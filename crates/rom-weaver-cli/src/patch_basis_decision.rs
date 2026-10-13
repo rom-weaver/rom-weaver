@@ -656,13 +656,13 @@ fn first_matching_state<'a>(
 }
 
 /// Copy `source` minus its first `skip` bytes into `destination`.
-fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<u64> {
+fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<()> {
     let mut reader = BufReader::new(File::open(source)?);
     reader.seek(SeekFrom::Start(skip))?;
     let mut writer = BufWriter::new(File::create(destination)?);
-    let copied = std::io::copy(&mut reader, &mut writer)?;
+    rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut writer)?;
     writer.flush()?;
-    Ok(copied)
+    Ok(())
 }
 
 /// How well one candidate's output held up. Field order is the comparison

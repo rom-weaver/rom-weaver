@@ -97,6 +97,8 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 
+When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
+
 ### Z3DS filename variants
 
 The browser's Z3DS output option selects the compressed extension from the source filename. Each subtype stores one Nintendo 3DS file.

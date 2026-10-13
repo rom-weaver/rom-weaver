@@ -328,6 +328,8 @@ pub struct SolidPatchMetadata {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatchCreateFormatOptions {
     Solid(SolidPatchMetadata),
+    /// PPF3: store the original bytes of each record so `tools ppf-undo` can revert it.
+    PpfUndo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -557,12 +559,17 @@ pub trait PatchHandler: Send + Sync {
             });
         }
 
+        // Keep the apply report's `; warning=` label segments so validate surfaces them too.
+        let warning_segments = apply_report
+            .label
+            .find("; warning=")
+            .map_or("", |start| &apply_report.label[start..]);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor().name.to_string()),
             "validate",
             format!(
-                "validated {} patch via dry-run apply",
+                "validated {} patch via dry-run apply{warning_segments}",
                 self.descriptor().name
             ),
             Some(100.0),

@@ -13,6 +13,7 @@ use rom_weaver_core::{
     PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
     SolidPatchMetadata, ValidationCodeError,
 };
+use tracing::debug;
 
 use crate::checksum_validation_suffix;
 use crate::shared::civil_from_days;
@@ -94,6 +95,13 @@ impl PatchHandler for SolidPatchHandler {
                 label.push_str(&format!("; truncate output to {size} byte(s)"));
             }
         }
+        let mut separator = "; info ";
+        for value in parsed.descriptions.iter().filter(|value| !value.is_empty()) {
+            label.push_str(separator);
+            separator = " | ";
+            // Patch-supplied text: keep terminal controls out of the label.
+            label.extend(value.chars().filter(|c| !c.is_control()));
+        }
         label.push_str(&format!(
             "; source md5 {}",
             format_md5_hex(parsed.source_md5)
@@ -115,6 +123,14 @@ impl PatchHandler for SolidPatchHandler {
                 PatchEndpointSide::default(),
             )],
         );
+        if let Some(patch) = report
+            .details
+            .as_mut()
+            .and_then(|details| details.get_mut("patch"))
+            .and_then(|patch| patch.as_object_mut())
+        {
+            patch.insert("descriptions".to_string(), parsed.descriptions.into());
+        }
         Ok(report)
     }
 
@@ -129,6 +145,7 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
+        let write_plan = plan_patch_writes(&parsed, &request.input, patch_path)?;
         let thread_capability = parallel_per_record_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         if let Some(parent) = request.output.parent() {
@@ -138,6 +155,7 @@ impl PatchHandler for SolidPatchHandler {
             let (execution, pool) = context.build_pool(thread_capability)?;
             apply_parsed_patch_parallel_to_file(
                 &parsed,
+                write_plan,
                 &request.input,
                 &request.output,
                 &pool,
@@ -145,7 +163,13 @@ impl PatchHandler for SolidPatchHandler {
             )?;
             execution
         } else {
-            apply_parsed_patch_to_file(&parsed, &request.input, &request.output, context)?;
+            apply_parsed_patch_to_file(
+                &parsed,
+                write_plan,
+                &request.input,
+                &request.output,
+                context,
+            )?;
             planned_execution
         };
 
@@ -175,9 +199,7 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
-        let source_len =
-            usize_from_u64(fs::metadata(&request.input)?.len(), "SOLID source length")?;
-        let _ = build_primitive_write_plans(&parsed, source_len)?;
+        plan_patch_writes(&parsed, &request.input, patch_path)?;
         let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -207,9 +229,15 @@ impl PatchHandler for SolidPatchHandler {
         options: Option<&PatchCreateFormatOptions>,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let metadata = options.map(|options| match options {
-            PatchCreateFormatOptions::Solid(metadata) => metadata,
-        });
+        let metadata = match options {
+            Some(PatchCreateFormatOptions::Solid(metadata)) => Some(metadata),
+            Some(PatchCreateFormatOptions::PpfUndo) => {
+                return Err(RomWeaverError::Validation(
+                    "solid patch create does not accept PPF undo data".into(),
+                ));
+            }
+            None => None,
+        };
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
         let shared_len = original_len.min(modified_len);
@@ -310,7 +338,14 @@ impl PatchHandler for SolidPatchHandler {
         let replay_path = context
             .temp_paths()
             .next_path("solid-create-replay", Some("bin"));
-        apply_parsed_patch_to_file(&parsed, &request.original, &replay_path, context)?;
+        let write_plan = plan_patch_writes(&parsed, &request.original, &replay_path)?;
+        apply_parsed_patch_to_file(
+            &parsed,
+            write_plan,
+            &request.original,
+            &replay_path,
+            context,
+        )?;
         let replay_matches = files_equal(&replay_path, &request.modified)?;
         let _ = fs::remove_file(&replay_path);
         if !replay_matches {
@@ -354,6 +389,8 @@ struct ParsedSolidPatch {
     version: u8,
     source_md5: [u8; SOLID_MD5_LEN],
     creation_date: Option<PatchDate>,
+    /// system, game, hack (plus version, author, contact, comment when extended).
+    descriptions: Vec<String>,
     resize: ResizeAction,
     primitives: Vec<ParsedPrimitive>,
     expansion_data: Vec<u8>,
@@ -469,8 +506,9 @@ fn parse_solid_patch_file(path: &Path) -> Result<ParsedSolidPatch> {
     } else {
         3
     };
+    let mut descriptions = Vec::with_capacity(description_count);
     for _ in 0..description_count {
-        let _ = parser.read_null_terminated_string()?;
+        descriptions.push(parser.read_null_terminated_string()?);
     }
 
     let field_size = if uses_big_fields { 8 } else { 4 };
@@ -544,6 +582,7 @@ fn parse_solid_patch_file(path: &Path) -> Result<ParsedSolidPatch> {
         version,
         source_md5,
         creation_date,
+        descriptions,
         resize,
         primitives,
         expansion_data,
@@ -610,8 +649,9 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
     } else {
         3
     };
+    let mut descriptions = Vec::with_capacity(description_count);
     for _ in 0..description_count {
-        let _ = read_null_terminated_string(bytes, &mut cursor)?;
+        descriptions.push(read_null_terminated_string(bytes, &mut cursor)?);
     }
 
     let field_size = if uses_big_fields { 8 } else { 4 };
@@ -692,21 +732,41 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
         version,
         source_md5,
         creation_date,
+        descriptions,
         resize,
         primitives,
         expansion_data,
     })
 }
 
+/// Plans the primitive writes against `source_path`, reporting an impossible plan as a corrupt
+/// `patch_path`.
+fn plan_patch_writes(
+    parsed: &ParsedSolidPatch,
+    source_path: &Path,
+    patch_path: &Path,
+) -> Result<(Vec<PrimitiveWritePlan>, usize)> {
+    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
+    build_primitive_write_plans(parsed, source_len).map_err(|error| {
+        debug!(patch = %patch_path.display(), %error, "SOLID write plan rejected");
+        let detail = match error {
+            RomWeaverError::Validation(message) => message,
+            other => other.to_string(),
+        };
+        RomWeaverError::Validation(format!(
+            "SOLID patch `{}` is corrupt: {detail}",
+            patch_path.display()
+        ))
+    })
+}
+
 fn apply_parsed_patch_to_file(
     parsed: &ParsedSolidPatch,
+    (plans, required_output_len): (Vec<PrimitiveWritePlan>, usize),
     source_path: &Path,
     output_path: &Path,
     context: &OperationContext,
 ) -> Result<()> {
-    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
-    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
-
     let writes = plans
         .iter()
         .map(|plan| {
@@ -736,13 +796,12 @@ fn apply_parsed_patch_to_file(
 
 fn apply_parsed_patch_parallel_to_file(
     parsed: &ParsedSolidPatch,
+    (plans, required_output_len): (Vec<PrimitiveWritePlan>, usize),
     source_path: &Path,
     output_path: &Path,
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<()> {
-    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
-    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
     let writes = pool.install(|| {
         plans
             .par_iter()
@@ -784,7 +843,7 @@ fn apply_solid_writes_and_resize_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(source_path, output_path)?;
+    rom_weaver_core::copy_file_retrying_interrupted(source_path, output_path)?;
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)
@@ -930,6 +989,13 @@ fn build_primitive_write_plans(
         }
 
         let start = usize_from_u64(cursor, "SOLID primitive address")?;
+        // Primitives may extend the output but never leave a hole; a start past the end is a
+        // corrupt address that would otherwise size the output from garbage.
+        if start > required_output_len {
+            return Err(RomWeaverError::Validation(format!(
+                "SOLID primitive {primitive_index} writes at offset {start}, past the end of the {required_output_len}-byte output"
+            )));
+        }
         let len = primitive.write_len();
         let end = checked_add_usize(start, len, "SOLID primitive write end")?;
         required_output_len = required_output_len.max(end);

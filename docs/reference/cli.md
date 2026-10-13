@@ -82,6 +82,8 @@ Output flags remain `-o`/`--output` on commands that accept them. `patch create`
 
 Native `extract` and `compress` also accept input `-`. Their [binary pipeline options](#binary-pipelines) control stdin filenames and binary stdout.
 
+`patch apply` and `patch validate` reject a pipe or other non-regular file as `--input` because patches seek within the ROM.
+
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
@@ -156,7 +158,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
 | `tools ppf-undo --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Requires one final regular file; a raw disc sheet with companion tracks cannot be streamed. |
 | Binary stdout | Refuses terminal output and conflicts with `--json`, `--jsonl`, and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
-| Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
+| Stdin with `--dry-run` | `compress` and `extract` fail before reading stdin; their dry runs require an input file. Read-only commands (`identify`, `checksum`, `probe`) do not read stdin during a dry run and report a read-only plan. |
 
 This is disk-backed pipeline support, not incremental streaming. Operations finish in private temporary storage before the CLI copies the result to stdout. It needs space for the input spool, intermediate files, and output.
 
@@ -201,7 +203,7 @@ Native identify performs no network access.
 - `--name QUERY` searches names instead of identifying a file or checksum; it requires `--system`, `--database`, or `--title-index` and cannot be combined with `--input` or `--hash`. Matching ignores case, punctuation, and accents (`asterix` matches `Astérix`), and every query word must match. Literal matches rank before spelling corrections. Pack searches cover each record's name, alternate names, and dump tags.
 - `--title-index JSON` selects a `rom-weaver-identify-title-index-v1` file for `--name`. It returns base titles, pack slugs, and scores under `details.identifyTitles.matches` in JSON output. It cannot be combined with `--database`, `--system`, or `--size`.
 - `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
-- `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
+- `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `nes`). The names available depend on the installed identify index (for example `psx` resolves only once the index is installed). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`, or the `full-v1/` tree installed by `setup`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
 - `--offline` asserts that identify performs no network access. Natively it never does; the flag records the guarantee in the log.
@@ -348,9 +350,9 @@ Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches si
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes the raw patched ROM to a sibling named `<input-stem>-patched.<rom-extension>`, including for `.bin` inputs, and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
-Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
+Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except an explicit `.bin` output: it is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
 `--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
 
@@ -432,8 +434,8 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
 - `--default-patch-basis base|previous|auto` sets the shared input relationship. The default is `auto`.
 - `--patch-basis base|previous|auto` overrides one patch. It binds to the preceding `--patch`.
-- `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure.
-- `--plan` reports the order, input basis, and verdict of each patch without applying the chain, so mid-chain patches that depend on earlier output are reported as deferred instead of failed.
+- `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure, and exits `1` when any patch fails (all passing exits `0`).
+- `--plan` reports the order, input basis, and verdict of each patch without applying the chain, so mid-chain patches that depend on earlier output are reported as deferred instead of failed. It only reports: a failed verdict still exits `0`, so read the verdicts from the summary or `details.patch_validation` under `--json`.
 - `--patch-input-check ALGO=HEX` and `--patch-output-check ALGO=HEX` supply the checksums the preceding `--patch` should see going in and produce, for formats that do not carry them.
 - A mid-chain patch with an original-ROM basis (declared, or inferred from its checksums) is checked against the original ROM and runs without its embedded source and target checks, as `patch apply` runs it.
 
@@ -442,6 +444,8 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 `patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.
 
 SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
+
+`--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.
 
 `--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest.
 
@@ -461,7 +465,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--default-patch-basis base\|previous\|auto` | Shared input basis recorded as `patchBasis`. The default is `auto`. |
 | `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
 | `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
-| `--patch-optional` | Marks the preceding patch optional. |
+| `--patch-optional true\|false` | Marks the preceding patch optional; the value is required. |
 | `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
 | `--expect-out` | Expected final result checks. |
 | `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
@@ -559,7 +563,7 @@ Permission failures exit `1`. Under `--json`, the result document has `"status":
 
 The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`.
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. When that directory cannot be resolved (no `XDG_DATA_HOME` or `HOME` on Unix, no `LOCALAPPDATA` on Windows), `--install` fails and asks for `--man-dir`.
 
 Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 

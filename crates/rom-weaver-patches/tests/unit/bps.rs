@@ -1048,6 +1048,68 @@ fn apply_rejects_truncated_action_stream_in_file() {
 }
 
 #[test]
+fn apply_names_truncated_patch_file() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("cut.bps");
+    fs::write(&input_path, []).expect("fixture");
+    fs::write(&patch_path, truncated_target_read_patch(8, b"XY")).expect("fixture");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.child("output.bin"),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("truncated action stream should fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("truncated or corrupt") && message.contains("cut.bps"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
+fn apply_reports_patch_cut_at_a_record_boundary_as_truncated() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("cut.bps");
+    fs::write(&input_path, b"abc").expect("fixture");
+    let full = build_bps_patch(
+        b"abc",
+        b"abcdef",
+        vec![
+            TestAction::SourceRead(3),
+            TestAction::TargetRead(b"def".to_vec()),
+        ],
+    );
+    // Drop the TargetRead record (one command byte plus three data bytes) but keep the footer.
+    let footer_start = full.len() - 12;
+    let mut cut = full[..footer_start - 4].to_vec();
+    cut.extend_from_slice(&full[footer_start..]);
+    fs::write(&patch_path, cut).expect("fixture");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.child("output.bin"),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("short action stream should fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("truncated or corrupt") && message.contains("cut.bps"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
 fn parse_reads_non_zero_metadata_block() {
     // A patch carrying a non-empty metadata block still decodes its sizes and action.
     let patch = build_bps_patch_with_metadata(

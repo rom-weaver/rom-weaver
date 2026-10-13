@@ -13,6 +13,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
+  setFormControlValue,
   VALID_BPS,
   VALID_UPS,
   WRONG_INPUT_BPS,
@@ -204,6 +205,25 @@ test("strict checksum mismatch blocks apply until override is checked", async ()
   const applyState = await waitForApplyOutcome();
   expect(applyState).not.toBeNull();
   expect(applyState?.kind).toBe("download");
+});
+
+test("changing the output format keeps the apply-anyway override checked", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { validation: { requireInputChecksumMatch: true } } }));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(WRONG_INPUT_BPS));
+  const checkbox = await waitForState(() => {
+    const element = document.getElementById("rom-weaver-checkbox-checksum-override");
+    return element instanceof HTMLInputElement ? element : null;
+  }, 60000);
+  checkbox.click();
+  await expect.poll(() => checkbox.checked).toBe(true);
+  const outputFormat = document.getElementById("rom-weaver-select-output-format");
+  expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(outputFormat, "none");
+  await expect.poll(() => outputFormat.value).toBe("none");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(checkbox.checked).toBe(true);
 });
 
 test("source-check patch formats report runtime patch validation success", async () => {

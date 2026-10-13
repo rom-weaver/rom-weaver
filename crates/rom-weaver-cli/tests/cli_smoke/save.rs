@@ -1398,3 +1398,53 @@ fn save_create_and_edit_super_mario_world() {
         0,
     );
 }
+
+#[test]
+fn save_set_reports_an_out_of_range_integer() {
+    let temp = setup_temp_dir();
+    let source = write_fixture(&temp);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "trainer.money=99999999999",
+            "--dry-run",
+            "--json",
+        ],
+        1,
+    );
+    assert!(report.to_string().contains("out of range"), "{report}");
+}
+
+#[test]
+fn save_set_and_create_dry_run_carry_plan_fields_and_keep_preview() {
+    let temp = setup_temp_dir();
+    let save = write_fixture(&temp);
+    let set_args = [
+        "save",
+        "set",
+        save.to_str().unwrap(),
+        "trainer.money=999999",
+        "-n",
+    ];
+    let json_args: Vec<_> = set_args.iter().copied().chain(["--json"]).collect();
+    let preview = run_single_json_event(&json_args, 0);
+    assert_eq!(preview["details"]["dry_run"], true);
+    assert_eq!(preview["details"]["writes"], serde_json::json!([]));
+    assert_eq!(preview["details"]["downloads"], serde_json::json!([]));
+    assert_eq!(preview["details"]["read_only"], true);
+    assert!(preview["details"]["save_editor"]["result"].is_object());
+
+    let human = String::from_utf8(command_stdout(&set_args, 0)).unwrap();
+    assert!(human.contains("5000 -> 999999"), "{human}");
+
+    let template = save.to_str().unwrap();
+    let create = run_single_json_event(
+        &["save", "create", "--template", template, "-n", "--json"],
+        0,
+    );
+    assert_eq!(create["details"]["dry_run"], true);
+    assert_eq!(create["details"]["read_only"], true);
+    assert!(create["details"]["save_editor"].is_object());
+}

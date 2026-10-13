@@ -464,6 +464,8 @@ const renderWebappRoot = (): undefined => {
         ...getDefaultSettings(),
         betaToolsEnabled: readHydrationBetaToolsEnabled(),
         language: document.documentElement.lang || "en",
+        // index.html also paints the runtime chip from this flag, so the first client render must agree.
+        offlineCopyEnabled: document.documentElement.dataset.offlineCopyEnabled !== "false",
         threads: state.settings.threads,
       }
     : state.settings;

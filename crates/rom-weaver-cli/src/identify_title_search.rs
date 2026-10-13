@@ -71,7 +71,13 @@ pub(super) fn search_title_index(
             "--limit must be at least 1".to_string(),
         ));
     }
-    let index: TitleIndex = serde_json::from_slice(&fs::read(path)?)
+    let bytes = fs::read(path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read title index `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    let index: TitleIndex = serde_json::from_slice(&bytes)
         .map_err(|error| RomWeaverError::Validation(format!("title index is invalid: {error}")))?;
     if index.format != "rom-weaver-identify-title-index-v1" {
         return Err(RomWeaverError::Validation(format!(

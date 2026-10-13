@@ -256,9 +256,7 @@ impl VmFileBuffer {
         let mut hasher = Sha1::new();
         let mut chunk = vec![0u8; FILE_IO_CHUNK_BYTES];
         loop {
-            let read = self
-                .file
-                .read(chunk.as_mut_slice())
+            let read = rom_weaver_core::read_full(&mut self.file, chunk.as_mut_slice())
                 .map_err(|error| format!("failed to read BSP file buffer: {error}"))?;
             if read == 0 {
                 break;

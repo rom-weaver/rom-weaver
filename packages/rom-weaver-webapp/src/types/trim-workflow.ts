@@ -27,6 +27,8 @@ type TrimWorkflowSourceState = {
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  /** False when a dry-run trim plan found nothing the engine can trim; undefined while unknown. */
+  trimSupported?: boolean;
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;

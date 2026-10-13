@@ -128,7 +128,7 @@ impl PatchHandler for PmsrPatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -607,7 +607,7 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
     let mut hasher = Hasher::new();
     let mut buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
     loop {
-        let read = source.read(&mut buffer)?;
+        let read = rom_weaver_core::read_full(&mut source, &mut buffer)?;
         if read == 0 {
             break;
         }

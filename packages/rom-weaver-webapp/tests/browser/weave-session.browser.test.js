@@ -14,6 +14,7 @@ import {
   mount,
   RAW_PATCH,
   RAW_ROM,
+  WRONG_INPUT_BPS,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
   waitForState,
@@ -219,6 +220,117 @@ test("weave keeps same-name apply usable after enabling several optional patches
   await waitForApplyButtonEnabled();
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+const createIpsPatch = (fileName, offset, value) => {
+  const bytes = new Uint8Array(14);
+  bytes.set(new TextEncoder().encode("PATCH"));
+  bytes.set([(offset >>> 16) & 0xff, (offset >>> 8) & 0xff, offset & 0xff, 0, 1, value], 5);
+  bytes.set(new TextEncoder().encode("EOF"), 11);
+  return new File([bytes], fileName, { type: "application/octet-stream" });
+};
+
+test("weave checks after a switched-off optional patch are not enforced; switched on they are sent", async () => {
+  // 64 zero bytes; first.ips sets byte 0, second.ips sets byte 10. The authored chain declares the
+  // second patch's output as both edits (crc32 f9f31dcf), which the bytes only match with first.ips on.
+  const romFile = new File([new Uint8Array(64)], "game.bin", { type: "application/octet-stream" });
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "chain-check-output" },
+        patches: [
+          { name: "First", optional: true, path: "first.ips" },
+          { name: "Second", outputChecks: { checksums: { crc32: "f9f31dcf" } }, path: "second.ips" },
+        ],
+        rom: { path: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: romFile, fileName: "game.bin" },
+      { file: createIpsPatch("first.ips", 0, 1), fileName: "first.ips" },
+      { file: createIpsPatch("second.ips", 10, 2), fileName: "second.ips" },
+    ],
+    "chain-checks.zip",
+  );
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  const lastOutputChecks = () => applySpy.mock.calls.at(-1)?.[0]?.options?.patchOutputChecks;
+  try {
+    mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive], id: 1 } }));
+    await expect
+      .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+      .toEqual([false, true]);
+
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(lastOutputChecks()).toBeUndefined();
+
+    getPatchToggles()[0]?.click();
+    await expect.poll(() => getPatchToggles()[0]?.checked, { timeout: 30000 }).toBe(true);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(lastOutputChecks()).toEqual(["", "crc32=f9f31dcf"]);
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+test("imported weave whose optional patch is off applies without touching the toggle", async () => {
+  // The off patch does not match the ROM (wrong-input BPS), so its preflight verdict is a
+  // checksum mismatch. That verdict belongs to a patch that never runs and must not block Apply.
+  const [romFile, patchFile, offBps] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    loadFixtureFile(RAW_PATCH),
+    loadFixtureFile(WRONG_INPUT_BPS),
+  ]);
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "off-optional-output" },
+        patches: [
+          { name: "Core", path: "change.ips" },
+          { name: "Off", optional: true, path: "wrong-input-same-size.bps" },
+        ],
+        rom: { checks: { checksums: { crc32: "d7ae93df" } }, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: offBps, fileName: "wrong-input-same-size.bps" },
+    ],
+    "off-optional.zip",
+  );
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    await expect
+      .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+      .toEqual([true, false]);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+  } finally {
+    applySpy.mockRestore();
+  }
 });
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {

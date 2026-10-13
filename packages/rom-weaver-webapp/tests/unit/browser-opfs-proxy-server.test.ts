@@ -11,6 +11,7 @@ import {
   OPFS_PROXY_CONTROL_STATE_INDEX,
   OPFS_PROXY_CONTROL_STATUS_INDEX,
   OPFS_PROXY_OP_OPEN,
+  OPFS_PROXY_OP_UNLINK,
   OPFS_PROXY_STATE_DONE,
   OPFS_PROXY_STATE_REQUESTED,
   OPFS_PROXY_STATUS_OK,
@@ -74,5 +75,39 @@ test("services a request and stops when the native doorbell wait never resolves"
     await vi.advanceTimersByTimeAsync(1000);
     expect.soft(stopped).toBe(true);
     expect.soft(vi.getTimerCount()).toBe(0);
+  }
+});
+
+test("traces a missing unlink target as a miss rather than a failure", async () => {
+  const channel = createOpfsProxyChannel(1);
+  const trace = vi.fn();
+  const notFound = Object.assign(new Error("missing"), { name: "NotFoundError" });
+  const directoryHandle = {
+    getDirectoryHandle: vi.fn(),
+    removeEntry: vi.fn().mockRejectedValue(notFound),
+  };
+  const server = startOpfsProxyServer({
+    channel,
+    mounts: [{ directoryHandle, mountPath: "/out", writableRoots: ["/out"] }] as never,
+    trace,
+  });
+  try {
+    const slot = channel.slots[0];
+    if (!slot) throw new Error("Proxy channel has no request slot");
+    const path = new TextEncoder().encode("/out/gone.bin");
+    slot.data.set(path);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, OPFS_PROXY_OP_UNLINK);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, path.byteLength);
+    Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
+    Atomics.add(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
+    Atomics.notify(channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+    await vi.waitFor(() => {
+      expect(Atomics.load(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX)).toBe(OPFS_PROXY_STATE_DONE);
+    });
+    const lines = trace.mock.calls.map(([line]) => String(line));
+    expect(lines.some((line) => line.includes("proxy op missed opcode=8"))).toBe(true);
+    expect(lines.filter((line) => line.includes("failed"))).toEqual([]);
+  } finally {
+    server.stop();
   }
 });

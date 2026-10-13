@@ -51,6 +51,7 @@ type InternalSourceState = {
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  trimSupported?: boolean;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -83,6 +84,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         size: state.size,
         sourceSize: state.sourceSize,
         status: state.status,
+        trimSupported: state.trimSupported,
         warnings: state.warnings.map(cloneWarning),
         wasDecompressed: state.wasDecompressed,
       } satisfies TrimWorkflowSourceState)
@@ -173,6 +175,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         this.inputStage = stage;
         await this.inputStages.maybeResolveBlockingStageSelection(stage);
         await this.finalizeInputStableState(stage);
+        await this.probeTrimSupport(stage);
         if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
       } catch (error) {
         await this.releaseInputStage();
@@ -323,6 +326,25 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
     stage.state.identification = cloneIdentification(primaryAsset?.identification);
     stage.state.romType = cloneRomType(primaryAsset?.romType);
+  }
+
+  /** Dry-run the trim plan so an unsupported input is flagged at staging, before any confirm or run. */
+  private async probeTrimSupport(stage: StagedSource<TSource>) {
+    if (stage.state.status !== "ready") return;
+    try {
+      await this.runtime.trim?.trim?.({
+        dryRun: true,
+        outputName: "",
+        signal: this.abortController.signal,
+        source: (this.getPreparedTrimSource(stage) || stage.source) as never,
+      });
+      stage.state.trimSupported = true;
+    } catch (error) {
+      // Only a definite "unsupported" verdict counts; other probe failures must not block trimming.
+      if ((error as Error)?.message !== "This input does not support trimming") return;
+      stage.state.trimSupported = false;
+      this.pushWarning(stage, Object.assign(error as Error, { code: "TRIM_UNSUPPORTED" }));
+    }
   }
 
   private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {

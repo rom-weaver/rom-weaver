@@ -810,8 +810,10 @@ fn trim_wbfs_uses_rvz_convert_output() {
     assert!(label.contains("mode=rvz-convert"));
     assert!(label.contains("revert_supported=false"));
     assert!(label.contains(
-        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO, not --revert"
+        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO"
     ));
+    // A plain trim never asked for --revert, so the warning must not mention it.
+    assert!(!label.contains("--revert"), "{label}");
 
     let trimmed = source_wbfs.path().with_extension("trim.rvz");
     assert!(trimmed.exists(), "expected trimmed rvz output");

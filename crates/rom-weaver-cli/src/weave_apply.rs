@@ -818,6 +818,7 @@ fn weave_patch_step_metadata(
             .map(patch_plan::PlanState::from_weave_checks),
         is_chain_prefix,
         lane_source_input: false,
+        enforce_declared_checks: false,
     };
     let step = patch_apply::PatchApplyStepMetadata {
         input: entry.input.clone(),

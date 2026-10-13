@@ -1,5 +1,5 @@
 import { resolveWeaveChecks } from "../../src/lib/weave/weave-targets.ts";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
@@ -303,4 +303,36 @@ test("export weaves the extracted patch leaf, not the archive it arrived in", as
   expect(result.weave.patches[0].path).toBe("change.ips");
   expect(result.weave.rom?.path).toBe(RAW_ROM.split("/").pop());
   await expect.poll(() => exportButton.disabled).toBe(false);
+});
+
+// The real app persists the include-ROM choice into the default settings it hands back to the form.
+const WeaveFormWithPersistedPackage = ({ files }) => {
+  const [defaultSettings, setDefaultSettings] = useState({ detailedViewEnabled: true });
+  return createElement(ApplyPatchForm, {
+    defaultSettings,
+    mode: "weave",
+    onWeavePackageChange: (value) =>
+      setDefaultSettings((current) => ({ ...current, output: { ...current.output, weavePackage: value } })),
+    pageDrop: { files, id: 1 },
+  });
+};
+
+test.each([
+  ["format then ROM", true],
+  ["ROM then format", false],
+])("weave export keeps the chosen 7z format when including the ROM (%s)", async (_label, formatFirst) => {
+  const patchFile = await loadFixtureFile(RAW_PATCH);
+  const romFile = await loadFixtureFile(RAW_ROM);
+  mount(createElement(WeaveFormWithPersistedPackage, { files: [romFile, patchFile] }));
+  const format = await waitForState(() => document.getElementById("rom-weaver-weave-export-format"));
+  const includeRom = await waitForState(() => document.getElementById("rom-weaver-weave-export-weave-rom"));
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
+  const chooseFormat = () => setFormControlValue(format, "7z");
+  const toggleRom = () => includeRom.click();
+  for (const step of formatFirst ? [chooseFormat, toggleRom] : [toggleRom, chooseFormat]) {
+    step();
+    await settle();
+  }
+  expect(includeRom.checked).toBe(true);
+  expect(document.getElementById("rom-weaver-weave-export-format").value).toBe("7z");
 });

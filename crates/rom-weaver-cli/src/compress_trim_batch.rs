@@ -698,7 +698,7 @@ impl CliApp {
         } else if state.irreversible_xiso && !state.irreversible_rvz_convert {
             "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
         } else if state.irreversible_rvz_convert && !state.irreversible_xiso {
-            "; warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO, not --revert"
+            "; warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO"
         } else if state.irreversible_xiso && state.irreversible_rvz_convert {
             "; warning=some trimmed outputs cannot be reverted to original source format; keep backups"
         } else {

@@ -668,8 +668,18 @@ fn a_check_token_list_parses_into_one_map() {
     )
     .expect("two tokens");
 
-    assert_eq!(parsed.get("crc32").map(String::as_str), Some("a684c7c6"));
-    assert_eq!(parsed.len(), 2);
+    assert_eq!(
+        parsed.checksums.get("crc32").map(String::as_str),
+        Some("a684c7c6")
+    );
+    assert_eq!(parsed.checksums.len(), 2);
+    assert_eq!(parsed.size, None);
+
+    // `size=N` is accepted the same way `patch apply` accepts it.
+    let sized = CliApp::parse_plan_check_tokens("crc32=a684c7c6,size=64", "--patch-input-check")
+        .expect("checksum and size");
+    assert_eq!(sized.size, Some(64));
+    assert_eq!(sized.checksums.len(), 1);
 
     assert!(
         CliApp::parse_plan_check_tokens(" , ,", "--patch-input-check")

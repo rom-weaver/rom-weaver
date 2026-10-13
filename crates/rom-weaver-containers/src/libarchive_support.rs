@@ -593,7 +593,7 @@ pub(crate) fn libarchive_open_read_stream(
                 source.display()
             ),
         )?;
-        Ok(())
+        archive.require_filter(filter, source)
     })();
 
     setup_result?;

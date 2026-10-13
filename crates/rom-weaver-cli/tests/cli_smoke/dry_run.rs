@@ -447,3 +447,68 @@ fn ppf_undo_dry_run_marks_raw_disc_companion_outputs_unknown() {
         );
     }
 }
+
+#[test]
+fn read_only_subcommand_dry_runs_report_a_read_only_plan() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), [0u8; 32]).expect("rom fixture");
+    let save = temp.child("x.sav");
+    fs::write(save.path(), [0u8; 32]).expect("save fixture");
+    let rom_s = rom.path().to_str().expect("path");
+    let save_s = save.path().to_str().expect("path");
+    for args in [
+        ["cheat", "list", "-n", "-i", rom_s, "--json"].as_slice(),
+        ["identify", "database", "list", "-n", "--json"].as_slice(),
+        ["identify", "database", "path", "-n", "--json"].as_slice(),
+        ["save", "inspect", "-n", save_s, "--json"].as_slice(),
+    ] {
+        let report = run_single_json_event(args, 0);
+        assert_eq!(report["details"]["dry_run"], true, "args={args:?}");
+        assert_eq!(report["details"]["read_only"], true, "args={args:?}");
+        assert_eq!(report["details"]["outputs_unknown"], false, "args={args:?}");
+    }
+}
+
+#[test]
+fn man_accepts_alternate_command_names() {
+    let canonical = command_stdout(&["man", "probe"], 0);
+    assert_eq!(command_stdout(&["man", "inspect"], 0), canonical);
+    assert!(!canonical.is_empty());
+}
+
+#[test]
+fn help_accepts_a_trailing_help_flag() {
+    let plain = command_stdout(&["patch", "--help"], 0);
+    assert_eq!(command_stdout(&["help", "patch", "--help"], 0), plain);
+    assert!(!command_stdout(&["help", "--help"], 0).is_empty());
+    // A help flag anywhere after `help`, with global flags before it.
+    assert_eq!(command_stdout(&["help", "-h", "patch"], 0), plain);
+    assert_eq!(
+        command_stdout(&["--quiet", "help", "patch", "-h"], 0),
+        plain
+    );
+    let root = command_stdout(&["--help"], 0);
+    assert_eq!(
+        command_stdout(&["--json", "help", "--help"], 0),
+        command_stdout(&["--json", "--help"], 0)
+    );
+    assert_eq!(command_stdout(&["help", "help", "--help"], 0), root);
+}
+
+#[test]
+fn read_only_commands_skip_stdin_during_dry_run() {
+    for args in [
+        ["identify", "-", "-n"].as_slice(),
+        ["checksum", "-", "-n"].as_slice(),
+        ["probe", "-", "-n"].as_slice(),
+    ] {
+        command_stdout_with_stdin(args, b"x", 0);
+    }
+    for args in [
+        ["compress", "-", "-n"].as_slice(),
+        ["extract", "-", "-n"].as_slice(),
+    ] {
+        command_stdout_with_stdin(args, b"x", 2);
+    }
+}
