@@ -119,3 +119,17 @@ test("only the preview label starts a real run", () => {
     assert.equal(evaluate(gate.name) === "CI gate", real, caseName);
   }
 });
+
+test("pull requests skip Lighthouse only through the shared classifier flag", () => {
+  const steps = ci.jobs["webapp-static"].steps;
+  const condition =
+    "github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'";
+  for (const [name, wanted] of [
+    ["Download webapp bundle", condition],
+    ["Lighthouse gates", condition],
+    ["Upload Lighthouse reports", `!cancelled() && (${condition})`],
+  ]) {
+    assert.equal(expression(steps.find((step) => step.name === name).if), wanted, name);
+  }
+  assert.equal(ci.jobs.changes.outputs.lighthouse, "${{ steps.classify.outputs.lighthouse }}");
+});

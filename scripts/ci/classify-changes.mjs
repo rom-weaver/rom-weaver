@@ -77,6 +77,23 @@ const ROOT_LEAF_SCRIPT = new RegExp(
 // Webapp static assets that live under docs/ but are not guide Markdown.
 const DOCS_WEBAPP_ASSET = /^docs\/(?:screenshots\/|samples\/|rom-weaver-[\w-]+\.schema\.json$)/;
 
+const WEBAPP_PACKAGE = "packages/rom-weaver-webapp/";
+
+// Inputs that can change the bundle the Lighthouse gates audit. Webapp tests,
+// guide Markdown, and Rust-only targets cannot; build scripts fail open.
+const isLighthouseInput = (path) =>
+  (path.startsWith(WEBAPP_PACKAGE) &&
+    !/(?:^|\/)tests?\/|\.test\.[cm]?[jt]sx?$/.test(path.slice(WEBAPP_PACKAGE.length))) ||
+  isWasmCompilerInput(path) ||
+  (path.startsWith("scripts/wasm/") &&
+    !path.endsWith(".test.mjs") &&
+    path !== "scripts/wasm/README.md") ||
+  (/^scripts\/[^/]+\.mjs$/.test(path) &&
+    !path.endsWith(".test.mjs") &&
+    !ROOT_LEAF_SCRIPT.test(path)) ||
+  path.startsWith("design/") ||
+  /^(?:Cargo\.(?:toml|lock)|package(?:-lock)?\.json)$/.test(path);
+
 // The real runtime lifecycle suite imports these host helpers outside the worker layers.
 // The import-graph test MUST reject newly reachable helpers missing from this list.
 const WASM_RUNTIME_SUPPORT = new Set([
@@ -128,6 +145,9 @@ const EMPTY = {
   // `webapp-browser` and `webapp-webkit-e2e`. A pull request that changes only
   // published guide Markdown keeps the static checks and Chromium E2E.
   webapp_browser: false,
+  // The Lighthouse steps of `webapp-static`. Every event but a pull request
+  // audits; a pull request audits when a bundle input changed.
+  lighthouse: false,
   wasm_runtime: false,
   security: false,
   docker_cli: false,
@@ -346,6 +366,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       result.repo_lint = true;
 
     if (result.webapp && !PUBLISHED_DOCS.has(path)) browserInput = true;
+    if (isLighthouseInput(path)) result.lighthouse = true;
     result.webapp ||= webappBefore;
   }
 
@@ -366,6 +387,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   // Every runtime test consumes the production module and webapp dependencies.
   if (result.wasm_runtime) result.webapp = true;
   if (result.rust) result.rust_lint = true;
+  if (result.full || eventName !== "pull_request") result.lighthouse = true;
   result.webapp_browser =
     result.webapp &&
     (eventName !== "pull_request" || browserInput || result.wasm_runtime || result.full);

@@ -60,6 +60,7 @@ jobs:
       fuzz: ${{ steps.classify.outputs.fuzz }}
       webapp: ${{ steps.classify.outputs.webapp }}
       webapp_browser: ${{ steps.classify.outputs.webapp_browser }}
+      lighthouse: ${{ steps.classify.outputs.lighthouse }}
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
@@ -1417,7 +1418,10 @@ jobs:
       - name: Unit tests
         run: npm --prefix packages/rom-weaver-webapp run test:unit
 
+      # A pull request audits only when the bundle can differ from main's; the
+      # `lighthouse` flag fails open for every build and CI input.
       - name: Download webapp bundle
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
@@ -1431,11 +1435,12 @@ jobs:
       # ordered before this job in any case.
       - name: Lighthouse gates
         id: performance
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         run: npm --prefix packages/rom-weaver-webapp run audit:lighthouse
 
       - name: Upload Lighthouse reports
         id: lighthouse-reports
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true') }}
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports

@@ -27,6 +27,7 @@ const REPO_LINT_ONLY = {
   fuzz: "false",
   webapp: "false",
   webapp_browser: "false",
+  lighthouse: "true",
   wasm_runtime: "false",
   security: "false",
   docker_cli: "false",
@@ -55,6 +56,7 @@ test("documentation changes skip compiled stacks", () =>
     fuzz: "false",
     webapp: "false",
     webapp_browser: "false",
+    lighthouse: "true",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "false",
@@ -155,6 +157,7 @@ test("Rust test-only changes select nothing but Rust", () => {
         fuzz: "false",
         webapp: "false",
         webapp_browser: "false",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -314,6 +317,7 @@ test("native package changes build every CLI platform", () => {
         fuzz: "false",
         webapp: "true",
         webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -342,6 +346,7 @@ test("identify data build scripts select the stacks that run them", () => {
         fuzz: "false",
         webapp: "true",
         webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -364,6 +369,7 @@ test("dependency and CI changes select their broader checks", () => {
     fuzz: "false",
     webapp: "true",
     webapp_browser: "true",
+    lighthouse: "true",
     wasm_runtime: "true",
     security: "true",
     docker_cli: "true",
@@ -383,6 +389,7 @@ test("dependency and CI changes select their broader checks", () => {
         fuzz: "true",
         webapp: "true",
         webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "true",
         security: "true",
         docker_cli: "true",
@@ -418,7 +425,11 @@ test("deployment and cleanup helpers select repo lint without compiled stacks", 
     "scripts/ci/ensure-cloudflare-pages-project.mjs",
     "scripts/ci/github-api.mjs",
   ]) {
-    assert.deepEqual(classifyFor("pull_request", path), REPO_LINT_ONLY, path);
+    assert.deepEqual(
+      classifyFor("pull_request", path),
+      { ...REPO_LINT_ONLY, lighthouse: "false" },
+      path,
+    );
   }
 });
 
@@ -429,6 +440,7 @@ test("CI matrix helpers select their consumers", () => {
     fuzz: "false",
     webapp: "false",
     webapp_browser: "false",
+    lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "false",
@@ -445,6 +457,7 @@ test("CI matrix helpers select their consumers", () => {
     fuzz: "false",
     webapp: "true",
     webapp_browser: "true",
+    lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "true",
@@ -753,4 +766,46 @@ test("release-time CI helpers select repo lint without compiled stacks", () => {
   // No tests of their own, so they stay fail-open.
   for (const path of ["scripts/ci/resolve-wasm-run.mjs", "scripts/ci/run-install-method.mjs"])
     assert.equal(classifyFor("pull_request", path).full, "true", path);
+});
+
+test("pull requests run Lighthouse only when the audited bundle can change", () => {
+  for (const path of [
+    "packages/rom-weaver-webapp/src/webapp/app.tsx",
+    "packages/rom-weaver-webapp/src/presentation/localization/locales/de.ts",
+    "packages/rom-weaver-webapp/scripts/vite-config/static-assets.mjs",
+    "packages/rom-weaver-webapp/performance-budgets.json",
+    "packages/rom-weaver-webapp/package-lock.json",
+    "crates/rom-weaver-core/src/lib.rs",
+    "scripts/wasm/build-app.mjs",
+    "scripts/dedupe-tree.mjs",
+    "design/icon-masters/README.md",
+    "Cargo.lock",
+    "package-lock.json",
+    // Fail open on CI and classifier changes.
+    ".github/workflows/ci.yml",
+    "scripts/ci/classify-changes.mjs",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).lighthouse, "true", path);
+  }
+  for (const path of [
+    "docs/how-to/apply-rom-patches.md",
+    "README.md",
+    "packages/rom-weaver-webapp/tests/browser/accessibility.browser.test.js",
+    "packages/rom-weaver-webapp/tests/fixtures/archives/multi-rom.zip",
+    "packages/rom-weaver-webapp/scripts/run-e2e.test.mjs",
+    "crates/rom-weaver-cli/tests/cli_smoke/apply.rs",
+    "crates/rom-weaver-cli/README.md",
+    "scripts/wasm/build-app.test.mjs",
+    "scripts/quality-mutation.mjs",
+    "tests/fixtures/vcdiff/secondary-source.bin",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).lighthouse, "false", path);
+  }
+  for (const eventName of ["push", "workflow_dispatch", undefined])
+    assert.equal(classifyFor(eventName, "README.md").lighthouse, "true", String(eventName));
+  assert.equal(
+    classifyChanges(["README.md"], false, "pull_request", `${RELEASE_PR_BRANCH_PREFIX}cli`)
+      .lighthouse,
+    true,
+  );
 });
