@@ -49,6 +49,7 @@ import {
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
+  readDropEntries,
 } from "../public/react/drop-destination.ts";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
@@ -646,15 +647,22 @@ function WebappRoot({
   // fit would leave files behind.
   const routeHomeFiles = useCallback(
     (files: File[]) => {
-      const plan = planDropDestinations(countDropEntries(files.map((file) => ({ name: file.name }))));
-      const [only] = plan.destinations;
-      if (!only) return;
-      if (plan.destinations.length === 1 && files.every((file) => isUsableDropFile(only, file.name))) {
-        deliverDrop(only, files);
-        return;
-      }
-      pageDropIdRef.current += 1;
-      setDropRoute({ files, from: "home", id: pageDropIdRef.current });
+      void readDropEntries(files).then((entries) => {
+        if (currentViewRef.current !== "home") {
+          logger.debug("dropped files left behind after leaving home", { count: files.length });
+          return;
+        }
+        const plan = planDropDestinations(countDropEntries(entries));
+        const [only] = plan.destinations;
+        if (!only) return;
+        const fitsAll = entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket));
+        if (plan.destinations.length === 1 && fitsAll) {
+          deliverDrop(only, files);
+          return;
+        }
+        pageDropIdRef.current += 1;
+        setDropRoute({ entries, files, from: "home", id: pageDropIdRef.current });
+      });
     },
     [deliverDrop],
   );

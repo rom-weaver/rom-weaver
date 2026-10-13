@@ -1,5 +1,11 @@
 import { createLogger } from "../../lib/logging.ts";
-import { isArchiveFileName, isPatchFileName, isRomFileName, isWeaveFileName } from "./file-classification.ts";
+import {
+  classifyArchiveBucket,
+  isArchiveFileName,
+  isPatchFileName,
+  isRomFileName,
+  isWeaveFileName,
+} from "./file-classification.ts";
 
 /**
  * Pure routing for drops that pick a workflow: the landing page sends files to
@@ -23,6 +29,8 @@ type DropCounts = {
   saves: number;
   /** Files no extension matched; the workflows stage them as inputs. */
   unknown: number;
+  /** ROM-counted archives whose entries were never listed, so they may still wrap a patch. */
+  unlistedArchives: number;
 };
 
 /**
@@ -76,7 +84,7 @@ const classifyDropEntry = (entry: DropEntry): DropFileKind => {
  * is one ROM, so `.bin`/`.raw` tracks stop counting once a sheet is present.
  */
 const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
-  const counts: DropCounts = { patches: 0, roms: 0, saves: 0, unknown: 0 };
+  const counts: DropCounts = { patches: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
   const hasSheet = entries.some((entry) => SHEET_NAME.test(entry.name));
   for (const entry of entries) {
     const kind = classifyDropEntry(entry);
@@ -84,6 +92,7 @@ const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
     else if (kind === "save") counts.saves += 1;
     else if (kind === "unknown") counts.unknown += 1;
     else if (!(hasSheet && TRACK_NAME.test(entry.name) && !isArchiveFileName(entry.name))) counts.roms += 1;
+    if (kind === "rom" && !entry.archiveBucket && isArchiveFileName(entry.name)) counts.unlistedArchives += 1;
   }
   logger.trace("counted dropped entries", { ...counts, names: entries.map((entry) => entry.name) });
   return counts;
@@ -114,14 +123,15 @@ const planDropDestinations = ({ patches, roms, saves, unknown }: DropCounts): Dr
 /**
  * Whether a drop on `view` belongs in another workflow. Only known ROM names
  * count here, so a save or a stray text file never triggers a redirect, and an
- * archive with no listing never counts as a patch.
+ * archive with no listing counts as neither a patch nor a second ROM.
  */
-const planDropRedirect = (view: string, { patches, roms }: DropCounts): DropRedirect | null => {
+const planDropRedirect = (view: string, { patches, roms, unlistedArchives }: DropCounts): DropRedirect | null => {
   let redirect: DropRedirect | null = null;
   if (view === "test" && patches > 0) redirect = { reason: "applyBeforeTest", to: "patcher" };
   else if ((view === "creator" && roms <= 1) || view === "trim") {
     if (patches > 0) redirect = { reason: "patchesNeedApply", to: "patcher" };
-  } else if (view === "patcher" && patches === 0 && roms >= 2) redirect = { reason: "romsMakePatch", to: "creator" };
+  } else if (view === "patcher" && patches === 0 && roms - unlistedArchives >= 2)
+    redirect = { reason: "romsMakePatch", to: "creator" };
   if (redirect) logger.debug("drop belongs in another workflow", { from: view, patches, roms, ...redirect });
   return redirect;
 };
@@ -137,8 +147,34 @@ const USABLE_KINDS: Record<string, readonly DropFileKind[]> = {
  * Whether `view` can use a dropped file. A workflow that cannot is still handed
  * the file when the visitor asks for it; this only decides what starts checked.
  */
-const isUsableDropFile = (view: string, name: string) =>
-  (USABLE_KINDS[view] ?? USABLE_KINDS.patcher)?.includes(classifyDropEntry({ name })) ?? true;
+const isUsableDropFile = (view: string, name: string, archiveBucket?: DropEntry["archiveBucket"]) =>
+  (USABLE_KINDS[view] ?? USABLE_KINDS.patcher)?.includes(classifyDropEntry({ archiveBucket, name })) ?? true;
+
+type ListArchiveNames = (archive: File) => Promise<string[]>;
+
+// Loaded on demand so the archive reader stays out of the entry chunk.
+const listArchiveNames: ListArchiveNames = async (archive) => {
+  const { listDroppedArchiveEntryNames } = await import("../../lib/input/input-preparation-archive.ts");
+  return listDroppedArchiveEntryNames(archive);
+};
+
+/**
+ * Name each dropped file, listing archives whose name alone reads as a ROM so a
+ * zipped patch routes like a patch. A failed listing keeps the ROM verdict, as
+ * the Apply tab's own drop does.
+ */
+const readDropEntries = (files: readonly File[], listNames = listArchiveNames): Promise<DropEntry[]> =>
+  Promise.all(
+    files.map(async (file): Promise<DropEntry> => {
+      const entry = { name: file.name };
+      if (!isArchiveFileName(file.name) || classifyDropEntry(entry) !== "rom") return entry;
+      const names = await listNames(file).catch((error: unknown) => {
+        logger.debug("dropped archive listing failed", { error, name: file.name });
+        return [] as string[];
+      });
+      return { archiveBucket: classifyArchiveBucket(file, names), name: file.name };
+    }),
+  );
 
 export {
   classifyDropEntry,
@@ -147,4 +183,6 @@ export {
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
+  readDropEntries,
+  type DropEntry,
 };

@@ -5,6 +5,7 @@ import {
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
+  readDropEntries,
 } from "../../src/public/react/drop-destination.ts";
 
 const counts = (...names: string[]) => countDropEntries(names.map((name) => ({ name })));
@@ -84,9 +85,35 @@ describe("planDropRedirect", () => {
     expect(planDropRedirect("patcher", counts("a.sfc", "a.sav", "notes.txt"))).toBeNull();
   });
 
+  it("does not offer Create on Apply for an archive it has not listed", () => {
+    expect(planDropRedirect("patcher", counts("game.sfc", "SMB3 Hack v1.0.zip"))).toBeNull();
+  });
+
   it("never redirects from workflows that take any file", () => {
     expect(planDropRedirect("identify", counts("game.sfc", "hack.ips"))).toBeNull();
     expect(planDropRedirect("home", counts("game.sfc", "hack.ips"))).toBeNull();
+  });
+});
+
+describe("readDropEntries", () => {
+  it("lists archives so a zipped patch routes to Apply with its ROM", async () => {
+    const listed: string[] = [];
+    const entries = await readDropEntries(
+      [new File(["x"], "game.sfc"), new File(["x"], "SMB3 Hack v1.0.zip"), new File(["x"], "fix.bps.zip")],
+      async (archive) => {
+        listed.push(archive.name);
+        return ["hack.ips", "readme.txt"];
+      },
+    );
+    expect(listed).toEqual(["SMB3 Hack v1.0.zip"]);
+    expect(planDropDestinations(countDropEntries(entries))).toEqual({ destinations: ["patcher"], mixed: false });
+  });
+
+  it("counts an archive as a ROM when its listing fails", async () => {
+    const entries = await readDropEntries([new File(["x"], "a.sfc"), new File(["x"], "b.zip")], () =>
+      Promise.reject(new Error("unreadable")),
+    );
+    expect(planDropDestinations(countDropEntries(entries)).destinations).toEqual(["creator"]);
   });
 });
 

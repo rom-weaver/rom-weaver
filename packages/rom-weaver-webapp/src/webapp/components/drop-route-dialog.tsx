@@ -5,6 +5,7 @@ import { Modal } from "../../public/react/components/ds/modal.tsx";
 import { SelectionCheckList, SelectionTree } from "../../public/react/components/ds/selection.tsx";
 import {
   countDropEntries,
+  type DropEntry,
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
@@ -22,6 +23,8 @@ import type { WebappView } from "../webapp-state-types.ts";
 const logger = createLogger("drop-route-dialog");
 
 type DropRouteRequest = {
+  /** Listed names for `files`, index for index; without them each file is judged by name. */
+  entries?: DropEntry[];
   files: File[];
   /** The view the files were dropped on; `home` plans a destination, a workflow plans a redirect. */
   from: WebappView;
@@ -62,8 +65,12 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
   const stay = (note: MessageId) =>
     option(request.from, note, localizer.message("ui.drop.stayOn", { page: page(request.from) }));
 
+  const entries: DropEntry[] = request.entries ?? request.files.map((file) => ({ name: file.name }));
+  const usable = (view: WebappView, index: number) =>
+    isUsableDropFile(view, entries[index]?.name ?? "", entries[index]?.archiveBucket);
+
   const question = ((): RouteQuestion => {
-    const counts = countDropEntries(request.files.map((file) => ({ name: file.name })));
+    const counts = countDropEntries(entries);
     const ask = (title: MessageId, subtitle: string, options: RouteOption[]) => ({
       options,
       subtitle,
@@ -112,7 +119,7 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
   })();
 
   const [picked, setPicked] = useState<RouteOption | undefined>(question.options[0]);
-  const fitsEvery = (choice: RouteOption) => request.files.every((file) => isUsableDropFile(choice.view, file.name));
+  const fitsEvery = (choice: RouteOption) => request.files.every((_file, index) => usable(choice.view, index));
 
   // When every page can use every file, the only question is where to go.
   if (question.options.every(fitsEvery)) {
@@ -157,12 +164,12 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
       {picked.note ? <p className="pdesc">{picked.note}</p> : null}
       <SelectionCheckList
         items={request.files.map((file, index) => {
-          const usable = isUsableDropFile(picked.view, file.name);
+          const fits = usable(picked.view, index);
           return {
-            defaultSelected: usable || undefined,
+            defaultSelected: fits || undefined,
             id: String(index),
             name: file.name,
-            note: usable ? undefined : localizer.message("ui.drop.notUsedHere", { page: picked.page }),
+            note: fits ? undefined : localizer.message("ui.drop.notUsedHere", { page: picked.page }),
             selectable: true,
           };
         })}
