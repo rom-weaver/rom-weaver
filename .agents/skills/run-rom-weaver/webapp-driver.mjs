@@ -77,10 +77,19 @@ async function apply() {
   await page.waitForTimeout(1000);
   await shot(page, "apply-staged.png");
 
+  // Under load the button is visible before hydration/staging enables it, and a click on a
+  // disabled button silently does nothing. Wait for it to be enabled, as the journeys do.
+  await page.waitForFunction(
+    () => {
+      const control = document.getElementById("rom-weaver-button-apply");
+      return control instanceof HTMLButtonElement && !control.disabled;
+    },
+    undefined,
+    { timeout: 120000 },
+  );
   const runBtn = page.getByRole("button", { name: /Apply & download/i }).first();
-  await runBtn.waitFor({ timeout: 30000 });
   log("clicking Apply & download");
-  const downloadP = page.waitForEvent("download", { timeout: 60000 });
+  const downloadP = page.waitForEvent("download", { timeout: 180000 });
   await runBtn.click();
   const download = await downloadP;
   const saved = path.join(OUT, await download.suggestedFilename());
