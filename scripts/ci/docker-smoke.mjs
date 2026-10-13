@@ -254,7 +254,8 @@ async function checkBrowser(origins) {
         .waitFor({ state: "visible", timeout: 60_000 });
       await page
         .locator("#rom-weaver-list-patch-stack")
-        .getByText("Verified", { exact: true })
+        // The IPS patch carries no checksum, so a passed preflight reads "Applied", not "Verified".
+        .getByText("Applied", { exact: true })
         .waitFor({ state: "visible", timeout: 60_000 });
       let download;
       try {
@@ -269,15 +270,11 @@ async function checkBrowser(origins) {
         console.error(await page.locator("body").innerText(), errors);
         throw error;
       }
-      const output = join(scratch, "download.zip");
+      // Apply downloads the bare output by default; ZIP is an opt-in in the form's options.
+      assert.equal(download.suggestedFilename(), "patched.bin");
+      const output = join(scratch, "download.bin");
       await download.saveAs(output);
-      run("python3", [
-        "-c",
-        `import sys,zipfile
-with zipfile.ZipFile(sys.argv[1]) as z:
- assert any(z.read(name)==bytes([170])+bytes(63) for name in z.namelist())`,
-        output,
-      ]);
+      assert.deepEqual(await readFile(output), expected);
       assert.deepEqual(errors, []);
       console.log(
         `PASS browser aliases, isolation, legacy archive apply and exact download bytes: ${origin}${prefix}`,
