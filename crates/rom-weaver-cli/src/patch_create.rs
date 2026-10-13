@@ -168,42 +168,38 @@ impl CliApp {
         modified: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> std::result::Result<PatchCreateInputSizes, Box<OperationReport>> {
-        let original_size = match fs::metadata(original) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
+        let inspect = |role: &str, path: &Path| -> std::result::Result<u64, Box<OperationReport>> {
+            let fail = |message: String| {
+                Box::new(
                     OperationReport::failed(
                         OperationFamily::Patch,
-                        format,
+                        format.clone(),
                         "validate",
-                        format!(
-                            "failed to inspect {command} original input `{}`: {error}",
-                            original.display()
-                        ),
-                        thread_execution,
+                        message,
+                        thread_execution.clone(),
                     )
                     .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
+                )
+            };
+            let metadata = fs::metadata(path).map_err(|error| {
+                fail(format!(
+                    "failed to inspect {command} {role} input `{}`: {error}",
+                    path.display()
+                ))
+            })?;
+            // Creation sizes and re-reads its inputs, so a pipe or device would
+            // report size 0 and yield a wrong patch or a partial output.
+            if !metadata.is_file() {
+                debug!(role, path = %path.display(), "patch create rejected a non-regular input");
+                return Err(fail(format!(
+                    "{command} {role} input `{}` is not a regular file; patch create needs seekable inputs, so write the stream to a file first",
+                    path.display()
+                )));
             }
+            Ok(metadata.len())
         };
-        let modified_size = match fs::metadata(modified) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        format,
-                        "validate",
-                        format!(
-                            "failed to inspect {command} modified input `{}`: {error}",
-                            modified.display()
-                        ),
-                        thread_execution,
-                    )
-                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
-            }
-        };
+        let original_size = inspect("original", original)?;
+        let modified_size = inspect("modified", modified)?;
         Ok(PatchCreateInputSizes {
             original: original_size,
             modified: modified_size,
