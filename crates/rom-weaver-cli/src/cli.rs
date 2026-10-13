@@ -4,6 +4,8 @@ use std::process::ExitCode;
 use std::io::{self, IsTerminal};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -15,8 +17,9 @@ use rom_weaver_app::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{
-    NoninteractivePrompter, OperationFamily, OperationReport, ProgressSink, SelectionPrompter,
-    clear_in_progress_outputs, process_cancellation_token, remove_in_progress_outputs,
+    NoninteractivePrompter, OperationFamily, OperationReport, OperationStatus, ProgressEvent,
+    ProgressSink, RomWeaverErrorKind, SelectionPrompter, clear_in_progress_outputs,
+    process_cancellation_token, remove_in_progress_outputs,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,6 +28,37 @@ use crate::formats_command::print_formats;
 use crate::native_output::{self, JsonReporter, OutputMode, print_argument_result, print_asset};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
+
+/// Turns a `patch validate --independent` result with failing verdicts into a
+/// failed event for the native front-end only, so the process exit status,
+/// human output, and `--json`/`--jsonl` `exit_code` all agree. The app layer
+/// keeps reporting the run as succeeded with `details.patch_validation.status`
+/// of `mixed`, because the browser reads `per_patch` from that report.
+#[cfg(not(target_arch = "wasm32"))]
+struct IndependentValidationExitSink {
+    inner: Arc<dyn ProgressSink>,
+    failed: AtomicBool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ProgressSink for IndependentValidationExitSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        let failed_count = (event.command == "patch-validate"
+            && event.status == OperationStatus::Succeeded)
+            .then_some(event.details.as_ref())
+            .flatten()
+            .and_then(|details| details.get("patch_validation"))
+            .filter(|validation| validation.get("independent") == Some(&serde_json::json!(true)))
+            .and_then(|validation| validation.get("failed_count")?.as_u64())
+            .unwrap_or(0);
+        if failed_count > 0 {
+            event.status = OperationStatus::Failed;
+            event.error_kind = Some(RomWeaverErrorKind::Validation);
+            self.failed.store(true, Ordering::SeqCst);
+        }
+        self.inner.emit(event);
+    }
+}
 
 /// Heading the global flags are listed under. Every subcommand inherits the
 /// globals, so without a heading they interleave with that command's own
@@ -793,6 +827,11 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
             command,
         ))
     };
+    let validation_exit = Arc::new(IndependentValidationExitSink {
+        inner: reporter,
+        failed: AtomicBool::new(false),
+    });
+    let reporter: Arc<dyn ProgressSink> = Arc::clone(&validation_exit) as Arc<dyn ProgressSink>;
     let prompter: Arc<dyn SelectionPrompter> = if interactive {
         Arc::new(StdinPrompter::new())
     } else {
@@ -835,6 +874,11 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         crate::checksum_output::run(command, options, reporter, prompter)
     } else {
         run_command(command, options, reporter, prompter)
+    };
+    let status = if status == ExitCode::SUCCESS && validation_exit.failed.load(Ordering::SeqCst) {
+        ExitCode::FAILURE
+    } else {
+        status
     };
     let status = finish_run(status);
     match json_reporter {

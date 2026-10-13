@@ -7258,7 +7258,7 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
         patch_bad.path(),
     );
 
-    // Independent mode exits 0 even though one patch fails, so the caller can read both verdicts.
+    // A failing verdict exits 1, but every verdict is still reported.
     let output = command_stdout(
         &[
             "patch",
@@ -7272,12 +7272,12 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
             "--independent",
             "--jsonl",
         ],
-        0,
+        1,
     );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "patch-validate");
-    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["status"], "failed");
     let validation = &json["details"]["patch_validation"];
     assert_eq!(validation["independent"], true);
     assert_eq!(validation["status"], "mixed");
@@ -7296,6 +7296,73 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
             .expect("failure message")
             .is_empty()
     );
+}
+
+fn independent_validate_fixture(temp: &assert_fs::TempDir, fail: bool) -> Vec<String> {
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(temp.child("mod-good.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("other.bin").path(), b"totally other src").expect("fixture");
+    fs::write(temp.child("mod-other.bin").path(), b"totally other dst").expect("fixture");
+    let good = temp.child("good.bps");
+    let second = temp.child("second.bps");
+    create_bps_patch(input.path(), temp.child("mod-good.bin").path(), good.path());
+    if fail {
+        create_bps_patch(
+            temp.child("other.bin").path(),
+            temp.child("mod-other.bin").path(),
+            second.path(),
+        );
+    } else {
+        create_bps_patch(
+            input.path(),
+            temp.child("mod-other.bin").path(),
+            second.path(),
+        );
+    }
+    [
+        "patch",
+        "validate",
+        "--input",
+        input.path().to_str().expect("path"),
+        "--patch",
+        good.path().to_str().expect("path"),
+        "--patch",
+        second.path().to_str().expect("path"),
+        "--independent",
+    ]
+    .map(str::to_string)
+    .to_vec()
+}
+
+#[test]
+fn patch_validate_independent_exit_code_follows_verdicts() {
+    for (fail, code) in [(true, 1), (false, 0)] {
+        let temp = setup_temp_dir();
+        let base = independent_validate_fixture(&temp, fail);
+        let run = |extra: Option<&str>| {
+            let mut args: Vec<&str> = base.iter().map(String::as_str).collect();
+            args.extend(extra);
+            command_stdout(&args, code)
+        };
+        run(None);
+        let json: serde_json::Value =
+            serde_json::from_slice(&run(Some("--json"))).expect("json document");
+        assert_eq!(json["exit_code"], code);
+        assert_eq!(
+            json["status"],
+            if fail { "failed" } else { "succeeded" },
+            "{json}"
+        );
+        let verdicts = &json["details"]["patch_validation"];
+        assert_eq!(verdicts["failed_count"], u64::from(fail));
+        assert_eq!(
+            verdicts["per_patch"].as_array().expect("per_patch").len(),
+            2
+        );
+        let line = parse_single_json_line(&run(Some("--jsonl")));
+        assert_eq!(line["status"], if fail { "failed" } else { "succeeded" });
+    }
 }
 
 #[test]
@@ -11690,21 +11757,26 @@ fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
         0,
     );
 
-    let stdout = String::from_utf8(command_stdout(
-        &[
-            "patch",
-            "validate",
-            "--input",
-            input.path().to_str().expect("path"),
-            "--independent",
-            "--patch",
-            good.path().to_str().expect("path"),
-            "--patch",
-            bad.path().to_str().expect("path"),
-        ],
-        0,
-    ))
-    .expect("utf8 stdout");
+    // A failed run reports on stderr.
+    let stdout = String::from_utf8(
+        command_output_with_env(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--independent",
+                "--patch",
+                good.path().to_str().expect("path"),
+                "--patch",
+                bad.path().to_str().expect("path"),
+            ],
+            &[],
+            1,
+        )
+        .stderr,
+    )
+    .expect("utf8 stderr");
 
     assert!(stdout.contains("1/2 passed"), "{stdout}");
     assert!(stdout.contains("; pass good.bps"), "{stdout}");
