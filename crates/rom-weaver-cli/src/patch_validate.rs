@@ -1086,11 +1086,6 @@ impl CliApp {
         report
     }
 
-    /// Fan patch preflight validations across the op's thread budget (capped at the
-    /// number of runnable patches; serial on the non-threaded wasm build). A
-    /// per-patch `Cancelled` is the only error that aborts the whole batch -
-    /// every other handler error is captured as that patch's "failed"
-    /// verdict. `Err` carries the whole-batch abort report.
     /// Check one independent job against its declared input and output checks,
     /// applying the patch to a temporary file when an output check exists.
     fn validate_job_with_declared_checks(
@@ -1141,6 +1136,11 @@ impl CliApp {
         result
     }
 
+    /// Fan patch preflight validations across the op's thread budget (capped at the
+    /// number of runnable patches; serial on the non-threaded wasm build). A
+    /// per-patch `Cancelled` is the only error that aborts the whole batch -
+    /// every other handler error is captured as that patch's "failed"
+    /// verdict. `Err` carries the whole-batch abort report.
     fn validate_ready_jobs(
         &self,
         ready_jobs: &[IndependentReadyJob],
