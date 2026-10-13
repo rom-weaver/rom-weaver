@@ -12149,6 +12149,56 @@ fn patch_apply_uses_a_raw_rom_whose_bytes_start_like_a_container_signature() {
     assert_eq!(fs::read(output.path()).expect("output"), expected);
 }
 
+#[cfg(unix)]
+#[test]
+fn patch_create_rejects_non_regular_modified_input_without_leaving_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    fs::write(original.path(), b"original ROM bytes").expect("original fixture");
+    let fifo = temp.child("modified.fifo");
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(fifo.path())
+            .status()
+            .expect("mkfifo")
+            .success()
+    );
+    // Holding the FIFO open read-write keeps any open by the command from blocking.
+    let _hold = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fifo.path())
+        .expect("open fifo");
+
+    for name in ["from-fifo.bps", "from-fifo.ips"] {
+        let output = temp.child(name);
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                fifo.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            1,
+        );
+        assert_eq!(event["status"], "failed", "{name}");
+        assert!(
+            event["label"]
+                .as_str()
+                .expect("label")
+                .contains("not a regular file"),
+            "{name}: {}",
+            event["label"]
+        );
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+}
+
 #[test]
 fn patch_validate_independent_enforces_patch_input_and_output_checks() {
     let temp = setup_temp_dir();
