@@ -517,6 +517,11 @@ impl CliApp {
             ),
         };
         if report.status != OperationStatus::Succeeded {
+            // A handler that failed mid-write MUST NOT leave a partial output behind.
+            if apply_output.exists() {
+                debug!(output = %apply_output.display(), "removing partial output of a failed patch step");
+                let _ = fs::remove_file(apply_output);
+            }
             let mut report = report;
             if patch_count > 1 {
                 report.label = format!(
