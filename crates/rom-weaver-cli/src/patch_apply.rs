@@ -656,6 +656,29 @@ impl<'a> PatchSelectors<'a> {
 }
 
 impl CliApp {
+    /// Patch handlers seek within and size the ROM, so a pipe or device input would read as empty
+    /// or fail mid-apply. Returns the failure report for such an input.
+    pub(super) fn unseekable_rom_input_failure(
+        command: &str,
+        input: &Path,
+    ) -> Option<OperationReport> {
+        let metadata = fs::metadata(input).ok()?;
+        if metadata.is_file() || metadata.is_dir() {
+            return None;
+        }
+        debug!(command, input = %input.display(), "rejected a non-regular ROM input");
+        Some(OperationReport::failed(
+            OperationFamily::Patch,
+            None,
+            "validate",
+            format!(
+                "{command} input `{}` is not a regular file; patches need a seekable ROM, so write the stream to a file first",
+                input.display()
+            ),
+            None,
+        ))
+    }
+
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         if args.input == Path::new("-") {
             let report = OperationReport::failed(
@@ -665,6 +688,9 @@ impl CliApp {
                 "patch apply does not read from stdin; pass a file path".to_string(),
                 None,
             );
+            return self.finish("patch-apply", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch apply", &args.input) {
             return self.finish("patch-apply", report);
         }
         if args.dry_run {
@@ -1999,6 +2025,12 @@ impl CliApp {
                 report.label,
                 checksum_verification_labels.join("; ")
             );
+            let warnings = checksum_verification_labels
+                .iter()
+                .filter_map(|label| label.strip_prefix("warning="))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            Self::append_report_warnings(report, warnings);
         }
         Ok(())
     }
@@ -2207,13 +2239,25 @@ impl CliApp {
                 patch = %patch.display(),
                 "auto n64: nothing separates the three orders; keeping the current one"
             );
-            return (source, None);
+            return (source, Self::n64_order_guess_warning(source));
         };
         let note = format!(
             "patch N64 byte order inferred as {} ({reason})",
             target.label()
         );
         (target, Some(note))
+    }
+
+    /// Keeping the input's order when no evidence separates the orders is a guess. Big-endian
+    /// is the common authoring order, so only a kept v64 or n64 input warns.
+    fn n64_order_guess_warning(source: N64ByteOrder) -> Option<String> {
+        if source == N64ByteOrder::BigEndian {
+            return None;
+        }
+        Some(format!(
+            "warning=N64 byte order could not be determined from the patch; assuming {} (the input's order). If the output is wrong, rerun with --n64-byte-order set to the order the patch was made for",
+            source.label()
+        ))
     }
 
     pub(super) fn transition_n64_byte_order(

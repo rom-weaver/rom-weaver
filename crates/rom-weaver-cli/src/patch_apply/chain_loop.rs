@@ -439,6 +439,8 @@ impl CliApp {
             && verification.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
         Self::verify_chain_step_input(context, state, step, step_is_base)?;
 
+        // A forced overwrite targets an existing file; a failure must leave it, not delete it.
+        let output_existed = apply_output.exists();
         let request = PatchApplyRequest {
             input: std::mem::take(&mut state.current_input),
             patches: vec![step.apply_step.patch.resolved.clone()],
@@ -517,6 +519,11 @@ impl CliApp {
             ),
         };
         if report.status != OperationStatus::Succeeded {
+            // A handler that failed mid-write MUST NOT leave a partial output behind.
+            if !output_existed && apply_output.exists() {
+                debug!(output = %apply_output.display(), "removing partial output of a failed patch step");
+                let _ = fs::remove_file(apply_output);
+            }
             let mut report = report;
             if patch_count > 1 {
                 report.label = format!(

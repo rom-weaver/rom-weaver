@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs::OpenOptions};
+use std::{collections::HashSet, fs::OpenOptions, num::IntErrorKind};
 
 use super::*;
 use rom_weaver_core::{
@@ -576,18 +576,28 @@ fn parse_save_assignments(
 fn parse_save_value(field: &SaveField, raw: &str) -> Result<SaveValue> {
     match &field.value {
         SaveValue::Text(_) => Ok(SaveValue::Text(raw.to_string())),
-        SaveValue::U32(_) => raw.parse::<u32>().map(SaveValue::U32).map_err(|_| {
+        SaveValue::U32(_) => raw.parse::<u32>().map(SaveValue::U32).map_err(|error| {
+            let message = match error.kind() {
+                IntErrorKind::PosOverflow => "the save field value is out of range",
+                _ => "the save field needs an unsigned integer",
+            };
             RomWeaverError::ValidationCode(
                 ValidationCodeError::new("save_value_type_invalid")
-                    .with_message("the save field needs an unsigned integer")
+                    .with_message(message)
                     .with_field("field", field.id.as_str())
                     .with_field("value", raw),
             )
         }),
-        SaveValue::I32(_) => raw.parse::<i32>().map(SaveValue::I32).map_err(|_| {
+        SaveValue::I32(_) => raw.parse::<i32>().map(SaveValue::I32).map_err(|error| {
+            let message = match error.kind() {
+                IntErrorKind::PosOverflow | IntErrorKind::NegOverflow => {
+                    "the save field value is out of range"
+                }
+                _ => "the save field needs a signed integer",
+            };
             RomWeaverError::ValidationCode(
                 ValidationCodeError::new("save_value_type_invalid")
-                    .with_message("the save field needs a signed integer")
+                    .with_message(message)
                     .with_field("field", field.id.as_str())
                     .with_field("value", raw),
             )

@@ -122,6 +122,31 @@ fn apply_names_truncated_patch_file() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn apply_keeps_non_eof_read_errors_instead_of_reporting_truncation() {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("dir.xdelta");
+    fs::write(&input_path, b"hello old world").expect("write input");
+    fs::create_dir(&patch_path).expect("create directory patch");
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.join("output.bin"),
+            },
+            &test_context(),
+        )
+        .expect_err("a directory is not a readable patch");
+    assert!(
+        matches!(&error, RomWeaverError::Io(io_error) if io_error.kind() != std::io::ErrorKind::UnexpectedEof),
+        "unexpected error: {error}"
+    );
+}
+
 #[test]
 fn apply_supports_overlapping_target_copy() {
     let patch_bytes = build_patch(TestPatch {
