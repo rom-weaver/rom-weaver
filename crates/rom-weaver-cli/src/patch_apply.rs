@@ -2831,6 +2831,7 @@ fn merge_apply_step_declarations(
     input_checks: &[String],
     output_checks: &[String],
     patch_count: usize,
+    shared_basis: PatchBasisMode,
 ) -> Result<()> {
     if input_checks.is_empty() && output_checks.is_empty() {
         return Ok(());
@@ -2857,9 +2858,22 @@ fn merge_apply_step_declarations(
         ));
     }
     for (index, step) in steps.iter_mut().enumerate() {
-        let verification = step
-            .verification
-            .get_or_insert_with(patch_plan::PatchStepVerification::default);
+        // A step no weave declared still takes the shared basis
+        // (--default-patch-basis); creating its verification here would
+        // otherwise read as a weave declaration and skip that basis.
+        let verification = step.verification.get_or_insert_with(|| {
+            let basis = shared_basis.declared();
+            trace!(
+                index,
+                ?basis,
+                "check flags: undeclared step takes the shared basis"
+            );
+            patch_plan::PatchStepVerification {
+                basis,
+                basis_source: basis.map(|_| PatchBasisSource::Declared),
+                ..patch_plan::PatchStepVerification::default()
+            }
+        });
         verification.enforce_declared_checks = true;
         let input_check = check_at(input_checks, index);
         if !input_check.trim().is_empty() {

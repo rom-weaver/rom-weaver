@@ -11956,6 +11956,42 @@ fn patch_validate_checks_a_base_step_input_against_the_base_rom_like_apply() {
 }
 
 #[test]
+fn default_patch_basis_base_checks_a_step_input_against_the_base_rom_in_apply_and_validate() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let second = second.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    // Base ROM 758d6336 passes; the intermediate after first.ips (fab84ea3)
+    // is not what the base-basis step reads, so it fails.
+    for (check, code) in [("crc32=758d6336", 0), ("crc32=fab84ea3", 1)] {
+        let chain = [
+            "--input",
+            rom,
+            "--patch",
+            first,
+            "--patch-input-check",
+            "",
+            "--patch",
+            second,
+            "--default-patch-basis",
+            "base",
+            "--patch-input-check",
+            check,
+        ];
+        let mut apply = vec!["patch", "apply"];
+        apply.extend(chain);
+        apply.extend(["--no-compress", "--force", "-o", out]);
+        command_output_with_env(&apply, &[], code);
+        let mut validate = vec!["patch", "validate"];
+        validate.extend(chain);
+        command_output_with_env(&validate, &[], code);
+    }
+}
+
+#[test]
 fn patch_validate_accepts_and_enforces_size_checks_like_apply() {
     let temp = setup_temp_dir();
     let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
