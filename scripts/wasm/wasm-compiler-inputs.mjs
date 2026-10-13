@@ -6,8 +6,15 @@ import { pathToFileURL } from "node:url";
 const STANDALONE_RUST_TARGET =
   /(?:^|\/)(?:tests?|examples|benches)\/|\/src\/(?:.*\/)?test[^/]*\.rs$/u;
 
+// No crate embeds its Markdown (no `include_str!` of a `.md` file). LICENSE
+// files stay inputs: gen-third-party-licenses.mjs copies them into the
+// module's attribution bundle. Vendored trees are never narrowed.
+const CRATE_PROSE = /\.md$/u;
+
 export const isWasmCompilerInput = (path) =>
-  path.startsWith("crates/") && !STANDALONE_RUST_TARGET.test(path);
+  path.startsWith("crates/") &&
+  !STANDALONE_RUST_TARGET.test(path) &&
+  (path.includes("/vendor/") || !CRATE_PROSE.test(path));
 
 const filterTree = (tree, select) =>
   tree

@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyChanges, coverageTiers, scheduledSelection } from "./classify-changes.mjs";
+import { existsSync, readFileSync } from "node:fs";
+
+import {
+  classifyChanges,
+  coverageTiers,
+  ROOT_LEAF_SCRIPTS,
+  scheduledSelection,
+} from "./classify-changes.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 // Both helpers stringify, so a `deepEqual` against the whole result and a spot
@@ -16,7 +23,11 @@ const classifyFor = (eventName, ...paths) =>
 const classify = (...paths) => classifyFor(undefined, ...paths);
 const REPO_LINT_ONLY = {
   rust: "false",
+  rust_lint: "false",
+  fuzz: "false",
   webapp: "false",
+  webapp_browser: "false",
+  lighthouse: "true",
   wasm_runtime: "false",
   security: "false",
   docker_cli: "false",
@@ -41,7 +52,11 @@ test("Rust save schemas rebuild both delivery targets", () => {
 test("documentation changes skip compiled stacks", () =>
   assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
     rust: "false",
+    rust_lint: "false",
+    fuzz: "false",
     webapp: "false",
+    webapp_browser: "false",
+    lighthouse: "true",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "false",
@@ -138,7 +153,11 @@ test("Rust test-only changes select nothing but Rust", () => {
       classify(path),
       {
         rust: "true",
+        rust_lint: "true",
+        fuzz: "false",
         webapp: "false",
+        webapp_browser: "false",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -294,7 +313,11 @@ test("native package changes build every CLI platform", () => {
       classify(path),
       {
         rust: "true",
+        rust_lint: "true",
+        fuzz: "false",
         webapp: "true",
+        webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -319,7 +342,11 @@ test("identify data build scripts select the stacks that run them", () => {
       classify(path),
       {
         rust: "true",
+        rust_lint: "true",
+        fuzz: "false",
         webapp: "true",
+        webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "false",
         security: "false",
         docker_cli: "false",
@@ -338,7 +365,11 @@ test("identify data build scripts select the stacks that run them", () => {
 test("dependency and CI changes select their broader checks", () => {
   assert.deepEqual(classify("Cargo.lock"), {
     rust: "true",
+    rust_lint: "true",
+    fuzz: "false",
     webapp: "true",
+    webapp_browser: "true",
+    lighthouse: "true",
     wasm_runtime: "true",
     security: "true",
     docker_cli: "true",
@@ -354,7 +385,11 @@ test("dependency and CI changes select their broader checks", () => {
       classify(path),
       {
         rust: "true",
+        rust_lint: "true",
+        fuzz: "true",
         webapp: "true",
+        webapp_browser: "true",
+        lighthouse: "true",
         wasm_runtime: "true",
         security: "true",
         docker_cli: "true",
@@ -390,14 +425,22 @@ test("deployment and cleanup helpers select repo lint without compiled stacks", 
     "scripts/ci/ensure-cloudflare-pages-project.mjs",
     "scripts/ci/github-api.mjs",
   ]) {
-    assert.deepEqual(classifyFor("pull_request", path), REPO_LINT_ONLY, path);
+    assert.deepEqual(
+      classifyFor("pull_request", path),
+      { ...REPO_LINT_ONLY, lighthouse: "false" },
+      path,
+    );
   }
 });
 
 test("CI matrix helpers select their consumers", () => {
   assert.deepEqual(classifyFor("pull_request", "scripts/ci/cli-platform-matrix.mjs"), {
     rust: "true",
+    rust_lint: "true",
+    fuzz: "false",
     webapp: "false",
+    webapp_browser: "false",
+    lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "false",
@@ -410,7 +453,11 @@ test("CI matrix helpers select their consumers", () => {
   });
   assert.deepEqual(classifyFor("pull_request", "scripts/ci/docker-matrix.mjs"), {
     rust: "false",
+    rust_lint: "false",
+    fuzz: "false",
     webapp: "true",
+    webapp_browser: "true",
+    lighthouse: "false",
     wasm_runtime: "false",
     security: "false",
     docker_cli: "true",
@@ -535,8 +582,9 @@ test("the nightly keeps only the Rust selection", () => {
   const everything = classifyChanges([], true, "schedule");
   const nightly = scheduledSelection(everything);
   assert.equal(nightly.rust, true);
+  assert.equal(nightly.rust_lint, true);
   for (const [key, value] of Object.entries(nightly))
-    if (key !== "rust") assert.equal(value, false, key);
+    if (key !== "rust" && key !== "rust_lint") assert.equal(value, false, key);
   assert.equal(
     scheduledSelection(classifyChanges(["docs/development/ci.md"], false, "schedule")).rust,
     false,
@@ -590,4 +638,174 @@ test("Docker runtime smoke changes select both image builds and the prebuilt bun
   ]) {
     assert.equal(result[key], "true", key);
   }
+});
+
+const selected = (result) =>
+  Object.entries(result)
+    .filter(([, value]) => value === true || value === "true")
+    .map(([key]) => key)
+    .sort();
+
+test("a published-guide-only pull request skips the browser suites, not static or E2E", () => {
+  const docs = classifyFor("pull_request", "docs/how-to/apply-rom-patches.md", "README.md");
+  assert.equal(docs.webapp, "true");
+  assert.equal(docs.webapp_browser, "false");
+  // Main and every other event keep the whole stack for the same change.
+  for (const eventName of ["push", "workflow_dispatch", undefined])
+    assert.equal(
+      classifyFor(eventName, "docs/how-to/apply-rom-patches.md").webapp_browser,
+      "true",
+      String(eventName),
+    );
+  for (const extra of [
+    "docs/screenshots/apply-page-desktop-dark.webp",
+    "docs/samples/compressed-disc/01-first.bps",
+    "packages/rom-weaver-webapp/src/webapp/docs-routing.mjs",
+    "crates/rom-weaver-core/src/lib.rs",
+  ]) {
+    const result = classifyFor("pull_request", "docs/how-to/apply-rom-patches.md", extra);
+    assert.equal(result.webapp_browser, "true", extra);
+  }
+});
+
+test("webapp assets stored under docs/ build the webapp", () => {
+  for (const path of [
+    "docs/screenshots/apply-page-desktop-dark.avif",
+    "docs/samples/compressed-disc/practice-disc.chd",
+    "docs/rom-weaver-weave-v2.schema.json",
+  ]) {
+    const result = classifyFor("pull_request", path);
+    assert.equal(result.webapp, "true", path);
+    assert.equal(result.webapp_browser, "true", path);
+  }
+});
+
+test("files Rust tests read outside crates/ select Rust", () => {
+  for (const path of [
+    "tests/fixtures/vcdiff/secondary-source.bin",
+    // cli_smoke compares its `extract --split-bin` paragraph with --help.
+    "docs/reference/cli.md",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).rust, "true", path);
+  }
+});
+
+test("fuzz targets select only the Rust lint job and its fuzz build", () => {
+  for (const path of ["fuzz/fuzz_targets/ips_apply.rs", "fuzz/Cargo.toml", "fuzz/Cargo.lock"]) {
+    assert.deepEqual(selected(classifyFor("pull_request", path)), ["fuzz", "rust_lint"], path);
+  }
+  assert.equal(classifyFor("pull_request", "crates/rom-weaver-core/src/lib.rs").fuzz, "false");
+});
+
+test("design notes select the webapp checks that run brand:check", () =>
+  assert.equal(classifyFor("pull_request", "design/icon-masters/README.md").webapp, "true"));
+
+test("crate prose selects Rust without the WASM module or webapp", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/README.md",
+    "crates/rom-weaver-core/src/save/schema/catalog/README.md",
+  ]) {
+    assert.deepEqual(
+      selected(classifyFor("pull_request", path)),
+      ["repo_lint", "rust", "rust_lint"],
+      path,
+    );
+  }
+  // Attribution text and vendored trees keep the module selection.
+  for (const path of [
+    "crates/rom-weaver-containers/src/nod/LICENSE-MIT",
+    "crates/rom-weaver-containers/libarchive/vendor/libarchive/README.md",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).wasm_runtime, "true", path);
+  }
+});
+
+test("leaf root scripts select repo lint alone, build scripts keep the webapp", () => {
+  for (const name of ROOT_LEAF_SCRIPTS) {
+    for (const path of [`scripts/${name}.mjs`, `scripts/${name}.test.mjs`]) {
+      assert.deepEqual(selected(classifyFor("pull_request", path)), ["repo_lint"], path);
+    }
+  }
+  for (const path of [
+    // These need the webapp's oxc-parser, which repo-lint does not install.
+    "scripts/quality-architecture.mjs",
+    "scripts/quality-guardrails.mjs",
+    // Imported by builds.
+    "scripts/dedupe-tree.mjs",
+    "scripts/identify-pack-groups.mjs",
+    "scripts/run-main.mjs",
+    "scripts/warn-only.mjs",
+    "scripts/cargo-target-dir.mjs",
+    "scripts/lefthook-install.mjs",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).webapp, "true", path);
+  }
+});
+
+test("repo-lint runs the test of every leaf root script", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  const step = workflow.match(/- name: Leaf script tests\n {8}run: >-\n((?: {10}\S.*\n)+)/u)[1];
+  const files = step.trim().split(/\s+/u).slice(2);
+  const expected = ROOT_LEAF_SCRIPTS.map((name) => `scripts/${name}.test.mjs`).filter((path) =>
+    existsSync(new URL(`../../${path}`, import.meta.url)),
+  );
+  assert.deepEqual(files, expected);
+});
+
+test("release-time CI helpers select repo lint without compiled stacks", () => {
+  for (const path of [
+    "scripts/ci/cla-gate.mjs",
+    "scripts/ci/docker-tag-policy.mjs",
+    "scripts/ci/npm-publish-package.mjs",
+    "scripts/ci/publication-freshness.mjs",
+    "scripts/ci/publish-apply-video.mjs",
+    "scripts/ci/purge-cloudflare-pages-cache.mjs",
+  ]) {
+    assert.deepEqual(selected(classifyFor("pull_request", path)), ["repo_lint"], path);
+  }
+  // No tests of their own, so they stay fail-open.
+  for (const path of ["scripts/ci/resolve-wasm-run.mjs", "scripts/ci/run-install-method.mjs"])
+    assert.equal(classifyFor("pull_request", path).full, "true", path);
+});
+
+test("pull requests run Lighthouse only when the audited bundle can change", () => {
+  for (const path of [
+    "packages/rom-weaver-webapp/src/webapp/app.tsx",
+    "packages/rom-weaver-webapp/src/presentation/localization/locales/de.ts",
+    "packages/rom-weaver-webapp/scripts/vite-config/static-assets.mjs",
+    "packages/rom-weaver-webapp/performance-budgets.json",
+    "packages/rom-weaver-webapp/package-lock.json",
+    "crates/rom-weaver-core/src/lib.rs",
+    "scripts/wasm/build-app.mjs",
+    "scripts/dedupe-tree.mjs",
+    "design/icon-masters/README.md",
+    "Cargo.lock",
+    "package-lock.json",
+    // Fail open on CI and classifier changes.
+    ".github/workflows/ci.yml",
+    "scripts/ci/classify-changes.mjs",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).lighthouse, "true", path);
+  }
+  for (const path of [
+    "docs/how-to/apply-rom-patches.md",
+    "README.md",
+    "packages/rom-weaver-webapp/tests/browser/accessibility.browser.test.js",
+    "packages/rom-weaver-webapp/tests/fixtures/archives/multi-rom.zip",
+    "packages/rom-weaver-webapp/scripts/run-e2e.test.mjs",
+    "crates/rom-weaver-cli/tests/cli_smoke/apply.rs",
+    "crates/rom-weaver-cli/README.md",
+    "scripts/wasm/build-app.test.mjs",
+    "scripts/quality-mutation.mjs",
+    "tests/fixtures/vcdiff/secondary-source.bin",
+  ]) {
+    assert.equal(classifyFor("pull_request", path).lighthouse, "false", path);
+  }
+  for (const eventName of ["push", "workflow_dispatch", undefined])
+    assert.equal(classifyFor(eventName, "README.md").lighthouse, "true", String(eventName));
+  assert.equal(
+    classifyChanges(["README.md"], false, "pull_request", `${RELEASE_PR_BRANCH_PREFIX}cli`)
+      .lighthouse,
+    true,
+  );
 });

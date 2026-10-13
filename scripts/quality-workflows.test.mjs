@@ -36,12 +36,12 @@ test("nightly and manual analysis runs use the selected source revision", () => 
   assert.ok(mutation.env.QUALITY_BASE.includes("needs.changes.outputs.last_nightly_sha"));
 });
 test("per-change Rust checks do not require the nightly quality jobs", () => {
-  assert.ok(ci.jobs.rust.needs.includes("quality-fast"));
-  assert.ok(ci.jobs.rust.needs.includes("quality-reference"));
-  const fast = ci.jobs.rust.steps.find((step) => step.name === "Verify required quality checks");
+  assert.ok(ci.jobs.gate.needs.includes("quality-fast"));
+  assert.ok(ci.jobs.gate.needs.includes("quality-reference"));
+  const fast = ci.jobs.gate.steps.find((step) => step.name === "Verify required quality checks");
   assert.ok(fast.if.includes("github.event_name == 'schedule'"));
   assert.ok(fast.if.includes("github.event_name == 'workflow_dispatch'"));
-  const reference = ci.jobs.rust.steps.find((step) => step.name === "Verify selected pinned reference");
+  const reference = ci.jobs.gate.steps.find((step) => step.name === "Verify selected pinned reference");
   assert.ok(reference.if.includes("github.event_name == 'schedule'"));
   assert.ok(reference.if.includes("github.event_name == 'workflow_dispatch'"));
   assert.equal(ci.jobs["quality-fast"]["continue-on-error"], undefined);

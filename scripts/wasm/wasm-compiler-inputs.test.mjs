@@ -67,3 +67,20 @@ test("cache inputs exclude standalone script tests and documentation", () => {
   ].map((path) => `100644 blob excluded\t${path}`);
   assert.equal(filterWasmCacheInputTree([...entries, ...excluded].join("\n")), entries.join("\n"));
 });
+
+test("crate prose is not a compiler input, but licenses and vendored files are", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/README.md",
+    "crates/rom-weaver-core/src/save/schema/catalog/README.md",
+  ]) {
+    assert.equal(isWasmCompilerInput(path), false, path);
+  }
+  for (const path of [
+    // gen-third-party-licenses.mjs copies these into the module's attribution.
+    "crates/rom-weaver-containers/src/nod/LICENSE-MIT",
+    "crates/rom-weaver-core/src/save/schema/catalog/LICENSE-GAME-TOOLS-COLLECTION",
+    "crates/rom-weaver-containers/libarchive/vendor/libarchive/README.md",
+  ]) {
+    assert.equal(isWasmCompilerInput(path), true, path);
+  }
+});

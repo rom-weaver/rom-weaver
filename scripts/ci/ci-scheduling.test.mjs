@@ -31,7 +31,7 @@ test("preview opt-in and validation use the same WASM selection", () => {
   const condition = job("wasm")
     .match(/    if: >-\n([\s\S]*?)\n    env:/u)[1]
     .trim();
-  const aggregate = job("plumbing").match(/WASM_SELECTED: \$\{\{ (.*) \}\}/u)[1];
+  const aggregate = job("gate").match(/WASM_SELECTED: \$\{\{ (.*) \}\}/u)[1];
   for (const [options, expected] of [
     [{}, false],
     [{ preview: true }, true],
@@ -49,8 +49,12 @@ test("main validation shares a group without cancelling active runs", () => {
   const concurrency = workflow.split("\nconcurrency:\n")[1].split("\njobs:\n")[0];
   const group = concurrency.match(/group: ci-\$\{\{ (.*) \}\}/u)[1];
   const cancel = concurrency.match(/cancel-in-progress: \$\{\{ (.*) \}\}/u)[1];
-  const evaluateConcurrency = (ref, event, runId) => {
-    const context = { github: { ref, event_name: event, run_id: runId } };
+  const evaluateConcurrency = (ref, event, runId, action = undefined, label = undefined) => {
+    const context = {
+      format: (template, ...values) =>
+        template.replace(/\{(\d+)\}/gu, (_, index) => String(values[index])),
+      github: { ref, event_name: event, run_id: runId, event: { action, label: { name: label } } },
+    };
     return {
       group: runInNewContext(group, context),
       cancel: runInNewContext(cancel, context),
@@ -72,6 +76,19 @@ test("main validation shares a group without cancelling active runs", () => {
     evaluateConcurrency("refs/pull/2/merge", "pull_request", 6).group,
     evaluateConcurrency("refs/pull/1/merge", "pull_request", 5).group,
   );
+  // The preview label replaces the pull request's run like a push does; any
+  // other label MUST NOT cancel it.
+  assert.deepEqual(
+    evaluateConcurrency("refs/pull/1/merge", "pull_request", 7, "labeled", "preview"),
+    {
+      group: "refs/pull/1/merge",
+      cancel: true,
+    },
+  );
+  assert.deepEqual(evaluateConcurrency("refs/pull/1/merge", "pull_request", 8, "labeled", "bug"), {
+    group: "ignored-label-8",
+    cancel: true,
+  });
 });
 
 test("publishers serialize and guard writes", () => {

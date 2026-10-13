@@ -37,6 +37,8 @@ test("the required Rust group enforces Windows results on pull requests", () => 
     );
     assert.equal(assertJobs("success", "true", dependencies).failed, result !== "success");
   }
-  const fullGroup = workflow.match(/- name: Verify full native jobs\n([\s\S]*?)(?=^  [\w-]+:)/m)[1];
+  const fullGroup = workflow.match(
+    /- name: Verify full native jobs\n([\s\S]*?)(?=\n      - name:|^  [\w-]+:)/m,
+  )[1];
   assert.doesNotMatch(fullGroup, /needs\.rust-windows\.result/);
 });

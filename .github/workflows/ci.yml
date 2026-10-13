@@ -9,8 +9,11 @@ on:
         default: none
         type: choice
         options: [none, nightly, beta, prod]
+  # `labeled` exists only for the `preview` label, which deploys a preview of
+  # the current head. Any other label starts a run whose jobs all skip; see
+  # the concurrency group and the `gate` job's name.
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - main
@@ -32,9 +35,11 @@ permissions:
 # Main validation MUST share one active slot to limit runner contention. New
 # pushes replace the pending run while the active run finishes.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
-# shared group would be replaced by the next push (or replace it).
+# shared group would be replaced by the next push (or replace it). A run for a
+# label other than `preview` gets a group of its own so it cannot cancel the
+# pull request's real run.
 concurrency:
-  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  group: ci-${{ github.event_name == 'schedule' && 'nightly' || (github.event.action == 'labeled' && github.event.label.name != 'preview') && format('ignored-label-{0}', github.run_id) || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -43,13 +48,19 @@ jobs:
     runs-on: ubuntu-24.04
     # A cold identify-data cache rebuilds the packs here; see below.
     timeout-minutes: 30
+    # Every other job needs this one, so skipping it skips the whole run.
+    if: ${{ !(github.event.action == 'labeled' && github.event.label.name != 'preview') }}
     permissions:
       contents: read
       # The nightly reads its own run history to find the last green nightly.
       actions: read
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
+      rust_lint: ${{ steps.classify.outputs.rust_lint }}
+      fuzz: ${{ steps.classify.outputs.fuzz }}
       webapp: ${{ steps.classify.outputs.webapp }}
+      webapp_browser: ${{ steps.classify.outputs.webapp_browser }}
+      lighthouse: ${{ steps.classify.outputs.lighthouse }}
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
@@ -209,7 +220,7 @@ jobs:
         id: identify
         if: >-
           github.event_name == 'workflow_dispatch' ||
-          steps.classify.outputs.rust == 'true' ||
+          steps.classify.outputs.rust_lint == 'true' ||
           steps.classify.outputs.webapp == 'true' ||
           steps['docker-matrix'].outputs.matrix != '[]' ||
           (steps.plan.outputs.targets != '' &&
@@ -248,8 +259,8 @@ jobs:
     needs: changes
     # It lints every tracked workflow, shell script, and Dockerfile rather than
     # the diff, so the gate is "did any file of those kinds change at all", not
-    # a per-file filter. The `Plumbing` aggregate below is the required check,
-    # so skipping this reports nothing to branch protection.
+    # a per-file filter. The `gate` job below is the required check, so
+    # skipping this reports nothing to branch protection.
     if: github.ref_type != 'tag' && needs.changes.outputs.repo_lint == 'true'
     steps:
       - name: Checkout
@@ -267,6 +278,33 @@ jobs:
 
       - name: CI script tests
         run: node --test scripts/ci/*.test.mjs
+
+      # The tests of ROOT_LEAF_SCRIPTS in scripts/ci/classify-changes.mjs; those
+      # scripts select only this job. `webapp-static` runs them with the rest.
+      - name: Leaf script tests
+        run: >-
+          node --test
+          scripts/markdownlint-no-soft-line-breaks.test.mjs
+          scripts/quality-diff-coverage.test.mjs
+          scripts/quality-fuzz.test.mjs
+          scripts/quality-kani.test.mjs
+          scripts/quality-miri.test.mjs
+          scripts/quality-mutation.test.mjs
+          scripts/quality-native-unaligned.test.mjs
+          scripts/quality-plan.test.mjs
+          scripts/quality-reference.test.mjs
+          scripts/quality-reference-encoder.test.mjs
+          scripts/quality-regression-proof.test.mjs
+          scripts/quality-sanitizer.test.mjs
+          scripts/quality-summary.test.mjs
+          scripts/quality-test-selection.test.mjs
+          scripts/quality-trusted-guardrails.test.mjs
+          scripts/quality-workflows.test.mjs
+          scripts/release-metadata.test.mjs
+          scripts/remove-worktree.test.mjs
+          scripts/setup-worktree.test.mjs
+          scripts/strip-ai-attribution.test.mjs
+          scripts/update-markdown-toc.test.mjs
 
       - name: Workflows
         run: mise run actionlint
@@ -786,7 +824,7 @@ jobs:
   wasm:
     name: Build WASM module + webapp
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     needs: changes
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
@@ -794,7 +832,7 @@ jobs:
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
     # first-party pull requests with the preview label also select their bundle.
-    # The `Plumbing` aggregate below is the required check.
+    # The `gate` job below is the required check.
     if: >-
       needs.changes.outputs.webapp == 'true' ||
       (github.event_name == 'pull_request' &&
@@ -941,51 +979,14 @@ jobs:
         continue-on-error: true
         run: npm --prefix packages/rom-weaver-webapp run check:size
 
-  # One stable name for the repository plumbing - lint, the WASM module, the
-  # images - so each of those jobs can be skipped outright when nothing it
-  # consumes changed. Branch protection requires this, not the individual jobs:
-  # a job removed from a matrix reports no status at all, and the ruleset has no
-  # bypass actors, so an unreported required name blocks the merge forever.
-  # Same shape as `rust` and `webapp` below: it runs even when its dependencies
-  # skipped, and accepts a WASM skip only where neither a webapp change nor a
-  # first-party pull-request preview selected it.
-  plumbing:
-    name: Plumbing
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    needs: [changes, repo-lint, docker, docker-prebuilt, wasm]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # One call per selection flag rather than one for the job: unlike `rust`
-      # and `webapp`, these jobs do not share a flag, and the script's contract
-      # is one flag per group. The prebuilt smoke has a flag of its own because
-      # a pull request skips it for a webapp change that touched no image file,
-      # which the webapp flag would report as a missing job. Every group is
-      # evaluated before exiting so one skip-mismatch does not hide the others.
-      - name: Verify plumbing jobs
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          REPO_LINT_SELECTED: ${{ needs.changes.outputs.repo_lint }}
-          REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
-          DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
-          DOCKER_RESULT: ${{ needs.docker.result }}
-          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
-          WASM_RESULT: ${{ needs.wasm.result }}
-          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
-          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
-        run: node scripts/ci/assert-job-groups.mjs
-
   # Host-profile Rust lint and metadata checks. The test suite has its own job
   # below so both compile-heavy paths can run at the same time.
   rust-lint:
     name: "Rust (Linux: lint + metadata)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust_lint == 'true'
     env:
       CARGO_TERM_COLOR: always
       # Full debuginfo is the bulk of a dev-profile target/, which is what this
@@ -1057,10 +1058,18 @@ jobs:
       - name: Unused Rust dependencies
         run: mise run machete
 
+      # The fuzz crate is its own workspace, so no other job compiles it; the
+      # nightly fuzz smoke is the only other check of its targets. Not
+      # `--locked`: Release Please does not bump fuzz/Cargo.lock, so its pins of
+      # the workspace crates trail every release.
+      - name: Fuzz targets build
+        if: needs.changes.outputs.fuzz == 'true'
+        run: cargo check --manifest-path fuzz/Cargo.toml --bins
+
   rust-host:
     name: "Rust (Linux: tests + package)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -1103,7 +1112,7 @@ jobs:
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: 40
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -1225,7 +1234,7 @@ jobs:
   rust-macos:
     name: Rust (macOS)
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 20
     needs: changes
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
@@ -1259,7 +1268,7 @@ jobs:
   rust-windows:
     name: Rust (Windows)
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 35
     needs: changes
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
@@ -1364,81 +1373,12 @@ jobs:
           cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
           --example rom-weaver-typegen --example rom-weaver-app
 
-  # Presents one stable check name while the independent host and threaded-target
-  # work runs in parallel, so branch protection has a single thing to require.
-  # The `main protection` ruleset requires this context by name. It must fail
-  # rather than skip when a dependency fails, hence `!cancelled()` plus the
-  # explicit result assertions below - a skipped check counts as passing.
-  # `!cancelled()` rather than `always()`: when the run itself is cancelled
-  # (superseded by a newer push, or by hand) the dependencies report
-  # `cancelled`, and `always()` would turn that into a red Rust check on a
-  # build nobody finished.
-  rust:
-    name: Rust
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    needs:
-      [
-        changes,
-        quality-fast,
-        quality-reference,
-        rust-host,
-        rust-lint,
-        cli-platforms,
-        cli-linux-arm64,
-        rust-macos,
-        rust-windows,
-      ]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Verify required quality checks
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          'true'
-          'quality-fast=${{ needs.quality-fast.result }}'
-
-      - name: Verify selected pinned reference
-        if: >-
-          ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          '${{ needs.quality-fast.outputs.reference }}'
-          'quality-reference=${{ needs.quality-reference.result }}'
-
-      - name: Verify Rust jobs
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust }}'
-          'rust-host=${{ needs.rust-host.result }}'
-          'rust-lint=${{ needs.rust-lint.result }}'
-          'cli-platforms=${{ needs.cli-platforms.result }}'
-          'rust-windows=${{ needs.rust-windows.result }}'
-
-      # Same `!cancelled()` as the job above, for the same reason: this has to
-      # report even when the step before it failed, but a cancelled run is not a
-      # red Rust check.
-      - name: Verify full native jobs
-        if: ${{ !cancelled() }}
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
-          'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
-          'rust-macos=${{ needs.rust-macos.result }}'
-
   # Keep node-only checks on the shorter Lighthouse job so the browser suite
   # can start immediately without adding another runner to the queue.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
@@ -1478,7 +1418,10 @@ jobs:
       - name: Unit tests
         run: npm --prefix packages/rom-weaver-webapp run test:unit
 
+      # A pull request audits only when the bundle can differ from main's; the
+      # `lighthouse` flag fails open for every build and CI input.
       - name: Download webapp bundle
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
@@ -1492,11 +1435,12 @@ jobs:
       # ordered before this job in any case.
       - name: Lighthouse gates
         id: performance
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         run: npm --prefix packages/rom-weaver-webapp run audit:lighthouse
 
       - name: Upload Lighthouse reports
         id: lighthouse-reports
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true') }}
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
@@ -1560,9 +1504,9 @@ jobs:
   webapp-browser:
     name: Webapp (browser)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1594,7 +1538,7 @@ jobs:
   webapp-wasm-browser:
     name: Webapp (WASM browser)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     needs: [changes, wasm]
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
@@ -1632,7 +1576,7 @@ jobs:
   webapp-e2e:
     name: Webapp (E2E)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
@@ -1672,9 +1616,9 @@ jobs:
     # Test the WebKit OPFS path on macOS because Linux WebKit hangs on real OPFS operations.
     # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 30
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
     env:
       ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1"
       ROM_WEAVER_CHANNEL: prod
@@ -1710,30 +1654,117 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
 
-  # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
-  # for branch protection while the webapp jobs run in parallel. Must
-  # fail rather than skip when a dependency fails (a skipped check counts as
-  # passing), and `!cancelled()` keeps a superseded run from reporting red.
-  webapp:
-    name: Webapp
+  # The one required CI check. A job that is not selected is skipped, a matrix
+  # leg that is not planned reports no status at all, and the ruleset has no
+  # bypass actors, so branch protection requires this name instead of the jobs.
+  # Each step below checks one selection flag's group with
+  # scripts/ci/assert-jobs.mjs: a skip passes only when its group was not
+  # selected, so every PR-only skip needs its own flag shared with the job's
+  # `if:`. One runner for every group: separate aggregates each waited for a
+  # runner of their own under the concurrency cap.
+  # `!cancelled()` rather than `always()`: it reports even when a dependency
+  # failed (a skipped required check counts as passing), but a superseded or
+  # hand-cancelled run is not a red gate. Each step repeats it so one failed
+  # group does not hide the others.
+  # A run for a label other than `preview` skips `changes` and so every job;
+  # its gate skips under another name so the skip can never stand in for the
+  # real run's result on the same commit.
+  gate:
+    name: ${{ (github.event.action == 'labeled' && github.event.label.name != 'preview') && 'CI gate (ignored label event)' || 'CI gate' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs:
       [
         changes,
+        repo-lint,
+        docker,
+        docker-prebuilt,
         wasm,
+        quality-fast,
+        quality-reference,
+        rust-host,
+        rust-lint,
+        cli-platforms,
+        cli-linux-arm64,
+        rust-macos,
+        rust-windows,
         webapp-static,
         webapp-browser,
         webapp-wasm-browser,
         webapp-e2e,
         webapp-webkit-e2e,
       ]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
+    if: ${{ !cancelled() && github.ref_type != 'tag' && !(github.event.action == 'labeled' && github.event.label.name != 'preview') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Verify required quality checks
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          'true'
+          'quality-fast=${{ needs.quality-fast.result }}'
+
+      - name: Verify selected pinned reference
+        if: >-
+          ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.quality-fast.outputs.reference }}'
+          'quality-reference=${{ needs.quality-reference.result }}'
+
+      # One call per selection flag: these jobs do not share a flag. The
+      # prebuilt smoke has a flag of its own because a pull request skips it
+      # for a webapp change that touched no image file, which the webapp flag
+      # would report as a missing job.
+      - name: Verify plumbing jobs
+        if: ${{ !cancelled() }}
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          REPO_LINT_SELECTED: ${{ needs.changes.outputs.repo_lint }}
+          REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
+          DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+          WASM_RESULT: ${{ needs.wasm.result }}
+          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
+          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
+        run: node scripts/ci/assert-job-groups.mjs
+
+      # A fuzz-target change selects `rust-lint` without the rest of the Rust
+      # group.
+      - name: Verify Rust lint
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust_lint }}'
+          'rust-lint=${{ needs.rust-lint.result }}'
+
+      - name: Verify Rust jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust }}'
+          'rust-host=${{ needs.rust-host.result }}'
+          'cli-platforms=${{ needs.cli-platforms.result }}'
+          'rust-windows=${{ needs.rust-windows.result }}'
+
+      - name: Verify full native jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
+          'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
+          'rust-macos=${{ needs.rust-macos.result }}'
+
       - name: Verify webapp jobs
+        if: ${{ !cancelled() }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
@@ -1741,11 +1772,18 @@ jobs:
           'webapp-build=${{ needs.wasm.outputs.bundle || needs.wasm.result }}'
           'webapp-size=${{ needs.wasm.outputs.size || needs.wasm.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
-          'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
+
+      # A pull request that changes only published guide Markdown skips these.
+      - name: Verify webapp browser jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.webapp_browser }}'
+          'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
 
-      # Reports even when the step above failed, but never on a cancelled run.
       - name: Verify WASM runtime jobs
         if: ${{ !cancelled() }}
         run: >-
