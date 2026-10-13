@@ -180,7 +180,7 @@ After the matching check passes, run the complete local gate:
 mise run ci
 ```
 
-The pre-commit hooks select lint and CI script checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs repository tests, webapp script tests, lint, and unit tests, then builds the production webapp once and checks its asset sizes before browser suites run. E2E reuses that same production bundle. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
+The pre-commit hooks select lint and CI script checks from staged paths. The pre-push hook runs the root script tests, webapp script tests, and webapp unit tests when the pushed commits touch their paths; after pulling this hook into an existing clone, run `npm run hooks:install` from the main checkout. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs repository tests, webapp script tests, lint, and unit tests, then builds the production webapp once and checks its asset sizes before browser suites run. E2E reuses that same production bundle. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
 
 ## Still red in CI but green locally?
 

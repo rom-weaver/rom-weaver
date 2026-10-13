@@ -153,6 +153,25 @@ pre-commit:
       glob: "*.rs"
       run: mise run thread-guards
 
+# Webapp unit and script tests are the CI failures most often fixed by a second
+# push, and no pre-commit check runs them. Each re-push costs a full CI run and
+# a fresh wait for one of the 20 shared runners, so run them once before
+# pushing. Globs match the pushed files. Not parallel: both webapp commands
+# regenerate the same accent stylesheet first.
+pre-push:
+  commands:
+    root-script-tests:
+      glob:
+        - "scripts/*.{mjs,cjs,js}"
+        - "scripts/wasm/**"
+      run: node --test scripts/*.test.mjs scripts/wasm/*.test.mjs
+    webapp-script-tests:
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run test:scripts
+    webapp-unit-tests:
+      glob: "packages/rom-weaver-webapp/**"
+      run: npm --prefix packages/rom-weaver-webapp run test:unit
+
 commit-msg:
   commands:
     strip-ai-attribution:
