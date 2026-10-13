@@ -482,6 +482,18 @@ fn help_accepts_a_trailing_help_flag() {
     let plain = command_stdout(&["patch", "--help"], 0);
     assert_eq!(command_stdout(&["help", "patch", "--help"], 0), plain);
     assert!(!command_stdout(&["help", "--help"], 0).is_empty());
+    // A help flag anywhere after `help`, with global flags before it.
+    assert_eq!(command_stdout(&["help", "-h", "patch"], 0), plain);
+    assert_eq!(
+        command_stdout(&["--quiet", "help", "patch", "-h"], 0),
+        plain
+    );
+    let root = command_stdout(&["--help"], 0);
+    assert_eq!(
+        command_stdout(&["--json", "help", "--help"], 0),
+        command_stdout(&["--json", "--help"], 0)
+    );
+    assert_eq!(command_stdout(&["help", "help", "--help"], 0), root);
 }
 
 #[test]

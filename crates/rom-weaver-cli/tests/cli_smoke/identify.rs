@@ -425,6 +425,33 @@ fn identify_matches_a_manual_hash() {
 }
 
 #[test]
+fn identify_hash_with_a_database_pack_needs_no_home_directory() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    // `env -i`: no HOME or XDG directories, so no installed-pack location.
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .env_clear()
+        .args([
+            "identify",
+            "--hash",
+            "3610a686",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["identify"]["status"], "matched");
+}
+
+#[test]
 fn identify_matches_a_whole_rom_check() {
     let temp = setup_temp_dir();
     fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");

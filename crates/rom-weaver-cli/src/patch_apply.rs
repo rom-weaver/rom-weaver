@@ -2863,7 +2863,8 @@ fn merge_apply_step_declarations(
         verification.enforce_declared_checks = true;
         let input_check = check_at(input_checks, index);
         if !input_check.trim().is_empty() {
-            let parsed = parse_expect_tokens(&[input_check], "--patch-input-check", true)?;
+            let parsed =
+                crate::expect_tokens::parse_patch_check_value(&input_check, "--patch-input-check")?;
             verification.declared_input = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
@@ -2871,7 +2872,10 @@ fn merge_apply_step_declarations(
         }
         let output_check = check_at(output_checks, index);
         if !output_check.trim().is_empty() {
-            let parsed = parse_expect_tokens(&[output_check], "--patch-output-check", true)?;
+            let parsed = crate::expect_tokens::parse_patch_check_value(
+                &output_check,
+                "--patch-output-check",
+            )?;
             verification.declared_output = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,

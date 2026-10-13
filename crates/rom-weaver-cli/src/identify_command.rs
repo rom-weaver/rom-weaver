@@ -908,10 +908,17 @@ impl CliApp {
 
     fn run_identify_hash_branch(&self, args: &mut IdentifyCommand) -> AppRunOutcome {
         let hashes = std::mem::take(&mut args.hash);
+        // Only a --system name needs the installed-pack catalog; a hash lookup
+        // against --database packs must not require a home directory.
         #[cfg(not(target_arch = "wasm32"))]
-        let provider = match IdentifyPackProvider::new(args.database_dir.clone()) {
-            Ok(provider) => Some(provider),
-            Err(error) => return self.finish("identify", identify_failed_error(error, None)),
+        let provider = if args.system.is_some() {
+            match IdentifyPackProvider::new(args.database_dir.clone()) {
+                Ok(provider) => Some(provider),
+                Err(error) => return self.finish("identify", identify_failed_error(error, None)),
+            }
+        } else {
+            trace!("identify --hash: no --system, skipping the installed-pack provider");
+            None
         };
         #[cfg(target_arch = "wasm32")]
         let provider: Option<IdentifyPackProvider> = None;

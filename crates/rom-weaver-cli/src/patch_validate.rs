@@ -729,7 +729,20 @@ impl CliApp {
                 context.single_thread_execution(),
             ))
         };
-        if enforce_checks && !declared_input.is_empty() {
+        // A step declared against the base ROM had its input checks verified
+        // against that ROM by the plan, exactly as `patch apply` does; the
+        // intermediate is not its input.
+        let declared_base = chain.validation_steps.as_ref().is_some_and(|verdicts| {
+            verdicts[index].basis == PatchInputBasis::Base
+                && verdicts[index].basis_source == PatchBasisSource::Declared
+        });
+        if declared_base && !declared_input.is_empty() {
+            debug!(
+                index,
+                "--patch-input-check verified against the base ROM by the plan"
+            );
+        }
+        if enforce_checks && !declared_base && !declared_input.is_empty() {
             Self::verify_chain_step_state(&chain.current_input, declared_input, context)
                 .map_err(|error| check_failed("--patch-input-check", error))?;
         }
@@ -1402,21 +1415,13 @@ impl CliApp {
             let resolved_patch_path = &patch.resolved;
             let mut declared_input = Self::filename_plan_state(&patch.source);
             if let Some(tokens) = metadata.input_check_flags[index].as_ref() {
-                declared_input
-                    .checksums
-                    .extend(Self::parse_plan_check_tokens(
-                        tokens,
-                        "--patch-input-check",
-                    )?);
+                let flagged = Self::parse_plan_check_tokens(tokens, "--patch-input-check")?;
+                declared_input.checksums.extend(flagged.checksums);
+                declared_input.size = flagged.size.or(declared_input.size);
             }
             let mut declared_output = patch_plan::PlanState::default();
             if let Some(tokens) = metadata.output_check_flags[index].as_ref() {
-                declared_output
-                    .checksums
-                    .extend(Self::parse_plan_check_tokens(
-                        tokens,
-                        "--patch-output-check",
-                    )?);
+                declared_output = Self::parse_plan_check_tokens(tokens, "--patch-output-check")?;
             }
             let mut plan_input = Self::build_plan_patch_input(
                 &patch.source,
@@ -1578,13 +1583,10 @@ impl CliApp {
     ) -> Result<Vec<(patch_plan::PlanState, patch_plan::PlanState)>> {
         let metadata = Self::align_plan_metadata(flags, patch_count)?;
         let parse = |tokens: &Option<String>, flag: &str| -> Result<patch_plan::PlanState> {
-            Ok(patch_plan::PlanState {
-                checksums: match tokens {
-                    Some(tokens) => Self::parse_plan_check_tokens(tokens, flag)?,
-                    None => BTreeMap::new(),
-                },
-                size: None,
-            })
+            match tokens {
+                Some(tokens) => Self::parse_plan_check_tokens(tokens, flag),
+                None => Ok(patch_plan::PlanState::default()),
+            }
         };
         (0..patch_count)
             .map(|index| {
@@ -1648,18 +1650,14 @@ impl CliApp {
         }
     }
 
-    /// Parse a comma-separable `ALGO=HEX` flag value.
-    fn parse_plan_check_tokens(value: &str, flag: &str) -> Result<BTreeMap<String, String>> {
-        let tokens: Vec<String> = value
-            .split(',')
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-            .map(str::to_owned)
-            .collect();
-        if tokens.is_empty() {
-            return Ok(BTreeMap::new());
-        }
-        Self::parse_patch_apply_checksum_values(&tokens, flag)
+    /// Parse a comma-separable `ALGO=HEX` / `size=N` flag value with the
+    /// same token rules `patch apply` uses for these flags.
+    fn parse_plan_check_tokens(value: &str, flag: &str) -> Result<patch_plan::PlanState> {
+        let parsed = crate::expect_tokens::parse_patch_check_value(value, flag)?;
+        Ok(patch_plan::PlanState {
+            checksums: parsed.checksums,
+            size: parsed.size,
+        })
     }
 
     fn filename_plan_state(patch_path: &Path) -> patch_plan::PlanState {
