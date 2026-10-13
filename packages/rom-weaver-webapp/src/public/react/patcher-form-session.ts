@@ -57,8 +57,18 @@ import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-h
 import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { clearApplyEntries } from "./emulator-session-store.ts";
 
-const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
-  JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
+// weavePackage is read from the settings by the form directly and persisted as the user toggles
+// Include ROM; counting it as a changed default would reset every per-job override (such as the
+// chosen weave format) back to the defaults.
+const withoutWeavePackage = ({ weavePackage: _weave, bundlePackage: _bundle, ...rest }: Record<string, unknown> = {}) =>
+  rest;
+const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) => {
+  const output = withoutWeavePackage(settings.output);
+  return JSON.stringify(
+    { ...withoutWeavePackage(settings), output: Object.keys(output).length ? output : undefined },
+    (_key, value) => (typeof value === "function" ? "[function]" : value),
+  );
+};
 
 const sameStringSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
   left.size === right.size && [...left].every((value) => right.has(value));

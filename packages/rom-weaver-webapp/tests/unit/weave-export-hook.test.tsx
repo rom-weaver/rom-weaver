@@ -219,4 +219,18 @@ describe("useWeaveExport", () => {
     expect(result.current.busy).toBe(false);
     expect(result.current.progress).toBeNull();
   });
+
+  it("keeps a chosen format when the ROM-inclusion default changes", () => {
+    const { result, rerender } = renderHook(
+      ({ initialWeaveRom }) => useWeaveExport(hookOptions({ initialWeaveRom, initialFormat: "zip" })),
+      { initialProps: { initialWeaveRom: false } },
+    );
+
+    act(() => result.current.setFormat("7z"));
+    expect(result.current.format).toBe("7z");
+    rerender({ initialWeaveRom: true });
+
+    expect(result.current.weaveRom).toBe(true);
+    expect(result.current.format).toBe("7z");
+  });
 });
