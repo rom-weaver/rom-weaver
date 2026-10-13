@@ -104,7 +104,10 @@ const NavRow = ({
           {entry.shortLabel}
         </span>
       ) : null}
-      {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
+      {/* The chip's word is generated content: a row named by its full title
+          ("Trim ROM") cannot also contain the chip as visible text (axe
+          label-content-name-mismatch), while unnamed rows still read it. */}
+      {entry.beta ? <span className="nav-beta" data-label={localizer.message("ui.tools.beta")} /> : null}
     </>
   );
   const rowClass = join(className, entry.className);

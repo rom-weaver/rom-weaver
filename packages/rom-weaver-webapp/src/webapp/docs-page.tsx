@@ -312,7 +312,7 @@ const OnwardLink = ({
   route: DocRoute;
 }) => (
   <a
-    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
+    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${docsLabelFor(route, audience)}`}
     className="docs-step"
     data-direction={direction}
     href={`/${route.slug}`}
@@ -326,8 +326,7 @@ const OnwardLink = ({
   >
     {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
     <span className="docs-step-copy">
-      <small>{direction === "next" ? "Next" : "Previous"}</small>
-      <b>{docsLabelFor(route, audience)}</b>
+      <small>{direction === "next" ? "Next" : "Previous"}</small> <b>{docsLabelFor(route, audience)}</b>
     </span>
     {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
   </a>

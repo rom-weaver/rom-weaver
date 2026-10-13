@@ -116,7 +116,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.sourceInfo.computed": msg({ id: "ui.sourceInfo.computed", message: "Computed" }),
   "ui.sourceInfo.copyDatabase": msg({
     id: "ui.sourceInfo.copyDatabase",
-    message: "Copy {label} from the identification database",
+    message: "Copy {label} {value} from the identification database",
   }),
   "ui.sourceInfo.database": msg({ id: "ui.sourceInfo.database", message: "database" }),
   "ui.sourceInfo.decode": msg({ id: "ui.sourceInfo.decode", message: "DECODE" }),
@@ -717,7 +717,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Apply anyway despite patch and ROM check mismatch",
   }),
   "ui.file.identified": msg({ id: "ui.file.identified", message: "Identified" }),
-  "ui.checks.copy": msg({ id: "ui.checks.copy", message: "Copy {label}" }),
+  "ui.checks.copy": msg({ id: "ui.checks.copy", message: "Copy {label} {value}" }),
   "ui.checks.matches": msg({ id: "ui.checks.matches", message: "matches" }),
   "ui.checks.matchesRom": msg({ id: "ui.checks.matchesRom", message: "Matches the ROM" }),
   "ui.checks.mismatch": msg({ id: "ui.checks.mismatch", message: "mismatch" }),

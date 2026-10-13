@@ -116,7 +116,8 @@ const EditableCheckRow = ({
       ) : (
         <button
           aria-describedby={invalid ? errorId : undefined}
-          aria-label={localizer.message("ui.patch.editCheck", { check: label })}
+          // The name ends with the shown value so it holds the button's visible text.
+          aria-label={`${localizer.message("ui.patch.editCheck", { check: label })}${value ? `: ${value}` : ""}`}
           className="ck-open mono"
           /* Derived from the field's own id so either state of the row is addressable. */
           id={`${id}-open`}

@@ -1426,12 +1426,12 @@ msgstr "Kopieren"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.checks.copy"
-msgstr "{label} kopieren"
+msgstr "{label} {value} kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.copyDatabase"
-msgstr "{label} aus der Identifikationsdatenbank kopieren"
+msgstr "{label} {value} aus der Identifikationsdatenbank kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
