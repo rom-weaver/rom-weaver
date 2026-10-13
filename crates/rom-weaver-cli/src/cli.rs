@@ -650,7 +650,10 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
             man_dir.as_deref(),
             cli.dry_run,
             mode,
-            cli.verbose > 0 && !cli.quiet,
+            ManOutputLevel {
+                verbose: cli.verbose > 0 && !cli.quiet,
+                quiet: cli.quiet,
+            },
         );
     }
     if let CliCommand::Formats = &cli.command {
@@ -930,13 +933,20 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy)]
+struct ManOutputLevel {
+    verbose: bool,
+    quiet: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn run_man_command(
     topics: &[String],
     install: bool,
     man_dir: Option<&std::path::Path>,
     dry_run: bool,
     mode: OutputMode,
-    verbose: bool,
+    level: ManOutputLevel,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
     let mut selected = rom_weaver_app::manpages::page_name(topics);
@@ -956,19 +966,27 @@ fn run_man_command(
             2,
         );
     };
-    let output_dir = man_dir
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
-    if dry_run {
-        let writes = if install {
-            vec![output_dir.display().to_string()]
-        } else {
-            Vec::new()
-        };
-        return print_native_dry_run_plan("man", writes, mode);
-    }
     if !install {
+        if dry_run {
+            return print_native_dry_run_plan("man", Vec::new(), mode);
+        }
         return print_asset(mode, "man", "roff", &String::from_utf8_lossy(page));
+    }
+    let Some(output_dir) = man_dir
+        .map(std::path::Path::to_path_buf)
+        .or_else(rom_weaver_app::manpages::default_man_dir)
+    else {
+        return native_output::print_error(
+            mode,
+            "man",
+            "install",
+            "cli.man_install",
+            "cannot resolve the man page directory: no home directory; pass --man-dir",
+            1,
+        );
+    };
+    if dry_run {
+        return print_native_dry_run_plan("man", vec![output_dir.display().to_string()], mode);
     }
     let selected_page = if topics.is_empty() {
         None
@@ -982,10 +1000,10 @@ fn run_man_command(
                 if count == 1 { "" } else { "s" },
                 output_dir.display()
             );
-            if verbose {
-                native_output::diagnostic(mode.is_json(), "INFO", "man", &label);
-            }
             if mode.is_json() {
+                if level.verbose {
+                    native_output::diagnostic(true, "INFO", "man", &label);
+                }
                 return native_output::print_event(
                     mode,
                     native_output::result_event(
@@ -998,6 +1016,9 @@ fn run_man_command(
                     ),
                     0,
                 );
+            }
+            if !level.quiet {
+                crate::stdout_output::write(format_args!("{label}\n"));
             }
             ExitCode::SUCCESS
         }
