@@ -117,6 +117,8 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
     const input = workflow.getInput();
     expect(input?.fileName).toBe("game.nds");
     expect(input?.wasDecompressed).toBe(true);
+    // The staging probe dry-runs the extracted member, not the archive.
+    expect(input?.trimSupported).toBe(true);
 
     const result = await workflow.run();
     expect(result.output.fileName).toBe("game (trimmed).nds");
