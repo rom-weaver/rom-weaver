@@ -5246,7 +5246,7 @@ msgstr "Two files to compare"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseFormatHint"
-msgstr "Two games share this save layout, so the file alone cannot tell which one wrote it."
+msgstr "{count, plural, one {# game shares} other {# games share}} this save layout, so the file alone cannot tell which one wrote it."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -5246,7 +5246,7 @@ msgstr "Zwei Dateien zum Vergleichen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseFormatHint"
-msgstr "Zwei Spiele teilen sich dieses Spielstandlayout, daher lässt sich allein anhand der Datei nicht erkennen, welches sie geschrieben hat."
+msgstr "{count, plural, one {# Spiel verwendet} other {# Spiele teilen sich}} dieses Spielstandlayout, daher lässt sich allein anhand der Datei nicht erkennen, welches {count, plural, one {es} other {sie}} geschrieben hat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -2245,7 +2245,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.saves.editor.chooseFormat": msg({ id: "ui.saves.editor.chooseFormat", message: "Choose the game format" }),
   "ui.saves.editor.chooseFormatHint": msg({
     id: "ui.saves.editor.chooseFormatHint",
-    message: "Two games share this save layout, so the file alone cannot tell which one wrote it.",
+    message:
+      "{count, plural, one {# game shares} other {# games share}} this save layout, so the file alone cannot tell which one wrote it.",
   }),
   "ui.saves.editor.unidentified": msg({
     id: "ui.saves.editor.unidentified",
