@@ -178,6 +178,21 @@ impl CliApp {
             return Err(Box::new(report));
         }
 
+        if std::fs::metadata(source).is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0)
+        {
+            debug!(source = %source.display(), "extract refused: input file is empty");
+            return Err(Box::new(OperationReport::failed(
+                OperationFamily::Container,
+                None,
+                "probe",
+                format!(
+                    "input `{}` is empty (0 bytes); not a valid archive",
+                    source.display()
+                ),
+                probe_threads,
+            )));
+        }
+
         self.containers.probe(source).ok_or_else(|| {
             Box::new(OperationReport::failed(
                 OperationFamily::Container,

@@ -2125,3 +2125,32 @@ fn extract_failure_preserves_preexisting_output_dir() {
 
     assert!(out.path().is_dir(), "pre-existing output dir was removed");
 }
+
+fn stderr_of_failed(args: &[&str]) -> String {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(args)
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
+    for name in ["empty.zip", "empty.7z"] {
+        let temp = setup_temp_dir();
+        let input = temp.child(name);
+        input.write_str("").expect("empty fixture");
+        let out = temp.child("out");
+        let stderr = stderr_of_failed(&[
+            "extract",
+            input.path().to_str().expect("path"),
+            "-o",
+            out.path().to_str().expect("path"),
+        ]);
+        assert!(stderr.contains("is empty"), "{name}: {stderr}");
+        assert!(!out.path().exists(), "{name}: empty output dir left behind");
+    }
+}
