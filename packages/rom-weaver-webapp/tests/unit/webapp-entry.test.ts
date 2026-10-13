@@ -146,6 +146,7 @@ const withListenerTracking = async (load: () => Promise<void>) => {
 
 const loadWebapp = async (options?: {
   betaTools?: boolean;
+  offlineCopy?: boolean;
   notFound?: boolean;
   prerendered?: boolean;
   url?: string;
@@ -155,6 +156,7 @@ const loadWebapp = async (options?: {
   window.history.replaceState({}, "", options?.url ?? "/apply-patches");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
+  document.documentElement.dataset.offlineCopyEnabled = options?.offlineCopy === false ? "false" : "true";
   document.body.innerHTML = `<div id="webapp-root" aria-busy="true">${
     options?.prerendered ? '<div id="shell"></div>' : ""
   }</div>`;
@@ -244,6 +246,19 @@ describe("boot", () => {
     expect(hydrationProps?.urlSession).toBeNull();
     expect(hydrationProps?.pageUpdate.ready).toBe(false);
     expect(document.getElementById("webapp-root")?.dataset.shellSettled).toBe("true");
+  });
+
+  it("hydrates with the offline copy off when the served document's chip was resolved as off", async () => {
+    await loadWebapp({ offlineCopy: false, prerendered: true });
+
+    expect(mocks.renders[0]?.state.settings.offlineCopyEnabled).toBe(false);
+    expect(mocks.renders[0]?.state.draftSettings.offlineCopyEnabled).toBe(false);
+  });
+
+  it("hydrates with the offline copy on when the served document's chip was resolved as on", async () => {
+    await loadWebapp({ offlineCopy: true, prerendered: true });
+
+    expect(mocks.renders[0]?.state.settings.offlineCopyEnabled).toBe(true);
   });
 
   it("hydrates the What's new document instead of falling back to the patcher", async () => {
