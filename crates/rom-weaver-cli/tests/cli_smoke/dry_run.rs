@@ -469,3 +469,10 @@ fn read_only_subcommand_dry_runs_report_a_read_only_plan() {
         assert_eq!(report["details"]["outputs_unknown"], false, "args={args:?}");
     }
 }
+
+#[test]
+fn man_accepts_alternate_command_names() {
+    let canonical = command_stdout(&["man", "probe"], 0);
+    assert_eq!(command_stdout(&["man", "inspect"], 0), canonical);
+    assert!(!canonical.is_empty());
+}

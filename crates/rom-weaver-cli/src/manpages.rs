@@ -151,6 +151,31 @@ pub fn write_man_pages(
     Ok(count)
 }
 
+/// Like [`page_name`], but maps alternate command names (`inspect`, `bundle`, ...) onto
+/// the canonical command the page is generated for.
+pub fn page_name_with_aliases(topics: &[String]) -> String {
+    let mut command = crate::cli::cli_command();
+    command.build();
+    let mut canonical = Vec::new();
+    let mut current = &command;
+    for (index, topic) in topics.iter().enumerate() {
+        if index == 0 && topic == current.get_name() {
+            continue;
+        }
+        let Some(sub) = current
+            .get_subcommands()
+            .find(|sub| sub.get_name() == topic || sub.get_all_aliases().any(|a| a == topic))
+        else {
+            canonical.extend(topics[index..].iter().cloned());
+            break;
+        };
+        canonical.push(sub.get_name().to_string());
+        current = sub;
+    }
+    tracing::debug!(?topics, ?canonical, "resolved man page alias");
+    page_name(&canonical)
+}
+
 #[cfg(test)]
 mod tests {
     use assert_fs::TempDir;
