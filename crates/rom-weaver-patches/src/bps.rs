@@ -387,7 +387,7 @@ fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
     let footer_offset = file_len
         .checked_sub(BPS_FOOTER_SIZE as u64)
         .expect("validated footer size");
-    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset, path);
     if parser.read_exact(BPS_MAGIC.len())?.as_slice() != BPS_MAGIC {
         return Err(crate::coded_validation(
             "BPS_HEADER_INVALID",
@@ -437,7 +437,7 @@ fn parse_bps_file_with_checksum_validation(
     let footer_offset = file_len
         .checked_sub(BPS_FOOTER_SIZE as u64)
         .expect("validated footer size");
-    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset, path);
 
     if parser.read_exact(BPS_MAGIC.len())?.as_slice() != BPS_MAGIC {
         return Err(crate::coded_validation(
@@ -531,7 +531,8 @@ fn parse_bps_file_with_checksum_validation(
 
     if output_size != target_size {
         return Err(RomWeaverError::Validation(format!(
-            "Output size invalid; Expected: {target_size}, Actual: {output_size}"
+            "BPS patch `{}` is truncated or corrupt: Output size invalid; Expected: {target_size}, Actual: {output_size}",
+            path.display()
         )));
     }
 
@@ -638,7 +639,7 @@ fn parse_bps_bytes_with_checksum_validation(
 
     if output_size != target_size {
         return Err(RomWeaverError::Validation(format!(
-            "Output size invalid; Expected: {target_size}, Actual: {output_size}"
+            "BPS patch is truncated or corrupt: Output size invalid; Expected: {target_size}, Actual: {output_size}"
         )));
     }
 
@@ -2322,14 +2323,16 @@ struct BpsFileParser<R> {
     reader: R,
     offset: u64,
     end: u64,
+    patch: String,
 }
 
 impl<R: Read> BpsFileParser<R> {
-    fn new(reader: R, end: u64) -> Self {
+    fn new(reader: R, end: u64, patch: &Path) -> Self {
         Self {
             reader,
             offset: 0,
             end,
+            patch: patch.display().to_string(),
         }
     }
 
@@ -2345,9 +2348,10 @@ impl<R: Read> BpsFileParser<R> {
             .checked_add(len_u64)
             .ok_or_else(|| RomWeaverError::Validation("BPS parser offset overflowed".into()))?;
         if next > self.end {
-            return Err(RomWeaverError::Validation(
-                "BPS patch ended unexpectedly while reading record data".into(),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "BPS patch `{}` is truncated or corrupt: it ended unexpectedly while reading record data",
+                self.patch
+            )));
         }
 
         let mut bytes = vec![0u8; len];
