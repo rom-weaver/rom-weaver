@@ -1,3 +1,4 @@
+import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -49,18 +50,6 @@ const assertCount = (source, expected, count, label) => {
   if (actual !== count)
     throw new Error(`${label} contains ${actual} copies of ${JSON.stringify(expected)}; expected ${count}`);
 };
-// Only text a reader (and a crawler) sees counts. Inline `<script>` bodies used
-// to land in this total, which put roughly 150 words of pre-paint bootstrap
-// source on every page and set the guide minimum below far above the prose it
-// was measuring.
-const countVisibleWords = (source) =>
-  source
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .trim()
-    .split(/\s+/).length;
-
 // index.html is the apex landing page; the patcher lives at apply-patches.html.
 const homeHtml = read("index.html");
 const applyHtml = read("apply-patches.html");
@@ -98,8 +87,7 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
 }
 for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
   const html = read(`${route.slug || "index"}.html`);
-  const headings = [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)];
-  if (headings.length !== 1 || headings[0][1].replace(/<[^>]*>/g, "").trim() === SITE_NAME) {
+  if (!hasDescriptiveHeading(html, SITE_NAME)) {
     throw new Error(`${route.slug || "home"} must have one descriptive workflow heading`);
   }
 

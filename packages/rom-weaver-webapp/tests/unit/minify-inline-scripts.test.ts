@@ -15,7 +15,7 @@ describe("inline script minification", () => {
   });
 
   it("minifies uppercase scripts", () => {
-    expect(minifyInlineScripts("<SCRIPT>window.a = 1; // note\n</SCRIPT>")).toBe("<script>window.a=1;</script>");
+    expect(minifyInlineScripts("<SCRIPT>window.a = 1; // note\n</SCRIPT>")).toBe("<SCRIPT>window.a=1;</SCRIPT>");
   });
 
   it("preserves uppercase data and external scripts", () => {

@@ -1,17 +1,12 @@
 import { minifySync } from "vite";
+import { documentNodes, parseDocument, replaceSourceRanges } from "./html-document.mjs";
 
-// Parser-time scripts stay inline so the shell can use their state before the
-// module bundle runs. Minify them after rendering without changing HTML whitespace.
-const INLINE_SCRIPT = /<script\b([^>]*)>([\s\S]+?)<\/script\s*>/gi;
-const SCRIPT_TYPE = /\btype\s*=\s*"([^"]*)"/i;
-// A classic script and a module both minify; anything else (`application/ld+json`
-// above all) is data this must not rewrite.
 const EXECUTABLE_TYPES = new Set(["", "module", "text/javascript"]);
 
-/** @param {string} attributes */
-const isMinifiableScript = (attributes) => {
-  if (/\bsrc\s*=/i.test(attributes)) return false;
-  return EXECUTABLE_TYPES.has(SCRIPT_TYPE.exec(attributes)?.[1] ?? "");
+const isMinifiableScript = (node) => {
+  if (node.attrs.some((attribute) => attribute.name === "src")) return false;
+  const type = node.attrs.find((attribute) => attribute.name === "type")?.value ?? "";
+  return EXECUTABLE_TYPES.has(type);
 };
 
 /**
@@ -21,9 +16,16 @@ const isMinifiableScript = (attributes) => {
  * @param {string} label file name used in minifier diagnostics
  * @returns {string}
  */
-export const minifyInlineScripts = (html, label = "document.html") =>
-  html.replace(INLINE_SCRIPT, (match, attributes, code) => {
-    if (!isMinifiableScript(attributes)) return match;
+export const minifyInlineScripts = (html, label = "document.html") => {
+  const edits = [];
+  for (const node of documentNodes(parseDocument(html))) {
+    if (node.tagName !== "script" || !isMinifiableScript(node)) continue;
+    const location = node.sourceCodeLocation;
+    if (!location?.startTag) continue;
+    const start = location.startTag.endOffset;
+    const end = location.endTag?.startOffset ?? location.endOffset;
+    const code = html.slice(start, end);
+    if (!code) continue;
     const result = minifySync(`${label}.inline.js`, code);
     if (result.errors?.length) {
       throw new Error(`${label}: inline script failed to minify: ${result.errors.map(String).join("; ")}`);
@@ -34,5 +36,7 @@ export const minifyInlineScripts = (html, label = "document.html") =>
     if (/<\/script/i.test(minified)) {
       throw new Error(`${label}: minified inline script contains a literal "</script"`);
     }
-    return `<script${attributes}>${minified}</script>`;
-  });
+    edits.push({ start, end, text: minified });
+  }
+  return replaceSourceRanges(html, edits);
+};
