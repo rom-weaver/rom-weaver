@@ -151,8 +151,9 @@ fn copy_extract_file_create_new(source: &Path, destination: &Path) -> std::io::R
         .write(true)
         .create_new(true)
         .open(destination)?;
-    let copy_result = std::io::copy(&mut source_file, &mut destination_file)
-        .and_then(|_| destination_file.flush());
+    let copy_result =
+        rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut destination_file)
+            .and_then(|_| destination_file.flush());
     drop(destination_file);
     if let Err(error) = copy_result {
         let _ = fs::remove_file(destination);

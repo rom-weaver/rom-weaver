@@ -353,6 +353,49 @@ fn apply_strict_rejects_non_paper_mario_source() {
     assert!(error.to_string().contains("Source ROM checksum mismatch"));
 }
 
+#[test]
+fn create_warns_when_original_is_not_paper_mario() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    let patch_path = temp.child("update.mod");
+
+    fs::write(&source_path, b"ORIGINAL").expect("fixture");
+    fs::write(&target_path, b"MODIFIED").expect("fixture");
+
+    let handler = PmsrPatchHandler::new(&MOD);
+    let request = PatchCreateRequest {
+        original: source_path,
+        modified: target_path,
+        output: patch_path.clone(),
+        format: "MOD".into(),
+    };
+    let report = handler
+        .create(
+            &request,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Strict),
+        )
+        .expect("create still writes the patch");
+    assert!(patch_path.exists());
+    assert!(
+        report
+            .label
+            .contains("; warning=MOD patches target Paper Mario (USA) v1.0"),
+        "{}",
+        report.label
+    );
+
+    let ignored = handler
+        .create(
+            &request,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("create with checks ignored");
+    assert!(!ignored.label.contains("warning="), "{}", ignored.label);
+}
+
 /// A well-formed MOD patch carrying `records` as `(offset, data)` pairs.
 fn pmsr_patch_bytes(records: &[(u32, &[u8])]) -> Vec<u8> {
     let mut bytes = Vec::new();

@@ -312,6 +312,8 @@ const evaluateApplyPatchReadiness = async <TSource>(
   }
   if (!stage.preparedPatchFile) await adapters.prepareSelectedSource(stage);
   if (!stage.parsedPatch) await adapters.parsePatch(stage);
+  // Unreadable patch: parsePatch recorded the failure on the card; keep it instead of resetting.
+  if (!stage.parsedPatch && stage.state.patchValidation?.unreadable) return changed();
   const assets = adapters.getPatchableInputAssets();
   if (!(assets.length && stage.parsedPatch)) {
     clearApplyPatchTarget(stage);

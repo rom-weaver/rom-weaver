@@ -128,7 +128,7 @@ impl PatchHandler for PmsrPatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -245,11 +245,26 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(crate::shared::labels::patch_create_report(
+        let mut report = crate::shared::labels::patch_create_report(
             self.descriptor,
             patch.record_count,
             execution,
-        ))
+        );
+        // MOD patches always declare the Paper Mario (USA) v1.0 source, so a
+        // patch made from any other original fails a strict apply.
+        if context.validate_source_checks()
+            && validate_paper_mario_source(&request.original).is_err()
+        {
+            debug!(
+                format = self.descriptor.name,
+                "pmsr create original is not Paper Mario (USA) v1.0"
+            );
+            report.label = crate::shared::labels::append_warning_labels(
+                report.label,
+                &["MOD patches target Paper Mario (USA) v1.0, so applying this one needs --ignore-checksum-validation".to_string()],
+            );
+        }
+        Ok(report)
     }
 
     fn capabilities(&self) -> PatchCapabilities {
@@ -592,7 +607,7 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
     let mut hasher = Hasher::new();
     let mut buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
     loop {
-        let read = source.read(&mut buffer)?;
+        let read = rom_weaver_core::read_full(&mut source, &mut buffer)?;
         if read == 0 {
             break;
         }

@@ -23,7 +23,7 @@ impl CliApp {
         hint_path: Option<&Path>,
         scratch: &Path,
     ) -> Result<HeaderRepairOutcome> {
-        fs::copy(path, scratch)?;
+        rom_weaver_core::copy_file_retrying_interrupted(path, scratch)?;
         // On unix `fs::copy` carries the source mode across, and preserved dumps
         // are routinely read-only; the repair routine opens for writing, so that
         // mode would make every such ROM look unreadable. Only act when the copy

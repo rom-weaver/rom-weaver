@@ -1402,7 +1402,7 @@ impl CliApp {
             .create_new(true)
             .open(destination)?;
         let copy_result = (|| {
-            io::copy(&mut source_file, &mut destination_file)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut destination_file)?;
             destination_file.sync_all()
         })();
         drop(destination_file);
@@ -1477,7 +1477,7 @@ impl CliApp {
             }
         };
         let publish_result = (|| -> io::Result<()> {
-            io::copy(&mut source_file, &mut staged_file)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut staged_file)?;
             staged_file.sync_all()?;
             drop(staged_file);
             Self::install_staged_no_overwrite(&staged_path, destination)

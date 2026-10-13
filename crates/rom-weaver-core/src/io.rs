@@ -143,6 +143,87 @@ pub fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
     false
 }
 
+/// Run `op` until it finishes with anything other than `Interrupted`.
+///
+/// A signal handler installed without `SA_RESTART` (libFuzzer's timers, or a host process's)
+/// makes an in-flight syscall fail with `EINTR`. Only use this for operations that are safe to
+/// repeat after failing that way.
+pub fn retry_interrupted<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    // WASI does not deliver signals, so nothing interrupts I/O there; keep the module small.
+    #[cfg(target_arch = "wasm32")]
+    return op();
+    #[cfg(not(target_arch = "wasm32"))]
+    loop {
+        match op() {
+            Err(error) if error.kind() == ErrorKind::Interrupted => {
+                tracing::trace!("io interrupted by a signal; retrying");
+            }
+            result => return result,
+        }
+    }
+}
+
+/// Fill `buffer` from `reader`, returning less than its length only when the input ends first.
+///
+/// A single `read` may return a short count or fail with `Interrupted`; this retries both, so
+/// the result depends only on the input's bytes.
+pub fn read_full(reader: &mut dyn Read, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        match retry_interrupted(|| reader.read(&mut buffer[filled..]))? {
+            0 => break,
+            read => filled += read,
+        }
+    }
+    Ok(filled)
+}
+
+/// Read up to `limit` bytes, returning fewer only when the input ends first. See [`read_full`].
+pub fn read_up_to<R: Read>(mut reader: R, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut bytes = vec![0u8; limit];
+    let filled = read_full(&mut reader, &mut bytes)?;
+    bytes.truncate(filled);
+    Ok(bytes)
+}
+
+/// `std::io::copy` that resumes after `Interrupted`.
+///
+/// On Linux, `io::copy` between files runs `copy_file_range`, `sendfile`, or `splice`, and std
+/// returns their `EINTR` instead of retrying it. Bytes already moved have advanced both file
+/// offsets (and any `Take` limit), so calling again continues where it stopped.
+pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
+    reader: &mut R,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    retry_interrupted(|| std::io::copy(reader, writer)).map(drop)
+}
+
+/// `std::fs::copy` that retries after `Interrupted`; it uses the same kernel copy as
+/// [`copy_retrying_interrupted`]. Each retry restarts the copy from the beginning.
+pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result<u64> {
+    #[cfg(target_arch = "wasm32")]
+    return fs::copy(from, to);
+    #[cfg(not(target_arch = "wasm32"))]
+    copy_file_retrying_with(from, to, |from, to| fs::copy(from, to))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn copy_file_retrying_with(
+    from: &Path,
+    to: &Path,
+    mut copy: impl FnMut(&Path, &Path) -> std::io::Result<u64>,
+) -> std::io::Result<u64> {
+    let mut attempted = false;
+    retry_interrupted(|| {
+        // The interrupted attempt already created `to` with the source's mode; a read-only
+        // source would make reopening it fail, so drop that partial copy first.
+        if std::mem::replace(&mut attempted, true) {
+            let _ = fs::remove_file(to);
+        }
+        copy(from, to)
+    })
+}
+
 pub fn ordered_streaming_compress<
     Tasks,
     TTask,
@@ -621,9 +702,7 @@ impl BlockCacheReader {
 
         let start = block_index.saturating_mul(self.block_size as u64);
         self.file.seek(SeekFrom::Start(start))?;
-        let mut block = vec![0u8; self.block_size];
-        let bytes_read = self.file.read(&mut block)?;
-        block.truncate(bytes_read);
+        let block = read_up_to(&mut self.file, self.block_size)?;
         if block.is_empty() {
             return Err(RomWeaverError::Validation(format!(
                 "block cache attempted to read beyond file length at block index {block_index}"

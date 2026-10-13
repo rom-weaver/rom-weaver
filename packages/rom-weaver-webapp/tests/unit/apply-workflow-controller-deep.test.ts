@@ -527,7 +527,13 @@ describe("apply controller ownership and lifecycle", () => {
 
     const invalid = patchStage(controller, "invalid.ips");
     invalid.preparedPatchFile = { ...patchFile("invalid.ips"), readString: () => "", seek: () => undefined };
-    await expect(controller.runParsePatch(invalid)).rejects.toThrow("Invalid patch file: invalid.ips");
+    // An unreadable patch fails its own card instead of rejecting the workflow.
+    await controller.runParsePatch(invalid);
+    expect(invalid.state.patchValidation).toEqual({
+      message: "Validation failed: Invalid patch file: invalid.ips",
+      status: "invalid",
+      unreadable: true,
+    });
   });
 
   it("rejects missing, ambiguous, and incomplete input before invoking the worker", async () => {

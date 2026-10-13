@@ -377,8 +377,12 @@ impl CliApp {
             output: create_output.clone(),
             format: handler.descriptor().name.to_string(),
         };
-        let mut report =
-            self.create_patch_with_handler(handler.as_ref(), &request, solid_options, &context);
+        let mut report = self.create_patch_with_handler(
+            handler.as_ref(),
+            &request,
+            solid_options.or(args.ppf_undo.then_some(PatchCreateFormatOptions::PpfUndo)),
+            &context,
+        );
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -414,6 +418,15 @@ impl CliApp {
                 args.format.clone(),
                 "validate",
                 "SOLID metadata options cannot be combined with --plan".to_string(),
+                probe_threads,
+            );
+        }
+        if args.ppf_undo {
+            return OperationReport::failed(
+                OperationFamily::Patch,
+                args.format.clone(),
+                "validate",
+                "--ppf-undo cannot be combined with --plan".to_string(),
                 probe_threads,
             );
         }
@@ -559,6 +572,13 @@ impl CliApp {
                 Some(requested_format),
                 "validate",
                 "SOLID metadata options require --format solid or a .solid output".to_string(),
+            ));
+        }
+        if args.ppf_undo && !requested_format.eq_ignore_ascii_case("ppf") {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                "--ppf-undo requires --format ppf or a .ppf output".to_string(),
             ));
         }
         if let Some(warning) = format_warning.as_deref() {

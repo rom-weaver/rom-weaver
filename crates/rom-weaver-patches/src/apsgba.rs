@@ -131,7 +131,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let mut output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -920,15 +920,7 @@ fn empty_apsgba_record() -> ApsGbaRecord {
 
 fn read_at_most(file: &mut File, offset: u64, buffer: &mut [u8]) -> Result<usize> {
     file.seek(SeekFrom::Start(offset))?;
-    let mut total = 0usize;
-    while total < buffer.len() {
-        let read = file.read(&mut buffer[total..])?;
-        if read == 0 {
-            break;
-        }
-        total += read;
-    }
-    Ok(total)
+    Ok(rom_weaver_core::read_full(file, buffer)?)
 }
 
 #[cfg(test)]

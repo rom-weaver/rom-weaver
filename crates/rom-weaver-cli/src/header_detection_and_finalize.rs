@@ -86,7 +86,7 @@ impl CliApp {
         source.read_exact(&mut header)?;
 
         let mut stripped = BufWriter::new(File::create(stripped_path)?);
-        io::copy(&mut source, &mut stripped)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut source, &mut stripped)?;
         stripped.flush()?;
         Ok(StripHeaderResult {
             header_bytes: header,
@@ -191,7 +191,7 @@ impl CliApp {
         let mut reader = BufReader::new(File::open(source)?);
         reader.seek(SeekFrom::Start(prefix_bytes))?;
         let mut writer = BufWriter::new(File::create(destination)?);
-        io::copy(&mut reader, &mut writer)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut writer)?;
         writer.flush()?;
         Ok(())
     }
@@ -209,7 +209,7 @@ impl CliApp {
         if let Some(header) = header {
             writer.write_all(header)?;
         }
-        io::copy(&mut reader, &mut writer)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut writer)?;
         writer.flush()?;
         Ok(())
     }

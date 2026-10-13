@@ -4,8 +4,8 @@ use std::{
 };
 
 use rom_weaver_core::{
-    PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    ThreadCapability,
+    PatchApplyRequest, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, ThreadCapability,
 };
 
 use super::{
@@ -1955,18 +1955,18 @@ fn little_endian_reads_reject_offsets_past_the_buffer() {
 #[test]
 fn ppf3_record_writer_skips_empty_payloads_and_rejects_oversized_ones() {
     let mut output = Vec::new();
-    super::write_ppf3_record(&mut output, 0, &[]).expect("empty record");
+    super::write_ppf3_record(&mut output, 0, &[], &[]).expect("empty record");
     assert!(output.is_empty());
 
-    let error =
-        super::write_ppf3_record(&mut output, 0, &vec![0u8; 256]).expect_err("oversized record");
+    let error = super::write_ppf3_record(&mut output, 0, &vec![0u8; 256], &[])
+        .expect_err("oversized record");
     assert!(
         error
             .to_string()
             .contains("PPF3 record length exceeded 255 bytes")
     );
 
-    super::write_ppf3_record(&mut output, 7, b"AB").expect("record");
+    super::write_ppf3_record(&mut output, 7, b"AB", &[]).expect("record");
     assert_eq!(output, [7, 0, 0, 0, 0, 0, 0, 0, 2, b'A', b'B']);
 }
 
@@ -2071,9 +2071,16 @@ fn parallel_create_rejects_shrinking_outputs() {
         .build_pool(ThreadCapability::parallel(Some(2)))
         .expect("pool");
     let mut output = Vec::new();
-    let error =
-        super::create_ppf3_patch_parallel(&original_path, 8, &modified_path, 4, &pool, &mut output)
-            .expect_err("shrinking output");
+    let error = super::create_ppf3_patch_parallel(
+        &original_path,
+        8,
+        &modified_path,
+        4,
+        &pool,
+        false,
+        &mut output,
+    )
+    .expect_err("shrinking output");
     assert!(
         error
             .to_string()
@@ -2242,4 +2249,84 @@ fn undo_accepts_empty_ppf3_with_undo_flag() {
     .expect("patch fixture");
     undo_ppf(&input, &patch, &output).expect("empty undo");
     assert_eq!(fs::read(&output).expect("output"), b"ROM");
+}
+
+#[test]
+fn create_with_undo_round_trips_through_apply_and_undo() {
+    let temp = TestDir::new();
+    let original_path = temp.child("original.bin");
+    let modified_path = temp.child("modified.bin");
+    let mut original: Vec<u8> = (0..(CREATE_THREAD_SCAN_CHUNK_BYTES * 2) + 4096)
+        .map(|index| (index % 251) as u8)
+        .collect();
+    let mut modified = original.clone();
+    // A run longer than one 255-byte record, a run crossing a scan-chunk boundary, and a tail
+    // that grows past the original's end.
+    modified[100..700].fill(0xEE);
+    modified[CREATE_THREAD_SCAN_CHUNK_BYTES - 3..CREATE_THREAD_SCAN_CHUNK_BYTES + 3].fill(0xAA);
+    let original_len = original.len();
+    modified.extend_from_slice(&[7, 0, 9]);
+    fs::write(&original_path, &original).expect("original");
+    fs::write(&modified_path, &modified).expect("modified");
+
+    let handler = PpfPatchHandler::new(&PPF);
+    let mut patches = Vec::new();
+    for threads in [1, 4] {
+        let patch_path = temp.child(&format!("undo-{threads}.ppf"));
+        let report = handler
+            .create_with_options(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "ppf".into(),
+                },
+                Some(&PatchCreateFormatOptions::PpfUndo),
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect("create with undo");
+        assert!(report.label.contains("with undo data"), "{}", report.label);
+        patches.push(fs::read(&patch_path).expect("patch bytes"));
+
+        let applied_path = temp.child(&format!("applied-{threads}.bin"));
+        let restored_path = temp.child(&format!("restored-{threads}.bin"));
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: applied_path.clone(),
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(&applied_path).expect("applied"), modified);
+        undo_ppf(&applied_path, &patch_path, &restored_path).expect("undo");
+        let restored = fs::read(&restored_path).expect("restored");
+        assert_eq!(&restored[..original_len], original.as_slice());
+        // PPF cannot shrink, so the grown tail is zeroed rather than removed.
+        original.extend_from_slice(&[0, 0, 0]);
+        assert_eq!(restored, original);
+        original.truncate(original_len);
+    }
+    assert_eq!(patches[0], patches[1], "thread count changed patch bytes");
+
+    // Without the option the patch carries no undo data, as before.
+    let plain_path = temp.child("plain.ppf");
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: plain_path.clone(),
+                format: "ppf".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create plain");
+    assert!(
+        !parse_ppf_file(&plain_path)
+            .expect("parse plain")
+            .has_undo_data()
+    );
 }

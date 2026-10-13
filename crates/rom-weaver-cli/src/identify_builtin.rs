@@ -893,7 +893,7 @@ fn copy_directory(source: &Path, target: &Path) -> Result<()> {
         if file_type.is_dir() {
             copy_directory(&entry.path(), &destination)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), destination)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&entry.path(), &destination)?;
         } else {
             return Err(RomWeaverError::Validation(format!(
                 "identify database contains an unsupported entry `{}`",

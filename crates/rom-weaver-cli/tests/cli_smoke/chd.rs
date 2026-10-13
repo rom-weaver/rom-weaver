@@ -841,6 +841,23 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     );
 }
 
+// The split-bin test above pins the emitted `<name> (Track N).bin` names; the
+// help text and CLI reference must describe that same naming.
+#[test]
+fn split_bin_help_and_reference_describe_emitted_track_names() {
+    let help = String::from_utf8_lossy(&command_stdout(&["extract", "--help"], 0)).into_owned();
+    assert!(help.contains("(Track N).bin"), "extract --help: {help}");
+    let reference = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/reference/cli.md"),
+    )
+    .expect("CLI reference");
+    let split_bin = reference
+        .lines()
+        .find(|line| line.starts_with("`extract --split-bin`"))
+        .expect("split-bin reference paragraph");
+    assert!(split_bin.contains("(Track N).bin"), "{split_bin}");
+}
+
 #[test]
 fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     let temp = setup_temp_dir();

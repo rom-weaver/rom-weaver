@@ -529,7 +529,7 @@ fn create_gdiff_patch_streaming(
     let mut command_count = 0usize;
     let mut output_bytes = 0u64;
     loop {
-        let read = modified.read(&mut scratch)?;
+        let read = rom_weaver_core::read_full(&mut modified, &mut scratch)?;
         if read == 0 {
             break;
         }

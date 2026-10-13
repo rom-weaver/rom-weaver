@@ -201,6 +201,7 @@ const buildStackViewState = ({
       validationLabel: patchInfo?.validationLabel || "",
       validationMessage: patchInfo?.validationMessage || "",
       validationState: patchInfo?.validationState || "",
+      validationUnreadable: !!patchInfo?.validationUnreadable,
       validationValues: patchInfo?.validationValues || [],
     };
   }),

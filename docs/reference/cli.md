@@ -180,7 +180,7 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
 
-`extract --split-bin` writes a CD-format CHD as a CUE plus one `*.trackNN.bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
+`extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
 
@@ -442,6 +442,8 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 `patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.
 
 SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
+
+`--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.
 
 `--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest.
 

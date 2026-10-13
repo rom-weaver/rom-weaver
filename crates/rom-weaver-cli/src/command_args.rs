@@ -426,7 +426,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Write a CD-format CHD as a CUE plus one BIN per track (*.trackNN.bin), rather than one merged BIN"
+            help = "Write a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track, rather than one merged BIN"
         )
     )]
     #[serde(default)]
@@ -2421,6 +2421,16 @@ apply and verifies the input, as long as the file name survives."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub solid_extended: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "ppf-undo",
+            help = "PPF patches only: store the original bytes in each record so `tools ppf-undo` can revert the patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub ppf_undo: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

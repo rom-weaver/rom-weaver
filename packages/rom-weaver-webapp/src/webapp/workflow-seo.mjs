@@ -65,6 +65,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
 });
 
+// Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
+const BETA_ROUTE_TITLES = Object.freeze({
+  "save-editor": `Save Editor | ${SITE_NAME}`,
+  "trim-rom": `Trim ROM | ${SITE_NAME}`,
+});
+
 /**
  * Mark a page title with the build channel (beta, nightly, dev); production has no badge.
  * @param {string} title
@@ -73,4 +79,4 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
  */
 const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
 
-export { withChannelBadge, SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
+export { BETA_ROUTE_TITLES, withChannelBadge, SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
