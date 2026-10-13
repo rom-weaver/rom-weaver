@@ -12547,6 +12547,48 @@ fn patch_apply_removes_the_output_when_the_handler_fails_after_writing() {
 }
 
 #[test]
+fn patch_apply_without_output_writes_a_raw_bin_sibling() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("modified.rom");
+    fs::write(original.path(), pseudo_random_bytes(2048, 11)).expect("original");
+    let mut changed = pseudo_random_bytes(2048, 11);
+    changed[7] ^= 0x5a;
+    fs::write(modified.path(), &changed).expect("modified");
+    let patch = temp.child("change.bps");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    assert_eq!(
+        fs::read(temp.child("game-patched.bin").path()).expect("inferred sibling"),
+        changed
+    );
+}
+
+#[test]
 fn patch_output_size_check_mismatch_names_the_output() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
