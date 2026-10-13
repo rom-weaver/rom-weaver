@@ -35,6 +35,9 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-validate command"
         );
+        if let Some(report) = Self::unseekable_rom_input_failure("patch validate", &args.input) {
+            return self.finish("patch-validate", report);
+        }
         let PatchValidateCommand {
             input,
             select,

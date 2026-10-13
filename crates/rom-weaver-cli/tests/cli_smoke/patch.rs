@@ -12350,6 +12350,61 @@ fn patch_apply_dry_run_plan_lists_device_code_step() {
     assert!(!output.path().exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn patch_apply_and_validate_reject_a_piped_rom_input() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: vec![0xaa; 4],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.bin");
+    let patch_arg = patch.path().to_str().expect("path");
+    let output_arg = output.path().to_str().expect("path");
+    let rom = vec![0x11_u8; 64];
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "/dev/stdin",
+            "--patch",
+            patch_arg,
+            "--output",
+            output_arg,
+            "--no-compress",
+        ],
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            "/dev/stdin",
+            "--patch",
+            patch_arg,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .write_stdin(rom.clone())
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(stderr.contains("is not a regular file"), "{stderr}");
+        assert!(!output.path().exists(), "{args:?} wrote an output");
+    }
+}
+
 #[test]
 fn patch_output_size_check_mismatch_names_the_output() {
     let temp = setup_temp_dir();
