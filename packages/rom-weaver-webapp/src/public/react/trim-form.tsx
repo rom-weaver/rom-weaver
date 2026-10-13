@@ -607,7 +607,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const trimPreparationPending = sourceStaging || progress?.stage === "input" || (!!source && !sourceState);
   const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState);
   const trimReady = trimSourceReady && !trimPreparationPending;
-  const actionDisabled = !!props.disabled || trimQueued || !(busy || completedOutput || source);
+  const trimUnsupported = sourceState?.trimSupported === false;
+  const actionDisabled =
+    !!props.disabled || trimQueued || !(busy || completedOutput || source) || (trimUnsupported && !busy);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);

@@ -40,7 +40,7 @@ const invokeRomWeaverTrimWorker = async (
     // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), never
     // simulate (`dry_run: false`), and never restore padding (`revert: false`).
     const command = createRomWeaverCommand("trim", {
-      dry_run: false,
+      dry_run: !!input.dryRun,
       in_place: false,
       output: outputPath,
       revert: false,
@@ -48,13 +48,7 @@ const invokeRomWeaverTrimWorker = async (
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),
       ...(threadArg ? { threads: threadArg } : {}),
     });
-    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", {
-      command,
-      extension: normalizedExtension || "",
-      outputPath,
-      sourceFilePath,
-      threadArg,
-    });
+    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", { command });
     const result = await runRomWeaverJson(
       command,
       toRomWeaverOptions({
