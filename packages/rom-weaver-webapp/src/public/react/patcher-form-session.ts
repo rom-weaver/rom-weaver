@@ -115,6 +115,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputNameKey,
   cheatNames = [],
   disabledPatchIds,
+  getPatchSlotIds,
   stageInput,
   stagePatches,
   validatePatches,
@@ -208,9 +209,9 @@ const useLocalApplyPatchFormSession = ({
   const activePatches = patches === undefined ? internalPatches : patches;
   const outputPatches = useMemo(() => {
     if (!disabledPatchIds?.size) return activePatches;
-    const ids = getBinarySourceListStableIds(activePatches);
+    const ids = getPatchSlotIds?.() ?? getBinarySourceListStableIds(activePatches);
     return activePatches.filter((_, index) => !disabledPatchIds.has(ids[index] || ""));
-  }, [activePatches, disabledPatchIds]);
+  }, [activePatches, disabledPatchIds, getPatchSlotIds]);
   const retainedSources = useMemo(
     () => new Set<BinarySource>([...effectiveInputs, ...activePatches]),
     [activePatches, effectiveInputs],

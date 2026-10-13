@@ -14,6 +14,7 @@ import {
   mount,
   RAW_PATCH,
   RAW_ROM,
+  WRONG_INPUT_BPS,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
   waitForState,
@@ -276,6 +277,57 @@ test("weave checks after a switched-off optional patch are not enforced; switche
     await clickApplyButton();
     expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
     expect(lastOutputChecks()).toEqual(["", "crc32=f9f31dcf"]);
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+test("imported weave whose optional patch is off applies without touching the toggle", async () => {
+  // The off patch does not match the ROM (wrong-input BPS), so its preflight verdict is a
+  // checksum mismatch. That verdict belongs to a patch that never runs and must not block Apply.
+  const [romFile, patchFile, offBps] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    loadFixtureFile(RAW_PATCH),
+    loadFixtureFile(WRONG_INPUT_BPS),
+  ]);
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "off-optional-output" },
+        patches: [
+          { name: "Core", path: "change.ips" },
+          { name: "Off", optional: true, path: "wrong-input-same-size.bps" },
+        ],
+        rom: { checks: { checksums: { crc32: "d7ae93df" } }, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: offBps, fileName: "wrong-input-same-size.bps" },
+    ],
+    "off-optional.zip",
+  );
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    await expect
+      .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+      .toEqual([true, false]);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
   } finally {
     applySpy.mockRestore();
   }
