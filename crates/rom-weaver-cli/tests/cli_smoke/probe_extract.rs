@@ -2156,6 +2156,37 @@ fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
 }
 
 #[test]
+fn checksum_fails_on_truncated_zip_instead_of_hashing_the_container() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("payload.bin").path(),
+        pseudo_random_bytes(200_000, 7),
+    )
+    .expect("payload");
+    let zip = temp.child("full.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("payload.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let bytes = fs::read(zip.path()).expect("zip bytes");
+    let truncated = temp.child("truncated.zip");
+    fs::write(truncated.path(), &bytes[..bytes.len() / 2]).expect("truncated zip");
+    let stderr = stderr_of_failed(&[
+        "checksum",
+        "--input",
+        truncated.path().to_str().expect("path"),
+    ]);
+    assert!(stderr.contains("decompression failed"), "{stderr}");
+}
+
+#[test]
 fn probe_select_of_unrecognised_archive_member_names_the_member() {
     let temp = setup_temp_dir();
     fs::write(temp.child("a.bin").path(), b"aaaa").expect("a");
