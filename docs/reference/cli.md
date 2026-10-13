@@ -350,7 +350,7 @@ Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches si
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes the raw patched ROM to a sibling named `<input-stem>-patched.<rom-extension>`, including for `.bin` inputs, and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
 Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except an explicit `.bin` output: it is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
