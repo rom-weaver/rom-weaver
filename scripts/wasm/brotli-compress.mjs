@@ -18,7 +18,7 @@ const BROTLI_VERSION = process.versions.brotli;
 // every rebuild, every preview and every E2E run. Brotli is deterministic for a
 // fixed parameter set, so the output is addressable by the input digest and
 // those parameters: hashing the same 7 MB takes ~15ms.
-const CACHE_ROOT = path.resolve(
+export const DEFAULT_BROTLI_CACHE_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
@@ -124,7 +124,7 @@ const readCachedBrotli = (entryPath, source) => {
 // half-written entry under the final path.
 const writeCachedBrotli = (entryPath, compressed) => {
   try {
-    fs.mkdirSync(CACHE_ROOT, { recursive: true });
+    fs.mkdirSync(DEFAULT_BROTLI_CACHE_DIR, { recursive: true });
     const temporaryPath = `${entryPath}.${process.pid}.tmp`;
     fs.writeFileSync(temporaryPath, compressed);
     fs.renameSync(temporaryPath, entryPath);
@@ -199,11 +199,11 @@ export function brotliCompressFile({
   const source = fs.readFileSync(inputPath);
   const normalizedQuality = Number(quality);
   const entryPath = cacheEnabled()
-    ? cacheEntryPath(CACHE_ROOT, source, normalizedQuality, parameterProfile)
+    ? cacheEntryPath(DEFAULT_BROTLI_CACHE_DIR, source, normalizedQuality, parameterProfile)
     : null;
 
   if (entryPath) {
-    pruneCache(CACHE_ROOT, Date.now());
+    pruneCache(DEFAULT_BROTLI_CACHE_DIR, Date.now());
     const cached = readCachedBrotli(entryPath, source);
     if (cached) {
       fs.writeFileSync(outputPath, cached);
