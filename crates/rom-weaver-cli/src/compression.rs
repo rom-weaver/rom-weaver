@@ -197,7 +197,7 @@ const COMPRESSION_CODECS: &[CompressionCodecMetadata] = &[
     CompressionCodecMetadata {
         name: "zlib",
         aliases: &[],
-        level: Some(CompressionCodecLevelMetadata { min: 0, max: 9 }),
+        level: Some(CompressionCodecLevelMetadata { min: 1, max: 9 }),
         profile_kind: "standard",
     },
     CompressionCodecMetadata {
@@ -227,7 +227,7 @@ const COMPRESSION_CODECS: &[CompressionCodecMetadata] = &[
     CompressionCodecMetadata {
         name: "cdzl",
         aliases: &[],
-        level: Some(CompressionCodecLevelMetadata { min: 0, max: 9 }),
+        level: Some(CompressionCodecLevelMetadata { min: 1, max: 9 }),
         profile_kind: "standard",
     },
     CompressionCodecMetadata {
