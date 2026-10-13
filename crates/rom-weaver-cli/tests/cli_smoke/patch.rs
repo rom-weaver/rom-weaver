@@ -11791,3 +11791,440 @@ fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
         "verdicts must not carry escaped newlines: {stdout}"
     );
 }
+
+fn run_patch_check_command(
+    command: &str,
+    original: &assert_fs::fixture::ChildPath,
+    patch: &assert_fs::fixture::ChildPath,
+    output: Option<&assert_fs::fixture::ChildPath>,
+    checks: &[(&str, String)],
+    expected_code: i32,
+) -> serde_json::Value {
+    let mut args = vec![
+        "patch",
+        command,
+        "--input",
+        original.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+    ];
+    if let Some(output) = output {
+        args.extend([
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ]);
+    }
+    for (flag, value) in checks {
+        args.extend([*flag, value.as_str()]);
+    }
+    args.push("--jsonl");
+    run_single_json_event(&args, expected_code)
+}
+
+#[test]
+fn patch_apply_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for (name, checks, expected_flag) in [
+        (
+            "bad-input.bin",
+            vec![("--patch-input-check", "crc32=deadbeef".to_string())],
+            "--patch-input-check",
+        ),
+        (
+            "bad-output.bin",
+            vec![("--patch-output-check", "crc32=deadbeef".to_string())],
+            "--patch-output-check",
+        ),
+        (
+            "bad-both.bin",
+            vec![
+                ("--patch-input-check", format!("crc32={input_crc}")),
+                ("--patch-output-check", "crc32=deadbeef".to_string()),
+            ],
+            "--patch-output-check",
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 1);
+        assert_eq!(event["status"], "failed", "{name}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(expected_flag), "{name}: {label}");
+        assert!(label.contains("update.bps"), "{name}: {label}");
+        assert!(label.contains("expected deadbeef"), "{name}: {label}");
+        assert!(label.contains("actual"), "{name}: {label}");
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+
+    // Either flag may be given alone.
+    for (name, checks) in [
+        (
+            "ok-input.bin",
+            vec![("--patch-input-check", format!("crc32={input_crc}"))],
+        ),
+        (
+            "ok-output.bin",
+            vec![("--patch-output-check", format!("crc32={output_crc}"))],
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 0);
+        assert_eq!(event["status"], "succeeded", "{name}");
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            b"hello new world",
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let checks = [(flag, "crc32=deadbeef".to_string())];
+        let event = run_patch_check_command("validate", &original, &patch, None, &checks, 1);
+        assert_eq!(event["status"], "failed", "{flag}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(flag), "{flag}: {label}");
+        assert!(label.contains("update.bps"), "{flag}: {label}");
+        assert!(label.contains("expected deadbeef"), "{flag}: {label}");
+    }
+
+    let checks = [
+        ("--patch-input-check", format!("crc32={input_crc}")),
+        ("--patch-output-check", format!("crc32={output_crc}")),
+    ];
+    let event = run_patch_check_command("validate", &original, &patch, None, &checks, 0);
+    assert_eq!(event["status"], "succeeded");
+}
+
+/// 64 zero bytes (crc32 758d6336) plus two IPS patches written against it:
+/// `first.ips` sets byte 0 to 1, `second.ips` sets byte 10 to 2.
+fn write_zero_rom_and_two_ips(temp: &TempDir, rom_name: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let rom = temp.child(rom_name).path().to_path_buf();
+    fs::write(&rom, [0u8; 64]).expect("rom fixture");
+    let first = temp.child("first.ips").path().to_path_buf();
+    let second = temp.child("second.ips").path().to_path_buf();
+    for (path, offset, value) in [(&first, 0, 1u8), (&second, 10, 2u8)] {
+        let records = vec![TestIpsRecord::Literal {
+            offset,
+            data: vec![value],
+        }];
+        fs::write(path, build_ips_patch(records, None)).expect("ips fixture");
+    }
+    (rom, first, second)
+}
+
+#[test]
+fn patch_validate_checks_a_base_step_input_against_the_base_rom_like_apply() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let path = |path: &Path| path.to_str().expect("path").to_string();
+    let chain = |command: &str, check: &str| {
+        let mut args = vec![
+            "patch".to_string(),
+            command.to_string(),
+            "--input".to_string(),
+            path(&rom),
+            "--patch".to_string(),
+            path(&first),
+            "--patch".to_string(),
+            path(&second),
+            "--patch-basis".to_string(),
+            "base".to_string(),
+            "--patch-input-check".to_string(),
+            check.to_string(),
+        ];
+        if command == "apply" {
+            args.extend(["--no-compress", "--force", "-o"].map(str::to_string));
+            args.push(path(output.path()));
+        }
+        args
+    };
+    for (check, code) in [("crc32=758d6336", 0), ("crc32=deadbeef", 1)] {
+        for command in ["apply", "validate"] {
+            let args = chain(command, check);
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            command_output_with_env(&args, &[], code);
+        }
+    }
+}
+
+#[test]
+fn default_patch_basis_base_checks_a_step_input_against_the_base_rom_in_apply_and_validate() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let second = second.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    // Base ROM 758d6336 passes; the intermediate after first.ips (fab84ea3)
+    // is not what the base-basis step reads, so it fails.
+    for (check, code) in [("crc32=758d6336", 0), ("crc32=fab84ea3", 1)] {
+        let chain = [
+            "--input",
+            rom,
+            "--patch",
+            first,
+            "--patch-input-check",
+            "",
+            "--patch",
+            second,
+            "--default-patch-basis",
+            "base",
+            "--patch-input-check",
+            check,
+        ];
+        let mut apply = vec!["patch", "apply"];
+        apply.extend(chain);
+        apply.extend(["--no-compress", "--force", "-o", out]);
+        command_output_with_env(&apply, &[], code);
+        let mut validate = vec!["patch", "validate"];
+        validate.extend(chain);
+        command_output_with_env(&validate, &[], code);
+    }
+}
+
+#[test]
+fn patch_validate_accepts_and_enforces_size_checks_like_apply() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        for (check, code) in [
+            ("size=64", 0),
+            ("crc32=758d6336,size=64", 0),
+            ("size=65", 1),
+        ] {
+            if !check.contains(',') {
+                command_output_with_env(
+                    &[
+                        "patch",
+                        "apply",
+                        "--input",
+                        rom,
+                        "--patch",
+                        first,
+                        flag,
+                        check,
+                        "--no-compress",
+                        "--force",
+                        "-o",
+                        out,
+                    ],
+                    &[],
+                    code,
+                );
+            }
+            let check = if flag == "--patch-output-check" {
+                check.replace("758d6336", "fab84ea3")
+            } else {
+                check.to_string()
+            };
+            command_output_with_env(
+                &[
+                    "patch", "validate", "--input", rom, "--patch", first, flag, &check,
+                ],
+                &[],
+                code,
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_apply_accepts_comma_separated_patch_check_values() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for (flag, check, code) in [
+        ("--patch-input-check", "crc32=758d6336,size=64", 0),
+        ("--patch-input-check", "crc32=758d6336, size=65", 1),
+        ("--patch-output-check", "crc32=fab84ea3,size=64", 0),
+        ("--patch-output-check", "crc32=758d6336,size=64", 1),
+    ] {
+        command_output_with_env(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                rom,
+                "--patch",
+                first,
+                flag,
+                check,
+                "--no-compress",
+                "--force",
+                "-o",
+                out,
+            ],
+            &[],
+            code,
+        );
+    }
+}
+
+#[test]
+fn patch_checks_reject_min_size_in_apply_and_validate() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let apply = [
+            "patch",
+            "apply",
+            "--input",
+            rom,
+            "--patch",
+            first,
+            flag,
+            "min-size=10",
+            "--no-compress",
+            "--force",
+            "-o",
+            out,
+        ];
+        let validate = [
+            "patch",
+            "validate",
+            "--input",
+            rom,
+            "--patch",
+            first,
+            flag,
+            "min-size=10",
+        ];
+        for args in [apply.as_slice(), validate.as_slice()] {
+            let stderr = command_output_with_env(args, &[], 1).stderr;
+            let stderr = String::from_utf8_lossy(&stderr);
+            assert!(
+                stderr.contains(&format!("{flag} does not accept min-size=N")),
+                "{args:?}: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_validate_independent_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+    let run = |checks: &[(&str, String)], code: i32| {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--independent",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+        ];
+        for (flag, value) in checks {
+            args.extend([*flag, value.as_str()]);
+        }
+        args.push("--jsonl");
+        run_single_json_event(&args, code)
+    };
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let event = run(&[(flag, "crc32=deadbeef".to_string())], 1);
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains("FAIL update.bps"), "{flag}: {label}");
+        assert!(label.contains(flag), "{flag}: {label}");
+    }
+    let event = run(
+        &[
+            ("--patch-input-check", format!("crc32={input_crc}")),
+            ("--patch-output-check", format!("crc32={output_crc}")),
+        ],
+        0,
+    );
+    assert!(
+        event["label"]
+            .as_str()
+            .expect("label")
+            .contains("pass update.bps")
+    );
+}
+
+#[test]
+fn patch_output_size_check_mismatch_names_the_output() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x22_u8; 32]).expect("rom fixture");
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 2,
+                data: vec![0x33; 2],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--patch-output-check",
+            "size=1",
+        ],
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--patch-output-check",
+            "size=1",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            stderr.contains("output size mismatch; expected 1 byte(s), actual 32"),
+            "{stderr}"
+        );
+    }
+}

@@ -1731,7 +1731,7 @@ impl CliApp {
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
         checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
-            let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
+            let label = Self::validate_patch_size(&apply_input, "input", Some(expected_size), None)
                 .map_err(|error| {
                     Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
@@ -2831,21 +2831,25 @@ fn merge_apply_step_declarations(
     input_checks: &[String],
     output_checks: &[String],
     patch_count: usize,
+    shared_basis: PatchBasisMode,
 ) -> Result<()> {
     if input_checks.is_empty() && output_checks.is_empty() {
         return Ok(());
     }
-    for (name, checks) in [
-        ("patch_input_check", input_checks),
-        ("patch_output_check", output_checks),
+    for (flag, checks) in [
+        ("--patch-input-check", input_checks),
+        ("--patch-output-check", output_checks),
     ] {
-        if checks.len() != patch_count {
+        if !checks.is_empty() && checks.len() != patch_count {
             return Err(RomWeaverError::Validation(format!(
-                "{name} must contain one value per patch (or be omitted); got {} value(s) for {patch_count} patch(es)",
+                "{flag} binds to the preceding --patch; got {} value(s) for {patch_count} patch(es)",
                 checks.len()
             )));
         }
     }
+    let check_at = |checks: &[String], index: usize| -> String {
+        checks.get(index).cloned().unwrap_or_default()
+    };
     if steps.is_empty() {
         steps.resize_with(patch_count, PatchApplyStepMetadata::default);
     } else if steps.len() != patch_count {
@@ -2853,21 +2857,39 @@ fn merge_apply_step_declarations(
             "weave patch declarations do not align with the resolved patches".to_string(),
         ));
     }
-    for index in 0..patch_count {
-        let verification = steps[index]
-            .verification
-            .get_or_insert_with(patch_plan::PatchStepVerification::default);
-        if !input_checks[index].trim().is_empty() {
+    for (index, step) in steps.iter_mut().enumerate() {
+        // A step no weave declared still takes the shared basis
+        // (--default-patch-basis); creating its verification here would
+        // otherwise read as a weave declaration and skip that basis.
+        let verification = step.verification.get_or_insert_with(|| {
+            let basis = shared_basis.declared();
+            trace!(
+                index,
+                ?basis,
+                "check flags: undeclared step takes the shared basis"
+            );
+            patch_plan::PatchStepVerification {
+                basis,
+                basis_source: basis.map(|_| PatchBasisSource::Declared),
+                ..patch_plan::PatchStepVerification::default()
+            }
+        });
+        verification.enforce_declared_checks = true;
+        let input_check = check_at(input_checks, index);
+        if !input_check.trim().is_empty() {
             let parsed =
-                parse_expect_tokens(&[input_checks[index].clone()], "patch_input_check", true)?;
+                crate::expect_tokens::parse_patch_check_value(&input_check, "--patch-input-check")?;
             verification.declared_input = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
             });
         }
-        if !output_checks[index].trim().is_empty() {
-            let parsed =
-                parse_expect_tokens(&[output_checks[index].clone()], "patch_output_check", true)?;
+        let output_check = check_at(output_checks, index);
+        if !output_check.trim().is_empty() {
+            let parsed = crate::expect_tokens::parse_patch_check_value(
+                &output_check,
+                "--patch-output-check",
+            )?;
             verification.declared_output = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
@@ -3391,13 +3413,14 @@ impl CliApp {
     /// Verify a chain intermediate against declared checks: every declared
     /// digest plus the exact size when pinned. A fresh read of the temp file -
     /// only runs at declared boundaries, which weaves rarely carry.
-    fn verify_chain_step_state(
+    pub(super) fn verify_chain_step_state(
         state_path: &Path,
+        side: &str,
         declared: &patch_plan::PlanState,
         context: &OperationContext,
     ) -> Result<()> {
         if let Some(expected_size) = declared.size {
-            Self::validate_patch_input_size(state_path, Some(expected_size), None)?;
+            Self::validate_patch_size(state_path, side, Some(expected_size), None)?;
         }
         if !declared.checksums.is_empty() {
             Self::validate_patch_apply_expected_checksums(
@@ -3424,15 +3447,16 @@ impl CliApp {
             return Ok(());
         };
         if !(context.strict_patch_checksums()
-            && (target.is_some() || !is_last)
-            && (step.is_chain_prefix || explicit_input.is_some()))
+            && (step.enforce_declared_checks
+                || ((target.is_some() || !is_last)
+                    && (step.is_chain_prefix || explicit_input.is_some()))))
         {
             return Ok(());
         }
         let Some(declared) = step.declared_output.as_ref() else {
             return Ok(());
         };
-        Self::verify_chain_step_state(output, declared, context)
+        Self::verify_chain_step_state(output, "output", declared, context)
     }
 
     /// Resolve the compression plan and re-check the resolved output path: the
