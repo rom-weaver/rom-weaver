@@ -16,8 +16,9 @@
 # was a full CI run. Dependabot has no "only between" window: `time` is the
 # check time, and security updates still open immediately at any hour.
 #
-# `cooldown` skips releases younger than three days, so a release that is
-# yanked or hot-fixed the next day does not cost a second PR and CI run.
+# `cooldown` pins GitHub's default three-day wait for version updates, so a
+# release that is yanked or hot-fixed the next day costs no extra PR and CI run
+# even if that default changes.
 #
 # `rebase-strategy: disabled` stops Dependabot from rebasing every open PR each
 # time main moves; each rebase is a full CI run. Required checks do not demand
