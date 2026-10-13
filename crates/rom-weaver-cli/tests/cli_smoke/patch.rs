@@ -12647,3 +12647,47 @@ fn patch_output_size_check_mismatch_names_the_output() {
         );
     }
 }
+
+#[test]
+fn zero_window_vcdiff_applies_and_validates_with_an_empty_rom_warning() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x44_u8; 64]).expect("rom fixture");
+    // A VCDIFF header with no windows, as `patch create` writes for an empty target.
+    let patch = temp.child("empty.vcdiff");
+    fs::write(patch.path(), [0xd6, 0xc3, 0xc4, 0x00, 0x00]).expect("vcdiff fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+        vec![
+            "patch", "validate", "--input", rom_arg, "--patch", patch_arg,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(0)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            stderr.contains("warning: VCDIFF patch `")
+                && stderr.contains("has no delta windows; it produces an empty ROM"),
+            "{args:?}: {stderr}"
+        );
+    }
+    assert_eq!(fs::metadata(output.path()).expect("output").len(), 0);
+}
