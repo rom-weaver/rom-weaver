@@ -13,6 +13,7 @@ import {
   serializeSettingsForStorage,
   validateSettingsDraft,
 } from "./settings/settings-state.ts";
+import { setThemePreference } from "./theme.ts";
 import { createStore } from "./vanilla-store.ts";
 import {
   type CompressSessionState,
@@ -440,11 +441,16 @@ const createWebappRootController = (options: ControllerOptions) => {
       });
     },
     restoreDefaults() {
-      setState({
-        draftSettings: getDefaultSettings(),
+      const draftSettings = getDefaultSettings();
+      // Theme and accent apply immediately everywhere else in the dialog, so resetting them does too.
+      setThemePreference("auto");
+      const nextSettings = { ...copySettings(store.getState().settings), accent: draftSettings.accent };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings,
         validation: {
           invalidFields: [],
-          messages: ["Defaults staged. Save and close to apply them."],
+          messages: ["Defaults staged. Theme and accent reset now; save and close to apply the rest."],
         },
       });
     },

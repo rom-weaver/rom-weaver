@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getDefaultSettings } from "../../../src/webapp/settings/settings-schema.ts";
+import { setThemePreference } from "../../../src/webapp/theme.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "../../../src/webapp/webapp-controller.ts";
 
 const createStorage = () => {
@@ -292,6 +294,25 @@ describe("createWebappRootController over the vanilla store", () => {
     // An unknown dye lot is rejected rather than persisted.
     controller.setAccent("chartreuse");
     expect(controller.getState().settings.accent).toBe("woad");
+  });
+
+  it("restores the theme and accent immediately along with the staged defaults", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+    setThemePreference("dark");
+    controller.setAccent("woad");
+    controller.restoreDefaults();
+    expect(localStorage.getItem("rom-weaver-theme")).toBe("auto");
+    expect(document.documentElement.getAttribute("data-theme-preference")).toBe("auto");
+    expect(controller.getState().settings.accent).toBe(getDefaultSettings().accent);
+    expect(controller.getState().draftSettings.accent).toBe(getDefaultSettings().accent);
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common?.accent).not.toBe("woad");
   });
 
   it("commits and persists the weave package selection from the output card", () => {

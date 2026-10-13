@@ -141,5 +141,5 @@ const useTheme = (): {
   return { theme, preference, setPreference, toggleTheme };
 };
 
-export { useTheme };
+export { setPreference as setThemePreference, useTheme };
 export type { ThemePreference };
