@@ -341,6 +341,11 @@ impl CliApp {
         if !matches!(stream_format, "gz" | "bz2" | "xz" | "zst") {
             return None;
         }
+        // A signature-only match may be a raw ROM; the general resolver decides whether to use it raw.
+        if !handler.descriptor().matches_path(source) {
+            trace!(source = %source.display(), stream_format, "streamed checksum skipped: extension not owned by the container");
+            return None;
+        }
 
         if let Some(inferred_output) =
             Self::inferred_stream_extract_output_path(source, stream_format)

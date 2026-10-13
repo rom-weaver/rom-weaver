@@ -35,6 +35,20 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-validate command"
         );
+        if args.input == Path::new("-") {
+            debug!("patch validate refused stdin input");
+            let report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "patch validate does not read from stdin; pass a file path".to_string(),
+                None,
+            );
+            return self.finish("patch-validate", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch validate", &args.input) {
+            return self.finish("patch-validate", report);
+        }
         let PatchValidateCommand {
             input,
             select,
@@ -394,6 +408,7 @@ impl CliApp {
             n64_byte_order,
             probe_threads,
             validation_steps,
+            handler_warnings: Vec::new(),
         };
         let mut formats = Vec::with_capacity(patch_count);
         for (index, patch) in resolved_patches.iter().enumerate() {
@@ -420,7 +435,7 @@ impl CliApp {
             validation_labels.push(format!("n64_byte_order={}", n64_byte_order.id()));
         }
         validation_labels.extend(extracted_patch_notes);
-        patch_validate_passed_report(
+        let mut report = patch_validate_passed_report(
             formats,
             patch_count,
             validation_labels,
@@ -428,7 +443,9 @@ impl CliApp {
             effective_expected_size,
             expected_input_checksums,
             context,
-        )
+        );
+        Self::append_report_warnings(&mut report, chain.handler_warnings);
+        report
     }
 
     /// Strips the header (with `--strip-header`) and transforms the N64 byte order of the
@@ -852,6 +869,11 @@ impl CliApp {
             }
             return Err(Box::new(failure));
         }
+        let mut report = report;
+        Self::lift_handler_label_warnings(&mut report);
+        chain
+            .handler_warnings
+            .extend(Self::report_warnings(&report));
         if !progress_tracker.saw_meaningful_running_progress() {
             self.emit_running(
                 OperationLabel {
@@ -2086,6 +2108,8 @@ struct PatchValidateChain {
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
     validation_steps: Option<Vec<PatchPlanVerdict>>,
+    /// Warnings the handlers reported for the patches validated so far.
+    handler_warnings: Vec<String>,
 }
 
 fn patch_validate_passed_report(

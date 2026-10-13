@@ -559,12 +559,17 @@ pub trait PatchHandler: Send + Sync {
             });
         }
 
+        // Keep the apply report's `; warning=` label segments so validate surfaces them too.
+        let warning_segments = apply_report
+            .label
+            .find("; warning=")
+            .map_or("", |start| &apply_report.label[start..]);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor().name.to_string()),
             "validate",
             format!(
-                "validated {} patch via dry-run apply",
+                "validated {} patch via dry-run apply{warning_segments}",
                 self.descriptor().name
             ),
             Some(100.0),

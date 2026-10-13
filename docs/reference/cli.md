@@ -82,6 +82,8 @@ Output flags remain `-o`/`--output` on commands that accept them. `patch create`
 
 Native `extract` and `compress` also accept input `-`. Their [binary pipeline options](#binary-pipelines) control stdin filenames and binary stdout.
 
+`patch apply` and `patch validate` reject a pipe or other non-regular file as `--input` because patches seek within the ROM.
+
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
@@ -156,7 +158,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
 | `tools ppf-undo --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Requires one final regular file; a raw disc sheet with companion tracks cannot be streamed. |
 | Binary stdout | Refuses terminal output and conflicts with `--json`, `--jsonl`, and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
-| Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
+| Stdin with `--dry-run` | `compress` and `extract` fail before reading stdin; their dry runs require an input file. Read-only commands (`identify`, `checksum`, `probe`) do not read stdin during a dry run and report a read-only plan. |
 
 This is disk-backed pipeline support, not incremental streaming. Operations finish in private temporary storage before the CLI copies the result to stdout. It needs space for the input spool, intermediate files, and output.
 
@@ -348,7 +350,7 @@ Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches si
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes the raw patched ROM to a sibling named `<input-stem>-patched.<rom-extension>`, including for `.bin` inputs, and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
 Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except an explicit `.bin` output: it is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 

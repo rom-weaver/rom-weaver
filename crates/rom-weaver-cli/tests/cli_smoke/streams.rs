@@ -1548,3 +1548,22 @@ mod cancelled_output {
         }
     }
 }
+
+#[test]
+fn extract_non_archive_stdin_does_not_expose_the_staging_path() {
+    let temp = setup_temp_dir();
+    let output = command_stdout_with_stdin(
+        &[
+            "extract",
+            "-",
+            "-o",
+            temp.child("out").path().to_str().unwrap(),
+            "--json",
+        ],
+        b"not an archive",
+        1,
+    );
+    let text = String::from_utf8(output).expect("utf8");
+    assert!(!text.contains("rom-weaver-stream"), "{text}");
+    assert!(text.contains("stdin"), "{text}");
+}

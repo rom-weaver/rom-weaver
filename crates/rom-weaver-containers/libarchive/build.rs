@@ -69,6 +69,7 @@ const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_free",
     "archive_errno",
     "archive_error_string",
+    "archive_filter_code",
     "archive_format",
     "archive_set_error",
     "archive_read_new",

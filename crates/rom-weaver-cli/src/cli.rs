@@ -538,9 +538,51 @@ fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::O
     args
 }
 
+/// `help --help` and `help patch --help` ask for help about help; print the
+/// target's help instead of failing the `help` subcommand's own parse.
+#[cfg(not(target_arch = "wasm32"))]
+fn normalize_help_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let asks_help = |arg: &std::ffi::OsString| arg == "--help" || arg == "-h";
+    // The subcommand token is the first argument after the global flags;
+    // `--log-level` is the only global flag that takes a separate value.
+    let mut command_index = 1;
+    while let Some(arg) = args.get(command_index) {
+        if arg == "--log-level" {
+            command_index += 2;
+        } else if arg != "--" && arg.to_str().is_some_and(|arg| arg.starts_with('-')) {
+            command_index += 1;
+        } else {
+            break;
+        }
+    }
+    let Some(after_help) = args
+        .get(command_index)
+        .filter(|arg| *arg == "help")
+        .map(|_| &args[command_index + 1..])
+    else {
+        return args;
+    };
+    if !after_help.iter().any(asks_help) {
+        return args;
+    }
+    // `help [help...] [SUBCOMMAND...]` plus a help flag anywhere means
+    // `[SUBCOMMAND...] --help`; clap would read the flag as a request for the
+    // `help` subcommand's own help, or the help flag as the command path.
+    let mut normalized = args[..command_index].to_vec();
+    normalized.extend(
+        after_help
+            .iter()
+            .skip_while(|arg| *arg == "help")
+            .filter(|arg| !asks_help(arg))
+            .cloned(),
+    );
+    normalized.push("--help".into());
+    normalized
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    let args = normalize_legacy_weave_args(std::env::args_os().collect());
+    let args = normalize_legacy_weave_args(normalize_help_args(std::env::args_os().collect()));
     let mode = OutputMode::from_args(&args);
     crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
 }
@@ -907,7 +949,10 @@ fn run_man_command(
     level: ManOutputLevel,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
-    let selected = rom_weaver_app::manpages::page_name(topics);
+    let mut selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        selected = rom_weaver_app::manpages::page_name_with_aliases(topics);
+    }
     let Some(page) = pages.get(&selected) else {
         return native_output::print_error(
             mode,
