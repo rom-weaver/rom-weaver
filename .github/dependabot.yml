@@ -9,11 +9,20 @@
 # properly beats twenty single-crate PRs that get rubber-stamped. Security
 # updates are exempt from grouping and open immediately.
 #
-# Every schedule fires daily at 03:00 in a fixed UTC-5 (`Etc/GMT+5`, no DST
-# shift) so the burst of PRs, and the CI runs they start, lands while nobody is
-# pushing to main and competing for the runner pool. Dependabot has no "only
-# between" window: `time` is the check time, and rebases or security updates
-# can still open at other hours.
+# Every schedule fires weekly, Monday 03:00 in a fixed UTC-5 (`Etc/GMT+5`, no
+# DST shift), so the burst of PRs, and the CI runs they start, lands once a week
+# while nobody is pushing to main and competing for the 20-job runner pool.
+# Daily schedules refreshed every open group PR each morning, and each refresh
+# was a full CI run. Dependabot has no "only between" window: `time` is the
+# check time, and security updates still open immediately at any hour.
+#
+# `cooldown` skips releases younger than three days, so a release that is
+# yanked or hot-fixed the next day does not cost a second PR and CI run.
+#
+# `rebase-strategy: disabled` stops Dependabot from rebasing every open PR each
+# time main moves; each rebase is a full CI run. Required checks do not demand
+# an up-to-date branch, so a clean PR merges as is; comment
+# `@dependabot rebase` on one that actually conflicts.
 #
 # Every update uses the `deps` commit type (docs/development/commits.md).
 # Without `commit-message`, Dependabot copies the type from recent history.
@@ -24,9 +33,13 @@ updates:
     commit-message:
       prefix: deps
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "03:00"
       timezone: Etc/GMT+5
+    cooldown:
+      default-days: 3
+    rebase-strategy: disabled
     open-pull-requests-limit: 5
     groups:
       rust-dependencies:
@@ -50,9 +63,13 @@ updates:
     commit-message:
       prefix: deps
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "03:00"
       timezone: Etc/GMT+5
+    cooldown:
+      default-days: 3
+    rebase-strategy: disabled
     open-pull-requests-limit: 5
     groups:
       root-npm:
@@ -64,9 +81,13 @@ updates:
     commit-message:
       prefix: deps
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "03:00"
       timezone: Etc/GMT+5
+    cooldown:
+      default-days: 3
+    rebase-strategy: disabled
     open-pull-requests-limit: 5
     groups:
       # React and the toolchain move together often enough that splitting them
@@ -86,9 +107,13 @@ updates:
     commit-message:
       prefix: deps
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "03:00"
       timezone: Etc/GMT+5
+    cooldown:
+      default-days: 3
+    rebase-strategy: disabled
     groups:
       actions:
         patterns: ["*"]
