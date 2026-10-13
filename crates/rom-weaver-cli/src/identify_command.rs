@@ -376,12 +376,18 @@ impl IdentifyDatabaseSet {
     ) -> Result<()> {
         for (database_name, pack) in &self.packs {
             let IdentifyPackFile::V1(pack) = pack;
-            if raw_size.is_none() {
+            // Without a size, or without the crc32 a fingerprint needs (a
+            // `--hash` md5/sha1 lookup), the pack's hash routes supply the
+            // missing fields; a known size only keeps the routes of that size.
+            if raw_size.is_none() || !raw_checksums.contains_key("crc32") {
                 for (size, route_crc32) in pack.matching_routes(
                     raw_checksums.get("crc32").map(String::as_str),
                     raw_checksums.get("md5").map(String::as_str),
                     raw_checksums.get("sha1").map(String::as_str),
                 ) {
+                    if raw_size.is_some_and(|wanted| wanted != size) {
+                        continue;
+                    }
                     let mut routed_checksums = raw_checksums.clone();
                     routed_checksums
                         .entry("crc32".to_string())
