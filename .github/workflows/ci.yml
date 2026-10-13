@@ -951,13 +951,8 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      # The build generates ignored channel assets from tracked masters. Render
-      # a second time and compare it with the build output before upload.
-      - name: Channel icon output is deterministic
-        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
-        env:
-          ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
+      # The channel icon determinism check (`icons:channels:check`) runs in
+      # Webapp (static) via `test:static`, off this job's critical path.
 
       # Browser E2E, Lighthouse, and Docker MUST consume this exact bundle.
       - name: Upload webapp bundle
@@ -1403,20 +1398,18 @@ jobs:
       # Vite reads the identify index while loading the config for lint.
       - uses: ./.github/actions/download-identify-data
 
+      # Root script tests, webapp script tests, and unit tests run concurrently
+      # (output buffered per command, every exit code collected) after the shared
+      # generators - accents, compiled locales, channel icons and their
+      # determinism check - ran once serially so no reader sees a partial file.
       # The runtime import contract reads the built module downloaded above.
-      - name: Build script tests
-        run: node --test scripts/*.test.mjs scripts/wasm/*.test.mjs
-
-      - name: Webapp script tests
+      - name: Script and unit tests
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+        run: npm --prefix packages/rom-weaver-webapp run test:static
 
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
-
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
 
       # A pull request audits only when the bundle can differ from main's; the
       # `lighthouse` flag fails open for every build and CI input.

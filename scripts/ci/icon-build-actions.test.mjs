@@ -14,7 +14,7 @@ test("icon consumers in CI select the installed system Chrome", () => {
     const source = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const steps = source.split(/(?=^\s+- (?:name|uses|run):)/m);
     for (const step of steps) {
-      if (!/npm --prefix packages\/rom-weaver-webapp run (?:build|analyze|icons:channels(?::check)?|test:scripts|test:browser)(?:\s|$)/.test(step)) continue;
+      if (!/npm --prefix packages\/rom-weaver-webapp run (?:build|analyze|icons:channels(?::check)?|test:scripts|test:static|test:browser)(?:\s|$)/.test(step)) continue;
       consumers += 1;
       assert.match(step, /ROM_WEAVER_SYSTEM_CHROME: "1"/, `${path}: icon generation needs the runner's browser`);
     }

@@ -33,9 +33,7 @@ mise run build-wasm-prod                                     # wasm
 npm test                                                     # repository tooling tests
 npm run docs:lint                                            # owned Markdown
 npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
-npm --prefix packages/rom-weaver-webapp run icons:channels:check
-npm --prefix packages/rom-weaver-webapp run test:scripts
-npm --prefix packages/rom-weaver-webapp run test:unit
+npm --prefix packages/rom-weaver-webapp run test:static              # icon check + root/webapp script tests + unit
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm
 npm --prefix packages/rom-weaver-webapp run test:browser
 npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
