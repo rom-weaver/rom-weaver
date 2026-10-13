@@ -12244,6 +12244,46 @@ fn patch_validate_independent_enforces_patch_input_and_output_checks() {
 }
 
 #[test]
+fn patch_apply_dry_run_plan_lists_device_code_step() {
+    let temp = setup_temp_dir();
+    let input = temp.child("g.nes");
+    let mut rom = b"NES\x1a\x01\x01\x00\x00".to_vec();
+    rom.resize(16 + 16384 + 8192, 0);
+    fs::write(input.path(), rom).expect("fixture");
+    let output = temp.child("d.nes");
+    let json = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "SXIOPO",
+            "-n",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    ))
+    .pop()
+    .expect("event");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("would apply 1 patch(es)")
+    );
+    let patches = json["details"]["patches"].as_array().expect("patches");
+    assert_eq!(patches.len(), 1, "{json}");
+    assert!(
+        patches[0].as_str().expect("entry").contains("SXIOPO"),
+        "{json}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
 fn patch_output_size_check_mismatch_names_the_output() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");

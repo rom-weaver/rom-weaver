@@ -1598,3 +1598,44 @@ fn database_remove_accepts_a_setup_only_pack() {
     );
     assert!(!dir.join("full-v1/packs/sony-playstation.pack.br").exists());
 }
+
+#[test]
+fn database_import_redump_rejects_a_non_zip_file() {
+    let temp = setup_temp_dir();
+    let dump = temp.child("notzip.zip");
+    fs::write(dump.path(), b"plain text, not an archive").expect("fixture");
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "import-redump",
+            dump.path().to_str().unwrap(),
+            "--database-dir",
+            temp.child("db").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    assert!(report.to_string().contains("not a ZIP"), "{report}");
+}
+
+#[test]
+fn database_install_group_rejects_unknown_groups_before_downloading() {
+    let temp = setup_temp_dir();
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "install-group",
+            "bogus",
+            "--database-dir",
+            temp.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    let text = report.to_string();
+    assert!(text.contains("unknown identify pack group"), "{report}");
+    assert!(text.contains("optional-computers"), "{report}");
+    assert!(!text.contains("download"), "{report}");
+}

@@ -1220,3 +1220,23 @@ fn identify_hash_with_size_matches_md5_and_sha1() {
         );
     }
 }
+
+#[test]
+fn identify_title_index_error_names_the_path() {
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            "missing-title-index.json",
+            "--name",
+            "foo",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert!(
+        json.to_string().contains("missing-title-index.json"),
+        "{json}"
+    );
+}
