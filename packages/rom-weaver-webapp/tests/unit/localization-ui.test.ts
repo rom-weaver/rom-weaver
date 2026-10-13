@@ -123,6 +123,14 @@ describe("messageCount", () => {
     expect(es.messageCount("ui.patch.offCount", 2)).toMatch(/^2 parches están/);
   });
 
+  it("states the real number of games that share a save layout", () => {
+    const en = createLocalizer("en");
+    expect(en.messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 games share this save layout/);
+    expect(en.messageCount("ui.saves.editor.chooseFormatHint", 1)).toMatch(/^1 game shares this save layout/);
+    expect(createLocalizer("de").messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 Spiele teilen/);
+    expect(createLocalizer("es").messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 juegos comparten/);
+  });
+
   it("localizes bounded unused-input lists", () => {
     const en = createLocalizer("en");
     const es = createLocalizer("es");

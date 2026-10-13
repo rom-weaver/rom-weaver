@@ -5246,7 +5246,7 @@ msgstr "Dos archivos para comparar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseFormatHint"
-msgstr "Dos juegos comparten este formato de partida, así que el archivo por sí solo no indica cuál lo escribió."
+msgstr "{count, plural, one {# juego usa} other {# juegos comparten}} este formato de partida, así que el archivo por sí solo no indica cuál lo escribió."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
