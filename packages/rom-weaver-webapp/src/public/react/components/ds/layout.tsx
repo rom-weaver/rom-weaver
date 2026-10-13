@@ -1,5 +1,5 @@
 import { ChevronDown, Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -193,6 +193,18 @@ const DropZone = ({
     if (lane && tickerHasMounted) lane.style.setProperty("--wall-clock", `${Date.now() / 1000}s`);
     tickerHasMounted = true;
   }, [showFormats]);
+  // A page-level listener MAY claim a drop before it reaches this zone, so any
+  // drop or cancelled drag ends the highlight. Window capture runs before it.
+  useEffect(() => {
+    if (!dragging) return;
+    const clear = () => setDragging(false);
+    window.addEventListener("drop", clear, true);
+    window.addEventListener("dragend", clear, true);
+    return () => {
+      window.removeEventListener("drop", clear, true);
+      window.removeEventListener("dragend", clear, true);
+    };
+  }, [dragging]);
   const formatSplit = Math.ceil((formats?.length || 0) / 2);
   const formatRows: { format: string; key: string }[][] = [];
   if (formats?.length) {

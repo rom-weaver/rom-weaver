@@ -105,6 +105,11 @@ msgstr "{count, plural, one {# escritura} other {# escrituras}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.openFiles"
+msgstr "{count, plural, one {Abrir # archivo en {page}} other {Abrir # archivos en {page}}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.containerFormats"
 msgstr "{count} formatos de archivo comprimido y de disco"
 
@@ -162,6 +167,21 @@ msgstr "{file} se lee sin extraerlo."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.defaultOption"
 msgstr "{label} (predeterminado)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.chooseFilesHint"
+msgstr "{page} no puede usar todos los archivos que añadiste. Elige cuáles llevar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.patchesNeedApplyBody"
+msgstr "{page} no usa parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.notUsedHere"
+msgstr "{page} no usará este archivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -527,6 +547,11 @@ msgstr "Aplicar parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Aplicar parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.applyBeforeTestTitle"
+msgstr "¿Aplicar el parche primero?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1115,6 +1140,11 @@ msgstr "Elige Detallada y abre Identificar para consultar la información de la 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.homeChoose"
+msgstr "Elegir archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseGameProfile"
 msgstr "Elegir perfil de juego"
 
@@ -1127,6 +1157,11 @@ msgstr "Elige cuánto ver"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseListed"
 msgstr "Elige uno de los valores indicados."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteStayApply"
+msgstr "Elige una ROM para parchear."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1277,6 +1312,11 @@ msgstr "Compara ROMs originales y modificadas, sin comprimir o en archivos, para
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.fixChecksum"
 msgstr "Compara la ROM esperada antes de omitir las comprobaciones (se abre en otra pestaña)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteCreateRoms"
+msgstr "Compara las ROMs para crear un parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1452,6 +1492,11 @@ msgstr "Crea un parche aparte para los códigos de otro tipo."
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.output.title"
 msgstr "Crea y descarga el parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeCreate"
+msgstr "Crear parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2490,6 +2535,11 @@ msgstr "Conserva el juego."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.noteStayRomOnly"
+msgstr "Conserva las ROMs aquí. Los parches se ignoran."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksNote"
 msgstr "Mantener sin conexión. Las bases de datos no marcadas se descargan a petición cuando un ROM las necesita; desmarcar una elimina su copia en caché."
 
@@ -2632,6 +2682,11 @@ msgstr "Registros"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Buscando esta ROM en la base de datos de títulos. Las filas se completan cuando se calculan las sumas de comprobación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.romsMakePatchTitle"
+msgstr "¿Crear un parche con estas ROMs?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3215,6 +3270,11 @@ msgstr "Abre el disco"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.noteApplyFiles"
+msgstr "Abrir estos archivos en Aplicar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Abre la guía"
 
@@ -3237,6 +3297,11 @@ msgstr "Opcional: crea a partir de códigos de trucos"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.options"
 msgstr "Opciones"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.homeDrop"
+msgstr "o suelta ROMs y parches aquí"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3460,6 +3525,16 @@ msgstr "El archivo de parche no es válido"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.noteApplyFirst"
+msgstr "Parchea primero y luego pulsa Probar en el resultado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeRomBody"
+msgstr "Parchéala o juégala tal como está."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_PARSE_FAILED"
 msgstr "El análisis del parche falló."
 
@@ -3472,6 +3547,11 @@ msgstr "Posición del parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
 msgstr "Resultado del parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteApplyRom"
+msgstr "Parchea esta ROM. Añade los parches después."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3512,6 +3592,11 @@ msgstr "Parches y trucos"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.patches.body"
 msgstr "Los parches se aplican de arriba abajo; desactiva uno para dejarlo fuera. Los parches de práctica convierten HELLO en ROM y WORLD en WEAVER, y ambos se hicieron para la ROM original, así que su orden no importa. Los trucos entran en esta misma lista y se aplican como cualquier otro parche; déjalos desactivados si quieres el resultado esperado ROM WEAVER."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.patchesNeedApplyTitle"
+msgstr "Los parches van en Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3585,8 +3670,18 @@ msgstr "Juégalo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.noteTestRom"
+msgstr "Juégala tal como está."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routeTestBody"
 msgstr "Juega a los juegos compatibles en esta pestaña antes de guardar nada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteTestUnpatched"
+msgstr "Juega la ROM sin parchear. Los parches se quedan fuera."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4500,6 +4595,11 @@ msgstr "Estado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.stayOn"
+msgstr "Quedarse en {page}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.step"
 msgstr "paso {step}"
 
@@ -4647,6 +4747,16 @@ msgstr "Probar"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Prueba"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.applyBeforeTestBody"
+msgstr "Probar ejecuta una ROM tal como está. Aplica primero los parches y luego pulsa Probar en el resultado parcheado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeTest"
+msgstr "Probar ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5250,6 +5360,16 @@ msgstr "Usar esta ROM en Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.noteApplyMixed"
+msgstr "Usa una ROM y pregunta cuál conservar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteCreateMixed"
+msgstr "Usa dos ROMs e ignora los parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.integrityValid"
 msgstr "válida"
 
@@ -5405,6 +5525,11 @@ msgstr "Aplicación web"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.routeRomTitle"
+msgstr "¿Qué quieres hacer con esta ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routesTitle"
 msgstr "¿Qué archivo tienes?"
 
@@ -5432,6 +5557,11 @@ msgstr "Novedades"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.identifiedOutputName"
 msgstr "Si se desactiva, los nombres de salida se derivan del nombre del archivo de entrada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeMixedTitle"
+msgstr "¿Adónde van estos archivos?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5492,6 +5622,16 @@ msgstr "escribe"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.faqArchiveAnswer"
 msgstr "Sí. Las ROMs y los parches dentro de ZIP, 7z, RAR y archivos anidados se abren sin extraerlos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeMixedBody"
+msgstr "Añadiste más de una ROM y además parches. Cada página usa solo una parte."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.romsMakePatchBody"
+msgstr "Añadiste ROMs sin ningún parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

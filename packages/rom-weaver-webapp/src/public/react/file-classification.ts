@@ -38,6 +38,34 @@ const isPatchFileName = (fileName: string) => hasKnownExtension(fileName, PATCH_
 const isArchiveFileName = (fileName: string) => hasKnownExtension(fileName, ARCHIVE_FILE_EXTENSIONS);
 const isRomFileName = (fileName: string) => hasKnownExtension(fileName, ROM_FILE_EXTENSIONS);
 
+// The canonical name is the trusted fast-path: it marks a weave by name
+// alone, and its parse errors surface. `rom-weaver-weave.json[.codec]`.
+const isWeaveFileName = (name: string) =>
+  /^rom-weaver-(?:weave|bundle)\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
+
+/**
+ * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-weave verdict
+ * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
+ * direction, since Rust's reclassify still moves a misrouted patch weave afterwards.
+ */
+const classifyArchiveBucket = (archive: { name: string }, names: readonly string[]): "rom" | "patch" => {
+  const hasRom = names.some(isRomFileName);
+  const hasPatch = names.some(isPatchFileName);
+  // Archive-only roots usually wrap nested patch weaves; route them to patch
+  // enumeration instead of the ROM keep-one prompt. Rust corrects real ROMs.
+  const hasNestedArchive = names.some(isArchiveFileName);
+  const bucket = hasRom ? "rom" : hasPatch || hasNestedArchive ? "patch" : "rom";
+  logger.trace("archive content classified", {
+    bucket,
+    entryCount: names.length,
+    hasNestedArchive,
+    hasPatch,
+    hasRom,
+    name: archive.name,
+  });
+  return bucket;
+};
+
 type DroppedFileClass = "patch" | "archive" | "rom" | "unknown";
 
 /**
@@ -92,11 +120,13 @@ const classifyDroppedFiles = (files: File[]): DroppedFileClassification => {
 
 export {
   ARCHIVE_FILE_EXTENSIONS,
+  classifyArchiveBucket,
   classifyDroppedFiles,
   classifyFileName,
   isArchiveFileName,
   isPatchFileName,
   isRomFileName,
+  isWeaveFileName,
   PATCH_FILE_EXTENSION_VARIANTS,
   PATCH_FILE_EXTENSIONS,
   ROM_FILE_EXTENSIONS,

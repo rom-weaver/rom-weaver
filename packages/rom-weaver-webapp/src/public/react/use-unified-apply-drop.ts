@@ -10,7 +10,14 @@ import {
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
-import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
+import {
+  classifyArchiveBucket,
+  classifyDroppedFiles,
+  isArchiveFileName,
+  isPatchFileName,
+  isRomFileName,
+  isWeaveFileName,
+} from "./file-classification.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -43,11 +50,6 @@ type UnifiedDropController = {
   providePatchInputFiles?: (files: File[]) => void;
 };
 
-// The canonical name is the trusted fast-path: it marks a weave by name
-// alone, and its parse errors surface. `rom-weaver-weave.json[.codec]`.
-const isWeaveFileName = (name: string) =>
-  /^rom-weaver-(?:weave|bundle)\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
-
 // Any other uncompressed `*.json` is a content-probe CANDIDATE: it is only
 // treated as a weave if its bytes parse+validate (mirrors the Rust loader), so
 // a stray `config.json` costs one parse attempt and is then ignored.
@@ -75,29 +77,6 @@ const getDropKind = (files: File[], classification: ReturnType<typeof classifyDr
   const hasWeave = files.some((file) => isWeaveFileName(file.name));
   const hasRom = classification.inputs.length > 0 || files.some((file) => isRomFileName(file.name));
   return hasWeave ? "weave" : hasRom ? "rom" : classification.archives.length ? "unknown" : "patch";
-};
-
-/**
- * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-weave verdict
- * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
- * direction, since Rust's reclassify still moves a misrouted patch weave afterwards.
- */
-const classifyArchiveBucket = (archive: File, names: string[]): "rom" | "patch" => {
-  const hasRom = names.some(isRomFileName);
-  const hasPatch = names.some(isPatchFileName);
-  // Archive-only roots usually wrap nested patch weaves; route them to patch
-  // enumeration instead of the ROM keep-one prompt. Rust corrects real ROMs.
-  const hasNestedArchive = names.some(isArchiveFileName);
-  const bucket = hasRom ? "rom" : hasPatch || hasNestedArchive ? "patch" : "rom";
-  logger.trace("archive content classified", {
-    bucket,
-    entryCount: names.length,
-    hasNestedArchive,
-    hasPatch,
-    hasRom,
-    name: archive.name,
-  });
-  return bucket;
 };
 
 const routeUnifiedDrop = async (
