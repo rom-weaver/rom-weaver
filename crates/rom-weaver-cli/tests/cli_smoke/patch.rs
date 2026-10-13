@@ -11621,6 +11621,29 @@ mod termination_signals {
 }
 
 #[test]
+fn patch_validate_explains_that_stdin_input_is_unsupported() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "-i",
+            "-",
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        json["label"],
+        "patch validate does not read from stdin; pass a file path"
+    );
+}
+
+#[test]
 fn patch_apply_explains_that_stdin_input_is_unsupported() {
     let temp = setup_temp_dir();
     let patch = temp.child("fix.ips");
