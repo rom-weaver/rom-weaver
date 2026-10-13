@@ -561,7 +561,7 @@ Permission failures exit `1`. Under `--json`, the result document has `"status":
 
 The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`.
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. When that directory cannot be resolved (no `XDG_DATA_HOME` or `HOME` on Unix, no `LOCALAPPDATA` on Windows), `--install` fails and asks for `--man-dir`.
 
 Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 

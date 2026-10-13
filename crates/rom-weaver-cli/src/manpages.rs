@@ -109,31 +109,28 @@ pub fn page_name(topics: &[String]) -> String {
     format!("{}.1", path.join("-"))
 }
 
-pub fn default_man_dir() -> PathBuf {
+/// The man page install directory, or `None` when no user data directory can be resolved.
+pub fn default_man_dir() -> Option<PathBuf> {
     if let Some(path) = env::var_os("ROM_WEAVER_MAN_DIR") {
-        return PathBuf::from(path);
+        return Some(PathBuf::from(path));
     }
 
     #[cfg(windows)]
     {
-        if let Some(path) = env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(path)
+        return env::var_os("LOCALAPPDATA").map(|path| {
+            PathBuf::from(path)
                 .join("rom-weaver")
                 .join("docs")
-                .join("man");
-        }
-        return PathBuf::from("docs").join("man");
+                .join("man")
+        });
     }
 
     #[cfg(not(windows))]
     {
         if let Some(path) = env::var_os("XDG_DATA_HOME") {
-            return PathBuf::from(path).join("man").join("man1");
+            return Some(PathBuf::from(path).join("man").join("man1"));
         }
-        if let Some(path) = env::var_os("HOME") {
-            return PathBuf::from(path).join(".local/share/man/man1");
-        }
-        PathBuf::from("man").join("man1")
+        env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/man/man1"))
     }
 }
 
@@ -233,7 +230,8 @@ mod tests {
 
     #[test]
     fn default_path_has_a_user_scope() {
-        let path = default_man_dir();
-        assert!(!path.as_os_str().is_empty());
+        if let Some(path) = default_man_dir() {
+            assert!(!path.as_os_str().is_empty());
+        }
     }
 }
