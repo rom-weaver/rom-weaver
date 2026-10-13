@@ -12276,6 +12276,46 @@ fn patch_create_mod_warns_when_original_is_not_paper_mario() {
 }
 
 #[test]
+fn patch_apply_auto_n64_warns_when_ips_order_is_a_guess_on_v64_input() {
+    let temp = setup_temp_dir();
+    let mut z64: Vec<u8> = (0..0x2000_u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    z64[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    let mut modified_z64 = z64.clone();
+    for offset in (0x1000..0x1800).step_by(0x101) {
+        modified_z64[offset] ^= 0xff;
+    }
+    fs::write(temp.child("a.z64").path(), &z64).expect("fixture");
+    fs::write(temp.child("b.z64").path(), &modified_z64).expect("fixture");
+    fs::write(temp.child("a.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    create_ips_patch(
+        temp.child("a.z64").path(),
+        temp.child("b.z64").path(),
+        temp.child("p.ips").path(),
+    );
+
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("a.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("p.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("out.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    ));
+    let warnings = json["details"]["warnings"].to_string();
+    assert!(warnings.contains("--n64-byte-order"), "{json}");
+    assert!(warnings.contains("byte-swapped"), "{json}");
+}
+
+#[test]
 fn patch_apply_dry_run_plan_lists_device_code_step() {
     let temp = setup_temp_dir();
     let input = temp.child("g.nes");
