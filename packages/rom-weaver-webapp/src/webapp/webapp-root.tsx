@@ -500,6 +500,11 @@ function WebappRoot({
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
   }, [state.settings.betaToolsEnabled]);
+  // Hydration reads the served lang as the language the prerender used, so the attribute only follows the
+  // active locale once the tree is mounted.
+  useLayoutEffect(() => {
+    document.documentElement.lang = state.settings.language;
+  }, [state.settings.language]);
   useLayoutEffect(() => {
     document.documentElement.dataset.onboardingEnabled = state.settings.onboardingEnabled ? "true" : "false";
   }, [state.settings.onboardingEnabled]);
