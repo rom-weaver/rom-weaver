@@ -238,3 +238,20 @@ test("trim rejects unsupported input and allows a successful retry", async () =>
     await workflow.dispose();
   }
 });
+
+test("trim staging settles for an empty file and the next file", async () => {
+  const workflow = new TrimWorkflow({
+    settings: { output: { compression: "none" }, workers: { threads: 1 } },
+  });
+  try {
+    await Promise.race([
+      workflow.setInput(new File([], "empty.bin")),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("empty staging hung")), 20000)),
+    ]);
+    expect(workflow.getInput()?.size).toBe(0);
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    expect(workflow.getInput()?.checksums).toBeTruthy();
+  } finally {
+    await workflow.dispose();
+  }
+}, 60000);
