@@ -871,6 +871,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             });
             setSourceStaging(false);
             clearProgressForStage("input");
+            // A last checksum event with no completion event (an empty file) would otherwise pin the checks panel.
+            clearProgressForStage("checksum");
           } else {
             emitTrimFormTrace("stage.finish.stale", {
               currentGeneration: stagedTrimWorkflowGenerationRef.current,

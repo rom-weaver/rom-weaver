@@ -8,6 +8,7 @@ import { TrimPatchForm } from "../../src/public/react/trim-form.tsx";
 const workflowMockState = {
   inputDeferred: null,
   inputSetCalls: 0,
+  emitChecksumProgress: false,
   inputStateOverrides: {},
   instances: [],
   runCalls: 0,
@@ -132,6 +133,20 @@ class MockTrimWorkflow {
     workflowMockState.inputSetCalls += 1;
     this.emitProgress("Preparing ROM...");
     return workflowMockState.inputDeferred.promise.then(() => {
+      // An empty file reports checksum progress but never a completion event.
+      if (workflowMockState.emitChecksumProgress) {
+        for (const handler of this.listeners.get("progress") || []) {
+          handler({
+            details: { role: "input", stage: "checksum" },
+            hasProgress: true,
+            label: "Calculating checksums...",
+            message: "Calculating checksums...",
+            percent: 100,
+            role: "input",
+            stage: "checksum",
+          });
+        }
+      }
       this.input = {
         fileName: source?.name || "game.bin",
         selectedCandidateId: "input",
@@ -194,6 +209,7 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
   workflowMockState.inputDeferred = createDeferred();
   workflowMockState.inputSetCalls = 0;
+  workflowMockState.emitChecksumProgress = false;
   workflowMockState.inputStateOverrides = {};
   workflowMockState.instances = [];
   workflowMockState.runDeferred = createDeferred();
@@ -478,4 +494,15 @@ test("trim queued default format does not guess for iso input", async () => {
   workflowMockState.inputDeferred.resolve();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
   expect(workflowMockState.instances[0]?.outputFormat).toBe("zip");
+});
+
+test("trim staging clears checksum progress once the source settles", async () => {
+  workflowMockState.emitChecksumProgress = true;
+  mount(
+    createElement(TrimPatchForm, withTrimWorkflowMock({ defaultSource: new File([new Uint8Array(0)], "empty.bin") })),
+  );
+  await expect.poll(() => workflowMockState.inputSetCalls).toBe(1);
+  workflowMockState.inputDeferred.resolve();
+  await expect.poll(() => document.getElementById("trim-builder-button-run")?.disabled).toBe(false);
+  await expect.poll(() => document.getElementById("trim-input-stage")).toBeNull();
 });
