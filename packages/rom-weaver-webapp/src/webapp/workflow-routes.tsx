@@ -33,6 +33,7 @@ type WorkflowRouteProps = {
   patcher: ApplyPatchFormProps;
   test: {
     active?: boolean;
+    pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null;
   };
   "ppf-undo": PpfUndoFormProps;
   "save-editor": SaveEditorProps;

@@ -656,6 +656,29 @@ impl<'a> PatchSelectors<'a> {
 }
 
 impl CliApp {
+    /// Patch handlers seek within and size the ROM, so a pipe or device input would read as empty
+    /// or fail mid-apply. Returns the failure report for such an input.
+    pub(super) fn unseekable_rom_input_failure(
+        command: &str,
+        input: &Path,
+    ) -> Option<OperationReport> {
+        let metadata = fs::metadata(input).ok()?;
+        if metadata.is_file() || metadata.is_dir() {
+            return None;
+        }
+        debug!(command, input = %input.display(), "rejected a non-regular ROM input");
+        Some(OperationReport::failed(
+            OperationFamily::Patch,
+            None,
+            "validate",
+            format!(
+                "{command} input `{}` is not a regular file; patches need a seekable ROM, so write the stream to a file first",
+                input.display()
+            ),
+            None,
+        ))
+    }
+
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         if args.input == Path::new("-") {
             let report = OperationReport::failed(
@@ -665,6 +688,9 @@ impl CliApp {
                 "patch apply does not read from stdin; pass a file path".to_string(),
                 None,
             );
+            return self.finish("patch-apply", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch apply", &args.input) {
             return self.finish("patch-apply", report);
         }
         if args.dry_run {
@@ -1731,7 +1757,7 @@ impl CliApp {
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
         checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
-            let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
+            let label = Self::validate_patch_size(&apply_input, "input", Some(expected_size), None)
                 .map_err(|error| {
                     Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
@@ -1999,6 +2025,12 @@ impl CliApp {
                 report.label,
                 checksum_verification_labels.join("; ")
             );
+            let warnings = checksum_verification_labels
+                .iter()
+                .filter_map(|label| label.strip_prefix("warning="))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            Self::append_report_warnings(report, warnings);
         }
         Ok(())
     }
@@ -2207,13 +2239,25 @@ impl CliApp {
                 patch = %patch.display(),
                 "auto n64: nothing separates the three orders; keeping the current one"
             );
-            return (source, None);
+            return (source, Self::n64_order_guess_warning(source));
         };
         let note = format!(
             "patch N64 byte order inferred as {} ({reason})",
             target.label()
         );
         (target, Some(note))
+    }
+
+    /// Keeping the input's order when no evidence separates the orders is a guess. Big-endian
+    /// is the common authoring order, so only a kept v64 or n64 input warns.
+    fn n64_order_guess_warning(source: N64ByteOrder) -> Option<String> {
+        if source == N64ByteOrder::BigEndian {
+            return None;
+        }
+        Some(format!(
+            "warning=N64 byte order could not be determined from the patch; assuming {} (the input's order). If the output is wrong, rerun with --n64-byte-order set to the order the patch was made for",
+            source.label()
+        ))
     }
 
     pub(super) fn transition_n64_byte_order(
@@ -2831,21 +2875,25 @@ fn merge_apply_step_declarations(
     input_checks: &[String],
     output_checks: &[String],
     patch_count: usize,
+    shared_basis: PatchBasisMode,
 ) -> Result<()> {
     if input_checks.is_empty() && output_checks.is_empty() {
         return Ok(());
     }
-    for (name, checks) in [
-        ("patch_input_check", input_checks),
-        ("patch_output_check", output_checks),
+    for (flag, checks) in [
+        ("--patch-input-check", input_checks),
+        ("--patch-output-check", output_checks),
     ] {
-        if checks.len() != patch_count {
+        if !checks.is_empty() && checks.len() != patch_count {
             return Err(RomWeaverError::Validation(format!(
-                "{name} must contain one value per patch (or be omitted); got {} value(s) for {patch_count} patch(es)",
+                "{flag} binds to the preceding --patch; got {} value(s) for {patch_count} patch(es)",
                 checks.len()
             )));
         }
     }
+    let check_at = |checks: &[String], index: usize| -> String {
+        checks.get(index).cloned().unwrap_or_default()
+    };
     if steps.is_empty() {
         steps.resize_with(patch_count, PatchApplyStepMetadata::default);
     } else if steps.len() != patch_count {
@@ -2853,21 +2901,39 @@ fn merge_apply_step_declarations(
             "weave patch declarations do not align with the resolved patches".to_string(),
         ));
     }
-    for index in 0..patch_count {
-        let verification = steps[index]
-            .verification
-            .get_or_insert_with(patch_plan::PatchStepVerification::default);
-        if !input_checks[index].trim().is_empty() {
+    for (index, step) in steps.iter_mut().enumerate() {
+        // A step no weave declared still takes the shared basis
+        // (--default-patch-basis); creating its verification here would
+        // otherwise read as a weave declaration and skip that basis.
+        let verification = step.verification.get_or_insert_with(|| {
+            let basis = shared_basis.declared();
+            trace!(
+                index,
+                ?basis,
+                "check flags: undeclared step takes the shared basis"
+            );
+            patch_plan::PatchStepVerification {
+                basis,
+                basis_source: basis.map(|_| PatchBasisSource::Declared),
+                ..patch_plan::PatchStepVerification::default()
+            }
+        });
+        verification.enforce_declared_checks = true;
+        let input_check = check_at(input_checks, index);
+        if !input_check.trim().is_empty() {
             let parsed =
-                parse_expect_tokens(&[input_checks[index].clone()], "patch_input_check", true)?;
+                crate::expect_tokens::parse_patch_check_value(&input_check, "--patch-input-check")?;
             verification.declared_input = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
             });
         }
-        if !output_checks[index].trim().is_empty() {
-            let parsed =
-                parse_expect_tokens(&[output_checks[index].clone()], "patch_output_check", true)?;
+        let output_check = check_at(output_checks, index);
+        if !output_check.trim().is_empty() {
+            let parsed = crate::expect_tokens::parse_patch_check_value(
+                &output_check,
+                "--patch-output-check",
+            )?;
             verification.declared_output = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
@@ -3391,13 +3457,14 @@ impl CliApp {
     /// Verify a chain intermediate against declared checks: every declared
     /// digest plus the exact size when pinned. A fresh read of the temp file -
     /// only runs at declared boundaries, which weaves rarely carry.
-    fn verify_chain_step_state(
+    pub(super) fn verify_chain_step_state(
         state_path: &Path,
+        side: &str,
         declared: &patch_plan::PlanState,
         context: &OperationContext,
     ) -> Result<()> {
         if let Some(expected_size) = declared.size {
-            Self::validate_patch_input_size(state_path, Some(expected_size), None)?;
+            Self::validate_patch_size(state_path, side, Some(expected_size), None)?;
         }
         if !declared.checksums.is_empty() {
             Self::validate_patch_apply_expected_checksums(
@@ -3424,15 +3491,16 @@ impl CliApp {
             return Ok(());
         };
         if !(context.strict_patch_checksums()
-            && (target.is_some() || !is_last)
-            && (step.is_chain_prefix || explicit_input.is_some()))
+            && (step.enforce_declared_checks
+                || ((target.is_some() || !is_last)
+                    && (step.is_chain_prefix || explicit_input.is_some()))))
         {
             return Ok(());
         }
         let Some(declared) = step.declared_output.as_ref() else {
             return Ok(());
         };
-        Self::verify_chain_step_state(output, declared, context)
+        Self::verify_chain_step_state(output, "output", declared, context)
     }
 
     /// Resolve the compression plan and re-check the resolved output path: the

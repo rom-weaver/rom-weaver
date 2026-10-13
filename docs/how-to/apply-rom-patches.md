@@ -123,7 +123,7 @@ In **Patches & Cheats**, select **Add cheats to the patch order**, then choose d
 If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearby warning. In **Apply**:
 
 1. Enter a filename without an extension.
-2. The format selector starts on the ROM's own extension, such as **.gba**, or a ROM-specific format for discs; several output files download as one **.zip**. Pick **.zip** or **.7z** only if you need an archive; the selector adds the extension.
+2. The format selector starts on the ROM's own extension, such as **.gba**, or a ROM-specific format for disc images such as **.chd**. A **.bin** whose size is a whole number of 2048- or 2352-byte sectors counts as a disc image, so it starts on **.chd**; pick **.bin** in the selector to keep a raw file; several output files download as one **.zip**. Pick **.zip** or **.7z** only if you need an archive; the selector adds the extension.
 3. Open **Options** for compression, output header, or weave controls when needed.
 4. Choose **APPLY & DOWNLOAD**, wait, and save the new file.
 

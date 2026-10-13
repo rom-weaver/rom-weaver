@@ -100,6 +100,29 @@ pub(super) fn create_patch_formats_for_sizes(
     SMALL_CREATE_PATCH_FORMATS
 }
 
+/// MOD (pmsr) patches can only apply to Paper Mario (USA) v1.0, so the plan lists the format
+/// only for that exact original. The CRC32 is read only when the size already matches.
+fn original_is_paper_mario_usa10(original: &Path, size: u64) -> bool {
+    const PAPER_MARIO_USA10_SIZE: u64 = 41_943_040;
+    const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5_CD7E;
+    if size != PAPER_MARIO_USA10_SIZE {
+        return false;
+    }
+    let Ok(mut file) = fs::File::open(original) else {
+        return false;
+    };
+    let mut hasher = crc32fast::Hasher::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    loop {
+        match rom_weaver_core::read_full(&mut file, &mut buffer) {
+            Ok(0) => break,
+            Ok(read) => hasher.update(&buffer[..read]),
+            Err(_) => return false,
+        }
+    }
+    hasher.finalize() == PAPER_MARIO_USA10_CRC32
+}
+
 pub(super) fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
     let normalized_path = path.to_string_lossy().to_ascii_lowercase();
     extensions
@@ -168,42 +191,38 @@ impl CliApp {
         modified: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> std::result::Result<PatchCreateInputSizes, Box<OperationReport>> {
-        let original_size = match fs::metadata(original) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
+        let inspect = |role: &str, path: &Path| -> std::result::Result<u64, Box<OperationReport>> {
+            let fail = |message: String| {
+                Box::new(
                     OperationReport::failed(
                         OperationFamily::Patch,
-                        format,
+                        format.clone(),
                         "validate",
-                        format!(
-                            "failed to inspect {command} original input `{}`: {error}",
-                            original.display()
-                        ),
-                        thread_execution,
+                        message,
+                        thread_execution.clone(),
                     )
                     .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
+                )
+            };
+            let metadata = fs::metadata(path).map_err(|error| {
+                fail(format!(
+                    "failed to inspect {command} {role} input `{}`: {error}",
+                    path.display()
+                ))
+            })?;
+            // Creation sizes and re-reads its inputs, so a pipe or device would
+            // report size 0 and yield a wrong patch or a partial output.
+            if !metadata.is_file() {
+                debug!(role, path = %path.display(), "patch create rejected a non-regular input");
+                return Err(fail(format!(
+                    "{command} {role} input `{}` is not a regular file; patch create needs seekable inputs, so write the stream to a file first",
+                    path.display()
+                )));
             }
+            Ok(metadata.len())
         };
-        let modified_size = match fs::metadata(modified) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        format,
-                        "validate",
-                        format!(
-                            "failed to inspect {command} modified input `{}`: {error}",
-                            modified.display()
-                        ),
-                        thread_execution,
-                    )
-                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
-            }
-        };
+        let original_size = inspect("original", original)?;
+        let modified_size = inspect("modified", modified)?;
         Ok(PatchCreateInputSizes {
             original: original_size,
             modified: modified_size,
@@ -472,7 +491,11 @@ impl CliApp {
         };
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
-        let formats = candidates.formats.to_vec();
+        let mut formats = candidates.formats.to_vec();
+        if !original_is_paper_mario_usa10(&args.original, input_info.original.size) {
+            debug!("patch create plan drops pmsr: original is not Paper Mario (USA) v1.0");
+            formats.retain(|format| *format != "pmsr");
+        }
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(candidates.default_format.to_string()),

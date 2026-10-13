@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { Check, Copy, Download, Footprints, Server, Stamp, Terminal } from "lucide-react";
+import { Check, Copy, Download, Server, Stamp, Terminal } from "lucide-react";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { HomeChain, HomeFaq, HomeFormats, HomeRoutes, HomeTrust } from "./home-sections.tsx";
@@ -16,6 +16,8 @@ import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 type HomePageProps = {
   /** Where the app is served. Route links resolve against it so a sub-path deployment keeps its prefix. */
   baseUrl: string;
+  /** Files chosen in the hero picker; the shell routes them to the workflow that fits. */
+  onFiles?: (files: File[]) => void;
 };
 
 type InstallMethod = {
@@ -155,7 +157,7 @@ const HomeCli = ({ route }: HomeCliProps): React.ReactElement => {
   );
 };
 
-const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
+const HomePage = ({ baseUrl, onFiles }: HomePageProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
 
@@ -172,12 +174,29 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
           <div className="home-hero-body">
             <p className="home-lede">{localizer.message("ui.home.lede")}</p>
             <div className="home-actions home-main-actions">
-              <a className="btn primary lg" href={route("apply-patches")}>
+              {/* Drops anywhere on the page reach the shell's page-level handler, so this zone
+                  only needs the picker; it is not a `.drop`, which the shell leaves to the zone. */}
+              <label className="needs-input" htmlFor="home-file-input">
+                <span className="btn primary lg">{localizer.message("ui.drop.homeChoose")}</span>
+                {localizer.message("ui.drop.homeDrop")}
+                <input
+                  className="sr-only"
+                  id="home-file-input"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    if (files.length) onFiles?.(files);
+                  }}
+                  type="file"
+                />
+              </label>
+              <a className="btn ghost" href={route("apply-patches")}>
                 <Stamp aria-hidden="true" />
                 {localizer.message("ui.home.applyPatchCta")}
               </a>
-              <a className="btn ghost lg" href={resolveGuidedSampleHref(baseUrl, "apply")}>
-                <Footprints aria-hidden="true" />
+              <a className="sample-tutorial-start-chip" href={resolveGuidedSampleHref(baseUrl, "apply")}>
+                <span aria-hidden="true" className="sample-tutorial-start-knot" />
                 {localizer.message("ui.home.tryLink")}
               </a>
             </div>

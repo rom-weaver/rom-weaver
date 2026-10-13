@@ -1,5 +1,5 @@
 import { runInNewContext } from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createEmulatorDocument,
   createEmulatorGameIdentity,
@@ -87,6 +87,20 @@ describe("createEmulatorDocument", () => {
       },
       { source: "rom-weaver-emulator", kind: "request-load-sram", gameId: checksum, gameName: checksum },
     ]);
+  });
+
+  it("resolves a denied screen wake lock instead of leaving an unhandled rejection", async () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const script = [...document.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((match) => match[1] ?? "")
+      .find((body) => body.includes("wakeLock"));
+    expect(script).toBeDefined();
+    const wakeLock = { request: vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError")) };
+    runInNewContext(script ?? "", { navigator: { wakeLock } });
+
+    const sentinel = await wakeLock.request("screen");
+    expect(sentinel.released).toBe(true);
+    await expect(sentinel.release()).resolves.toBeUndefined();
   });
 
   it("selects the self-hosted threaded WebGL 2 core", () => {

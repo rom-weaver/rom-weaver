@@ -158,7 +158,7 @@ rom-weaver patch validate \
 
 Patches default to automatic checksum inference. Pass `--default-patch-basis base` for patches made from the original ROM, or `previous` for a dependent chain.
 
-Pass `--independent` to check each patch separately and report every verdict. Use `--expect-in ALGO=HEX` to check the ROM itself.
+Pass `--independent` to check each patch separately and report every verdict. The command exits `1` if any patch fails. Use `--expect-in ALGO=HEX` to check the ROM itself.
 
 ## Undo a PPF patch
 

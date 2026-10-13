@@ -262,6 +262,7 @@ fn run_staged(
     let binary_stdout = stdout_requested(&command);
     let stdin = stdin_count(&command) != 0;
     let staging = StagingDir::new()?;
+    let mut reporter = reporter;
     if stdin {
         let input_dir = staging.0.join("input");
         fs::create_dir(&input_dir)?;
@@ -270,6 +271,11 @@ fn run_staged(
         let mut output = File::create_new(&path)?;
         crate::stdin_input::copy_stdin(&mut output)?;
         drop(output);
+        // The staged copy is an internal detail; reports name it `stdin`.
+        reporter = Arc::new(StdinPathSink {
+            inner: reporter,
+            staged: path.display().to_string(),
+        });
         match &mut command {
             Commands::Extract(args) => args.input = path,
             Commands::Compress(args) => {
@@ -478,6 +484,21 @@ impl Write for PollStdout {
     fn flush(&mut self) -> io::Result<()> {
         // Raw descriptor writes leave no Rust stdout buffer to flush.
         Ok(())
+    }
+}
+
+/// Replaces the private staged stdin path in report labels with `stdin`.
+struct StdinPathSink {
+    inner: Arc<dyn ProgressSink>,
+    staged: String,
+}
+
+impl ProgressSink for StdinPathSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        if event.label.contains(&self.staged) {
+            event.label = event.label.replace(&self.staged, "stdin");
+        }
+        self.inner.emit(event);
     }
 }
 

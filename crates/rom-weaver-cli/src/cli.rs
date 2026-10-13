@@ -4,6 +4,8 @@ use std::process::ExitCode;
 use std::io::{self, IsTerminal};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -15,8 +17,9 @@ use rom_weaver_app::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{
-    NoninteractivePrompter, OperationFamily, OperationReport, ProgressSink, SelectionPrompter,
-    clear_in_progress_outputs, process_cancellation_token, remove_in_progress_outputs,
+    NoninteractivePrompter, OperationFamily, OperationReport, OperationStatus, ProgressEvent,
+    ProgressSink, RomWeaverErrorKind, SelectionPrompter, clear_in_progress_outputs,
+    process_cancellation_token, remove_in_progress_outputs,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,6 +28,37 @@ use crate::formats_command::print_formats;
 use crate::native_output::{self, JsonReporter, OutputMode, print_argument_result, print_asset};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
+
+/// Turns a `patch validate --independent` result with failing verdicts into a
+/// failed event for the native front-end only, so the process exit status,
+/// human output, and `--json`/`--jsonl` `exit_code` all agree. The app layer
+/// keeps reporting the run as succeeded with `details.patch_validation.status`
+/// of `mixed`, because the browser reads `per_patch` from that report.
+#[cfg(not(target_arch = "wasm32"))]
+struct IndependentValidationExitSink {
+    inner: Arc<dyn ProgressSink>,
+    failed: AtomicBool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ProgressSink for IndependentValidationExitSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        let failed_count = (event.command == "patch-validate"
+            && event.status == OperationStatus::Succeeded)
+            .then_some(event.details.as_ref())
+            .flatten()
+            .and_then(|details| details.get("patch_validation"))
+            .filter(|validation| validation.get("independent") == Some(&serde_json::json!(true)))
+            .and_then(|validation| validation.get("failed_count")?.as_u64())
+            .unwrap_or(0);
+        if failed_count > 0 {
+            event.status = OperationStatus::Failed;
+            event.error_kind = Some(RomWeaverErrorKind::Validation);
+            self.failed.store(true, Ordering::SeqCst);
+        }
+        self.inner.emit(event);
+    }
+}
 
 /// Heading the global flags are listed under. Every subcommand inherits the
 /// globals, so without a heading they interleave with that command's own
@@ -504,9 +538,51 @@ fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::O
     args
 }
 
+/// `help --help` and `help patch --help` ask for help about help; print the
+/// target's help instead of failing the `help` subcommand's own parse.
+#[cfg(not(target_arch = "wasm32"))]
+fn normalize_help_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let asks_help = |arg: &std::ffi::OsString| arg == "--help" || arg == "-h";
+    // The subcommand token is the first argument after the global flags;
+    // `--log-level` is the only global flag that takes a separate value.
+    let mut command_index = 1;
+    while let Some(arg) = args.get(command_index) {
+        if arg == "--log-level" {
+            command_index += 2;
+        } else if arg != "--" && arg.to_str().is_some_and(|arg| arg.starts_with('-')) {
+            command_index += 1;
+        } else {
+            break;
+        }
+    }
+    let Some(after_help) = args
+        .get(command_index)
+        .filter(|arg| *arg == "help")
+        .map(|_| &args[command_index + 1..])
+    else {
+        return args;
+    };
+    if !after_help.iter().any(asks_help) {
+        return args;
+    }
+    // `help [help...] [SUBCOMMAND...]` plus a help flag anywhere means
+    // `[SUBCOMMAND...] --help`; clap would read the flag as a request for the
+    // `help` subcommand's own help, or the help flag as the command path.
+    let mut normalized = args[..command_index].to_vec();
+    normalized.extend(
+        after_help
+            .iter()
+            .skip_while(|arg| *arg == "help")
+            .filter(|arg| !asks_help(arg))
+            .cloned(),
+    );
+    normalized.push("--help".into());
+    normalized
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    let args = normalize_legacy_weave_args(std::env::args_os().collect());
+    let args = normalize_legacy_weave_args(normalize_help_args(std::env::args_os().collect()));
     let mode = OutputMode::from_args(&args);
     crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
 }
@@ -574,7 +650,10 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
             man_dir.as_deref(),
             cli.dry_run,
             mode,
-            cli.verbose > 0 && !cli.quiet,
+            ManOutputLevel {
+                verbose: cli.verbose > 0 && !cli.quiet,
+                quiet: cli.quiet,
+            },
         );
     }
     if let CliCommand::Formats = &cli.command {
@@ -793,6 +872,11 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
             command,
         ))
     };
+    let validation_exit = Arc::new(IndependentValidationExitSink {
+        inner: reporter,
+        failed: AtomicBool::new(false),
+    });
+    let reporter: Arc<dyn ProgressSink> = Arc::clone(&validation_exit) as Arc<dyn ProgressSink>;
     let prompter: Arc<dyn SelectionPrompter> = if interactive {
         Arc::new(StdinPrompter::new())
     } else {
@@ -836,11 +920,23 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     } else {
         run_command(command, options, reporter, prompter)
     };
+    let status = if status == ExitCode::SUCCESS && validation_exit.failed.load(Ordering::SeqCst) {
+        ExitCode::FAILURE
+    } else {
+        status
+    };
     let status = finish_run(status);
     match json_reporter {
         Some(reporter) => reporter.finish(status),
         None => status,
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy)]
+struct ManOutputLevel {
+    verbose: bool,
+    quiet: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -850,10 +946,13 @@ fn run_man_command(
     man_dir: Option<&std::path::Path>,
     dry_run: bool,
     mode: OutputMode,
-    verbose: bool,
+    level: ManOutputLevel,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
-    let selected = rom_weaver_app::manpages::page_name(topics);
+    let mut selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        selected = rom_weaver_app::manpages::page_name_with_aliases(topics);
+    }
     let Some(page) = pages.get(&selected) else {
         return native_output::print_error(
             mode,
@@ -867,19 +966,27 @@ fn run_man_command(
             2,
         );
     };
-    let output_dir = man_dir
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
-    if dry_run {
-        let writes = if install {
-            vec![output_dir.display().to_string()]
-        } else {
-            Vec::new()
-        };
-        return print_native_dry_run_plan("man", writes, mode);
-    }
     if !install {
+        if dry_run {
+            return print_native_dry_run_plan("man", Vec::new(), mode);
+        }
         return print_asset(mode, "man", "roff", &String::from_utf8_lossy(page));
+    }
+    let Some(output_dir) = man_dir
+        .map(std::path::Path::to_path_buf)
+        .or_else(rom_weaver_app::manpages::default_man_dir)
+    else {
+        return native_output::print_error(
+            mode,
+            "man",
+            "install",
+            "cli.man_install",
+            "cannot resolve the man page directory: no home directory; pass --man-dir",
+            1,
+        );
+    };
+    if dry_run {
+        return print_native_dry_run_plan("man", vec![output_dir.display().to_string()], mode);
     }
     let selected_page = if topics.is_empty() {
         None
@@ -893,10 +1000,10 @@ fn run_man_command(
                 if count == 1 { "" } else { "s" },
                 output_dir.display()
             );
-            if verbose {
-                native_output::diagnostic(mode.is_json(), "INFO", "man", &label);
-            }
             if mode.is_json() {
+                if level.verbose {
+                    native_output::diagnostic(true, "INFO", "man", &label);
+                }
                 return native_output::print_event(
                     mode,
                     native_output::result_event(
@@ -909,6 +1016,9 @@ fn run_man_command(
                     ),
                     0,
                 );
+            }
+            if !level.quiet {
+                crate::stdout_output::write(format_args!("{label}\n"));
             }
             ExitCode::SUCCESS
         }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::shared::labels::append_warning_labels;
 use rom_weaver_core::{checksum_validation_suffix, require_single_patch_file};
 
 pub(super) const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
@@ -86,7 +87,7 @@ impl PatchHandler for VcdiffPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let mut reader = BufReader::new(File::open(patch_path)?);
-        let patch = parse_patch(&mut reader)?;
+        let patch = parse_patch_file(&mut reader, patch_path)?;
         let minimum_source_size = patch.minimum_source_size()?;
         let target_size = patch.target_size()?;
         let checksum_windows = patch
@@ -164,7 +165,7 @@ impl PatchHandler for VcdiffPatchHandler {
     ) -> Result<OperationReport> {
         let patch_path = require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
-        let patch = parse_patch(&mut patch_reader)?;
+        let patch = parse_patch_file(&mut patch_reader, &patch_path)?;
         if patch.custom_code_table.is_some() {
             return Err(RomWeaverError::Validation(
                 "native VCDIFF backend does not support custom code tables".into(),
@@ -172,6 +173,17 @@ impl PatchHandler for VcdiffPatchHandler {
         }
         let validate_checksums = context.validate_target_checks();
         let input_len = std::fs::metadata(&request.input)?.len();
+        // A window-less patch is valid (it encodes an empty target) but is also what a patch cut
+        // after its header looks like, so the empty result is surfaced.
+        let empty_patch_warnings = if patch.windows.is_empty() {
+            debug!(patch = %patch_path.display(), "VCDIFF patch has no windows");
+            vec![format!(
+                "VCDIFF patch `{}` has no delta windows; it produces an empty ROM",
+                patch_path.display()
+            )]
+        } else {
+            Vec::new()
+        };
         let uses_xdelta_lzma_sections = patch.secondary_compressor_id
             == Some(XDELTA_LZMA_SECONDARY_ID)
             && patch_uses_xdelta_lzma_sections(&patch, &patch_path)?;
@@ -204,11 +216,14 @@ impl PatchHandler for VcdiffPatchHandler {
                 OperationFamily::Patch,
                 Some(self.descriptor.name.to_string()),
                 "apply",
-                format!(
-                    "applied {} patch with {} window(s){}",
-                    self.descriptor.name,
-                    patch.windows.len(),
-                    checksum_suffix
+                append_warning_labels(
+                    format!(
+                        "applied {} patch with {} window(s){}",
+                        self.descriptor.name,
+                        patch.windows.len(),
+                        checksum_suffix
+                    ),
+                    &empty_patch_warnings,
                 ),
                 Some(100.0),
                 Some(execution),
@@ -239,11 +254,14 @@ impl PatchHandler for VcdiffPatchHandler {
                 OperationFamily::Patch,
                 Some(self.descriptor.name.to_string()),
                 "apply",
-                format!(
-                    "applied {} patch with {} window(s){}",
-                    self.descriptor.name,
-                    patch.windows.len(),
-                    checksum_suffix
+                append_warning_labels(
+                    format!(
+                        "applied {} patch with {} window(s){}",
+                        self.descriptor.name,
+                        patch.windows.len(),
+                        checksum_suffix
+                    ),
+                    &empty_patch_warnings,
                 ),
                 Some(100.0),
                 Some(execution),
@@ -336,11 +354,14 @@ impl PatchHandler for VcdiffPatchHandler {
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
-            format!(
-                "applied {} patch with {} window(s){}",
-                self.descriptor.name,
-                patch.windows.len(),
-                checksum_suffix
+            append_warning_labels(
+                format!(
+                    "applied {} patch with {} window(s){}",
+                    self.descriptor.name,
+                    patch.windows.len(),
+                    checksum_suffix
+                ),
+                &empty_patch_warnings,
             ),
             Some(100.0),
             Some(execution),
@@ -769,6 +790,21 @@ pub(super) struct XdeltaRecodeWindowSections {
     pub(super) data: Vec<u8>,
     pub(super) inst: Vec<u8>,
     pub(super) addr: Vec<u8>,
+}
+
+/// Parse a patch read from `path`, naming the file when the stream ends before
+/// a complete header or window was read.
+pub(super) fn parse_patch_file<R: Read + Seek>(reader: &mut R, path: &Path) -> Result<ParsedPatch> {
+    parse_patch(reader).map_err(|error| match error {
+        RomWeaverError::Io(io_error) if io_error.kind() == std::io::ErrorKind::UnexpectedEof => {
+            debug!(path = %path.display(), "VCDIFF/xdelta patch ended before a complete record");
+            RomWeaverError::Validation(format!(
+                "VCDIFF/xdelta patch `{}` is truncated or corrupt: it ended unexpectedly",
+                path.display()
+            ))
+        }
+        other => other,
+    })
 }
 
 pub(super) fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {

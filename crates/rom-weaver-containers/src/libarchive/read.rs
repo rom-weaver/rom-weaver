@@ -89,6 +89,26 @@ impl ReadArchive {
         self.check_status(status, context)
     }
 
+    /// Fails unless `filter` decodes the opened input. libarchive silently falls back to its
+    /// pass-through filter when the decoder rejects the header, which would yield the input bytes.
+    pub(crate) fn require_filter(&self, filter: ReadFilter, source: &Path) -> Result<()> {
+        let (expected, name) = match filter {
+            ReadFilter::Gzip => (ARCHIVE_FILTER_GZIP, "gzip"),
+            ReadFilter::Bzip2 => (ARCHIVE_FILTER_BZIP2, "bzip2"),
+            ReadFilter::Xz => (ARCHIVE_FILTER_XZ, "xz"),
+            ReadFilter::Zstd => (ARCHIVE_FILTER_ZSTD, "zstd"),
+        };
+        let actual = unsafe { archive_filter_code(self.as_ptr(), 0) };
+        trace!(source = %source.display(), expected, actual, "libarchive read filter check");
+        if actual == expected {
+            return Ok(());
+        }
+        Err(RomWeaverError::Validation(format!(
+            "`{}` is not a valid {name} stream",
+            source.display()
+        )))
+    }
+
     pub fn open_filename(
         &mut self,
         input: &Path,
@@ -304,6 +324,7 @@ where
             source.display()
         ),
     )?;
+    archive.require_filter(filter, source)?;
 
     let result = (|| -> Result<T> {
         if !archive.next_header(&format!(

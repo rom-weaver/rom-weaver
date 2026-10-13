@@ -173,6 +173,7 @@
         try {
           const stored = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           offlineCopyEnabled = stored?.common?.offlineCopyEnabled !== false;
+          document.documentElement.dataset.offlineCopyEnabled = offlineCopyEnabled;
           const applyCompression = stored?.apply?.compression;
           const createCompression = stored?.create?.compression;
           // No version gate - see the theme/accent script above. The parse

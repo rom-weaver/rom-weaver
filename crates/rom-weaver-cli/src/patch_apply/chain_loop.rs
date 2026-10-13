@@ -439,6 +439,8 @@ impl CliApp {
             && verification.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
         Self::verify_chain_step_input(context, state, step, step_is_base)?;
 
+        // A forced overwrite targets an existing file; a failure must leave it, not delete it.
+        let output_existed = apply_output.exists();
         let request = PatchApplyRequest {
             input: std::mem::take(&mut state.current_input),
             patches: vec![step.apply_step.patch.resolved.clone()],
@@ -517,6 +519,11 @@ impl CliApp {
             ),
         };
         if report.status != OperationStatus::Succeeded {
+            // A handler that failed mid-write MUST NOT leave a partial output behind.
+            if !output_existed && apply_output.exists() {
+                debug!(output = %apply_output.display(), "removing partial output of a failed patch step");
+                let _ = fs::remove_file(apply_output);
+            }
             let mut report = report;
             if patch_count > 1 {
                 report.label = format!(
@@ -602,13 +609,16 @@ impl CliApp {
         // Base. Only an explicit Base declaration verifies once up front.
         if context.strict_patch_checksums()
             && !(step_declares_base && step.explicit_input.is_none())
-            && (step.lane_position > 0 || step.explicit_input.is_some() || member_lane_start)
+            && (verification.is_some_and(|step| step.enforce_declared_checks)
+                || step.lane_position > 0
+                || step.explicit_input.is_some()
+                || member_lane_start)
             && let Some(declared) = verification.and_then(|step| step.declared_input.as_ref())
             && let Err(error) =
-                Self::verify_chain_step_state(&state.current_input, declared, context)
+                Self::verify_chain_step_state(&state.current_input, "input", declared, context)
         {
             let mut coded = ValidationCodeError::new("patch.chain.input_mismatch")
-                .with_message("chain step input does not match the patch's declared input checks")
+                .with_message("chain step input does not match the patch's declared input checks (--patch-input-check or weave inputChecks)")
                 .with_field("patch_index", step.index as u64)
                 .with_field("patch", step.patch_path().display().to_string())
                 .with_field("detail", error.to_string());
@@ -651,8 +661,13 @@ impl CliApp {
             &apply_output,
         )
         .map_err(|error| {
+            if is_last {
+                // The final step wrote straight into the staged output, so a
+                // failed check MUST NOT leave that file behind.
+                let _ = fs::remove_file(&apply_output);
+            }
             let mut coded = ValidationCodeError::new("patch.chain.output_mismatch")
-                .with_message("chain step output does not match the patch's declared output checks")
+                .with_message("chain step output does not match the patch's declared output checks (--patch-output-check or weave outputChecks)")
                 .with_field("patch_index", step.index as u64)
                 .with_field("patch", step.patch_path().display().to_string())
                 .with_field("detail", error.to_string());

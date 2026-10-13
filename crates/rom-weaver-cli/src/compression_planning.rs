@@ -239,11 +239,42 @@ impl CliApp {
         let codec_kind = codec
             .and_then(Self::profile_codec_kind_for_codec_name)
             .or_else(|| Self::default_profile_codec_kind_for_format(format_name));
-        match codec_kind {
+        let level = match codec_kind {
             Some(ProfileCodecKind::Standard) => Some(profile.standard_level()),
             Some(ProfileCodecKind::Zstd) => Some(profile.zstd_level()),
             Some(ProfileCodecKind::NoLevel) | None => None,
-        }
+        };
+        // Raise to the named codec's advertised minimum (e.g. CHD zlib starts at 1); the upper
+        // bound is left to each encoder so existing output bytes are unchanged.
+        let range = Self::primary_codec_name(codec).and_then(Self::codec_level_range);
+        let level = match (level, range) {
+            (Some(level), Some((min, _))) => Some(level.max(min)),
+            (level, _) => level,
+        };
+        tracing::debug!(
+            format_name,
+            ?codec,
+            ?profile,
+            ?level,
+            "resolved profile level"
+        );
+        level
+    }
+
+    fn codec_level_range(codec_name: &str) -> Option<(i32, i32)> {
+        let codec = codec_name.trim();
+        compression_metadata()
+            .codecs
+            .iter()
+            .find(|metadata| {
+                metadata.name.eq_ignore_ascii_case(codec)
+                    || metadata
+                        .aliases
+                        .iter()
+                        .any(|alias| alias.eq_ignore_ascii_case(codec))
+            })
+            .and_then(|metadata| metadata.level)
+            .map(|level| (level.min, level.max))
     }
 
     pub(super) fn default_profile_codec_kind_for_format(

@@ -35,6 +35,20 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-validate command"
         );
+        if args.input == Path::new("-") {
+            debug!("patch validate refused stdin input");
+            let report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "patch validate does not read from stdin; pass a file path".to_string(),
+                None,
+            );
+            return self.finish("patch-validate", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch validate", &args.input) {
+            return self.finish("patch-validate", report);
+        }
         let PatchValidateCommand {
             input,
             select,
@@ -312,6 +326,19 @@ impl CliApp {
         }
 
         if independent {
+            let declared_checks =
+                match Self::declared_chain_checks(&plan_flags, resolved_patches.len()) {
+                    Ok(checks) => checks,
+                    Err(error) => {
+                        return OperationReport::failed_with_error(
+                            OperationFamily::Patch,
+                            None,
+                            "validate",
+                            error,
+                            probe_threads.clone(),
+                        );
+                    }
+                };
             return self.run_patch_validate_independent(
                 &resolved_patches,
                 &validate_input,
@@ -328,6 +355,7 @@ impl CliApp {
                     expected_size: effective_expected_size,
                     expected_input_checksums: expected_input_checksums.clone(),
                 },
+                &declared_checks,
             );
         }
 
@@ -361,12 +389,26 @@ impl CliApp {
         } else {
             None
         };
+        let declared_checks = match Self::declared_chain_checks(&plan_flags, patch_count) {
+            Ok(checks) => checks,
+            Err(error) => {
+                return OperationReport::failed_with_error(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    error,
+                    probe_threads.clone(),
+                );
+            }
+        };
         let mut chain = PatchValidateChain {
+            declared_checks,
             current_input: validate_input,
             n64_order,
             n64_byte_order,
             probe_threads,
             validation_steps,
+            handler_warnings: Vec::new(),
         };
         let mut formats = Vec::with_capacity(patch_count);
         for (index, patch) in resolved_patches.iter().enumerate() {
@@ -393,7 +435,7 @@ impl CliApp {
             validation_labels.push(format!("n64_byte_order={}", n64_byte_order.id()));
         }
         validation_labels.extend(extracted_patch_notes);
-        patch_validate_passed_report(
+        let mut report = patch_validate_passed_report(
             formats,
             patch_count,
             validation_labels,
@@ -401,7 +443,9 @@ impl CliApp {
             effective_expected_size,
             expected_input_checksums,
             context,
-        )
+        );
+        Self::append_report_warnings(&mut report, chain.handler_warnings);
+        report
     }
 
     /// Strips the header (with `--strip-header`) and transforms the N64 byte order of the
@@ -532,8 +576,9 @@ impl CliApp {
             &transformed_checksum_hints
         };
         if run.effective_expected_size.is_some() || run.validate_with_min_size.is_some() {
-            let label = Self::validate_patch_input_size(
+            let label = Self::validate_patch_size(
                 validate_input,
+                "input",
                 run.effective_expected_size,
                 run.validate_with_min_size,
             )
@@ -686,6 +731,40 @@ impl CliApp {
             None,
         );
 
+        let (declared_input, declared_output) = &chain.declared_checks[index];
+        let enforce_checks = context.strict_patch_checksums();
+        let check_failed = |flag: &str, error: RomWeaverError| {
+            debug!(index, flag, %error, "declared patch check failed");
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                Some(format.clone()),
+                "validate",
+                format!(
+                    "{flag} mismatch for patch {}/{patch_count} (`{}`): {error}",
+                    index + 1,
+                    patch_path.display()
+                ),
+                context.single_thread_execution(),
+            ))
+        };
+        // A step declared against the base ROM had its input checks verified
+        // against that ROM by the plan, exactly as `patch apply` does; the
+        // intermediate is not its input.
+        let declared_base = chain.validation_steps.as_ref().is_some_and(|verdicts| {
+            verdicts[index].basis == PatchInputBasis::Base
+                && verdicts[index].basis_source == PatchBasisSource::Declared
+        });
+        if declared_base && !declared_input.is_empty() {
+            debug!(
+                index,
+                "--patch-input-check verified against the base ROM by the plan"
+            );
+        }
+        if enforce_checks && !declared_base && !declared_input.is_empty() {
+            Self::verify_chain_step_state(&chain.current_input, "input", declared_input, context)
+                .map_err(|error| check_failed("--patch-input-check", error))?;
+        }
+
         let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
         let mut patch_context =
             context
@@ -731,7 +810,7 @@ impl CliApp {
             })
         };
         let mut validate_output = None;
-        let report = if patch_count == 1 {
+        let report = if patch_count == 1 && !(enforce_checks && !declared_output.is_empty()) {
             let request = PatchValidateRequest {
                 input: chain.current_input.clone(),
                 patches: vec![resolved_patch_path.clone()],
@@ -790,6 +869,11 @@ impl CliApp {
             }
             return Err(Box::new(failure));
         }
+        let mut report = report;
+        Self::lift_handler_label_warnings(&mut report);
+        chain
+            .handler_warnings
+            .extend(Self::report_warnings(&report));
         if !progress_tracker.saw_meaningful_running_progress() {
             self.emit_running(
                 OperationLabel {
@@ -814,6 +898,10 @@ impl CliApp {
             );
         }
         if let Some(output) = validate_output {
+            if enforce_checks && !declared_output.is_empty() {
+                Self::verify_chain_step_state(&output, "output", declared_output, context)
+                    .map_err(|error| check_failed("--patch-output-check", error))?;
+            }
             chain.current_input = output;
         }
         Ok(format)
@@ -832,6 +920,7 @@ impl CliApp {
         context: &OperationContext,
         probe_threads: Option<ThreadExecution>,
         summary: IndependentValidationSummary,
+        declared_checks: &[(patch_plan::PlanState, patch_plan::PlanState)],
     ) -> OperationReport {
         let patch_count = resolved_patches.len();
         debug!(
@@ -863,6 +952,7 @@ impl CliApp {
                             resolved: patch.resolved.clone(),
                             format,
                             handler,
+                            declared: declared_checks.get(index).cloned(),
                         });
                     } else {
                         let message = format!("{format} does not support patch preflight");
@@ -1018,6 +1108,56 @@ impl CliApp {
         report
     }
 
+    /// Check one independent job against its declared input and output checks,
+    /// applying the patch to a temporary file when an output check exists.
+    fn validate_job_with_declared_checks(
+        job: &IndependentReadyJob,
+        request: &PatchValidateRequest,
+        input_check: &patch_plan::PlanState,
+        output_check: &patch_plan::PlanState,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let mismatch = |flag: &str, error: RomWeaverError| {
+            debug!(index = job.index, flag, %error, "declared patch check failed");
+            RomWeaverError::Validation(format!(
+                "{flag} mismatch for patch `{}`: {error}",
+                job.patch
+            ))
+        };
+        if !input_check.is_empty() {
+            Self::verify_chain_step_state(&job.input, "input", input_check, context)
+                .map_err(|error| mismatch("--patch-input-check", error))?;
+        }
+        if output_check.is_empty() {
+            return job.handler.validate(request, context);
+        }
+        let output = context
+            .temp_paths()
+            .next_path("patch-validate-independent-output", Some("bin"));
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let result = job
+            .handler
+            .apply(
+                &PatchApplyRequest {
+                    input: job.input.clone(),
+                    patches: request.patches.clone(),
+                    output: output.clone(),
+                },
+                context,
+            )
+            .and_then(|report| {
+                if report.status == OperationStatus::Succeeded {
+                    Self::verify_chain_step_state(&output, "output", output_check, context)
+                        .map_err(|error| mismatch("--patch-output-check", error))?;
+                }
+                Ok(report)
+            });
+        let _ = fs::remove_file(&output);
+        result
+    }
+
     /// Fan patch preflight validations across the op's thread budget (capped at the
     /// number of runnable patches; serial on the non-threaded wasm build). A
     /// per-patch `Cancelled` is the only error that aborts the whole batch -
@@ -1037,7 +1177,19 @@ impl CliApp {
                     input: job.input.clone(),
                     patches: vec![job.resolved.clone()],
                 };
-                let (passed, message) = match job.handler.validate(&request, context) {
+                let outcome = match &job.declared {
+                    Some((input_check, output_check)) if context.strict_patch_checksums() => {
+                        Self::validate_job_with_declared_checks(
+                            job,
+                            &request,
+                            input_check,
+                            output_check,
+                            context,
+                        )
+                    }
+                    _ => job.handler.validate(&request, context),
+                };
+                let (passed, message) = match outcome {
                     Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
                     Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
                     Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
@@ -1140,8 +1292,8 @@ impl CliApp {
     /// base-basis patches - mid-chain previous-basis patches are
     /// `chain_deferred`, never falsely "failed" against the wrong bytes),
     /// and emit the typed `PatchValidationPlan` under
-    /// `details.patch_validation`. Exit contract matches `--independent`:
-    /// mixed results still exit 0; only cancellation is a hard failure.
+    /// `details.patch_validation`. Mixed plan results still exit 0 (unlike
+    /// native `--independent`, which exits 1); only cancellation is a hard failure.
     fn run_patch_validate_plan(&self, inputs: PatchValidatePlanInputs<'_>) -> OperationReport {
         let PatchValidatePlanInputs {
             resolved_patches,
@@ -1286,21 +1438,13 @@ impl CliApp {
             let resolved_patch_path = &patch.resolved;
             let mut declared_input = Self::filename_plan_state(&patch.source);
             if let Some(tokens) = metadata.input_check_flags[index].as_ref() {
-                declared_input
-                    .checksums
-                    .extend(Self::parse_plan_check_tokens(
-                        tokens,
-                        "--patch-input-check",
-                    )?);
+                let flagged = Self::parse_plan_check_tokens(tokens, "--patch-input-check")?;
+                declared_input.checksums.extend(flagged.checksums);
+                declared_input.size = flagged.size.or(declared_input.size);
             }
             let mut declared_output = patch_plan::PlanState::default();
             if let Some(tokens) = metadata.output_check_flags[index].as_ref() {
-                declared_output
-                    .checksums
-                    .extend(Self::parse_plan_check_tokens(
-                        tokens,
-                        "--patch-output-check",
-                    )?);
+                declared_output = Self::parse_plan_check_tokens(tokens, "--patch-output-check")?;
             }
             let mut plan_input = Self::build_plan_patch_input(
                 &patch.source,
@@ -1385,6 +1529,7 @@ impl CliApp {
                     resolved: patch.resolved.clone(),
                     format: handler.descriptor().name.to_string(),
                     handler,
+                    declared: None,
                 });
             }
         }
@@ -1453,6 +1598,29 @@ impl CliApp {
         Ok(ready_jobs)
     }
 
+    /// Parse the per-patch input and output checks that sequential validation
+    /// enforces against the real intermediate bytes.
+    fn declared_chain_checks(
+        flags: &PlanFlagInputs,
+        patch_count: usize,
+    ) -> Result<Vec<(patch_plan::PlanState, patch_plan::PlanState)>> {
+        let metadata = Self::align_plan_metadata(flags, patch_count)?;
+        let parse = |tokens: &Option<String>, flag: &str| -> Result<patch_plan::PlanState> {
+            match tokens {
+                Some(tokens) => Self::parse_plan_check_tokens(tokens, flag),
+                None => Ok(patch_plan::PlanState::default()),
+            }
+        };
+        (0..patch_count)
+            .map(|index| {
+                Ok((
+                    parse(&metadata.input_check_flags[index], "--patch-input-check")?,
+                    parse(&metadata.output_check_flags[index], "--patch-output-check")?,
+                ))
+            })
+            .collect()
+    }
+
     fn align_plan_metadata(
         flags: &PlanFlagInputs,
         patch_count: usize,
@@ -1505,18 +1673,14 @@ impl CliApp {
         }
     }
 
-    /// Parse a comma-separable `ALGO=HEX` flag value.
-    fn parse_plan_check_tokens(value: &str, flag: &str) -> Result<BTreeMap<String, String>> {
-        let tokens: Vec<String> = value
-            .split(',')
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-            .map(str::to_owned)
-            .collect();
-        if tokens.is_empty() {
-            return Ok(BTreeMap::new());
-        }
-        Self::parse_patch_apply_checksum_values(&tokens, flag)
+    /// Parse a comma-separable `ALGO=HEX` / `size=N` flag value with the
+    /// same token rules `patch apply` uses for these flags.
+    fn parse_plan_check_tokens(value: &str, flag: &str) -> Result<patch_plan::PlanState> {
+        let parsed = crate::expect_tokens::parse_patch_check_value(value, flag)?;
+        Ok(patch_plan::PlanState {
+            checksums: parsed.checksums,
+            size: parsed.size,
+        })
     }
 
     fn filename_plan_state(patch_path: &Path) -> patch_plan::PlanState {
@@ -1937,11 +2101,15 @@ struct PatchValidateRun {
 
 /// State carried from one patch to the next in a sequential validation chain.
 struct PatchValidateChain {
+    /// Per-patch `--patch-input-check` / `--patch-output-check` states.
+    declared_checks: Vec<(patch_plan::PlanState, patch_plan::PlanState)>,
     current_input: PathBuf,
     n64_order: Option<N64ByteOrderTransform>,
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
     validation_steps: Option<Vec<PatchPlanVerdict>>,
+    /// Warnings the handlers reported for the patches validated so far.
+    handler_warnings: Vec<String>,
 }
 
 fn patch_validate_passed_report(
@@ -2208,6 +2376,8 @@ struct IndependentReadyJob {
     resolved: PathBuf,
     format: String,
     handler: Arc<dyn rom_weaver_core::PatchHandler>,
+    /// `--patch-input-check` / `--patch-output-check` states enforced for this job.
+    declared: Option<(patch_plan::PlanState, patch_plan::PlanState)>,
 }
 
 /// One patch's independent-mode verdict, collected regardless of pass/fail.
@@ -2325,6 +2495,7 @@ mod tests {
             resolved: missing,
             format: "IPS".to_string(),
             handler: app.patches.handlers()[0].clone(),
+            declared: None,
         }];
         let context = cancelled_context(temp.path().join("ready-job-temp"));
 

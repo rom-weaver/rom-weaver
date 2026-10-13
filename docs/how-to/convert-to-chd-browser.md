@@ -17,7 +17,7 @@ Compress ISO or BIN/CUE disc images to CHD locally in your browser. Use this CHD
 2. Add the `.iso`, or add the `.cue` with every referenced `.bin` file.
 3. Keep only that disc's files in **Inputs**.
 
-Add a DVD-style ISO alone. For a CD, if `disc.cue` names `track01.bin` and `track02.bin`, add all three, including audio tracks. Keep filenames unchanged: the cue sheet names and orders them. Renaming BIN to ISO does not convert sectors.
+Add a DVD-style ISO alone. For a CD, if `disc.cue` names `track01.bin` and `track02.bin`, add all three, including audio tracks. Keep filenames unchanged: the cue sheet names and orders them. Renaming BIN to ISO does not convert sectors. With a single file, **CHD** appears in **Output** only when the file's size is a whole number of 2048- or 2352-byte sectors; the browser decides from size, not contents.
 
 ## Create the CHD
 

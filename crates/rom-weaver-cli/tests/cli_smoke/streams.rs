@@ -9,6 +9,20 @@ use std::{
 fn binary() -> ProcessCommand {
     let mut command = ProcessCommand::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // The CLI keeps an inherited SIG_IGN for SIGHUP/SIGTERM (nohup semantics), so a test runner
+    // started with either ignored would make the termination tests wait forever for a handler.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+    }
     command
 }
 
@@ -1533,4 +1547,23 @@ mod cancelled_output {
             );
         }
     }
+}
+
+#[test]
+fn extract_non_archive_stdin_does_not_expose_the_staging_path() {
+    let temp = setup_temp_dir();
+    let output = command_stdout_with_stdin(
+        &[
+            "extract",
+            "-",
+            "-o",
+            temp.child("out").path().to_str().unwrap(),
+            "--json",
+        ],
+        b"not an archive",
+        1,
+    );
+    let text = String::from_utf8(output).expect("utf8");
+    assert!(!text.contains("rom-weaver-stream"), "{text}");
+    assert!(text.contains("stdin"), "{text}");
 }

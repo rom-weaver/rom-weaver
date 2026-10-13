@@ -355,7 +355,7 @@ impl CliApp {
             return Err(Box::new(report));
         }
         if run.args.dry_run {
-            let report = self.run_patch_apply_dry_run(
+            let mut report = self.run_patch_apply_dry_run(
                 &run.args.input,
                 &run.args.patches,
                 run.args.output.as_deref(),
@@ -363,6 +363,24 @@ impl CliApp {
                 run.args.output_header,
                 run.probe_threads.clone(),
             );
+            // Device codes apply as one extra step beside the listed patches.
+            let listed = run.args.patches.len();
+            let planned = listed + run.cheat_patch_count();
+            if planned != listed {
+                report.label = report.label.replacen(
+                    &format!("would apply {listed} patch(es)"),
+                    &format!("would apply {planned} patch(es)"),
+                    1,
+                );
+                if let Some(patches) = report
+                    .details
+                    .as_mut()
+                    .and_then(|details| details.get_mut("patches"))
+                    .and_then(Value::as_array_mut)
+                {
+                    patches.push(json!(format!("device code: {}", run.args.codes.join(", "))));
+                }
+            }
             return Err(Box::new(report));
         }
         run.disc_context = self.resolve_patch_apply_disc(PatchApplyDiscInputs {
@@ -496,9 +514,18 @@ impl CliApp {
         ) {
             return Err(run.fail("validate", message));
         }
+        // The implicit `<stem>-patched.<ext>` sibling keeps the ROM's own extension, so without
+        // compression flags it is the raw ROM even for an otherwise ambiguous `.bin`.
+        let implicit_raw_output = run.output_was_inferred
+            && run.args.compress_format.is_none()
+            && run.args.compress_codec.is_empty()
+            && run.args.compress_level.is_none();
+        if implicit_raw_output {
+            debug!(output = %run.output.display(), "inferred patch output keeps the raw ROM bytes");
+        }
         run.compression_options = self
             .resolve_patch_apply_compression_options(
-                run.args.no_compress,
+                run.args.no_compress || implicit_raw_output,
                 run.args.compress_format.clone(),
                 run.args.compress_codec.clone(),
                 run.args.compress_level,
@@ -967,11 +994,17 @@ impl CliApp {
         // inference against the prepared input) and verify declared
         // base-basis steps against the base once, before the chain runs.
         let cheat_patch_count = run.cheat_patch_count();
+        let shared_patch_basis = run
+            .weave_resolution
+            .as_ref()
+            .map(|resolution| resolution.patch_basis)
+            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         merge_apply_step_declarations(
             &mut run.patch_step_metadata,
             &run.args.patch_input_check,
             &run.args.patch_output_check,
             run.resolved_patches.len().saturating_sub(cheat_patch_count),
+            shared_patch_basis,
         )
         .map_err(|error| failed("validate", error))?;
         let mut patch_steps = normalize_patch_apply_steps(
@@ -982,11 +1015,6 @@ impl CliApp {
             &chain_n64_modes,
             cheat_patch_count,
         );
-        let shared_patch_basis = run
-            .weave_resolution
-            .as_ref()
-            .map(|resolution| resolution.patch_basis)
-            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         // A target lane may begin from another ROM member or from a
         // generated output. Plan it only after that seed is available;
         // using the command's root input here would verify its authored

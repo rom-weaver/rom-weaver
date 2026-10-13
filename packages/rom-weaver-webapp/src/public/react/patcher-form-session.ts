@@ -57,8 +57,18 @@ import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-h
 import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { clearApplyEntries } from "./emulator-session-store.ts";
 
-const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
-  JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
+// weavePackage is read from the settings by the form directly and persisted as the user toggles
+// Include ROM; counting it as a changed default would reset every per-job override (such as the
+// chosen weave format) back to the defaults.
+const withoutWeavePackage = ({ weavePackage: _weave, bundlePackage: _bundle, ...rest }: Record<string, unknown> = {}) =>
+  rest;
+const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) => {
+  const output = withoutWeavePackage(settings.output);
+  return JSON.stringify(
+    { ...withoutWeavePackage(settings), output: Object.keys(output).length ? output : undefined },
+    (_key, value) => (typeof value === "function" ? "[function]" : value),
+  );
+};
 
 const sameStringSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
   left.size === right.size && [...left].every((value) => right.has(value));
@@ -105,6 +115,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputNameKey,
   cheatNames = [],
   disabledPatchIds,
+  getPatchSlotIds,
   stageInput,
   stagePatches,
   validatePatches,
@@ -198,9 +209,9 @@ const useLocalApplyPatchFormSession = ({
   const activePatches = patches === undefined ? internalPatches : patches;
   const outputPatches = useMemo(() => {
     if (!disabledPatchIds?.size) return activePatches;
-    const ids = getBinarySourceListStableIds(activePatches);
+    const ids = getPatchSlotIds?.() ?? getBinarySourceListStableIds(activePatches);
     return activePatches.filter((_, index) => !disabledPatchIds.has(ids[index] || ""));
-  }, [activePatches, disabledPatchIds]);
+  }, [activePatches, disabledPatchIds, getPatchSlotIds]);
   const retainedSources = useMemo(
     () => new Set<BinarySource>([...effectiveInputs, ...activePatches]),
     [activePatches, effectiveInputs],
@@ -600,8 +611,8 @@ const useLocalApplyPatchFormSession = ({
   );
 
   const updateSettings = useCallback(
-    (nextSettings: ApplyPatchFormSettings) => {
-      setChecksumOverrideChecked(false);
+    (nextSettings: ApplyPatchFormSettings, keepChecksumOverride = false) => {
+      if (!keepChecksumOverride) setChecksumOverrideChecked(false);
       setApplyQueued(false);
       clearDismissibleErrors();
       invalidateCompletedOutputState();
@@ -622,13 +633,16 @@ const useLocalApplyPatchFormSession = ({
   );
   useEffect(() => {
     if (!outputCompressionEdited || activeCompression === effectiveActiveCompression) return;
-    updateSettings({
-      ...activeSettings,
-      output: {
-        ...activeSettings.output,
-        compression: effectiveActiveCompression,
+    updateSettings(
+      {
+        ...activeSettings,
+        output: {
+          ...activeSettings.output,
+          compression: effectiveActiveCompression,
+        },
       },
-    });
+      true,
+    );
   }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
@@ -1331,13 +1345,17 @@ const useLocalApplyPatchFormSession = ({
       },
       setOutputCompression: (value: string) => {
         setOutputCompressionEdited(true);
-        updateSettings({
-          ...activeSettings,
-          output: {
-            ...activeSettings.output,
-            compression: value as "auto" | CompressionFormat,
+        // The output format never changes the input checks, so it keeps the "apply anyway" override.
+        updateSettings(
+          {
+            ...activeSettings,
+            output: {
+              ...activeSettings.output,
+              compression: value as "auto" | CompressionFormat,
+            },
           },
-        });
+          true,
+        );
       },
       setOutputCompressOption: (key: string, value: string, updates?: Record<string, string>) => {
         // Per-job override of a flat compression setting (zipCodec, compressionProfile, …)

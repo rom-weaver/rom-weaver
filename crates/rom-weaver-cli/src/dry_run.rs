@@ -454,12 +454,12 @@ impl CliApp {
     }
 
     fn read_only_dry_run(&self, command: &str) -> AppRunOutcome {
-        self.plan_succeeded(
+        self.plan_report(
             command,
             OperationFamily::Command,
             &format!("dry run: {command} only reads; no changes planned"),
-            Vec::new(),
-            Vec::new(),
+            (Vec::new(), Vec::new(), Vec::new()),
+            true,
         )
     }
 
@@ -523,8 +523,6 @@ impl CliApp {
         downloads: Vec<String>,
         notes: Vec<String>,
     ) -> AppRunOutcome {
-        let mut report =
-            OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
         let read_only = matches!(
             command,
             "probe"
@@ -537,6 +535,25 @@ impl CliApp {
                 | "man"
                 | "plan-extract-batch"
         ) || (command == "bundle-parse" && writes.is_empty());
+        self.plan_report(
+            command,
+            family,
+            label,
+            (writes, downloads, notes),
+            read_only,
+        )
+    }
+
+    fn plan_report(
+        &self,
+        command: &str,
+        family: OperationFamily,
+        label: &str,
+        (writes, downloads, notes): (Vec<String>, Vec<String>, Vec<String>),
+        read_only: bool,
+    ) -> AppRunOutcome {
+        let mut report =
+            OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
         report.details = Some(json!({
             "dry_run": true,
             "command": command,
