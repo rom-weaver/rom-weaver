@@ -897,7 +897,10 @@ fn run_man_command(
     verbose: bool,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
-    let selected = rom_weaver_app::manpages::page_name(topics);
+    let mut selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        selected = rom_weaver_app::manpages::page_name_with_aliases(topics);
+    }
     let Some(page) = pages.get(&selected) else {
         return native_output::print_error(
             mode,
