@@ -1589,6 +1589,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       defaultPatchBasis: patchInputBasis,
       disabledPatchIds,
       downloadOutput,
+      getPatchSlotIds: getPatchIds,
       onApplyComplete: () => undefined,
       onInputsChange: handleLocalInputsChange,
       onPatchesChange: handleLocalPatchesChange,
