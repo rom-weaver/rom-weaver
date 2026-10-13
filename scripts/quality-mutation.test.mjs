@@ -121,3 +121,23 @@ test("successful diff runs with no selected mutants report no mutation evidence"
     noSelectedMutants: true,
   });
 });
+
+test("diff runs pin a/ b/ prefixes regardless of user diff config", (context) => {
+  const scratch = path.resolve(".agent/quality-mutation-tests");
+  fs.mkdirSync(scratch, { recursive: true });
+  const output = fs.mkdtempSync(path.join(scratch, "run-"));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  const gitCalls = [];
+  const runner = (command, args) => {
+    if (command === "git") {
+      gitCalls.push(args);
+      return { status: 0, stdout: args[0] === "merge-base" ? "abc\n" : "" };
+    }
+    return { status: 0 };
+  };
+
+  runMutation(["diff", "main"], runner, output);
+  const diffArgs = gitCalls.find((args) => args[0] === "diff");
+  assert.ok(diffArgs.includes("--src-prefix=a/"));
+  assert.ok(diffArgs.includes("--dst-prefix=b/"));
+});
