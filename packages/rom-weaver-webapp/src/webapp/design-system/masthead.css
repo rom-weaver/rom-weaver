@@ -598,6 +598,9 @@
   border: 1px solid currentcolor;
   border-radius: 999px;
 }
+.rw-app .nav-beta::before {
+  content: attr(data-label);
+}
 .rw-app .nav-row[aria-current="page"] .nav-beta {
   color: inherit;
 }
@@ -1061,6 +1064,12 @@
   text-align: center;
   background: var(--thread);
   border-radius: 50%;
+}
+/* The letter is generated content: axe's label-content-name-mismatch reads
+   text nodes even under aria-hidden, and the decorative badge is not part of
+   the control's name. */
+.rw-app .theme-auto-badge::before {
+  content: attr(data-badge);
 }
 .rw-app .theme-auto-icon svg {
   mask-image: radial-gradient(circle at 85% 85%, #0000 8px, #000 8.5px);

@@ -645,12 +645,12 @@ describe("sample tutorial step card", () => {
     };
     render(<Workbench />);
     await waitFor(() => expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: false }));
+    fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: false }));
     expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
     expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: true }));
+    fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: true }));
     expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
-    fireEvent.click(screen.getByRole("button", { name: "Simple", pressed: false }));
+    fireEvent.click(screen.getByRole("button", { name: /^Simple\b/, pressed: false }));
     expect(screen.getByRole("checkbox")).toHaveProperty("checked", false);
     expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("1");
   });

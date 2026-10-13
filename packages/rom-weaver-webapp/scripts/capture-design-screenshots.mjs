@@ -110,7 +110,10 @@ const prepareScreenshot = async (page, name) => {
       mimeType: "application/octet-stream",
       name: "hello-world.nes",
     });
-    await page.getByRole("button", { name: "Copy SHA-1", exact: true }).first().waitFor();
+    await page
+      .getByRole("button", { name: /^Copy SHA-1 / })
+      .first()
+      .waitFor();
     return;
   }
   if (name === "save-editor") {
