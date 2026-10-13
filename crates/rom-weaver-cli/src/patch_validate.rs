@@ -35,6 +35,17 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-validate command"
         );
+        if args.input == Path::new("-") {
+            debug!("patch validate refused stdin input");
+            let report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "patch validate does not read from stdin; pass a file path".to_string(),
+                None,
+            );
+            return self.finish("patch-validate", report);
+        }
         if let Some(report) = Self::unseekable_rom_input_failure("patch validate", &args.input) {
             return self.finish("patch-validate", report);
         }
