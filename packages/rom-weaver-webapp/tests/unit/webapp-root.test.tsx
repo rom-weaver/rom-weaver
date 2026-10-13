@@ -187,6 +187,13 @@ describe("the workbench shell", () => {
     expect(document.documentElement.dataset.betaToolsEnabled).toBeDefined();
   });
 
+  it.each(["de", "es", "en"])("marks the document language as %s once the locale is active", async (language) => {
+    document.documentElement.lang = "en";
+    await renderRoot({ language });
+
+    expect(document.documentElement.lang).toBe(language);
+  });
+
   it("names the Save Editor row and page title in full, not Saves", async () => {
     const { container } = await renderRoot({ currentView: "save-editor" });
 

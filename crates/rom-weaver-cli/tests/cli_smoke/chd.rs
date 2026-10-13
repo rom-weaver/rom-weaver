@@ -841,6 +841,23 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
     );
 }
 
+// The split-bin test above pins the emitted `<name> (Track N).bin` names; the
+// help text and CLI reference must describe that same naming.
+#[test]
+fn split_bin_help_and_reference_describe_emitted_track_names() {
+    let help = String::from_utf8_lossy(&command_stdout(&["extract", "--help"], 0)).into_owned();
+    assert!(help.contains("(Track N).bin"), "extract --help: {help}");
+    let reference = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/reference/cli.md"),
+    )
+    .expect("CLI reference");
+    let split_bin = reference
+        .lines()
+        .find(|line| line.starts_with("`extract --split-bin`"))
+        .expect("split-bin reference paragraph");
+    assert!(split_bin.contains("(Track N).bin"), "{split_bin}");
+}
+
 #[test]
 fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     let temp = setup_temp_dir();
@@ -2382,4 +2399,90 @@ fn build_pcm_wave(data: &[u8]) -> Vec<u8> {
     bytes.extend_from_slice(&data_chunk_size.to_le_bytes());
     bytes.extend_from_slice(data);
     bytes
+}
+
+/// `formats --json` advertises each codec's level range, and the named level
+/// profiles must resolve to a level every CHD codec accepts (`min` used to map
+/// to 0, which CHD zlib/cdzl reject). Levels just outside that range are rejected.
+#[test]
+fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec() {
+    let formats: Value =
+        serde_json::from_slice(&command_stdout(&["formats", "--json"], 0)).expect("formats json");
+    let chd_codecs = formats["containers"]
+        .as_array()
+        .expect("containers")
+        .iter()
+        .find(|format| format["name"] == "chd")
+        .expect("chd format")["codecs"]
+        .clone();
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.bin").path(), vec![0x5a_u8; 8 * 2352]).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let cue = temp.child("disc.cue");
+    let mut checked = 0;
+    for codec in formats["codecs"].as_array().expect("codecs") {
+        let name = codec["name"].as_str().expect("codec name");
+        if !chd_codecs
+            .as_array()
+            .expect("chd codecs")
+            .contains(&Value::from(name))
+            || codec["minLevel"].is_null()
+        {
+            continue;
+        }
+        let min = codec["minLevel"].as_i64().expect("min");
+        let max = codec["maxLevel"].as_i64().expect("max");
+        let attempts = [
+            (format!("{name}:{min}"), None),
+            (format!("{name}:{max}"), None),
+            (name.to_string(), Some("min")),
+        ];
+        for (codec_arg, profile) in &attempts {
+            let out = temp.child(format!("{name}.chd"));
+            let _ = fs::remove_file(out.path());
+            let mut args = vec![
+                "compress",
+                "--input",
+                cue.path().to_str().expect("path"),
+                "--output",
+                out.path().to_str().expect("path"),
+                "--codec",
+                codec_arg.as_str(),
+                "--quiet",
+            ];
+            if let Some(profile) = profile {
+                args.extend(["--level", profile]);
+            }
+            command_stdout(&args, 0);
+            assert!(out.path().exists(), "{codec_arg} {profile:?}");
+        }
+        // FLAC also accepts an extended level 9 above its advertised `max` profile (see
+        // chd_compress_and_extract_cdfl_with_level_round_trip), so only its lower bound is out of range.
+        let above = (!matches!(name, "flac" | "cdfl")).then_some(max + 1);
+        for outside in std::iter::once(min - 1).chain(above) {
+            let codec_arg = format!("{name}:{outside}");
+            let out = temp.child(format!("{name}-outside.chd"));
+            command_stdout(
+                &[
+                    "compress",
+                    "--input",
+                    cue.path().to_str().expect("path"),
+                    "--output",
+                    out.path().to_str().expect("path"),
+                    "--codec",
+                    codec_arg.as_str(),
+                    "--quiet",
+                ],
+                1,
+            );
+            assert!(!out.path().exists(), "{codec_arg} must be rejected");
+        }
+        checked += 1;
+    }
+    assert!(
+        checked >= 8,
+        "expected every levelled CHD codec, got {checked}"
+    );
 }

@@ -1766,3 +1766,28 @@ fn cheat_list_names_its_own_system_flag_when_the_rom_system_is_unknown() {
     assert!(message.contains("--cheat-system"), "{message}");
     assert!(!message.contains("--code-system"), "{message}");
 }
+
+#[test]
+fn patch_apply_dry_run_counts_device_codes() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("fixture");
+    let report = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--code",
+            "AKE-LVS",
+            "--output",
+            temp.child("out.nes").path().to_str().unwrap(),
+            "--no-compress",
+            "--dry-run",
+            "--jsonl",
+        ],
+        0,
+    ));
+    let label = report.last().expect("event")["label"].as_str().unwrap();
+    assert!(label.contains("would apply 1 patch(es)"), "{label}");
+}

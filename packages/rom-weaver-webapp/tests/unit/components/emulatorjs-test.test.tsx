@@ -382,6 +382,23 @@ describe("EmulatorTestView", () => {
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
+  it("unloads the previous game when the replacement file is unsupported", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    loadRomMock.mockResolvedValue({ blob: new Blob(["disc"]), checksum: "b".repeat(40), fileName: "game.iso" });
+    addEntry(entry());
+
+    const { container } = render(withSettings(<EmulatorTestView />));
+    expect(getEmulatorSessionState().currentGameId).toBe("game");
+    fireEvent.change(container.querySelector("input[type=file]") as HTMLInputElement, {
+      target: { files: [new File(["disc"], "game.iso")] },
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Cannot play game.iso.");
+    expect(getEmulatorSessionState().currentGameId).toBeNull();
+    expect(screen.queryByTitle("EmulatorJS test for game.nes")).toBeNull();
+  });
+
   it("uses the detected platform to load a PSP disc image", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

@@ -75,4 +75,49 @@ const validatePatchDependencies = (patches: readonly PatchDependency[]): string 
   return undefined;
 };
 
-export { weaveCheckTokens, resolveWeaveChecks, selectWeaveMembers, validatePatchDependencies };
+type ChainCheckEntry = {
+  target?: ParsedWeavePatchInput;
+  /** Explicit execution input (`input`); its declared states describe the bytes it names. */
+  input?: ParsedWeavePatchInput;
+  enabled: boolean;
+  /** The input checks came from the weave/user rather than the identify-database member fill. */
+  authoredInputChecks: boolean;
+  inputChecks?: string;
+  outputChecks?: string;
+};
+
+const chainLaneKey = (target: ParsedWeavePatchInput | undefined): string =>
+  target ? `${"patch" in target ? target.patch : ""}:${target.member ?? ""}` : "";
+
+/**
+ * Drops declared checks that no longer describe real bytes, mirroring the CLI weave apply
+ * (`is_chain_prefix` in weave_apply.rs, the chain loop's input gate, and its output gate). The
+ * engine enforces every check the browser sends, so a declared state travels only when every
+ * earlier entry in its own target lane is enabled, or when the entry names its own `input` (the
+ * final root-lane output excepted: the CLI gates that on the chain prefix alone). Authored input
+ * checks are otherwise verified regardless, except at a ROM-member lane start. Disabled entries
+ * pass through untouched.
+ */
+const gateWeaveChainChecks = (
+  entries: readonly ChainCheckEntry[],
+): Array<{ inputChecks?: string; outputChecks?: string }> => {
+  const brokenLanes = new Set<string>();
+  const startedLanes = new Set<string>();
+  const lastEnabled = entries.findLastIndex((entry) => entry.enabled);
+  return entries.map(({ target, input, enabled, authoredInputChecks, inputChecks, outputChecks }, index) => {
+    const lane = chainLaneKey(target);
+    if (!enabled) {
+      brokenLanes.add(lane);
+      return { inputChecks, outputChecks };
+    }
+    const isChainPrefix = !brokenLanes.has(lane);
+    const memberLaneStart = !startedLanes.has(lane) && !!target && "rom" in target && !!target.member;
+    startedLanes.add(lane);
+    return {
+      inputChecks: !(isChainPrefix || input) && memberLaneStart && authoredInputChecks ? undefined : inputChecks,
+      outputChecks: isChainPrefix || (input && (target || index !== lastEnabled)) ? outputChecks : undefined,
+    };
+  });
+};
+
+export { gateWeaveChainChecks, weaveCheckTokens, resolveWeaveChecks, selectWeaveMembers, validatePatchDependencies };

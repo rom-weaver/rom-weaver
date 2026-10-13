@@ -549,7 +549,7 @@ impl CliApp {
                 .write(true)
                 .create_new(true)
                 .open(&dest)?;
-            std::io::copy(&mut source, &mut target)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut source, &mut target)?;
         }
 
         primary_sheet
@@ -702,7 +702,7 @@ impl CliApp {
                 // identities before each destructive copy, not only before
                 // the first publication.
                 Self::validate_disc_output_destinations(disc, output, &[], true)?;
-                fs::copy(source, destination)?;
+                rom_weaver_core::copy_file_retrying_interrupted(source, destination)?;
             } else {
                 Self::copy_to_new_output_file(source, destination)?;
             }

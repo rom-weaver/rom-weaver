@@ -13,6 +13,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
+  setFormControlValue,
   VALID_BPS,
   VALID_UPS,
   WRONG_INPUT_BPS,
@@ -204,6 +205,25 @@ test("strict checksum mismatch blocks apply until override is checked", async ()
   const applyState = await waitForApplyOutcome();
   expect(applyState).not.toBeNull();
   expect(applyState?.kind).toBe("download");
+});
+
+test("changing the output format keeps the apply-anyway override checked", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { validation: { requireInputChecksumMatch: true } } }));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(WRONG_INPUT_BPS));
+  const checkbox = await waitForState(() => {
+    const element = document.getElementById("rom-weaver-checkbox-checksum-override");
+    return element instanceof HTMLInputElement ? element : null;
+  }, 60000);
+  checkbox.click();
+  await expect.poll(() => checkbox.checked).toBe(true);
+  const outputFormat = document.getElementById("rom-weaver-select-output-format");
+  expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(outputFormat, "none");
+  await expect.poll(() => outputFormat.value).toBe("none");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(checkbox.checked).toBe(true);
 });
 
 test("source-check patch formats report runtime patch validation success", async () => {
@@ -423,4 +443,36 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
     .poll(() => document.querySelector("#rom-weaver-list-input-stack .file.ok"), { timeout: 30000 })
     .not.toBeNull();
   expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
+});
+
+test("an unreadable patch fails its own card in plain language and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  const garbage = new Uint8Array(3000);
+  for (let index = 0; index < garbage.length; index += 1) garbage[index] = (index * 131 + 17) % 251;
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-unified"),
+    new File([garbage], "garbage.bps", { type: "application/octet-stream" }),
+  );
+
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault"), { timeout: 60000 })
+    .not.toBeNull();
+  const fault = document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault");
+  expect(fault.textContent).toContain("Invalid patch file: garbage.bps");
+  const chip = document.querySelector('#rom-weaver-list-patch-stack .file.bad [id^="rom-weaver-patch-chain-chip-"]');
+  expect(chip?.textContent?.trim()).toBe("⚠ Patch file is not valid");
+  const pageText = document.body.textContent || "";
+  expect(pageText).not.toContain("INVALID_INPUT");
+  expect(pageText).not.toContain("Not checked yet");
+  // Like other invalid-patch states, Apply stays clickable but is a no-op while the card is failed.
+  const applyButton = document.getElementById("rom-weaver-button-apply");
+  applyButton?.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 2000));
+  // A completed apply would turn the button into a download.
+  expect(applyButton?.textContent || "").not.toContain("Download");
+  expect(document.body.textContent || "").not.toContain("INVALID_INPUT");
+  expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault")).not.toBeNull();
 });

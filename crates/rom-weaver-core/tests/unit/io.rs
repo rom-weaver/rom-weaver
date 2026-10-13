@@ -1,15 +1,16 @@
 use std::{
     collections::HashSet,
     fs,
-    io::Write,
+    io::{self, ErrorKind, Read, Write},
     sync::{Arc, Mutex},
 };
 
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
     create_extract_output_file, ensure_output_available, file_starts_with,
-    ordered_streaming_compress,
+    ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
 };
 use crate::RomWeaverError;
 
@@ -782,4 +783,175 @@ fn temp_allocator_exposes_its_root_and_namespace_and_handles_extension_shapes() 
         allocator.next_path("a b/c.d", Some("tmp")),
         namespace_dir.join("a-b-c-d-00000003.tmp")
     );
+}
+
+/// Reader that fails its first call with `Interrupted`, then hands out at most `step` bytes
+/// per call - the two ways a single `read` can fall short of a full buffer.
+struct InterruptedShortReader {
+    data: Vec<u8>,
+    position: usize,
+    step: usize,
+    interrupted: bool,
+}
+
+impl InterruptedShortReader {
+    fn new(data: &[u8], step: usize) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+            step,
+            interrupted: false,
+        }
+    }
+}
+
+impl Read for InterruptedShortReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.interrupted {
+            self.interrupted = true;
+            return Err(ErrorKind::Interrupted.into());
+        }
+        let len = buf
+            .len()
+            .min(self.step)
+            .min(self.data.len() - self.position);
+        buf[..len].copy_from_slice(&self.data[self.position..self.position + len]);
+        self.position += len;
+        Ok(len)
+    }
+}
+
+#[test]
+fn read_full_retries_interrupted_and_short_reads_until_full() {
+    let data: Vec<u8> = (0..=99).collect();
+    let mut reader = InterruptedShortReader::new(&data, 7);
+    let mut buffer = [0u8; 64];
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("first fill"), 64);
+    assert_eq!(buffer, data[..64]);
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("tail"), 36);
+    assert_eq!(buffer[..36], data[64..]);
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("eof"), 0);
+}
+
+#[test]
+fn read_up_to_retries_interrupted_and_short_reads_until_full() {
+    let data: Vec<u8> = (0..=99).collect();
+    let bytes = read_up_to(InterruptedShortReader::new(&data, 7), 64).expect("read");
+    assert_eq!(bytes, data[..64]);
+}
+
+#[test]
+fn read_up_to_stops_at_end_of_input() {
+    let data: Vec<u8> = (0..20).collect();
+    let bytes = read_up_to(InterruptedShortReader::new(&data, 7), 64).expect("read");
+    assert_eq!(bytes, data);
+}
+
+#[test]
+fn block_cache_reader_returns_partial_last_block() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "rom-weaver-io-partial-block-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let temp_file = temp_dir.join("input.bin");
+    let data: Vec<u8> = (0..40).collect();
+    fs::write(&temp_file, &data).expect("write");
+    let mut reader = BlockCacheReader::open(&temp_file, 16, 2).expect("reader");
+    assert_eq!(reader.read_vec_at(30, 10).expect("tail read"), data[30..]);
+    assert!(reader.read_vec_at(36, 8).is_err());
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+/// The interrupting reader hits `io::copy`'s generic path, which retries reader `Interrupted`
+/// itself; only the Linux kernel-copy path surfaces it. This checks the wrapper passes every
+/// byte through unchanged.
+#[test]
+fn copy_retrying_interrupted_copies_all_bytes() {
+    let data: Vec<u8> = (0..=255).cycle().take(10_000).collect();
+    let mut output = Vec::new();
+    copy_retrying_interrupted(&mut InterruptedShortReader::new(&data, 333), &mut output)
+        .expect("copy");
+    assert_eq!(output, data);
+}
+
+#[test]
+fn retry_interrupted_reruns_an_interrupted_operation() {
+    let mut calls = 0;
+    let result = retry_interrupted(|| {
+        calls += 1;
+        if calls == 1 {
+            Err(ErrorKind::Interrupted.into())
+        } else {
+            Ok(calls)
+        }
+    });
+    assert_eq!(result.expect("retried"), 2);
+}
+
+#[test]
+fn retry_interrupted_returns_other_errors_without_retrying() {
+    let mut calls = 0;
+    let error = retry_interrupted(|| -> io::Result<()> {
+        calls += 1;
+        Err(ErrorKind::NotFound.into())
+    })
+    .expect_err("not retried");
+    assert_eq!(error.kind(), ErrorKind::NotFound);
+    assert_eq!(calls, 1);
+}
+
+#[test]
+fn copy_file_retrying_interrupted_copies_bytes_and_length() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("rom-weaver-io-copy-file-{}", std::process::id()));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let source = temp_dir.join("source.bin");
+    let destination = temp_dir.join("destination.bin");
+    let data: Vec<u8> = (0..=255).cycle().take(70_000).collect();
+    fs::write(&source, &data).expect("write source");
+    fs::write(&destination, vec![0xff; 100_000]).expect("write stale destination");
+    let copied = copy_file_retrying_interrupted(&source, &destination).expect("copy");
+    assert_eq!(copied, 70_000);
+    assert_eq!(fs::read(&destination).expect("read destination"), data);
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn copy_file_retry_replaces_a_read_only_partial_destination() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = std::env::temp_dir().join(format!(
+        "rom-weaver-io-copy-retry-ro-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let source = temp_dir.join("source.bin");
+    let destination = temp_dir.join("destination.bin");
+    fs::write(&source, b"read-only dump").expect("source");
+    fs::set_permissions(&source, fs::Permissions::from_mode(0o444)).expect("chmod source");
+    let _ = fs::remove_file(&destination);
+
+    let mut calls = 0;
+    let copied = copy_file_retrying_with(&source, &destination, |from, to| {
+        calls += 1;
+        if calls == 1 {
+            // Mimic an interrupted first attempt that left a read-only destination behind.
+            fs::write(to, b"partial").expect("partial destination");
+            fs::set_permissions(to, fs::Permissions::from_mode(0o444)).expect("chmod partial");
+            return Err(io::Error::from(ErrorKind::Interrupted));
+        }
+        fs::copy(from, to)
+    })
+    .expect("retry succeeds after removing the partial destination");
+
+    assert_eq!(calls, 2);
+    assert_eq!(copied, 14);
+    assert_eq!(
+        fs::read(&destination).expect("destination"),
+        b"read-only dump"
+    );
+    let _ = fs::set_permissions(&destination, fs::Permissions::from_mode(0o644));
+    let _ = fs::set_permissions(&source, fs::Permissions::from_mode(0o644));
+    let _ = fs::remove_dir_all(&temp_dir);
 }

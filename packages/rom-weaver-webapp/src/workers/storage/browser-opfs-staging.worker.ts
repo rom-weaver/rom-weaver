@@ -17,7 +17,7 @@ type StorageRequest = {
 type StorageResponse = {
   action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
   entries?: Array<{ kind: "directory" | "file"; path: string; size?: number }>;
-  error?: { message: string };
+  error?: { message: string; name?: string };
   filePath?: string;
   requestId?: string;
   size?: number;
@@ -224,7 +224,7 @@ workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
     .catch((error) => {
       postCloneSafeWorkerMessage(workerScope, {
         action: "stage-error",
-        error: { message: getWorkerErrorMessage(error) },
+        error: { message: getWorkerErrorMessage(error), name: (error as { name?: unknown })?.name?.toString() },
         requestId: request.requestId,
         success: false,
       } satisfies StorageResponse);

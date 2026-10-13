@@ -354,13 +354,30 @@ impl CliApp {
                 split_bin: false,
             };
             if let Err(error) = handler.probe_details(&probe_request, context) {
+                // A short signature can match raw ROM bytes by chance. Only a
+                // file named as this container is a damaged archive; any
+                // other file is used as-is.
+                if !handler.descriptor().matches_path(&current_source) {
+                    debug!(
+                        current_source = %current_source.display(),
+                        format = handler.descriptor().name,
+                        error = %error,
+                        "auto-extract stopped: signature-only match failed its probe; using the raw file"
+                    );
+                    break;
+                }
                 trace!(
                     current_source = %current_source.display(),
                     format = handler.descriptor().name,
                     error = %error,
-                    "auto-extract stopped: handler probe failed"
+                    "auto-extract failed: handler probe failed"
                 );
-                break;
+                return Err(RomWeaverError::Validation(format!(
+                    "{} payload extraction failed for `{}` ({}): {error}",
+                    labels.source_label,
+                    current_source.display(),
+                    handler.descriptor().name
+                )));
             }
 
             let next_depth = depth + 1;

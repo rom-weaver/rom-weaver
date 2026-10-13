@@ -732,7 +732,7 @@ impl CliApp {
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(rom, &target)?;
+            rom_weaver_core::copy_file_retrying_interrupted(rom, &target)?;
             inputs.push(target);
         }
         for (spec, entry) in specs.iter().zip(&definition.patches) {
@@ -746,7 +746,7 @@ impl CliApp {
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(&spec.path, &target)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&spec.path, &target)?;
             inputs.push(target);
         }
         let format = weave

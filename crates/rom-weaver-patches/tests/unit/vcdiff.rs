@@ -85,6 +85,69 @@ fn parse_and_apply_basic_source_patch() {
 }
 
 #[test]
+fn apply_names_truncated_patch_file() {
+    let patch_bytes = build_patch(TestPatch {
+        windows: vec![TestWindow {
+            win_indicator: WIN_SOURCE,
+            source_segment_size: Some(15),
+            source_segment_position: Some(0),
+            target_window_size: 15,
+            checksum: None,
+            data: b"new".to_vec(),
+            inst: vec![22, 4, 22],
+            addr: encode_all_varints(&[0, 9]),
+        }],
+        ..Default::default()
+    });
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("cut.xdelta");
+    fs::write(&input_path, b"hello old world").expect("write input");
+    fs::write(&patch_path, &patch_bytes[..9]).expect("write patch");
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.join("output.bin"),
+            },
+            &test_context(),
+        )
+        .expect_err("truncated patch must fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("truncated or corrupt") && message.contains("cut.xdelta"),
+        "unexpected error: {message}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn apply_keeps_non_eof_read_errors_instead_of_reporting_truncation() {
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("dir.xdelta");
+    fs::write(&input_path, b"hello old world").expect("write input");
+    fs::create_dir(&patch_path).expect("create directory patch");
+
+    let error = VcdiffPatchHandler::new(&crate::xdelta::XDELTA)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.join("output.bin"),
+            },
+            &test_context(),
+        )
+        .expect_err("a directory is not a readable patch");
+    assert!(
+        matches!(&error, RomWeaverError::Io(io_error) if io_error.kind() != std::io::ErrorKind::UnexpectedEof),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
 fn apply_supports_overlapping_target_copy() {
     let patch_bytes = build_patch(TestPatch {
         windows: vec![TestWindow {

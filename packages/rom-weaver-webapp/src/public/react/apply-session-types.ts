@@ -52,6 +52,7 @@ type StagedInputInfo = {
   validationLabel?: string;
   validationMessage?: string;
   validationState?: string;
+  validationUnreadable?: boolean;
   validationValues?: string[];
   sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
@@ -190,6 +191,8 @@ type LocalApplyPatchFormSessionOptions = Pick<
   resolvedOutputNameKey?: string;
   cheatNames?: readonly string[];
   disabledPatchIds?: ReadonlySet<string>;
+  /** Slot ids index-aligned with the patch list; `disabledPatchIds` is keyed by these. */
+  getPatchSlotIds?: () => readonly string[];
   stageInput?: (
     input: ApplyWorkflowStageSnapshot,
     handlers: {

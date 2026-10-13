@@ -988,7 +988,9 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           <div aria-live="polite" className="save-editor-candidates">
             <p className="save-editor-candidates-lead">
               <strong>{localizer.message("ui.saves.editor.chooseFormat")}</strong>
-              <span>{localizer.message("ui.saves.editor.chooseFormatHint")}</span>
+              <span>
+                {localizer.messageCount("ui.saves.editor.chooseFormatHint", recognition?.candidates?.length ?? 0)}
+              </span>
             </p>
             <div className="save-editor-candidate-list">
               {(recognition?.candidates || []).map((candidate) => (

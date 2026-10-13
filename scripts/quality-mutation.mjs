@@ -92,7 +92,18 @@ export function runMutation(
     if (merge.status !== 0) throw new Error("Cannot resolve mutation merge base");
     const changes = run(
       "git",
-      ["diff", "--no-ext-diff", "--unified=0", merge.stdout.trim(), "--", "crates"],
+      // Pin a/ b/ prefixes: cargo-mutants matches only those, and diff.mnemonicPrefix or
+      // diff.noprefix would otherwise make every diff select zero mutants.
+      [
+        "diff",
+        "--no-ext-diff",
+        "--unified=0",
+        "--src-prefix=a/",
+        "--dst-prefix=b/",
+        merge.stdout.trim(),
+        "--",
+        "crates",
+      ],
       { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
     );
     if (changes.status !== 0) throw new Error("Cannot obtain mutation diff");

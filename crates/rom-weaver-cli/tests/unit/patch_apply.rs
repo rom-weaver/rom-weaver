@@ -230,6 +230,7 @@ fn a_dry_run_resolves_the_compression_plan_before_reporting() {
         &requested,
         &compression_options(Some("zip")),
         None,
+        None,
     );
 
     assert_eq!(report.status, OperationStatus::Succeeded);
@@ -254,6 +255,7 @@ fn a_dry_run_fails_when_the_requested_container_format_is_unknown() {
         &[PathBuf::from("a.ips")],
         &temp.path().join("out.bin"),
         &compression_options(Some("definitely-not-a-format")),
+        None,
         None,
     );
 
@@ -1179,27 +1181,34 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
     fs::write(&state_path, b"0123456789").expect("intermediate fixture");
     let context = test_context(temp.path().join("chain-step-temp"));
 
-    CliApp::verify_chain_step_state(&state_path, &patch_plan::PlanState::default(), &context)
-        .expect("an empty declaration always passes");
+    CliApp::verify_chain_step_state(
+        &state_path,
+        "output",
+        &patch_plan::PlanState::default(),
+        &context,
+    )
+    .expect("an empty declaration always passes");
 
     let matching = patch_plan::PlanState {
         checksums: BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]),
         size: Some(10),
     };
-    CliApp::verify_chain_step_state(&state_path, &matching, &context)
+    CliApp::verify_chain_step_state(&state_path, "output", &matching, &context)
         .expect("the declared size and checksum match");
 
     let wrong_size = patch_plan::PlanState {
         checksums: BTreeMap::new(),
         size: Some(11),
     };
-    assert!(CliApp::verify_chain_step_state(&state_path, &wrong_size, &context).is_err());
+    assert!(CliApp::verify_chain_step_state(&state_path, "output", &wrong_size, &context).is_err());
 
     let wrong_checksum = patch_plan::PlanState {
         checksums: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
         size: None,
     };
-    assert!(CliApp::verify_chain_step_state(&state_path, &wrong_checksum, &context).is_err());
+    assert!(
+        CliApp::verify_chain_step_state(&state_path, "output", &wrong_checksum, &context).is_err()
+    );
 }
 
 #[test]

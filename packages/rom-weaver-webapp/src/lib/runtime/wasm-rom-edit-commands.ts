@@ -37,10 +37,10 @@ const invokeRomWeaverTrimWorker = async (
     const threadArg = toThreadBudget(input.threads);
     // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
     // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
-    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), never
-    // simulate (`dry_run: false`), and never restore padding (`revert: false`).
+    // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), simulate
+    // only for the staging support probe (`dryRun`), and never restore padding (`revert: false`).
     const command = createRomWeaverCommand("trim", {
-      dry_run: false,
+      dry_run: !!input.dryRun,
       in_place: false,
       output: outputPath,
       revert: false,
@@ -48,13 +48,7 @@ const invokeRomWeaverTrimWorker = async (
       ...(normalizedExtension ? { extension: normalizedExtension } : {}),
       ...(threadArg ? { threads: threadArg } : {}),
     });
-    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", {
-      command,
-      extension: normalizedExtension || "",
-      outputPath,
-      sourceFilePath,
-      threadArg,
-    });
+    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", { command });
     const result = await runRomWeaverJson(
       command,
       toRomWeaverOptions({

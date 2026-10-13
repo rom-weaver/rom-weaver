@@ -893,7 +893,7 @@ fn copy_directory(source: &Path, target: &Path) -> Result<()> {
         if file_type.is_dir() {
             copy_directory(&entry.path(), &destination)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), destination)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&entry.path(), &destination)?;
         } else {
             return Err(RomWeaverError::Validation(format!(
                 "identify database contains an unsupported entry `{}`",
@@ -956,6 +956,16 @@ fn download_archive_bytes(url: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// The optional groups the release publishes archives for.
+#[cfg(not(target_arch = "wasm32"))]
+const OPTIONAL_GROUPS: [&str; 5] = [
+    "optional-arcade",
+    "optional-computers",
+    "optional-engines",
+    "optional-mobile",
+    "optional-extended",
+];
+
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn install_group(
     database_dir: &Path,
@@ -966,6 +976,12 @@ pub(super) fn install_group(
     let bytes = if let Some(path) = from {
         local_archive_bytes(path, "identify group archive")?
     } else {
+        if !OPTIONAL_GROUPS.contains(&group) {
+            return Err(RomWeaverError::Validation(format!(
+                "unknown identify pack group `{group}`; valid groups: {}",
+                OPTIONAL_GROUPS.join(", ")
+            )));
+        }
         let version = env!("CARGO_PKG_VERSION");
         let url = format!(
             "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.br"
@@ -1716,6 +1732,20 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn optional_groups_match_the_published_release_groups() {
+        let script =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/build-identify-index.mjs");
+        let script = std::fs::read_to_string(&script).expect("read identify index script");
+        let published: Vec<&str> = script
+            .lines()
+            .filter(|line| line.contains("default: false"))
+            .filter_map(|line| line.split("id: \"").nth(1)?.split('"').next())
+            .collect();
+        assert_eq!(published, OPTIONAL_GROUPS);
     }
 
     #[test]

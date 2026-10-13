@@ -15,11 +15,12 @@ use rom_weaver_core::{Result, RomWeaverError};
 pub mod sys;
 
 use sys::{
-    ARCHIVE_EOF, ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR,
-    ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
-    archive, archive_entry, archive_entry_filetype, archive_entry_pathname,
-    archive_entry_pathname_utf8, archive_entry_size, archive_entry_size_is_set, archive_errno,
-    archive_error_string, archive_format, archive_read_close, archive_read_data, archive_read_free,
+    ARCHIVE_EOF, ARCHIVE_FILTER_BZIP2, ARCHIVE_FILTER_GZIP, ARCHIVE_FILTER_XZ, ARCHIVE_FILTER_ZSTD,
+    ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
+    ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN, archive, archive_entry,
+    archive_entry_filetype, archive_entry_pathname, archive_entry_pathname_utf8,
+    archive_entry_size, archive_entry_size_is_set, archive_errno, archive_error_string,
+    archive_filter_code, archive_format, archive_read_close, archive_read_data, archive_read_free,
     archive_read_new, archive_read_next_header, archive_read_open_filename,
     archive_read_support_filter_bzip2, archive_read_support_filter_compress,
     archive_read_support_filter_gzip, archive_read_support_filter_lzip,

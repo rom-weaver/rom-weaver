@@ -28,7 +28,7 @@ type BrowserOpfsStorageRequest = {
 
 type BrowserOpfsStorageResponse = {
   action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
-  error?: { message?: string };
+  error?: { message?: string; name?: string };
   entries?: BrowserOpfsEntry[];
   filePath?: string;
   requestId?: string;

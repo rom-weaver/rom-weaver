@@ -334,7 +334,8 @@ assertIncludes(homeHtml, "Online ROM patcher.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="btn primary lg" href="/apply-patches"', "home Apply action");
+assertIncludes(homeHtml, 'class="btn ghost" href="/apply-patches"', "home Apply action");
+assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
 // Home is the only current Project destination on the landing page.
@@ -578,6 +579,15 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
+for (const [slug, title] of [
+  ["save-editor", "Save Editor | rom-weaver"],
+  ["trim-rom", "Trim ROM | rom-weaver"],
+]) {
+  const html = read(`${slug}/index.html`);
+  assertIncludes(html, `<title>${title}`, `${slug} title`);
+  assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
+  assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
+}
 for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(

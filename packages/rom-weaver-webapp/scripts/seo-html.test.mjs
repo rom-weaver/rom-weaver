@@ -9,6 +9,7 @@ import {
   createWorkflowRouteHtml,
   createWorkflowMarkdown,
   injectLdJson,
+  makeBetaRouteNoindex,
 } from "./vite-config/seo-html.mjs";
 
 const routeShell = `<!doctype html><html><head>
@@ -115,5 +116,21 @@ test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
       assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${markdownPath}" />`));
       assert.equal(html.split('type="text/markdown"').length - 1, 1);
     }
+  }
+});
+
+test("beta tool pages get their own title, social titles, and channel badge", () => {
+  const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
+  for (const [slug, name] of [
+    ["save-editor", "Save Editor"],
+    ["trim-rom", "Trim ROM"],
+  ]) {
+    const prod = makeBetaRouteNoindex(shell, slug, "prod", "Production");
+    assert.ok(prod.includes(`<title>${name} | rom-weaver</title>`), `${slug} title`);
+    assert.ok(prod.includes(`<meta property="og:title" content="${name} | rom-weaver">`), `${slug} og:title`);
+    assert.ok(prod.includes(`<meta name="twitter:title" content="${name} | rom-weaver">`), `${slug} twitter:title`);
+    assert.ok(prod.includes('content="noindex, nofollow"'), `${slug} noindex`);
+    const beta = makeBetaRouteNoindex(shell, slug, "beta", "Beta");
+    assert.ok(beta.includes(`<title>${name} | rom-weaver Beta</title>`), `${slug} beta title`);
   }
 });

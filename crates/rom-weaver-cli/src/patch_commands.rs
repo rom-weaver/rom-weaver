@@ -734,8 +734,11 @@ impl CliApp {
         Ok(format!("{scope} checksum(s) verified ({rendered})"))
     }
 
-    pub(super) fn validate_patch_input_size(
+    /// Checks `source` against size expectations; `side` (`input` or `output`) names which end of
+    /// the patch the file is in messages.
+    pub(super) fn validate_patch_size(
         source: &Path,
+        side: &str,
         expected_size: Option<u64>,
         minimum_size: Option<u64>,
     ) -> Result<String> {
@@ -744,14 +747,14 @@ impl CliApp {
             && actual_size != expected
         {
             return Err(RomWeaverError::Validation(format!(
-                "input size mismatch; expected {expected} byte(s), actual {actual_size}"
+                "{side} size mismatch; expected {expected} byte(s), actual {actual_size}"
             )));
         }
         if let Some(minimum) = minimum_size
             && actual_size < minimum
         {
             return Err(RomWeaverError::Validation(format!(
-                "input size is below required minimum; expected at least {minimum} byte(s), actual {actual_size}"
+                "{side} size is below required minimum; expected at least {minimum} byte(s), actual {actual_size}"
             )));
         }
 
@@ -763,9 +766,9 @@ impl CliApp {
             labels.push(format!("min_size={minimum}"));
         }
         if labels.is_empty() {
-            Ok(format!("input size verified ({actual_size} byte(s))"))
+            Ok(format!("{side} size verified ({actual_size} byte(s))"))
         } else {
-            Ok(format!("input size verified ({})", labels.join(", ")))
+            Ok(format!("{side} size verified ({})", labels.join(", ")))
         }
     }
 }

@@ -321,6 +321,10 @@ pub(crate) struct PatchStepVerification {
     /// identify database), so it verifies at the lane start even when earlier
     /// optional entries of the lane are deselected.
     pub lane_source_input: bool,
+    /// `declared_input`/`declared_output` came from `--patch-input-check` /
+    /// `--patch-output-check`, so they are verified for this step wherever
+    /// it sits in the chain rather than only at weave chain boundaries.
+    pub enforce_declared_checks: bool,
 }
 
 /// The planner's resolution before dry-run results are merged in.

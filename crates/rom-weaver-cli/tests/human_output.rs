@@ -100,6 +100,46 @@ fn quiet_man_install_writes_files_without_a_summary() {
 }
 
 #[test]
+fn man_install_reports_the_installed_pages() {
+    let temp = TempDir::new().expect("temp dir");
+    let output = command()
+        .args(["man", "checksum", "--install", "--man-dir"])
+        .arg(temp.path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("installed 1 man page to"), "{output:?}");
+    assert!(temp.path().join("rom-weaver-checksum.1").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn man_install_without_a_home_fails_instead_of_writing_to_the_working_directory() {
+    let temp = TempDir::new().expect("temp dir");
+    let output = command()
+        .args(["man", "--install"])
+        .current_dir(temp.path())
+        .env_remove("HOME")
+        .env_remove("XDG_DATA_HOME")
+        .env_remove("ROM_WEAVER_MAN_DIR")
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no home directory; pass --man-dir"),
+        "{stderr}"
+    );
+    assert!(
+        !temp.child("man").path().exists(),
+        "pages were written to the cwd"
+    );
+}
+
+#[test]
 fn native_command_diagnostics_keep_machine_output_intact() {
     let output = command()
         .args(["formats", "--verbose", "--json"])

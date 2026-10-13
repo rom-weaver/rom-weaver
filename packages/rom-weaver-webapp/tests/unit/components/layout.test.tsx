@@ -99,6 +99,21 @@ describe("DropZone", () => {
     expect(onFiles.mock.calls[0]?.[0]?.[0]?.name).toBe("a.ips");
   });
 
+  it("clears the drag highlight when a page-level listener claims the drop", () => {
+    const claim = (event: Event) => event.stopImmediatePropagation();
+    document.addEventListener("drop", claim, true);
+    try {
+      const { container } = render(<DropZone label="Drop files" onFiles={() => undefined} />);
+      const drop = container.querySelector("label.drop") as HTMLElement;
+      fireEvent.dragOver(drop);
+      expect(drop.classList.contains("dragging")).toBe(true);
+      fireEvent.drop(drop);
+      expect(drop.classList.contains("dragging")).toBe(false);
+    } finally {
+      document.removeEventListener("drop", claim, true);
+    }
+  });
+
   it("duplicates the full format set for a seamless ticker", () => {
     const { container } = render(
       <DropZone big formats={["rom", "ppf3"]} label="Drop files" onFiles={() => undefined} />,

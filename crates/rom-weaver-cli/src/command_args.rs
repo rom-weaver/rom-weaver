@@ -426,7 +426,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Write a CD-format CHD as a CUE plus one BIN per track (*.trackNN.bin), rather than one merged BIN"
+            help = "Write a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track, rather than one merged BIN"
         )
     )]
     #[serde(default)]
@@ -1829,11 +1829,16 @@ impl PatchApplyCommand {
         self.patch_header = resolved;
     }
 
-    /// Bind each `--patch-basis` and `--patch-select` occurrence to the most
+    /// Bind each `--patch-basis`, `--patch-select`, `--patch-input-check`, and
+    /// `--patch-output-check` occurrence to the most
     /// recent preceding `--patch` and rewrite the vectors index-aligned with
     /// `patches` (the wasm path sends them index-aligned already).
     pub fn align_patch_basis(&mut self, matches: &clap::ArgMatches) {
-        if self.patch_basis.is_empty() && self.patch_select.is_empty() {
+        if self.patch_basis.is_empty()
+            && self.patch_select.is_empty()
+            && self.patch_input_check.is_empty()
+            && self.patch_output_check.is_empty()
+        {
             return;
         }
         let patch_indices: Vec<usize> = matches
@@ -1869,6 +1874,26 @@ impl PatchApplyCommand {
                 .map(Iterator::collect)
                 .unwrap_or_default();
             self.patch_select = bind_per_patch(
+                values,
+                indices,
+                patch_indices.len(),
+                String::new(),
+                &patch_position,
+            );
+        }
+        for (id, checks) in [
+            ("patch_input_check", &mut self.patch_input_check),
+            ("patch_output_check", &mut self.patch_output_check),
+        ] {
+            if checks.is_empty() {
+                continue;
+            }
+            let values = std::mem::take(checks);
+            let indices: Vec<usize> = matches
+                .indices_of(id)
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            *checks = bind_per_patch(
                 values,
                 indices,
                 patch_indices.len(),
@@ -2421,6 +2446,16 @@ apply and verifies the input, as long as the file name survives."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub solid_extended: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "ppf-undo",
+            help = "PPF patches only: store the original bytes in each record so `tools ppf-undo` can revert the patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub ppf_undo: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

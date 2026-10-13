@@ -374,6 +374,7 @@ type RuntimePatchCreateFormatCandidates = {
 };
 
 type RuntimeTrimWorkerInput = {
+  dryRun?: boolean;
   extension?: string;
   logLevel?: LogLevel;
   outputName: string;
@@ -620,6 +621,8 @@ type WorkflowRuntimeWeave = {
 type WorkflowRuntimeTrim = {
   trim?: (input: {
     source: SourceRef;
+    /** Plan only: resolves without output, rejects when the input cannot be trimmed. */
+    dryRun?: boolean;
     extension?: string;
     outputName: string;
     threads?: RuntimeThreadBudgetInput;

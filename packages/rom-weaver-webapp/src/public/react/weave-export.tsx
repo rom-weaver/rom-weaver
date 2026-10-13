@@ -385,10 +385,13 @@ const useWeaveExport = ({
   // the bench changes underneath it.
   const sourcesRef = useRef<WeaveExportSources>({ patches: [], rom: null });
 
+  // Separate effects: a changed ROM default must not reset a format the user picked, and vice versa.
   useEffect(() => {
     setFormat(resolvedInitialFormat);
+  }, [resolvedInitialFormat]);
+  useEffect(() => {
     setWeaveRom(initialWeaveRom);
-  }, [initialWeaveRom, resolvedInitialFormat]);
+  }, [initialWeaveRom]);
 
   const downloadExport = useCallback(async () => {
     const output = downloadableOutputRef.current;

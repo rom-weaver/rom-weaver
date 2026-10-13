@@ -1,6 +1,7 @@
 import { parseWeaveCreateResult } from "../../src/lib/runtime/weave-result.ts";
 import { describe, expect, it } from "vitest";
 import {
+  gateWeaveChainChecks,
   resolveWeaveChecks,
   selectWeaveMembers,
   validatePatchDependencies,
@@ -151,5 +152,59 @@ describe("weave member selection", () => {
         ],
       ),
     ).toEqual({ id: "disc", ids: ["disc"] });
+  });
+});
+
+describe("weave chain check gating", () => {
+  const entry = (overrides: Partial<Parameters<typeof gateWeaveChainChecks>[0][number]>) => ({
+    enabled: true,
+    authoredInputChecks: true,
+    inputChecks: "crc32=11111111",
+    outputChecks: "crc32=22222222",
+    ...overrides,
+  });
+
+  it("drops output checks after a disabled entry in the same lane only", () => {
+    const track = { rom: true as const, member: "track02.bin" };
+    expect(gateWeaveChainChecks([entry({ enabled: false }), entry({}), entry({ target: track }), entry({})])).toEqual([
+      { inputChecks: "crc32=11111111", outputChecks: "crc32=22222222" },
+      { inputChecks: "crc32=11111111", outputChecks: undefined },
+      { inputChecks: "crc32=11111111", outputChecks: "crc32=22222222" },
+      { inputChecks: "crc32=11111111", outputChecks: undefined },
+    ]);
+  });
+
+  it("keeps the checks of a non-prefix entry that names its own input, except the final root output", () => {
+    const own = { patch: "a" };
+    expect(
+      gateWeaveChainChecks([entry({ enabled: false }), entry({ input: own }), entry({ input: own })]).map(
+        (gated) => gated.outputChecks,
+      ),
+    ).toEqual(["crc32=22222222", "crc32=22222222", undefined]);
+    const track = { rom: true as const, member: "track02.bin" };
+    expect(
+      gateWeaveChainChecks([
+        entry({ enabled: false, target: track }),
+        entry({ target: track, input: { rom: true } }),
+      ])[1],
+    ).toEqual({ inputChecks: "crc32=11111111", outputChecks: "crc32=22222222" });
+  });
+
+  it("drops authored input checks only at a member lane start that is not a chain prefix", () => {
+    const track = { rom: true as const, member: "track02.bin" };
+    expect(
+      gateWeaveChainChecks([
+        entry({ enabled: false, target: track }),
+        entry({ target: track }),
+        entry({ target: track }),
+      ]).map((gated) => gated.inputChecks),
+    ).toEqual(["crc32=11111111", undefined, "crc32=11111111"]);
+    // Identify-database fills describe the raw member and always travel.
+    expect(
+      gateWeaveChainChecks([
+        entry({ enabled: false, target: track }),
+        entry({ target: track, authoredInputChecks: false }),
+      ])[1]?.inputChecks,
+    ).toBe("crc32=11111111");
   });
 });
