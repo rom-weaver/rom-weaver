@@ -100,6 +100,29 @@ pub(super) fn create_patch_formats_for_sizes(
     SMALL_CREATE_PATCH_FORMATS
 }
 
+/// MOD (pmsr) patches can only apply to Paper Mario (USA) v1.0, so the plan lists the format
+/// only for that exact original. The CRC32 is read only when the size already matches.
+fn original_is_paper_mario_usa10(original: &Path, size: u64) -> bool {
+    const PAPER_MARIO_USA10_SIZE: u64 = 41_943_040;
+    const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5_CD7E;
+    if size != PAPER_MARIO_USA10_SIZE {
+        return false;
+    }
+    let Ok(mut file) = fs::File::open(original) else {
+        return false;
+    };
+    let mut hasher = crc32fast::Hasher::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    loop {
+        match rom_weaver_core::read_full(&mut file, &mut buffer) {
+            Ok(0) => break,
+            Ok(read) => hasher.update(&buffer[..read]),
+            Err(_) => return false,
+        }
+    }
+    hasher.finalize() == PAPER_MARIO_USA10_CRC32
+}
+
 pub(super) fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
     let normalized_path = path.to_string_lossy().to_ascii_lowercase();
     extensions
@@ -468,7 +491,11 @@ impl CliApp {
         };
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
-        let formats = candidates.formats.to_vec();
+        let mut formats = candidates.formats.to_vec();
+        if !original_is_paper_mario_usa10(&args.original, input_info.original.size) {
+            debug!("patch create plan drops pmsr: original is not Paper Mario (USA) v1.0");
+            formats.retain(|format| *format != "pmsr");
+        }
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(candidates.default_format.to_string()),

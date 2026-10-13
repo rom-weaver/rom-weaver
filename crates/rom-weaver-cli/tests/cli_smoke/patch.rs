@@ -2765,7 +2765,7 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
         vec![
-            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
+            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "ppf", "rup", "ups",
         ]
     );
     assert_eq!(candidates["source_values"]["original"]["size"], 15);
@@ -2883,7 +2883,7 @@ fn patch_create_candidates_default_to_xdelta_from_128_mib() {
             .iter()
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
-        vec!["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]
+        vec!["xdelta", "bps", "aps", "bdf", "ppf", "rup", "ups"]
     );
 }
 
@@ -12241,4 +12241,111 @@ fn patch_validate_independent_enforces_patch_input_and_output_checks() {
             .expect("label")
             .contains("pass update.bps")
     );
+}
+
+#[test]
+fn patch_create_mod_warns_when_original_is_not_paper_mario() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let output = temp.child("out.mod");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let text = json.to_string();
+    assert!(text.contains("Paper Mario (USA) v1.0"), "{text}");
+}
+
+#[test]
+fn patch_apply_auto_n64_warns_when_ips_order_is_a_guess_on_v64_input() {
+    let temp = setup_temp_dir();
+    let mut z64: Vec<u8> = (0..0x2000_u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    z64[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    let mut modified_z64 = z64.clone();
+    for offset in (0x1000..0x1800).step_by(0x101) {
+        modified_z64[offset] ^= 0xff;
+    }
+    fs::write(temp.child("a.z64").path(), &z64).expect("fixture");
+    fs::write(temp.child("b.z64").path(), &modified_z64).expect("fixture");
+    fs::write(temp.child("a.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    create_ips_patch(
+        temp.child("a.z64").path(),
+        temp.child("b.z64").path(),
+        temp.child("p.ips").path(),
+    );
+
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("a.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("p.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("out.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    ));
+    let warnings = json["details"]["warnings"].to_string();
+    assert!(warnings.contains("--n64-byte-order"), "{json}");
+    assert!(warnings.contains("byte-swapped"), "{json}");
+}
+
+#[test]
+fn patch_apply_dry_run_plan_lists_device_code_step() {
+    let temp = setup_temp_dir();
+    let input = temp.child("g.nes");
+    let mut rom = b"NES\x1a\x01\x01\x00\x00".to_vec();
+    rom.resize(16 + 16384 + 8192, 0);
+    fs::write(input.path(), rom).expect("fixture");
+    let output = temp.child("d.nes");
+    let json = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "SXIOPO",
+            "-n",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    ))
+    .pop()
+    .expect("event");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("would apply 1 patch(es)")
+    );
+    let patches = json["details"]["patches"].as_array().expect("patches");
+    assert_eq!(patches.len(), 1, "{json}");
+    assert!(
+        patches[0].as_str().expect("entry").contains("SXIOPO"),
+        "{json}"
+    );
+    assert!(!output.path().exists());
 }

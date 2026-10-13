@@ -66,7 +66,7 @@ pub(super) fn render_success(
     event: &ProgressEvent,
     selection: &OutputSelection,
 ) {
-    if is_dry_run(event) {
+    if is_dry_run(event) && save_editor_details(event).is_none() {
         return render_dry_run(surface, event);
     }
     match event.command.as_str() {

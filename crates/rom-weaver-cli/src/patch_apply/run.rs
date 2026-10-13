@@ -372,6 +372,14 @@ impl CliApp {
                     &format!("would apply {planned} patch(es)"),
                     1,
                 );
+                if let Some(patches) = report
+                    .details
+                    .as_mut()
+                    .and_then(|details| details.get_mut("patches"))
+                    .and_then(Value::as_array_mut)
+                {
+                    patches.push(json!(format!("device code: {}", run.args.codes.join(", "))));
+                }
             }
             return Err(Box::new(report));
         }
