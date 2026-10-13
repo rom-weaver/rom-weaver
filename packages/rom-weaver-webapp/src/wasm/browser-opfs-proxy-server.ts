@@ -284,8 +284,11 @@ class OpfsProxyServer {
       const encoded = textEncoder.encode(detail).subarray(0, data.byteLength);
       data.set(encoded, 0);
       result = encoded.byteLength;
+      // A missing path is an expected probe result (unlink-if-exists, open-without-create): the guest
+      // gets ENOENT and handles it, so trace it as a miss, which the worker does not log as an error.
+      const outcome = status === ERRNO_NOENT ? "missed" : "failed";
       this.trace?.(
-        `[browser-opfs] proxy op failed opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
+        `[browser-opfs] proxy op ${outcome} opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
       );
     }
     // Encode the result across two words like read/write offsets so 64-bit values survive: RESULT
