@@ -2154,3 +2154,36 @@ fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
         assert!(!out.path().exists(), "{name}: empty output dir left behind");
     }
 }
+
+#[test]
+fn probe_select_of_unrecognised_archive_member_names_the_member() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), b"aaaa").expect("a");
+    fs::write(temp.child("b.bin").path(), b"bbbb").expect("b");
+    let zip = temp.child("multi.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("a.bin").path().to_str().expect("path"),
+            "--input",
+            temp.child("b.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let stderr = stderr_of_failed(&[
+        "probe",
+        "--input",
+        zip.path().to_str().expect("path"),
+        "--select",
+        "b.bin",
+    ]);
+    assert!(stderr.contains("archive member `b.bin`"), "{stderr}");
+    assert!(
+        !stderr.contains("no registered handler matched"),
+        "{stderr}"
+    );
+}
