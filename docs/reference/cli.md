@@ -463,7 +463,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--default-patch-basis base\|previous\|auto` | Shared input basis recorded as `patchBasis`. The default is `auto`. |
 | `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
 | `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
-| `--patch-optional` | Marks the preceding patch optional. |
+| `--patch-optional true\|false` | Marks the preceding patch optional; the value is required. |
 | `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
 | `--expect-out` | Expected final result checks. |
 | `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
