@@ -12121,6 +12121,35 @@ fn patch_checks_reject_min_size_in_apply_and_validate() {
 }
 
 #[test]
+fn patch_apply_uses_a_raw_rom_whose_bytes_start_like_a_container_signature() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "weird.gba");
+    // A gzip signature by chance; the .gba name says this is not a gzip file.
+    let mut bytes = vec![0x1f, 0x8b, 0x08];
+    bytes.resize(256, 0);
+    fs::write(&rom, &bytes).expect("rom fixture");
+    let output = temp.child("weird-out.gba");
+    command_output_with_env(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            rom.to_str().expect("path"),
+            "--patch",
+            first.to_str().expect("path"),
+            "--no-compress",
+            "-o",
+            output.path().to_str().expect("path"),
+        ],
+        &[],
+        0,
+    );
+    let mut expected = bytes;
+    expected[0] = 1;
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
+}
+
+#[test]
 fn patch_validate_independent_enforces_patch_input_and_output_checks() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
