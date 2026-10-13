@@ -1,6 +1,6 @@
 # rom-weaver documentation
 
-rom-weaver changes, checks, compresses, and tests game files you already have. Your files stay on your device.
+rom-weaver applies BPS, IPS, UPS, and xdelta ROM patches, converts discs to and from CHD and RVZ, compresses 3DS ROMs to Z3DS, identifies ROMs, and tests games you already have. Your files stay on your device.
 
 [What rom-weaver supports](reference/features.md) explains every feature in plain words, with links to exact support limits.
 
@@ -90,7 +90,7 @@ Procedures for specific tasks.
 - [Decompress CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md)
 - [Compress ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
 - [Compress GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
-- [Compress Nintendo 3DS ROMs to Z3DS](how-to/convert-to-z3ds-browser.md)
+- [Compress 3DS ROMs to Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX](how-to/convert-to-z3ds-browser.md)
 - [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
@@ -144,7 +144,7 @@ Background on the engine, formats, and design decisions.
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
 - [ROM cheats](explanation/rom-cheats.md): why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
-- [ROM patch formats compared](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
+- [BPS vs IPS, UPS, xdelta and PPF](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a weave is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
@@ -166,7 +166,7 @@ Background on the engine, formats, and design decisions.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
 - [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
-- [References](development/references.md): format specifications and upstream reference implementations.
+- [ROM patch and disc format specifications](development/references.md): format specifications and upstream reference implementations.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).
 - [Commit conventions](development/commits.md) and the [release guide](../.github/RELEASING.md).

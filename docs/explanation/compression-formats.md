@@ -1,6 +1,6 @@
 # ROM compression formats: CHD, RVZ, Z3DS, ZIP and 7z
 
-Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives.
+Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives. [Compress](https://rom-weaver.com/compress) creates each of them in the browser.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -59,7 +59,7 @@ rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, con
 
 **Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms (`.z3ds` and friends) are supported by [Azahar 2123 and later](https://github.com/azahar-emu/azahar/discussions/1302); it is not a disc image format.
 
-Browser procedures: [Compress Nintendo 3DS ROMs to Z3DS](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
+Browser procedures: [Compress 3DS ROMs to Z3DS](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
 
 ## General archives: ZIP and 7z
 

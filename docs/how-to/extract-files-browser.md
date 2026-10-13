@@ -39,4 +39,4 @@ The [container table](../reference/formats.md#container-and-compression-formats)
 
 ## Convert CHD to ISO or BIN/CUE
 
-Follow [Extract CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md) for CHD decompression.
+Follow [Convert CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md) for CHD decompression.
