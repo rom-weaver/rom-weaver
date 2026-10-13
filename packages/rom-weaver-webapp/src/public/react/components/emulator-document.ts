@@ -66,6 +66,15 @@ const CLEAR_HIDDEN_SETTINGS = `
       })();`;
 
 /**
+ * EmulatorJS requests a screen wake lock without handling a refusal, which
+ * surfaces as an unhandled rejection whenever the browser denies it (headless
+ * browsers, battery saver, an unfocused tab). The lock is best-effort, so a
+ * denied request resolves to an already-released sentinel instead. The script
+ * MUST run before `loader.js`.
+ */
+const TOLERATE_WAKE_LOCK_DENIAL = `{const w=navigator.wakeLock,r=w?.request?.bind(w);if(r)w.request=t=>Promise.resolve().then(()=>r(t)).catch(()=>({released:!0,type:t,addEventListener(){},removeEventListener(){},release:()=>Promise.resolve()}))}`;
+
+/**
  * Stop EmulatorJS from calling home to `cdn.emulatorjs.org` for a version
  * check. Its constructor runs the check whenever `EJS_DEBUG_XX` is true or the
  * hostname is `localhost`/`127.0.0.1`, so the dev server, the browser tests,
@@ -237,6 +246,7 @@ const createEmulatorDocument = (
     </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName, options.saveId || gameName)}</script>
     <script src="${dataUrl}loader.js"></script>

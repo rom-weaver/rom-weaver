@@ -409,6 +409,8 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
         const core = getEmulatorJsCore(loaded.platform, loaded.fileName);
         if (!core) {
+          // The new pick replaces the session even when it cannot play, so drop the previous game's player.
+          if (currentGameId) disposeEntry(currentGameId);
           setError({
             detail: "No emulator core is available for this file. Choose a supported ROM.",
             summary: `Cannot play ${loaded.fileName}.`,
@@ -467,7 +469,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         }
       }
     },
-    [busy],
+    [busy, currentGameId],
   );
   // A drop can carry a ROM and its battery save together; the save rides along with the ROM.
   const handleDroppedFiles = useCallback(
