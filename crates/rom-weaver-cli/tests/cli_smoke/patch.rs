@@ -11576,14 +11576,19 @@ mod termination_signals {
             .args(["--compress-level", "max"])
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        if ignore_hup {
-            // SAFETY: only async-signal-safe signal() runs between fork and exec.
-            unsafe {
-                command.pre_exec(|| {
-                    libc::signal(libc::SIGHUP, libc::SIG_IGN);
-                    Ok(())
-                });
-            }
+        // Set both signals either way so the result does not depend on the runner's inherited dispositions.
+        let disposition = if ignore_hup {
+            libc::SIG_IGN
+        } else {
+            libc::SIG_DFL
+        };
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(move || {
+                libc::signal(libc::SIGHUP, disposition);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
         }
         let child = command.spawn().expect("spawn apply");
         let deadline = Instant::now() + Duration::from_secs(60);

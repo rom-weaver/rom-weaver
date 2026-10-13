@@ -9,6 +9,20 @@ use std::{
 fn binary() -> ProcessCommand {
     let mut command = ProcessCommand::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // The CLI keeps an inherited SIG_IGN for SIGHUP/SIGTERM (nohup semantics), so a test runner
+    // started with either ignored would make the termination tests wait forever for a handler.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+    }
     command
 }
 
