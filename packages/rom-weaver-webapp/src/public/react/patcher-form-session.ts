@@ -600,8 +600,8 @@ const useLocalApplyPatchFormSession = ({
   );
 
   const updateSettings = useCallback(
-    (nextSettings: ApplyPatchFormSettings) => {
-      setChecksumOverrideChecked(false);
+    (nextSettings: ApplyPatchFormSettings, keepChecksumOverride = false) => {
+      if (!keepChecksumOverride) setChecksumOverrideChecked(false);
       setApplyQueued(false);
       clearDismissibleErrors();
       invalidateCompletedOutputState();
@@ -622,13 +622,16 @@ const useLocalApplyPatchFormSession = ({
   );
   useEffect(() => {
     if (!outputCompressionEdited || activeCompression === effectiveActiveCompression) return;
-    updateSettings({
-      ...activeSettings,
-      output: {
-        ...activeSettings.output,
-        compression: effectiveActiveCompression,
+    updateSettings(
+      {
+        ...activeSettings,
+        output: {
+          ...activeSettings.output,
+          compression: effectiveActiveCompression,
+        },
       },
-    });
+      true,
+    );
   }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
@@ -1331,13 +1334,17 @@ const useLocalApplyPatchFormSession = ({
       },
       setOutputCompression: (value: string) => {
         setOutputCompressionEdited(true);
-        updateSettings({
-          ...activeSettings,
-          output: {
-            ...activeSettings.output,
-            compression: value as "auto" | CompressionFormat,
+        // The output format never changes the input checks, so it keeps the "apply anyway" override.
+        updateSettings(
+          {
+            ...activeSettings,
+            output: {
+              ...activeSettings.output,
+              compression: value as "auto" | CompressionFormat,
+            },
           },
-        });
+          true,
+        );
       },
       setOutputCompressOption: (key: string, value: string, updates?: Record<string, string>) => {
         // Per-job override of a flat compression setting (zipCodec, compressionProfile, …)
