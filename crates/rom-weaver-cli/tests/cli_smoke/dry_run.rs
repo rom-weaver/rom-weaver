@@ -447,3 +447,25 @@ fn ppf_undo_dry_run_marks_raw_disc_companion_outputs_unknown() {
         );
     }
 }
+
+#[test]
+fn read_only_subcommand_dry_runs_report_a_read_only_plan() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), [0u8; 32]).expect("rom fixture");
+    let save = temp.child("x.sav");
+    fs::write(save.path(), [0u8; 32]).expect("save fixture");
+    let rom_s = rom.path().to_str().expect("path");
+    let save_s = save.path().to_str().expect("path");
+    for args in [
+        ["cheat", "list", "-n", "-i", rom_s, "--json"].as_slice(),
+        ["identify", "database", "list", "-n", "--json"].as_slice(),
+        ["identify", "database", "path", "-n", "--json"].as_slice(),
+        ["save", "inspect", "-n", save_s, "--json"].as_slice(),
+    ] {
+        let report = run_single_json_event(args, 0);
+        assert_eq!(report["details"]["dry_run"], true, "args={args:?}");
+        assert_eq!(report["details"]["read_only"], true, "args={args:?}");
+        assert_eq!(report["details"]["outputs_unknown"], false, "args={args:?}");
+    }
+}
