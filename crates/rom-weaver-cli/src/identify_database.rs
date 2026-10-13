@@ -699,6 +699,17 @@ fn import_redump_dat(
             database_dir.display()
         ))
     })?;
+    let mut magic = [0u8; 2];
+    if fs::File::open(dump)
+        .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut magic))
+        .is_err()
+        || &magic != b"PK"
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "Redump DAT archive `{}` is not a ZIP file",
+            dump.display()
+        )));
+    }
     let entries = list_regular_archive_file_entries(dump, "zip")?;
     let mut dat_entries: Vec<DumpEntry> = Vec::new();
     for entry in &entries {
