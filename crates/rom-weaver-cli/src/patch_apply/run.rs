@@ -967,11 +967,17 @@ impl CliApp {
         // inference against the prepared input) and verify declared
         // base-basis steps against the base once, before the chain runs.
         let cheat_patch_count = run.cheat_patch_count();
+        let shared_patch_basis = run
+            .weave_resolution
+            .as_ref()
+            .map(|resolution| resolution.patch_basis)
+            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         merge_apply_step_declarations(
             &mut run.patch_step_metadata,
             &run.args.patch_input_check,
             &run.args.patch_output_check,
             run.resolved_patches.len().saturating_sub(cheat_patch_count),
+            shared_patch_basis,
         )
         .map_err(|error| failed("validate", error))?;
         let mut patch_steps = normalize_patch_apply_steps(
@@ -982,11 +988,6 @@ impl CliApp {
             &chain_n64_modes,
             cheat_patch_count,
         );
-        let shared_patch_basis = run
-            .weave_resolution
-            .as_ref()
-            .map(|resolution| resolution.patch_basis)
-            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         // A target lane may begin from another ROM member or from a
         // generated output. Plan it only after that seed is available;
         // using the command's root input here would verify its authored
