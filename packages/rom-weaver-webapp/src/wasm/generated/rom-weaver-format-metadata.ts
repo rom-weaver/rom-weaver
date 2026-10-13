@@ -585,7 +585,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
       "aliases": [],
       "level": {
         "max": 9,
-        "min": 0
+        "min": 1
       },
       "profileKind": "standard"
     },
@@ -645,7 +645,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
       "aliases": [],
       "level": {
         "max": 9,
-        "min": 0
+        "min": 1
       },
       "profileKind": "standard"
     },

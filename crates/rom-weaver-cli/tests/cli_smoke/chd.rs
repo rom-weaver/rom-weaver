@@ -2400,3 +2400,68 @@ fn build_pcm_wave(data: &[u8]) -> Vec<u8> {
     bytes.extend_from_slice(data);
     bytes
 }
+
+/// `formats --json` advertises each codec's level range, and the named level
+/// profiles must resolve to a level every CHD codec accepts (`min` used to map
+/// to 0, which CHD zlib/cdzl reject).
+#[test]
+fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec() {
+    let formats: Value =
+        serde_json::from_slice(&command_stdout(&["formats", "--json"], 0)).expect("formats json");
+    let chd_codecs = formats["containers"]
+        .as_array()
+        .expect("containers")
+        .iter()
+        .find(|format| format["name"] == "chd")
+        .expect("chd format")["codecs"]
+        .clone();
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.bin").path(), vec![0x5a_u8; 8 * 2352]).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let cue = temp.child("disc.cue");
+    let mut checked = 0;
+    for codec in formats["codecs"].as_array().expect("codecs") {
+        let name = codec["name"].as_str().expect("codec name");
+        if !chd_codecs
+            .as_array()
+            .expect("chd codecs")
+            .contains(&Value::from(name))
+            || codec["minLevel"].is_null()
+        {
+            continue;
+        }
+        let min = codec["minLevel"].as_i64().expect("min");
+        let max = codec["maxLevel"].as_i64().expect("max");
+        let attempts = [
+            (format!("{name}:{min}"), None),
+            (format!("{name}:{max}"), None),
+            (name.to_string(), Some("min")),
+        ];
+        for (codec_arg, profile) in &attempts {
+            let out = temp.child(format!("{name}.chd"));
+            let _ = fs::remove_file(out.path());
+            let mut args = vec![
+                "compress",
+                "--input",
+                cue.path().to_str().expect("path"),
+                "--output",
+                out.path().to_str().expect("path"),
+                "--codec",
+                codec_arg.as_str(),
+                "--quiet",
+            ];
+            if let Some(profile) = profile {
+                args.extend(["--level", profile]);
+            }
+            command_stdout(&args, 0);
+            assert!(out.path().exists(), "{codec_arg} {profile:?}");
+        }
+        checked += 1;
+    }
+    assert!(
+        checked >= 8,
+        "expected every levelled CHD codec, got {checked}"
+    );
+}
