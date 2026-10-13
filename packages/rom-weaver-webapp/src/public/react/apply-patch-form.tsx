@@ -1,4 +1,9 @@
-import { weaveCheckTokens, selectWeaveMembers, validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
+import {
+  gateWeaveChainChecks,
+  weaveCheckTokens,
+  selectWeaveMembers,
+  validatePatchDependencies,
+} from "../../lib/weave/weave-targets.ts";
 import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
@@ -424,10 +429,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         mode: patchInputBasisRef.current,
         overrides: ids.map((id) => weaveMetaRef.current.get(id || "")?.basis),
       });
+      const gatedChecks = gateWeaveChainChecks(
+        ids.map((id, index) => {
+          const meta = weaveMetaRef.current.get(id || "");
+          const inputChecks = weaveCheckTokens(meta?.inputChecks);
+          return {
+            target: meta?.target,
+            input: meta?.input,
+            enabled: !disabled.has(index),
+            authoredInputChecks: !!inputChecks,
+            inputChecks,
+            outputChecks: weaveCheckTokens(meta?.outputChecks),
+          };
+        }),
+      );
       ids.forEach((id, index) => {
         const meta = weaveMetaRef.current.get(id || "");
-        const inputChecks = weaveCheckTokens(meta?.inputChecks);
-        const outputChecks = weaveCheckTokens(meta?.outputChecks);
+        const { inputChecks, outputChecks } = gatedChecks[index] || {};
         const basis = resolved[index] || "auto";
         chainMeta.set(index, {
           id: meta?.id || id,
@@ -1095,12 +1113,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           ...(basis ? { basis } : {}),
         };
       });
+      const enabled = runOptions.map((_option, index) => !disabledPatchIds.has(patchIds[index] || ""));
+      // A disabled entry breaks its lane's chain, so later declared states no longer describe the bytes.
+      const gatedChecks = gateWeaveChainChecks(
+        runOptions.map((option, index) => ({
+          ...option,
+          enabled: enabled[index] ?? true,
+          authoredInputChecks: !!weaveCheckTokens(weaveMetaRef.current.get(patchIds[index] || "")?.inputChecks),
+        })),
+      );
+      for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
           input: option.input,
           target: option.target,
-          enabled: !disabledPatchIds.has(patchIds[index] || ""),
+          enabled: enabled[index] ?? true,
         })),
       );
       if (dependencyError) throw new Error(dependencyError);
