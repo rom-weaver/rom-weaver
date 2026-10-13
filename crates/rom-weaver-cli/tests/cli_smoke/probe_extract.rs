@@ -2218,3 +2218,49 @@ fn probe_select_of_unrecognised_archive_member_names_the_member() {
         "{stderr}"
     );
 }
+
+#[test]
+fn raw_file_with_stream_signature_is_not_decoded_as_itself() {
+    let temp = setup_temp_dir();
+    for (name, magic, stream) in [
+        ("gz-lookalike.bin", &b"\x1f\x8b"[..], "gzip"),
+        ("bz2-lookalike.bin", &b"BZh"[..], "bzip2"),
+    ] {
+        let mut bytes = vec![0_u8; 4096];
+        bytes[..magic.len()].copy_from_slice(magic);
+        let source = temp.child(name);
+        fs::write(source.path(), &bytes).expect("lookalike fixture");
+        let source_arg = source.path().to_str().expect("path");
+
+        let stderr = stderr_of_failed(&["probe", "--input", source_arg]);
+        assert!(
+            stderr.contains(&format!("is not a valid {stream} stream")),
+            "{stderr}"
+        );
+
+        let out = temp.child(format!("{name}.out"));
+        let stderr = stderr_of_failed(&[
+            "extract",
+            "--input",
+            source_arg,
+            "--output",
+            out.path().to_str().expect("path"),
+        ]);
+        assert!(
+            stderr.contains(&format!("is not a valid {stream} stream")),
+            "{stderr}"
+        );
+        assert!(!out.path().exists(), "extract left output for {name}");
+
+        let raw = command_stdout(
+            &["checksum", "--input", source_arg, "--no-extract", "--json"],
+            0,
+        );
+        let resolved = command_stdout(&["checksum", "--input", source_arg, "--json"], 0);
+        assert_eq!(
+            parse_single_json_line(&resolved)["label"],
+            parse_single_json_line(&raw)["label"],
+            "{name} must hash as a raw file"
+        );
+    }
+}
