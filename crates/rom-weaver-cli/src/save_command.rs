@@ -373,6 +373,14 @@ impl CliApp {
                 "output": output,
             }})),
         );
+        if args.dry_run
+            && let Some(details) = report.details.as_mut().and_then(Value::as_object_mut)
+        {
+            details.insert("dry_run".to_string(), json!(true));
+            details.insert("writes".to_string(), json!([]));
+            details.insert("downloads".to_string(), json!([]));
+            details.insert("read_only".to_string(), json!(true));
+        }
         if let Some(path) = output {
             report = Self::attach_emitted_files_details(report, vec![path], Some("game-save"));
         }
