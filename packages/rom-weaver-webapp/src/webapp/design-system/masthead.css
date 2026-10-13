@@ -1062,6 +1062,11 @@
   background: var(--thread);
   border-radius: 50%;
 }
+/* The letter is generated content so it stays out of the button's visible
+   text: axe's label-content-name-mismatch counts aria-hidden text nodes. */
+.rw-app .theme-auto-badge::before {
+  content: attr(data-badge);
+}
 .rw-app .theme-auto-icon svg {
   mask-image: radial-gradient(circle at 85% 85%, #0000 8px, #000 8.5px);
 }
