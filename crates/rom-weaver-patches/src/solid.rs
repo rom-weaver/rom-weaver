@@ -13,6 +13,7 @@ use rom_weaver_core::{
     PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
     SolidPatchMetadata, ValidationCodeError,
 };
+use tracing::debug;
 
 use crate::checksum_validation_suffix;
 use crate::shared::civil_from_days;
@@ -144,6 +145,7 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
+        let write_plan = plan_patch_writes(&parsed, &request.input, patch_path)?;
         let thread_capability = parallel_per_record_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         if let Some(parent) = request.output.parent() {
@@ -153,6 +155,7 @@ impl PatchHandler for SolidPatchHandler {
             let (execution, pool) = context.build_pool(thread_capability)?;
             apply_parsed_patch_parallel_to_file(
                 &parsed,
+                write_plan,
                 &request.input,
                 &request.output,
                 &pool,
@@ -160,7 +163,13 @@ impl PatchHandler for SolidPatchHandler {
             )?;
             execution
         } else {
-            apply_parsed_patch_to_file(&parsed, &request.input, &request.output, context)?;
+            apply_parsed_patch_to_file(
+                &parsed,
+                write_plan,
+                &request.input,
+                &request.output,
+                context,
+            )?;
             planned_execution
         };
 
@@ -190,9 +199,7 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
-        let source_len =
-            usize_from_u64(fs::metadata(&request.input)?.len(), "SOLID source length")?;
-        let _ = build_primitive_write_plans(&parsed, source_len)?;
+        plan_patch_writes(&parsed, &request.input, patch_path)?;
         let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
@@ -331,7 +338,14 @@ impl PatchHandler for SolidPatchHandler {
         let replay_path = context
             .temp_paths()
             .next_path("solid-create-replay", Some("bin"));
-        apply_parsed_patch_to_file(&parsed, &request.original, &replay_path, context)?;
+        let write_plan = plan_patch_writes(&parsed, &request.original, &replay_path)?;
+        apply_parsed_patch_to_file(
+            &parsed,
+            write_plan,
+            &request.original,
+            &replay_path,
+            context,
+        )?;
         let replay_matches = files_equal(&replay_path, &request.modified)?;
         let _ = fs::remove_file(&replay_path);
         if !replay_matches {
@@ -725,15 +739,34 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
     })
 }
 
+/// Plans the primitive writes against `source_path`, reporting an impossible plan as a corrupt
+/// `patch_path`.
+fn plan_patch_writes(
+    parsed: &ParsedSolidPatch,
+    source_path: &Path,
+    patch_path: &Path,
+) -> Result<(Vec<PrimitiveWritePlan>, usize)> {
+    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
+    build_primitive_write_plans(parsed, source_len).map_err(|error| {
+        debug!(patch = %patch_path.display(), %error, "SOLID write plan rejected");
+        let detail = match error {
+            RomWeaverError::Validation(message) => message,
+            other => other.to_string(),
+        };
+        RomWeaverError::Validation(format!(
+            "SOLID patch `{}` is corrupt: {detail}",
+            patch_path.display()
+        ))
+    })
+}
+
 fn apply_parsed_patch_to_file(
     parsed: &ParsedSolidPatch,
+    (plans, required_output_len): (Vec<PrimitiveWritePlan>, usize),
     source_path: &Path,
     output_path: &Path,
     context: &OperationContext,
 ) -> Result<()> {
-    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
-    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
-
     let writes = plans
         .iter()
         .map(|plan| {
@@ -763,13 +796,12 @@ fn apply_parsed_patch_to_file(
 
 fn apply_parsed_patch_parallel_to_file(
     parsed: &ParsedSolidPatch,
+    (plans, required_output_len): (Vec<PrimitiveWritePlan>, usize),
     source_path: &Path,
     output_path: &Path,
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<()> {
-    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
-    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
     let writes = pool.install(|| {
         plans
             .par_iter()
@@ -957,6 +989,13 @@ fn build_primitive_write_plans(
         }
 
         let start = usize_from_u64(cursor, "SOLID primitive address")?;
+        // Primitives may extend the output but never leave a hole; a start past the end is a
+        // corrupt address that would otherwise size the output from garbage.
+        if start > required_output_len {
+            return Err(RomWeaverError::Validation(format!(
+                "SOLID primitive {primitive_index} writes at offset {start}, past the end of the {required_output_len}-byte output"
+            )));
+        }
         let len = primitive.write_len();
         let end = checked_add_usize(start, len, "SOLID primitive write end")?;
         required_output_len = required_output_len.max(end);

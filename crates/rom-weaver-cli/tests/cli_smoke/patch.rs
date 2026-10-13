@@ -12411,6 +12411,114 @@ fn patch_apply_and_validate_reject_a_piped_rom_input() {
 }
 
 #[test]
+fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x11_u8; 64]).expect("rom fixture");
+    // SOLID v4, 2-byte base addresses, one literal primitive at a base offset of 0xff00,
+    // far past the 64-byte ROM, as a flipped address byte produces.
+    let mut solid = b"SP\x04\x01".to_vec();
+    solid.extend_from_slice(&1_u32.to_le_bytes());
+    solid.extend_from_slice(&[0; 16 + 3]);
+    solid.extend_from_slice(&[0, 0, 0]);
+    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0xff, b'Z']);
+    let patch = temp.child("corrupt.solid");
+    fs::write(patch.path(), solid).expect("solid fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+        ],
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--ignore-checksum-validation",
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(stderr.contains("corrupt.solid` is corrupt"), "{stderr}");
+        assert!(!output.path().exists(), "{args:?} left an output");
+    }
+}
+
+#[test]
+fn patch_apply_removes_the_output_when_the_handler_fails_after_writing() {
+    let temp = setup_temp_dir();
+    let original = temp.child("orig.bin");
+    let modified = temp.child("mod.bin");
+    fs::write(original.path(), pseudo_random_bytes(4096, 7)).expect("original");
+    let mut changed = pseudo_random_bytes(4096, 7);
+    changed[100] ^= 0xff;
+    fs::write(modified.path(), changed).expect("modified");
+    let patch = temp.child("change.bps");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    // Break the declared target CRC but keep the patch CRC valid, so BPS only fails after
+    // writing the output.
+    let mut bps = fs::read(patch.path()).expect("bps");
+    let footer = bps.len() - 8;
+    bps[footer] ^= 0xff;
+    let mut crc = flate2::Crc::new();
+    crc.update(&bps[..bps.len() - 4]);
+    let patch_crc_at = bps.len() - 4;
+    bps[patch_crc_at..].copy_from_slice(&crc.sum().to_le_bytes());
+    fs::write(patch.path(), bps).expect("bad target crc bps");
+
+    let output = temp.child("out.bin");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+        1,
+    );
+    assert!(
+        !output.path().exists(),
+        "a failed apply left a partial output"
+    );
+}
+
+#[test]
 fn patch_output_size_check_mismatch_names_the_output() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.bin");
