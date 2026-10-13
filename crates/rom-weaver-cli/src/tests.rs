@@ -1240,12 +1240,12 @@ fn validate_patch_input_size_enforces_exact_and_minimum() {
     let path = write_repair_test_file("patch-validate-size.bin", &[0u8; 64]);
 
     // Exact-size match returns a descriptive label.
-    let label = CliApp::validate_patch_input_size(&path, Some(64), None)
+    let label = CliApp::validate_patch_size(&path, "input", Some(64), None)
         .expect("matching size should pass");
     assert!(label.contains("size=64"), "label: {label}");
 
     // Exact-size mismatch is rejected.
-    let error = CliApp::validate_patch_input_size(&path, Some(128), None)
+    let error = CliApp::validate_patch_size(&path, "input", Some(128), None)
         .expect_err("size mismatch should fail");
     assert!(
         matches!(error, RomWeaverError::Validation(ref message) if message.contains("input size mismatch")),
@@ -1253,14 +1253,14 @@ fn validate_patch_input_size_enforces_exact_and_minimum() {
     );
 
     // Below the minimum is rejected; at-or-above passes.
-    let error = CliApp::validate_patch_input_size(&path, None, Some(65))
+    let error = CliApp::validate_patch_size(&path, "input", None, Some(65))
         .expect_err("below minimum should fail");
     assert!(
         matches!(error, RomWeaverError::Validation(ref message) if message.contains("below required minimum")),
         "unexpected error: {error:?}"
     );
-    let label =
-        CliApp::validate_patch_input_size(&path, None, Some(64)).expect("at minimum should pass");
+    let label = CliApp::validate_patch_size(&path, "input", None, Some(64))
+        .expect("at minimum should pass");
     assert!(label.contains("min_size=64"), "label: {label}");
 
     let _ = std::fs::remove_file(path);
