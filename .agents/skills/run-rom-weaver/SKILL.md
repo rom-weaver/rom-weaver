@@ -77,5 +77,6 @@ Environment overrides:
 - Browser startup timeout: confirm the server URL returns HTTP 200 with `curl -sk https://localhost:5191/ -o /dev/null -w '%{http_code}'`.
 - CLI output-extension error: add `--no-compress` for a raw file, or use a supported compressed extension.
 - Missing CLI binary: run `cargo build -p rom-weaver-cli --release`.
+- Old behavior after a rebuild: restart the preview server. It caches `dist` for the whole session.
 
 The bundled server supplies the COOP/COEP headers needed by `SharedArrayBuffer`. A plain static server does not reproduce the real runtime.
