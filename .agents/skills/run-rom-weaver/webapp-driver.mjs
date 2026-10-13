@@ -6,7 +6,8 @@
 //   node .agents/skills/run-rom-weaver/webapp-driver.mjs load
 //   node .agents/skills/run-rom-weaver/webapp-driver.mjs apply
 //
-// RW_URL selects the server (default https://localhost:5191/).
+// RW_URL selects the server (default https://localhost:5191/). The driver
+// opens the Apply route under it; the site root is the home page.
 // RW_OUT selects the output directory (default /tmp/rw-driver).
 // RW_HEAD=1 opens a visible browser.
 
@@ -21,7 +22,8 @@ const REPO = path.resolve(HERE, "..", "..", "..");
 // from there regardless of where this script lives or runs.
 const require = createRequire(path.join(REPO, "packages/rom-weaver-webapp/package.json"));
 const { chromium } = require("playwright");
-const URL = process.env.RW_URL || "https://localhost:5191/";
+const BASE_URL = process.env.RW_URL || "https://localhost:5191/";
+const APPLY_URL = new URL("apply-patches", BASE_URL.endsWith("/") ? BASE_URL : `${BASE_URL}/`).href;
 const OUT = process.env.RW_OUT || "/tmp/rw-driver";
 const HEADLESS = process.env.RW_HEAD !== "1";
 const cmd = process.argv[2] || "load";
@@ -41,8 +43,8 @@ async function boot() {
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  log("navigating", URL);
-  await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+  log("navigating", APPLY_URL);
+  await page.goto(APPLY_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
   // The unified file input is the stable anchor that the app has mounted.
   await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached", timeout: 60000 });
   // Give the wasm warmup extraction a moment to finish before driving inputs.
