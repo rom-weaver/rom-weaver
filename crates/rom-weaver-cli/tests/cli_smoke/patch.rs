@@ -11786,3 +11786,212 @@ fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
         "verdicts must not carry escaped newlines: {stdout}"
     );
 }
+
+fn run_patch_check_command(
+    command: &str,
+    original: &assert_fs::fixture::ChildPath,
+    patch: &assert_fs::fixture::ChildPath,
+    output: Option<&assert_fs::fixture::ChildPath>,
+    checks: &[(&str, String)],
+    expected_code: i32,
+) -> serde_json::Value {
+    let mut args = vec![
+        "patch",
+        command,
+        "--input",
+        original.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+    ];
+    if let Some(output) = output {
+        args.extend([
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ]);
+    }
+    for (flag, value) in checks {
+        args.extend([*flag, value.as_str()]);
+    }
+    args.push("--jsonl");
+    run_single_json_event(&args, expected_code)
+}
+
+#[test]
+fn patch_apply_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for (name, checks, expected_flag) in [
+        (
+            "bad-input.bin",
+            vec![("--patch-input-check", "crc32=deadbeef".to_string())],
+            "--patch-input-check",
+        ),
+        (
+            "bad-output.bin",
+            vec![("--patch-output-check", "crc32=deadbeef".to_string())],
+            "--patch-output-check",
+        ),
+        (
+            "bad-both.bin",
+            vec![
+                ("--patch-input-check", format!("crc32={input_crc}")),
+                ("--patch-output-check", "crc32=deadbeef".to_string()),
+            ],
+            "--patch-output-check",
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 1);
+        assert_eq!(event["status"], "failed", "{name}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(expected_flag), "{name}: {label}");
+        assert!(label.contains("update.bps"), "{name}: {label}");
+        assert!(label.contains("expected deadbeef"), "{name}: {label}");
+        assert!(label.contains("actual"), "{name}: {label}");
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+
+    // Either flag may be given alone.
+    for (name, checks) in [
+        (
+            "ok-input.bin",
+            vec![("--patch-input-check", format!("crc32={input_crc}"))],
+        ),
+        (
+            "ok-output.bin",
+            vec![("--patch-output-check", format!("crc32={output_crc}"))],
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 0);
+        assert_eq!(event["status"], "succeeded", "{name}");
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            b"hello new world",
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let checks = [(flag, "crc32=deadbeef".to_string())];
+        let event = run_patch_check_command("validate", &original, &patch, None, &checks, 1);
+        assert_eq!(event["status"], "failed", "{flag}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(flag), "{flag}: {label}");
+        assert!(label.contains("update.bps"), "{flag}: {label}");
+        assert!(label.contains("expected deadbeef"), "{flag}: {label}");
+    }
+
+    let checks = [
+        ("--patch-input-check", format!("crc32={input_crc}")),
+        ("--patch-output-check", format!("crc32={output_crc}")),
+    ];
+    let event = run_patch_check_command("validate", &original, &patch, None, &checks, 0);
+    assert_eq!(event["status"], "succeeded");
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_create_rejects_non_regular_modified_input_without_leaving_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    fs::write(original.path(), b"original ROM bytes").expect("original fixture");
+    let fifo = temp.child("modified.fifo");
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(fifo.path())
+            .status()
+            .expect("mkfifo")
+            .success()
+    );
+    // Holding the FIFO open read-write keeps any open by the command from blocking.
+    let _hold = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fifo.path())
+        .expect("open fifo");
+
+    for name in ["from-fifo.bps", "from-fifo.ips"] {
+        let output = temp.child(name);
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                fifo.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            1,
+        );
+        assert_eq!(event["status"], "failed", "{name}");
+        assert!(
+            event["label"]
+                .as_str()
+                .expect("label")
+                .contains("not a regular file"),
+            "{name}: {}",
+            event["label"]
+        );
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+}
+
+#[test]
+fn patch_validate_independent_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+    let run = |checks: &[(&str, String)], code: i32| {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--independent",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+        ];
+        for (flag, value) in checks {
+            args.extend([*flag, value.as_str()]);
+        }
+        args.push("--jsonl");
+        run_single_json_event(&args, code)
+    };
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let event = run(&[(flag, "crc32=deadbeef".to_string())], 1);
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains("FAIL update.bps"), "{flag}: {label}");
+        assert!(label.contains(flag), "{flag}: {label}");
+    }
+    let event = run(
+        &[
+            ("--patch-input-check", format!("crc32={input_crc}")),
+            ("--patch-output-check", format!("crc32={output_crc}")),
+        ],
+        0,
+    );
+    assert!(
+        event["label"]
+            .as_str()
+            .expect("label")
+            .contains("pass update.bps")
+    );
+}

@@ -350,7 +350,7 @@ Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches si
 
 For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
-Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
+Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except `.bin`: a `.bin` output is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
 `--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
 
@@ -463,7 +463,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--default-patch-basis base\|previous\|auto` | Shared input basis recorded as `patchBasis`. The default is `auto`. |
 | `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
 | `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
-| `--patch-optional` | Marks the preceding patch optional. |
+| `--patch-optional true\|false` | Marks the preceding patch optional; the value is required. |
 | `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
 | `--expect-out` | Expected final result checks. |
 | `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
