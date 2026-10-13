@@ -12464,6 +12464,34 @@ fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
 }
 
 #[test]
+fn patch_apply_keeps_an_existing_output_when_a_forced_apply_fails() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("rom.bin");
+    fs::write(rom.path(), pseudo_random_bytes(4096, 3)).expect("rom");
+    let output = temp.child("out.bin");
+    fs::write(output.path(), b"keep").expect("existing output");
+    let patch = temp.child("broken.bps");
+    fs::write(patch.path(), b"BPS1 not a real patch").expect("patch");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--force",
+        ])
+        .assert()
+        .code(1);
+    assert_eq!(fs::read(output.path()).expect("output kept"), b"keep");
+}
+
+#[test]
 fn patch_apply_removes_the_output_when_the_handler_fails_after_writing() {
     let temp = setup_temp_dir();
     let original = temp.child("orig.bin");
