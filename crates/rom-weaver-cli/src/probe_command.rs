@@ -111,6 +111,21 @@ impl CliApp {
             report.label = report
                 .label
                 .replace(&probe_source.display().to_string(), &shown);
+            if !from_stdin && extracted_archives > 0 {
+                let prefix = format!("no registered handler matched `{shown}`");
+                if report.label.contains(&prefix) {
+                    let member = probe_source
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    report.label = report.label.replace(
+                        &prefix,
+                        &format!(
+                            "selected archive member `{member}` of `{shown}` is not a recognised container, patch, or disc image; use `checksum -s` to hash it"
+                        ),
+                    );
+                }
+            }
         }
         self.finish_probe(
             report,

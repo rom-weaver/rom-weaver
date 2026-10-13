@@ -358,9 +358,14 @@ impl CliApp {
                     current_source = %current_source.display(),
                     format = handler.descriptor().name,
                     error = %error,
-                    "auto-extract stopped: handler probe failed"
+                    "auto-extract failed: handler probe failed"
                 );
-                break;
+                return Err(RomWeaverError::Validation(format!(
+                    "{} payload extraction failed for `{}` ({}): {error}",
+                    labels.source_label,
+                    current_source.display(),
+                    handler.descriptor().name
+                )));
             }
 
             let next_depth = depth + 1;

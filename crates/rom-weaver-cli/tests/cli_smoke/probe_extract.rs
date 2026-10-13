@@ -2125,3 +2125,96 @@ fn extract_failure_preserves_preexisting_output_dir() {
 
     assert!(out.path().is_dir(), "pre-existing output dir was removed");
 }
+
+fn stderr_of_failed(args: &[&str]) -> String {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(args)
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
+    for name in ["empty.zip", "empty.7z"] {
+        let temp = setup_temp_dir();
+        let input = temp.child(name);
+        input.write_str("").expect("empty fixture");
+        let out = temp.child("out");
+        let stderr = stderr_of_failed(&[
+            "extract",
+            input.path().to_str().expect("path"),
+            "-o",
+            out.path().to_str().expect("path"),
+        ]);
+        assert!(stderr.contains("is empty"), "{name}: {stderr}");
+        assert!(!out.path().exists(), "{name}: empty output dir left behind");
+    }
+}
+
+#[test]
+fn checksum_fails_on_truncated_zip_instead_of_hashing_the_container() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("payload.bin").path(),
+        pseudo_random_bytes(200_000, 7),
+    )
+    .expect("payload");
+    let zip = temp.child("full.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("payload.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let bytes = fs::read(zip.path()).expect("zip bytes");
+    let truncated = temp.child("truncated.zip");
+    fs::write(truncated.path(), &bytes[..bytes.len() / 2]).expect("truncated zip");
+    let stderr = stderr_of_failed(&[
+        "checksum",
+        "--input",
+        truncated.path().to_str().expect("path"),
+    ]);
+    assert!(stderr.contains("decompression failed"), "{stderr}");
+}
+
+#[test]
+fn probe_select_of_unrecognised_archive_member_names_the_member() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), b"aaaa").expect("a");
+    fs::write(temp.child("b.bin").path(), b"bbbb").expect("b");
+    let zip = temp.child("multi.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("a.bin").path().to_str().expect("path"),
+            "--input",
+            temp.child("b.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let stderr = stderr_of_failed(&[
+        "probe",
+        "--input",
+        zip.path().to_str().expect("path"),
+        "--select",
+        "b.bin",
+    ]);
+    assert!(stderr.contains("archive member `b.bin`"), "{stderr}");
+    assert!(
+        !stderr.contains("no registered handler matched"),
+        "{stderr}"
+    );
+}
