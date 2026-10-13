@@ -35,6 +35,9 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-validate command"
         );
+        if let Some(report) = Self::unseekable_rom_input_failure("patch validate", &args.input) {
+            return self.finish("patch-validate", report);
+        }
         let PatchValidateCommand {
             input,
             select,
@@ -394,6 +397,7 @@ impl CliApp {
             n64_byte_order,
             probe_threads,
             validation_steps,
+            handler_warnings: Vec::new(),
         };
         let mut formats = Vec::with_capacity(patch_count);
         for (index, patch) in resolved_patches.iter().enumerate() {
@@ -420,7 +424,7 @@ impl CliApp {
             validation_labels.push(format!("n64_byte_order={}", n64_byte_order.id()));
         }
         validation_labels.extend(extracted_patch_notes);
-        patch_validate_passed_report(
+        let mut report = patch_validate_passed_report(
             formats,
             patch_count,
             validation_labels,
@@ -428,7 +432,9 @@ impl CliApp {
             effective_expected_size,
             expected_input_checksums,
             context,
-        )
+        );
+        Self::append_report_warnings(&mut report, chain.handler_warnings);
+        report
     }
 
     /// Strips the header (with `--strip-header`) and transforms the N64 byte order of the
@@ -559,8 +565,9 @@ impl CliApp {
             &transformed_checksum_hints
         };
         if run.effective_expected_size.is_some() || run.validate_with_min_size.is_some() {
-            let label = Self::validate_patch_input_size(
+            let label = Self::validate_patch_size(
                 validate_input,
+                "input",
                 run.effective_expected_size,
                 run.validate_with_min_size,
             )
@@ -743,7 +750,7 @@ impl CliApp {
             );
         }
         if enforce_checks && !declared_base && !declared_input.is_empty() {
-            Self::verify_chain_step_state(&chain.current_input, declared_input, context)
+            Self::verify_chain_step_state(&chain.current_input, "input", declared_input, context)
                 .map_err(|error| check_failed("--patch-input-check", error))?;
         }
 
@@ -851,6 +858,11 @@ impl CliApp {
             }
             return Err(Box::new(failure));
         }
+        let mut report = report;
+        Self::lift_handler_label_warnings(&mut report);
+        chain
+            .handler_warnings
+            .extend(Self::report_warnings(&report));
         if !progress_tracker.saw_meaningful_running_progress() {
             self.emit_running(
                 OperationLabel {
@@ -876,7 +888,7 @@ impl CliApp {
         }
         if let Some(output) = validate_output {
             if enforce_checks && !declared_output.is_empty() {
-                Self::verify_chain_step_state(&output, declared_output, context)
+                Self::verify_chain_step_state(&output, "output", declared_output, context)
                     .map_err(|error| check_failed("--patch-output-check", error))?;
             }
             chain.current_input = output;
@@ -1107,7 +1119,7 @@ impl CliApp {
             ))
         };
         if !input_check.is_empty() {
-            Self::verify_chain_step_state(&job.input, input_check, context)
+            Self::verify_chain_step_state(&job.input, "input", input_check, context)
                 .map_err(|error| mismatch("--patch-input-check", error))?;
         }
         if output_check.is_empty() {
@@ -1131,7 +1143,7 @@ impl CliApp {
             )
             .and_then(|report| {
                 if report.status == OperationStatus::Succeeded {
-                    Self::verify_chain_step_state(&output, output_check, context)
+                    Self::verify_chain_step_state(&output, "output", output_check, context)
                         .map_err(|error| mismatch("--patch-output-check", error))?;
                 }
                 Ok(report)
@@ -2085,6 +2097,8 @@ struct PatchValidateChain {
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
     validation_steps: Option<Vec<PatchPlanVerdict>>,
+    /// Warnings the handlers reported for the patches validated so far.
+    handler_warnings: Vec<String>,
 }
 
 fn patch_validate_passed_report(

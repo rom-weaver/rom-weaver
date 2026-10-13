@@ -209,7 +209,7 @@ const COMPRESSION_CODECS: &[CompressionCodecMetadata] = &[
     CompressionCodecMetadata {
         name: "flac",
         aliases: &[],
-        level: Some(CompressionCodecLevelMetadata { min: 0, max: 8 }),
+        level: Some(CompressionCodecLevelMetadata { min: 0, max: 9 }),
         profile_kind: "standard",
     },
     CompressionCodecMetadata {
@@ -233,7 +233,7 @@ const COMPRESSION_CODECS: &[CompressionCodecMetadata] = &[
     CompressionCodecMetadata {
         name: "cdfl",
         aliases: &[],
-        level: Some(CompressionCodecLevelMetadata { min: 0, max: 8 }),
+        level: Some(CompressionCodecLevelMetadata { min: 0, max: 9 }),
         profile_kind: "standard",
     },
     CompressionCodecMetadata {

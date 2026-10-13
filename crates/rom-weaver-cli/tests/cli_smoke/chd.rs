@@ -2403,7 +2403,7 @@ fn build_pcm_wave(data: &[u8]) -> Vec<u8> {
 
 /// `formats --json` advertises each codec's level range, and the named level
 /// profiles must resolve to a level every CHD codec accepts (`min` used to map
-/// to 0, which CHD zlib/cdzl reject).
+/// to 0, which CHD zlib/cdzl reject). Levels just outside that range are rejected.
 #[test]
 fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec() {
     let formats: Value =
@@ -2457,6 +2457,24 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
             }
             command_stdout(&args, 0);
             assert!(out.path().exists(), "{codec_arg} {profile:?}");
+        }
+        for outside in [min - 1, max + 1] {
+            let codec_arg = format!("{name}:{outside}");
+            let out = temp.child(format!("{name}-outside.chd"));
+            command_stdout(
+                &[
+                    "compress",
+                    "--input",
+                    cue.path().to_str().expect("path"),
+                    "--output",
+                    out.path().to_str().expect("path"),
+                    "--codec",
+                    codec_arg.as_str(),
+                    "--quiet",
+                ],
+                1,
+            );
+            assert!(!out.path().exists(), "{codec_arg} must be rejected");
         }
         checked += 1;
     }

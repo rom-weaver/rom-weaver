@@ -82,6 +82,8 @@ Output flags remain `-o`/`--output` on commands that accept them. `patch create`
 
 Native `extract` and `compress` also accept input `-`. Their [binary pipeline options](#binary-pipelines) control stdin filenames and binary stdout.
 
+`patch apply` and `patch validate` reject a pipe or other non-regular file as `--input` because patches seek within the ROM.
+
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
@@ -348,9 +350,9 @@ Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches si
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes the raw patched ROM to a sibling named `<input-stem>-patched.<rom-extension>`, including for `.bin` inputs, and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
-Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except `.bin`: a `.bin` output is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
+Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes, except an explicit `.bin` output: it is ambiguous between a raw ROM and a disc image, so it requires `--no-compress` or an explicit `--compress-format`. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
 `--no-compress` and its compatibility alias `--raw` force raw output. `--compress-format`, `--compress-codec`, and `--compress-level` remain the canonical compression flags; `--format`, `--codec`, and `--level` are accepted aliases on `patch apply`.
 
@@ -433,7 +435,7 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--default-patch-basis base|previous|auto` sets the shared input relationship. The default is `auto`.
 - `--patch-basis base|previous|auto` overrides one patch. It binds to the preceding `--patch`.
 - `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure, and exits `1` when any patch fails (all passing exits `0`).
-- `--plan` reports the order, input basis, and verdict of each patch without applying the chain, so mid-chain patches that depend on earlier output are reported as deferred instead of failed.
+- `--plan` reports the order, input basis, and verdict of each patch without applying the chain, so mid-chain patches that depend on earlier output are reported as deferred instead of failed. It only reports: a failed verdict still exits `0`, so read the verdicts from the summary or `details.patch_validation` under `--json`.
 - `--patch-input-check ALGO=HEX` and `--patch-output-check ALGO=HEX` supply the checksums the preceding `--patch` should see going in and produce, for formats that do not carry them.
 - A mid-chain patch with an original-ROM basis (declared, or inferred from its checksums) is checked against the original ROM and runs without its embedded source and target checks, as `patch apply` runs it.
 
@@ -561,7 +563,7 @@ Permission failures exit `1`. Under `--json`, the result document has `"status":
 
 The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`.
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. When that directory cannot be resolved (no `XDG_DATA_HOME` or `HOME` on Unix, no `LOCALAPPDATA` on Windows), `--install` fails and asks for `--man-dir`.
 
 Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 

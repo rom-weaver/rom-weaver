@@ -656,6 +656,29 @@ impl<'a> PatchSelectors<'a> {
 }
 
 impl CliApp {
+    /// Patch handlers seek within and size the ROM, so a pipe or device input would read as empty
+    /// or fail mid-apply. Returns the failure report for such an input.
+    pub(super) fn unseekable_rom_input_failure(
+        command: &str,
+        input: &Path,
+    ) -> Option<OperationReport> {
+        let metadata = fs::metadata(input).ok()?;
+        if metadata.is_file() || metadata.is_dir() {
+            return None;
+        }
+        debug!(command, input = %input.display(), "rejected a non-regular ROM input");
+        Some(OperationReport::failed(
+            OperationFamily::Patch,
+            None,
+            "validate",
+            format!(
+                "{command} input `{}` is not a regular file; patches need a seekable ROM, so write the stream to a file first",
+                input.display()
+            ),
+            None,
+        ))
+    }
+
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         if args.input == Path::new("-") {
             let report = OperationReport::failed(
@@ -665,6 +688,9 @@ impl CliApp {
                 "patch apply does not read from stdin; pass a file path".to_string(),
                 None,
             );
+            return self.finish("patch-apply", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch apply", &args.input) {
             return self.finish("patch-apply", report);
         }
         if args.dry_run {
@@ -1731,7 +1757,7 @@ impl CliApp {
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
         checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
-            let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
+            let label = Self::validate_patch_size(&apply_input, "input", Some(expected_size), None)
                 .map_err(|error| {
                     Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
@@ -3433,11 +3459,12 @@ impl CliApp {
     /// only runs at declared boundaries, which weaves rarely carry.
     pub(super) fn verify_chain_step_state(
         state_path: &Path,
+        side: &str,
         declared: &patch_plan::PlanState,
         context: &OperationContext,
     ) -> Result<()> {
         if let Some(expected_size) = declared.size {
-            Self::validate_patch_input_size(state_path, Some(expected_size), None)?;
+            Self::validate_patch_size(state_path, side, Some(expected_size), None)?;
         }
         if !declared.checksums.is_empty() {
             Self::validate_patch_apply_expected_checksums(
@@ -3473,7 +3500,7 @@ impl CliApp {
         let Some(declared) = step.declared_output.as_ref() else {
             return Ok(());
         };
-        Self::verify_chain_step_state(output, declared, context)
+        Self::verify_chain_step_state(output, "output", declared, context)
     }
 
     /// Resolve the compression plan and re-check the resolved output path: the

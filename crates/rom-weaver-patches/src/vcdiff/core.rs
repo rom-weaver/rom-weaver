@@ -1,4 +1,5 @@
 use super::*;
+use crate::shared::labels::append_warning_labels;
 use rom_weaver_core::{checksum_validation_suffix, require_single_patch_file};
 
 pub(super) const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
@@ -172,6 +173,17 @@ impl PatchHandler for VcdiffPatchHandler {
         }
         let validate_checksums = context.validate_target_checks();
         let input_len = std::fs::metadata(&request.input)?.len();
+        // A window-less patch is valid (it encodes an empty target) but is also what a patch cut
+        // after its header looks like, so the empty result is surfaced.
+        let empty_patch_warnings = if patch.windows.is_empty() {
+            debug!(patch = %patch_path.display(), "VCDIFF patch has no windows");
+            vec![format!(
+                "VCDIFF patch `{}` has no delta windows; it produces an empty ROM",
+                patch_path.display()
+            )]
+        } else {
+            Vec::new()
+        };
         let uses_xdelta_lzma_sections = patch.secondary_compressor_id
             == Some(XDELTA_LZMA_SECONDARY_ID)
             && patch_uses_xdelta_lzma_sections(&patch, &patch_path)?;
@@ -204,11 +216,14 @@ impl PatchHandler for VcdiffPatchHandler {
                 OperationFamily::Patch,
                 Some(self.descriptor.name.to_string()),
                 "apply",
-                format!(
-                    "applied {} patch with {} window(s){}",
-                    self.descriptor.name,
-                    patch.windows.len(),
-                    checksum_suffix
+                append_warning_labels(
+                    format!(
+                        "applied {} patch with {} window(s){}",
+                        self.descriptor.name,
+                        patch.windows.len(),
+                        checksum_suffix
+                    ),
+                    &empty_patch_warnings,
                 ),
                 Some(100.0),
                 Some(execution),
@@ -239,11 +254,14 @@ impl PatchHandler for VcdiffPatchHandler {
                 OperationFamily::Patch,
                 Some(self.descriptor.name.to_string()),
                 "apply",
-                format!(
-                    "applied {} patch with {} window(s){}",
-                    self.descriptor.name,
-                    patch.windows.len(),
-                    checksum_suffix
+                append_warning_labels(
+                    format!(
+                        "applied {} patch with {} window(s){}",
+                        self.descriptor.name,
+                        patch.windows.len(),
+                        checksum_suffix
+                    ),
+                    &empty_patch_warnings,
                 ),
                 Some(100.0),
                 Some(execution),
@@ -336,11 +354,14 @@ impl PatchHandler for VcdiffPatchHandler {
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
-            format!(
-                "applied {} patch with {} window(s){}",
-                self.descriptor.name,
-                patch.windows.len(),
-                checksum_suffix
+            append_warning_labels(
+                format!(
+                    "applied {} patch with {} window(s){}",
+                    self.descriptor.name,
+                    patch.windows.len(),
+                    checksum_suffix
+                ),
+                &empty_patch_warnings,
             ),
             Some(100.0),
             Some(execution),

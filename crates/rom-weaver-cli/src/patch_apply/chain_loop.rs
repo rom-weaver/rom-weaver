@@ -517,6 +517,11 @@ impl CliApp {
             ),
         };
         if report.status != OperationStatus::Succeeded {
+            // A handler that failed mid-write MUST NOT leave a partial output behind.
+            if apply_output.exists() {
+                debug!(output = %apply_output.display(), "removing partial output of a failed patch step");
+                let _ = fs::remove_file(apply_output);
+            }
             let mut report = report;
             if patch_count > 1 {
                 report.label = format!(
@@ -608,7 +613,7 @@ impl CliApp {
                 || member_lane_start)
             && let Some(declared) = verification.and_then(|step| step.declared_input.as_ref())
             && let Err(error) =
-                Self::verify_chain_step_state(&state.current_input, declared, context)
+                Self::verify_chain_step_state(&state.current_input, "input", declared, context)
         {
             let mut coded = ValidationCodeError::new("patch.chain.input_mismatch")
                 .with_message("chain step input does not match the patch's declared input checks (--patch-input-check or weave inputChecks)")
