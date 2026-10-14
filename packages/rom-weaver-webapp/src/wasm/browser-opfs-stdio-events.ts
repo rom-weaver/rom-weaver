@@ -1,4 +1,5 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
+import { OpfsProxyError } from "./browser-opfs-proxy-client.ts";
 import {
   addRandomAccessFileIoStats,
   createRandomAccessFileIoStats,
@@ -264,6 +265,19 @@ export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undef
       wasi,
     });
   };
+  // Proxy failures MUST return through WASI so Rust can drop files and stop its
+  // background readers. A JavaScript exception skips that cleanup and can hang joins.
+  for (const [name, original] of Object.entries(imports)) {
+    if (typeof original !== "function") continue;
+    imports[name] = (...args: unknown[]) => {
+      try {
+        return original.apply(imports, args);
+      } catch (error) {
+        if (error instanceof OpfsProxyError) return error.errno;
+        throw error;
+      }
+    };
+  }
   imports.__romWeaverDirectFileIoStats = stats;
   imports.__romWeaverDirectFileIo = true;
   trace?.("[browser-opfs] direct file io imports installed");
@@ -479,6 +493,10 @@ function directWasiFileRead({
     buffer.setUint32(nreadPtr, nread, true);
     return wasiShim.wasi.ERRNO_SUCCESS;
   } catch (error) {
+    if (error instanceof OpfsProxyError) {
+      buffer.setUint32(nreadPtr, nread, true);
+      return error.errno;
+    }
     if (nread === 0) return original();
     throw error;
   }
@@ -532,6 +550,10 @@ function directWasiFileWrite({
     buffer.setUint32(nwrittenPtr, nwritten, true);
     return wasiShim.wasi.ERRNO_SUCCESS;
   } catch (error) {
+    if (error instanceof OpfsProxyError) {
+      buffer.setUint32(nwrittenPtr, nwritten, true);
+      return error.errno;
+    }
     if (nwritten === 0) return original();
     throw error;
   }

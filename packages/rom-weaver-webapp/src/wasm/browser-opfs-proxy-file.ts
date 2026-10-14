@@ -171,11 +171,17 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       this.releaseBuffers();
       return;
     }
-    this.flushWriteBuffer();
-    this.client.close(this.handleId);
-    this.handleId = null;
-    this.closed = true;
-    this.releaseBuffers();
+    try {
+      this.flushWriteBuffer();
+    } finally {
+      try {
+        this.client.close(this.handleId);
+      } finally {
+        this.handleId = null;
+        this.closed = true;
+        this.releaseBuffers();
+      }
+    }
   }
 
   /**
@@ -207,7 +213,6 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   private flushWriteBuffer(): void {
     if (this.wbufLen === 0 || !this.wbuf || this.handleId === null) return;
     const pending = this.wbufLen;
-    this.wbufLen = 0;
     const written = this.client.write(this.handleId, this.wbufStart, this.wbuf.subarray(0, pending));
     if (written !== pending) {
       throw new OpfsProxyError(
@@ -215,5 +220,6 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
         29 /* EIO */,
       );
     }
+    this.wbufLen = 0;
   }
 }

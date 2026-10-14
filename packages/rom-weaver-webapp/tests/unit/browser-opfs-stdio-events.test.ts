@@ -1,5 +1,6 @@
 import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { describe, expect, it, vi } from "vitest";
+import { OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
 
 import {
   createLineTrace,
@@ -224,7 +225,58 @@ describe("installDirectWasiFileIoImports path_open tracing", () => {
   });
 });
 
+describe("installDirectWasiFileIoImports storage errors", () => {
+  it.each([
+    "fd_filestat_set_size",
+    "fd_allocate",
+    "fd_sync",
+    "fd_close",
+    "fd_filestat_get",
+    "path_open",
+    "path_unlink_file",
+  ])("returns a proxy errno from %s without unwinding the guest", (name) => {
+    const { wasi } = makeHarness();
+    const imports: Record<string, unknown> = wasi.wasiImport;
+    imports[name] = () => {
+      throw new OpfsProxyError("storage unavailable", ERRNO_IO);
+    };
+    installDirectWasiFileIoImports(wasi);
+    const call = imports[name];
+    if (typeof call !== "function") throw new Error("WASI import is unavailable");
+    expect(call()).toBe(ERRNO_IO);
+  });
+
+  it("preserves unrelated exceptions and WASI exits", () => {
+    const { wasi } = makeHarness();
+    const imports = Object.assign(wasi.wasiImport, {
+      proc_exit: () => {
+        throw new wasiShim.WASIProcExit(1);
+      },
+      fd_sync: () => {
+        throw new Error("unexpected failure");
+      },
+    });
+    installDirectWasiFileIoImports(wasi);
+    expect(() => imports.proc_exit()).toThrow(wasiShim.WASIProcExit);
+    expect(() => imports.fd_sync()).toThrow("unexpected failure");
+  });
+});
+
 describe("installDirectWasiFileIoImports direct reads", () => {
+  it("returns proxy read errors without retrying the original import", () => {
+    const fd = {
+      fd_read_into: vi.fn(() => {
+        throw new OpfsProxyError("read failed", ERRNO_IO);
+      }),
+    };
+    const { imports, originals, memory, wasi } = makeHarness([fd]);
+    writeIovecs(memory, [4]);
+    installDirectWasiFileIoImports(wasi);
+    expect(imports.fd_read(0, IOVS_PTR, 1, NRESULT_PTR)).toBe(ERRNO_IO);
+    expect(readResult(memory)).toBe(0);
+    expect(originals.fd_read).not.toHaveBeenCalled();
+    expect(fd.fd_read_into).toHaveBeenCalledTimes(1);
+  });
   it("delegates to the original import when the fd has no direct read hook", () => {
     const { imports, originals, wasi } = makeHarness([{}]);
     installDirectWasiFileIoImports(wasi);
@@ -366,6 +418,22 @@ describe("installDirectWasiFileIoImports direct reads", () => {
 });
 
 describe("installDirectWasiFileIoImports direct writes", () => {
+  it("returns proxy write errors without replaying a failed buffered write", () => {
+    const fd = {
+      fd_pwrite: vi.fn(),
+      fd_write: vi.fn(() => {
+        throw new OpfsProxyError("disk write failed", ERRNO_IO);
+      }),
+    };
+    const { imports, originals, memory, wasi } = makeHarness([fd]);
+    writeIovecs(memory, [3]);
+    installDirectWasiFileIoImports(wasi);
+    expect(imports.fd_write(0, IOVS_PTR, 1, NRESULT_PTR)).toBe(ERRNO_IO);
+    expect(readResult(memory)).toBe(0);
+    expect(originals.fd_write).not.toHaveBeenCalled();
+    expect(fd.fd_write).toHaveBeenCalledOnce();
+  });
+
   it("writes every iovec and records nwritten plus stats", () => {
     const seen: Uint8Array[] = [];
     const fd = {
