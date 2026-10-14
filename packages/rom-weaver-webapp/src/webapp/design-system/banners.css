@@ -460,15 +460,20 @@
   mask-size: 28px 28px;
   animation: weave-drift 1.6s linear infinite paused;
 }
-.rw-app.rw-page-dragging .dropveil {
+/* `rw-drop-routing` holds the veil after the drop while Home hands the files
+   to a workflow, so the pill can name it. */
+.rw-app:is(.rw-page-dragging, .rw-drop-routing) .dropveil {
   visibility: visible;
   opacity: 1;
 }
-.rw-app.rw-page-dragging .dropveil::before {
+.rw-app:is(.rw-page-dragging, .rw-drop-routing) .dropveil::before {
   animation-play-state: running;
 }
 .rw-app .dropveil-text {
-  position: relative;
+  /* Centred in the panel, but a panel as long as Home would put that centre
+     below the fold; the sticky bottom inset lifts the pill to mid-viewport. */
+  position: sticky;
+  bottom: calc(50vh - 30px);
   display: inline-flex;
   gap: var(--sp-m);
   align-items: center;

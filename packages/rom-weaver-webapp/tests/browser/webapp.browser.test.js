@@ -167,6 +167,28 @@ const openMenuSheet = async () => {
   return document.querySelector(".menu-sheet");
 };
 
+test.each([
+  ["home", "Apply Patches", "Apply & download"],
+  ["home", "Weave Patches", "Share weave"],
+  ["docs", "Apply Patches", "Apply & download"],
+  ["whats-new", "Weave Patches", "Share weave"],
+])("%s offers %s for a ZIP containing a weave and its ROM", async (initialView, destination, action) => {
+  mountWebappRoot({ initialView });
+  await expect.poll(() => document.querySelector(`#panel-${initialView}:not([hidden])`)).toBeTruthy();
+  const transfer = new DataTransfer();
+  transfer.items.add(await loadFixtureFile("first-weave.zip", "application/zip"));
+  document.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+
+  await expect.element(page.getByRole("dialog", { name: "What do you want to do with this weave?" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: /Test ROM/ })).not.toBeInTheDocument();
+  await expect.poll(() => document.querySelector("#column")?.classList.contains("rw-drop-routing")).toBe(false);
+  await page.getByRole("button", { name: new RegExp(destination) }).click();
+
+  await waitForInputStackFile("hello-world.nes");
+  await expect.poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack .file").length).toBe(2);
+  await expect.element(page.getByRole("button", { name: action, exact: true })).toBeVisible();
+});
+
 test("disc conversion and extraction have independent hit targets on mobile", async () => {
   await page.viewport(390, 844);
   mountWebappRoot({ initialView: "home" });
@@ -607,6 +629,14 @@ test.each([
     .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
     .toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip");
+  // Measure the settled layout: mid panel-in, the body's sub-pixel translate
+  // rounds the chip's box to 43.9999px.
+  await Promise.allSettled(
+    document
+      .querySelector(".workflow-body")
+      .getAnimations()
+      .map((animation) => animation.finished),
+  );
   const chipBox = chip.getBoundingClientRect();
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
