@@ -23,10 +23,11 @@ import type { WebappView } from "../webapp-state-types.ts";
 const logger = createLogger("drop-route-dialog");
 
 type DropRouteRequest = {
+  chooseDestination?: boolean;
   /** Listed names for `files`, index for index; without them each file is judged by name. */
   entries?: DropEntry[];
   files: File[];
-  /** The view the files were dropped on; `home` plans a destination, a workflow plans a redirect. */
+  /** The view the files were dropped on; workflows can offer a redirect. */
   from: WebappView;
   /** Distinguishes requests so each one opens on its first step. */
   id: number;
@@ -48,6 +49,7 @@ const PAGE_NAMES: Partial<Record<WebappView, MessageId>> = {
   creator: "ui.drop.routeCreate",
   patcher: "ui.home.applyPatchCta",
   test: "ui.drop.routeTest",
+  weave: "ui.find.weavesApplyPatch",
 };
 
 const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDialogProps) => {
@@ -76,8 +78,14 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
       subtitle,
       title: localizer.message(title),
     });
-    if (request.from === "home") {
+    if (request.chooseDestination || request.from === "home") {
       const plan = planDropDestinations(counts);
+      if (counts.weaves > 0) {
+        return ask("ui.drop.routeWeaveTitle", localizer.message("ui.drop.routeWeaveBody"), [
+          option("patcher", "ui.drop.noteApplyWeave"),
+          option("weave", "ui.drop.noteEditWeave"),
+        ]);
+      }
       if (plan.mixed) {
         return ask("ui.drop.routeMixedTitle", localizer.message("ui.drop.routeMixedBody"), [
           option("creator", "ui.drop.noteCreateMixed"),

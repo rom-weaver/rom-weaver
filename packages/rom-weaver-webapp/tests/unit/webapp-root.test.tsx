@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -468,6 +468,33 @@ describe("the What's new route", () => {
 });
 
 describe("page-level drag and drop", () => {
+  it.each([
+    { currentView: "docs" as const },
+    { currentView: "whats-new" as const },
+    { currentView: "save-editor" as const },
+    { currentView: "patcher" as const, notFound: true },
+  ])("offers ROM routing from $currentView (notFound=$notFound)", async (options) => {
+    const { called, container } = await renderRoot(options);
+    const drag = fileDragEvent("dragover");
+    act(() => {
+      document.dispatchEvent(drag);
+    });
+    expect(drag.defaultPrevented).toBe(true);
+    expect(container.querySelector("#column")?.className).toContain("rw-page-dragging");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Release to add files");
+
+    const drop = fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]);
+    act(() => {
+      document.dispatchEvent(drop);
+    });
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor(() => expect(within(container).queryByRole("button", { name: /Test ROM/ })).toBeTruthy());
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    fireEvent.click(within(container).getByRole("button", { name: /Apply Patches/ }));
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(container.querySelector(".is-not-found")).toBeNull();
+  });
+
   it("arms the page while a file is dragged over it", async () => {
     const { container } = await renderRoot();
 
@@ -514,6 +541,49 @@ describe("page-level drag and drop", () => {
     });
 
     expect(dropped.defaultPrevented).toBe(false);
+  });
+
+  it("names the workflow a landing-page drop opens, then lets the veil go", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const column = () => container.querySelector("#column")?.className ?? "";
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["patch"], "hack.bps")]));
+    });
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(column()).toContain("rw-drop-routing");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Opening Apply Patches");
+    expect(container.querySelector('p[role="status"].sr-only')?.textContent).toBe("Opening Apply Patches");
+    await waitFor(() => expect(column()).not.toContain("rw-drop-routing"), { timeout: 2000 });
+  });
+
+  it("routes a file picked on the landing page without raising the drop veil", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const input = container.querySelector<HTMLInputElement>("#home-file-input");
+    if (!input) throw new Error("The landing page rendered no file input");
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(container.querySelector("#column")?.className ?? ""));
+    observer.observe(container.querySelector("#column") as Element, { attributeFilter: ["class"] });
+
+    Object.defineProperty(input, "files", { value: [new File(["patch"], "hack.bps")] });
+    fireEvent.change(input);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    observer.disconnect();
+    expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(false);
+  });
+
+  it("lets the veil go without naming a workflow when a landing-page drop needs a choice", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]));
+    });
+
+    await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    expect(container.querySelector(".dropveil-text")?.textContent).not.toContain("Opening");
   });
 });
 
