@@ -55,13 +55,15 @@ describe("RomExpectationCard", () => {
       const { container, queryByRole, rerender } = render(card(false));
 
       expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
-      expect(queryByRole("button", { name: /^Checks/ })).not.toBeNull();
+      expect(queryByRole("button", { name: /^Checks.*GBA.*Identified.*Expected/ })).not.toBeNull();
       expect(container.textContent).toContain("Metroid Fusion (USA)");
       expect(rows(container)).toContain("CRC32 abcd1234");
 
       rerender(card(true));
       const identify = queryByRole("button", { name: /^Identify/ });
       expect(identify).not.toBeNull();
+      expect(identify?.textContent).toContain("GBA");
+      expect(queryByRole("button", { name: /^Checks/ })?.textContent).toBe("ChecksExpected");
       fireEvent.click(identify as HTMLButtonElement);
       expect(identify?.getAttribute("aria-expanded")).toBe("true");
 
@@ -88,7 +90,7 @@ describe("RomExpectationCard", () => {
     const { queryByRole, rerender } = render(card(false));
 
     expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
-    expect(queryByRole("button", { name: /^Checks.*2 possible matches/ })).not.toBeNull();
+    expect(queryByRole("button", { name: /^Checks.*GBA.*2 possible matches/ })).not.toBeNull();
 
     rerender(card(true));
     expect(queryByRole("button", { name: /^Identify/ })?.getAttribute("aria-expanded")).toBe("true");

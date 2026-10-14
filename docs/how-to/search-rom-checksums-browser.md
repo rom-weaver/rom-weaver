@@ -19,7 +19,7 @@ To identify a file, use [Identify a ROM by checksum](identify-roms-browser.md). 
 2. Paste your hash into **Identify by checksum or game name**.
 3. Wait for the lookup to finish.
 4. Select a release, even for a single result.
-5. Read the expected ROM's **Checks**. Switch from **Simple** to **Detailed** for its **Identify** drawer.
+5. Read the expected ROM's **Checks**. Its **Simple** header shows the console and identification status. Switch to **Detailed** for its **Identify** drawer.
 
 Paste the hexadecimal value without an algorithm label or `0x` prefix. Either letter case works.
 

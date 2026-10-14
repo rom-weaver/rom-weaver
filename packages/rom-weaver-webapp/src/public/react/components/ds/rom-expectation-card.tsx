@@ -15,10 +15,10 @@ import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx
 import { useKeepInputVisible } from "../../use-keep-input-visible.ts";
 import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
-import { DrawerReadout } from "./drawer.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
 import { FileCard } from "./file-card.tsx";
 import { PlatformName } from "./platform-name.tsx";
+import { RomIdentificationReadouts } from "./rom-identification-readouts.tsx";
 
 const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = {
   crc32: "CRC32",
@@ -280,17 +280,14 @@ const RomExpectationCard = ({
         {...(removeLabel ? { removeLabel } : {})}
       >
         {detailedViewEnabled && identification ? (
-          <IdentifyDrawer defaultOpen={ambiguous} identification={identification} />
+          <IdentifyDrawer defaultOpen={ambiguous} identification={identification} integrated />
         ) : null}
         <ChecksumList
           defaultOpen
+          integrated
           label={localizer.message("ui.checks.title")}
           sublabel={localizer.message("ui.sourceInfo.expected")}
-          summary={
-            !detailedViewEnabled && ambiguous ? (
-              <DrawerReadout muted>{identifyMatchCountLabel(identification.matches.length)}</DrawerReadout>
-            ) : undefined
-          }
+          summary={detailedViewEnabled ? undefined : <RomIdentificationReadouts identification={identification} />}
         >
           {componentGroups.length > 1 ? (
             <ExpectedComponentCheckGroups
