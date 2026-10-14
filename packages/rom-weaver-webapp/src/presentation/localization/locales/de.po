@@ -451,7 +451,7 @@ msgstr "Ergänzt Schubladen für Dateien, Identifizieren und Disc-Sheets sowie Z
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.detailedView"
-msgstr "Fügt jeder Dateikarte die Bereiche Dateien, Identifizieren und Disc-Blatt sowie Zeitangaben hinzu. Entspricht dem Schalter Detailliert."
+msgstr "Fügt jeder Dateikarte die Bereiche Dateien, Identifizieren und Disc-Blatt sowie Zeitangaben hinzu. Entspricht dem Schalter Einfach/Detailliert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,6 +1627,11 @@ msgstr "Beschreibung"
 #: src/presentation/localization/messages.ts
 msgid "ui.view.detailed"
 msgstr "Detailliert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Einfach"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4681,12 +4686,12 @@ msgstr "Schalte einen Patch aus oder öffne sein Menü, um einen Übungscheat hi
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedTryIt"
-msgstr "Schalte Detailliert aus, um wieder eine Schublade pro Datei zu sehen. Deine Wahl wird gespeichert."
+msgstr "Wechsle zu Einfach, um wieder eine Schublade pro Datei zu sehen. Deine Wahl wird gespeichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleTryIt"
-msgstr "Schalte Detailliert ein und sieh zu, wie sich die markierte Karte ändert. Deine Wahl wird gespeichert."
+msgstr "Wechsle zu Detailliert und sieh zu, wie sich die markierte Karte ändert. Deine Wahl wird gespeichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
