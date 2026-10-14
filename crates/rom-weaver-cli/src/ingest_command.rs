@@ -540,6 +540,12 @@ impl CliApp {
         ) {
             Ok(assets) => assets,
             Err(rom_error) => {
+                if matches!(&rom_error, RomWeaverError::Cancelled)
+                    || matches!(&rom_error, RomWeaverError::Validation(message)
+                        if message.contains("interactive selection was cancelled"))
+                {
+                    return Err(rom_error);
+                }
                 // Top-level classification can mistake nested patch-only archives for ROM archives.
                 // Retry as patches before preserving the original ROM failure.
                 if patches.is_empty() {

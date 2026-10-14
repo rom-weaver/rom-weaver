@@ -587,6 +587,54 @@ fn compress_zip_fixture(app: &CliApp, inputs: &[PathBuf], output: &Path) {
     );
 }
 
+#[test]
+fn ingest_mixed_archive_preserves_rom_selection_cancellation() {
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(|| {
+            let temp = assert_fs::TempDir::new().expect("fixture directory");
+            let first = temp.path().join("first.nes");
+            let second = temp.path().join("second.nes");
+            let patch = temp.path().join("change.ips");
+            std::fs::write(&first, b"first ROM payload").expect("first ROM");
+            std::fs::write(&second, b"second ROM payload").expect("second ROM");
+            std::fs::write(&patch, b"PATCH\x00\x00\x00\x00\x01\x01EOF").expect("IPS patch");
+            let archive = temp.path().join("mixed.zip");
+            let cancelled = test_app_with_prompt(Vec::new());
+            compress_zip_fixture(&cancelled, &[first, second, patch], &archive);
+            let command = |output: &str| {
+                Commands::Ingest(super::IngestCommand {
+                    input: archive.clone(),
+                    output: temp.path().join(output),
+                    database: Vec::new(),
+                    select: Vec::new(),
+                    sidecar_names: Vec::new(),
+                    sidecar_only: false,
+                    no_ignore: false,
+                    no_nested_extract: false,
+                    split_bin: None,
+                    checksum: Vec::new(),
+                    threads: ThreadBudget::Fixed(1),
+                })
+            };
+            assert_eq!(
+                test_app_with_prompt(vec![0])
+                    .run(command("selected"))
+                    .exit_code,
+                0,
+                "selecting a ROM from the mixed archive should succeed"
+            );
+            assert_ne!(
+                cancelled.run(command("cancelled")).exit_code,
+                0,
+                "cancelling ROM selection must not succeed as a patch-only archive"
+            );
+        })
+        .expect("spawn ingest cancellation test")
+        .join()
+        .expect("ingest cancellation test");
+}
+
 /// Recursively locate a file named `name` anywhere under `root`, panicking if it is absent.
 fn find_emitted_file(root: &Path, name: &str) -> PathBuf {
     let mut stack = vec![root.to_path_buf()];
