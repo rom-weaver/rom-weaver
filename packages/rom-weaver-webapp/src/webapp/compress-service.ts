@@ -214,13 +214,17 @@ const encodeBytes = (text: string): Uint8Array<ArrayBuffer> => {
 };
 
 // Disc sheets MUST reference staged names after archive entries are flattened or renamed.
-const rewriteSheetReferences = async (cue: File, cuePath: string, nameByPath: Map<string, string>): Promise<File> => {
+const rewriteSheetReferences = async (
+  cue: File,
+  cuePath: string,
+  resolveName: (path: string) => string | undefined,
+): Promise<File> => {
   if (cue.size > MAX_SHEET_REWRITE_BYTES) return cue;
   const text = decodeBytes(new Uint8Array(await cue.arrayBuffer()));
   let changed = false;
   const replaceReferences = /\.gdi$/i.test(cue.name) ? replaceGdiFileReferences : replaceCueFileReferences;
   const rewritten = replaceReferences(text, (reference) => {
-    const name = nameByPath.get(resolveSheetReference(cuePath, reference).toLowerCase());
+    const name = resolveName(resolveSheetReference(cuePath, reference));
     if (!name || name === reference) return undefined;
     changed = true;
     return name;
@@ -242,7 +246,13 @@ const toOpenedEntries = async (
     const baseName = getEntryBaseName(path);
     return (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
   };
-  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path).toLowerCase(), nameOf(path)]));
+  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path), nameOf(path)]));
+  const foldedNames = new Map<string, string | undefined>();
+  for (const [path, name] of nameByPath) {
+    const folded = path.toLowerCase();
+    foldedNames.set(folded, foldedNames.has(folded) ? undefined : name);
+  }
+  const resolveName = (path: string) => nameByPath.get(path) ?? foldedNames.get(path.toLowerCase());
   const entries: OpenedCompressEntry[] = [];
   for (const { output, path } of picked) {
     const stored = await output.vfs.getFile?.(output.path);
@@ -253,7 +263,7 @@ const toOpenedEntries = async (
     });
     entries.push({
       file: /\.(cue|gdi)$/i.test(path)
-        ? await rewriteSheetReferences(file, normalizeEntryPath(path), nameByPath)
+        ? await rewriteSheetReferences(file, normalizeEntryPath(path), resolveName)
         : file,
       output,
       path,
