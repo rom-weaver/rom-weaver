@@ -199,14 +199,14 @@ describe("buildSessionOutputFiles", () => {
     );
   });
 
-  it("throws when a CHD disc-group output has no CUE or no tracks", async () => {
+  it("throws when a CHD disc-group output has no disc sheet or no tracks", async () => {
     const romA = await makeFile("rom-a-bytes", "gameA.bin");
     const romB = await makeFile("rom-b-bytes", "gameB.bin");
     const assets = [makeAsset("a1", "rom", romA), makeAsset("a2", "rom", romB)];
     const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
 
     await expect(buildSessionOutputFiles(assets, new Map(), options)).rejects.toThrow(
-      "CHD output requires a CUE disc group with tracks",
+      "CHD output requires a disc sheet group with tracks",
     );
   });
 
