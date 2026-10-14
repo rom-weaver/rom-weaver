@@ -280,6 +280,7 @@ type CompressionCreateImageFileInput = {
 };
 
 type CompressionCreateChdOptions = {
+  compressionProfile?: CompressionProfile;
   compressionCodecs?: ChdCompressionCodecs | null;
   cueFilePath?: string | null;
   imageFiles?: CompressionCreateImageFileInput[];

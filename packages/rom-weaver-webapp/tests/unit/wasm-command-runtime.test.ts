@@ -1,3 +1,7 @@
+import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
+import { COMPRESSION_DEFAULTS } from "../../src/lib/compression/compression-metadata.ts";
+import { createBrowserChdRuntime } from "../../src/platform/browser/workflow-runtime-chd.ts";
+import { createSharedCompressionRuntime } from "../../src/lib/runtime/workflow-runtime-core.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invokeRomWeaverWeaveCreateWorker,
@@ -414,6 +418,51 @@ describe("weave runtime workers", () => {
 });
 
 describe("output-producing runtime workers", () => {
+  it.each(["cd", "dvd"] as const)("dispatches default %s codecs with Min, Medium, and Max profiles", async (mode) => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),
+    );
+    const chdRuntime = createBrowserChdRuntime({
+      stageSource: async () => ({ filePath: "/in/game.bin", cleanup: async () => undefined }),
+      createWorkerOutput: async (result: unknown) => result,
+    } as never);
+    const runtime = createSharedCompressionRuntime({}, chdRuntime);
+    for (const compressionProfile of ["min", "medium", "max"] as const) {
+      const codecs = OutputCompressionManager.getChdCodecsForMode(mode, {
+        chdCreateCdCodecs: COMPRESSION_DEFAULTS.chdCreateCdCodecs,
+        chdCreateDvdCodecs: COMPRESSION_DEFAULTS.chdCreateDvdCodecs,
+        compressionProfile,
+      });
+      await runtime.create?.({
+        source: { fileName: "game.bin" },
+        fileName: "game.bin",
+        outputName: "game.chd",
+        format: "chd",
+        romSpecific: { chd: { mode, compressionCodecs: codecs, compressionProfile } },
+      } as never);
+      expect(lastCall()[0].args).toMatchObject({
+        format: `chd-${mode}`,
+        level: compressionProfile,
+        codec:
+          compressionProfile === "medium"
+            ? codecs.split(",")
+            : COMPRESSION_DEFAULTS[mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs"].split(","),
+      });
+    }
+  });
+
+  it("retains a single explicit CHD codec level with a selected profile", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    await invokeRomWeaverCompressionCreateWorker({
+      codecs: ["cdzl:1"],
+      format: "chd-cd",
+      levelProfile: "max",
+      inputPaths: ["/in/game.bin"],
+      outputFileName: "game.chd",
+    });
+    expect(lastCall()[0].args).toMatchObject({ codec: ["cdzl:1"], level: "max" });
+  });
+
   it("creates a compressed output and strips conflicting CHD codec levels", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),
