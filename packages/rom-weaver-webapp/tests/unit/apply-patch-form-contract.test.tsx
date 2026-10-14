@@ -147,7 +147,9 @@ const createFakeApplyWorkflow = () => {
     setPatchOption: vi.fn(async () => undefined),
     setPatchTarget: vi.fn(async () => undefined),
     setSettings: vi.fn(async () => undefined),
-    validatePatches: vi.fn(async () => undefined),
+    validatePatches: vi.fn(async () => {
+      await validationBarrier;
+    }),
   };
   return {
     ...workflow,
@@ -169,6 +171,7 @@ const createFakeApplyWorkflow = () => {
 };
 
 let latestFakeWorkflow: ReturnType<typeof createFakeApplyWorkflow> | null = null;
+let validationBarrier: Promise<void> | null = null;
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
   ApplyWorkflow: class {
@@ -383,6 +386,87 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
       expect(onApplyComplete).not.toHaveBeenCalled();
     } finally {
       await act(async () => rejectRun(new DOMException("Cancelled", "AbortError")));
+    }
+  });
+
+  it("defers shared input staging while aggregate Create is inactive", async () => {
+    const initial = new File(["rom"], "game.bin");
+    const archive = new File(["archive"], "multiple-roms.zip");
+    const patch = new File(["patch"], "change.ips");
+    const view = (active: boolean, rom: File) => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm mode="create" active={active} inputs={[rom]} patches={[patch]} />
+      </RomWeaverSettingsProvider>
+    );
+    const { rerender } = render(view(true, initial));
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalledOnce());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    await act(async () => {
+      rerender(view(false, archive));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+
+    expect(latestFakeWorkflow).toBe(workflow);
+    expect(workflow.setInput).toHaveBeenCalledOnce();
+    await act(async () => rerender(view(true, archive)));
+    await vi.waitFor(() => expect(workflow.setInput).toHaveBeenLastCalledWith([archive], expect.anything()));
+    expect(workflow.setInput).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels queued execution without aborting the reusable workflow", async () => {
+    const onApplyComplete = vi.fn();
+    const { container, getByRole } = renderForm({
+      defaultInputs: [new File(["rom"], "game.bin")],
+      defaultPatches: [new File(["patch"], "change.ips")],
+      onApplyComplete,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    let finishOptions: () => void = () => undefined;
+    workflow.setPatchOption.mockClear();
+    workflow.setPatchOption.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOptions = resolve;
+        }),
+    );
+    const applyButton = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+    await act(async () => fireEvent.click(applyButton));
+    await vi.waitFor(() => expect(workflow.setPatchOption).toHaveBeenCalled());
+    await act(async () => fireEvent.click(getByRole("button", { name: /cancel/i })));
+    await act(async () => finishOptions());
+
+    expect(workflow.abort).not.toHaveBeenCalled();
+    expect(workflow.run).not.toHaveBeenCalled();
+    expect(onApplyComplete).not.toHaveBeenCalled();
+    const retryButton = () => getByRole("button", { name: /apply.*download/i }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(retryButton().disabled).toBe(false));
+    await act(async () => fireEvent.click(retryButton()));
+    await vi.waitFor(() => expect(onApplyComplete).toHaveBeenCalledOnce());
+  });
+
+  it("keeps combined creation disabled until patch validation settles", async () => {
+    let finishValidation: () => void = () => undefined;
+    validationBarrier = new Promise<void>((resolve) => {
+      finishValidation = resolve;
+    });
+    try {
+      const { getByRole } = renderForm({
+        mode: "create",
+        defaultInputs: [new File(["rom"], "game.bin")],
+        defaultPatches: [new File(["patch"], "change.ips")],
+      });
+      await vi.waitFor(() => expect(latestFakeWorkflow?.validatePatches).toHaveBeenCalled());
+      const createButton = getByRole("button", { name: /create patch.*download/i }) as HTMLButtonElement;
+      expect(createButton.disabled).toBe(true);
+      await act(async () => finishValidation());
+      await vi.waitFor(() => expect(createButton.disabled).toBe(false));
+    } finally {
+      await act(async () => finishValidation());
+      validationBarrier = null;
     }
   });
 

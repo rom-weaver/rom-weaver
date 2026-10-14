@@ -319,6 +319,28 @@ describe("CreatePatchForm", () => {
     );
   });
 
+  it("defers new original staging until Modified ROM is active again", async () => {
+    const initial = new File(["original"], "original.nes");
+    const archive = new File(["archive"], "multiple-roms.zip");
+    const props = withSeams();
+    const view = (original: File) => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <CreatePatchFormForTest {...props} original={original} />
+      </RomWeaverSettingsProvider>
+    );
+    const { container, rerender } = render(view(initial));
+    await vi.waitFor(() => expect(latest?.workflow.setOriginal).toHaveBeenCalledWith(initial));
+    const workflow = latest?.workflow;
+    if (!workflow) throw new Error("Expected a staged create workflow");
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    await act(async () => rerender(view(archive)));
+
+    expect(workflow.setOriginal).toHaveBeenCalledTimes(1);
+    await act(async () => fireEvent.click(activeButton(container, "Modified ROM")));
+    await vi.waitFor(() => expect(workflow.setOriginal).toHaveBeenLastCalledWith(archive));
+    expect(workflow.setOriginal).toHaveBeenCalledTimes(2);
+  });
+
   it("detects patches from actual archive listings before routing to the stack", async () => {
     const { container } = renderForm(withSeams());
     await upload(container, [new File(["archive"], "release.zip")]);

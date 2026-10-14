@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
+import { throwIfAborted } from "../../lib/errors.ts";
 import type {
   ApplyWorkflow,
   BrowserApplyResult,
@@ -1199,9 +1200,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const readinessError = getWorkflowReadinessError(workflow.getInput() || stagedInput, workflow.getPatches());
         if (readinessError) throw readinessError;
         const abortSignal = input.options.signal;
+        throwIfAborted(abortSignal);
         const abortWorkflow = () => workflow.abort(abortSignal?.reason);
-        if (abortSignal?.aborted) abortWorkflow();
-        else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
+        abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
           setCompletedOutput(null);
           setCompletedCheats(undefined);
@@ -1614,30 +1615,36 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowSnapshot.ready &&
     (!expectedWorkflowPatchCountRef.current || workflowSnapshot.patchCount === expectedWorkflowPatchCountRef.current);
 
-  const { localUiController, localStackController, localOutputController, localNoticeController, getRunInput } =
-    useLocalApplyPatchFormSession({
-      ...propsWithSettings,
-      disabled: props.disabled || creatingCombined,
-      applyPatches,
-      applyReady: applyReady && !weaveDefaultsPending,
-      applyDisabled: weaveDefaultsPending,
-      defaultPatchBasis: patchInputBasis,
-      disabledPatchIds,
-      downloadOutput,
-      getPatchSlotIds: getPatchIds,
-      onApplyComplete: () => undefined,
-      onInputsChange: handleLocalInputsChange,
-      onPatchesChange: handleLocalPatchesChange,
-      resolvedOutputCompression,
-      resolvedOutputName,
-      resolvedOutputNameKey,
-      cheatNames,
-      setPatchOption,
-      setPatchTarget,
-      stageInput,
-      stagePatches,
-      validatePatches,
-    });
+  const {
+    localUiController,
+    localStackController,
+    localOutputController,
+    localNoticeController,
+    getRunInput,
+    canStartApply,
+  } = useLocalApplyPatchFormSession({
+    ...propsWithSettings,
+    disabled: props.disabled || creatingCombined,
+    applyPatches,
+    applyReady: applyReady && !weaveDefaultsPending,
+    applyDisabled: weaveDefaultsPending,
+    defaultPatchBasis: patchInputBasis,
+    disabledPatchIds,
+    downloadOutput,
+    getPatchSlotIds: getPatchIds,
+    onApplyComplete: () => undefined,
+    onInputsChange: handleLocalInputsChange,
+    onPatchesChange: handleLocalPatchesChange,
+    resolvedOutputCompression,
+    resolvedOutputName,
+    resolvedOutputNameKey,
+    cheatNames,
+    setPatchOption,
+    setPatchTarget,
+    stageInput: props.active === false ? undefined : stageInput,
+    stagePatches: props.active === false ? undefined : stagePatches,
+    validatePatches: props.active === false ? undefined : validatePatches,
+  });
   const resolvedUiController = localUiController;
   const resolvedStackController = localStackController;
   const resolvedOutputController = localOutputController;
@@ -1678,7 +1685,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     positions: selectedCheatPositionsRef.current,
   });
   const combinedReady =
-    applyReady &&
+    canStartApply &&
     runInput.inputs.length === 1 &&
     (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
   const prepareCheatWeave = cheatsOn

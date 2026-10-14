@@ -861,6 +861,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   );
 
   useEffect(() => {
+    if (props.active === false) return;
     let disposed = false;
     let cleanup: (() => void) | undefined;
     const stage = async () => {
@@ -974,6 +975,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     original,
     originalSourceKey,
     onError,
+    props.active,
     resolvedAssetBaseUrl,
     setWorkflowMessage,
     stagingSettingsKey,
