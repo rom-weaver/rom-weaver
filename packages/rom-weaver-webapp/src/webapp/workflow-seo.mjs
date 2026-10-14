@@ -22,15 +22,15 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   compress: Object.freeze({
     description:
-      "Compress ISO, BIN/CUE, or GDI disc images to CHD and GameCube or Wii ISO to RVZ locally in your browser. Create Z3DS ROMs, ZIP, and 7z archives. No uploads.",
+      "Compress ISO, BIN/CUE, or GDI disc images to CHD and GameCube or Wii ISO to RVZ locally in your browser. Create Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX 3DS ROMs, ZIP, and 7z archives. No uploads.",
     slug: "compress",
     title: `ISO to CHD & RVZ: Compress ROMs online | ${SITE_NAME}`,
   }),
   extract: Object.freeze({
     description:
-      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX.",
     slug: "extract",
-    title: `RVZ to ISO & CHD decompression online | ${SITE_NAME}`,
+    title: `RVZ to ISO & CHD to ISO converter online | ${SITE_NAME}`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({

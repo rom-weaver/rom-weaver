@@ -1,6 +1,8 @@
-# Extract CHD to ISO, BIN/CUE, or GDI online
+# Convert CHD to ISO, BIN/CUE, or GDI online
 
-Decompress CHD locally in your browser without uploading it. DVDs produce ISO, CDs BIN/CUE, and Dreamcast GD-ROMs GDI with tracks.
+Decompress CHD locally in your browser with this CHD to ISO converter, without uploading the disc. DVDs produce ISO, CDs BIN/CUE, and Dreamcast GD-ROMs GDI with tracks.
+
+<a id="extract-chd-to-iso-bincue-or-gdi-online"></a>
 
 <!-- START doctoc -->
 ## Table of contents

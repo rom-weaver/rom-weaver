@@ -41,4 +41,4 @@ Allow space for source, staged tracks, output, and download. Browser quotas and 
 
 Before deleting sources, extract the CHD and test it in your emulator. Compare DVD ISO checksums with [Checksum file](https://rom-weaver.com/checksum); compare CD tracks only with matching split/combined layouts. The [synthetic disc tutorial](../tutorials/patch-compressed-disc.md) supplies known bytes for practice.
 
-To reverse this workflow, follow [Extract CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares CHD with RVZ and archives.
+To reverse this workflow, follow [Convert CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares CHD with RVZ and archives.

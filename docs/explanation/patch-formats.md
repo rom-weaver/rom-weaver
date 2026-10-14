@@ -1,8 +1,10 @@
-# ROM patch formats compared: BPS, IPS, UPS, xdelta and PPF
+# BPS vs IPS, UPS, xdelta and PPF: ROM patch formats compared
 
 ROM patch formats differ in checksums, size limits, and compatible patchers. BPS is a strong cartridge default; IPS, UPS, xdelta, and PPF serve different release needs.
 
 <a id="choosing-a-patch-format"></a>
+
+<a id="rom-patch-formats-compared-bps-ips-ups-xdelta-and-ppf"></a>
 
 <!-- START doctoc -->
 ## Table of contents

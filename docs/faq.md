@@ -171,7 +171,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### Can I decompress CHD to ISO?
 
-[Extract CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md).
+[Convert CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md).
 
 ### Can I make a trimmed ROM larger again?
 

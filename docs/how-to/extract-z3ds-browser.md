@@ -1,6 +1,8 @@
-# Extract Z3DS files in the browser
+# Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files to 3DS, CCI, CXI, CIA, or 3DSX online
 
-Extract Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX files into Nintendo 3DS ROMs locally in your browser, without uploads.
+Decompress a Nintendo 3DS file locally in your browser, without uploads. Each type keeps its own extension, such as `.zcci` to `.cci`.
+
+<a id="extract-z3ds-files-in-the-browser"></a>
 
 <!-- START doctoc -->
 ## Table of contents
