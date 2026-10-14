@@ -1083,11 +1083,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.tutorial.view.simpleTryIt": msg({
     id: "ui.tutorial.view.simpleTryIt",
-    message: "Switch Detailed on and watch the highlighted card change. Your choice is saved.",
+    message: "Switch to Detailed and watch the highlighted card change. Your choice is saved.",
   }),
   "ui.tutorial.view.detailedTryIt": msg({
     id: "ui.tutorial.view.detailedTryIt",
-    message: "Switch Detailed off to go back to one drawer per file. Your choice is saved.",
+    message: "Switch to Simple to go back to one drawer per file. Your choice is saved.",
   }),
   "ui.tutorial.view.simple": msg({ id: "ui.tutorial.view.simple", message: "Simple" }),
   "ui.tutorial.view.simpleSummary": msg({
@@ -1236,7 +1236,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patchChecks.stackOutput",
     message: "Combined result",
   }),
-  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet" }),
   "ui.patchChecks.unreadable": msg({ id: "ui.patchChecks.unreadable", message: "Patch file is not valid" }),
   "ui.patchChecks.failed": msg({ id: "ui.patchChecks.failed", message: "Check failed: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
@@ -1246,7 +1246,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patchChecks.patchNumber": msg({ id: "ui.patchChecks.patchNumber", message: "Patch {n}" }),
   "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified" }),
-  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Applied" }),
+  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Checked" }),
   "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
   "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
   "ui.patchChecks.autoPrevious": msg({
@@ -1683,6 +1683,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.save": msg({ id: "ui.settings.save", message: "Save" }),
   "ui.settings.sevenZipCodec": msg({ id: "ui.settings.sevenZipCodec", message: "7z" }),
   "ui.settings.title": msg({ id: "ui.settings.title", message: "Settings" }),
+  "ui.view.simple": msg({ id: "ui.view.simple", message: "Simple" }),
   "ui.view.detailed": msg({ id: "ui.view.detailed", message: "Detailed" }),
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
@@ -1934,7 +1935,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.suggestion.detailedView": msg({
     id: "ui.settings.suggestion.detailedView",
     message:
-      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch.",
+      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Simple/Detailed switch.",
   }),
   "ui.settings.suggestion.identifiedOutputName": msg({
     id: "ui.settings.suggestion.identifiedOutputName",

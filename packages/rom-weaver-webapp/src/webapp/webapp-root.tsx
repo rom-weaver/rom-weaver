@@ -305,19 +305,20 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
 /** File-detail switch for the workflow panel's `0x01` heading band. */
 const PanelViewToggle = ({ detailed, onChange }: { detailed: boolean; onChange: (enabled: boolean) => void }) => {
   const localizer = useUiLocalizer();
-  const label = localizer.message("ui.view.detailed");
+  const simpleLabel = localizer.message("ui.view.simple");
+  const detailedLabel = localizer.message("ui.view.detailed");
   // The switch keeps one accessible name; its checked state carries on/off.
   return (
     <label className="panel-view-toggle">
       <input
         aria-checked={detailed}
-        aria-label={label}
+        aria-label={`${simpleLabel} / ${detailedLabel}`}
         checked={detailed}
         onChange={(event) => onChange(event.currentTarget.checked)}
         role="switch"
         type="checkbox"
       />
-      <span>{label}</span>
+      <span>{detailed ? detailedLabel : simpleLabel}</span>
     </label>
   );
 };

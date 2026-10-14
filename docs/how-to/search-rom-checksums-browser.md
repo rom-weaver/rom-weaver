@@ -19,7 +19,7 @@ To identify a file, use [Identify a ROM by checksum](identify-roms-browser.md). 
 2. Paste your hash into **Identify by checksum or game name**.
 3. Wait for the lookup to finish.
 4. Select a release, even for a single result.
-5. Read the expected ROM's details and **Checks**.
+5. Read the expected ROM's **Checks**. Its **Simple** header shows the console and identification status. Switch to **Detailed** for its **Identify** drawer.
 
 Paste the hexadecimal value without an algorithm label or `0x` prefix. Either letter case works.
 
@@ -37,7 +37,7 @@ You can also paste a hash into the top-bar **Find games (by name/checksum), tool
 
 1. Enter a game name in **Identify by checksum or game name**.
 2. Select the game, then its release.
-3. Read the expected checksums, region, and revision where available.
+3. Read the expected checksums. In **Detailed** view, open **Identify** for region and revision where available.
 
 Select **Try a checksum lookup** in the empty search box, then choose the matching Tetris release.
 

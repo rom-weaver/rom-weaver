@@ -451,7 +451,7 @@ msgstr "Añade cajones de Archivos, Identificar y hojas de disco, además de tie
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.detailedView"
-msgstr "Añade los paneles Archivos, Identificar y hoja de disco a cada tarjeta de archivo, además de los tiempos. Igual que el interruptor Detallado."
+msgstr "Añade los paneles Archivos, Identificar y hoja de disco a cada tarjeta de archivo, además de los tiempos. Igual que el interruptor Simple/Detallada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -486,7 +486,7 @@ msgstr "Apariencia"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.applied"
-msgstr "Aplicado"
+msgstr "Revisado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,6 +1627,11 @@ msgstr "Descripción"
 #: src/presentation/localization/messages.ts
 msgid "ui.view.detailed"
 msgstr "Detallada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3066,7 +3071,7 @@ msgstr "Ninguna"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
-msgstr "Aún no comprobado: {input}"
+msgstr "Aún no comprobado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4686,12 +4691,12 @@ msgstr "Desactiva un parche o abre su menú para añadir un truco de práctica."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedTryIt"
-msgstr "Desactiva Detallada para volver a un cajón por archivo. Tu elección se guarda."
+msgstr "Cambia a Simple para volver a un cajón por archivo. Tu elección se guarda."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleTryIt"
-msgstr "Activa Detallada y observa cómo cambia la tarjeta resaltada. Tu elección se guarda."
+msgstr "Cambia a Detallada y observa cómo cambia la tarjeta resaltada. Tu elección se guarda."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

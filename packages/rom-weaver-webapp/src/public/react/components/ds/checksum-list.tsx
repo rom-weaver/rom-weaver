@@ -141,7 +141,7 @@ const ChecksumList = ({
   label: ReactNode;
   timing?: ReactNode;
   match?: { ok: boolean; label: ReactNode };
-  /** A deferred verification is still running: show a subtle "Verifying…" readout in place of the
+  /** A deferred verification is still running: show a subtle "Checking…" readout in place of the
    * verdict chip (the card's verify-bar carries the motion; the body stays fully visible). */
   verifying?: boolean;
   sublabel?: ReactNode;
@@ -175,7 +175,7 @@ const ChecksumList = ({
             {summary}
             {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
             {verifying ? (
-              <DrawerReadout muted>Verifying…</DrawerReadout>
+              <DrawerReadout muted>Checking…</DrawerReadout>
             ) : (
               <>
                 {shownTiming ? <DrawerReadout time>{shownTiming}</DrawerReadout> : null}

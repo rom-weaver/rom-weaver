@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 import type { IdentifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
-import { abbreviatePlatform } from "../../../../presentation/platform-abbreviations.ts";
-import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import type { ParsedIdentifyLookupResult } from "../../../../types/identify.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
-import { DrawerReadout } from "./drawer.tsx";
+import { RomIdentificationReadouts } from "./rom-identification-readouts.tsx";
 import { IdentifyDrawer, PendingIdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import {
   type ChecksumPendingGroup,
@@ -76,9 +74,6 @@ const RomInputPanels = ({
   const localizer = useUiLocalizer();
   const { detailedViewEnabled = false } = useRomWeaverSettings();
   const isDisc = Array.isArray(tracks) && tracks.length > 0;
-  const matchedPlatforms = [...new Set((identification?.matches ?? []).map((match) => match.platform).filter(Boolean))];
-  const systemTag = matchedPlatforms.length ? matchedPlatforms.map(abbreviatePlatform).join(" · ") : platformTag;
-  const status = identification?.status;
   const conditionNote =
     !(detailedViewEnabled || identifyPending) && identification?.condition ? (
       <p className="pdesc identify-drawer-condition">
@@ -94,24 +89,11 @@ const RomInputPanels = ({
       </>
     ) : undefined;
   const summary = detailedViewEnabled ? undefined : (
-    <>
-      {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
-      {identifyPending ? (
-        <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
-      ) : identification?.condition ? (
-        <DrawerReadout muted>
-          {localizer.message(`ui.identifyDrawer.condition.${identification.condition}`)}
-        </DrawerReadout>
-      ) : status === "unavailable" ? (
-        <DrawerReadout muted>{localizer.message("ui.apply.titleLookupUnavailable")}</DrawerReadout>
-      ) : status === "matched" ? (
-        <DrawerReadout>{localizer.message("ui.file.identified")}</DrawerReadout>
-      ) : status === "ambiguous" ? (
-        <DrawerReadout muted>{identifyMatchCountLabel(identification?.matches.length ?? 0)}</DrawerReadout>
-      ) : status ? (
-        <DrawerReadout muted>{localizer.message("ui.identifyDrawer.unidentified")}</DrawerReadout>
-      ) : null}
-    </>
+    <RomIdentificationReadouts
+      identification={identification}
+      identifyPending={identifyPending}
+      platformTag={platformTag}
+    />
   );
   const renderInfo = () => {
     if (isDisc)

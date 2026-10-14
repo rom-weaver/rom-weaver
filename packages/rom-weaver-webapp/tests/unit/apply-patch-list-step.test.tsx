@@ -160,7 +160,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
-  it("labels a successful preflight with no compared checksum as applied, not verified", () => {
+  it("labels a successful preflight with no compared checksum as checked", () => {
     const appliedWithoutChecksum = item(0, {
       chainVerdict: {
         basis: "base",
@@ -170,7 +170,7 @@ describe("ApplyPatchListStep", () => {
     });
     const { container } = renderList({ patches: [appliedWithoutChecksum] });
 
-    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Applied");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Checked");
   });
 
   it("labels a successful preflight as verified when a checksum was compared or matched", () => {
