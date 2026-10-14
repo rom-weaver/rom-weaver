@@ -511,6 +511,49 @@ describe("page-level drag and drop", () => {
 
     expect(dropped.defaultPrevented).toBe(false);
   });
+
+  it("names the workflow a landing-page drop opens, then lets the veil go", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const column = () => container.querySelector("#column")?.className ?? "";
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["patch"], "hack.bps")]));
+    });
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(column()).toContain("rw-drop-routing");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Opening Apply Patches");
+    expect(container.querySelector('p[role="status"].sr-only')?.textContent).toBe("Opening Apply Patches");
+    await waitFor(() => expect(column()).not.toContain("rw-drop-routing"), { timeout: 2000 });
+  });
+
+  it("routes a file picked on the landing page without raising the drop veil", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const input = container.querySelector<HTMLInputElement>("#home-file-input");
+    if (!input) throw new Error("The landing page rendered no file input");
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(container.querySelector("#column")?.className ?? ""));
+    observer.observe(container.querySelector("#column") as Element, { attributeFilter: ["class"] });
+
+    Object.defineProperty(input, "files", { value: [new File(["patch"], "hack.bps")] });
+    fireEvent.change(input);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    observer.disconnect();
+    expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(false);
+  });
+
+  it("lets the veil go without naming a workflow when a landing-page drop needs a choice", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]));
+    });
+
+    await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    expect(container.querySelector(".dropveil-text")?.textContent).not.toContain("Opening");
+  });
 });
 
 describe("page metadata per view", () => {

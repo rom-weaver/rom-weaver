@@ -3275,6 +3275,11 @@ msgstr "Diese Dateien in Anwenden öffnen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.opening"
+msgstr "{page} wird geöffnet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Öffnet die Anleitung"
 

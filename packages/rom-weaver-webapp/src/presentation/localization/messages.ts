@@ -1360,6 +1360,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.drop.patchesIgnored",
     message: "Patches belong in Apply and were ignored.",
   }),
+  "ui.drop.opening": msg({ id: "ui.drop.opening", message: "Opening {page}" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),

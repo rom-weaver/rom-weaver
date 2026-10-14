@@ -3275,6 +3275,11 @@ msgstr "Abrir estos archivos en Aplicar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.opening"
+msgstr "Abriendo {page}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Abre la guía"
 
