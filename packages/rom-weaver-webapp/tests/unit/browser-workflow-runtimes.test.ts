@@ -339,6 +339,51 @@ describe("browser archive runtime", () => {
     );
   });
 
+  it.each([true, false])(
+    "preserves archive source precedence and byte snapshots with File available: %s",
+    async (hasFile) => {
+      const file = new File(["file"], "original.bin");
+      const shared = new SharedArrayBuffer(4);
+      const sharedBytes = new Uint8Array(shared);
+      sharedBytes.set([1, 2, 3, 4]);
+      const runtime = createBrowserArchiveRuntime(io as never);
+      if (!hasFile) vi.stubGlobal("File", undefined);
+      try {
+        await runtime.create?.({
+          entries: [
+            { fileName: "path.bin", filePath: "/work/path.bin", file, text: "ignored" },
+            { fileName: "file.bin", file, text: "ignored" },
+            { fileName: "text.bin", text: "", u8array: sharedBytes },
+            { fileName: "slice.bin", u8array: sharedBytes.subarray(1, 3), arrayBuffer: new ArrayBuffer(9) },
+            { fileName: "empty.bin", u8array: new Uint8Array(), arrayBuffer: shared },
+            { fileName: "shared.bin", arrayBuffer: shared },
+          ],
+          format: "zip",
+        } as never);
+        sharedBytes.fill(9);
+        const sources = io.stageSource.mock.calls.map(([request]) => request.source);
+        expect(sources.slice(0, 2)).toEqual(["/work/path.bin", file]);
+        const blobs = sources.slice(2);
+        const expected = [[], [2, 3], [], [1, 2, 3, 4]];
+        for (const [index, source] of blobs.entries()) {
+          expect(source).toBeInstanceOf(Blob);
+          if (!(source instanceof Blob)) throw new Error("Expected staged Blob");
+          expect(Array.from(new Uint8Array(await source.arrayBuffer()))).toEqual(expected[index]);
+          expect(source.type).toBe(index === 0 ? "text/plain" : "application/octet-stream");
+        }
+        if (hasFile)
+          expect(blobs.map((source) => (source as File).name)).toEqual([
+            "text.bin",
+            "slice.bin",
+            "empty.bin",
+            "shared.bin",
+          ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
   it("passes aligned relative entry names when a zip preserves paths", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
 
@@ -380,7 +425,7 @@ describe("browser archive runtime", () => {
       expect.any(Function),
       undefined,
     );
-    expect(io.stageSources).not.toHaveBeenCalled();
+    expect(io.stageSources).toHaveBeenCalledOnce();
     expect(io.stageSource).toHaveBeenCalledTimes(2);
   });
 
@@ -571,17 +616,33 @@ describe("browser archive runtime", () => {
     });
   });
 
+  it("validates all archive entry data before staging any source", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.create?.({
+        entries: [{ fileName: "valid.bin", text: "valid" }, { fileName: "missing.bin" }],
+        format: "zip",
+      }),
+    ).rejects.toThrow("Archive entry data was not provided: missing.bin");
+    expect(io.stageSource).not.toHaveBeenCalled();
+    expect(state.compressionCreate).not.toHaveBeenCalled();
+  });
+
   it("reports staging, descend, and storage failures with emitted context", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const stagedEntry = { cleanup: vi.fn(async () => undefined), fileName: "entry.bin", filePath: "/work/entry.bin" };
-    state.staged.push(stagedEntry);
+    io.stageSource.mockResolvedValueOnce(stagedEntry);
+    io.stageSource.mockRejectedValueOnce(new Error("second entry staging failed"));
     await expect(
       runtime.create?.({
-        entries: [{ fileName: "entry.bin", text: "ok" }, { fileName: "missing.bin" }],
+        entries: [
+          { fileName: "entry.bin", text: "ok" },
+          { fileName: "second.bin", text: "also valid" },
+        ],
         format: "zip",
         options: {},
       } as never),
-    ).rejects.toThrow("Archive entry data was not provided: missing.bin");
+    ).rejects.toThrow("second entry staging failed");
     expect(stagedEntry.cleanup).toHaveBeenCalledTimes(1);
 
     state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc.chd", filePath: "/work/disc.chd" });

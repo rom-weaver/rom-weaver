@@ -118,60 +118,20 @@ const normalizeZipLikeArchiveSource = (source: unknown): unknown => {
   };
 };
 
-const stageCompressionEntryForRomWeaver = async (
-  workerIo: RuntimeWorkerIo,
-  entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
-  fileName: string,
-  index: number,
-  pathPrefixRoot: string,
-): Promise<{ cleanup: () => Promise<void>; filePath: string }> => {
-  const source = createArchiveEntrySource(entry, fileName);
-  if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
-  const staged = await workerIo.stageSource({
-    fallbackFileName: fileName,
-    pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
-    pathPrefixInPath: true,
-    scope: "archive",
-    source,
-  });
-
-  return {
-    cleanup: async () => {
-      await staged.cleanup().catch(() => undefined);
-    },
-    filePath: staged.filePath,
-  };
-};
-
 const createArchiveEntrySource = (
   entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
   fileName: string,
 ): Blob | File | string | Uint8Array | ArrayBufferLike | null => {
   if (entry.filePath) return entry.filePath;
   if (entry.file) return entry.file;
-  if (entry.text !== undefined) {
-    if (typeof File !== "undefined") return new File([String(entry.text)], fileName, { type: "text/plain" });
-    return new Blob([String(entry.text)], { type: "text/plain" });
-  }
-  if (entry.u8array) {
-    if (typeof File !== "undefined")
-      return new File([toFileBlobPart(entry.u8array)], fileName, {
-        type: "application/octet-stream",
-      });
-    return new Blob([toFileBlobPart(entry.u8array)], {
-      type: "application/octet-stream",
-    });
-  }
-  if (entry.arrayBuffer) {
-    if (typeof File !== "undefined")
-      return new File([toFileBlobPart(entry.arrayBuffer)], fileName, {
-        type: "application/octet-stream",
-      });
-    return new Blob([toFileBlobPart(entry.arrayBuffer)], {
-      type: "application/octet-stream",
-    });
-  }
-  return null;
+  let part: BlobPart;
+  const bytes = entry.u8array || entry.arrayBuffer;
+  const type = entry.text === undefined ? "application/octet-stream" : "text/plain";
+  if (entry.text !== undefined) part = String(entry.text);
+  else if (bytes) part = toFileBlobPart(bytes);
+  else return null;
+  if (typeof File !== "undefined") return new File([part], fileName, { type });
+  return new Blob([part], { type });
 };
 
 // Split-bin extraction is valid only for CD-class CHDs. The Rust chd-extract REJECTS the flag on DVD
@@ -199,89 +159,88 @@ const isDescendCdChd = async (
   return !!probed?.entries?.some((entry) => /\.cue$/i.test(String(entry.filename || entry.fileName || "")));
 };
 
-const stageBrowserCompressionEntries = async (
-  entries: RuntimeArchiveCreateInput["entries"],
+const stageArchiveSources = async (
   workerIo: RuntimeWorkerIo,
+  requests: Parameters<RuntimeWorkerIo["stageSources"]>[0],
 ) => {
-  const normalizedEntries = normalizeCompressionWorkerEntries(entries);
-  const pathPrefixRoot = `archive-create-${createVfsPathId()}`;
-  const stagedEntries: Array<{
-    cleanup: () => Promise<void>;
-    filePath: string;
-  }> = [];
-  try {
-    const inputPaths: string[] = [];
-    const entryNames: string[] = [];
-    for (let index = 0; index < normalizedEntries.length; index++) {
-      const entry = normalizedEntries[index];
-      if (!entry) continue;
-      const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
-      const stagedEntry = await stageCompressionEntryForRomWeaver(workerIo, entry, fileName, index, pathPrefixRoot);
-      stagedEntries.push(stagedEntry);
-      inputPaths.push(stagedEntry.filePath);
-      entryNames.push(fileName);
-    }
-
-    return {
-      cleanup: async () => {
-        await Promise.all(stagedEntries.map((entry) => entry.cleanup().catch(() => undefined)));
-      },
-      inputPaths,
-      entryNames,
-      stagedEntries,
-    };
-  } catch (error) {
-    await Promise.all(stagedEntries.map((entry) => entry.cleanup().catch(() => undefined)));
-    throw error;
-  }
-};
-
-const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionProbeInput) => {
-  const trace = { logLevel: input.options?.logLevel, onLog: input.options?.onLog };
-  if (!input.companionFiles?.length) {
-    const archive = await workerIo.stageSource({
-      fallbackFileName: "archive.bin",
-      pathPrefix: "archive-input",
-      scope: "archive",
-      source: normalizeZipLikeArchiveSource(input.source),
-      trace,
-    });
-    return { archive, knownInputPaths: [archive.filePath], cleanup: archive.cleanup };
-  }
-  const files = [input.source, ...input.companionFiles];
-  if (!files.every((file): file is File => file instanceof File)) {
-    throw new Error("Companion extraction requires a File source and File companions.");
-  }
-  const names = new Set<string>();
-  const pathPrefix = `archive-input-${createVfsPathId()}`;
-  // Grouped uploads MUST use fresh File identities to keep cached standalone stages
-  // from changing the directory or fixed basename of a companion.
-  const requests = files.map((file) => {
-    const fileName = normalizeArchiveRelativePath(file.name).toLowerCase();
-    if (fileName.includes("/")) {
-      throw new Error("Companion filenames cannot contain directories.");
-    }
-    if (names.has(fileName)) throw new Error("Duplicate companion filename.");
-    names.add(fileName);
-    return {
-      fallbackFileName: fileName,
-      pathPrefix,
-      pathPrefixInPath: true,
-      scope: "archive" as const,
-      source: new File([file], fileName),
-      trace,
-    };
-  });
   const staged = await workerIo.stageSources(requests);
-  const archive = staged[0];
-  if (!archive) throw new Error("Archive was not staged.");
   return {
-    archive,
-    knownInputPaths: staged.map((entry) => entry.filePath),
+    archive: staged[0],
+    inputPaths: staged.map((entry) => entry.filePath),
     cleanup: async () => {
       await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
     },
   };
+};
+
+const stageBrowserCompressionEntries = async (
+  entries: RuntimeArchiveCreateInput["entries"],
+  workerIo: RuntimeWorkerIo,
+) => {
+  const pathPrefixRoot = `archive-create-${createVfsPathId()}`;
+  const requests = normalizeCompressionWorkerEntries(entries).flatMap((entry, index) => {
+    if (!entry) return [];
+    const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
+    const source = createArchiveEntrySource(entry, fileName);
+    if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
+    return [
+      {
+        fallbackFileName: fileName,
+        pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
+        pathPrefixInPath: true,
+        scope: "archive" as const,
+        source,
+      },
+    ];
+  });
+  return {
+    ...(await stageArchiveSources(workerIo, requests)),
+    entryNames: requests.map((request) => request.fallbackFileName),
+  };
+};
+
+const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionProbeInput) => {
+  const trace = { logLevel: input.options?.logLevel, onLog: input.options?.onLog };
+  let requests: Parameters<RuntimeWorkerIo["stageSources"]>[0];
+  if (input.companionFiles?.length) {
+    const files = [input.source, ...input.companionFiles];
+    if (!files.every((file): file is File => file instanceof File)) {
+      throw new Error("Companion extraction requires a File source and File companions.");
+    }
+    const names = new Set<string>();
+    const pathPrefix = `archive-input-${createVfsPathId()}`;
+    // Grouped uploads MUST use fresh File identities to keep cached standalone stages
+    // from changing the directory or fixed basename of a companion.
+    requests = files.map((file) => {
+      const fileName = normalizeArchiveRelativePath(file.name).toLowerCase();
+      if (fileName.includes("/")) {
+        throw new Error("Companion filenames cannot contain directories.");
+      }
+      if (names.has(fileName)) throw new Error("Duplicate companion filename.");
+      names.add(fileName);
+      return {
+        fallbackFileName: fileName,
+        pathPrefix,
+        pathPrefixInPath: true,
+        scope: "archive",
+        source: new File([file], fileName),
+        trace,
+      };
+    });
+  } else {
+    requests = [
+      {
+        fallbackFileName: "archive.bin",
+        pathPrefix: "archive-input",
+        scope: "archive",
+        source: normalizeZipLikeArchiveSource(input.source),
+        trace,
+      },
+    ];
+  }
+  const staged = await stageArchiveSources(workerIo, requests);
+  if (!staged.archive) throw new Error("Archive was not staged.");
+  return { archive: staged.archive, knownInputPaths: staged.inputPaths, cleanup: staged.cleanup };
 };
 
 const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<WorkflowRuntime["compression"]> => ({
