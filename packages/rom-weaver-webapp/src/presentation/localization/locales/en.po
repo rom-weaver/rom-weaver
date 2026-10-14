@@ -451,7 +451,7 @@ msgstr "Adds Files, Identify and disc-sheet drawers, plus timings."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.detailedView"
-msgstr "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch."
+msgstr "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Simple/Detailed switch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,6 +1627,11 @@ msgstr "Description"
 #: src/presentation/localization/messages.ts
 msgid "ui.view.detailed"
 msgstr "Detailed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4681,12 +4686,12 @@ msgstr "Switch a patch off, or open its menu to add a practice cheat."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedTryIt"
-msgstr "Switch Detailed off to go back to one drawer per file. Your choice is saved."
+msgstr "Switch to Simple to go back to one drawer per file. Your choice is saved."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleTryIt"
-msgstr "Switch Detailed on and watch the highlighted card change. Your choice is saved."
+msgstr "Switch to Detailed and watch the highlighted card change. Your choice is saved."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -11,10 +11,11 @@ import type {
   ParsedIdentifyTitleMatch,
 } from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
-import { useUiLocalizer } from "../../settings-context.tsx";
+import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx";
 import { useKeepInputVisible } from "../../use-keep-input-visible.ts";
 import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
+import { DrawerReadout } from "./drawer.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
 import { FileCard } from "./file-card.tsx";
 import { PlatformName } from "./platform-name.tsx";
@@ -244,6 +245,7 @@ const RomExpectationCard = ({
   removeLabel?: string;
 }) => {
   const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   const identified = identification?.status === "matched" ? identification.matches[0] : undefined;
   // Several titles share the checksum: the drawer that lists them is the answer,
   // so it opens on arrival instead of hiding behind an untitled card.
@@ -277,11 +279,18 @@ const RomExpectationCard = ({
         {...(onRemove ? { onRemove } : {})}
         {...(removeLabel ? { removeLabel } : {})}
       >
-        {identification ? <IdentifyDrawer defaultOpen={ambiguous} identification={identification} /> : null}
+        {detailedViewEnabled && identification ? (
+          <IdentifyDrawer defaultOpen={ambiguous} identification={identification} />
+        ) : null}
         <ChecksumList
           defaultOpen
           label={localizer.message("ui.checks.title")}
           sublabel={localizer.message("ui.sourceInfo.expected")}
+          summary={
+            !detailedViewEnabled && ambiguous ? (
+              <DrawerReadout muted>{identifyMatchCountLabel(identification.matches.length)}</DrawerReadout>
+            ) : undefined
+          }
         >
           {componentGroups.length > 1 ? (
             <ExpectedComponentCheckGroups

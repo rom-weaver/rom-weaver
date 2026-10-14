@@ -80,6 +80,7 @@ const renderRoot = async ({
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
+  detailedViewEnabled = false,
   language,
   updateReady = false,
 }: {
@@ -88,12 +89,14 @@ const renderRoot = async ({
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
+  detailedViewEnabled?: boolean;
   language?: string;
   updateReady?: boolean;
 } = {}) => {
   if (!notFound) await preloadWorkflowRoute(currentView);
   const { actions, called } = createActions();
   const state = baseState();
+  state.settings.detailedViewEnabled = detailedViewEnabled;
   if (language) state.settings.language = language;
   const view = render(
     <WebappRoot
@@ -361,17 +364,18 @@ describe("the unified dialog", () => {
     );
   });
 
-  it("switches from the default simple view to detailed view from the panel heading", async () => {
-    const { called, container } = await renderRoot();
+  it.each([false, true])("labels the active view when detailed is %s", async (detailedViewEnabled) => {
+    const { called, container } = await renderRoot({ detailedViewEnabled });
 
     const toggle = container.querySelector(".workflow-panel-head .panel-view-toggle input") as HTMLInputElement;
-    expect(toggle.closest("label")?.textContent).toBe("Detailed");
+    expect(toggle.closest("label")?.textContent).toBe(detailedViewEnabled ? "Detailed" : "Simple");
     expect(toggle.getAttribute("role")).toBe("switch");
-    expect(toggle.checked).toBe(false);
-    expect(toggle.getAttribute("aria-label")).toBe("Detailed");
+    expect(toggle.checked).toBe(detailedViewEnabled);
+    expect(toggle.getAttribute("aria-checked")).toBe(String(detailedViewEnabled));
+    expect(toggle.getAttribute("aria-label")).toBe("Simple / Detailed");
     fireEvent.click(toggle);
 
-    expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(true);
+    expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(!detailedViewEnabled);
     expect(called("onOpenSettings")).not.toHaveBeenCalled();
   });
 

@@ -611,14 +611,14 @@ describe("sample tutorial step card", () => {
     expect(screen.getByRole("heading", { name: "Choose how much to see" })).toBeTruthy();
     expect(screen.getByText(/You're in Simple view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Simple");
-    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Detailed/)).toBeTruthy();
     const head = document.querySelector(".workflow-panel-head") as HTMLElement;
     await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
 
     rerender(viewWorkbench(true));
     expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Detailed");
-    expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Simple/)).toBeTruthy();
   });
 
   it("changes the live view from the guide comparison without advancing", async () => {
@@ -716,7 +716,7 @@ describe("sample tutorial step card", () => {
     expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
     expect(screen.getByText(/^Check the first section\. You're in Simple view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare")).toBeTruthy();
-    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Detailed/)).toBeTruthy();
     const head = document.querySelector(".workflow-panel-head") as HTMLElement;
     await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
   });

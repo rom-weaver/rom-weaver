@@ -41,6 +41,59 @@ const rows = (container: ParentNode) =>
   );
 
 describe("RomExpectationCard", () => {
+  it.each(["manual", "name", "patch", "weave"] as const)(
+    "follows the detail setting without losing %s checks",
+    (source) => {
+      const card = (detailedViewEnabled: boolean) => (
+        <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+          <RomExpectationCard
+            expectation={{ checks: { checksums: { crc32: "abcd1234" } }, source }}
+            identification={matched([{ crc32: "abcd1234", size: 4194304 }])}
+          />
+        </RomWeaverSettingsProvider>
+      );
+      const { container, queryByRole, rerender } = render(card(false));
+
+      expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+      expect(queryByRole("button", { name: /^Checks/ })).not.toBeNull();
+      expect(container.textContent).toContain("Metroid Fusion (USA)");
+      expect(rows(container)).toContain("CRC32 abcd1234");
+
+      rerender(card(true));
+      const identify = queryByRole("button", { name: /^Identify/ });
+      expect(identify).not.toBeNull();
+      fireEvent.click(identify as HTMLButtonElement);
+      expect(identify?.getAttribute("aria-expanded")).toBe("true");
+
+      rerender(card(false));
+      expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+      expect(queryByRole("button", { name: /^Checks/ })?.getAttribute("aria-expanded")).toBe("true");
+      expect(rows(container)).toContain("CRC32 abcd1234");
+      expect(rows(container)).toContain("BYTES 4194304");
+    },
+  );
+
+  it("keeps ambiguous match counts visible in simple view", () => {
+    const identification = matched([{ crc32: "abcd1234" }]);
+    identification.status = "ambiguous";
+    identification.matches.push({ ...identification.matches[0], name: "Another game" });
+    const card = (detailedViewEnabled: boolean) => (
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+        <RomExpectationCard
+          expectation={{ checks: { checksums: { crc32: "abcd1234" } }, source: "manual" }}
+          identification={identification}
+        />
+      </RomWeaverSettingsProvider>
+    );
+    const { queryByRole, rerender } = render(card(false));
+
+    expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+    expect(queryByRole("button", { name: /^Checks.*2 possible matches/ })).not.toBeNull();
+
+    rerender(card(true));
+    expect(queryByRole("button", { name: /^Identify/ })?.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("merges the database checks into one Expected group named after the database", () => {
     const { container } = render(
       <RomExpectationCard
