@@ -346,6 +346,44 @@ describe("compress service", () => {
       expect(await getCompressFormats(entries.map((entry) => entry.file))).toEqual(["zip", "7z", "chd"]);
     });
 
+    it.each(["zip", "7z"] as const)("preserves case-distinct GDI tracks when repacking as %s", async (format) => {
+      const text = "2\n1 0 4 2352 A.bin 0\n2 45000 4 2352 a.bin 0\n";
+      const { runtime } = extractRuntime({
+        "disc.gdi": file("disc.gdi", text),
+        "A.bin": file("A.bin", new Uint8Array([1])),
+        "a.bin": file("a.bin", new Uint8Array([2])),
+      });
+      const entries = await extractCompressEntries(file("disc.zip"), ["disc.gdi", "A.bin", "a.bin"], runtime);
+      const compression = makeRuntime();
+      await compressFiles(
+        entries.map((entry) => entry.file),
+        options(format),
+        compression.runtime,
+      );
+      const files = compression.create.mock.calls[0]?.[0].entries?.map((entry) => entry.file);
+      expect(await files?.[0]?.text()).toBe(text);
+      const upper = files?.[1];
+      const lower = files?.[2];
+      if (!(upper && lower)) throw new Error("Both track files must reach archive compression");
+      expect(new Uint8Array(await upper.arrayBuffer())).toEqual(new Uint8Array([1]));
+      expect(new Uint8Array(await lower.arrayBuffer())).toEqual(new Uint8Array([2]));
+    });
+
+    it.each(["cue", "gdi"])("rewrites %s letter-case mismatches only when unambiguous", async (extension) => {
+      const text = extension === "gdi" ? "1\n1 0 4 2352 TRACK.BIN 0\n" : 'FILE "TRACK.BIN" BINARY\n';
+      const sheet = `disc.${extension}`;
+      for (const names of [["Track.bin"], ["Track.bin", "track.bin"]]) {
+        const { runtime } = extractRuntime({
+          [sheet]: file(sheet, text),
+          ...Object.fromEntries(names.map((name) => [name, file(name)])),
+        });
+        const entries = await extractCompressEntries(file("disc.zip"), [sheet, ...names], runtime);
+        expect(await entries[0]?.file.text()).toBe(
+          names.length === 1 ? text.replace(/"?TRACK.BIN"?/, '"Track.bin"') : text,
+        );
+      }
+    });
+
     it("selects names with wildcard characters literally", async () => {
       const { extract, runtime } = extractRuntime({});
       extract.mockImplementationOnce(async () => {

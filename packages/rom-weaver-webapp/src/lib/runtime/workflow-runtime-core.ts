@@ -505,6 +505,7 @@ const createSharedCompressionRuntime = (
   const createRomSpecificInputs = {
     chd: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateChdInput => ({
       compressionCodecs: request.romSpecific?.chd?.compressionCodecs,
+      compressionProfile: request.romSpecific?.chd?.compressionProfile,
       cueFilePath: request.romSpecific?.chd?.cueFilePath,
       fileName: request.fileName,
       imageFiles: request.romSpecific?.chd?.imageFiles,

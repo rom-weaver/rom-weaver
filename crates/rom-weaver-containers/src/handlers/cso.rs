@@ -183,16 +183,9 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
                     }
                     decoded[..stored_len].copy_from_slice(&stored);
                 } else {
-                    // SAFETY: Both buffers are valid for their passed lengths, bounded above by 16 MiB.
-                    let decoded_len = unsafe {
-                        lz4_sys::LZ4_decompress_safe(
-                            stored.as_ptr().cast(),
-                            decoded.as_mut_ptr().cast(),
-                            stored_len as i32,
-                            self.block_size as i32,
-                        )
-                    };
-                    if decoded_len != block_len as i32 {
+                    let decoded_len = lz4_flex::block::decompress_into(&stored, &mut decoded)
+                        .map_err(|_| Self::invalid("invalid CSO LZ4 compressed block"))?;
+                    if decoded_len != block_len {
                         return Err(Self::invalid("invalid CSO LZ4 compressed block"));
                     }
                 }
@@ -632,6 +625,70 @@ mod reader_regressions {
                 .read_offset(0, &mut output)
                 .expect("valid expanded LZ4 literal stream");
             assert_eq!(output, original);
+        }
+    }
+
+    fn match_block(offset: u8, preceding_match: bool) -> Vec<u8> {
+        let mut compressed = if preceding_match {
+            vec![0x10, b'A', 1, 0, 0x0f, offset, 0]
+        } else {
+            vec![0x1f, b'A', offset, 0]
+        };
+        compressed.extend_from_slice(&[255; 7]);
+        compressed.push(if preceding_match { 234 } else { 238 });
+        compressed.extend_from_slice(&[0x50, b'B', b'B', b'B', b'B', b'B']);
+        let mut payload = (compressed.len() as u32).to_le_bytes().to_vec();
+        payload.extend_from_slice(&compressed);
+        image_with_spans(
+            2048,
+            2048,
+            0,
+            &[0x8000_0020, 32 + payload.len() as u32],
+            &payload,
+        )
+    }
+
+    #[test]
+    fn cso_lz4_rejects_zero_match_offsets() {
+        for preceding_match in [false, true] {
+            let bytes = match_block(0, preceding_match);
+            let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+            let error = reader
+                .read_offset(0, &mut [0; 2048])
+                .expect_err("zero offset after literals or a match must be rejected");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        }
+    }
+
+    #[test]
+    fn cso_lz4_match_offsets_preserve_bytes_and_bounds() {
+        for preceding_match in [false, true] {
+            let bytes = match_block(1, preceding_match);
+            for logical_bytes in [2047_u64, 2048, 2049] {
+                let mut bytes = bytes.clone();
+                bytes[8..16].copy_from_slice(&logical_bytes.to_le_bytes());
+                bytes[16..20].copy_from_slice(&4096_u32.to_le_bytes());
+                let mut reader =
+                    CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+                let mut output = vec![0; logical_bytes as usize];
+                let result = reader.read_offset(0, &mut output);
+                if logical_bytes == 2048 {
+                    result.expect("valid offset one");
+                    assert_eq!(&output[..2043], &[b'A'; 2043]);
+                    assert_eq!(&output[2043..], &[b'B'; 5]);
+                    let mut tail = [0; 6];
+                    reader
+                        .read_offset(2042, &mut tail)
+                        .expect("partial match read");
+                    assert_eq!(tail, [b'A', b'B', b'B', b'B', b'B', b'B']);
+                    assert!(reader.read_offset(2048, &mut [0]).is_err());
+                } else {
+                    assert!(
+                        result.is_err(),
+                        "decoded size must equal logical block length"
+                    );
+                }
+            }
         }
     }
 
