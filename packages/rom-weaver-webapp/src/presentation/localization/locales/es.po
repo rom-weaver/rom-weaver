@@ -5707,3 +5707,18 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.saveTool"
+msgstr "Editor de partidas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.undoTool"
+msgstr "Deshacer PPF"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.tools"
+msgstr "Herramientas para esta guía"

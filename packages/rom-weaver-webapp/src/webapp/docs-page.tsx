@@ -579,6 +579,9 @@ const DocsPage = ({
               <span>{docShelfFor(route.slug)?.title}</span>
             </nav>
           )}
+          {onSelectTab ? (
+            <RelatedStrip entryKey={route.slug} labelId="ui.docs.tools" onSelectTab={onSelectTab} />
+          ) : null}
           {/* Keyed on the route so a guide switch remounts the article and
               replays its entrance - that animation IS the page transition. */}
           <article

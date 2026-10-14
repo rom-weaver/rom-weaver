@@ -440,7 +440,13 @@
 
 /* Related strip: rows, not pills, so tool (thread-tinted) and guide
    (plain outline) links never read as one list. Used at the foot of a
-   finished workflow result, a docs article, and the not-found page. */
+   finished workflow result and the not-found page, and at both ends of a guide. */
+.rw-app .docs-panel > .related-strip {
+  margin: var(--article-pad) var(--article-pad) 0;
+}
+.rw-app .docs-panel > .related-strip .related-row {
+  min-height: 56px;
+}
 .rw-app .related-strip ul {
   display: flex;
   flex-direction: column;

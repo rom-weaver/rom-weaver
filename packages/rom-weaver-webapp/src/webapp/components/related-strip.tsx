@@ -1,10 +1,12 @@
+import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { DOC_SOURCES } from "../docs-routing.mjs";
 import { RELATED_LINKS } from "../related-links.ts";
 
 type RelatedStripProps = {
-  /** A `WebappView` id (workflow result) or a docs slug (guide footer). */
+  /** A `WebappView` id (workflow result) or a docs slug (guide tools). */
   entryKey: string;
+  labelId?: MessageId;
   /** The same handler the nav uses to switch tabs; never resolved here. */
   onSelectTab: (id: string) => void;
 };
@@ -22,14 +24,14 @@ type RelatedStripProps = {
  * branch here breaks hydration for everyone whose setting differs from the
  * build's.
  */
-const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
+const RelatedStrip = ({ entryKey, labelId = "ui.related.heading", onSelectTab }: RelatedStripProps) => {
   const localizer = useUiLocalizer();
   const entry = RELATED_LINKS[entryKey];
   const tools = entry?.tools ?? [];
   const guideRoute = entry?.guide ? DOC_SOURCES.find((route) => route.slug === entry.guide?.slug) : undefined;
   if (tools.length === 0 && !guideRoute) return null;
   return (
-    <nav aria-label={localizer.message("ui.related.heading")} className="related-strip">
+    <nav aria-label={localizer.message(labelId)} className="related-strip">
       <ul>
         {tools.map((tool) => (
           <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>

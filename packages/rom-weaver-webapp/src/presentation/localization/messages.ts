@@ -1650,6 +1650,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.related.applyTool": msg({ id: "ui.related.applyTool", message: "Apply tool" }),
   "ui.related.createTool": msg({ id: "ui.related.createTool", message: "Create tool" }),
+  "ui.related.saveTool": msg({ id: "ui.related.saveTool", message: "Save Editor" }),
+  "ui.related.undoTool": msg({ id: "ui.related.undoTool", message: "PPF undo" }),
+  "ui.docs.tools": msg({ id: "ui.docs.tools", message: "Tools for this guide" }),
   "ui.related.heading": msg({ id: "ui.related.heading", message: "Related" }),
   "ui.related.hintGuide": msg({ id: "ui.related.hintGuide", message: "Opens the guide" }),
   "ui.related.hintCarriesSelection": msg({

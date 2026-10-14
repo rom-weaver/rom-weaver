@@ -980,8 +980,56 @@ Fixture description.
     expect(onSelectTab).toHaveBeenCalledWith("trim");
   });
 
+  it.each([
+    ["docs/apply-rom-patches", "patcher"],
+    ["docs/create-rom-patches", "creator"],
+    ["docs/create-bundles", "weave"],
+    ["docs/identify-roms-browser", "identify"],
+    ["docs/search-rom-checksums", "identify"],
+    ["docs/checksum-roms-browser", "checksum"],
+    ["docs/convert-to-chd", "compress"],
+    ["docs/convert-rvz-to-iso", "extract"],
+    ["docs/test-roms", "test"],
+    ["docs/trim-roms-browser", "trim"],
+    ["docs/edit-gen3-saves", "save-editor"],
+    ["docs/undo-ppf-browser", "ppf-undo"],
+    ["docs/get-started", "patcher"],
+  ])("opens the matching tool above %s and keeps its footer button", (slug, view) => {
+    const onSelectTab = vi.fn();
+    render(<DocsPage active onSelectTab={onSelectTab} slug={slug} />);
+    const strip = document.querySelector(".docs-panel > .related-strip");
+    const button = strip?.querySelector("button") as HTMLButtonElement;
+    const article = document.querySelector(".docs-article") as HTMLElement;
+    expect(strip).not.toBeNull();
+    expect(strip?.getAttribute("aria-label")).toBe("Tools for this guide");
+    expect(document.querySelector(".docs-footer .related-strip")?.getAttribute("aria-label")).toBe("Related");
+    expect(strip?.compareDocumentPosition(article) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(button.textContent).toBe(document.querySelector(".docs-footer .related-row-tool")?.textContent);
+    fireEvent.click(button);
+    expect(onSelectTab).toHaveBeenCalledWith(view);
+  });
+
+  it("updates the top buttons when navigating between guides", () => {
+    const onSelectTab = vi.fn();
+    const { rerender } = render(<DocsPage active onSelectTab={onSelectTab} slug="docs/use-cheats" />);
+    const toolButtons = () => [...document.querySelectorAll<HTMLButtonElement>(".docs-panel > .related-strip button")];
+    expect(toolButtons()).toHaveLength(2);
+    for (const button of toolButtons()) fireEvent.click(button);
+    expect(onSelectTab.mock.calls).toEqual([["patcher"], ["creator"]]);
+
+    rerender(<DocsPage active onSelectTab={onSelectTab} slug="docs/create-bundles" />);
+    expect(toolButtons()).toHaveLength(1);
+    fireEvent.click(toolButtons()[0]);
+    expect(onSelectTab).toHaveBeenLastCalledWith("weave");
+
+    rerender(<DocsPage active onSelectTab={onSelectTab} slug="docs/privacy" />);
+    expect(toolButtons()).toHaveLength(0);
+    expect(document.querySelector(".docs-panel > .related-strip")).toBeNull();
+  });
+
   it("does not mount the related-links strip without an onSelectTab handler", () => {
     render(<DocsPage active slug="docs/cli-trim" />);
     expect(document.querySelector(".docs-footer nav.related-strip")).toBeNull();
+    expect(document.querySelector(".docs-panel > .related-strip")).toBeNull();
   });
 });
