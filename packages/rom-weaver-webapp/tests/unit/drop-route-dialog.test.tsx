@@ -2,12 +2,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import type { DropEntry } from "../../src/public/react/drop-destination.ts";
 import { DropRouteDialog } from "../../src/webapp/components/drop-route-dialog.tsx";
 import type { WebappView } from "../../src/webapp/webapp-state-types.ts";
 
 const files = (...names: string[]) => names.map((name) => new File(["x"], name));
 
-const renderDialog = (from: WebappView, dropped: File[]) => {
+const renderDialog = (from: WebappView, dropped: File[], entries?: DropEntry[]) => {
   const delivered: { files: string[]; view: WebappView }[] = [];
   render(
     <RomWeaverSettingsProvider settings={{ language: "en" }}>
@@ -15,7 +16,7 @@ const renderDialog = (from: WebappView, dropped: File[]) => {
         labelFor={(view) => (view === "trim" ? "Trim ROM" : view)}
         onCancel={() => undefined}
         onDeliver={(view, chosen) => delivered.push({ files: chosen.map((file) => file.name), view })}
-        request={{ files: dropped, from, id: 1 }}
+        request={{ entries, files: dropped, from, id: 1 }}
       />
     </RomWeaverSettingsProvider>,
   );
@@ -23,6 +24,19 @@ const renderDialog = (from: WebappView, dropped: File[]) => {
 };
 
 describe("DropRouteDialog", () => {
+  it.each([
+    ["Apply Patches", "patcher"],
+    ["Weave Patches", "weave"],
+  ])("delivers a packaged weave to %s", (label, view) => {
+    const delivered = renderDialog("home", files("release.zip"), [
+      { name: "release.zip", archiveBucket: "patch", weave: true },
+    ]);
+    expect(screen.getByText("What do you want to do with this weave?")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Test ROM/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(label) }));
+    expect(delivered).toEqual([{ files: ["release.zip"], view }]);
+  });
+
   it("delivers every file when the picked page can use them all", () => {
     const delivered = renderDialog("home", files("game.sfc"));
     expect(screen.getByText("What do you want to do with this ROM?")).toBeTruthy();
