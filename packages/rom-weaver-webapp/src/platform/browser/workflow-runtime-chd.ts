@@ -2,6 +2,7 @@ import {
   getRomSpecificExtractedFileName,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
 } from "../../lib/compression/container-format-registry.ts";
+import { parseGdiFileReferences, replaceGdiFileReferences } from "../../workers/protocol/gdi-file-utils.ts";
 import { replaceCuePatchFileName } from "../../lib/input/rom-specific-file-utils.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
@@ -107,7 +108,10 @@ const rewriteStagedCue = async (cuePath: string, rewrite: (contents: string) => 
   const updatedContents = rewrite(contents);
   if (updatedContents === contents) return;
   if (getBrowserVirtualFileSource(cuePath)) {
-    updateBrowserVirtualFileSource(cuePath, new Blob([updatedContents], { type: "application/x-cue" }));
+    updateBrowserVirtualFileSource(
+      cuePath,
+      new Blob([updatedContents], { type: /\.gdi$/i.test(cuePath) ? "text/plain" : "application/x-cue" }),
+    );
     return;
   }
   await writeTextToBrowserVfs(cuePath, updatedContents);
@@ -125,13 +129,15 @@ const resolveCueSidecarPath = (cuePath: string, referencedName: string): string 
 // knownInputPaths makes them visible to spawned threads, which open their bytes through the OPFS proxy.
 const collectCueSidecarPaths = async (cuePath: string): Promise<string[]> => {
   const normalizedCuePath = String(cuePath || "").trim();
-  if (!(normalizedCuePath && /\.cue$/i.test(normalizedCuePath))) return [];
+  if (!(normalizedCuePath && /\.(cue|gdi)$/i.test(normalizedCuePath))) return [];
   const contents = await readStagedCueText(normalizedCuePath).catch(() => "");
   if (!contents) return [];
-  const parsed = parseCueFile(contents);
+  const references = /\.gdi$/i.test(normalizedCuePath)
+    ? parseGdiFileReferences(contents).map(normalizeEntryPath)
+    : parseCueFile(contents).files.map((file) => file.name);
   const sidecarPaths: string[] = [];
-  for (const file of parsed.files) {
-    const sidecarPath = resolveCueSidecarPath(normalizedCuePath, file.name);
+  for (const reference of references) {
+    const sidecarPath = resolveCueSidecarPath(normalizedCuePath, reference);
     if (!sidecarPath || sidecarPath === normalizedCuePath) continue;
     // A referenced track is available if it is on OPFS or registered as a virtual input.
     const exists =
@@ -193,6 +199,16 @@ const createBrowserChdRuntime = (
             replaceCuePatchFileName(contents, workerInput.filePath),
           );
         }
+      } else if (/\.gdi$/i.test(chdInputPath) && stagedImageSources.length > 0) {
+        const stagedTracks = new Map(
+          stagedImageSources.map((entry, index) => [
+            getPathBaseName(imageFiles?.[index]?.fileName || entry.fileName).toLowerCase(),
+            entry.filePath,
+          ]),
+        );
+        await rewriteStagedCue(chdInputPath, (contents) =>
+          replaceGdiFileReferences(contents, (name) => stagedTracks.get(getPathBaseName(name).toLowerCase())),
+        );
       } else if (/\.cue$/i.test(chdInputPath) && stagedImageSources.length === 1) {
         // The cue is the main input and its track staged separately. Staging can land the track on
         // a collision-suffixed path (e.g. `disc-2.bin`) that no longer matches the name the cue
@@ -213,9 +229,8 @@ const createBrowserChdRuntime = (
         );
       }
 
-      // When the CHD input is a cue, hydrate every sibling track file it references so worker
-      // threads can read the full disc layout from OPFS.
-      if (/\.cue$/i.test(chdInputPath)) {
+      // Disc sheets MUST hydrate every referenced track before worker threads read the layout.
+      if (/\.(cue|gdi)$/i.test(chdInputPath)) {
         const cueSidecarPaths = await collectCueSidecarPaths(chdInputPath);
         for (const sidecarPath of cueSidecarPaths) {
           if (!stagedInputPaths.includes(sidecarPath)) stagedInputPaths.push(sidecarPath);

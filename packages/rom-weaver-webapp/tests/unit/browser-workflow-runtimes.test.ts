@@ -784,6 +784,35 @@ describe("browser CHD runtime", () => {
     });
   });
 
+  it("rewrites GDI track paths and keeps every staged track visible to the guest", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    const text = '2\r\n1 0 4 2352 "tracks/track 01.bin" 0\r\n2 45000 4 2352 track02.bin 128\r\n';
+    state.virtualSources.set("/work/disc.gdi", new Blob([text]));
+    state.staged.push(
+      { filePath: "/work/disc.gdi", fileName: "disc.gdi", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track01-2.bin", fileName: "track 01.bin", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track02-3.bin", fileName: "track02.bin", cleanup: vi.fn(async () => undefined) },
+    );
+    await runtime.createChd({
+      source: "disc.gdi",
+      fileName: "disc.gdi",
+      mode: "gd",
+      imageFiles: [
+        { fileName: "track 01.bin", source: "a" },
+        { fileName: "track02.bin", source: "b" },
+      ],
+    } as never);
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      format: "chd-gd",
+      inputPaths: ["/work/disc.gdi"],
+      knownInputPaths: ["/work/disc.gdi", "/work/track01-2.bin", "/work/track02-3.bin"],
+    });
+    const updated = state.updatedVirtual[0]?.source as Blob | undefined;
+    expect(await updated?.text()).toBe(
+      text.replace('"tracks/track 01.bin"', '"/work/track01-2.bin"').replace("track02.bin", '"/work/track02-3.bin"'),
+    );
+  });
+
   it("reads virtual and OPFS cue sources and hydrates their sidecars", async () => {
     const runtime = createBrowserChdRuntime(io as never);
     state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "blob.cue", filePath: "/work/blob.cue" });
