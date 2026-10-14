@@ -228,7 +228,11 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         // makes create fail WITHOUT touching the file and never enters the guard,
         // so its Drop can't delete the very file the flag protects.
         let cleanup = ChdOutputCleanup::new();
-        let mut output = BufWriter::new(cleanup.create_output(&output_path, request.overwrite)?);
+        let output_file = cleanup.create_output(&output_path, request.overwrite)?;
+        // Browser OPFS outputs MUST be sized before streaming to avoid geometric growth of
+        // Chromium's in-memory filesystem backing allocation in private browsing contexts.
+        output_file.set_len(chd.header().logical_bytes)?;
+        let mut output = BufWriter::new(output_file);
         let mut output_checksum =
             create_extract_checksum(context, request.containing_archive.is_none())?;
         chd.stream_with_progress(
