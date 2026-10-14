@@ -108,7 +108,7 @@ Before pushing webapp or published-doc changes, check the generated bundle, even
    npm --prefix packages/rom-weaver-webapp run check:size
    ```
 
-3. Investigate unexpected growth using the failing asset group and its raw/Brotli measurements. Remove accidental imports or duplicated assets before considering a budget change. For intentional growth, explain the cost and propose the corresponding budget update in the same change; do not raise limits just to silence a failure.
+3. Investigate unexpected growth using the failing asset group and its raw/Brotli measurements. Remove accidental imports or duplicated assets before considering a budget change. For intentional growth, record the measured size and old and new limits in the same change. Follow the [byte-count limit policy](../../AGENTS.md#byte-count-limits): automatically raise a failing limit without asking for consent when its total increase in the PR is at most 10,000 bytes; ask before larger increases. Keep the checks enabled and rerun them after the update.
 4. For UI changes, also run the affected browser tests and `test:e2e:a11y`. Run `test:e2e:webapp:webkit` for Safari-sensitive behavior. Reproduce failures against the same production channel as CI. When changing tutorial steps, Settings controls, or navigation, check the browser assertions, E2E locators, and screenshot targets together. Prefer stable state attributes for readiness; keep assertions for intended step counts and content.
 
 Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
