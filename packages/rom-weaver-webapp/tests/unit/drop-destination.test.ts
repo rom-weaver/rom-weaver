@@ -35,6 +35,13 @@ describe("countDropEntries", () => {
 });
 
 describe("planDropDestinations", () => {
+  it("offers Apply or Weave for a weave alongside its source files", () => {
+    expect(plan("rom-weaver-weave.json", "game.sfc", "fix.ips")).toEqual({
+      destinations: ["patcher", "weave"],
+      mixed: false,
+    });
+  });
+
   it("sends patches alone, or one ROM with patches, to Apply", () => {
     expect(plan("translation.bps")).toEqual({ destinations: ["patcher"], mixed: false });
     expect(plan("game.sfc", "translation.bps", "fix.ips")).toEqual({ destinations: ["patcher"], mixed: false });
@@ -96,6 +103,28 @@ describe("planDropRedirect", () => {
 });
 
 describe("readDropEntries", () => {
+  it.each([
+    ["release.zip", "rom-weaver-weave.json", ["game.sfc", "fix.ips"]],
+    ["release.zip", "rom-weaver-bundle.json", ["fix.ips"]],
+    ["fix.bps.zip", "./ROM-WEAVER-WEAVE.JSON", ["fix.bps"]],
+  ])("offers Apply or Weave for %s containing %s", async (name, manifest, members) => {
+    const entries = await readDropEntries([new File(["zip"], name)], async () => [manifest, ...members]);
+    expect(planDropDestinations(countDropEntries(entries))).toEqual({
+      destinations: ["patcher", "weave"],
+      mixed: false,
+    });
+    expect(planDropRedirect("test", countDropEntries(entries))?.to).toBe("patcher");
+  });
+
+  it("does not treat a nested or compressed archive member as a root weave", async () => {
+    const entries = await readDropEntries([new File(["zip"], "release.zip")], async () => [
+      "examples/rom-weaver-weave.json",
+      "rom-weaver-weave.json.gz",
+      "game.sfc",
+    ]);
+    expect(planDropDestinations(countDropEntries(entries)).destinations).toEqual(["patcher", "test"]);
+  });
+
   it("lists archives so a zipped patch routes to Apply with its ROM", async () => {
     const listed: string[] = [];
     const entries = await readDropEntries(
@@ -105,7 +134,7 @@ describe("readDropEntries", () => {
         return ["hack.ips", "readme.txt"];
       },
     );
-    expect(listed).toEqual(["SMB3 Hack v1.0.zip"]);
+    expect(listed).toEqual(["SMB3 Hack v1.0.zip", "fix.bps.zip"]);
     expect(planDropDestinations(countDropEntries(entries))).toEqual({ destinations: ["patcher"], mixed: false });
   });
 
