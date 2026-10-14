@@ -1096,10 +1096,14 @@ html:is(.vt-theme, .vt-accent) .unified-drop-step .drop,
 html:is(.vt-theme, .vt-accent) .unified-drop-step .step-head {
   view-transition-name: none !important;
 }
-/* Flatten mode switches into one root crossfade. */
+/* Flatten mode switches into one root crossfade. A routed drop fills the new
+   form under the drop veil; its named drop morph would paint above the veil. */
 html.vt-mode .unified-drop-step .drop,
 html.vt-mode .unified-drop-step .step-head,
-html.vt-mode .drop:has(#ppf-undo-input-picker) {
+html.vt-mode .drop:has(#ppf-undo-input-picker),
+.rw-drop-routing .unified-drop-step .drop,
+.rw-drop-routing .unified-drop-step .step-head,
+.rw-drop-routing .drop:has(#ppf-undo-input-picker) {
   view-transition-name: none !important;
 }
 /* Keep drop morphs faster than the ambient crossfade. */

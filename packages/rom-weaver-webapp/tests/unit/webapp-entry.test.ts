@@ -859,4 +859,25 @@ describe("routing", () => {
 
     expect(window.location.pathname).toBe("/nope");
   });
+
+  it("restores navigation and unload protection after a missing-page drop selects a workflow", async () => {
+    await loadWebapp({ notFound: true, url: "/nope" });
+    latest().actions.onSelectView("patcher");
+    latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
+    await flush();
+    expect(latest().notFound).toBe(false);
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+
+    latest().actions.onSelectView("compress");
+    window.history.replaceState(null, "", "/apply-patches");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("patcher");
+
+    clickAnchor("/docs");
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("docs");
+  });
 });

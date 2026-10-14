@@ -1,3 +1,15 @@
+import {
+  IdentifyDataUnavailableError,
+  loadIdentifyPacks,
+  loadIdentifyPackForPlatform,
+  loadIdentifyTitleIndex,
+  mapIdentifyTitleSearchMatches,
+} from "./identify-packs.ts";
+import {
+  invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIdentifyNameWorker,
+  invokeRomWeaverIdentifyTitlesWorker,
+} from "../../lib/runtime/wasm-command-runtime.ts";
 import { createSingleFileRomSpecificOutput } from "../../lib/output/output-build-service.ts";
 import { toPublicOutput } from "../../lib/apply/patch-apply-service.ts";
 import type { RomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
@@ -213,7 +225,6 @@ const identifyChecks = async (
   if (!normalized) throw new Error("Identify needs at least one checksum.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyPacks } = await import("./identify-packs.ts");
   let packs: Awaited<ReturnType<typeof loadIdentifyPacks>>;
   try {
     packs = await loadIdentifyPacks({ checksums: check.checksums }, (platforms) => {
@@ -235,7 +246,6 @@ const identifyChecks = async (
       status: "unknown",
     };
   }
-  const { invokeRomWeaverIdentifyHashWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSources(
     packs.map((pack, index) => ({
       fallbackFileName: pack.fileName,
@@ -304,7 +314,6 @@ const identifyName = async (
   if (!normalized) throw new Error("Identify needs a name to search for.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyPackForPlatform } = await import("./identify-packs.ts");
   let pack: Awaited<ReturnType<typeof loadIdentifyPackForPlatform>>;
   try {
     pack = await loadIdentifyPackForPlatform(platform, (platforms) => {
@@ -319,7 +328,6 @@ const identifyName = async (
       unavailableReason: error.message,
     };
   }
-  const { invokeRomWeaverIdentifyNameWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSources([
     {
       fallbackFileName: pack.fileName,
@@ -370,8 +378,6 @@ const identifyTitles = async (
   if (!name) throw new Error("Identify needs a name to search for.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyTitleIndex, mapIdentifyTitleSearchMatches } =
-    await import("./identify-packs.ts");
   let titleIndex: Awaited<ReturnType<typeof loadIdentifyTitleIndex>>;
   try {
     titleIndex = await loadIdentifyTitleIndex(options.onProgress);
@@ -380,7 +386,6 @@ const identifyTitles = async (
     return { status: "unavailable", titles: [], unavailableReason: error.message };
   }
   options.signal?.throwIfAborted();
-  const { invokeRomWeaverIdentifyTitlesWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSource({
     fallbackFileName: titleIndex.fileName,
     pathPrefix: "identify-title-index",
