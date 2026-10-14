@@ -1827,6 +1827,7 @@ dependencies = [
  "libz-sys",
  "lru",
  "lz4-sys",
+ "lz4_flex",
  "maybe-async",
  "md-5 0.11.0",
  "openssl-sys",

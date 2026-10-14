@@ -43,7 +43,7 @@ use crate::nod::{
 use crate::xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
-use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
+use ciso::split::SplitFileReader;
 use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_core::codecs::{decode_deflate_into_buffer, normalize_codec_label};
 use rom_weaver_core::{
