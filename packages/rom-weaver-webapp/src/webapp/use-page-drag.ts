@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { WebappView } from "./webapp-state-types.ts";
 
 const hasDataTransferType = (types: readonly string[], type: string) => types.includes(type);
 
@@ -14,13 +13,9 @@ const isInsideLocalDropZone = (target: EventTarget | null) =>
 // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
 // fires continuously, so a short debounce clears the flag once it stops (drag
 // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
-const usePageDragging = (notFound: boolean, state: { currentView: WebappView }) => {
+const usePageDragging = () => {
   const [pageDragging, setPageDragging] = useState(false);
   useEffect(() => {
-    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") {
-      setPageDragging(false);
-      return undefined;
-    }
     let clearTimer: ReturnType<typeof setTimeout> | undefined;
     const onDragOver = (event: DragEvent) => {
       if (!isFileDragTransfer(event.dataTransfer)) return;
@@ -39,7 +34,7 @@ const usePageDragging = (notFound: boolean, state: { currentView: WebappView }) 
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", stop);
     };
-  }, [notFound, state.currentView]);
+  }, []);
 
   return pageDragging;
 };

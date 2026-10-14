@@ -215,7 +215,7 @@ const applySettingsToRuntime = (settings: SettingsState) => {
   });
 };
 
-const isNotFoundPage = document.documentElement.dataset.page === "not-found";
+let isNotFoundPage = document.documentElement.dataset.page === "not-found";
 // Old weave links used the Apply route's query/hash state. Keep guided
 // samples and URL sessions shareable, but replace their route before React
 // chooses a workflow. Direct ROM/patch sessions remain on Apply.
@@ -555,7 +555,11 @@ const renderWebappRoot = (): undefined => {
       onSaveClose: () => {
         webappController.saveDraftSettings();
       },
-      onSelectView: (view) => webappController.selectView(view),
+      onSelectView: (view) => {
+        // A routed drop can recover the missing-page document without losing its files.
+        isNotFoundPage = false;
+        webappController.selectView(view);
+      },
       onStartGuide: (guide) => {
         const view = GUIDED_SAMPLE_VIEWS[guide];
         if (webappController.selectView(view) !== view) return;
@@ -648,71 +652,71 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   // "Hide this button" on the sample link persists through the
   // settings so the Settings panel checkbox can bring it back.
   window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
-  if (!isNotFoundPage) {
-    // A real page unload - reload, address bar, closing the tab - is the one
-    // exit the app cannot soft-navigate. Everything else that could lose staged
-    // work already asks first; this was the hole. The browser writes its own
-    // wording, so preventDefault is the whole API.
-    window.addEventListener("beforeunload", (event) => {
-      if (!shouldWarnBeforeUnload(getNavigationGuardState())) return;
-      event.preventDefault();
-    });
-    const syncRouteFromUrl = (scrollTo?: () => void) => {
-      replaceLegacyWeaveRoute();
-      const view = readWorkflowViewFromPath();
-      if (!view) return;
-      const guide = readGuidedSampleFromSearch(window.location.search);
-      const applyRoute = () => {
-        const selectedView = webappController.selectView(view, { historyMode: "none" });
-        if (selectedView !== view) {
-          webappController.selectView(selectedView, { historyMode: "replace" });
-          return;
-        }
-        // Visited workflows stay mounted, so their guide hook cannot reread a new query.
-        // Dispatch the same event used by in-place guide starts.
-        if (guide) requestGuidedSampleStart(guide);
-      };
-      // Guide to guide is a page turn inside one route, not a mode switch. The
-      // masthead, trail, and dock are identical either side of it while the
-      // reader's scroll position is not, so a root crossfade dissolves the whole
-      // screen and reads as a reload. The article carries the transition on its
-      // own instead (`docs-page-in` in docs.css), and the scroll lands in the
-      // same synchronous render, so the new guide is never painted at the old
-      // guide's offset first.
-      const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
-      if (withinDocs) {
-        applyRoute();
-        scrollTo?.();
+  // A real page unload - reload, address bar, closing the tab - is the one
+  // exit the app cannot soft-navigate. Everything else that could lose staged
+  // work already asks first; this was the hole. The browser writes its own
+  // wording, so preventDefault is the whole API.
+  window.addEventListener("beforeunload", (event) => {
+    if (isNotFoundPage || !shouldWarnBeforeUnload(getNavigationGuardState())) return;
+    event.preventDefault();
+  });
+  const syncRouteFromUrl = (scrollTo?: () => void) => {
+    if (isNotFoundPage) return;
+    replaceLegacyWeaveRoute();
+    const view = readWorkflowViewFromPath();
+    if (!view) return;
+    const guide = readGuidedSampleFromSearch(window.location.search);
+    const applyRoute = () => {
+      const selectedView = webappController.selectView(view, { historyMode: "none" });
+      if (selectedView !== view) {
+        webappController.selectView(selectedView, { historyMode: "replace" });
         return;
       }
-      selectViewWithTransition(applyRoute);
-      // A mode switch updates inside a view transition, so the DOM the scroll
-      // target lives in only exists on the next frame.
-      if (scrollTo) window.requestAnimationFrame(scrollTo);
+      // Visited workflows stay mounted, so their guide hook cannot reread a new query.
+      // Dispatch the same event used by in-place guide starts.
+      if (guide) requestGuidedSampleStart(guide);
     };
+    // Guide to guide is a page turn inside one route, not a mode switch. The
+    // masthead, trail, and dock are identical either side of it while the
+    // reader's scroll position is not, so a root crossfade dissolves the whole
+    // screen and reads as a reload. The article carries the transition on its
+    // own instead (`docs-page-in` in docs.css), and the scroll lands in the
+    // same synchronous render, so the new guide is never painted at the old
+    // guide's offset first.
+    const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
+    if (withinDocs) {
+      applyRoute();
+      scrollTo?.();
+      return;
+    }
+    selectViewWithTransition(applyRoute);
+    // A mode switch updates inside a view transition, so the DOM the scroll
+    // target lives in only exists on the next frame.
+    if (scrollTo) window.requestAnimationFrame(scrollTo);
+  };
 
-    // Back/forward carries the browser's own scroll restoration; only a click
-    // decides where the reader lands.
-    window.addEventListener("popstate", () => syncRouteFromUrl());
-    document.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) return;
-      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
-      if (!anchor) return;
-      const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
-      if (!url) return;
-      event.preventDefault();
-      window.history.pushState(window.history.state, "", url);
-      syncRouteFromUrl(() => {
-        if (url.hash) {
-          const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
-          target?.scrollIntoView({ block: "start" });
-          target?.focus({ preventScroll: true });
-        } else {
-          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        }
-      });
+  // Back/forward carries the browser's own scroll restoration; only a click
+  // decides where the reader lands.
+  window.addEventListener("popstate", () => syncRouteFromUrl());
+  document.addEventListener("click", (event) => {
+    if (isNotFoundPage) return;
+    if (!(event.target instanceof Element)) return;
+    const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+    if (!anchor) return;
+    const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
+    if (!url) return;
+    event.preventDefault();
+    window.history.pushState(window.history.state, "", url);
+    syncRouteFromUrl(() => {
+      if (url.hash) {
+        const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+        target?.scrollIntoView({ block: "start" });
+        target?.focus({ preventScroll: true });
+      } else {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      }
     });
-  }
+  });
 }
 
 const initializeWebapp = () => {
