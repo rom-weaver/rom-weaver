@@ -20,6 +20,8 @@ const skippedNotice = (used: File, skipped: string[]): string =>
   `Extract opens one archive per run: only ${used.name} was used; ${skipped.join(", ")} ${skipped.length === 1 ? "was" : "were"} skipped.`;
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
+const isNfsPart = (file: File): boolean => /^hif_\d{6}\.nfs$/i.test(file.name);
+const isNfsKey = (file: File): boolean => /^htk\.bin$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
@@ -61,6 +63,7 @@ const toSelectionItem = (output: PublicOutput): SelectionItem => {
 
 const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [source, setSource] = useState<File | null>(null);
+  const [companionFiles, setCompanionFiles] = useState<File[]>([]);
   const [outputs, setOutputs] = useState<PublicOutput[]>([]);
   const [busy, setBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
@@ -93,7 +96,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   }, [disposeZip]);
 
   const extract = useCallback(
-    async (file: File, splitBin: boolean) => {
+    async (file: File, splitBin: boolean, companions: File[] = []) => {
       const runId = ++runIdRef.current;
       const abort = new AbortController();
       abortRef.current = abort;
@@ -108,6 +111,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
         const result = await browserRuntime.compression.extract?.({
           source: file,
+          ...(companions.length ? { companionFiles: companions } : {}),
           entries: [],
           extractAll: true,
           options: {
@@ -142,9 +146,9 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   // A multi-track CD CHD can extract as one BIN or as one BIN per track, so ask before extracting it.
   const startExtract = useCallback(
-    async (file: File) => {
+    async (file: File, companions: File[] = []) => {
       if (!isChd(file)) {
-        await extract(file, false);
+        await extract(file, false, companions);
         return;
       }
       const runId = ++runIdRef.current;
@@ -180,8 +184,16 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   const stageFiles = useCallback(
     (files: File[]) => {
-      const file = files[0];
+      const first = files[0];
+      const nfs =
+        first && (isNfsPart(first) || isNfsKey(first))
+          ? files.find((file) => /^hif_000000\.nfs$/i.test(file.name))
+          : undefined;
+      const file = nfs || first;
       if (!file) return;
+      const companions = isNfsPart(file)
+        ? files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)))
+        : [];
       if (downloadBusy) {
         setError("Wait for the download to finish, then add the file again.");
         return;
@@ -192,8 +204,9 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       setSplitPrompt(null);
       setProgress(null);
       setSource(file);
-      setSkipped(files.slice(1).map((extra) => extra.name));
-      void startExtract(file);
+      setCompanionFiles(companions);
+      setSkipped(files.filter((extra) => extra !== file && !companions.includes(extra)).map((extra) => extra.name));
+      void startExtract(file, companions);
     },
     [clearOutputs, downloadBusy, startExtract],
   );
@@ -296,7 +309,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       retry: {
         description: "Extract the source again with the current track-layout flow.",
         enabled: !!source && !busy && !downloadBusy && !splitPrompt,
-        execute: () => (source ? startExtract(source) : undefined),
+        execute: () => (source ? startExtract(source, companionFiles) : undefined),
       },
       downloadAll: {
         description: "Download every extracted output, using a ZIP when needed.",
@@ -322,13 +335,13 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         guide={WORKFLOW_GUIDES.extract}
         heroLabel="Drop an archive or disc image to extract it"
         heroLabelCoarse="Tap to add an archive or disc image"
-        info={<p>Extraction runs locally. Your files never leave this browser.</p>}
+        info={<p>Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together.</p>}
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",
           description: "ui.hero.extractDescription",
         }}
-        multiple={false}
+        multiple
         onFiles={stageFiles}
         title="Archive"
       />
@@ -377,7 +390,10 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
             </>
           ) : null}
           {canRetry ? (
-            <RunButton icon={<RotateCcw aria-hidden="true" />} onClick={() => void startExtract(source)}>
+            <RunButton
+              icon={<RotateCcw aria-hidden="true" />}
+              onClick={() => void startExtract(source, companionFiles)}
+            >
               Extract again
             </RunButton>
           ) : null}
