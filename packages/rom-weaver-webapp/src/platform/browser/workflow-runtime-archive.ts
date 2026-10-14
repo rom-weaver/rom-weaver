@@ -23,6 +23,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
+import type { CompressionProbeInput } from "../../types/workflow-runtime-types.ts";
 import { forwardArchiveProgress } from "../shared/workflow-runtime-progress.ts";
 import { stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
 import {
@@ -235,6 +236,54 @@ const stageBrowserCompressionEntries = async (
   }
 };
 
+const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionProbeInput) => {
+  const trace = { logLevel: input.options?.logLevel, onLog: input.options?.onLog };
+  if (!input.companionFiles?.length) {
+    const archive = await workerIo.stageSource({
+      fallbackFileName: "archive.bin",
+      pathPrefix: "archive-input",
+      scope: "archive",
+      source: normalizeZipLikeArchiveSource(input.source),
+      trace,
+    });
+    return { archive, knownInputPaths: [archive.filePath], cleanup: archive.cleanup };
+  }
+  const files = [input.source, ...input.companionFiles];
+  if (!files.every((file): file is File => file instanceof File)) {
+    throw new Error("Companion extraction requires a File source and File companions.");
+  }
+  const names = new Set<string>();
+  const pathPrefix = `archive-input-${createVfsPathId()}`;
+  // Grouped uploads MUST use fresh File identities to keep cached standalone stages
+  // from changing the directory or fixed basename of a companion.
+  const requests = files.map((file) => {
+    const fileName = normalizeArchiveRelativePath(file.name).toLowerCase();
+    if (fileName.includes("/")) {
+      throw new Error("Companion filenames cannot contain directories.");
+    }
+    if (names.has(fileName)) throw new Error("Duplicate companion filename.");
+    names.add(fileName);
+    return {
+      fallbackFileName: fileName,
+      pathPrefix,
+      pathPrefixInPath: true,
+      scope: "archive" as const,
+      source: new File([file], fileName),
+      trace,
+    };
+  });
+  const staged = await workerIo.stageSources(requests);
+  const archive = staged[0];
+  if (!archive) throw new Error("Archive was not staged.");
+  return {
+    archive,
+    knownInputPaths: staged.map((entry) => entry.filePath),
+    cleanup: async () => {
+      await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+    },
+  };
+};
+
 const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<WorkflowRuntime["compression"]> => ({
   create: async (workflowInput) => {
     if (!("entries" in workflowInput)) throw new Error("archive runtime received non-archive create input");
@@ -291,13 +340,8 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
     }
   },
   extract: async (workflowInput) => {
-    const archive = await workerIo.stageSource({
-      fallbackFileName: "archive.bin",
-      pathPrefix: "archive-input",
-      scope: "archive",
-      source: normalizeZipLikeArchiveSource(workflowInput.source),
-      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
-    });
+    const stagedInputs = await stageArchiveInputs(workerIo, workflowInput);
+    const { archive, knownInputPaths } = stagedInputs;
     try {
       // Extract-selected shares the extract-all output mapping: one pass writes every chosen entry, so a
       // solid archive decodes once. It keeps nested archives packed, since the caller picked them as files.
@@ -315,7 +359,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             {
               inputPath: archive.filePath,
               interactiveSelectionEnabled: false,
-              knownInputPaths: [archive.filePath],
+              knownInputPaths,
               logLevel: workflowInput.options?.logLevel,
               noIgnore: true,
               ...(extractSelected ? { noNestedExtract: true, select: selectedEntries } : {}),
@@ -366,7 +410,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           const extracted = await invokeRomWeaverExtractWorker(
             {
               inputPath: archive.filePath,
-              knownInputPaths: [archive.filePath],
+              knownInputPaths,
               logLevel: workflowInput.options?.logLevel,
               noIgnore: true,
               noNestedExtract: true,
@@ -423,7 +467,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             ...(typeof workflowInput.options?.interactiveSelectionEnabled === "boolean"
               ? { interactiveSelectionEnabled: workflowInput.options.interactiveSelectionEnabled }
               : {}),
-            knownInputPaths: [archive.filePath],
+            knownInputPaths,
             logLevel: workflowInput.options?.logLevel,
             outDirPath,
             select: selectedEntries,
@@ -569,6 +613,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 select: [entryName],
                 signal: workflowInput.options?.signal,
                 sourcePath: archive.filePath,
+                knownInputPaths,
                 threads: workflowInput.options?.threads,
               },
               forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${entryName}...`),
@@ -659,17 +704,12 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       }
       return createCompressionExtractResult(outputs);
     } finally {
-      await archive.cleanup().catch(() => undefined);
+      await stagedInputs.cleanup().catch(() => undefined);
     }
   },
   probe: async (workflowInput) => {
-    const archive = await workerIo.stageSource({
-      fallbackFileName: "archive.bin",
-      pathPrefix: "archive-input",
-      scope: "archive",
-      source: normalizeZipLikeArchiveSource(workflowInput.source),
-      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
-    });
+    const stagedInputs = await stageArchiveInputs(workerIo, workflowInput);
+    const { archive, knownInputPaths } = stagedInputs;
     try {
       return await runRomWeaverProbeWorker(
         {
@@ -678,13 +718,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           romFilter: workflowInput.options?.romFilter,
           signal: workflowInput.options?.signal,
           sourcePath: archive.filePath,
+          knownInputPaths,
           splitBin: workflowInput.options?.chdSplitBin,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress, `Reading ${archive.fileName}...`),
         workflowInput.options?.onLog,
       );
     } finally {
-      await archive.cleanup().catch(() => undefined);
+      await stagedInputs.cleanup().catch(() => undefined);
     }
   },
 });

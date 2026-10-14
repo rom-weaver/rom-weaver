@@ -240,12 +240,16 @@ type CompressionWorkflowOptions = {
 
 type CompressionProbeInput = {
   source: SourceRef;
+  /** Browser companion uploads MUST share a directory with the primary File input. */
+  companionFiles?: File[];
   format?: string;
   options?: CompressionWorkflowOptions;
 };
 
 type CompressionExtractInput = {
   source: SourceRef;
+  /** Browser companion uploads MUST share a directory with the primary File input. */
+  companionFiles?: File[];
   entries: string[];
   format?: string;
   outputName?: string;

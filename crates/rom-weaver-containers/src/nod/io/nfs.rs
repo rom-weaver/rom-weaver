@@ -183,9 +183,11 @@ impl BlockReaderNFS {
                 ["..", "code", "htk.bin"].iter().collect::<PathBuf>(),
             );
             let secondary_key_path = get_path(directory, "htk.bin");
-            let mut key_path = primary_key_path.canonicalize();
+            let mut key_path = super::resolve_path(&primary_key_path)
+                .and_then(|path| path.metadata().map(|_| path));
             if key_path.is_err() {
-                key_path = secondary_key_path.canonicalize();
+                key_path = super::resolve_path(&secondary_key_path)
+                    .and_then(|path| path.metadata().map(|_| path));
             }
             if key_path.is_err() {
                 return Err(Error::DiscFormat(format!(
