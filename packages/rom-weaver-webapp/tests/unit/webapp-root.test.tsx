@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -464,6 +464,33 @@ describe("the What's new route", () => {
 });
 
 describe("page-level drag and drop", () => {
+  it.each([
+    { currentView: "docs" as const },
+    { currentView: "whats-new" as const },
+    { currentView: "save-editor" as const },
+    { currentView: "patcher" as const, notFound: true },
+  ])("offers ROM routing from $currentView (notFound=$notFound)", async (options) => {
+    const { called, container } = await renderRoot(options);
+    const drag = fileDragEvent("dragover");
+    act(() => {
+      document.dispatchEvent(drag);
+    });
+    expect(drag.defaultPrevented).toBe(true);
+    expect(container.querySelector("#column")?.className).toContain("rw-page-dragging");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Release to add files");
+
+    const drop = fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]);
+    act(() => {
+      document.dispatchEvent(drop);
+    });
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor(() => expect(within(container).queryByRole("button", { name: /Test ROM/ })).toBeTruthy());
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    fireEvent.click(within(container).getByRole("button", { name: /Apply Patches/ }));
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(container.querySelector(".is-not-found")).toBeNull();
+  });
+
   it("arms the page while a file is dragged over it", async () => {
     const { container } = await renderRoot();
 

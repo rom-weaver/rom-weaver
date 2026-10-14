@@ -45,6 +45,7 @@ import { setActiveSelectionForm } from "../public/react/input-selection-handler.
 import type { RomLookupResult, RomLookupResultRequest, RomLookupSelection } from "../public/react/use-rom-lookup.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import {
+  classifyDropEntry,
   countDropEntries,
   isUsableDropFile,
   planDropDestinations,
@@ -370,7 +371,7 @@ const PageFooter = () => {
   );
 };
 
-/* While a landing-page drop is read and handed to its workflow, the veil stays
+/* While a routed drop is read and handed to its workflow, the veil stays
    up and says where the files are going; a drop that stays put never sets it. */
 type DropRouting = { phase: "reading" } | { phase: "opening"; view: WebappView };
 // Long enough to read the destination over the newly opened workflow.
@@ -476,9 +477,11 @@ function WebappRoot({
   serviceWorkerCache,
   urlSession,
   docsSlug = "docs",
-  notFound = false,
+  notFound: initiallyNotFound = false,
   assetBaseUrl,
 }: WebappRootProps) {
+  const [recoveredDrop, setRecoveredDrop] = useState(false);
+  const notFound = initiallyNotFound && !recoveredDrop;
   // The prerendered shell resolves asset links against "/" (no window to read
   // the origin from), so hydration passes the same value and only the render
   // after it adopts the real base - otherwise React sees every href mismatch.
@@ -680,26 +683,30 @@ function WebappRoot({
       setDropRoute(null);
       if (!files.length) return;
       logger.debug("delivering routed drop", { count: files.length, from: currentViewRef.current, view });
-      if (currentViewRef.current !== view) handleSelectTab(view);
+      if (notFound) {
+        // A full navigation would discard the browser's dropped File objects.
+        setRecoveredDrop(true);
+        if (view === "test") requestEmulatorStartFromUserAction();
+        actions.onSelectView(view);
+      } else if (currentViewRef.current !== view) handleSelectTab(view);
       pageDropIdRef.current += 1;
       setPageDrop({ drop: { files, id: pageDropIdRef.current }, view });
     },
-    [handleSelectTab],
+    [actions, handleSelectTab, notFound],
   );
-  // The landing page has no workflow of its own: a drop or a picked file goes
-  // straight to the one workflow that fits, or asks when several do or when the
-  // fit would leave files behind.
+  // Pages without a suitable workflow MUST choose a destination before staging files.
   // Only a page drop holds the veil: a picked file never raised it.
-  const routeHomeFiles = useCallback(
+  const routeFiles = useCallback(
     (files: File[], fromDrop = false) => {
+      const from = currentViewRef.current;
       const routeVeil: typeof showDropRouting = (routing, holdMs) => {
         if (fromDrop) showDropRouting(routing, holdMs);
       };
       routeVeil({ phase: "reading" });
       void readDropEntries(files).then(
         (entries) => {
-          if (currentViewRef.current !== "home") {
-            logger.debug("dropped files left behind after leaving home", { count: files.length });
+          if (currentViewRef.current !== from) {
+            logger.debug("dropped files left behind after navigating", { count: files.length, from });
             routeVeil(null);
             return;
           }
@@ -714,8 +721,8 @@ function WebappRoot({
               void preloadWorkflowRoute(only)
                 .catch(() => undefined)
                 .then(() => {
-                  if (currentViewRef.current !== "home") {
-                    logger.debug("dropped files left behind after leaving home", { count: files.length });
+                  if (currentViewRef.current !== from) {
+                    logger.debug("dropped files left behind after navigating", { count: files.length, from });
                     routeVeil(null);
                     return;
                   }
@@ -728,7 +735,7 @@ function WebappRoot({
           routeVeil(null);
           if (!only) return;
           pageDropIdRef.current += 1;
-          setDropRoute({ entries, files, from: "home", id: pageDropIdRef.current });
+          setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
         },
         (error: unknown) => {
           routeVeil(null);
@@ -773,11 +780,10 @@ function WebappRoot({
     setApplyRomLookupRequest({ id: applyRomLookupIdRef.current, result });
   }, []);
 
-  const pageDragging = usePageDragging(notFound, state);
+  const pageDragging = usePageDragging();
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -793,12 +799,13 @@ function WebappRoot({
       // clears; routing/classification is owned by the active tab's unified drop
       // handler, so the page-level listener just forwards every file to it.
       const droppedView = state.currentView;
+      const needsDestination = notFound || ["home", "docs", "whats-new"].includes(droppedView);
       // Hold the veil from the drop itself so it never fades out and back in
       // while the transfer is read.
-      if (droppedView === "home") showDropRouting({ phase: "reading" });
+      if (needsDestination) showDropRouting({ phase: "reading" });
       void readDataTransferFiles(event.dataTransfer).then((files) => {
-        if (files.length === 0) {
-          if (droppedView === "home") showDropRouting(null);
+        if (files.length === 0 || currentViewRef.current !== droppedView) {
+          if (needsDestination) showDropRouting(null);
           return;
         }
         markDropReceived();
@@ -808,8 +815,8 @@ function WebappRoot({
           names: files.map((file) => file.name),
           source: "page",
         });
-        if (droppedView === "home") {
-          routeHomeFiles(files, true);
+        if (needsDestination) {
+          routeFiles(files, true);
           return;
         }
         pageDropIdRef.current += 1;
@@ -826,15 +833,23 @@ function WebappRoot({
     // the capture phase, ahead of the tab's own drop zones, and only claims the
     // drop when the file names alone already call for a redirect.
     const handleRedirectDrop = (event: DragEvent) => {
+      if (notFound) return;
       if (!(event.dataTransfer && isFileDragTransfer(event.dataTransfer))) return;
       if (logOpen || state.settingsDialogOpen || confirmationDialog.open || agentApprovalDialog?.state.open) return;
       const names = Array.from(event.dataTransfer.files, (file) => ({ name: file.name }));
-      if (!planDropRedirect(state.currentView, countDropEntries(names))) return;
+      const needsDestination =
+        state.currentView === "save-editor" &&
+        names.some((entry) => ["rom", "patch"].includes(classifyDropEntry(entry)));
+      if (!(needsDestination || planDropRedirect(state.currentView, countDropEntries(names)))) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       const fromView = state.currentView;
       void readDataTransferFiles(event.dataTransfer).then((files) => {
-        if (!files.length) return;
+        if (!files.length || currentViewRef.current !== fromView) return;
+        if (needsDestination) {
+          routeFiles(files, true);
+          return;
+        }
         pageDropIdRef.current += 1;
         setDropRoute({ files, from: fromView, id: pageDropIdRef.current });
       });
@@ -852,7 +867,7 @@ function WebappRoot({
     confirmationDialog.open,
     logOpen,
     notFound,
-    routeHomeFiles,
+    routeFiles,
     showDropRouting,
     state.currentView,
     state.settingsDialogOpen,
@@ -983,7 +998,7 @@ function WebappRoot({
                   // landing page starts a veil's height down the page.
                   <div className="panel" hidden={state.currentView !== "home"}>
                     <Suspense fallback={null}>
-                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeHomeFiles} />
+                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeFiles} />
                     </Suspense>
                   </div>
                 ) : null}
@@ -1087,11 +1102,9 @@ function WebappRoot({
                     pageDrop={pageDropFor("save-editor")}
                   />,
                 )}
-                {state.currentView === "docs" || state.currentView === "whats-new" ? null : (
-                  <DropVeil dragging={pageDragging} routing={dropRouting} />
-                )}
               </>
             )}
+            <DropVeil dragging={pageDragging} routing={dropRouting} />
           </main>
           <PageFooter />
           <span className="shell-threads-identity" hidden />

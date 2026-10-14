@@ -43,6 +43,8 @@ Without the source file, use **Identify by checksum or game name** below the emp
 2. Drop the ROM and patch into **0x01 Inputs**, or choose **Add files**. A folder or [supported archive](../reference/formats.md#container-and-compression-formats) also works; nested archives, CHD, and RVZ are unpacked.
 3. Wait for **Reading** and **Checksumming**. If asked, choose the entry the author named.
 
+You can also drop files outside the input box. Active tools handle files they support. Home, Docs, and What's New offer suitable workflows. Dropping a ROM on Save Editor or a missing-page screen also opens the workflow chooser.
+
 The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Compress](convert-roms-browser.md).
 
 New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
@@ -148,6 +150,8 @@ If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearb
 <a id="open-a-bundle"></a>
 
 ## Open a weave
+
+Drop a ZIP containing `rom-weaver-weave.json` or `rom-weaver-bundle.json` on Home, Docs, or What's New. Choose **Apply Patches** to use it, or **Weave Patches** to edit its recipe. The index must be at the archive root.
 
 Add the [weave recipe](../explanation/bundles.md) to **0x01 Inputs**, or open the author's preload link. Supply the matching ROM for a patch-only weave, review optional switches, and use **APPLY & DOWNLOAD**. To publish one, follow [Create a weave](create-bundles.md).
 
