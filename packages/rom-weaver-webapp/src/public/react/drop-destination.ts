@@ -1,4 +1,5 @@
 import { createLogger } from "../../lib/logging.ts";
+import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import {
   classifyArchiveBucket,
   isArchiveFileName,
@@ -152,18 +153,15 @@ const isUsableDropFile = (view: string, name: string, archiveBucket?: DropEntry[
 
 type ListArchiveNames = (archive: File) => Promise<string[]>;
 
-// Loaded on demand so the archive reader stays out of the entry chunk.
-const listArchiveNames: ListArchiveNames = async (archive) => {
-  const { listDroppedArchiveEntryNames } = await import("../../lib/input/input-preparation-archive.ts");
-  return listDroppedArchiveEntryNames(archive);
-};
-
 /**
  * Name each dropped file, listing archives whose name alone reads as a ROM so a
  * zipped patch routes like a patch. A failed listing keeps the ROM verdict, as
  * the Apply tab's own drop does.
  */
-const readDropEntries = (files: readonly File[], listNames = listArchiveNames): Promise<DropEntry[]> =>
+const readDropEntries = (
+  files: readonly File[],
+  listNames: ListArchiveNames = listDroppedArchiveEntryNames,
+): Promise<DropEntry[]> =>
   Promise.all(
     files.map(async (file): Promise<DropEntry> => {
       const entry = { name: file.name };
