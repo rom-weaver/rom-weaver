@@ -1411,6 +1411,7 @@ const useLocalApplyPatchFormSession = ({
   );
 
   return {
+    getRunInput: () => ({ ...createStageSnapshot(), patchOptions: activePatchOptions }),
     localNoticeController,
     localOutputController,
     localStackController,

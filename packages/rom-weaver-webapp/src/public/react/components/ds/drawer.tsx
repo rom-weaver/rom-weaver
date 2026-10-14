@@ -107,7 +107,7 @@ const Drawer = ({
         {readouts ? <span className="readouts">{readouts}</span> : null}
       </button>
       {action ? <span className="drawer-action">{action}</span> : null}
-      <div className="cks-body" id={bodyId}>
+      <div className="cks-body" id={bodyId} inert={!isOpen} aria-hidden={!isOpen}>
         <div className="cks-inner">
           <div className={bodyClassName}>{children}</div>
         </div>

@@ -32,6 +32,7 @@ type CreatePatchFormViewModel = {
   output: ComponentProps<typeof WorkflowOutputStep>;
   /** No source staged yet - show only the hero. */
   sourcesEmpty: boolean;
+  sourceModeControls?: ReactNode;
   /** Swap original/modified - present only when both sources are staged. */
   swap: { disabled: boolean; onSwap: () => void } | null;
 };
@@ -45,6 +46,7 @@ const CreatePatchFormView = ({
   originalStep,
   output,
   sourcesEmpty,
+  sourceModeControls,
   swap,
 }: CreatePatchFormViewModel) => {
   const localizer = useUiLocalizer();
@@ -58,13 +60,16 @@ const CreatePatchFormView = ({
         }}
       />
       {sourcesEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.original") },
-            { num: "0x03", title: localizer.message("ui.step.modified") },
-            { num: "0x04", title: localizer.message("ui.step.output") },
-          ]}
-        />
+        <>
+          {sourceModeControls}
+          <GhostSteps
+            steps={[
+              { num: "0x02", title: localizer.message("ui.step.original") },
+              { num: "0x03", title: localizer.message("ui.step.modified") },
+              { num: "0x04", title: localizer.message("ui.step.output") },
+            ]}
+          />
+        </>
       ) : (
         <>
           <WorkflowRomInputStep {...originalStep} />

@@ -81,8 +81,8 @@ describe("planDropRedirect", () => {
     expect(planDropRedirect("test", counts("game.gb", "game.sav"))).toBeNull();
   });
 
-  it("offers Apply for patches on Create and Trim", () => {
-    expect(planDropRedirect("creator", counts("game.sfc", "hack.ips"))?.to).toBe("patcher");
+  it("keeps patches on Create and offers Apply for patches on Trim", () => {
+    expect(planDropRedirect("creator", counts("game.sfc", "hack.ips"))).toBeNull();
     expect(planDropRedirect("trim", counts("hack.ips"))?.to).toBe("patcher");
     expect(planDropRedirect("creator", counts("a.sfc", "b.sfc", "hack.ips"))).toBeNull();
   });
@@ -148,7 +148,7 @@ describe("readDropEntries", () => {
 
 describe("isUsableDropFile", () => {
   it("pre-checks only what the destination uses", () => {
-    expect(isUsableDropFile("creator", "fix.ips")).toBe(false);
+    expect(isUsableDropFile("creator", "fix.ips")).toBe(true);
     expect(isUsableDropFile("creator", "game.sfc")).toBe(true);
     expect(isUsableDropFile("test", "game.sav")).toBe(true);
     expect(isUsableDropFile("patcher", "game.sav")).toBe(false);

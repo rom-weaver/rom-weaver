@@ -2,7 +2,7 @@ import { toBundleCreateResult } from "../../lib/runtime/bundle-runtime.ts";
 import { type RefObject, useCallback, useEffect } from "react";
 import type { ApplyWorkflow } from "../../platform/browser/browser-api.ts";
 import type { ApplyWorkflowWeaveSources } from "../../types/apply-workflow.ts";
-import { resolveWeaveArchiveFormat, useWeaveExport } from "./weave-export.tsx";
+import { type PrepareWeaveExportSources, resolveWeaveArchiveFormat, useWeaveExport } from "./weave-export.tsx";
 import type { BinarySource } from "./patcher-form.ts";
 import type { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
@@ -16,6 +16,8 @@ type ApplyFormSession = ReturnType<typeof useLocalApplyPatchFormSession>;
 type ApplyPatchEnablement = ReturnType<typeof useApplyPatchEnablement>;
 
 type ApplyWeaveExportInput = {
+  prepareSources?: PrepareWeaveExportSources;
+  sourcesRevision?: string;
   weaveMetaById: ReturnType<typeof useWeaveApplySession>["weaveMetaById"];
   weaveSourcesRef: RefObject<ApplyWorkflowWeaveSources | null>;
   currentPatchesRef: RefObject<BinarySource[]>;
@@ -39,6 +41,8 @@ type ApplyWeaveExportInput = {
 
 /** Weave export state for the apply form's sharing job, plus the package-choice callback it persists. */
 const useApplyWeaveExport = ({
+  prepareSources,
+  sourcesRevision,
   weaveMetaById,
   weaveSourcesRef,
   currentPatchesRef,
@@ -60,9 +64,12 @@ const useApplyWeaveExport = ({
   // session's files + enablement into a rom-weaver-weave.json (or everything-weave .zip).
   const stagedWeaveSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getWeaveExportSources();
   const weaveExportReady =
+    (!!prepareSources && !!stagedWeaveSources?.rom) ||
     (!!stagedWeaveSources?.rom && stagedWeaveSources.patches.length > 0) ||
     (!!weaveSourcesRef.current?.rom && weaveSourcesRef.current.patches.length > 0);
   const weaveExport = useWeaveExport({
+    prepareSources,
+    sourcesRevision,
     weaveMetaById,
     patchBasis: patchInputBasis,
     disabledPatchIds,

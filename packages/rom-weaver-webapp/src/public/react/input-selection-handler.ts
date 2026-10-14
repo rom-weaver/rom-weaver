@@ -139,11 +139,12 @@ const installHostSelectionHandler = () => {
   });
 };
 
-const useInputSelectionHandler = (formId: string, selectFile: SelectCandidateFile) => {
+const useInputSelectionHandler = (formId: string, selectFile: SelectCandidateFile, enabled = true) => {
   const selectFileRef = useRef(selectFile);
   selectFileRef.current = selectFile;
 
   useEffect(() => {
+    if (!enabled) return;
     installHostSelectionHandler();
     // A stable indirection so per-render selectFile identity changes don't thrash
     // the registry; the latest selectFile is read via the ref at prompt time.
@@ -158,7 +159,7 @@ const useInputSelectionHandler = (formId: string, selectFile: SelectCandidateFil
         logger.trace("deregistered form selection handler", { formId });
       }
     };
-  }, [formId]);
+  }, [enabled, formId]);
 };
 
 export { setActiveSelectionForm, useInputSelectionHandler };

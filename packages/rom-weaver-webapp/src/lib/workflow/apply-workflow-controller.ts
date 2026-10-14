@@ -4,17 +4,23 @@ import type {
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
-import type { ApplyResult } from "../../types/public.ts";
+import type { ApplyResult, CreateResult } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
-import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
+import type { ApplySettings, CompressionFormat, CreateSettings } from "../../types/settings.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-controller.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchValidationPlan } from "../../wasm/index.ts";
-import type { ApplyWorkflowOptions, PatchInput, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowOptions,
+  PatchInput,
+  ProgressEvent,
+  PublicOutput,
+} from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
 import { runApplyWorkflow } from "../apply/workflow.ts";
+import { runCreateWorkflow } from "../create/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import type { CheatRecord } from "../cheats/model.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
@@ -123,6 +129,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
   private inputs: TSource[] = [];
+  // Object identities MUST remain weak so replaced archives can be collected while restaging stays deduplicated.
+  private discoveredSidecarSources = new WeakSet<object>();
+  private discoveredSidecarPrimitiveSources = new Set<TSource>();
   private cheatRecords: CheatRecord[] = [];
   private cheatPositions: number[] = [];
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
@@ -270,6 +279,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async setInput(
     input: TSource | TSource[],
     options?: {
+      appendSidecarPatches?: boolean;
       onPrepared?: (input: ApplyWorkflowInputState | null) => void;
       onFinalized?: (input: ApplyWorkflowInputState | null) => void;
     },
@@ -341,7 +351,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         // only on the patch row and must not keep the ROM row showing "checksumming".
         options?.onFinalized?.(this.getInput());
         const endImplicit = startStageSpan("setInput:discoverImplicitPatches");
-        await this.discoverImplicitPatches();
+        await this.discoverImplicitPatches(options?.appendSidecarPatches);
         endImplicit();
         await this.refreshPatchReadiness();
         this.recomputeOutputState();
@@ -616,9 +626,31 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return true;
   }
 
-  private async discoverImplicitPatches(): Promise<void> {
-    if (this.patches.length || !this.inputSession) return;
-    const stages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
+  private hasDiscoveredSidecarSource(source: TSource): boolean {
+    if (typeof source === "object" && source !== null) return this.discoveredSidecarSources.has(source);
+    return this.discoveredSidecarPrimitiveSources.has(source);
+  }
+
+  private rememberDiscoveredSidecarSource(source: TSource): void {
+    if (typeof source === "object" && source !== null) {
+      this.discoveredSidecarSources.add(source);
+      return;
+    }
+    this.discoveredSidecarPrimitiveSources.add(source);
+  }
+
+  private async discoverImplicitPatches(appendSidecarPatches = false): Promise<void> {
+    if (!this.inputSession || (this.patches.length && !(appendSidecarPatches && this.selectFile))) return;
+    const sessionStages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
+    const stages = appendSidecarPatches
+      ? sessionStages.filter(
+          (stage) =>
+            !(
+              this.hasDiscoveredSidecarSource(stage.source) ||
+              this.patches.some((patch) => patch.source === stage.source)
+            ),
+        )
+      : sessionStages;
     // No selection handler = headless/libretro-style soft-patching: apply only name-matched sidecars,
     // no prompt. With a handler (the webapp) every sidecar goes through the selection flow instead.
     if (!this.selectFile) {
@@ -630,7 +662,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (!sidecarPatches.length) continue;
       // Preferred path: the dialog already ran off the streamed `patch-manifest` while the ROM hashed;
       // apply that pick off the materialized leaves - no second dialog, no re-ingest.
-      if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) continue;
+      if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) {
+        if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
+        continue;
+      }
       // A lone sidecar auto-adds (no prompt), reusing the already-extracted leaf. (The apply
       // execution skips its own discovery once rows exist.)
       if (sidecarPatches.length === 1) {
@@ -639,6 +674,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           this.trace("patch.implicit.sidecar-auto-add", { fileName: only.file.fileName });
           await this.addFannedOutPatch(only.file, only.parentCompressions);
         }
+        if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
         continue;
       }
       // Fallback (early dialog never ran): surface the multi-select by re-staging the archive as a
@@ -647,6 +683,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // The staging cache is reference-counted, so the patch flow can share the exact source object
       // with the input flow without conflating a same-metadata but different File.
       await this.surfaceArchivePatchSelection(stage.source);
+      if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
     }
   }
 
@@ -870,27 +907,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   async run(): Promise<ApplyResult<TDestination>> {
     return this.mutate("run", async () => {
-      const input = this.inputSession;
-      if (!input) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
-      await this.finalizeInputStableState();
-      await this.refreshPatchReadiness();
-      this.recomputeOutputState();
-      if (input.view.state.status !== "ready" || !input.view.state.selectedCandidateId)
-        throw new RomWeaverError("AMBIGUOUS_SELECTION", "Input selection is required");
-      const pendingPatch = this.patches.find((patch) => patch.state.status !== "ready");
-      if (pendingPatch) {
-        if (!pendingPatch.state.selectedCandidateId)
-          throw new RomWeaverError(
-            "AMBIGUOUS_SELECTION",
-            `${pendingPatch.state.fileName || "Patch"} requires selection`,
-          );
-        throw new RomWeaverError(
-          "AMBIGUOUS_SELECTION",
-          pendingPatch.state.warnings.at(-1)?.message || `${pendingPatch.state.fileName || "Patch"} is not ready`,
-        );
-      }
-      const outputName = this.outputState.outputName;
-      if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
+      await this.prepareRun();
       const result = await withAbortSignal(
         runApplyWorkflow(
           this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress)),
@@ -911,6 +928,152 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
       return publicResult;
+    });
+  }
+
+  private async prepareRun(): Promise<void> {
+    const input = this.inputSession;
+    if (!input) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
+    await this.finalizeInputStableState();
+    await this.refreshPatchReadiness();
+    this.recomputeOutputState();
+    if (input.view.state.status !== "ready" || !input.view.state.selectedCandidateId)
+      throw new RomWeaverError("AMBIGUOUS_SELECTION", "Input selection is required");
+    const pendingPatch = this.patches.find((patch) => patch.state.status !== "ready");
+    if (pendingPatch) {
+      if (!pendingPatch.state.selectedCandidateId)
+        throw new RomWeaverError("AMBIGUOUS_SELECTION", `${pendingPatch.state.fileName || "Patch"} requires selection`);
+      throw new RomWeaverError(
+        "AMBIGUOUS_SELECTION",
+        pendingPatch.state.warnings.at(-1)?.message || `${pendingPatch.state.fileName || "Patch"} is not ready`,
+      );
+    }
+    const outputName = this.outputState.outputName;
+    if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
+  }
+
+  async createCombinedPatch(settings: Partial<CreateSettings>): Promise<CreateResult<TDestination>> {
+    return this.mutate("createCombinedPatch", async () => {
+      await this.prepareRun();
+      if (!(this.patches.length || this.cheatRecords.length))
+        throw new RomWeaverError("INVALID_INPUT", "Select at least one patch or cheat to combine");
+      const assets = this.getPreparedInputAssets();
+      if (assets.length !== 1 || !assets[0]?.patchable)
+        throw new RomWeaverError(
+          "INVALID_INPUT",
+          "Combined patches require exactly one ROM file; multi-file ROMs are not supported",
+        );
+      const original = assets[0];
+      const originalSource = getPatchFileExternalSource(original.file, original.fileName);
+      if (!originalSource) throw new RomWeaverError("INVALID_INPUT", "The prepared original ROM is not readable");
+      const outputName = settings.output?.outputName?.trim();
+      if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
+      const applyPatch = this.runtime.patch.applyPatch;
+      const createPatch = this.runtime.patch.createPatch;
+      const createSource = this.runtime.output.createSource;
+      if (!createSource)
+        throw new RomWeaverError("UNSUPPORTED_FORMAT", "Combined patch output is unavailable in this runtime");
+      const intermediateOutputs: PublicOutput[] = [];
+      const modifiedSources: SourceRef[] = [];
+      const applyInput = this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress));
+      applyInput.options = {
+        ...applyInput.options,
+        retainUncompressedOutput: undefined,
+        output: { ...applyInput.options?.output, compression: "none", header: "keep" },
+      };
+      const runtime: WorkflowRuntime = {
+        ...this.runtime,
+        patch: {
+          ...this.runtime.patch,
+          applyPatch: applyPatch
+            ? async (...args) => {
+                const output = await applyPatch(...args);
+                intermediateOutputs.push(output);
+                return output;
+              }
+            : undefined,
+        },
+        output: {
+          ...this.runtime.output,
+          // Chaining MUST use the prepared source: public output paths may belong to a download-only VFS.
+          createSource: async (source, fileName) => {
+            modifiedSources.push(source);
+            const output = await createSource(source, fileName);
+            intermediateOutputs.push(output);
+            return output;
+          },
+        },
+      };
+      let createdOutput: PublicOutput | undefined;
+      let succeeded = false;
+      try {
+        const applied = await runApplyWorkflow(applyInput, runtime);
+        if (applied.outputs.length !== 1 || modifiedSources.length !== 1)
+          throw new RomWeaverError("INVALID_INPUT", "Combined patches require exactly one modified ROM output");
+        this.abortController.signal.throwIfAborted();
+        const createRuntime: WorkflowRuntime = {
+          ...this.runtime,
+          patch: {
+            ...this.runtime.patch,
+            createPatch: createPatch
+              ? async (...args) => {
+                  const result = await createPatch(...args);
+                  intermediateOutputs.push(result.output);
+                  return result;
+                }
+              : undefined,
+          },
+        };
+        const created = await runCreateWorkflow(
+          {
+            original: originalSource,
+            modified: modifiedSources[0],
+            originalCrc32: getInputAssetChecksums(original)?.crc32,
+            options: {
+              ...cloneValue(settings),
+              output: { ...cloneValue(settings.output), outputName },
+              signal: this.abortController.signal,
+              onLog: settings.logging?.sink ?? this.settings.logging?.sink,
+              onProgress: (progress) =>
+                this.emitProgress({
+                  ...progress,
+                  stage: progress.stage === "output" ? "compress" : "create",
+                  details: isRecord(progress.details) ? progress.details : undefined,
+                  id: `${this.id}:worker:create`,
+                  role: "worker",
+                  workflow: "create",
+                }),
+            },
+          },
+          createRuntime,
+        );
+        createdOutput = created.output;
+        this.abortController.signal.throwIfAborted();
+        const output = wrapPublicOutput<TDestination>(created.output, this.runtime, 0);
+        const warnings = [...(applied.warnings || []), ...(created.warnings || [])];
+        const result: CreateResult<TDestination> = {
+          original: { id: original.id, fileName: original.fileName, kind: original.kind, size: original.size },
+          modified: {
+            id: `${this.id}:combined`,
+            fileName: applied.output.fileName,
+            kind: "rom",
+            size: applied.output.size,
+          },
+          output,
+          type: created.format as CreateResult<TDestination>["type"],
+          sizeSummary: { ...created.sizeSummary, outputSize: output.size },
+          ...(warnings.length ? { warnings } : {}),
+        };
+        succeeded = true;
+        return result;
+      } finally {
+        await Promise.allSettled(
+          [...new Set(intermediateOutputs)]
+            .filter((output) => output !== createdOutput)
+            .map((output) => output.dispose()),
+        );
+        if (!succeeded && createdOutput) await createdOutput.dispose();
+      }
     });
   }
 
@@ -943,6 +1106,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.flushPendingOwnedSourceReleases();
     await this.runtime.workerIo?.releaseOwnedSources?.([...this.ownedSourceRefCounts.keys()]).catch(() => undefined);
     this.ownedSourceRefCounts.clear();
+    this.discoveredSidecarPrimitiveSources.clear();
     this.patches = [];
     this.clearListeners();
     this.disposed = true;

@@ -620,6 +620,7 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
+  ["creator", "/create-patch?guide=create", "/docs/create-rom-patches"],
   ["weave", "/weave-patches?guide=weave", "/docs/create-bundles"],
 ])("the %s sample link carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
@@ -646,7 +647,11 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  const secondaryHref = initialView === "patcher" ? "/apply-patches?guide=apply-cheats" : null;
+  const secondaryHrefs = {
+    patcher: "/apply-patches?guide=apply-cheats",
+    creator: "/create-patch?guide=create-cheats",
+  };
+  const secondaryHref = secondaryHrefs[initialView] || null;
   await expect
     .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
     .toBe(secondaryHref ? 5 : 4);

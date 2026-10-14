@@ -514,6 +514,36 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.itemCount": msg({ id: "ui.apply.itemCount", message: "{count, plural, one {# item} other {# items}}" }),
   "ui.apply.loadFailed": msg({ id: "ui.apply.loadFailed", message: "rom-weaver failed to load." }),
   "ui.apply.needsPatches": msg({ id: "ui.apply.needsPatches", message: "Add your patch files" }),
+  "ui.create.sourceMode.label": msg({ id: "ui.create.sourceMode.label", message: "Create patch from" }),
+  "ui.create.sourceMode.rom": msg({ id: "ui.create.sourceMode.rom", message: "Modified ROM" }),
+  "ui.create.sourceMode.patches": msg({ id: "ui.create.sourceMode.patches", message: "Patches & cheats" }),
+  "ui.create.changes": msg({ id: "ui.create.changes", message: "Changes" }),
+  "ui.combinedPatch.filename": msg({ id: "ui.combinedPatch.filename", message: "Patch filename" }),
+  "ui.combinedPatch.format": msg({ id: "ui.combinedPatch.format", message: "Patch format" }),
+  "ui.combinedPatch.description": msg({
+    id: "ui.combinedPatch.description",
+    message: "Combine the enabled patches and cheats into one patch for the original ROM.",
+  }),
+  "ui.combinedPatch.working": msg({ id: "ui.combinedPatch.working", message: "Creating combined patch…" }),
+  "ui.combinedPatch.download": msg({ id: "ui.combinedPatch.download", message: "Download patch" }),
+  "ui.combinedPatch.create": msg({ id: "ui.combinedPatch.create", message: "Create patch & download" }),
+  "ui.combinedPatch.title": msg({ id: "ui.combinedPatch.title", message: "Create patch" }),
+  "ui.combinedPatch.downloadTitle": msg({ id: "ui.combinedPatch.downloadTitle", message: "Download a combined patch" }),
+  "ui.combinedPatch.needsRom": msg({
+    id: "ui.combinedPatch.needsRom",
+    message: "Add one original ROM to create a combined patch.",
+  }),
+  "ui.combinedPatch.unavailable": msg({
+    id: "ui.combinedPatch.unavailable",
+    message: "The combined patch is unavailable in this browser.",
+  }),
+  "ui.secondary.downloadRom": msg({ id: "ui.secondary.downloadRom", message: "Download patched ROM" }),
+  "ui.secondary.downloadThisRom": msg({ id: "ui.secondary.downloadThisRom", message: "Download this ROM" }),
+  "ui.secondary.downloadWeave": msg({ id: "ui.secondary.downloadWeave", message: "Download the weave" }),
+  "ui.weaveExport.combinedCheats": msg({
+    id: "ui.weaveExport.combinedCheats",
+    message: "This weave contains one combined patch with the enabled patches and cheats in their current order.",
+  }),
   "ui.create.needsModified": msg({ id: "ui.create.needsModified", message: "Add your modified ROM" }),
   "ui.apply.needsRom": msg({ id: "ui.apply.needsRom", message: "Choose your original ROM" }),
   "ui.apply.outputFilename": msg({ id: "ui.apply.outputFilename", message: "Output filename (no extension)" }),
@@ -656,18 +686,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.create.tutorial.cheats.title": msg({
     id: "ui.create.tutorial.cheats.title",
-    message: "Optional: build from cheat codes",
+    message: "Optional: build from patches & cheats",
   }),
   "ui.create.tutorial.cheats.body": msg({
     id: "ui.create.tutorial.cheats.body",
     message:
-      "Cheat codes replaces the modified ROM as the source of changes. Switch back to Modified ROM for the sample's expected patch.",
+      "Choose Patches & cheats on step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
   }),
   "ui.create.tutorial.cheats.tryIt": msg({
     id: "ui.create.tutorial.cheats.tryIt",
-    message: "Switch to Cheat codes and open the practice catalog.",
+    message: "Switch to Patches & cheats and open the practice catalog.",
   }),
-  "ui.create.tutorial.cheatCodes": msg({ id: "ui.create.tutorial.cheatCodes", message: "Cheat codes" }),
+  "ui.create.tutorial.cheatCodes": msg({ id: "ui.create.tutorial.cheatCodes", message: "Patches & cheats" }),
   "ui.create.tutorial.pickCheats": msg({
     id: "ui.create.tutorial.pickCheats",
     message: "Pick from the cheat database",
@@ -1321,7 +1351,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.noteApplyRom": msg({ id: "ui.drop.noteApplyRom", message: "Patch this ROM. Add the patches next." }),
   "ui.drop.noteApplyWeave": msg({ id: "ui.drop.noteApplyWeave", message: "Apply the weave's patches to a ROM." }),
   "ui.drop.noteEditWeave": msg({ id: "ui.drop.noteEditWeave", message: "Edit the patch recipe and share a weave." }),
-  "ui.drop.noteCreateMixed": msg({ id: "ui.drop.noteCreateMixed", message: "Uses two ROMs and ignores the patches." }),
+  "ui.drop.noteCreateMixed": msg({
+    id: "ui.drop.noteCreateMixed",
+    message: "Combine the patches into one patch for the original ROM.",
+  }),
   "ui.drop.noteCreateRoms": msg({ id: "ui.drop.noteCreateRoms", message: "Compare the ROMs to make a patch." }),
   "ui.drop.noteStayApply": msg({ id: "ui.drop.noteStayApply", message: "Choose one ROM to patch." }),
   "ui.drop.noteStayRomOnly": msg({
@@ -1479,7 +1512,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:
-      "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
+      "Compare original and modified ROMs, or combine ordered patches and cheats into one patch for your original ROM.",
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
   "ui.hero.compressGuide": msg({ id: "ui.hero.compressGuide", message: "Read the Compress guide" }),

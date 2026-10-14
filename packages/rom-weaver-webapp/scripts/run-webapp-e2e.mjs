@@ -260,6 +260,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     for (const testCase of [
       { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create-patch/" },
+      { finalView: "creator", initialView: "creator", path: "create-patch?guide=create-cheats" },
       { finalView: "trim", initialView: "trim", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
@@ -1038,12 +1039,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       "guided Create loading (desktop, light)",
       () => guidedCreate.click(),
     );
-    for (let step = 1; step <= 6; step += 1) {
+    for (let step = 1; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="6"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Create ${step}/6`);
-      if (step === 6) {
+      await scanVariants(`guided Create ${step}/5`);
+      if (step === 5) {
         // The guide ends on the click, before the asynchronous create/compress
         // run finishes. Keep its document alive until the patch has downloaded;
         // navigation would otherwise invalidate WebKit's in-flight OPFS reads.

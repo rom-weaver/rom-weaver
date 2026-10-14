@@ -112,6 +112,102 @@ const openWorkflow = async (page, baseUrl, route, pickerId) => {
   return page.locator(`#${pickerId}`);
 };
 
+const requireCollapsedOutputJobs = async (page, ids, label) => {
+  for (const id of ids) {
+    const toggle = page.locator(`#${id} > .weave-job > button[aria-expanded]`);
+    await toggle.waitFor({ state: "visible" });
+    requireEqual(await toggle.getAttribute("aria-expanded"), "false", `${label}: ${id} should start collapsed`);
+  }
+};
+
+const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOutput) => {
+  const { original } = makeJourneyInputs();
+  const makeIps = (records) =>
+    Buffer.concat([
+      Buffer.from("PATCH"),
+      ...records.map(({ offset, bytes }) => {
+        const header = Buffer.alloc(5);
+        header.writeUIntBE(offset, 0, 3);
+        header.writeUInt16BE(bytes.length, 3);
+        return Buffer.concat([header, Buffer.from(bytes)]);
+      }),
+      Buffer.from("EOF"),
+    ]);
+  const first = makeIps([
+    { offset: 3, bytes: [0xaa] },
+    { offset: 2048, bytes: [0xbb] },
+  ]);
+  const second = makeIps([
+    { offset: 3, bytes: [0xcc] },
+    { offset: 1024, bytes: [0xdd] },
+  ]);
+  const expected = Buffer.from(original);
+  expected[3] = 0xcc;
+  expected[1024] = 0xdd;
+  expected[2048] = 0xbb;
+  const stackFiles = () => [
+    inputFile("original.bin", original),
+    inputFile("01-first.ips", first),
+    inputFile("02-second.ips", second),
+  ];
+  const reapplyCombined = async (patch, label) => {
+    requireJourney(patch.name.endsWith(".bps"), `${label}: expected BPS, received ${patch.name}`);
+    requireEqual(patch.bytes.subarray(0, 4).toString("ascii"), "BPS1", `${label}: missing BPS header`);
+    requireEqual(patch.bytes.readUInt32LE(patch.bytes.length - 12), zlib.crc32(original), `${label}: source CRC32`);
+    requireEqual(patch.bytes.readUInt32LE(patch.bytes.length - 8), zlib.crc32(expected), `${label}: target CRC32`);
+    const picker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
+    await picker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
+    await waitForEnabled(page, "rom-weaver-button-apply");
+    const rebuilt = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
+    assertJourneyBytes(rebuilt.bytes, expected, `${label} -> Apply exact combined result`);
+  };
+
+  const createPicker = await openWorkflow(page, baseUrl, "create-patch", "patch-builder-input-file-unified");
+  await configureUncompressedOutput(page);
+  const mode = page.getByRole("group", { name: "Create patch from", exact: true });
+  const modifiedMode = mode.getByRole("button", { name: "Modified ROM", exact: true });
+  await modifiedMode.waitFor({ state: "visible" });
+  requireEqual(await modifiedMode.getAttribute("aria-pressed"), "true", "Create should default to Modified ROM");
+  await createPicker.setInputFiles(stackFiles());
+  const patchesMode = mode.getByRole("button", { name: "Patches & cheats", exact: true });
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll("fieldset.seg button")).some(
+      (button) => button.textContent?.trim() === "Patches & cheats" && button.getAttribute("aria-pressed") === "true",
+    ),
+  );
+  requireEqual(
+    await patchesMode.getAttribute("aria-pressed"),
+    "true",
+    "Create should select Patches & cheats for patch uploads",
+  );
+  await requireCollapsedOutputJobs(page, ["rom-weaver-apply-job", "rom-weaver-weave-job"], "Create combined outputs");
+  const createOutput = page.locator("#rom-weaver-combined-patch-output");
+  await createOutput.locator("#rom-weaver-combined-patch-format").selectOption("bps");
+  const created = await downloadedBytes(page, () =>
+    createOutput.getByRole("button", { name: "Create patch & download", exact: true }).click(),
+  );
+  await reapplyCombined(created, "Create ordered IPS -> combined BPS");
+
+  for (const [route, pickerId, otherJob] of [
+    ["apply-patches", "rom-weaver-input-file-unified", "rom-weaver-weave-job"],
+    ["weave-patches", "rom-weaver-input-file-unified-weave", "rom-weaver-apply-job"],
+  ]) {
+    const picker = await openWorkflow(page, baseUrl, route, pickerId);
+    await picker.setInputFiles(stackFiles());
+    await requireCollapsedOutputJobs(page, ["rom-weaver-combined-patch-job", otherJob], route);
+    const combinedJob = page.locator("#rom-weaver-combined-patch-job");
+    await combinedJob.locator(":scope > .weave-job > button[aria-expanded]").click();
+    await combinedJob.locator("#rom-weaver-combined-patch-format").selectOption("bps");
+    const exported = await downloadedBytes(page, () =>
+      combinedJob.getByRole("button", { name: "Create patch & download", exact: true }).click(),
+    );
+    await reapplyCombined(exported, `${route} optional combined BPS`);
+  }
+  process.stdout.write(
+    "PASS Create auto-mode and Apply/Weave optional combined BPS exports -> exact byte roundtrips\n",
+  );
+};
+
 export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureUncompressedOutput) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   const page = await context.newPage();
@@ -159,6 +255,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await waitForEnabled(page, "rom-weaver-button-apply");
     const rewoven = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rewoven.bytes, modified, "Weave export -> Apply exact roundtrip");
+    await runCombinedPatchRoundtrips(page, baseUrl, configureUncompressedOutput);
     requireJourney(failures.length === 0, `Create/Apply uncaught page errors: ${failures.join("; ")}`);
     process.stdout.write(`PASS Create -> Apply BPS roundtrip (${original.length} -> ${output.bytes.length} bytes)\n`);
     process.stdout.write("PASS Weave export with ROM -> Apply exact roundtrip\n");

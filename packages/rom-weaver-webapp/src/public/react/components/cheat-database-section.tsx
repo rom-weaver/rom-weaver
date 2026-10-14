@@ -77,7 +77,7 @@ const isClassifiedCheat = (record: ClassifiedCheatRecord | CheatDatabaseRecord):
   "record" in record;
 
 /** Why cheats are off for a ROM whose platform no shard and no decoder covers. */
-export const getUnsupportedCheatSystemMessage = (platform: string | undefined, localizer: Localizer): string =>
+const getUnsupportedCheatSystemMessage = (platform: string | undefined, localizer: Localizer): string =>
   platform
     ? localizer.message("ui.cheats.unsupportedSystem", { platform })
     : localizer.message("ui.cheats.unsupportedSystemUnknown");

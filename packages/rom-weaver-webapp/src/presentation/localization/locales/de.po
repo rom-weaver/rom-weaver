@@ -936,12 +936,12 @@ msgstr "Cheat-Code"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheatCodes"
-msgstr "Cheat-Codes"
+msgstr "Patches & Cheats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Cheat-Codes ersetzt das modifizierte ROM als Quelle der Änderungen. Wechsle zurück zu Modifiziertes ROM für den erwarteten Beispiel-Patch."
+msgstr "Wähle bei Schritt 0x03 Patches & Cheats, um geordnete Änderungen zu kombinieren. Geänderte ROM ist die Voreinstellung; beim Wechsel bleiben deine Eingaben erhalten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1306,7 +1306,7 @@ msgstr "Vergleiche es mit dem Original, um einen Patch zum Teilen zu erstellen."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createDescription"
-msgstr "Vergleiche originale und geänderte ROMs, direkt oder in Archiven, und erstelle BPS-, IPS-, UPS-, xdelta- oder andere Patches."
+msgstr "Vergleiche Original-ROM und geänderte ROM oder fasse geordnete Patches und Cheats zu einem Patch für deine Original-ROM zusammen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3301,7 +3301,7 @@ msgstr "Optionale ROM-Datenbanken"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.title"
-msgstr "Optional: aus Cheat-Codes erstellen"
+msgstr "Optional: aus Patches & Cheats erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4701,7 +4701,7 @@ msgstr "Wechsle zu Detailliert und sieh zu, wie sich die markierte Karte ändert
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.tryIt"
-msgstr "Wechsle zu Cheat-Codes und öffne den Übungskatalog."
+msgstr "Wechsle zu Patches & Cheats und öffne den Übungskatalog."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5376,7 +5376,7 @@ msgstr "Verwendet ein ROM und fragt, welches du behalten willst."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteCreateMixed"
-msgstr "Verwendet zwei ROMs und ignoriert die Patches."
+msgstr "Kombiniert die Patches zu einem Patch für das Original-ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5732,3 +5732,93 @@ msgstr "Patches anwenden oder die Anleitung bearbeiten."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeWeaveTitle"
 msgstr "Was möchtest du mit diesem Weave tun?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.label"
+msgstr "Patch erstellen aus"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.rom"
+msgstr "Geänderte ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.patches"
+msgstr "Patches & Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.changes"
+msgstr "Änderungen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.filename"
+msgstr "Patch-Dateiname"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.format"
+msgstr "Patch-Format"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.description"
+msgstr "Fasse die aktivierten Patches und Cheats zu einem Patch für die Original-ROM zusammen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.working"
+msgstr "Kombinierter Patch wird erstellt…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.download"
+msgstr "Patch herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.create"
+msgstr "Patch erstellen & herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.title"
+msgstr "Patch erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.downloadTitle"
+msgstr "Kombinierten Patch herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.needsRom"
+msgstr "Füge eine Original-ROM hinzu, um einen kombinierten Patch zu erstellen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.unavailable"
+msgstr "Der kombinierte Patch ist in diesem Browser nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadRom"
+msgstr "Gepatchte ROM herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadThisRom"
+msgstr "Diese ROM herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadWeave"
+msgstr "Weave herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.weaveExport.combinedCheats"
+msgstr "Dieses Weave enthält einen kombinierten Patch mit den aktivierten Patches und Cheats in ihrer aktuellen Reihenfolge."

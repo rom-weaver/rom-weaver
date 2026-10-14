@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ runApplyWorkflow: vi.fn() }));
+const mocks = vi.hoisted(() => ({ runApplyWorkflow: vi.fn(), runCreateWorkflow: vi.fn() }));
 vi.mock("../../src/lib/apply/workflow.ts", () => ({ runApplyWorkflow: mocks.runApplyWorkflow }));
 
+vi.mock("../../src/lib/create/workflow.ts", () => ({ runCreateWorkflow: mocks.runCreateWorkflow }));
+
+import type { CreateResult } from "../../src/types/public.ts";
 import { ApplyWorkflowController } from "../../src/lib/workflow/apply-workflow-controller.ts";
 
 type Source = { name: string };
@@ -11,6 +14,14 @@ type Stage = {
   parentCompressions: unknown[];
   preparedPatchFile?: Record<string, unknown>;
   parsedPatch?: unknown;
+  preparedInputAssets: Array<{
+    file: ReturnType<typeof file>;
+    fileName: string;
+    id: string;
+    kind: string;
+    patchable: boolean;
+    size: number;
+  }>;
   state: Record<string, unknown>;
 };
 type Probe = {
@@ -22,6 +33,8 @@ type Probe = {
   recomputeOutputState: () => void;
   refreshPatchReadiness: () => Promise<void>;
   run: () => Promise<Record<string, unknown>>;
+  abort: () => void;
+  createCombinedPatch: (settings: unknown) => Promise<CreateResult<unknown>>;
   createInitialSource: (role: "input" | "patch", source: Source, index: number) => Stage;
 };
 
@@ -52,6 +65,8 @@ const makeController = () => {
       getStorage: vi.fn(() => "blob"),
       saveAs: vi.fn(async () => undefined),
     },
+    patch: { applyPatch: vi.fn() },
+    output: { createSource: vi.fn() },
     workerIo: { releaseOwnedSources: vi.fn(async () => undefined), releaseSources: vi.fn(async () => undefined) },
   };
   const controller = new ApplyWorkflowController<Source, unknown>(
@@ -81,7 +96,10 @@ const makeController = () => {
   return { controller, runtime, input, patch };
 };
 
-beforeEach(() => mocks.runApplyWorkflow.mockReset());
+beforeEach(() => {
+  mocks.runApplyWorkflow.mockReset();
+  mocks.runCreateWorkflow.mockReset();
+});
 
 describe("ApplyWorkflowController.run", () => {
   it("runs a validated apply, maps every output, and preserves public output controls", async () => {
@@ -140,6 +158,88 @@ describe("ApplyWorkflowController.run", () => {
     const { controller } = makeController();
     controller.outputState.outputName = "";
     await expect(controller.run()).rejects.toThrow("Output name is required");
+    expect(mocks.runApplyWorkflow).not.toHaveBeenCalled();
+  });
+});
+
+describe("ApplyWorkflowController.createCombinedPatch", () => {
+  const arrange = () => {
+    const setup = makeController();
+    const worker = { fileName: "final.sfc", size: 12, dispose: vi.fn(async () => undefined) };
+    const normalized = { ...worker, path: "/fake", dispose: vi.fn(async () => undefined) };
+    const finalPatch = { fileName: "combined.bps", size: 4, dispose: vi.fn(async () => undefined) };
+    const realSource = { source: "/real/opfs/final.sfc", fileName: "final.sfc", size: 12 };
+    setup.runtime.patch.applyPatch.mockResolvedValue(worker);
+    setup.runtime.output.createSource.mockResolvedValue(normalized);
+    mocks.runApplyWorkflow.mockImplementation(async (_input, runtime) => {
+      await runtime.patch.applyPatch({});
+      const output = await runtime.output.createSource(realSource, "final.sfc");
+      return { output, outputs: [output], warnings: ["apply warning"] };
+    });
+    mocks.runCreateWorkflow.mockResolvedValue({ format: "bps", output: finalPatch });
+    return { ...setup, worker, normalized, finalPatch, realSource };
+  };
+
+  it("diffs prepared original against the real final source and releases intermediates", async () => {
+    const { controller, worker, normalized, finalPatch, realSource } = arrange();
+    const result = await controller.createCombinedPatch({ format: "bps", output: { outputName: "combined.bps" } });
+    expect(mocks.runApplyWorkflow.mock.calls[0][0].options.output).toMatchObject({
+      compression: "none",
+      header: "keep",
+    });
+    expect(mocks.runCreateWorkflow.mock.calls[0][0]).toMatchObject({
+      original: { source: "/work/rom.sfc" },
+      modified: realSource,
+      options: { format: "bps", output: { outputName: "combined.bps" } },
+    });
+    expect(result).toMatchObject({ type: "bps", warnings: ["apply warning"] });
+    expect(worker.dispose).toHaveBeenCalledOnce();
+    expect(normalized.dispose).toHaveBeenCalledOnce();
+    expect(finalPatch.dispose).not.toHaveBeenCalled();
+    await controller.createCombinedPatch({ output: { outputName: "again.bps" } });
+    expect(mocks.runCreateWorkflow).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the worker output when apply fails after producing it", async () => {
+    const { controller, runtime, worker } = arrange();
+    mocks.runApplyWorkflow.mockImplementation(async (_input, adapter) => {
+      await adapter.patch.applyPatch({});
+      throw new Error("apply failed");
+    });
+    await expect(controller.createCombinedPatch({ output: { outputName: "combined.bps" } })).rejects.toThrow(
+      "apply failed",
+    );
+    expect(worker.dispose).toHaveBeenCalledOnce();
+    expect(runtime.workerIo.releaseSources).not.toHaveBeenCalled();
+  });
+
+  it("releases intermediate outputs when create fails", async () => {
+    const { controller, worker, normalized } = arrange();
+    mocks.runCreateWorkflow.mockRejectedValue(new Error("create failed"));
+    await expect(controller.createCombinedPatch({ output: { outputName: "combined.bps" } })).rejects.toThrow(
+      "create failed",
+    );
+    expect(worker.dispose).toHaveBeenCalledOnce();
+    expect(normalized.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("disposes a final patch produced after cancellation", async () => {
+    const { controller, finalPatch, worker } = arrange();
+    mocks.runCreateWorkflow.mockImplementation(async () => {
+      controller.abort();
+      return { format: "bps", output: finalPatch };
+    });
+    await expect(controller.createCombinedPatch({ output: { outputName: "combined.bps" } })).rejects.toThrow();
+    expect(finalPatch.dispose).toHaveBeenCalledOnce();
+    expect(worker.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("rejects multi-file ROMs before applying", async () => {
+    const { controller, input } = arrange();
+    input.preparedInputAssets.push({ ...input.preparedInputAssets[0], id: "second" });
+    await expect(controller.createCombinedPatch({ output: { outputName: "combined.bps" } })).rejects.toThrow(
+      "exactly one ROM file",
+    );
     expect(mocks.runApplyWorkflow).not.toHaveBeenCalled();
   });
 });

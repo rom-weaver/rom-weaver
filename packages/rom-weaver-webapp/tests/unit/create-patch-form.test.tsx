@@ -2,20 +2,36 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { listDroppedArchiveEntryNames } from "../../src/lib/input/input-preparation-archive.ts";
 import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 
-// A test MAY stand in a cheat index; left unset, the real loader runs against
-// the stubbed fetch.
-const identifyIndexOverride = vi.hoisted(() => ({ current: undefined as undefined | (() => Promise<unknown>) }));
-vi.mock("../../src/platform/browser/identify-packs.ts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/platform/browser/identify-packs.ts")>();
+vi.mock("../../src/public/react/apply-patch-form.tsx", async () => {
+  const { useEffect, useState } = await import("react");
   return {
-    ...actual,
-    loadIdentifyIndexAndCatalog: () =>
-      (identifyIndexOverride.current?.() as ReturnType<typeof actual.loadIdentifyIndexAndCatalog> | undefined) ??
-      actual.loadIdentifyIndexAndCatalog(),
+    ApplyPatchForm: (props: import("../../src/public/react/public-types.ts").ApplyPatchFormProps) => {
+      const [stack, setStack] = useState<string[]>([]);
+      useEffect(() => {
+        const files = props.pageDrop?.files;
+        if (files) setStack((current) => [...current, ...files.map((file) => file.name)]);
+      }, [props.pageDrop]);
+      return (
+        <section data-testid="aggregate-create" data-active={props.active}>
+          {props.createModeControls}
+          <output data-testid="aggregate-original">{props.inputs?.[0]?.name}</output>
+          <output data-testid="aggregate-stack">{stack.join(",")}</output>
+          <button type="button" onClick={() => setStack((current) => [...current, "manual cheat"])}>
+            Add test cheat
+          </button>
+        </section>
+      );
+    },
   };
 });
+
+vi.mock("../../src/lib/input/input-preparation-archive.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/lib/input/input-preparation-archive.ts")>()),
+  listDroppedArchiveEntryNames: vi.fn(async () => ["fix.ips"]),
+}));
 
 type FakeEventListener = (payload: unknown) => void;
 
@@ -166,7 +182,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  identifyIndexOverride.current = undefined;
   latest = null;
   createPatchFormModule = null;
   nextOriginalError = null;
@@ -258,108 +273,81 @@ describe("CreatePatchForm", () => {
     await vi.waitFor(() => expect(view.container.querySelectorAll(".step-num")).toHaveLength(4));
     return view;
   };
-  const findButton = (container: HTMLElement, text: string) =>
-    Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === text);
+  const activeButton = (container: HTMLElement, text: string) =>
+    Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === text && !button.closest("[hidden]"),
+    ) as HTMLButtonElement;
+  const upload = async (container: HTMLElement, files: File[]) => {
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: files });
+      fireEvent.change(input);
+    });
+  };
 
-  it("offers cheat codes mode without beta tools", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+  it("defaults to Modified ROM and offers Patches & cheats without beta tools", async () => {
     const { container } = await stageOriginalOnly({});
-
-    expect(findButton(container, "Cheat codes")).toBeTruthy();
+    expect(activeButton(container, "Modified ROM").getAttribute("aria-pressed")).toBe("true");
+    expect(activeButton(container, "Patches & cheats").disabled).toBe(false);
+    expect(container.querySelector('[data-testid="aggregate-create"]')).toBeNull();
   });
 
-  it("offers cheat codes mode when beta tools are on", async () => {
-    // The cheat panel loads the cheat database index; this test only checks the mode switch.
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
-    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
-
-    const codes = findButton(container, "Cheat codes") as HTMLButtonElement;
-    expect(codes).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(codes);
-    });
-    expect(codes.getAttribute("aria-pressed")).toBe("true");
-    expect(container.textContent).not.toContain("Add your modified ROM");
+  it("preserves original, modified ROM, and ordered patches and cheats across mode switches", async () => {
+    const { container } = await stageOriginalOnly({});
+    const modified = new File(["modified"], "modified.nes");
+    await upload(container, [modified]);
+    await vi.waitFor(() => expect(latest?.workflow.setModified).toHaveBeenCalledWith(modified));
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    expect(container.querySelector('[data-testid="aggregate-original"]')?.textContent).toBe("original.nes");
+    await act(async () => fireEvent.click(activeButton(container, "Add test cheat")));
+    await act(async () => fireEvent.click(activeButton(container, "Modified ROM")));
+    expect(container.querySelector("#patch-builder-row-modified")?.textContent).toContain("modified.nes");
+    await upload(container, [new File(["patch"], "first.ips"), new File(["patch"], "second.bps")]);
+    await vi.waitFor(() =>
+      expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true"),
+    );
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe(
+        "manual cheat,first.ips,second.bps",
+      ),
+    );
+    await act(async () => fireEvent.click(activeButton(container, "Modified ROM")));
+    expect(container.querySelector("#patch-builder-row-modified")?.textContent).toContain("modified.nes");
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe(
+      "manual cheat,first.ips,second.bps",
+    );
   });
 
-  // The staged original is an NES ROM; this index and catalog cover only the SNES.
-  const snesOnlyCheatData = () => ({
-    catalog: {
-      format: "rom-weaver-identify-catalog-v1",
-      platforms: [
-        {
-          aliases: ["snes"],
-          canonicalPlatform: "Nintendo - Super Nintendo Entertainment System",
-          mediaProfiles: [],
-          packFormat: "RWFP1",
-          packSha256: "",
-          packSlug: "nintendo-super-nintendo-entertainment-system",
-          source: "libretro",
-        },
-      ],
-    },
-    index: {
-      cheats: [
-        {
-          cheatSystem: "snes",
-          cheats: 1,
-          file: "cheats-snes.json",
-          games: 1,
-          platform: "Nintendo - Super Nintendo Entertainment System",
-          rawBytes: 1,
-          sha256: "a".repeat(64),
-          slug: "nintendo-super-nintendo-entertainment-system",
-        },
-      ],
-      sources: { libretro: { revision: "abc123", url: "https://github.com/libretro/libretro-database" } },
-    },
+  it("detects patches from actual archive listings before routing to the stack", async () => {
+    const { container } = renderForm(withSeams());
+    await upload(container, [new File(["archive"], "release.zip")]);
+    await vi.waitFor(() =>
+      expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true"),
+    );
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe("release.zip"),
+    );
+    expect(latest).toBeNull();
   });
 
-  it("disables cheat codes mode when the original ROM's system has no cheat support", async () => {
-    identifyIndexOverride.current = async () => snesOnlyCheatData();
-    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
-
-    await vi.waitFor(() => expect((findButton(container, "Cheat codes") as HTMLButtonElement).disabled).toBe(true));
-    const reason = container.querySelector("#patch-builder-cheat-codes-unsupported");
-    expect(reason?.textContent).toBe("Cheats are not supported for Nintendo Entertainment System yet.");
-    expect(findButton(container, "Cheat codes")?.getAttribute("aria-describedby")).toBe(reason?.id);
-    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  it("uses the aggregate mode when an archive contains both a ROM and patches", async () => {
+    vi.mocked(listDroppedArchiveEntryNames).mockResolvedValueOnce(["game.nes", "fix.ips"]);
+    const { container } = renderForm(withSeams());
+    await upload(container, [new File(["archive"], "mixed.zip")]);
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe("mixed.zip"),
+    );
+    expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("leaves cheat codes mode once the index shows the system has no cheat support", async () => {
-    // The form and the cheat panel both load the index; they MUST share one pending load.
-    let resolveIndex: (value: unknown) => void = () => undefined;
-    const pendingIndex = new Promise((resolve) => (resolveIndex = resolve));
-    identifyIndexOverride.current = () => pendingIndex;
-    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
-    await act(async () => {
-      fireEvent.click(findButton(container, "Cheat codes") as HTMLButtonElement);
-    });
-    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
-
-    await act(async () => resolveIndex(snesOnlyCheatData()));
-    await vi.waitFor(() => expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true"));
-    expect(container.textContent).toContain("Add your modified ROM");
-  });
-
-  it("keeps cheat codes mode when beta tools turn off", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
-    const { container, rerender } = await stageOriginalOnly({ betaToolsEnabled: true });
-    await act(async () => {
-      fireEvent.click(findButton(container, "Cheat codes") as HTMLButtonElement);
-    });
-
-    const rerenderWithBeta = (betaToolsEnabled: boolean) =>
-      rerender(
-        <RomWeaverSettingsProvider settings={{ betaToolsEnabled }}>
-          <CreatePatchFormForTest {...withSeams()} />
-        </RomWeaverSettingsProvider>,
-      );
-    await act(async () => rerenderWithBeta(false));
-    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
-
-    await act(async () => rerenderWithBeta(true));
-    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
+  it("switches to the aggregate mode for canonical weave drops", async () => {
+    const { container } = renderForm(withSeams());
+    await upload(container, [new File(["{}"], "rom-weaver-weave.json")]);
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe("rom-weaver-weave.json"),
+    );
+    expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("reports duplicate drops and allows the user to confirm them", async () => {

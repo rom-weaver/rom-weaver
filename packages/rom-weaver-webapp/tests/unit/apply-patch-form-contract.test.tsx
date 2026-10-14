@@ -277,6 +277,18 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     });
   });
 
+  it.each(["apply", "create"] as const)("opts into sidecar appending only for %s mode", async (mode) => {
+    const rom = new File(["rom"], "game.nes");
+    renderForm({ mode, defaultInputs: [rom], defaultPatches: [new File(["patch"], "existing.ips")] });
+
+    await vi.waitFor(() =>
+      expect(latestFakeWorkflow?.setInput).toHaveBeenCalledWith(
+        [rom],
+        expect.objectContaining({ appendSidecarPatches: mode === "create" }),
+      ),
+    );
+  });
+
   it("stages a dropped ROM through the fake workflow and discloses the rest of the bench", async () => {
     const { container } = renderForm();
     const fileInput = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;

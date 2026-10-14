@@ -32,6 +32,16 @@ type CandidateSelectionChoice = { id: string; ids?: string[]; keepSource?: boole
 type ApplyPatchFormSettings = ApplySettings;
 
 type ApplyPatchFormProps = Omit<BaseApplyPatchFormProps, "onApplyComplete"> & {
+  active?: boolean;
+  createCheatSampleRequestId?: number;
+  createSettings?: CreateSettings;
+  createModeControls?: ReactNode;
+  patchType?: string;
+  defaultPatchType?: string;
+  onPatchTypeChange?: (patchType: string) => void;
+  onCreateRomDrop?: (files: File[]) => void;
+  onCreateComplete?: (result: BrowserCreateResult) => void;
+  onBusyChange?: (busy: boolean) => void;
   onApplyComplete?: (result: BrowserApplyResult) => void;
 };
 

@@ -128,6 +128,8 @@ const SharedPatchMetaEditor = ({
 };
 
 const ApplyPatchListStep = ({
+  title,
+  headerExtra,
   weaveOutputCheckHint,
   weaveSessionMatches,
   disabledFlags,
@@ -151,6 +153,8 @@ const ApplyPatchListStep = ({
   cheats,
   woven,
 }: {
+  title?: ReactNode;
+  headerExtra?: ReactNode;
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   weaveOutputCheckHint?: boolean;
@@ -307,19 +311,22 @@ const ApplyPatchListStep = ({
         </InfoPopover>
       }
       headerExtra={
-        total > 1 && onWeaveMetaBulkChange ? (
-          <button
-            aria-controls="rom-weaver-bulk-patch-meta"
-            aria-expanded={bulkEditing}
-            className="patch-bulk-edit-button"
-            onClick={() => setBulkEditing((editing) => !editing)}
-            ref={bulkEditButtonRef}
-            type="button"
-          >
-            <Pencil aria-hidden="true" />
-            {localizer.message("ui.patch.bulkEdit")}
-          </button>
-        ) : undefined
+        <>
+          {headerExtra}
+          {total > 1 && onWeaveMetaBulkChange ? (
+            <button
+              aria-controls="rom-weaver-bulk-patch-meta"
+              aria-expanded={bulkEditing}
+              className="patch-bulk-edit-button"
+              onClick={() => setBulkEditing((editing) => !editing)}
+              ref={bulkEditButtonRef}
+              type="button"
+            >
+              <Pencil aria-hidden="true" />
+              {localizer.message("ui.patch.bulkEdit")}
+            </button>
+          ) : undefined}
+        </>
       }
       meta={
         total > 0 ? (
@@ -333,7 +340,7 @@ const ApplyPatchListStep = ({
         ) : undefined
       }
       num="0x03"
-      title={localizer.message(cheats ? "ui.step.patchesCheats" : "ui.step.patches")}
+      title={title ?? localizer.message(cheats ? "ui.step.patchesCheats" : "ui.step.patches")}
       woven={woven}
     >
       {bulkEditing && onWeaveMetaBulkChange ? (

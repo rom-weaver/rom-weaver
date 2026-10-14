@@ -278,21 +278,68 @@ test("guided Create URL starts and loads the sample tutorial", async () => {
   expect(requested).toEqual(["/hello-world.nes", "/modified-world.nes"]);
 });
 
-test("Create explains that dropped patches belong in Apply", async () => {
+const getVisibleSourceModeButton = (label) =>
+  Array.from(document.querySelectorAll(".seg-btn")).find(
+    (button) => button.textContent?.trim() === label && !button.closest("[hidden]"),
+  );
+
+test("Create defaults to Modified ROM", async () => {
+  mount(createElement(CreatePatchForm, withCreateWorkflowMock()));
+
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  expect(getVisibleSourceModeButton("Patches & cheats")).toBeInstanceOf(HTMLButtonElement);
+  expect(document.querySelector("#rom-weaver-row-patch-stack")).toBeNull();
+});
+
+test("Create automatically keeps dropped patches in Patches & cheats", async () => {
   mount(
     createElement(
       CreatePatchForm,
       withCreateWorkflowMock({
-        pageDrop: { files: [new File([], "hack.ips")], id: 1 },
+        pageDrop: { files: [new File(["PATCHEOF"], "hack.ips")], id: 1 },
       }),
     ),
   );
 
+  await expect.poll(() => getVisibleSourceModeButton("Patches & cheats")?.getAttribute("aria-pressed")).toBe("true");
   await expect
-    .poll(() => document.getElementById("patch-builder-input-notice")?.textContent || "")
-    .toContain("Patches belong in Apply");
+    .poll(() => document.querySelector("#rom-weaver-row-patch-stack")?.textContent || "")
+    .toContain("hack.ips");
+  expect(document.getElementById("patch-builder-input-notice")).toBeNull();
   expect(document.querySelector("#patch-builder-row-original .file")).toBeNull();
   expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
+});
+
+test("Create preserves the ROM pair and dropped patches across source mode switches", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+      }),
+    ),
+  );
+
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  selectFileInput(document.getElementById("patch-builder-input-file-unified"), new File(["PATCHEOF"], "retained.ips"));
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-row-patch-stack")?.textContent || "")
+    .toContain("retained.ips");
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
+    .toContain("original.bin");
+
+  getVisibleSourceModeButton("Modified ROM").click();
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector("#patch-builder-row-original .card")?.textContent).toContain("original.bin");
+  expect(document.querySelector("#patch-builder-row-modified .card")?.textContent).toContain("modified.bin");
+  expect(document.querySelector("#patch-builder-container")?.closest("[hidden]")).toBeNull();
+
+  getVisibleSourceModeButton("Patches & cheats").click();
+  await expect.poll(() => getVisibleSourceModeButton("Patches & cheats")?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector("#rom-weaver-row-patch-stack")?.textContent).toContain("retained.ips");
+  expect(document.querySelectorAll("#rom-weaver-list-patch-stack .card")).toHaveLength(1);
 });
 
 test("Create preserves simultaneous drop order regardless of filename length", async () => {

@@ -99,6 +99,13 @@
 .rw-app .step-head:has(> .emulator-player-actions) {
   flex-wrap: wrap;
 }
+.rw-app .step-head:has(> .seg) {
+  flex-wrap: wrap;
+}
+.rw-app .step-head > .seg {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+}
 .rw-app .step-head-action {
   display: none;
 }

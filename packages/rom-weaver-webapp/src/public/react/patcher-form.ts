@@ -9,7 +9,7 @@ import type { PatcherOutputState, PatchStackItemState, PatchStackState } from ".
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
-type ApplyPatchFormMode = "apply" | "weave" | "bundle";
+type ApplyPatchFormMode = "apply" | "weave" | "bundle" | "create";
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
   files: File[];

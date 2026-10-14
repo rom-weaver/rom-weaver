@@ -46,6 +46,21 @@ describe("useUnifiedApplyDrop", () => {
     expect(controller.providePatchInputFiles).not.toHaveBeenCalled();
   });
 
+  it("stages a mixed ROM and patch archive once so extracted sidecars are not ingested again", async () => {
+    mockedList.mockResolvedValue(["game.nes", "first.ips", "second.bps"]);
+    const controller = makeController();
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller));
+    const archive = file("mixed.zip");
+    const directPatch = file("third.ips");
+
+    act(() => result.current.onDrop([archive, directPatch]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([archive]));
+    await waitFor(() => expect(controller.providePatchInputFiles).toHaveBeenCalledExactlyOnceWith([directPatch]));
+    await waitFor(() => expect(result.current.pendingDrops).toHaveLength(0));
+    expect(mockedList).toHaveBeenCalledExactlyOnceWith(archive);
+  });
+
   it("routes a patch-only archive straight to the patch bucket (no ROM-bucket detour)", async () => {
     mockedList.mockResolvedValue(["hack.ips"]);
     const controller = makeController();

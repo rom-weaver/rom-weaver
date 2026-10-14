@@ -43,6 +43,7 @@ type DropCounts = {
 type DropEntry = {
   archiveBucket?: "patch" | "rom";
   weave?: boolean;
+  hasPatches?: boolean;
   name: string;
 };
 
@@ -134,7 +135,7 @@ const planDropDestinations = ({ patches, weaves, roms, saves, unknown }: DropCou
 const planDropRedirect = (view: string, { patches, roms, unlistedArchives }: DropCounts): DropRedirect | null => {
   let redirect: DropRedirect | null = null;
   if (view === "test" && patches > 0) redirect = { reason: "applyBeforeTest", to: "patcher" };
-  else if ((view === "creator" && roms <= 1) || view === "trim") {
+  else if (view === "trim") {
     if (patches > 0) redirect = { reason: "patchesNeedApply", to: "patcher" };
   } else if (view === "patcher" && patches === 0 && roms - unlistedArchives >= 2)
     redirect = { reason: "romsMakePatch", to: "creator" };
@@ -143,7 +144,7 @@ const planDropRedirect = (view: string, { patches, roms, unlistedArchives }: Dro
 };
 
 const USABLE_KINDS: Record<string, readonly DropFileKind[]> = {
-  creator: ["rom", "unknown"],
+  creator: ["patch", "rom", "unknown"],
   patcher: ["patch", "rom", "unknown"],
   test: ["rom", "save", "unknown"],
   trim: ["rom", "unknown"],
@@ -178,7 +179,12 @@ const readDropEntries = (
       const weave = names.some((name) =>
         /^(?:\.\/|\/)?rom-weaver-(?:weave|bundle)\.json$/i.test(name.replaceAll("\\", "/")),
       );
-      return { archiveBucket: weave ? "patch" : classifyArchiveBucket(file, names), name: file.name, weave };
+      return {
+        archiveBucket: weave ? "patch" : classifyArchiveBucket(file, names),
+        hasPatches: names.some(isPatchFileName),
+        name: file.name,
+        weave,
+      };
     }),
   );
 

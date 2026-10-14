@@ -15,7 +15,7 @@ type ControllerProbe = {
   addFannedOutPatch: unknown;
   applyEarlySidecarSelection: unknown;
   clearPatches: () => Promise<void>;
-  discoverImplicitPatches: () => Promise<void>;
+  discoverImplicitPatches: (appendSidecarPatches?: boolean) => Promise<void>;
   discoverNameMatchedSidecarPatches: (stages: unknown[]) => Promise<void>;
   evaluatePatchReadiness: unknown;
   getPatchableInputAssets: unknown;
@@ -94,6 +94,18 @@ describe("discoverImplicitPatches", () => {
     controller.inputSession = { stages: [inputStage("in-1", "rom.sfc")], view: inputStage("in-1", "rom.sfc") };
     await controller.discoverImplicitPatches();
     expect(controller.stageSidecarPatches).not.toHaveBeenCalled();
+  });
+
+  it("preserves headless explicit patch precedence even when append is requested", async () => {
+    const controller = createController();
+    controller.patches = [controller.createInitialSource("patch", { name: "explicit.ips" }, 0)];
+    controller.inputSession = { stages: [inputStage("in-1", "rom.sfc")] };
+    controller.stageSidecarPatches = vi.fn(() => [leaf("rom.ips", 1)]);
+
+    await controller.discoverImplicitPatches(true);
+
+    expect(controller.stageSidecarPatches).not.toHaveBeenCalled();
+    expect(controller.addFannedOutPatch).not.toHaveBeenCalled();
   });
 
   it("falls back to the session view when no stages were recorded", async () => {

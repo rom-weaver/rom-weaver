@@ -25,6 +25,7 @@ Apply a BPS, IPS, UPS, or xdelta patch to your own ROM with the [online ROM patc
 - [Put several patches in order](#put-several-patches-in-order)
 - [Add cheats to the patch order](#add-cheats-to-the-patch-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
+- [Download one combined patch](#download-one-combined-patch)
 - [Open a weave](#open-a-weave)
 - [If the ROM does not match](#if-the-rom-does-not-match)
 - [Use the result safely](#use-the-result-safely)
@@ -146,6 +147,12 @@ If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearb
   </picture>
   <figcaption>Choose the output name and format before applying.</figcaption>
 </figure>
+
+## Download one combined patch
+
+Expand **Download a combined patch**, set its filename and format, then choose **Create patch & download**. It reproduces the enabled patches and ROM cheats in order when applied to your Original ROM. Use one ROM file; multi-file ROMs are unsupported.
+
+[Create](create-rom-patches.md#build-from-patches-and-cheats) also supports this workflow.
 
 <a id="open-a-bundle"></a>
 
