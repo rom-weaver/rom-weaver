@@ -1,3 +1,9 @@
+import { identifyGroupIdsForHints, loadIdentifyPackSelection, selectIdentifySlugs } from "./identify-packs.ts";
+import {
+  bumpOfflineWarmupPriority,
+  pauseOfflineWarmup,
+  resumeOfflineWarmup,
+} from "../../webapp/pwa/offline-warmup-client.ts";
 import { createBundleRuntime } from "../../lib/runtime/bundle-runtime.ts";
 import { invokeRomWeaverChecksumWorker } from "../../lib/runtime/wasm-checksum-command.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
@@ -170,10 +176,6 @@ const prepareIngestIdentify = async ({
   let entryNames: string[] = [];
   let resumePausedWarmup: (() => void) | undefined;
   try {
-    const { identifyGroupIdsForHints, loadIdentifyPackSelection, selectIdentifySlugs } =
-      await import("./identify-packs.ts");
-    const { bumpOfflineWarmupPriority, pauseOfflineWarmup, resumeOfflineWarmup } =
-      await import("../../webapp/pwa/offline-warmup-client.ts");
     let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
     const extensionSlugs = selectIdentifySlugs(hints);
     const reportSelectedPlatforms = (platforms: string[]) => {
