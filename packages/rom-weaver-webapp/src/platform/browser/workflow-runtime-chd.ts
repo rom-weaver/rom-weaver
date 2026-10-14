@@ -160,6 +160,7 @@ const createBrowserChdRuntime = (
     cueFilePath,
     threads,
     compressionCodecs,
+    compressionProfile,
     logLevel,
     onLog,
     onProgress,
@@ -246,6 +247,7 @@ const createBrowserChdRuntime = (
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
           codecs,
+          levelProfile: compressionProfile,
           format: getChdCreateFormat(requestedMode),
           inputPaths: [chdInputPath],
           invalidateMountCacheBeforeRun: true,
