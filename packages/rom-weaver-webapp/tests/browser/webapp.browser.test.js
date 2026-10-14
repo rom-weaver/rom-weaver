@@ -629,6 +629,14 @@ test.each([
     .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
     .toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip");
+  // Measure the settled layout: mid panel-in, the body's sub-pixel translate
+  // rounds the chip's box to 43.9999px.
+  await Promise.allSettled(
+    document
+      .querySelector(".workflow-body")
+      .getAnimations()
+      .map((animation) => animation.finished),
+  );
   const chipBox = chip.getBoundingClientRect();
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
