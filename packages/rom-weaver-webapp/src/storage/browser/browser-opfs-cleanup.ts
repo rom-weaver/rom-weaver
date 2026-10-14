@@ -44,7 +44,30 @@ const resetBrowserTransientOpfs = async (
 };
 
 const startBrowserOpfsBootCleanup = (): Promise<void> => {
-  if (!bootCleanupPromise) bootCleanupPromise = resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
+  if (!bootCleanupPromise) {
+    const cleanup = () => resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
+    const locks = globalThis.navigator?.locks;
+    bootCleanupPromise = locks
+      ? new Promise<void>((resolve, reject) => {
+          // Pages MUST queue their shared lifetime lease before releasing the exclusive boot
+          // lock, so another boot cannot delete outputs owned by any surviving page.
+          const name = "rom-weaver-opfs-pages";
+          void locks
+            .request(name, { ifAvailable: true }, async (lock) => {
+              if (lock) await cleanup();
+              void locks
+                .request(name, { mode: "shared" }, () => {
+                  resolve();
+                  return new Promise<void>(() => {
+                    // The lease MUST remain held until the browser destroys this page.
+                  });
+                })
+                .catch(reject);
+            })
+            .catch(reject);
+        })
+      : cleanup();
+  }
   return bootCleanupPromise;
 };
 
