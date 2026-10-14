@@ -20,7 +20,7 @@ export const chainChipText = (
   // The patch itself is unreadable, so no ROM was checked and the chip must not blame the ROM.
   if (item.validationUnreadable) return { text: localizer.message("ui.patchChecks.unreadable"), warn: true };
   // "Verified" claims a checksum matched; a patch that merely applied (IPS, or no checksum to
-  // compare) is only "Applied".
+  // compare) is only "Checked".
   const passedText = (matchedKnownState: boolean) =>
     localizer.message(
       matchedKnownState || item.checksumCompared ? "ui.patchChecks.verified" : "ui.patchChecks.applied",

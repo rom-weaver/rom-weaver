@@ -486,7 +486,7 @@ msgstr "Apariencia"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.applied"
-msgstr "Aplicado"
+msgstr "Revisado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
