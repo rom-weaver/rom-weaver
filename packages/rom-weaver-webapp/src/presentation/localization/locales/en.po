@@ -85,6 +85,11 @@ msgstr "{count, plural, one {# file} other {# files}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.chooseFormatHint"
+msgstr "{count, plural, one {# game shares} other {# games share}} this save layout, so the file alone cannot tell which one wrote it."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.gameCount"
 msgstr "{count, plural, one {# game} other {# games}}"
 
@@ -485,11 +490,6 @@ msgstr "Appearance"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.applied"
-msgstr "Checked"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "applies after patch {n}"
 
@@ -547,6 +547,11 @@ msgstr "Apply Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Apply Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolApply"
+msgstr "Apply ROM patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -840,6 +845,11 @@ msgstr "Calculate file checksums."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolChecksum"
+msgstr "Calculate ROM checksums"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.faqArchiveQuestion"
 msgstr "Can I drop a ZIP or 7z without extracting it?"
 
@@ -997,6 +1007,11 @@ msgstr "Check the original ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Check your original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.applied"
+msgstr "Checked"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1345,6 +1360,11 @@ msgstr "Compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCompress"
+msgstr "Compress and convert ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.compressDescription"
 msgstr "Compress ISO, BIN/CUE, or GDI disc images to CHD, and GameCube or Wii ISO to RVZ. Create Z3DS ROMs, ZIP, or 7z archives. Everything runs locally in your browser."
 
@@ -1500,6 +1520,11 @@ msgstr "Create Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCreate"
+msgstr "Create ROM patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.generator.create"
 msgstr "Create save"
 
@@ -1627,11 +1652,6 @@ msgstr "Description"
 #: src/presentation/localization/messages.ts
 msgid "ui.view.detailed"
 msgstr "Detailed"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.view.simple"
-msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1865,6 +1885,11 @@ msgstr "Edit details"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolSave"
+msgstr "Edit game saves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.editPosition"
 msgstr "Edit patch position, currently {position} of {total}"
 
@@ -2032,6 +2057,11 @@ msgstr "Exports this session as a portable rom-weaver weave defined by rom-weave
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomExtract"
 msgstr "extract"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolExtract"
+msgstr "Extract and convert ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2337,6 +2367,11 @@ msgstr "Identify by checksum or game name"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.identifyData"
 msgstr "identify data"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolIdentify"
+msgstr "Identify ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3720,6 +3755,11 @@ msgstr "Potential format: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.undoTool"
+msgstr "PPF undo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Practice files"
 
@@ -4310,6 +4350,11 @@ msgstr "Save as patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.saveTool"
+msgstr "Save Editor"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.saveFile"
 msgstr "Save file"
 
@@ -4520,6 +4565,11 @@ msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Simple"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
@@ -4685,16 +4735,6 @@ msgstr "Switch a patch off, or open its menu to add a practice cheat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.view.detailedTryIt"
-msgstr "Switch to Simple to go back to one drawer per file. Your choice is saved."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.tutorial.view.simpleTryIt"
-msgstr "Switch to Detailed and watch the highlighted card change. Your choice is saved."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.tryIt"
 msgstr "Switch to Cheat codes and open the practice catalog."
 
@@ -4705,8 +4745,18 @@ msgstr "Switch to dark theme"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.view.simpleTryIt"
+msgstr "Switch to Detailed and watch the highlighted card change. Your choice is saved."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toLight"
 msgstr "Switch to light theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.view.detailedTryIt"
+msgstr "Switch to Simple to go back to one drawer per file. Your choice is saved."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4762,6 +4812,11 @@ msgstr "Test plays a ROM as it is. Apply the patches first, then press Test on t
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeTest"
 msgstr "Test ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolTest"
+msgstr "Test ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5180,6 +5235,11 @@ msgstr "Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.tools"
+msgstr "Tools for this guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.total"
 msgstr "TOTAL"
 
@@ -5220,6 +5280,11 @@ msgstr "Trim"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolTrim"
+msgstr "Trim ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.trimTool"
 msgstr "Trim tool"
 
@@ -5250,11 +5315,6 @@ msgstr "Two files to compare"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.chooseFormatHint"
-msgstr "{count, plural, one {# game shares} other {# games share}} this save layout, so the file alone cannot tell which one wrote it."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.type"
 msgstr "Type"
 
@@ -5272,6 +5332,11 @@ msgstr "Type codes"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Unchanged"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolUndo"
+msgstr "Undo PPF patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5515,6 +5580,11 @@ msgstr "Weave Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolWeave"
+msgstr "Weave ROM patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.weaveThesis"
 msgstr "Weave your patches."
 
@@ -5707,18 +5777,3 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.saveTool"
-msgstr "Save Editor"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.undoTool"
-msgstr "PPF undo"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.tools"
-msgstr "Tools for this guide"

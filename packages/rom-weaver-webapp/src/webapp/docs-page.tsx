@@ -6,6 +6,7 @@ import { copyToClipboard } from "../lib/clipboard.ts";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { RelatedStrip } from "./components/related-strip.tsx";
+import { DocsToolLinks } from "./components/docs-tool-links.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken } from "./docs-search.mjs";
@@ -76,10 +77,22 @@ const adoptPrerenderedDocsHtml = () => {
   if (!article) return;
   const slug = resolveDocsSlug();
   if (article.getAttribute("data-markdown-source") !== findDocsRoute(slug).source) return;
-  docsHtmlCache.set(slug, article.innerHTML);
+  const fragments = article.querySelectorAll("[data-docs-markdown]");
+  docsHtmlCache.set(slug, Array.from(fragments, (fragment) => fragment.innerHTML).join(""));
 };
 
 adoptPrerenderedDocsHtml();
+
+const DocsMarkdown = ({ html }: { html: string }) => (
+  <div
+    className="docs-markdown"
+    data-docs-markdown=""
+    // Committed repository Markdown, rendered to HTML at build time by
+    // the same parser that feeds the prerendered page.
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
+    dangerouslySetInnerHTML={{ __html: html }}
+  />
+);
 
 const preloadDocsHtml = (slug?: string): Promise<void> => {
   const resolved = resolveDocsSlug(slug);
@@ -579,9 +592,6 @@ const DocsPage = ({
               <span>{docShelfFor(route.slug)?.title}</span>
             </nav>
           )}
-          {onSelectTab ? (
-            <RelatedStrip entryKey={route.slug} labelId="ui.docs.tools" onSelectTab={onSelectTab} />
-          ) : null}
           {/* Keyed on the route so a guide switch remounts the article and
               replays its entrance - that animation IS the page transition. */}
           <article
@@ -589,11 +599,19 @@ const DocsPage = ({
             key={route.slug}
             data-markdown-source={route.source}
             data-page-turn={pageTurned ? "true" : undefined}
-            // Committed repository Markdown, rendered to HTML at build time by
-            // the same parser that feeds the prerendered page.
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          >
+            {/* The compiled Markdown renderer emits one h1. Keep its inline
+                markup while placing crawlable tool links directly below it. */}
+            {html.includes("</h1>") ? (
+              <>
+                <DocsMarkdown html={html.slice(0, html.indexOf("</h1>") + 5)} />
+                <DocsToolLinks slug={route.slug} />
+                <DocsMarkdown html={html.slice(html.indexOf("</h1>") + 5)} />
+              </>
+            ) : (
+              <DocsMarkdown html={html} />
+            )}
+          </article>
           {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
           <ArticleEnd onSelectTab={onSelectTab} slug={route.slug} />

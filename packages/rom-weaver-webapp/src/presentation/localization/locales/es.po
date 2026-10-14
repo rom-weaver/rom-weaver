@@ -85,6 +85,11 @@ msgstr "{count, plural, one {# archivo} other {# archivos}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.editor.chooseFormatHint"
+msgstr "{count, plural, one {# juego usa} other {# juegos comparten}} este formato de partida, así que el archivo por sí solo no indica cuál lo escribió."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.gameCount"
 msgstr "{count, plural, one {# juego} other {# juegos}}"
 
@@ -485,11 +490,6 @@ msgstr "Apariencia"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.applied"
-msgstr "Revisado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -547,6 +547,11 @@ msgstr "Aplicar parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Aplicar parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolApply"
+msgstr "Aplicar parches a ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -840,6 +845,11 @@ msgstr "Calcula las sumas de cualquier archivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolChecksum"
+msgstr "Calcular sumas de verificación de ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.faqArchiveQuestion"
 msgstr "¿Puedo soltar un ZIP o 7z sin extraerlo?"
 
@@ -997,6 +1007,11 @@ msgstr "Comprueba la ROM inicial"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Revisa tu ROM de partida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.applied"
+msgstr "Revisado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1345,6 +1360,11 @@ msgstr "Comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCompress"
+msgstr "Comprimir y convertir ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.compressDescription"
 msgstr "Crea archivos ZIP o 7z con tus archivos. Comprime imágenes de disco y ROM compatibles a CHD, RVZ o Z3DS. Todo se ejecuta localmente en tu navegador."
 
@@ -1500,6 +1520,11 @@ msgstr "Crear parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCreate"
+msgstr "Crear parches de ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.generator.create"
 msgstr "Crear partida"
 
@@ -1627,11 +1652,6 @@ msgstr "Descripción"
 #: src/presentation/localization/messages.ts
 msgid "ui.view.detailed"
 msgstr "Detallada"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.view.simple"
-msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1865,6 +1885,11 @@ msgstr "Editar detalles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolSave"
+msgstr "Editar partidas guardadas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.editPosition"
 msgstr "Editar posición del parche, actualmente {position} de {total}"
 
@@ -2032,6 +2057,11 @@ msgstr "Exporta esta sesión como un paquete portátil de rom-weaver definido po
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomExtract"
 msgstr "extraer"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolExtract"
+msgstr "Extraer y convertir ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2337,6 +2367,11 @@ msgstr "Identificar por suma de verificación o nombre del juego"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.identifyData"
 msgstr "datos de identificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolIdentify"
+msgstr "Identificar ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3720,6 +3755,11 @@ msgstr "Formato posible: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.undoTool"
+msgstr "Deshacer PPF"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Archivos de práctica"
 
@@ -4310,6 +4350,11 @@ msgstr "Guardar como parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.saveTool"
+msgstr "Editor de partidas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.saveFile"
 msgstr "Archivo de partida"
 
@@ -4520,6 +4565,11 @@ msgstr "Simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Simple"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Saltar al contenido principal"
 
@@ -4685,16 +4735,6 @@ msgstr "Desactiva un parche o abre su menú para añadir un truco de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.view.detailedTryIt"
-msgstr "Cambia a Simple para volver a un cajón por archivo. Tu elección se guarda."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.tutorial.view.simpleTryIt"
-msgstr "Cambia a Detallada y observa cómo cambia la tarjeta resaltada. Tu elección se guarda."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.tryIt"
 msgstr "Cambia a Códigos de trucos y abre el catálogo de práctica."
 
@@ -4705,8 +4745,18 @@ msgstr "Cambiar a tema oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.view.simpleTryIt"
+msgstr "Cambia a Detallada y observa cómo cambia la tarjeta resaltada. Tu elección se guarda."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toLight"
 msgstr "Cambiar a tema claro"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.view.detailedTryIt"
+msgstr "Cambia a Simple para volver a un cajón por archivo. Tu elección se guarda."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4762,6 +4812,11 @@ msgstr "Probar ejecuta una ROM tal como está. Aplica primero los parches y lueg
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeTest"
 msgstr "Probar ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolTest"
+msgstr "Probar ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5180,6 +5235,11 @@ msgstr "Herramienta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.tools"
+msgstr "Herramientas para esta guía"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.total"
 msgstr "TOTAL"
 
@@ -5220,6 +5280,11 @@ msgstr "Recortar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolTrim"
+msgstr "Recortar ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.trimTool"
 msgstr "Herramienta Recortar"
 
@@ -5250,11 +5315,6 @@ msgstr "Dos archivos para comparar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.saves.editor.chooseFormatHint"
-msgstr "{count, plural, one {# juego usa} other {# juegos comparten}} este formato de partida, así que el archivo por sí solo no indica cuál lo escribió."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.type"
 msgstr "Tipo"
 
@@ -5272,6 +5332,11 @@ msgstr "Escribir códigos"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
 msgstr "Sin cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolUndo"
+msgstr "Deshacer parches PPF"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5515,6 +5580,11 @@ msgstr "Agrupar parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolWeave"
+msgstr "Crear paquetes de parches de ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.weaveThesis"
 msgstr "Agrupa tus parches."
 
@@ -5707,18 +5777,3 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.saveTool"
-msgstr "Editor de partidas"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.undoTool"
-msgstr "Deshacer PPF"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.tools"
-msgstr "Herramientas para esta guía"

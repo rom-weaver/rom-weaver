@@ -1,11 +1,5 @@
 /* Related links appear in prerendered docs and not-found pages, so these styles
    MUST load with the render-critical stylesheet. */
-.rw-app .docs-panel > .related-strip {
-  margin: var(--article-pad) var(--article-pad) 0;
-}
-.rw-app .docs-panel > .related-strip .related-row {
-  min-height: 56px;
-}
 .rw-app .related-strip ul {
   display: flex;
   flex-direction: column;

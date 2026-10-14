@@ -1,0 +1,9 @@
+.rw-app .docs-tools {
+  margin-bottom: var(--sp-xl);
+}
+.rw-app .docs-tools ul {
+  flex-flow: row wrap;
+}
+.rw-app .docs-tools li {
+  max-width: 100%;
+}

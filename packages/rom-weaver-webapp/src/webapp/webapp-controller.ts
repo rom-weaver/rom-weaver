@@ -652,4 +652,4 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 };
 
-export { areSettingsEqual, createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath };
+export { areSettingsEqual, createWebappRootController, readAppBaseUrl, readWorkflowViewFromPath, VIEW_TO_ROUTE_SLUG };
