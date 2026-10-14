@@ -39,7 +39,7 @@ export const chainChipText = (
     if (item.validationState === "invalid") {
       return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
     }
-    return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
+    return { text: localizer.message("ui.patchChecks.unknown") };
   }
   const displayNumber = (enabledPosition: number) => (enabledIndexes[enabledPosition] ?? enabledPosition) + 1;
   const displayPatch = (enabledPosition: number) => {
@@ -78,7 +78,7 @@ export const chainChipText = (
   if (item.validationState === "invalid") {
     return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
   }
-  return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
+  return { text: localizer.message("ui.patchChecks.unknown") };
 };
 
 export const resolvedBasisLabel = (
