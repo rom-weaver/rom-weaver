@@ -1,0 +1,68 @@
+{
+  "baseline": "63a34e968242e43c7276db90c28c16a039aff44f",
+  "platform": "Linux / headless Chromium154 / ChromeDevToolsMCP",
+  "scope": "Synthetic/homebrew fixtures; beta tools excluded",
+  "observations": {
+    "storage": {
+      "summary": "Browser storage failures could discard buffered bytes, leak handles, or leave extraction hanging. Validate native results, preserve failed buffers, and return known storage errors through WASI so Rust cleanup runs.",
+      "validation": "Regression controls failed before the fix: three buffered-write cases, one truncate case, and six WASI cases. The final stdio suite passes 53 tests. MCP private-profile NFS extraction now reports errno 29 and permits replacement; a subsequent CSO extraction downloads the expected 32,768 bytes.",
+      "before": "A failed native write returned 4294967288; a failed truncate requested 1459978240 bytes but getSize returned 0. An escaping JavaScript exception left Rust preloader threads waiting.",
+      "after": "i/o error: I/O error (os error 29)\nSame-page recovery: 32768 bytes, SHA-256 38379851b7c0b8ab085f8b46593ca4f9d8fecc060529d9211e892a57f6af3421"
+    },
+    "chd-extract": {
+      "summary": "Large CHD extraction failed while growing browser output files. Preallocate the known logical size before streaming, preserving output bytes and cleanup behavior.",
+      "validation": "The extraction regression observes the final length throughout streaming. Native container tests and pinned reference comparisons pass. MCP downloaded 967,835,648 bytes matching the source SHA-256.",
+      "before": "proxy short write flushing /work/operations/.../dvd-created-4.iso: wrote 4294967288 of 3145728",
+      "after": "967835648 bytes\nSHA-256 4fa1c9e30f656102dafe6f247a95ed1ea307253534edd3fa7b3fb17d5ea3ac02"
+    },
+    "nfs": {
+      "summary": "Browser NFS extraction lost required companion files and used unsupported filesystem canonicalization. Keep the NFS segments and htk.bin together through probing, extraction, and retries; preallocate the decoded disc output.",
+      "validation": "The real Chromium probe test decrypts a synthetic GameCube header and rejects the wrong synthetic key. MCP accepts the key-first selection and downloads 1,459,978,240 bytes matching the native output.",
+      "before": "validation failed: failed to open nfs source `/work/hif_000000.nfs`: Failed to open /work/hif_000000.nfs: Not supported (os error 58)",
+      "after": "1459978240 bytes\nSHA-256 661541ffccf4b6d79f42b0d5bbe815950d38144e4aeae51e5b0ed1e3e67061a5"
+    },
+    "gdi": {
+      "summary": "Complete GDI disc groups offered only ZIP and 7z output. Recognize their tracks, enable GD-ROM CHD compression, and rewrite descriptor references for loose and archived inputs.",
+      "validation": "MCP compressed loose and ZIP-contained groups into byte-identical 667-byte CHDs. Extracted tracks match both original hashes. Forty-eight focused service/runtime tests pass. Pure descriptor helpers remain within the worker protocol dependency boundary.",
+      "before": "Complete disc.gdi + track01.bin + track02.bin selection: only .zip and .7z outputs.",
+      "after": "Loose and archived groups: .chd available; 667-byte output\nSHA-256 8fa8114f24d67e2c96a8c150b785ec5ce713f637cd7dba84677670fadba25f27"
+    },
+    "chd-profiles": {
+      "summary": "The Min CHD profile supplied level zero to codecs requiring levels one through nine. Clamp profile-derived values to each codec's supported range in both CLI planning and browser compression.",
+      "validation": "CLI profile tests and the real browser codec combobox test pass. MCP compressed mixed CUE/BIN with cdzl and Min into a 1,122-byte CHD whose codec header is cdzl.",
+      "before": "validation failed: chd codec `cdzl` level `0` is out of range; expected 1..=9",
+      "after": "mixed.chd: 1122 bytes; header codec cdzl\nSHA-256 aa40f4ab7256e80e3fa99d875d329fcb11bf57e21cc11eb35ae525d355ed0b4f"
+    },
+    "identify": {
+      "summary": "Choosing Use this ROM in Apply opened an empty Apply form. Pass the identified selection through the existing root handoff so the file and checksum remain available.",
+      "validation": "The handoff regression covers the selected ROM. MCP exercised the unknown homebrew-ROM path: Apply retained hello-world.nes, 24,592 bytes, and its checksum rows.",
+      "before": "Use this ROM in Apply / Keeps this selection navigated to an empty Apply form.",
+      "after": "hello-world.nes: 24592 bytes\nSHA-1 22f56591eb4dbb85fbb6398cd0c4554558f70603; Add patches available"
+    },
+    "accent": {
+      "summary": "Reloading a saved accent restored its colors but left toolbar labels on the default accent. Keep the hydration snapshot stable so all labels update from the saved setting.",
+      "validation": "The new hydration regression passes. MCP saved Woad, reloaded, and verified localStorage, data-accent, and all three accessible toolbar labels agree.",
+      "before": "Stored accent=woad; html data-accent=woad; three buttons still labeled Accent: Verdigris.",
+      "after": "Stored accent=woad; html data-accent=woad; three buttons labeled Accent: Woad."
+    },
+    "cso": {
+      "summary": "Malformed CSOv2 compressed blocks could panic and surface only unreachable. Validate index geometry and block spans, then use bounded LZ4 decoding with contextual errors.",
+      "validation": "Sixteen focused CSO tests pass, including valid compressed expansion and malformed bounds. MCP reports the invalid block and recovers with a valid 32,768-byte output. The targeted survivor rerun caught 23 of 25 mutants; two remain recorded as missed with boundary-equivalence reasoning. Original timeouts and build failures remain separate.",
+      "before": "unreachable",
+      "after": "validation failed: cso extract failed while decoding `/work/malformed-flag.cso` chunk 0 at offset 0: invalid CSO LZ4 block length"
+    },
+    "tabs": {
+      "summary": "Opening another tab could delete extraction outputs still used by an existing tab. Coordinate startup cleanup with shared Web Locks held for each tab's lifetime.",
+      "validation": "The old cleanup failed the two-tab regression; all five cleanup tests pass. MCP reloaded another tab and still downloaded all three extracted files as a 16,240-byte ZIP. Closing every tab releases leases, allowing orphan cleanup on the next boot. Exhaustive seeded lifecycle and real OPFS tests pass.",
+      "before": "Browser worker input path is not available: /work/operations/.../nightly-ui-zip-disc-1792003350079 (Track 1).bin",
+      "after": "Second-tab reload preserves the first tab's output: ZIP 16240 bytes. Shared leases decrease from two to one when a tab closes; the next sole boot reclaims orphan files."
+    }
+  },
+  "image_provenance": {
+    "initial_before": "0.21.0+63a34e96 nightly",
+    "ui_after": "0.21.0+fix-nightly-audit.dirty.b54004cbe",
+    "runtime_after": "0.21.0+fix-nightly-audit.dirty.c50579318",
+    "cso_and_tabs_before": "Current nightly v0.21.0n, index-RTndlQ4c.js; exact commit unverified",
+    "notes": "Images show synthetic/homebrew fixtures only. Cross-tab ZIP size differs with descriptor filenames: earlier16240B, latest16256B. Storage before shows unsigned CHD write error; after shows NFS allocation errno29. These are different inputs, with matching regression proof recorded separately."
+  }
+}
