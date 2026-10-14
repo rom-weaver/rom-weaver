@@ -177,7 +177,7 @@ fn compression_profile_respects_codec_types() {
             None,
             CompressionLevelProfile::Max,
         ),
-        Some(9)
+        Some(8)
     );
     assert_eq!(
         CliApp::resolve_compression_level_for_profile(
@@ -215,6 +215,27 @@ fn compression_profile_respects_codec_types() {
         ),
         Some(9)
     );
+}
+
+#[test]
+fn chd_profiles_stay_within_codec_bounds() {
+    for (codec, min, max) in [
+        ("cdzl", 1, 9),
+        ("zlib", 1, 9),
+        ("flac", 0, 8),
+        ("cdfl", 0, 8),
+    ] {
+        for (profile, expected) in [
+            (CompressionLevelProfile::Min, min),
+            (CompressionLevelProfile::Max, max),
+        ] {
+            assert_eq!(
+                CliApp::resolve_compression_level_for_profile("chd", Some(codec), None, profile),
+                Some(expected),
+                "{codec} {profile:?}"
+            );
+        }
+    }
 }
 
 #[test]

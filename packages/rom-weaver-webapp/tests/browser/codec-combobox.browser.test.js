@@ -439,3 +439,21 @@ test("chd accepts a level override for one codec and clears it when level change
   expect(resolvedCodec(highPanel, highSettings)).toBe("cdlz:7,cdzl:7,cdfl:7");
   expect(codecChipValue(highPanel)).toBe("lzma+");
 });
+
+test("CHD profiles respect codec minimum and maximum levels", () => {
+  for (const [mode, codecs, profile, expected] of [
+    ["cd", "cdzl", "min", "cdzl:1"],
+    ["dvd", "zlib", "min", "zlib:1"],
+    ["cd", "cdzs", "min", "cdzs:-7"],
+    ["cd", "cdfl", "max", "cdfl:8"],
+    ["dvd", "flac", "max", "flac:8"],
+  ]) {
+    const settings = {
+      chdOutputMode: mode,
+      chdCreateCdCodecs: codecs,
+      chdCreateDvdCodecs: codecs,
+      compressionProfile: profile,
+    };
+    expect(resolvedCodec(buildCompressPanel("chd", settings, {}), settings)).toBe(expected);
+  }
+});

@@ -244,11 +244,9 @@ impl CliApp {
             Some(ProfileCodecKind::Zstd) => Some(profile.zstd_level()),
             Some(ProfileCodecKind::NoLevel) | None => None,
         };
-        // Raise to the named codec's advertised minimum (e.g. CHD zlib starts at 1); the upper
-        // bound is left to each encoder so existing output bytes are unchanged.
         let range = Self::primary_codec_name(codec).and_then(Self::codec_level_range);
         let level = match (level, range) {
-            (Some(level), Some((min, _))) => Some(level.max(min)),
+            (Some(level), Some((min, max))) => Some(level.clamp(min, max)),
             (level, _) => level,
         };
         tracing::debug!(
