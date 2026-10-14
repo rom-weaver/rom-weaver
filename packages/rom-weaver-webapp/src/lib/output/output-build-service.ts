@@ -237,6 +237,7 @@ const createRuntimeRomSpecificOutputFiles = async (
       romSpecific: {
         chd: {
           compressionCodecs: outputPlan.chdCompressionCodecs,
+          compressionProfile: getCompressionProfile(options),
           cueFilePath: outputPlan.chdCuePath,
           mode: outputPlan.chdCreateMode,
           sourceMode: outputPlan.chdSourceMode,
@@ -559,6 +560,7 @@ const buildSessionOutputFiles = async (
       romSpecific: {
         chd: {
           compressionCodecs: getChdCompressionCodecs(mode, options),
+          compressionProfile: getCompressionProfile(options),
           imageFiles,
           mode,
         },
