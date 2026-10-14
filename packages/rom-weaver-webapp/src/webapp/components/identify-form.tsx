@@ -62,6 +62,7 @@ type IdentifyFormProps = {
   onLookupResultChange?: (result: RomLookupResult | undefined) => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
+  onUseFilesInApply?: (files: File[]) => void;
   pageDrop?: PageFileDrop | null;
 };
 
@@ -140,6 +141,7 @@ const IdentifyForm = ({
   lookupRequest,
   onLookupResultChange,
   onSelectTab,
+  onUseFilesInApply,
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
@@ -566,7 +568,16 @@ const IdentifyForm = ({
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}
       {!busy && (!!expectation || (!!result && !unavailable)) && onSelectTab ? (
-        <RelatedStrip entryKey="identify" onSelectTab={onSelectTab} />
+        <RelatedStrip
+          entryKey="identify"
+          onSelectTab={(view) => {
+            if (view === "patcher" && hasFiles && onUseFilesInApply) {
+              onUseFilesInApply(entries.map((entry) => entry.file));
+              return;
+            }
+            onSelectTab(view);
+          }}
+        />
       ) : null}
     </section>
   );

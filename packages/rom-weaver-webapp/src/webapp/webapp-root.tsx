@@ -977,6 +977,7 @@ function WebappRoot({
                   <IdentifyRouteForm
                     lookupRequest={identifyLookupRequest}
                     onLookupResultChange={carryIdentifyResultToApply}
+                    onUseFilesInApply={(files) => deliverDrop("patcher", files)}
                     onSelectTab={handleSelectTab}
                     pageDrop={pageDropFor("identify")}
                   />,
