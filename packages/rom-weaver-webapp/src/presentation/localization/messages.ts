@@ -1236,7 +1236,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patchChecks.stackOutput",
     message: "Combined result",
   }),
-  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet" }),
   "ui.patchChecks.unreadable": msg({ id: "ui.patchChecks.unreadable", message: "Patch file is not valid" }),
   "ui.patchChecks.failed": msg({ id: "ui.patchChecks.failed", message: "Check failed: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
@@ -1246,7 +1246,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patchChecks.patchNumber": msg({ id: "ui.patchChecks.patchNumber", message: "Patch {n}" }),
   "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified" }),
-  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Applied" }),
+  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Checked" }),
   "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
   "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
   "ui.patchChecks.autoPrevious": msg({

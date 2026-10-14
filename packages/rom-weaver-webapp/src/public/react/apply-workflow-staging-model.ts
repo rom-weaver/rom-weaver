@@ -164,7 +164,7 @@ const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementVal
 };
 
 const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState["patchValidation"]): string => {
-  if (status === "verifying") return "Verifying patch against the ROM…";
+  if (status === "verifying") return "Checking patch against the ROM…";
   if (deep?.status === "deferred")
     return deep.message || "Applies to the previous patch's output; verified during apply";
   if (deep?.status === "valid") return "Patch validation passed";

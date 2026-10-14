@@ -486,7 +486,7 @@ msgstr "Appearance"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.applied"
-msgstr "Applied"
+msgstr "Checked"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3066,7 +3066,7 @@ msgstr "None"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
-msgstr "Not checked yet: {input}"
+msgstr "Not checked yet"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -126,8 +126,8 @@ test("checksumless patches distinguish a successful preflight from a verified id
   const passedChecks = () =>
     document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  // No checksum was compared, so the chip claims only that the patch applied.
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Applied");
+  // No checksum was compared, so the chip claims only that the patch was checked.
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checked");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
