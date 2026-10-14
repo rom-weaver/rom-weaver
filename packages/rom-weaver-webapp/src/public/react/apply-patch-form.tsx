@@ -1212,7 +1212,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               cheatDelivery(record) === "rom" ? [selectedCheatPositionsRef.current[index] ?? 0] : [],
             ),
           );
-          return run(workflow);
+          return await run(workflow);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
         }

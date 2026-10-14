@@ -353,6 +353,39 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     expect(onRender).toHaveBeenCalledTimes(commitsAfterStaging);
   });
 
+  it("keeps cancellation connected until the running workflow settles", async () => {
+    const onApplyComplete = vi.fn();
+    const { container, getByRole } = renderForm({
+      defaultInputs: [new File(["rom"], "game.bin")],
+      defaultPatches: [new File(["patch"], "change.ips")],
+      onApplyComplete,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    let rejectRun: (reason: unknown) => void = () => undefined;
+    workflow.run.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectRun = reject;
+        }),
+    );
+    workflow.abort.mockImplementation(() => rejectRun(new DOMException("Cancelled", "AbortError")));
+    const applyButton = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+    await act(async () => fireEvent.click(applyButton));
+    await vi.waitFor(() => expect(workflow.run).toHaveBeenCalledOnce());
+
+    try {
+      await act(async () => fireEvent.click(getByRole("button", { name: /cancel/i })));
+      expect(workflow.abort).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+      expect(onApplyComplete).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => rejectRun(new DOMException("Cancelled", "AbortError")));
+    }
+  });
+
   it("surfaces an apply error from the fake workflow's run()", async () => {
     const { container } = renderForm();
     const fileInput = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
