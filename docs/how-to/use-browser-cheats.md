@@ -84,21 +84,7 @@ The status names the output file. The [cheat reference](../reference/cheat-datab
 
 The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
 
-1. Add the original ROM on **Create**.
-2. Select **Cheat codes** on the **Modified** step.
-3. Enter one code per line, or join codes with `+`.
-4. Select **Pick from the cheat database** to use the same picker as Apply.
-5. Check the detected system, code type, and write count.
-6. Check each code's write list and its `compare` badge.
-7. Select the patch format and file name on **Patch**.
-8. Select **CREATE & DOWNLOAD PATCH**.
-
-**Pick from the cheat database** offers the same database as Apply. A code that cannot become ROM writes blocks creation and states its reason.
-
-<figure class="docs-screenshot">
-  <img src="../screenshots/cheat-create-cheats-desktop-light.webp" alt="Create using the shared cheat picker and manual entry" width="1164" height="900">
-  <figcaption>Create uses the same picker to add codes to its input.</figcaption>
-</figure>
+On **Create**, select **Patches & cheats** on **0x03 Modified**, then follow [combined patch creation](create-rom-patches.md#build-from-patches-and-cheats). It uses Apply's cheat picker and supports patches alongside cheats.
 
 ## Inspect cheats without changing a ROM
 

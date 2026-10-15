@@ -946,12 +946,12 @@ msgstr "Cheat code"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheatCodes"
-msgstr "Cheat codes"
+msgstr "Patches & cheats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Cheat codes replaces the modified ROM as the source of changes. Switch back to Modified ROM for the sample's expected patch."
+msgstr "Choose Patches & cheats on step 0x03 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1321,7 +1321,7 @@ msgstr "Compare it with the original to make a patch you can share."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createDescription"
-msgstr "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches."
+msgstr "Compare original and modified ROMs, or combine ordered patches and cheats into one patch for your original ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3336,7 +3336,7 @@ msgstr "Optional ROM databases"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.title"
-msgstr "Optional: build from cheat codes"
+msgstr "Optional: build from patches & cheats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4741,7 +4741,7 @@ msgstr "Switch a patch off, or open its menu to add a practice cheat."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.tryIt"
-msgstr "Switch to Cheat codes and open the practice catalog."
+msgstr "Switch to Patches & cheats and open the practice catalog."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5441,7 +5441,7 @@ msgstr "Uses one ROM and asks which to keep."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteCreateMixed"
-msgstr "Uses two ROMs and ignores the patches."
+msgstr "Combine the patches into one patch for the original ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5802,3 +5802,123 @@ msgstr "Apply its patches, or edit the recipe."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeWeaveTitle"
 msgstr "What do you want to do with this weave?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.label"
+msgstr "Create patch from"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.rom"
+msgstr "Modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.patches"
+msgstr "Patches & cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.changes"
+msgstr "Changes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.filename"
+msgstr "Patch filename"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.format"
+msgstr "Patch format"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.description"
+msgstr "Combine the enabled patches and cheats into one patch for the original ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.working"
+msgstr "Creating combined patch…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.download"
+msgstr "Download patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.create"
+msgstr "Create patch & download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.title"
+msgstr "Create patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.downloadTitle"
+msgstr "Download a combined patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.needsRom"
+msgstr "Add one original ROM to create a combined patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.title"
+msgstr "Use this ROM as"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.subtitle"
+msgstr "{name} - an Original ROM is already loaded."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.replace"
+msgstr "Replace the Original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.replaceNote"
+msgstr "Stay in Patches & cheats with this ROM as the original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.modified"
+msgstr "Use as the Modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.modifiedNote"
+msgstr "Switch to Modified ROM and compare it with the current original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.unavailable"
+msgstr "The combined patch is unavailable in this browser."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadRom"
+msgstr "Download patched ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadThisRom"
+msgstr "Download this ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadWeave"
+msgstr "Download the weave"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.weaveExport.combinedCheats"
+msgstr "This weave contains one combined patch with the enabled patches and cheats in their current order."

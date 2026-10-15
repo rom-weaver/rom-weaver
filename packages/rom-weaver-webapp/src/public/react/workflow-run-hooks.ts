@@ -181,6 +181,7 @@ const useActiveAbortController = () => {
 
 export type { WorkflowFormProgressState };
 export {
+  createWorkflowFormProgress,
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
   toWorkflowChecksumProgressProps,

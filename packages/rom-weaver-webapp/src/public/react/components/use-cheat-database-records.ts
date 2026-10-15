@@ -71,35 +71,6 @@ const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog
 
 const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
 
-/**
- * Whether the ROM's platform is one cheats cannot cover. It stays false until
- * the database index and catalog load, and when either fails to load, so a
- * slow or offline index never locks cheats out. Nothing loads while `enabled`
- * is false.
- */
-const useUnsupportedCheatSystem = (rom: CheatRomIdentity | null, enabled = true): boolean => {
-  const [loaded, setLoaded] = useState<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }>();
-  const needsIndex = enabled && !!rom?.platform;
-  useEffect(() => {
-    if (!needsIndex) return;
-    let active = true;
-    void loadCheatDatabase()
-      .then((next) => {
-        if (active) setLoaded(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [needsIndex]);
-  return needsIndex && isUnsupportedCheatSystem(loaded?.index, loaded?.catalog, rom);
-};
-
-/**
- * Loads the cheat database for one ROM, matches its game, and classifies that
- * game's cheats through the Rust decoder. Shared by the apply workflow's cheat
- * card and the create workflow's cheat-codes mode so both see the same rows.
- */
 const useCheatDatabaseRecords = ({
   rom,
   index,
@@ -294,4 +265,4 @@ const useCheatDatabaseRecords = ({
   };
 };
 
-export { useCheatDatabaseRecords, useUnsupportedCheatSystem };
+export { useCheatDatabaseRecords };

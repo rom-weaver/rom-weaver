@@ -27,10 +27,11 @@ export function getAgentWorkflow(view: string) {
   return workflows.get(view);
 }
 
-export function useAgentWorkflow(view: string, workflow: AgentWorkflow) {
+export function useAgentWorkflow(view: string, workflow: AgentWorkflow, enabled = true) {
   const current = useRef(workflow);
   current.current = workflow;
   useLayoutEffect(() => {
+    if (!enabled) return;
     const adapter: AgentWorkflow = {
       getState: () => current.current.getState(),
       get actions() {
@@ -41,5 +42,5 @@ export function useAgentWorkflow(view: string, workflow: AgentWorkflow) {
     return () => {
       if (workflows.get(view) === adapter) workflows.delete(view);
     };
-  }, [view]);
+  }, [enabled, view]);
 }

@@ -57,7 +57,7 @@ test("export weave weaves the session from main-page options with a checks-only 
   await waitForState(() => document.getElementById("rom-weaver-weave-job"));
   expect(document.querySelector(".outopts #rom-weaver-weave-export-format")).toBeNull();
   const weaveDrawer = document.querySelector("#rom-weaver-weave-job .cks-head");
-  expect(weaveDrawer?.textContent).toContain("Share this patch recipe (for patch creators)");
+  expect(weaveDrawer?.textContent).toContain("Download the weave");
   expect(weaveDrawer?.getAttribute("aria-expanded")).toBe("false");
   weaveDrawer?.click();
   await expect.poll(() => weaveDrawer?.getAttribute("aria-expanded")).toBe("true");
@@ -240,7 +240,7 @@ test("the weave drawer is addressable by a single selector inside the output row
   // The selector the capture actually uses MUST resolve to exactly one head.
   const anchored = outputRow.querySelectorAll("#rom-weaver-weave-job > .cks > .cks-head");
   expect(anchored.length).toBe(1);
-  expect(anchored[0].textContent).toContain("Share this patch recipe (for patch creators)");
+  expect(anchored[0].textContent).toContain("Download the weave");
 
   // It stays correct only because it is anchored: the row carries more than one
   // drawer, so the unanchored selector this replaced is ambiguous by design.
@@ -261,7 +261,7 @@ test("keeps the sharing job after an ordinary Apply completes", async () => {
 
   const applyButton = document.getElementById("rom-weaver-button-apply");
   const job = document.getElementById("rom-weaver-weave-job");
-  expect(job?.textContent).toContain("Share this patch recipe (for patch creators)");
+  expect(job?.textContent).toContain("Download the weave");
   expect(applyButton?.compareDocumentPosition(job || document.body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(document.querySelector(".outopts #rom-weaver-weave-export-format")).toBeNull();
   expect(document.getElementById("rom-weaver-weave-export-format")).toBeNull();

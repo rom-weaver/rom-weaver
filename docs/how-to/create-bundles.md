@@ -29,7 +29,7 @@ Choose ZIP for broad compatibility, or 7z. This selects the recipe archive forma
 ## Build the patch recipe
 
 1. Open [Weave](https://rom-weaver.com/weave-patches).
-2. Add the clean ROM and every patch.
+2. Add the clean ROM and every patch. Add supported ROM cheats through **Add cheats to the patch order** when needed.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu → **Edit details**. Add a readable name and any description, version, and author users need.
 5. Open **Checks** → **Add check** for a known input or output CRC32, MD5, SHA-1, or byte count. Input checks describe the expected bytes. Embedded output checks verify the standalone result, not a combined stack whose earlier patches changed the source. Never guess values.
@@ -53,6 +53,8 @@ Built-in checks, such as BPS checksums, cannot be edited. Add only values from t
 
 Reorder only when the patch supports that input state. Test optional combinations as described below, including dependencies.
 
+Enabled ROM cheats make the weave contain one combined patch, preserving the enabled changes' order. Recipients cannot toggle individual steps. Without cheats, the weave retains separate patches, metadata, and optional switches.
+
 <a id="turn-on-bundle-output-and-download-it"></a>
 
 ## Turn on weave output and download it
@@ -63,13 +65,15 @@ Reorder only when the patch supports that input state. Test optional combination
 4. Select **Share weave** and wait for the checks and download.
 5. Save the archive. The control becomes **Download ZIP Weave** or **Download 7z Weave** for another copy.
 
-Expand the secondary **Apply** step to test the recipe. Its name and compression settings are shared with Weave: 7z selects a 7z weave; other Apply formats select ZIP. Recheck the Weave format before sharing.
+Expand the secondary **Download this ROM** step to test the recipe. Its name and compression settings are shared with Weave: 7z selects a 7z weave; other Apply formats select ZIP. Recheck the Weave format before sharing.
 
-From an existing **Apply** session, export through **Share this patch recipe (for patch creators)**.
+On **Apply**, expand **Download the weave**. On **Create**, this appears in [Patches & cheats mode](create-rom-patches.md#build-from-patches-and-cheats).
+
+For one patch instead, expand **Download a combined patch** on Apply or Weave.
 
 Checksums verify content; a filename mismatch alone does not block Apply.
 
-Weave creation packages the staged recipe without applying it. Use **APPLY & DOWNLOAD** separately to build the patched ROM.
+Weave creation applies changes only when combining ROM cheats. Download the patched ROM separately.
 
 Files are read locally. Patch-only weaves contain ROM checksums, not ROM bytes.
 
@@ -110,7 +114,7 @@ Share a link that preloads the public weave:
 https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip
 ```
 
-Weave links open **Weave**, including links that start on the Apply route. Recipients add their matching ROM, review the recipe, expand **Apply**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
+Weave links open **Weave**, including links that start on the Apply route. Recipients add their matching ROM, review the recipe, expand **Download this ROM**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
 
 Use the [copyable Apply-button examples](../hosting/webapp-integration.md#add-an-apply-button) for HTML and Markdown release pages.
 

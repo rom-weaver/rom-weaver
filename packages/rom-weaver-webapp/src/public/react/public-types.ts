@@ -32,6 +32,17 @@ type CandidateSelectionChoice = { id: string; ids?: string[]; keepSource?: boole
 type ApplyPatchFormSettings = ApplySettings;
 
 type ApplyPatchFormProps = Omit<BaseApplyPatchFormProps, "onApplyComplete"> & {
+  active?: boolean;
+  createCheatSampleRequestId?: number;
+  createSettings?: CreateSettings;
+  createModeControls?: ReactNode;
+  patchType?: string;
+  defaultPatchType?: string;
+  onPatchTypeChange?: (patchType: string) => void;
+  /** `asModified` marks one ROM the user chose as the Modified ROM; it replaces a filled Modified slot. */
+  onCreateRomDrop?: (files: File[], asModified?: boolean) => void;
+  onCreateComplete?: (result: BrowserCreateResult) => void;
+  onBusyChange?: (busy: boolean) => void;
   onApplyComplete?: (result: BrowserApplyResult) => void;
 };
 

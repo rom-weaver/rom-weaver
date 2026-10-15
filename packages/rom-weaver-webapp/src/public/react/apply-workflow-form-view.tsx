@@ -1,3 +1,5 @@
+import type { useCombinedPatch } from "./use-combined-patch.tsx";
+import { SecondaryOutputJob } from "./apply-output-fields.tsx";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import type { WeaveRomExpectation } from "../../lib/weave/weave-session-model.ts";
@@ -163,7 +165,10 @@ const getApplySampleTutorialSteps = (
   },
 ];
 
-const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+const getCheatsTutorialSteps = (
+  localizer: ReturnType<typeof useUiLocalizer>,
+  createPage: boolean,
+): readonly SampleTutorialStep[] => [
   {
     actions: [["checks", "Checks"]],
     body: "This checksum-matched homebrew ROM unlocks a small practice catalog for this guide.",
@@ -191,13 +196,15 @@ const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     title: "Review the stack",
   },
   {
-    actions: [["apply", "Apply & download"]],
-    body: "Apply the stack to bake the selected cheats into a new ROM.",
+    actions: [["apply", createPage ? localizer.message("ui.combinedPatch.create") : "Apply & download"]],
+    body: createPage
+      ? localizer.message("ui.combinedPatch.description")
+      : "Apply the stack to bake the selected cheats into a new ROM.",
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-row-output-file-name",
-    title: "Apply the cheats",
+    target: createPage ? "#rom-weaver-combined-patch-output" : "#rom-weaver-row-output-file-name",
+    title: createPage ? localizer.message("ui.combinedPatch.title") : "Apply the cheats",
   },
 ];
 
@@ -327,7 +334,8 @@ const resolveOutputHeaderOptions = (romInputs: RomInputRowState[]) => {
 /** Fetches the bundled sample and hands it to the drop path, for both guided tutorials. */
 const useGuidedSampleLoader = (input: {
   assetBaseUrl: string | undefined;
-  mode: "apply" | "weave";
+  mode: "apply" | "weave" | "create";
+  createCheatSampleRequestId?: number;
   onDrop: (files: File[]) => void;
   onStartWeave: () => void;
   onPracticeCheatSampleChange?: (active: boolean) => void;
@@ -397,6 +405,15 @@ const useGuidedSampleLoader = (input: {
     setSampleTutorial("weave");
     void loadFirstWeave("weave");
   };
+  const handledCreateCheats = useRef(0);
+  const startCreateCheats = useRef(startApplyCheatsSample);
+  startCreateCheats.current = startApplyCheatsSample;
+  useEffect(() => {
+    const request = input.createCheatSampleRequestId || 0;
+    if (!request || request === handledCreateCheats.current) return;
+    handledCreateCheats.current = request;
+    startCreateCheats.current();
+  }, [input.createCheatSampleRequestId]);
   useGuidedSampleStart("apply", startApplySample, closeSampleTutorial, input.mode === "apply");
   useGuidedSampleStart("apply-cheats", startApplyCheatsSample, closeSampleTutorial, input.mode === "apply");
   useGuidedSampleStart("weave", startWeaveSample, closeSampleTutorial, input.mode === "weave");
@@ -460,6 +477,10 @@ const buildRomRowDeps = (input: {
 };
 
 function ApplyWorkflowFormView({
+  combinedPatch,
+  createModeControls,
+  createCheatSampleRequestId,
+  onPracticeDrop,
   cheats,
   cheatsOn,
   controllers,
@@ -484,6 +505,10 @@ function ApplyWorkflowFormView({
   romLookupRequest,
   startup = { message: "", status: "ready" },
 }: {
+  combinedPatch?: ReturnType<typeof useCombinedPatch>;
+  createModeControls?: ReactNode;
+  createCheatSampleRequestId?: number;
+  onPracticeDrop?: (files: File[]) => void;
   /**
    * The optional cheat patch card attached to the ROM step. It receives the
    * header-strip guard the patch controls derive.
@@ -521,7 +546,7 @@ function ApplyWorkflowFormView({
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   onPracticeCheatSampleChange?: (active: boolean) => void;
-  mode?: "apply" | "weave";
+  mode?: "apply" | "weave" | "create";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
@@ -552,7 +577,16 @@ function ApplyWorkflowFormView({
   const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
   const localizer = useUiLocalizer();
   const weavePage = mode === "weave";
-  const unifiedInputId = mode === "weave" ? "rom-weaver-input-file-unified-weave" : "rom-weaver-input-file-unified";
+  const createPage = mode === "create";
+  const workflowGuide = { create: WORKFLOW_GUIDES.create, weave: WORKFLOW_GUIDES.weave, apply: WORKFLOW_GUIDES.apply }[
+    mode
+  ];
+  const workflowLead = {
+    create: { line1: "ui.hero.createThesis", description: "ui.hero.createDescription" },
+    weave: { line1: "ui.hero.weaveThesis", description: "ui.hero.weaveDescription" },
+    apply: { line1: "ui.hero.thesis", description: "ui.hero.applyDescription" },
+  } as const;
+  const unifiedInputId = `rom-weaver-input-file-unified${mode === "apply" ? "" : `-${mode}`}`;
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -687,7 +721,7 @@ function ApplyWorkflowFormView({
     singleRom,
     uiController,
   });
-  const outputDisabled = outputState.disabled || weaveExport?.busy === true;
+  const outputDisabled = outputState.disabled || weaveExport?.busy === true || combinedPatch?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
   const renderOutputHeaderField = (id?: string) => (
     <OutputHeaderField
@@ -748,7 +782,8 @@ function ApplyWorkflowFormView({
   } = useGuidedSampleLoader({
     assetBaseUrl,
     mode,
-    onDrop: handleUnifiedDrop,
+    createCheatSampleRequestId,
+    onDrop: onPracticeDrop || handleUnifiedDrop,
     onPracticeCheatSampleChange,
     onStartWeave: () => weaveTools?.setWeavePackage("patches"),
   });
@@ -827,7 +862,8 @@ function ApplyWorkflowFormView({
         weaveActionLabel={weaveActionLabel}
         weaveExport={weaveExport}
         weaveTools={weaveTools}
-        disabled={outputState.disabled || !weaveExport.ready || !romInputs.length || !patches.length}
+        disabled={outputDisabled || !weaveExport.ready || !romInputs.length}
+        combinedCheats={cheatsOn}
       />
     ) : null;
 
@@ -871,12 +907,24 @@ function ApplyWorkflowFormView({
       state={uiState.outputNotice}
     />
   );
-  const applySecondaryJob = weavePage ? (
-    <ApplySecondaryJob>
-      <OutputCard {...applyOutputProps} className="apply-output" />
-      {outputNotice}
-    </ApplySecondaryJob>
-  ) : null;
+  const applySecondaryJob =
+    weavePage || createPage ? (
+      <ApplySecondaryJob label={createPage ? localizer.message("ui.secondary.downloadRom") : undefined}>
+        <OutputCard {...applyOutputProps} className="apply-output" />
+        {outputNotice}
+      </ApplySecondaryJob>
+    ) : null;
+
+  const combinedSecondaryJob =
+    combinedPatch && !createPage ? (
+      <SecondaryOutputJob
+        id="rom-weaver-combined-patch-job"
+        label={localizer.message("ui.combinedPatch.downloadTitle")}
+      >
+        {romInputs.length > 1 ? <Notice level="warn">{localizer.message("ui.combinedPatch.needsRom")}</Notice> : null}
+        <OutputCard {...combinedPatch.outputProps} />
+      </SecondaryOutputJob>
+    ) : null;
 
   if (startup.status === "error") {
     return (
@@ -904,7 +952,7 @@ function ApplyWorkflowFormView({
           </>
         }
         big={workflowEmpty}
-        guide={weavePage ? WORKFLOW_GUIDES.weave : WORKFLOW_GUIDES.apply}
+        guide={workflowGuide}
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
@@ -917,21 +965,11 @@ function ApplyWorkflowFormView({
           </ul>
         }
         inputId={unifiedInputId}
-        lead={
-          weavePage
-            ? {
-                line1: "ui.hero.weaveThesis",
-                description: "ui.hero.weaveDescription",
-              }
-            : {
-                line1: "ui.hero.thesis",
-                description: "ui.hero.applyDescription",
-              }
-        }
+        lead={workflowLead[mode]}
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDropFiles}
         onboarding={
-          pendingDrops.length ? null : (
+          pendingDrops.length || createPage ? null : (
             <ApplySampleStart
               weavePage={weavePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
@@ -945,7 +983,7 @@ function ApplyWorkflowFormView({
         }
         supported={getApplySupportedFiles(localizer)}
       />
-      {workflowEmpty ? (
+      {workflowEmpty && !createPage ? (
         <GhostSteps
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
@@ -1024,13 +1062,15 @@ function ApplyWorkflowFormView({
               </>
             }
             num="0x02"
-            title={localizer.message("ui.step.rom")}
+            title={localizer.message(createPage ? "ui.step.original" : "ui.step.rom")}
             woven={wovenSteps}
           />
 
           {(() => {
             const renderPatchStep = (stack?: CheatStackRenderState) => (
               <ApplyPatchListStep
+                title={createPage ? localizer.message("ui.create.changes") : undefined}
+                headerExtra={createModeControls}
                 cheats={stack}
                 weaveMeta={weaveMeta}
                 weaveOutputCheckHint={!!weaveTools?.hasOptionalEntries}
@@ -1064,7 +1104,7 @@ function ApplyWorkflowFormView({
                 woven={wovenSteps}
               />
             );
-            return !weavePage && romInputs.length === 1 && cheats
+            return romInputs.length === 1 && cheats
               ? cheats({ headerStripConflict: cheatHeaderStripConflict, renderStack: renderPatchStep })
               : renderPatchStep();
           })()}
@@ -1074,7 +1114,8 @@ function ApplyWorkflowFormView({
               weaveActionLabel={weaveActionLabel}
               weaveExport={weaveExport}
               weaveTools={weaveTools}
-              disabled={outputDisabled || !weaveExport.ready || !romInputs.length || !patches.length}
+              disabled={outputDisabled || !weaveExport.ready || !romInputs.length}
+              combinedCheats={cheatsOn}
               fileName={outputState.displayFileName}
               headerField={
                 header.visible ? renderOutputHeaderField("rom-weaver-select-weave-output-header") : undefined
@@ -1084,11 +1125,16 @@ function ApplyWorkflowFormView({
                 weaveExport.setFormat(value);
                 controllers.output.setOutputCompression(value);
               }}
-              secondary={applySecondaryJob}
+              secondary={
+                <>
+                  {applySecondaryJob}
+                  {combinedSecondaryJob}
+                </>
+              }
             />
           ) : null}
 
-          {weavePage ? null : (
+          {weavePage || createPage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
               className="apply-output"
@@ -1107,11 +1153,35 @@ function ApplyWorkflowFormView({
               meta={renderApplyTimingMeta(applyDone, localizer, outputState.applyTiming, outputState.compressTiming)}
               notice={outputNotice}
               num="0x04"
-              secondary={weaveSecondaryJob}
+              secondary={
+                <>
+                  {weaveSecondaryJob}
+                  {combinedSecondaryJob}
+                </>
+              }
               title={localizer.message("ui.step.apply")}
               woven={applyDone || running}
             />
           )}
+          {createPage && combinedPatch ? (
+            <WorkflowOutputStep
+              {...combinedPatch.outputProps}
+              num="0x04"
+              title={localizer.message("ui.combinedPatch.title")}
+              id="rom-weaver-combined-patch-output"
+              notice={
+                romInputs.length > 1 ? (
+                  <Notice level="warn">{localizer.message("ui.combinedPatch.needsRom")}</Notice>
+                ) : undefined
+              }
+              secondary={
+                <>
+                  {applySecondaryJob}
+                  {weaveSecondaryJob}
+                </>
+              }
+            />
+          ) : null}
           {applyDone && onSelectTab ? <RelatedStrip entryKey="patcher" onSelectTab={onSelectTab} /> : null}
         </>
       )}
@@ -1133,7 +1203,7 @@ function ApplyWorkflowFormView({
             sampleTutorial === "weave"
               ? getWeaveSampleTutorialSteps(localizer)
               : sampleTutorial === "apply-cheats"
-                ? APPLY_CHEATS_TUTORIAL_STEPS
+                ? getCheatsTutorialSteps(localizer, createPage)
                 : getApplySampleTutorialSteps(localizer, {
                     loadPractice: loadApplyPractice,
                     loading: sampleLoading,

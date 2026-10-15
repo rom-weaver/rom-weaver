@@ -1,7 +1,10 @@
+import { ApplyPatchForm } from "./apply-patch-form.tsx";
+import { CreateSourceModeToggle } from "./create-source-mode-toggle.tsx";
+import { countDropEntries, readDropEntries } from "./drop-destination.ts";
+import type { PageFileDrop } from "./patcher-form.ts";
 import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { Download, GitCompare } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CheatManualSystem, ManualCheatKindOverride } from "../../lib/cheats/index.ts";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import type {
@@ -27,21 +30,10 @@ import {
   type SampleTutorialStep,
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
-import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
-import { getPracticeCheatCatalog } from "./guided-cheat-sample.ts";
+import { requestGuidedSampleStart, resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
-import { createCheatClassifiers } from "./cheat-classifier.ts";
-import { getUnsupportedCheatSystemMessage } from "./components/cheat-database-section.tsx";
-import { CreateCheatCodesPanel } from "./components/create-cheat-codes-panel.tsx";
-import { useUnsupportedCheatSystem } from "./components/use-cheat-database-records.ts";
-import {
-  getCheatCodesPatchName,
-  getCheatCodesValidationMessage,
-  splitCheatCodes,
-  type CreateCheatCodeEntry,
-} from "./create-cheat-codes-model.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
 import {
   areCreateSourcesIdentical,
@@ -345,16 +337,6 @@ const getCreateSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalize
   },
   {
     actions: [
-      ["toggle", localizer.message("ui.create.tutorial.cheatCodes")],
-      ["menu", localizer.message("ui.create.tutorial.pickCheats")],
-    ],
-    body: localizer.message("ui.create.tutorial.cheats.body"),
-    target: "#patch-builder-row-modified",
-    title: localizer.message("ui.create.tutorial.cheats.title"),
-    tryIt: localizer.message("ui.create.tutorial.cheats.tryIt"),
-  },
-  {
-    actions: [
       ["options", localizer.message("ui.apply.tutorial.outputName")],
       ["archive", localizer.message("ui.create.tutorial.archive")],
       ["create", localizer.message("ui.create.tutorial.createDownload")],
@@ -369,38 +351,14 @@ const getCreateSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalize
   },
 ];
 
-const CREATE_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
-  {
-    actions: [["checks", "Checks"]],
-    body: "This legal practice ROM is the unchanged source for the cheat patch.",
-    openDrawers: true,
-    target: "#patch-builder-row-original",
-    title: "Start with the original ROM",
-  },
-  {
-    actions: [["toggle", "Cheat codes"]],
-    body: "Cheat codes replaces the modified ROM. Pick a practice cheat or enter a supported code.",
-    target: "#patch-builder-row-modified",
-    title: "Build from cheat codes",
-  },
-  {
-    actions: [["menu", "Pick from the cheat database"]],
-    body: "The practice catalog appears only for this bundled ROM. Add a code, then inspect the ROM write it creates.",
-    target: ".create-cheat-codes",
-    title: "Choose and inspect a cheat",
-  },
-  {
-    actions: [["create", "Create & download"]],
-    body: "Choose the patch format, then create a normal patch containing the selected cheat writes.",
-    cta: ".btn.run",
-    openDrawers: true,
-    placement: "top",
-    target: "#patch-builder-row-output",
-    title: "Create the cheat patch",
-  },
-];
-
 type InternalCreatePatchFormProps = CreatePatchFormProps & {
+  active?: boolean;
+  sourceModeControls?: ReactNode;
+  onUnifiedDrop?: (files: File[]) => void;
+  /** The page drop is a ROM chosen as the Modified ROM, so it replaces a filled Modified slot. */
+  pageDropReplacesModified?: boolean;
+  onActivateRomMode?: () => void;
+  onBusyChange?: (busy: boolean) => void;
   createWorkflow?: typeof CreateWorkflow;
   getCreatePatchFormatCandidates?: typeof getCreatePatchFormatCandidates;
 };
@@ -431,8 +389,8 @@ const selectCreateDropAssignments = async (
   return assignment;
 };
 
-function CreatePatchForm(props: CreatePatchFormProps) {
-  const { onError } = props;
+function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
+  const { onError, onBusyChange } = props;
   const internalProps = props as InternalCreatePatchFormProps;
   const createWorkflowOverride = internalProps.createWorkflow;
   const createPatchFormatCandidatesOverride = internalProps.getCreatePatchFormatCandidates;
@@ -452,7 +410,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     onCancelSelection: (request) => cancelSelectionRef.current(request),
   });
   // id matches webapp-root's `currentView` so root routing targets the active tab.
-  useInputSelectionHandler("creator", selectFile);
+  useInputSelectionHandler("creator", selectFile, props.active !== false);
   const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
   const [internalModified, setInternalModified] = useState<BinarySource | null>(props.defaultModified || null);
   const [internalSettings, setInternalSettings] = useState<CreatePatchFormSettings>(() =>
@@ -466,8 +424,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     useState<CreatePatchFormatCandidateState | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const [sampleTutorial, setSampleTutorial] = useState<"create" | "create-cheats" | null>(null);
-  const [practiceCheatSession, setPracticeCheatSession] = useState(false);
+  const [sampleTutorial, setSampleTutorial] = useState<"create" | null>(null);
   const sampleLoadGenerationRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
@@ -502,14 +459,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     createStartedAt: null,
   });
   const [errorCode, setErrorCode] = useState("");
-  // Cheat-codes mode replaces the modified ROM with codes the engine bakes into
-  // the original; the staged modified source (if any) is ignored while it is on.
-  const [modifiedMode, setModifiedMode] = useState<"codes" | "rom">("rom");
-  const [cheatCodesText, setCheatCodesText] = useState("");
-  const [cheatCodeKind, setCheatCodeKind] = useState<ManualCheatKindOverride>("auto");
-  const [cheatCodeEntries, setCheatCodeEntries] = useState<CreateCheatCodeEntry[]>([]);
-  const [cheatCodesClassifying, setCheatCodesClassifying] = useState(false);
-  const [cheatSystem, setCheatSystem] = useState<CheatManualSystem | undefined>(undefined);
   const original = props.original === undefined ? internalOriginal : props.original;
   const modified = props.modified === undefined ? internalModified : props.modified;
   const settings = props.settings || internalSettings || providerSettings;
@@ -541,27 +490,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   });
   const uploadDisabled = !!props.disabled || busy;
   const outputDisabled = !!props.disabled || busy;
-  const codesMode = modifiedMode === "codes";
-  const cheatCodes = useMemo(
-    () => (codesMode ? splitCheatCodes(cheatCodesText, cheatSystem, cheatCodeKind) : []),
-    [cheatCodeKind, cheatCodesText, cheatSystem, codesMode],
-  );
-  const cheatCodesValidationMessage = codesMode
-    ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying, localizer)
-    : "";
-  const identicalSources = !codesMode && areCreateSourcesIdentical(originalState, modifiedState);
-  const createInputsSelected = codesMode ? !!original : !!(original && modified);
-  const createSourcesReady = codesMode
-    ? createInputsSelected && originalState?.status === "ready" && !cheatCodesValidationMessage
-    : createInputsSelected && originalState?.status === "ready" && modifiedState?.status === "ready";
-  const createPreparationPending = codesMode
-    ? !!stagingRole || progress?.stage === "input" || (createInputsSelected && !originalState)
-    : !!stagingRole || progress?.stage === "input" || (createInputsSelected && !(originalState && modifiedState));
+  const identicalSources = areCreateSourcesIdentical(originalState, modifiedState);
+  const createInputsSelected = !!(original && modified);
+  const createSourcesReady =
+    createInputsSelected && originalState?.status === "ready" && modifiedState?.status === "ready";
+  const createPreparationPending =
+    !!stagingRole || progress?.stage === "input" || (createInputsSelected && !(originalState && modifiedState));
   const createQueueBlocked =
-    !!message ||
-    !!errorCode ||
-    hasSourceQueueWarning(originalState) ||
-    (!codesMode && hasSourceQueueWarning(modifiedState));
+    !!message || !!errorCode || hasSourceQueueWarning(originalState) || hasSourceQueueWarning(modifiedState);
   const canStartCreate = createSourcesReady && !createPreparationPending;
   const canQueueCreate = createInputsSelected;
   const actionDisabled = !!props.disabled || createQueued || !(busy || completedOutput || canQueueCreate);
@@ -579,18 +515,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const useIdentifiedOutputName = settings.output?.identifiedName !== false;
   const generatedOutputName =
     configuredOutputName ||
-    // Cheat-codes mode names the patch after the original plus the first cheat
-    // description ("Zelda - Infinite health.ips"); the modified ROM that usually
-    // names the patch does not exist here.
-    (codesMode
-      ? getCheatCodesPatchName(
-          (useIdentifiedOutputName ? identifiedOutputTitle : null) ||
-            displayedOriginalInfo?.fileName ||
-            originalFileName,
-          cheatCodeEntries,
-          patchType,
-        )
-      : null) ||
     (useIdentifiedOutputName ? identifiedOutputTitle : null) ||
     getDefaultCreateOutputName(generatedOutputSource);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
@@ -614,29 +538,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [activePatchFormatCandidates?.formats, modifiedState?.size, originalState?.size],
   );
   const displayedOriginalFileName = displayedOriginalInfo?.fileName || originalFileName;
-  // Cheat classification runs against the original ROM: it supplies the platform
-  // the database lookup routes on and the ROM bytes the decoder resolves against.
-  // The header platform comes first, as in Apply: identify leaves both of its
-  // fields empty for a ROM it cannot match.
-  const cheatPlatform =
-    originalState?.romType?.platform ||
-    originalState?.identification?.matches?.[0]?.platform ||
-    originalState?.identification?.platformCandidates?.[0]?.platform;
-  const cheatRom = useMemo(
-    () =>
-      original
-        ? {
-            ...(originalState?.checksums ? { checksums: originalState.checksums } : {}),
-            fileName: displayedOriginalFileName,
-            key: `${originalSourceKey}:${originalState?.checksums?.sha1 || originalState?.checksums?.crc32 || ""}`,
-            ...(cheatPlatform ? { platform: cheatPlatform } : {}),
-            title: displayedOriginalFileName,
-          }
-        : null,
-    [cheatPlatform, displayedOriginalFileName, original, originalSourceKey, originalState?.checksums],
-  );
-  const practiceCheatCatalog = practiceCheatSession ? getPracticeCheatCatalog(originalState?.checksums) : {};
-  const cheatSystemUnsupported = useUnsupportedCheatSystem(cheatRom, true);
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
   const clearWorkflowMessage = useCallback(() => {
@@ -652,13 +553,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setProgress,
     setQueued: setCreateQueued,
   });
-  // A patch built from cheat codes MUST NOT stay on screen once the original
-  // ROM's system turns out to have no cheat support.
-  useEffect(() => {
-    if (!cheatSystemUnsupported || modifiedMode !== "codes") return;
-    setModifiedMode("rom");
-    resetWorkflowOutput();
-  }, [cheatSystemUnsupported, modifiedMode, resetWorkflowOutput]);
   const setWorkflowMessage = useCallback(
     (placement: CreateMessagePlacement, error: Error) => {
       const code = getErrorCode(error);
@@ -739,7 +633,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const resolvedCandidateKeyRef = useRef("");
   useEffect(() => {
-    if (codesMode || !(original && modified && originalSourceKey && modifiedSourceKey)) {
+    if (!(original && modified && originalSourceKey && modifiedSourceKey)) {
       resolvedCandidateKeyRef.current = "";
       setCreatePatchFormatCandidates(null);
       return;
@@ -774,7 +668,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       cancelled = true;
     };
   }, [
-    codesMode,
     modified,
     modifiedSourceKey,
     original,
@@ -810,9 +703,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     props.onModifiedChange?.(file);
   };
 
-  // Combined drop surface: both sources are ROMs, so files fill Original then
-  // Modified in drop order; patches and overflow stay visible as a notice (no
-  // patch bucket on this tab). See routeByOrder.
   const handledPageDropIdRef = useRef<number | null>(null);
   const applyRoutedDrop = (routed: PendingCreateDrop) => {
     const [originalFile, modifiedFile] = routed.assignment;
@@ -822,7 +712,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
   const commitRoutedDrop = (routed: PendingCreateDrop) => {
     const assigned = routed.assignment.filter((file): file is File => file !== null);
-    const selectedSources = [original, modified, ...assigned].filter(
+    // Compare the resulting pair: a replaced slot's old source is not a duplicate of its replacement.
+    const [nextOriginal, nextModified] = routed.assignment;
+    const selectedSources = [nextOriginal ?? original, nextModified ?? modified].filter(
       (source): source is BinarySource => source !== null && source !== undefined,
     );
     if (assigned.length > 0 && hasDuplicateBinarySources(selectedSources)) {
@@ -832,14 +724,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     applyRoutedDrop(routed);
   };
-  const handleUnifiedDrop = (files: File[], practiceSample = false) => {
+  const handleUnifiedDrop = (files: File[], practiceSample = false, replaceModified = false) => {
     if (!practiceSample) {
       sampleLoadGenerationRef.current += 1;
       setSampleLoading(false);
       setSampleTutorial(null);
-      setPracticeCheatSession(false);
     }
-    const slotFilled = [!!original, !!modified];
+    const slotFilled = [!!original, !!modified && !replaceModified];
     const routed = routeByOrder(files, slotFilled);
     const emptySlotCount = slotFilled.filter((filled) => !filled).length;
     if (emptySlotCount > 0 && routed.roms.length > emptySlotCount) {
@@ -858,40 +749,31 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     commitRoutedDrop(routed);
   };
-  const closeSampleTutorial = () => {
+  const closeSampleTutorial = useCallback(() => {
     sampleLoadGenerationRef.current += 1;
     setSampleLoading(false);
     setSampleTutorial(null);
-  };
+  }, []);
   useEffect(
     () => () => {
       sampleLoadGenerationRef.current += 1;
     },
     [],
   );
-  const loadCreateSample = async (guide: "create" | "create-cheats") => {
+  const loadCreateSample = async () => {
     const generation = ++sampleLoadGenerationRef.current;
     setSampleLoading(true);
     setSampleError("");
     try {
       const files = await Promise.all(
-        CREATE_SAMPLE_ASSETS.slice(0, guide === "create-cheats" ? 1 : undefined).map(async ([asset, name]) => {
+        CREATE_SAMPLE_ASSETS.map(async ([asset, name]) => {
           const response = await fetch(resolveAssetUrl(resolvedAssetBaseUrl, asset));
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return new File([await response.blob()], name, { type: "application/octet-stream" });
         }),
       );
       if (generation !== sampleLoadGenerationRef.current) return;
-      if (guide === "create-cheats") {
-        updateModified(null);
-        setCheatCodesText("");
-        setCheatCodeEntries([]);
-        setModifiedMode("codes");
-      } else {
-        setModifiedMode("rom");
-      }
       handleUnifiedDrop(files, true);
-      setPracticeCheatSession(true);
     } catch {
       if (generation !== sampleLoadGenerationRef.current) return;
       closeSampleTutorial();
@@ -903,19 +785,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   useGuidedSampleStart(
     "create",
     () => {
+      props.onActivateRomMode?.();
       setSampleTutorial("create");
-      void loadCreateSample("create");
+      void loadCreateSample();
     },
     closeSampleTutorial,
   );
-  useGuidedSampleStart(
-    "create-cheats",
-    () => {
-      setSampleTutorial("create-cheats");
-      void loadCreateSample("create-cheats");
-    },
-    closeSampleTutorial,
-  );
+  useEffect(() => {
+    if (props.active === false) closeSampleTutorial();
+  }, [closeSampleTutorial, props.active]);
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
     const bothStaged = !!workflow && originalState?.status === "ready" && modifiedState?.status === "ready";
@@ -949,7 +827,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified
   // handler so the whole tab is a drop target, not just the dropzone box.
-  usePageDropForwarder(props.pageDrop, (files) => handleUnifiedDrop(files), handledPageDropIdRef);
+  usePageDropForwarder(
+    props.pageDrop,
+    (files) => handleUnifiedDrop(files, false, !!props.pageDropReplacesModified),
+    handledPageDropIdRef,
+  );
   const cancelSourceStaging = (role: "modified" | "original") => {
     setCreateQueued(false);
     resetStagedCreateWorkflow();
@@ -987,6 +869,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
 
   useEffect(() => {
+    if (props.active === false) return;
     let disposed = false;
     let cleanup: (() => void) | undefined;
     const stage = async () => {
@@ -1100,6 +983,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     original,
     originalSourceKey,
     onError,
+    props.active,
     resolvedAssetBaseUrl,
     setWorkflowMessage,
     stagingSettingsKey,
@@ -1148,7 +1032,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     if (!canStartCreate) return;
     if (!original) return;
-    if (!(codesMode || modified)) return;
+    if (!modified) return;
     const stagedOriginal = original;
     const stagedModified = modified;
     await runWorkflow(async (abortController, registerCleanup) => {
@@ -1180,19 +1064,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.threads));
       } else {
         await createWorkflow.setOriginal(stagedOriginal);
-        if (!codesMode && stagedModified) await createWorkflow.setModified(stagedModified);
+        if (stagedModified) await createWorkflow.setModified(stagedModified);
       }
-      await createWorkflow.setCheatCodes(cheatCodes, cheatSystem, cheatCodeKind);
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
       await createWorkflow.setOutputName(executionOutputName);
 
       if (createWorkflow.getOriginal()?.status !== "ready" || !createWorkflow.getOriginal()?.selectedCandidateId) {
         throw new Error("Original source requires candidate selection");
       }
-      if (
-        !codesMode &&
-        (createWorkflow.getModified()?.status !== "ready" || !createWorkflow.getModified()?.selectedCandidateId)
-      ) {
+      if (createWorkflow.getModified()?.status !== "ready" || !createWorkflow.getModified()?.selectedCandidateId) {
         throw new Error("Modified source requires candidate selection");
       }
 
@@ -1279,15 +1159,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     messageDismissible,
     messagePlacement,
   };
-  const getCheatSource = useCallback(() => {
-    if (!original) throw new Error("Add the original ROM before checking cheat codes");
-    return original as never;
-  }, [original]);
-  const { classifyDatabaseCheats, classifyManualCode } = useMemo(
-    () => createCheatClassifiers(getCheatSource),
-    [getCheatSource],
-  );
-
   const renderSourceStep = (
     options: Omit<Parameters<typeof buildCreateSourceStep>[0], "runtimeNotice">,
   ): CreatePatchFormViewModel["originalStep"] =>
@@ -1296,10 +1167,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesActuallyEmpty = !(original || modified || createPreparationPending);
   const createSourcesEmpty = useFlatTransitionFlag(createSourcesActuallyEmpty);
-  const sampleTutorialReady =
-    sampleTutorial === "create-cheats"
-      ? originalState?.status === "ready" && !stagingRole
-      : createSourcesReady && !createPreparationPending;
+  const sampleTutorialReady = createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
@@ -1335,30 +1203,19 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         {sampleTutorial ? (
           <SampleTutorial
             download={{
-              href: resolveAssetUrl(
-                resolvedAssetBaseUrl,
-                sampleTutorial === "create-cheats" ? "hello-world.nes" : CREATE_SAMPLE_ARCHIVE,
-              ),
-              name: sampleTutorial === "create-cheats" ? "hello-world.nes" : CREATE_SAMPLE_ARCHIVE,
+              href: resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE),
+              name: CREATE_SAMPLE_ARCHIVE,
             }}
-            loadingBody={
-              sampleTutorial === "create-cheats"
-                ? "RomWeaver is loading and fingerprinting a tiny legal practice ROM."
-                : "RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
-            }
+            loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
             onClose={closeSampleTutorial}
             ready={sampleTutorialReady}
-            steps={
-              sampleTutorial === "create-cheats"
-                ? CREATE_CHEATS_TUTORIAL_STEPS
-                : getCreateSampleTutorialSteps(localizer)
-            }
+            steps={getCreateSampleTutorialSteps(localizer)}
           />
         ) : null}
       </>
     ),
     dropZone: {
-      accept: createFileInputAccept.unifiedRom,
+      accept: createFileInputAccept.unifiedApply,
       addLabel: localizer.message("ui.drop.addRom"),
       afterDropZone:
         dropNotice || identicalSources ? (
@@ -1382,7 +1239,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       heroLabelCoarse: "Tap to add original and modified ROMs or archives",
       id: "patch-builder-row-unified-drop",
       inputId: "patch-builder-input-file-unified",
-      onFiles: handleUnifiedDrop,
+      onFiles: props.onUnifiedDrop || handleUnifiedDrop,
       onboarding: createSourcesActuallyEmpty ? (
         <SampleTutorialStart
           chipLabel={localizer.message("ui.tutorial.tryCreate")}
@@ -1400,107 +1257,36 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           loading={sampleLoading}
           onStart={() => {
             setSampleTutorial("create");
-            void loadCreateSample("create");
+            void loadCreateSample();
           }}
           secondaryAction="toggle"
           secondaryHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create-cheats")}
           secondaryLabel="Create a patch from cheats"
-          onSecondaryStart={() => {
-            setSampleTutorial("create-cheats");
-            void loadCreateSample("create-cheats");
-          }}
+          onSecondaryStart={() => requestGuidedSampleStart("create-cheats")}
         />
       ) : null,
       supported: CREATE_SUPPORTED_FILES,
     },
+    sourceModeControls: props.sourceModeControls,
     modifiedStep: {
       ...renderSourceStep({
-        checksumProgress: codesMode ? null : getSourceChecksumProgress("modified"),
-        file: codesMode ? null : modified,
+        checksumProgress: getSourceChecksumProgress("modified"),
+        file: modified,
         fileName: displayedModifiedFileName,
         num: "0x03",
         onClear: () => updateModified(null),
         removeLabel: "Clear modified ROM",
         role: "modified",
-        ...(codesMode ? {} : { sourceProgress: getSourceProgress("modified") }),
-        sourceState: codesMode ? null : modifiedState,
+        sourceProgress: getSourceProgress("modified"),
+        sourceState: modifiedState,
         title: "Modified",
       }),
-      ...(codesMode
-        ? {
-            afterItems: (
-              <>
-                <CreateCheatCodesPanel
-                  classifyDatabaseCheats={classifyDatabaseCheats}
-                  classifyManualCode={classifyManualCode}
-                  {...practiceCheatCatalog}
-                  disabled={outputDisabled}
-                  kind={cheatCodeKind}
-                  onClassifyingChange={setCheatCodesClassifying}
-                  onEntriesChange={setCheatCodeEntries}
-                  onKindChange={(kind) => {
-                    resetWorkflowOutput();
-                    setCheatCodeKind(kind);
-                  }}
-                  onSystemChange={setCheatSystem}
-                  onValueChange={(value) => {
-                    resetWorkflowOutput();
-                    setCheatCodesText(value);
-                  }}
-                  rom={cheatRom}
-                  value={cheatCodesText}
-                />
-                {cheatCodesValidationMessage && cheatCodesText.trim() ? (
-                  <Notice id="patch-builder-cheat-codes-message" level="warn">
-                    {cheatCodesValidationMessage}
-                  </Notice>
-                ) : null}
-              </>
-            ),
-          }
-        : {}),
-      ...(cheatSystemUnsupported
-        ? {
-            afterItems: (
-              <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
-                {getUnsupportedCheatSystemMessage(cheatRom?.platform, localizer)}
-              </p>
-            ),
-          }
-        : {}),
-      ...(codesMode
-        ? {}
-        : {
-            emptyState: (
-              <NeedsInput onClick={() => document.getElementById("patch-builder-input-file-unified")?.click()}>
-                {localizer.message("ui.create.needsModified")}
-              </NeedsInput>
-            ),
-          }),
-      headerExtra: (
-        <fieldset className="seg">
-          <legend className="sr-only">How the modification is supplied</legend>
-          {(["rom", "codes"] as const).map((mode) => (
-            <button
-              aria-pressed={modifiedMode === mode}
-              className="seg-btn"
-              disabled={uploadDisabled || (mode === "codes" && cheatSystemUnsupported)}
-              key={mode}
-              {...(mode === "codes" && cheatSystemUnsupported
-                ? { "aria-describedby": "patch-builder-cheat-codes-unsupported" }
-                : {})}
-              onClick={() => {
-                if (modifiedMode === mode) return;
-                resetWorkflowOutput();
-                setModifiedMode(mode);
-              }}
-              type="button"
-            >
-              {mode === "rom" ? "Modified ROM" : "Cheat codes"}
-            </button>
-          ))}
-        </fieldset>
+      emptyState: (
+        <NeedsInput onClick={() => document.getElementById("patch-builder-input-file-unified")?.click()}>
+          {localizer.message("ui.create.needsModified")}
+        </NeedsInput>
       ),
+      headerExtra: props.sourceModeControls,
     },
     originalStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("original"),
@@ -1611,104 +1397,210 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       title: "Patch",
     },
     sourcesEmpty: createSourcesActuallyEmpty,
-    swap:
-      createInputsSelected && !codesMode
-        ? { disabled: uploadDisabled || createPreparationPending || createQueued, onSwap: swapCreateSources }
-        : null,
+    swap: createInputsSelected
+      ? { disabled: uploadDisabled || createPreparationPending || createQueued, onSwap: swapCreateSources }
+      : null,
   });
   const model = createModel();
 
   const createActionEnabled = !(actionDisabled || completedOutput);
   const downloadActionEnabled = !actionDisabled && !!completedOutput;
-  useAgentWorkflow("creator", {
-    getState: () => ({
-      sources: {
-        original: describeAgentSource(original),
-        modified: describeAgentSource(modified),
-      },
-      sourceState: {
-        original: originalState,
-        modified: modifiedState,
-      },
-      settings,
-      options: {
-        cheatCodeKind,
-        cheatCodes: cheatCodesText,
-        cheatSystem,
-        compression: createCompression,
-        modifiedMode,
-        outputName: resolvedOutputName,
-        patchType,
-      },
-      ready: canStartCreate,
-      staging: createPreparationPending,
-      queued: createQueued,
-      busy,
-      error: message || null,
-      errorCode: errorCode || null,
-      progress,
-      output: completedOutput
-        ? {
-            compression: completedOutput.compression,
-            fileName: completedOutput.fileName,
-            patchType: completedOutput.patchType,
-            rawSize: completedOutput.rawSize,
-            size: completedOutput.size,
-          }
-        : { fileName: executionOutputName, ready: canStartCreate },
-      cheats: {
-        classifying: cheatCodesClassifying,
-        entries: cheatCodeEntries.map((entry) => ({
-          code: entry.code,
-          description: entry.description,
-          error: entry.error || null,
-        })),
-        validationMessage: cheatCodesValidationMessage || null,
-      },
-      confirmationOpen: !!pendingDuplicateDrop,
-    }),
-    actions: {
-      create: {
-        description: "Create and download a patch from the staged sources.",
-        enabled: createActionEnabled,
-        execute: () => {
-          if (createActionEnabled) return runCreate();
-          return undefined;
+  useAgentWorkflow(
+    "creator",
+    {
+      getState: () => ({
+        sources: {
+          original: describeAgentSource(original),
+          modified: describeAgentSource(modified),
         },
-      },
-      download: {
-        description: "Download the completed patch again.",
-        enabled: downloadActionEnabled,
-        execute: () => {
-          if (downloadActionEnabled) return runCreate();
-          return undefined;
+        sourceState: {
+          original: originalState,
+          modified: modifiedState,
         },
-      },
-      cancel: {
-        description: "Cancel the active or queued patch creation.",
-        enabled: busy || createQueued,
-        execute: () => {
-          if (busy || createQueued) cancelCreateOutputProgress();
+        settings,
+        options: {
+          compression: createCompression,
+          outputName: resolvedOutputName,
+          patchType,
         },
-      },
-      cancelOriginalStaging: {
-        description: "Cancel original ROM staging and clear that source.",
-        enabled: stagingRole === "original",
-        execute: () => {
-          if (stagingRole === "original") cancelSourceStaging("original");
+        ready: canStartCreate,
+        staging: createPreparationPending,
+        queued: createQueued,
+        busy,
+        error: message || null,
+        errorCode: errorCode || null,
+        progress,
+        output: completedOutput
+          ? {
+              compression: completedOutput.compression,
+              fileName: completedOutput.fileName,
+              patchType: completedOutput.patchType,
+              rawSize: completedOutput.rawSize,
+              size: completedOutput.size,
+            }
+          : { fileName: executionOutputName, ready: canStartCreate },
+        confirmationOpen: !!pendingDuplicateDrop,
+      }),
+      actions: {
+        create: {
+          description: "Create and download a patch from the staged sources.",
+          enabled: createActionEnabled,
+          execute: () => {
+            if (createActionEnabled) return runCreate();
+            return undefined;
+          },
         },
-      },
-      cancelModifiedStaging: {
-        description: "Cancel modified ROM staging and clear that source.",
-        enabled: stagingRole === "modified",
-        execute: () => {
-          if (stagingRole === "modified") cancelSourceStaging("modified");
+        download: {
+          description: "Download the completed patch again.",
+          enabled: downloadActionEnabled,
+          execute: () => {
+            if (downloadActionEnabled) return runCreate();
+            return undefined;
+          },
+        },
+        cancel: {
+          description: "Cancel the active or queued patch creation.",
+          enabled: busy || createQueued,
+          execute: () => {
+            if (busy || createQueued) cancelCreateOutputProgress();
+          },
+        },
+        cancelOriginalStaging: {
+          description: "Cancel original ROM staging and clear that source.",
+          enabled: stagingRole === "original",
+          execute: () => {
+            if (stagingRole === "original") cancelSourceStaging("original");
+          },
+        },
+        cancelModifiedStaging: {
+          description: "Cancel modified ROM staging and clear that source.",
+          enabled: stagingRole === "modified",
+          execute: () => {
+            if (stagingRole === "modified") cancelSourceStaging("modified");
+          },
         },
       },
     },
-  });
+    props.active !== false,
+  );
+  useEffect(() => onBusyChange?.(busy || createQueued), [busy, createQueued, onBusyChange]);
 
   return <CreatePatchFormView {...model} />;
+}
+
+function CreatePatchForm(props: CreatePatchFormProps) {
+  const [sourceMode, setSourceMode] = useState<"rom" | "patches">("rom");
+  const [patchesMounted, setPatchesMounted] = useState(false);
+  const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
+  const [romBusy, setRomBusy] = useState(false);
+  const [patchesBusy, setPatchesBusy] = useState(false);
+  const [cheatSampleRequestId, setCheatSampleRequestId] = useState(0);
+  const [deliveries, setDeliveries] = useState<
+    (PageFileDrop & { mode: "rom" | "patches"; replacesModified?: boolean })[]
+  >([]);
+  const nextDropId = useRef(0);
+  const dropQueue = useRef(Promise.resolve());
+  const handledPageDropIdRef = useRef<number | null>(null);
+  const original = props.original === undefined ? internalOriginal : props.original;
+  const inputs = useMemo(() => (original ? [original] : []), [original]);
+  const changeOriginal = (file: BinarySource | null) => {
+    if (props.original === undefined) setInternalOriginal(file);
+    props.onOriginalChange?.(file);
+  };
+  const changeMode = (mode: "rom" | "patches") => {
+    if (mode === "patches") setPatchesMounted(true);
+    setSourceMode(mode);
+  };
+  const sourceModeRef = useRef(sourceMode);
+  useEffect(() => {
+    sourceModeRef.current = sourceMode;
+  }, [sourceMode]);
+  // ROM-only drops stay in Patches & cheats while it is active; its form decides the ROM's slot.
+  const queueDrop = (files: File[], romMode?: "rom", replacesModified = false) => {
+    const id = ++nextDropId.current;
+    dropQueue.current = dropQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        const entries = await readDropEntries(files);
+        const counts = countDropEntries(entries);
+        const hasPatches = counts.patches || counts.weaves || entries.some((entry) => entry.hasPatches);
+        const mode = hasPatches ? "patches" : romMode || sourceModeRef.current;
+        setDeliveries((current) => [...current, { files, id, mode, replacesModified }]);
+      })
+      .catch((error: unknown) => props.onError?.(error instanceof Error ? error : new Error(String(error))));
+  };
+  const routeDrop = (files: File[]) => queueDrop(files);
+  const delivery = deliveries[0];
+  const activeMode = delivery?.mode || sourceMode;
+  useEffect(() => {
+    if (!delivery) return;
+    if (delivery.mode === "patches") setPatchesMounted(true);
+    setSourceMode(delivery.mode);
+    const timer = setTimeout(() => setDeliveries((current) => current.filter((entry) => entry.id !== delivery.id)), 0);
+    return () => clearTimeout(timer);
+  }, [delivery]);
+  usePageDropForwarder(props.pageDrop, routeDrop, handledPageDropIdRef);
+  useGuidedSampleStart(
+    "create-cheats",
+    () => {
+      changeMode("patches");
+      setCheatSampleRequestId((id) => id + 1);
+    },
+    () => undefined,
+  );
+  const controls = (
+    <CreateSourceModeToggle
+      value={activeMode}
+      onChange={changeMode}
+      disabled={!!props.disabled || romBusy || patchesBusy}
+    />
+  );
+  const romDrop = delivery?.mode === "rom" ? delivery : null;
+  const patchDrop = delivery?.mode === "patches" ? delivery : null;
+  return (
+    <>
+      <div hidden={activeMode !== "rom"}>
+        <ModifiedRomCreateForm
+          {...props}
+          active={activeMode === "rom"}
+          original={original}
+          onOriginalChange={changeOriginal}
+          pageDrop={romDrop}
+          pageDropReplacesModified={!!romDrop?.replacesModified}
+          onUnifiedDrop={routeDrop}
+          onActivateRomMode={() => changeMode("rom")}
+          sourceModeControls={controls}
+          onBusyChange={setRomBusy}
+        />
+      </div>
+      {patchesMounted || activeMode === "patches" ? (
+        <div hidden={activeMode !== "patches"}>
+          <ApplyPatchForm
+            mode="create"
+            active={activeMode === "patches"}
+            assetBaseUrl={props.assetBaseUrl}
+            inputs={inputs}
+            onInputsChange={(inputs) => changeOriginal(inputs[0] || null)}
+            createSettings={props.settings || props.defaultSettings}
+            patchType={props.patchType}
+            defaultPatchType={props.defaultPatchType}
+            onPatchTypeChange={props.onPatchTypeChange}
+            disabled={props.disabled}
+            threads={props.threads}
+            pageDrop={patchDrop}
+            createModeControls={controls}
+            onCreateRomDrop={(files, asModified) => queueDrop(files, "rom", !!asModified)}
+            onCreateComplete={props.onCreateComplete}
+            onError={props.onError}
+            onProgress={props.onProgress}
+            onSelectTab={props.onSelectTab}
+            onBusyChange={setPatchesBusy}
+            createCheatSampleRequestId={cheatSampleRequestId}
+          />
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 export { CreatePatchForm };

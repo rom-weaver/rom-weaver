@@ -946,12 +946,12 @@ msgstr "Código de truco"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheatCodes"
-msgstr "Códigos de trucos"
+msgstr "Parches y trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.body"
-msgstr "Códigos de trucos sustituye a la ROM modificada como origen de los cambios. Vuelve a ROM modificada para obtener el parche esperado del ejemplo."
+msgstr "Elige Parches y trucos en el paso 0x03 para combinar cambios ordenados. ROM modificada es el modo predeterminado; al cambiar de modo se conservan tus archivos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1321,7 +1321,7 @@ msgstr "Compárala con la original para crear un parche que puedas compartir."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createDescription"
-msgstr "Compara ROMs originales y modificadas, sin comprimir o en archivos, para crear parches BPS, IPS, UPS, xdelta u otros."
+msgstr "Compara las ROM original y modificada, o combina parches y trucos ordenados en un solo parche para tu ROM original."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3336,7 +3336,7 @@ msgstr "Bases de datos de ROM opcionales"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.title"
-msgstr "Opcional: crea a partir de códigos de trucos"
+msgstr "Opcional: crear a partir de parches y trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4741,7 +4741,7 @@ msgstr "Desactiva un parche o abre su menú para añadir un truco de práctica."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheats.tryIt"
-msgstr "Cambia a Códigos de trucos y abre el catálogo de práctica."
+msgstr "Cambia a Parches y trucos y abre el catálogo de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5441,7 +5441,7 @@ msgstr "Usa una ROM y pregunta cuál conservar."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteCreateMixed"
-msgstr "Usa dos ROMs e ignora los parches."
+msgstr "Combina los parches en un solo parche para la ROM original."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5802,3 +5802,123 @@ msgstr "Aplica sus parches o edita la receta."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeWeaveTitle"
 msgstr "¿Qué quieres hacer con este paquete?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.label"
+msgstr "Crear parche a partir de"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.rom"
+msgstr "ROM modificada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.sourceMode.patches"
+msgstr "Parches y trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.changes"
+msgstr "Cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.filename"
+msgstr "Nombre del archivo de parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.format"
+msgstr "Formato del parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.description"
+msgstr "Combina los parches y trucos activados en un solo parche para la ROM original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.working"
+msgstr "Creando parche combinado…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.download"
+msgstr "Descargar parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.create"
+msgstr "Crear parche y descargar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.title"
+msgstr "Crear parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.downloadTitle"
+msgstr "Descargar un parche combinado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.needsRom"
+msgstr "Añade una ROM original para crear un parche combinado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.title"
+msgstr "Usar esta ROM como"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.subtitle"
+msgstr "{name}: ya hay una ROM original cargada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.replace"
+msgstr "Reemplazar la ROM original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.replaceNote"
+msgstr "Quedarse en Parches y trucos con esta ROM como original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.modified"
+msgstr "Usar como ROM modificada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.romChoice.modifiedNote"
+msgstr "Cambiar a ROM modificada y compararla con el original actual."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.combinedPatch.unavailable"
+msgstr "El parche combinado no está disponible en este navegador."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadRom"
+msgstr "Descargar ROM parcheada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadThisRom"
+msgstr "Descargar esta ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.secondary.downloadWeave"
+msgstr "Descargar el weave"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.weaveExport.combinedCheats"
+msgstr "Este weave contiene un parche combinado con los parches y trucos activados en su orden actual."

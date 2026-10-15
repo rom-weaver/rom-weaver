@@ -114,4 +114,47 @@ describe("apply controller staged patch paths", () => {
     expect(patches[0]?.state.selectedCandidateId).toBeDefined();
     expect(controller.evaluatePatchReadiness).toHaveBeenCalledWith(patches[0]);
   });
+  it("appends mixed archive sidecars to an existing Create stack once per source identity", async () => {
+    const controller = makeController() as unknown as Probe & {
+      discoverImplicitPatches: (append?: boolean) => Promise<void>;
+      getPatchSources: () => Source[];
+      inputSession: unknown;
+      patches: Stage[];
+      selectFile: unknown;
+    };
+    controller.evaluatePatchReadiness = vi.fn(async () => true);
+    controller.selectFile = vi.fn();
+    const existing = source("explicit.ips");
+    const archive = source("mixed.zip");
+    controller.patches = [controller.createInitialSource("patch", existing, 0)];
+    const stage = (archiveSource: Source | string) => ({
+      source: archiveSource,
+      state: { id: "input-1" },
+      preparedInputAssets: [{ sidecarPatches: [{ file: file("embedded.ips", 7), parentCompressions: [] }] }],
+    });
+    controller.inputSession = { stages: [stage(archive)] };
+
+    await controller.discoverImplicitPatches(true);
+    expect(controller.getPatchSources().map((patch) => patch.name)).toEqual(["explicit.ips", "embedded.ips"]);
+    expect(controller.getPatchSources()[0]).toBe(existing);
+
+    controller.inputSession = { stages: [stage(archive)] };
+    await controller.discoverImplicitPatches(true);
+    expect(controller.getPatchSources()).toHaveLength(2);
+
+    controller.inputSession = { stages: [stage(source("mixed.zip"))] };
+    await controller.discoverImplicitPatches(true);
+    expect(controller.getPatchSources().map((patch) => patch.name)).toEqual([
+      "explicit.ips",
+      "embedded.ips",
+      "embedded.ips",
+    ]);
+
+    controller.inputSession = { stages: [stage("/archives/mixed.zip")] };
+    await controller.discoverImplicitPatches(true);
+    expect(controller.getPatchSources()).toHaveLength(4);
+    controller.inputSession = { stages: [stage("/archives/mixed.zip")] };
+    await controller.discoverImplicitPatches(true);
+    expect(controller.getPatchSources()).toHaveLength(4);
+  });
 });

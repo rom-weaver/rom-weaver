@@ -88,6 +88,61 @@ describe("useWeaveExport", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it("packages full-ROM combined patches independently of output headers and stale stack metadata", async () => {
+    const dispose = vi.fn();
+    const prepareSources = vi.fn(async () => ({
+      sources: {
+        rom: rom({ fileName: "hello-world.nes", size: 24592, checksums: { crc32: "3e30b9b3" } }),
+        patches: [patch("combined.bps")],
+      },
+      dispose,
+    }));
+    const { result, rerender } = renderHook(
+      ({ revision }) =>
+        useWeaveExport(
+          hookOptions({
+            prepareSources,
+            sourcesRevision: revision,
+            getOutputHeader: () => "strip",
+            disabledPatchIds: new Set(["patch-1"]),
+            patchBasis: "previous",
+          }),
+        ),
+      { initialProps: { revision: "cheat-a" } },
+    );
+    await act(async () => result.current.runExport());
+    expect(weaveCreate.mock.calls[0][0]).toMatchObject({
+      patchBasis: "auto",
+      outputHeader: "strip",
+      romChecksums: "crc32=3e30b9b3",
+      romSize: 24592,
+      patches: [{ fileName: "combined.bps", header: "keep" }],
+    });
+    expect(weaveCreate.mock.calls[0][0].patches[0].name).toBeUndefined();
+    expect(weaveCreate.mock.calls[0][0].patches[0].optional).toBeUndefined();
+    expect(dispose).toHaveBeenCalledOnce();
+    await act(async () => result.current.runExport());
+    expect(prepareSources).toHaveBeenCalledOnce();
+    rerender({ revision: "cheat-b" });
+    await waitFor(() => expect(result.current.downloadable).toBe(false));
+  });
+
+  it("cleans prepared sources when weave creation fails", async () => {
+    const dispose = vi.fn();
+    weaveCreate.mockRejectedValue(new Error("archive failed"));
+    const { result } = renderHook(() =>
+      useWeaveExport(
+        hookOptions({
+          prepareSources: async () => ({ sources: { rom: rom(), patches: [patch("combined.bps")] }, dispose }),
+        }),
+      ),
+    );
+    await act(async () => result.current.runExport());
+    expect(result.current.error).toBe("archive failed");
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(result.current.busy).toBe(false);
+  });
+
   it("reports missing staged inputs before trying to create a weave", async () => {
     const { result } = renderHook(() =>
       useWeaveExport(
@@ -106,13 +161,16 @@ describe("useWeaveExport", () => {
 
   it("builds, downloads, and then invalidates an export when its options change", async () => {
     const onComplete = vi.fn();
-    const { result } = renderHook(() => useWeaveExport(hookOptions({ onComplete, initialFormat: "7z" })));
+    const { result } = renderHook(() =>
+      useWeaveExport(hookOptions({ onComplete, initialFormat: "7z", patchBasis: "previous" })),
+    );
 
     await act(async () => result.current.runExport());
 
     expect(weaveCreate).toHaveBeenCalledOnce();
     expect(weaveCreate.mock.calls[0]?.[0]).toMatchObject({
       weaveFileName: "My-Weave.7z",
+      patchBasis: "previous",
       noWeaveRom: true,
       outputHeader: "keep",
       outputName: "My Weave",
@@ -131,6 +189,7 @@ describe("useWeaveExport", () => {
           inputChecks: "crc32=1234abcd",
           outputChecks: "md5=0123456789abcdef0123456789abcdef",
           basis: "base",
+          header: "strip",
         },
       ],
     });

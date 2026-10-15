@@ -433,6 +433,7 @@ export const WeaveOutputStep = ({
   onFileNameChange,
   onFormatChange,
   secondary,
+  combinedCheats,
 }: {
   weaveActionLabel: string;
   weaveExport: WeaveExportState;
@@ -443,12 +444,16 @@ export const WeaveOutputStep = ({
   onFileNameChange: (value: string) => void;
   onFormatChange: (value: string) => void;
   secondary?: ReactNode;
+  combinedCheats?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   return (
     <WorkflowOutputStep
       action={
         <>
+          {combinedCheats ? (
+            <p className="patch-off-note">{localizer.message("ui.weaveExport.combinedCheats")}</p>
+          ) : null}
           {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
           <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
         </>
@@ -483,7 +488,7 @@ export const WeaveOutputStep = ({
   );
 };
 
-const SecondaryOutputJob = ({
+export const SecondaryOutputJob = ({
   children,
   hash,
   id,
@@ -539,15 +544,18 @@ export const WeaveSecondaryJob = ({
   weaveExport,
   weaveTools,
   disabled,
+  combinedCheats,
 }: {
   weaveActionLabel: string;
   weaveExport: WeaveExportState;
   weaveTools: WeaveToolsState;
   disabled: boolean;
+  combinedCheats?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   return (
-    <SecondaryOutputJob hash="#weave" id="rom-weaver-weave-job" label={localizer.message("ui.weaveExport.shareTitle")}>
+    <SecondaryOutputJob hash="#weave" id="rom-weaver-weave-job" label={localizer.message("ui.secondary.downloadWeave")}>
+      {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.combinedCheats")}</p> : null}
       <WeaveOutputFields weaveExport={weaveExport} weaveTools={weaveTools} />
       {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
       <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
@@ -556,10 +564,10 @@ export const WeaveSecondaryJob = ({
 };
 
 /** Apply is the optional alternate job on the Weave route. */
-export const ApplySecondaryJob = ({ children }: { children: ReactNode }) => {
+export const ApplySecondaryJob = ({ children, label }: { children: ReactNode; label?: string }) => {
   const localizer = useUiLocalizer();
   return (
-    <SecondaryOutputJob id="rom-weaver-apply-job" label={localizer.message("ui.step.apply")}>
+    <SecondaryOutputJob id="rom-weaver-apply-job" label={label || localizer.message("ui.secondary.downloadThisRom")}>
       {children}
     </SecondaryOutputJob>
   );

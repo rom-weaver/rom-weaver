@@ -28,7 +28,7 @@ For a Markdown release page or README, use:
 [Apply this recipe](https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip)
 ```
 
-The link opens **Weave** with the recipe preloaded. Tell readers to add their matching ROM, review the patches, expand **Apply**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
+The link opens **Weave** with the recipe preloaded. Tell readers to add their matching ROM, review the patches, expand **Download this ROM**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
 
 Beside it, give the source's region, revision, header state and checksum; supported optional choices; expected output checksums; and a direct archive download. Archive and ROM checksums describe different bytes. Keep private tokens out of shared links.
 

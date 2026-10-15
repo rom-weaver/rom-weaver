@@ -1,13 +1,13 @@
 # Create a ROM patch in the browser
 
-Give rom-weaver a clean ROM and your edited version. It creates a patch that describes the changes needed to reproduce your edited version.
+Create a patch from a clean ROM and your edited version, or combine an ordered set of patches and cheats into one patch for the clean ROM.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Prepare a clean release pair](#prepare-a-clean-release-pair)
 - [Add Original and Modified](#add-original-and-modified)
-- [Use cheat codes instead of a Modified ROM](#use-cheat-codes-instead-of-a-modified-rom)
+- [Build from patches and cheats](#build-from-patches-and-cheats)
 - [Choose a patch format](#choose-a-patch-format)
 - [Create and download the patch](#create-and-download-the-patch)
 - [Test the downloaded patch](#test-the-downloaded-patch)
@@ -33,7 +33,7 @@ Write down the region, revision, and header state now. The Create cards will sho
 ## Add Original and Modified
 
 1. Open [Create](https://rom-weaver.com/create-patch).
-2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. If more ROM candidates are available than Create can use, choose the Original and Modified files from the list. Extra files are not staged after you choose. If both files appear to be the same ROM, confirm before using them as a pair. Add patches on **Apply** instead.
+2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. If more ROM candidates are available than Create can use, choose the Original and Modified files from the list. Extra files are not staged after you choose. If both files appear to be the same ROM, confirm before using them as a pair. **Modified ROM** is the default mode.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
 5. Wait until reading and checksum work finishes.
@@ -58,22 +58,25 @@ Each card shows the selected file, size, detected system, and checksums. Open **
 
 If both files have identical contents, Create warns that the patch would change nothing; check that you chose the right pair. If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
 
-## Use cheat codes instead of a Modified ROM
+<a id="use-cheat-codes-instead-of-a-modified-rom"></a>
 
-Create can turn supported ROM cheat codes into a patch without a separate Modified file. The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats) demonstrates this with the supplied homebrew ROM and a working practice code.
+## Build from patches and cheats
 
-1. Add the clean ROM as **Original**.
-2. Select **Cheat codes** on the **Modified** step.
-3. Enter a code, or select **Pick from the cheat database**.
-4. Use **Add code manually** in the picker when you need system and code-type controls.
-5. Check the detected system, code type, ROM writes, and compare values.
-6. Remove or correct any code that cannot become ROM writes.
+Choose **Patches & cheats** on **0x03 Modified**; the step becomes **0x03 Changes**. Patch uploads, including archives, select this mode automatically. Switching modes preserves your inputs.
 
-The cheat picker uses the same database and manual entry as Apply. The patch contains the selected byte changes, so the person who applies it does not need a cheat engine. See [Use cheats in the browser](use-browser-cheats.md) for supported-code limits.
+1. Add one clean **Original** ROM; multi-file ROMs are unsupported. If an Original is already loaded, choose whether the new ROM replaces it or becomes the **Modified ROM**.
+2. Add patches or choose **Add cheats to the patch order**.
+3. Select database cheats or use **Add code manually**.
+4. Order the enabled changes and resolve input-check or cheat warnings.
+5. Choose the patch filename and format, then **Create patch & download**.
+
+The patch reproduces these changes when applied to the Original ROM. Try the [guided cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats), or check [supported-code limits](use-browser-cheats.md).
+
+Expand **Download patched ROM** for ROM compression options, or **Download the weave** to share. See [weave packaging](create-bundles.md#build-the-patch-recipe) when cheats are enabled.
 
 ## Choose a patch format
 
-In **0x04 Patch**, give the download a useful filename and choose a format.
+In **Modified ROM** mode, use **0x04 Patch** to name the download and choose its format.
 
 BPS is a strong default unless your community expects otherwise; [Choosing a patch format](../explanation/patch-formats.md) compares the choices and their trade-offs. If you do publish IPS, put the Original's checksum prominently in the release notes - the format cannot carry it.
 

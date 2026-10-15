@@ -293,6 +293,11 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   });
 
+  it("does not offer Apply's sample guides on Create", () => {
+    const { container } = renderView({ mode: "create", ui: createEmptyPatcherUiState() });
+    expect(container.querySelector(".sample-tutorial-start")).toBeNull();
+  });
+
   it("keeps file input hooks unique when Apply and Weave stay mounted", () => {
     const apply = renderView({ ui: createEmptyPatcherUiState() });
     const weave = renderView({ mode: "weave", ui: createEmptyPatcherUiState() });
@@ -1867,7 +1872,7 @@ describe("apply workflow view - weave controls", () => {
 
     const job = container.querySelector("#rom-weaver-weave-job");
     const toggle = job?.querySelector(".cks-head");
-    expect(toggle?.textContent).toContain("Share this patch recipe (for patch creators)");
+    expect(toggle?.textContent).toContain("Download the weave");
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(toggle?.querySelector(".readouts")?.textContent).toBe("optional");
     expect(job?.querySelector(".weave-job")?.classList).not.toContain("is-open");
@@ -1929,7 +1934,7 @@ describe("apply workflow view - weave controls", () => {
     expect(job?.querySelector(".optsnote")).toBeNull();
     expect(job?.querySelectorAll("#rom-weaver-select-weave-output-header")).toHaveLength(1);
     expect(job?.contains(applyJob)).toBe(true);
-    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");
+    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Download this ROM");
     expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).not.toContain("0x05");
     expect(applyJob?.querySelector(".weave-job")?.classList).not.toContain("is-open");

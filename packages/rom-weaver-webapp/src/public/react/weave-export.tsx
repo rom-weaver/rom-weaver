@@ -12,6 +12,7 @@ import {
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import type { WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { ApplyWorkflowWeaveSources } from "../../types/apply-workflow.ts";
 import type { WeaveHeaderMode, ParsedWeaveCreateResult, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
@@ -20,12 +21,6 @@ import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import { resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
-
-/**
- * The apply form's weave export flow reuses the leaves and metadata already
- * prepared by the live session. That keeps export out of the ingest/extract/
- * apply pipeline and keeps large outputs path-backed until download.
- */
 
 type WeaveExportRow = {
   input?: ParsedWeavePatchInput;
@@ -140,7 +135,14 @@ const embeddedChecks = (item: PatchStackItemState | undefined, side: "in" | "out
   return checks;
 };
 
+export type PrepareWeaveExportSources = (options: {
+  signal: AbortSignal;
+  onProgress: (event: WorkflowProgress) => void;
+}) => Promise<{ sources: ApplyWorkflowWeaveSources; dispose?: () => Promise<void> | void }>;
+
 type UseWeaveExportOptions = {
+  prepareSources?: PrepareWeaveExportSources;
+  sourcesRevision?: string;
   /** Live session sources, read at export time. */
   getSessionSources: () => WeaveExportSources;
   /** Resolves once every queued staging mutation has settled. The session
@@ -356,6 +358,8 @@ const preparePackagedRom = async ({
 };
 
 const useWeaveExport = ({
+  prepareSources,
+  sourcesRevision,
   getSessionSources,
   waitForPendingWork,
   getPatchIds,
@@ -381,6 +385,7 @@ const useWeaveExport = ({
   const downloadableOutputRef = useRef<PublicOutput | null>(null);
   const weaveMetaByIdRef = useRef(weaveMetadataSignature(weaveMetaById));
   const patchBasisRef = useRef(patchBasis);
+  const sourcesRevisionRef = useRef(sourcesRevision);
   // The sources captured when the export ran, so the run stays aligned even if
   // the bench changes underneath it.
   const sourcesRef = useRef<WeaveExportSources>({ patches: [], rom: null });
@@ -423,50 +428,60 @@ const useWeaveExport = ({
     }
     const exportName = getName?.().trim() || "";
     await waitForPendingWork?.();
-    const sources = getSessionSources();
-    if (sources.error) {
-      setError(sources.error);
-      return;
-    }
-    sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
-    const { rom, patches } = sources;
-    const items = getStackItems();
-    const patchIds = getPatchIds();
-    const outputHeader = getOutputHeader?.();
-    const browserRuntime = await loadBrowserRuntime();
-    const create = getWeaveRuntime(browserRuntime)?.create;
-    const validation = validateWeaveExportStart({ create, patches, rom });
-    if ("error" in validation) {
-      setError(validation.error);
-      return;
-    }
-    const { create: exportCreate, rom: exportRom } = validation;
-    const exportRows = buildWeaveExportRows({
-      weaveMetaById,
-      disabledPatchIds,
-      getPatchIds: () => patchIds,
-      getStackItems: () => items,
-      patchBasis,
-      patches,
-    });
-    const stepProgress = (label: string) =>
-      setProgress(
-        createProgressViewModel({
-          hasProgress: true,
-          label,
-          percent: 0,
-          stage: "weave",
-        }),
-      );
-    setBusy(true);
-    setError("");
-    stepProgress("Preparing weave export");
     const outputs: PublicOutput[] = [];
     const compressedRomOutputs: PublicOutput[] = [];
     const retainedOutputs = new Set<PublicOutput>();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    let disposePrepared: (() => Promise<void> | void) | undefined;
+    setBusy(true);
+    setError("");
     try {
+      const prepared = await prepareSources?.({
+        signal: abortController.signal,
+        onProgress: (event) => setProgress(createProgressViewModelFromEvent(event)),
+      });
+      disposePrepared = prepared?.dispose;
+      abortController.signal.throwIfAborted();
+      const sources = prepared?.sources ?? getSessionSources();
+      if (sources.error) {
+        setError(sources.error);
+        return;
+      }
+      sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
+      const { rom, patches } = sources;
+      const items = prepared ? [] : getStackItems();
+      const patchIds = prepared ? [] : getPatchIds();
+      const outputHeader = getOutputHeader?.();
+      const browserRuntime = await loadBrowserRuntime();
+      const create = getWeaveRuntime(browserRuntime)?.create;
+      const validation = validateWeaveExportStart({ create, patches, rom });
+      if ("error" in validation) {
+        setError(validation.error);
+        return;
+      }
+      const { create: exportCreate, rom: exportRom } = validation;
+      const exportRows = buildWeaveExportRows({
+        weaveMetaById: prepared ? new Map() : weaveMetaById,
+        disabledPatchIds: prepared ? new Set() : disabledPatchIds,
+        getPatchIds: () => patchIds,
+        getStackItems: () => items,
+        patchBasis: prepared ? "auto" : patchBasis,
+        patches,
+      });
+      // Generated patches MUST consume the full original ROM, including its header. The first
+      // patch already consumes the base; Auto avoids declaring a redundant independent base plan.
+      if (prepared) for (const row of exportRows) row.header = "keep";
+      const stepProgress = (label: string) =>
+        setProgress(
+          createProgressViewModel({
+            hasProgress: true,
+            label,
+            percent: 0,
+            stage: "weave",
+          }),
+        );
+      stepProgress("Preparing weave export");
       validateWeaveRows(exportRows, items);
       const dependencyError = validatePatchDependencies(
         exportRows.map((row) => ({
@@ -499,7 +514,7 @@ const useWeaveExport = ({
         ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
         ...(typeof romSize === "number" ? { romSize } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
-        patchBasis,
+        patchBasis: prepared ? "auto" : patchBasis,
         ...(exportRom.member ? { romMember: exportRom.member } : {}),
         // The ROM is never distributed unless explicitly bundled: its weave
         // entry keeps checks only and the applying user supplies the file.
@@ -534,10 +549,15 @@ const useWeaveExport = ({
           .filter((output) => !retainedOutputs.has(output))
           .map((output) => output.dispose().catch(() => undefined)),
       );
-      setProgress(null);
-      setBusy(false);
+      try {
+        await disposePrepared?.();
+      } finally {
+        setProgress(null);
+        setBusy(false);
+      }
     }
   }, [
+    prepareSources,
     weaveRom,
     disabledPatchIds,
     format,
@@ -565,6 +585,10 @@ const useWeaveExport = ({
     setDownloadableOutput(null);
     disposeWeaveOutput(output);
   }, []);
+  useEffect(() => {
+    if (sourcesRevisionRef.current !== sourcesRevision) clearDownloadable();
+    sourcesRevisionRef.current = sourcesRevision;
+  }, [clearDownloadable, sourcesRevision]);
   useEffect(() => {
     if (patchBasisRef.current !== patchBasis) clearDownloadable();
     patchBasisRef.current = patchBasis;
