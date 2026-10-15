@@ -1766,3 +1766,36 @@ fn ingest_missing_input_uses_the_shared_wording() {
     let label = json["label"].as_str().expect("label");
     assert!(label.starts_with("input path does not exist: `"), "{label}");
 }
+
+/// PSP homebrew `EBOOT.PBP` files have an empty DATA.PSAR (its offset equals the file size): the
+/// PBP is itself the ROM, so ingest keeps it in place as a PSP ROM instead of rejecting it.
+#[test]
+fn ingest_treats_a_pbp_with_an_empty_psar_as_a_bare_psp_rom() {
+    let temp = setup_temp_dir();
+    let mut pbp = vec![0x5a_u8; 0x100];
+    pbp[..8].copy_from_slice(&[0x00, b'P', b'B', b'P', 0, 0, 1, 0]);
+    for section in 0..8 {
+        let offset = if section < 7 { 0x28_u32 } else { 0x100 };
+        pbp[8 + section * 4..12 + section * 4].copy_from_slice(&offset.to_le_bytes());
+    }
+    let source = temp.child("EBOOT.PBP");
+    fs::write(source.path(), &pbp).expect("pbp fixture");
+    let out_dir = temp.child("ingest-out");
+
+    let ingest = ingest_terminal(&[
+        "ingest",
+        "--input",
+        source.path().to_str().expect("pbp path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--json",
+    ]);
+
+    let assets = ingest["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets");
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0]["file_name"], "EBOOT.PBP");
+    assert_eq!(assets[0]["platform"], "Sony Playstation Portable");
+    assert_eq!(assets[0]["copied_in_place"], true);
+}

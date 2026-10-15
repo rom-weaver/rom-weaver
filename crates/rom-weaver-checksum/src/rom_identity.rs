@@ -126,6 +126,13 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
         );
         return identity;
     }
+    if pbp_has_empty_psar(prefix, total_len) {
+        trace!("detected PSP homebrew PBP (empty DATA.PSAR)");
+        return RomIdentity {
+            platform: Some(platform::PSP),
+            disc_format: None,
+        };
+    }
     if let Some(console) = detect_cartridge_platform(prefix, extension) {
         trace!(platform = console, "detected cartridge platform");
         return RomIdentity {
@@ -138,6 +145,18 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
         total_len, "no rom identity detected"
     );
     RomIdentity::default()
+}
+
+/// True for a `\0PBP` file whose DATA.PSAR offset (header field 0x24) equals the file size:
+/// PSP homebrew `EBOOT.PBP` with no PSAR. PlayStation PBPs always carry a PSAR, so this never
+/// matches a PS1 disc image.
+fn pbp_has_empty_psar(prefix: &[u8], total_len: u64) -> bool {
+    const PBP_HEADER_LEN: usize = 0x28;
+    if prefix.len() < PBP_HEADER_LEN || prefix[..4] != [0x00, b'P', b'B', b'P'] {
+        return false;
+    }
+    let psar_offset = u32::from_le_bytes([prefix[0x24], prefix[0x25], prefix[0x26], prefix[0x27]]);
+    u64::from(psar_offset) == total_len
 }
 
 /// A streaming sink that captures the first ≤[`DETECT_PREFIX_BYTES`] of a byte
@@ -329,6 +348,21 @@ mod tests {
 
     fn write(buffer: &mut [u8], offset: usize, data: &[u8]) {
         buffer[offset..offset + data.len()].copy_from_slice(data);
+    }
+
+    #[test]
+    fn detects_psp_homebrew_pbp_with_empty_psar() {
+        let mut pbp = vec![0u8; 0x100];
+        write(&mut pbp, 0, &[0x00, b'P', b'B', b'P']);
+        write(&mut pbp, 0x24, &0x100u32.to_le_bytes());
+        let identity = detect_rom_identity(&pbp, pbp.len() as u64, Some(".PBP"));
+        assert_eq!(identity.platform, Some(platform::PSP));
+        // A PSAR inside the file (a PlayStation disc PBP) is not PSP homebrew.
+        write(&mut pbp, 0x24, &0x80u32.to_le_bytes());
+        assert_eq!(
+            detect_rom_identity(&pbp, pbp.len() as u64, Some(".pbp")).platform,
+            None
+        );
     }
 
     #[test]

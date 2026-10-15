@@ -405,7 +405,11 @@ impl CliApp {
         // A container handler matching means the source is an archive or single-payload codec:
         // classify its entries and extract. No handler means a bare file (cartridge ROM or loose patch) that
         // is classified by name and checksummed in place / described directly.
-        if let Some(handler) = self.containers.probe(source) {
+        let container = self
+            .containers
+            .probe(source)
+            .filter(|handler| !handler.is_self_contained_rom(source));
+        if let Some(handler) = container {
             return self.ingest_container(
                 handler.as_ref(),
                 IngestRequest {
