@@ -53,6 +53,31 @@ const addUnique = (entries, entry) => {
   if (entry && !entries.includes(entry)) entries.push(entry);
 };
 
+const mergeHighlights = (collections) => {
+  const sections = new Map([["", []]]);
+  const seen = new Set();
+  for (const lines of collections) {
+    let section = "";
+    for (const line of lines) {
+      if (line.startsWith("#### ")) {
+        section = line;
+        if (!sections.has(section)) sections.set(section, []);
+      } else if (line && !seen.has(line)) {
+        sections.get(section).push(line);
+        seen.add(line);
+      }
+    }
+  }
+  return [...sections].flatMap(([heading, entries]) =>
+    entries.length ? [...(heading ? [heading] : []), ...entries] : [],
+  );
+};
+
+const renderHighlights = (highlights) =>
+  highlights.flatMap((line, index) =>
+    line.startsWith("#### ") ? [...(index ? [""] : []), line, ""] : [line],
+  );
+
 // Reads a section body in either the raw release-please layout or the
 // collapsed layout this script writes. Highlights are kept apart from the
 // generated groups because they are the one part a person wrote.
@@ -83,22 +108,27 @@ const parseReleaseBody = (body) => {
     }
     if (text.startsWith("### ")) {
       category = text.slice(4).trim();
-      if (category !== HIGHLIGHTS_CATEGORY && !categories.has(category)) categories.set(category, []);
+      if (category !== HIGHLIGHTS_CATEGORY && !categories.has(category))
+        categories.set(category, []);
       continue;
     }
-    if (category === HIGHLIGHTS_CATEGORY) addUnique(highlights, text);
+    if (category === HIGHLIGHTS_CATEGORY) highlights.push(text);
     else if (category) addUnique(categories.get(category), text);
     else addUnique(uncategorized, text);
   }
 
-  return { categories, compare, highlights, uncategorized };
+  return { categories, compare, highlights: mergeHighlights([highlights]), uncategorized };
 };
 
 const mergeParsedBodies = (bodies) => {
-  const merged = { categories: new Map(), compare: undefined, highlights: [], uncategorized: [] };
+  const merged = {
+    categories: new Map(),
+    compare: undefined,
+    highlights: mergeHighlights(bodies.map((body) => body.highlights)),
+    uncategorized: [],
+  };
   for (const body of bodies) {
     merged.compare ??= body.compare;
-    for (const entry of body.highlights) addUnique(merged.highlights, entry);
     for (const entry of body.uncategorized) addUnique(merged.uncategorized, entry);
     for (const [category, entries] of body.categories) {
       if (!merged.categories.has(category)) merged.categories.set(category, []);
@@ -130,7 +160,8 @@ const renderReleaseBody = ({ categories, compare, highlights, uncategorized }) =
   }
 
   const lines = [];
-  if (highlights.length) lines.push(`### ${HIGHLIGHTS_CATEGORY}`, "", ...highlights, "");
+  if (highlights.length)
+    lines.push(`### ${HIGHLIGHTS_CATEGORY}`, "", ...renderHighlights(highlights), "");
   for (const group of visible) lines.push(...group, "");
   lines.push("<details>", `<summary>${ALL_CHANGES_SUMMARY}</summary>`);
   if (compare) lines.push("", `[${compareLabel(compare)}](${compare})`);
@@ -141,23 +172,26 @@ const renderReleaseBody = ({ categories, compare, highlights, uncategorized }) =
 
 const repositoryUrlFromHeading = (heading) => heading.match(/(https?:\/\/[^)\s]+?)\/(?:compare|releases\/tag)\//)?.[1];
 
-// Turns free-form highlight text into changelog entries: one `* ` bullet per
-// line, a leading `### Highlights` heading dropped, and bare `(#123)` pull
-// request references linked the way release-please links them so the webapp
-// changelog parser picks them up.
+// Subsections MUST stay below the workflow-owned Highlights heading.
+// Linked references use the release-please form understood by the webapp parser.
 const normalizeHighlights = (text, repositoryUrl) => {
   if (!text) return [];
   const linkReference = (line) => {
     if (!repositoryUrl) return line;
-    return line.replace(/\(#(\d+)\)/g, (_, number) => `([#${number}](${repositoryUrl}/issues/${number}))`);
+    return line.replace(
+      /\(#(\d+)\)/g,
+      (_, number) => `([#${number}](${repositoryUrl}/issues/${number}))`,
+    );
   };
   const entries = [];
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (!trimmed || /^#+\s/.test(trimmed)) continue;
-    addUnique(entries, `* ${linkReference(trimmed.replace(/^[*-]\s+/, ""))}`);
+    if (!trimmed) continue;
+    if (trimmed.startsWith("#### ")) entries.push(trimmed);
+    else if (!/^#+\s/.test(trimmed))
+      entries.push(`* ${linkReference(trimmed.replace(/^[*-]\s+/, ""))}`);
   }
-  return entries;
+  return mergeHighlights([entries]);
 };
 
 const replaceSection = (changelog, section, heading, body) => {
@@ -238,7 +272,7 @@ const highlightsComment = (highlights) =>
     "",
     `### ${HIGHLIGHTS_CATEGORY}`,
     "",
-    ...highlights,
+    ...renderHighlights(highlights),
   ].join("\n");
 
 const highlightsFromComment = (body) =>

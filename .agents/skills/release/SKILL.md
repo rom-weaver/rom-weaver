@@ -1,12 +1,17 @@
 ---
 name: release
-description: Start a rom-weaver release. Drafts the release highlights from the commits since the last tag, gets them approved, then dispatches the Release workflow with them so they head the changelog section, the release PR, and the GitHub release.
+description: Draft rom-weaver release highlights and optionally start a release. Use --notes-only to show the notes and predicted version without dispatching; otherwise get approval before running the Release workflow.
 disable-model-invocation: true
 ---
 
 # Release
 
-Run from a clean checkout of the repository. Nothing here pushes a commit; the only write is the workflow dispatch, and it needs the user's approval first.
+Run from a clean checkout of the repository. Nothing here pushes a commit. The skill writes a local highlights draft; dispatching the workflow requires the user's approval.
+
+## Modes
+
+- `release --notes-only`: collect changes, draft highlights, and show them with the predicted version. Stop there: do not ask to dispatch or run a workflow. Keep the local draft.
+- `release`: draft highlights, get approval, then dispatch the workflow.
 
 ## 1. Collect the changes
 
@@ -18,7 +23,7 @@ git log "$last"..origin/main --format='%h %s'
 
 Stop if the log is empty: there is nothing to release.
 
-For every `feat`, `ux`, `fix`, `security`, `a11y`, `i18n`, `perf`, or breaking (`!`) commit, read the pull request description for what the change means to a user. Fetch them in one call:
+Read the pull request descriptions for `feat`, `ux`, `fix`, `security`, `a11y`, `i18n`, `perf`, and breaking (`!`) commits to identify user-facing themes. Fetch them in one call:
 
 ```bash
 for n in <numbers>; do gh pr view "$n" --json number,title,body --jq '"#\(.number) \(.title)\n\(.body)\n---"'; done
@@ -28,30 +33,37 @@ Skip non-breaking `chore`, `build`, `ci`, `deps`, `dx`, `test`, `docs`, and `ref
 
 ## 2. Draft the highlights
 
-Highlights are a quick, high-level answer to "what will I notice in this release?". A reader should get it in five seconds. The full detail is already in the collapsed `All changes` list, so leave it there.
+Highlights explain meaningful user-visible changes concisely. Keep enough detail for readers to recognize what they can now do or which problem was fixed. The collapsed `All changes` list provides complete coverage.
+
+Group changes to the same workflow when their concrete outcomes remain clear. Do not merge unrelated improvements just because both make the app easier or more reliable. Shorten by removing repetition and minor details, not the information that makes a highlight useful.
 
 Rules:
 
-- Cover every user-facing change. Check each `feat`, `ux`, `fix`, `security`, `a11y`, `i18n`, `perf`, and breaking commit from step 1 against the bullets, and do not leave one out. Merge related commits into one bullet, so the list stays short; a user-facing change that has no bullet of its own is a mistake.
-- Each bullet is one short line, at most 12 words. Plain words, present tense, no jargon. A concrete detail that a user would care about is welcome: a number or a name, as in "29 game save editors". Leave out flags, crate names, and internals.
-- Add `(still in beta)` after a feature that lives in a tool that is still in beta: "in Save Editor (still in beta)". A bare `(beta)` tag is not enough. Check the pull request and the app's beta settings; when unsure, say so in the approval step.
+- Select the strongest benefits before grouping them under `#### New features`, `#### Improvements`, `#### Fixes`, and `#### Security`, in that order. Omit unused sections even when matching commits exist. Choose the section by the user-visible outcome, not just the commit type; put each bullet in one section only.
+- Use no fixed count or section quotas. Include distinct new capabilities, meaningful workflow improvements, and notable fixes. A capability can matter to a specific audience without defining the whole release; do not discard it just to shorten the list. Leave routine polish and maintenance in `All changes`.
+- Each bullet is one concise sentence in plain words. Name the affected task, tool, or format and the concrete result. Keep necessary scope and conditions, even when that needs more words. Avoid vague summaries such as "more tools", "better handling", or "more reliable" without saying what changed. Leave out flags, crate names, and internals.
+- Add `(still in beta)` after a feature that lives in a tool that is still in beta: "in Save Editor (still in beta)". A bare `(beta)` tag is not enough. Check the pull request and the app's beta settings; when unsure, say so when showing the notes.
 - Name the app page where the feature lives when that helps a user find it: "on the Test page", "in Save Editor". Take the name from the app's navigation, and skip it for changes that span the whole app.
-- Name the user benefit, not the change: "Faster compression", not "Parallelize hunk encoding".
-- Leave out only what a user can never notice: CI, dependency bumps, tests, refactors, and build or hosting changes. Small fixes and wording tweaks still count.
-- Every bullet MUST trace to a listed commit and MUST end with its pull request reference as `(#123)`. The workflow turns that into a link. When a bullet merges several commits, list every reference, each in its own parentheses. Never describe something the commits do not contain.
-- Put a breaking change first and say what changes for the user in plain words, without flag names: "Command-line output is now compressed by default". The PR body has the exact flags; the release notes link there. The `⚠ BREAKING CHANGES` group also stays visible above the collapsed list.
-- No heading, no trailing note, no markdown links. Bullets only.
+- Explain the user benefit through the changed behavior, rather than implementation details or a generic positive claim.
+- Highlight fixes that restore an important workflow, prevent lost files or incorrect results, or address material security risks. Name the affected case instead of listing each failure mode. A `fix` or `security` commit does not automatically need a headline; leave minor repairs and internal hardening in `All changes`.
+- Every bullet MUST trace to listed commits and end with supporting pull request references as `(#123)`. The workflow turns them into links. Cite only the PRs needed to substantiate the headline, not every related change. When grouping changes, preserve their scope and conditions; do not turn separate fixes into a broader guarantee.
+- Put breaking changes in a `#### Breaking changes` section before all other highlights. Say what changes for the user in plain words, without flag names: "Command-line output is now compressed by default". The PR body has the exact flags; the release notes link there. The generated `⚠ BREAKING CHANGES` group also stays visible above the collapsed list.
+- Always include required migration actions and urgent security notices.
+- Use only section headings and bullets. Put blank lines around headings, but no blank lines between bullets within a section. Do not add a top-level Highlights heading, introductory text, trailing notes, or markdown links; the workflow adds `### Highlights`.
 
 - Good: `* Edit saves for 29 more games in Save Editor (still in beta) (#999)`
+- Bad: `* Improve save tools and make file handling more reliable (#999)`
 - Bad: `* Consume consistent JSONL cancellation and error details across the CLI output contract (#974)`
 
-Before showing them, reread each bullet and cut any word that does not help a user decide whether the release matters to them.
+Before showing them, check both selection and specificity: remove repetition and routine details, restore distinct capabilities lost through over-grouping, and replace vague benefits with concrete outcomes. Do not hide unrelated fixes inside a catch-all bullet. Check grouped claims against their sources. Judge the result by useful information and readability, not its bullet count.
 
-Create `.agent/release/` if needed (`mkdir -p`), then write them to `.agent/release/highlights.md`, one bullet per line, `* ` prefix.
+Create `.agent/release/` if needed (`mkdir -p`), then write the section headings and bullets to `.agent/release/highlights.md`. Keep one bullet per line with a `* ` prefix.
 
-## 3. Get approval
+## 3. Show the notes
 
-Show the bullets, and say which version Release Please will compute (minor for a `feat` or a breaking change, patch otherwise; pre-1.0 breaking changes bump the minor). Ask whether to dispatch. A `release_as` override needs an explicit version from the user.
+Show the sectioned highlights, and say which version Release Please will compute (minor for a `feat` or a breaking change, patch otherwise; pre-1.0 breaking changes bump the minor).
+
+With `--notes-only`, stop here. Otherwise, ask whether to dispatch. A `release_as` override needs an explicit version from the user.
 
 ## 4. Dispatch
 

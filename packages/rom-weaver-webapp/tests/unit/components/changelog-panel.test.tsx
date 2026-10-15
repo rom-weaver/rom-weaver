@@ -111,6 +111,50 @@ describe("ChangelogPanel pending update", () => {
     expect(allChanges.contains(update.getByText("Headline change"))).toBe(false);
   });
 
+  it("renders highlight subsections above collapsed generated changes", async () => {
+    mockChangelog([
+      {
+        date: "",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              {
+                entries: [
+                  { summary: "Legacy headline" },
+                  { pr: "7", scope: "webapp", summary: "New workflow" },
+                  { summary: "Fixed workflow" },
+                ],
+                sections: [
+                  { title: "", entries: [{ summary: "Legacy headline" }] },
+                  { title: "New features", entries: [{ pr: "7", scope: "webapp", summary: "New workflow" }] },
+                  { title: "Fixes", entries: [{ summary: "Fixed workflow" }] },
+                ],
+                title: "Highlights",
+              },
+              { entries: [{ summary: "Rename the flag" }], title: "⚠ BREAKING CHANGES" },
+              { entries: [{ summary: "Generated fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+    expect(update.getByRole("heading", { level: 3, name: "Highlights" })).toBeTruthy();
+    expect(update.getByRole("heading", { level: 4, name: "New features" })).toBeTruthy();
+    expect(update.getByRole("heading", { level: 4, name: "Fixes" })).toBeTruthy();
+    expect(update.getByRole("link", { name: "#7" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/pull/7`);
+    expect(allChanges.open).toBe(false);
+    expect(update.getAllByRole("heading", { level: 4 })).toHaveLength(2);
+    for (const text of ["Legacy headline", "New workflow", "Fixed workflow", "Rename the flag"]) {
+      expect(allChanges.contains(update.getByText(text))).toBe(false);
+    }
+    expect(allChanges.contains(update.getByText("Generated fix"))).toBe(true);
+  });
+
   it("keeps the breaking-changes group visible next to the highlights", async () => {
     mockChangelog([
       {
@@ -255,6 +299,15 @@ describe("ChangelogPanel pending update", () => {
     ["a note whose entries lack a summary", releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3" }])])],
     ["a note with no groups array", releaseOf("9.9.9", [{ version: "9.9.9" }])],
     ["a release missing its repository url", { changelogUrl: CHANGELOG_URL, notes: [noteOf("9.9.9", [])] }],
+    [
+      "invalid highlight subsections",
+      releaseOf("9.9.9", [
+        {
+          version: "9.9.9",
+          groups: [{ title: "Highlights", entries: [], sections: [{ title: "Fixes", entries: [{}] }] }],
+        },
+      ]),
+    ],
     ["a non-object release", "release notes"],
   ])("ignores %s and shows commits instead", async (_label, release) => {
     mockChangelog([

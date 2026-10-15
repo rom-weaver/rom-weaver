@@ -13,7 +13,7 @@ on:
       # from the commits since the last tag). Blank keeps the highlights an
       # earlier dispatch stored on the release pull request.
       highlights:
-        description: Release highlights, one per line. Blank = keep the ones already on the release PR.
+        description: Markdown release highlights with subsection headings and bullets. Blank = keep the ones already on the release PR.
         required: false
         type: string
   # A merged release PR has passed required checks, so its close event creates the draft release.
