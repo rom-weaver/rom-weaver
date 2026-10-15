@@ -1,3 +1,4 @@
+import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { PageUpdateState } from "./page-update-state.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
@@ -31,6 +32,7 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 
 type WebappRootProps = {
   docsSlug?: string;
+  workflowEntry?: keyof typeof WORKFLOW_ENTRY_ROUTES | null;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   /**

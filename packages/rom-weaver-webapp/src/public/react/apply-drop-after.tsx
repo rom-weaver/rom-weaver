@@ -136,6 +136,7 @@ export const ApplyDropAfter = ({ pendingDrops }: { pendingDrops: PendingDrop[] }
 
 export const ApplySampleStart = ({
   weavePage,
+  cheatsPage = false,
   downloadHref,
   onLoadApplySample,
   onLoadApplyCheatsSample,
@@ -144,6 +145,7 @@ export const ApplySampleStart = ({
   sampleLoading,
 }: {
   weavePage: boolean;
+  cheatsPage?: boolean;
   onLoadApplySample: () => void;
   onLoadApplyCheatsSample: () => void;
   onLoadWeaveSample: () => void;
@@ -153,7 +155,9 @@ export const ApplySampleStart = ({
 }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const guide = weavePage ? WORKFLOW_GUIDES.weave : WORKFLOW_GUIDES.apply;
+  let guide: (typeof WORKFLOW_GUIDES)[keyof typeof WORKFLOW_GUIDES] = WORKFLOW_GUIDES.apply;
+  if (cheatsPage) guide = WORKFLOW_GUIDES.cheats;
+  if (weavePage) guide = WORKFLOW_GUIDES.weave;
   return (
     <SampleTutorialStart
       chipLabel={localizer.message(weavePage ? "ui.tutorial.tryWeave" : "ui.tutorial.tryApply")}

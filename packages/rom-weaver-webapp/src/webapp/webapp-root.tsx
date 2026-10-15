@@ -90,7 +90,7 @@ import {
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
-import { WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   {
@@ -218,23 +218,17 @@ const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrow
 
 const logger = createLogger("webapp-root");
 
-const syncWorkflowSeoMetadata = (view: WebappView) => {
+const syncWorkflowSeoMetadata = (view: WebappView, workflowEntry: WebappRootProps["workflowEntry"]) => {
   if (view === "docs") return;
   if (view === "whats-new") {
     document.title = withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE);
     return;
   }
-  let route = null;
-  if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
-  else if (view === "weave") route = WORKFLOW_SEO_ROUTES.weave;
-  else if (view === "checksum") route = WORKFLOW_SEO_ROUTES.checksum;
-  else if (view === "compress") route = WORKFLOW_SEO_ROUTES.compress;
-  else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
-  else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
-  else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
-  else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
-  else if (view === "ppf-undo") route = WORKFLOW_SEO_ROUTES["ppf-undo"];
-  else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
+  let route: { title: string; description: string; slug: string } | undefined =
+    WORKFLOW_SEO_ROUTES[view as keyof typeof WORKFLOW_SEO_ROUTES];
+  if (workflowEntry && WORKFLOW_ENTRY_ROUTES[workflowEntry].view === view) {
+    route = WORKFLOW_ENTRY_ROUTES[workflowEntry];
+  }
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
     document.title = withChannelBadge(tab ? `${tab.label} | rom-weaver` : "rom-weaver", CHANNEL_BADGE);
@@ -478,6 +472,7 @@ function WebappRoot({
   serviceWorkerCache,
   urlSession,
   docsSlug = "docs",
+  workflowEntry = null,
   notFound: initiallyNotFound = false,
   assetBaseUrl,
 }: WebappRootProps) {
@@ -490,8 +485,8 @@ function WebappRoot({
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
-    syncWorkflowSeoMetadata(state.currentView);
-  }, [notFound, state.currentView]);
+    syncWorkflowSeoMetadata(state.currentView, workflowEntry);
+  }, [notFound, state.currentView, workflowEntry]);
   const {
     changePreviewRuntimeState,
     previewOfflineProgress,
@@ -921,6 +916,8 @@ function WebappRoot({
         </div>
       </section>
     ) : null;
+  // The cheat page opens Create in Patches & cheats.
+  const creatorEntry = workflowEntry === "create-rom-cheat-patch" ? "cheats" : undefined;
   const pageHasPendingChanges = shouldWarnBeforeUnload({
     creatorState: state.creatorSession,
     outputState: state.patcherSession,
@@ -1006,6 +1003,7 @@ function WebappRoot({
                 {workflowPanel(
                   "patcher",
                   <ApplyPatchRoute
+                    cheatsPage={workflowEntry === "apply-cheats"}
                     weaveSession={weaveSession}
                     onWeavePackageChange={actions.onPatcherWeavePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
@@ -1036,6 +1034,7 @@ function WebappRoot({
                 {workflowPanel(
                   "creator",
                   <CreatePatchRoute
+                    entry={creatorEntry}
                     onModifiedChange={actions.onCreatorModifiedChange}
                     onOriginalChange={actions.onCreatorOriginalChange}
                     onPatchTypeChange={actions.onCreatorPatchTypeChange}

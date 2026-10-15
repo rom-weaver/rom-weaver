@@ -11,6 +11,8 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 ## Web app
 
 - [Online ROM patcher](https://rom-weaver.com/apply-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported ROM patches with format detection and ordered patch chains.
+- [Apply cheat codes](https://rom-weaver.com/apply-cheats): Bake supported cheat codes into your ROM with the Apply workflow.
+- [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch): Create a patch from an original ROM and supported cheat codes.
 - [Create ROM patches](https://rom-weaver.com/create-rom-patch): Create patches with format-aware settings and distributable weaves.
 - [Compress files](https://rom-weaver.com/compress): Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
 - [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.

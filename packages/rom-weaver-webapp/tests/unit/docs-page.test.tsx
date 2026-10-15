@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
@@ -1011,10 +1011,22 @@ Fixture description.
     expect(onSelectTab).toHaveBeenCalledWith(view);
   });
 
+  it("points both cheat guide shortcuts and footer links to task pages", () => {
+    render(<DocsPage active onSelectTab={vi.fn()} slug="docs/use-cheats" />);
+    for (const selector of [".docs-tools", ".docs-footer .related-strip"]) {
+      const links = [...document.querySelectorAll(`${selector} a`)];
+      expect(links.map((link) => link.getAttribute("href"))).toEqual(["/apply-cheats", "/create-rom-cheat-patch"]);
+      expect(links.map((link) => link.textContent)).toEqual([
+        expect.stringContaining("Apply cheat codes"),
+        expect.stringContaining("Create a patch from cheat codes"),
+      ]);
+    }
+  });
+
   it("updates the tool links when navigating between guides", () => {
     const { rerender } = render(<DocsPage active slug="docs/use-cheats" />);
     const toolPaths = () => [...document.querySelectorAll(".docs-tools a")].map((link) => link.getAttribute("href"));
-    expect(toolPaths()).toEqual(["/apply-patches", "/create-rom-patch"]);
+    expect(toolPaths()).toEqual(["/apply-cheats", "/create-rom-cheat-patch"]);
 
     rerender(<DocsPage active slug="docs/create-bundles" />);
     expect(toolPaths()).toEqual(["/weave-patches"]);
@@ -1034,21 +1046,23 @@ Fixture description.
   it("preserves the deployment subpath in tool links", () => {
     window.history.replaceState({}, "", "/rom-weaver/docs/use-cheats");
     render(<DocsPage active slug="docs/use-cheats" />);
-    expect(screen.getByRole("link", { name: "Apply ROM patches" }).getAttribute("href")).toBe(
-      "/rom-weaver/apply-patches",
-    );
+    expect(
+      within(screen.getByRole("navigation", { name: "Tools for this guide" }))
+        .getByRole("link", { name: "Apply cheat codes" })
+        .getAttribute("href"),
+    ).toBe("/rom-weaver/apply-cheats");
   });
 
   it.each([
-    ["es", "Aplicar parches a ROMs", "Crear parches de ROMs"],
-    ["de", "ROM-Patches anwenden", "ROM-Patches erstellen"],
+    ["es", "Aplicar códigos de trucos", "Crear un parche a partir de códigos de trucos"],
+    ["de", "Cheat-Codes anwenden", "Einen Patch aus Cheat-Codes erstellen"],
   ])("uses descriptive tool names in %s", (language, applyLabel, createLabel) => {
     render(
       <RomWeaverSettingsProvider settings={{ language }}>
         <DocsPage active slug="docs/use-cheats" />
       </RomWeaverSettingsProvider>,
     );
-    expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-patches");
-    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-rom-patch");
+    expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-cheats");
+    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-rom-cheat-patch");
   });
 });

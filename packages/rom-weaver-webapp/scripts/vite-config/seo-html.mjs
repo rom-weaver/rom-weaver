@@ -6,6 +6,7 @@ import {
   SITE_ALTERNATE_NAMES,
   SITE_NAME,
   WORKFLOW_SEO_ROUTES,
+  WORKFLOW_ENTRY_ROUTES,
 } from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot } from "./paths.mjs";
 
@@ -119,7 +120,7 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
 
 export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${Object.values(WORKFLOW_SEO_ROUTES)
+${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
   .map((route) => `  <url><loc>https://rom-weaver.com/${route.slug}</loc></url>`)
   .join("\n")}
 ${DOC_SOURCES.map((source) => {

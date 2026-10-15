@@ -1967,6 +1967,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        cheatsPage={props.cheatsPage}
         mode={mode}
         combinedPatch={combinedPatch}
         createModeControls={props.createModeControls}

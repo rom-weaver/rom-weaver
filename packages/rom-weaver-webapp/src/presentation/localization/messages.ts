@@ -1524,6 +1524,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
+  "ui.hero.cheatsGuide": msg({ id: "ui.hero.cheatsGuide", message: "Read the cheat codes guide" }),
   "ui.hero.weaveDescription": msg({
     id: "ui.hero.weaveDescription",
     message: "Stage a ROM and its patches, describe the recipe, and share a reusable weave.",
@@ -1709,6 +1710,30 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.related.applyTool": msg({ id: "ui.related.applyTool", message: "Apply tool" }),
   "ui.docs.tools": msg({ id: "ui.docs.tools", message: "Tools for this guide" }),
+  "ui.docs.toolApplyCheats": msg({
+    id: "ui.docs.toolApplyCheats",
+    message: "Apply cheat codes",
+  }),
+  "ui.docs.toolCreateCheats": msg({
+    id: "ui.docs.toolCreateCheats",
+    message: "Create a patch from cheat codes",
+  }),
+  "ui.hero.applyCheatsThesis": msg({
+    id: "ui.hero.applyCheatsThesis",
+    message: "Apply cheat codes to ROMs",
+  }),
+  "ui.hero.applyCheatsDescription": msg({
+    id: "ui.hero.applyCheatsDescription",
+    message: "Add supported cheat codes to your ROM and download the modified game. Files stay on your device.",
+  }),
+  "ui.hero.createCheatsThesis": msg({
+    id: "ui.hero.createCheatsThesis",
+    message: "Create ROM patches from cheat codes",
+  }),
+  "ui.hero.createCheatsDescription": msg({
+    id: "ui.hero.createCheatsDescription",
+    message: "Turn supported cheat codes into a patch for your ROM. Files stay on your device.",
+  }),
   "ui.docs.toolApply": msg({ id: "ui.docs.toolApply", message: "Apply ROM patches" }),
   "ui.docs.toolCreate": msg({ id: "ui.docs.toolCreate", message: "Create ROM patches" }),
   "ui.docs.toolWeave": msg({ id: "ui.docs.toolWeave", message: "Weave ROM patches" }),

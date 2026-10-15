@@ -55,6 +55,7 @@ type RomWeaverSettingsProviderProps = {
 type CreatePatchFormSettings = CreateSettings;
 
 type CreatePatchFormProps = {
+  entry?: "cheats";
   assetBaseUrl?: string;
   original?: BinarySource | null;
   modified?: BinarySource | null;

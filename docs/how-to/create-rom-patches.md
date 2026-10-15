@@ -62,7 +62,7 @@ If both files have identical contents, Create warns that the patch would change 
 
 ## Build from patches and cheats
 
-Choose **Patches & cheats** on **0x03 Modified**; the step becomes **0x03 Changes**. Patch uploads, including archives, select this mode automatically. Switching modes preserves your inputs.
+Choose **Patches & cheats** on **0x03 Modified**, or open [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch), which starts in that mode; the step becomes **0x03 Changes**. Patch uploads, including archives, select this mode automatically. Switching modes preserves your inputs.
 
 1. Add one clean **Original** ROM; multi-file ROMs are unsupported. If an Original is already loaded, choose whether the new ROM replaces it or becomes the **Modified ROM**.
 2. Add patches or choose **Add cheats to the patch order**.

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
-import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
@@ -77,6 +77,7 @@ const baseState = () => {
 const renderRoot = async ({
   currentView = "patcher" as WebappRootProps["state"]["currentView"],
   assetBaseUrl,
+  workflowEntry,
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
@@ -86,6 +87,7 @@ const renderRoot = async ({
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
   assetBaseUrl?: string;
+  workflowEntry?: WebappRootProps["workflowEntry"];
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
@@ -102,6 +104,7 @@ const renderRoot = async ({
     <WebappRoot
       actions={actions}
       assetBaseUrl={assetBaseUrl}
+      workflowEntry={workflowEntry}
       confirmationDialog={createEmptyConfirmationDialogState()}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
@@ -588,6 +591,27 @@ describe("page-level drag and drop", () => {
 });
 
 describe("page metadata per view", () => {
+  it.each(Object.keys(WORKFLOW_ENTRY_ROUTES) as (keyof typeof WORKFLOW_ENTRY_ROUTES)[])(
+    "uses task-specific metadata for %s",
+    async (workflowEntry) => {
+      const canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      const description = document.createElement("meta");
+      description.name = "description";
+      document.head.append(canonical, description);
+      const route = WORKFLOW_ENTRY_ROUTES[workflowEntry];
+      try {
+        await renderRoot({ currentView: route.view, workflowEntry });
+        expect(canonical.href).toBe(`https://rom-weaver.com/${route.slug}`);
+        expect(description.content).toBe(route.description);
+        expect(document.title).toBe(withChannelBadge(route.title, CHANNEL_BADGE));
+      } finally {
+        canonical.remove();
+        description.remove();
+      }
+    },
+  );
+
   it("updates PPF undo metadata after navigating from Apply", async () => {
     const canonical = document.createElement("link");
     canonical.rel = "canonical";

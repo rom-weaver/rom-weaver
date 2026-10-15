@@ -21,7 +21,10 @@ const DocsToolLinks = ({ slug }: { slug: string }) => {
           <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
             <a
               className="btn ghost docs-tool"
-              href={new URL(VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid")).pathname}
+              href={
+                new URL(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid"))
+                  .pathname
+              }
             >
               {localizer.message(tool.labelId)}
               <ArrowRight aria-hidden="true" size={14} />

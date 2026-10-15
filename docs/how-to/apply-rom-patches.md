@@ -121,6 +121,8 @@ Recheck **Checks** after changing order, inputs, or switches. Input checks descr
 
 ## Add cheats to the patch order
 
+To start with a ROM and cheat codes, open [Apply cheat codes](https://rom-weaver.com/apply-cheats).
+
 In **Patches & Cheats**, select **Add cheats to the patch order**, then choose database entries or **Add code manually**. Place each code where it must run; it changes the preceding result. Check game/revision when matching by title, and resolve unsupported-code or write-conflict errors. [Use cheats](use-browser-cheats.md) covers validation, export, and offline use.
 
 ## Choose the output and apply

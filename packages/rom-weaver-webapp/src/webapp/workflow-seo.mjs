@@ -65,6 +65,32 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
 });
 
+const WORKFLOW_ENTRY_ROUTES = Object.freeze({
+  "apply-cheats": Object.freeze({
+    slug: "apply-cheats",
+    view: "patcher",
+    title: `Apply cheat codes to ROMs online | ${SITE_NAME}`,
+    description:
+      "Apply supported cheat codes to ROM files locally in your browser and download the modified ROM. No uploads or account required.",
+  }),
+  "create-rom-cheat-patch": Object.freeze({
+    slug: "create-rom-cheat-patch",
+    view: "creator",
+    title: `Create ROM patches from cheat codes online | ${SITE_NAME}`,
+    description:
+      "Create a ROM patch from supported cheat codes locally in your browser. Choose a patch format and download the patch without uploading your ROM.",
+  }),
+});
+
+/** @param {string} pathname @returns {keyof typeof WORKFLOW_ENTRY_ROUTES | null} */
+const readWorkflowEntryFromPathname = (pathname) => {
+  const segments = pathname.trim().toLowerCase().split("/").filter(Boolean);
+  if (segments.includes("docs")) return null;
+  if (segments.at(-1) === "index.html") segments.pop();
+  const slug = (segments.at(-1) || "").replace(/\.html$/, "");
+  return Object.hasOwn(WORKFLOW_ENTRY_ROUTES, slug) ? /** @type {keyof typeof WORKFLOW_ENTRY_ROUTES} */ (slug) : null;
+};
+
 // Beta tools stay out of WORKFLOW_SEO_ROUTES (no sitemap, no Markdown twin) but still need their own page title.
 const BETA_ROUTE_TITLES = Object.freeze({
   "save-editor": `Save Editor | ${SITE_NAME}`,
@@ -79,4 +105,12 @@ const BETA_ROUTE_TITLES = Object.freeze({
  */
 const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
 
-export { BETA_ROUTE_TITLES, withChannelBadge, SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
+export {
+  WORKFLOW_ENTRY_ROUTES,
+  readWorkflowEntryFromPathname,
+  BETA_ROUTE_TITLES,
+  withChannelBadge,
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  WORKFLOW_SEO_ROUTES,
+};

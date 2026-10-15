@@ -3,7 +3,7 @@ import path from "node:path";
 import { build } from "vite";
 import { DOC_ROUTES } from "../../src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "../../src/webapp/docs-routing.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { rootDir } from "./paths.mjs";
 import { LEGACY_WORKFLOW_ROUTES } from "./root-static-assets.mjs";
 
@@ -102,6 +102,9 @@ const devPrerenderRoute = (url) => {
   // No route segment is the app base itself, which serves the landing page.
   if (!slug) return { docsSlug: "docs", view: "home" };
   const routeSlug = slug.replace(/\.html$/, "");
+  if (Object.hasOwn(WORKFLOW_ENTRY_ROUTES, routeSlug)) {
+    return { docsSlug: "docs", view: WORKFLOW_ENTRY_ROUTES[routeSlug].view, workflowEntry: routeSlug };
+  }
   const directView = {
     "ppf-undo": "ppf-undo",
     "save-editor": "save-editor",
@@ -135,7 +138,13 @@ export const prerenderWebappShell = (prerenderedShells) => ({
       // writeWebappStaticAssets emits as a second static entry point.
       if (ctx.server) {
         const route = devPrerenderRoute(ctx.originalUrl ?? ctx.path);
-        const shell = await prerender.renderLandingShellWithServer(ctx.server, route.view, false, route.docsSlug);
+        const shell = await prerender.renderLandingShellWithServer(
+          ctx.server,
+          route.view,
+          false,
+          route.docsSlug,
+          route.workflowEntry,
+        );
         if (route.view === "home") assertShellLoomCanvas(shell);
         const routeHtml = route.view === "docs" ? html.replace("<head>", '<head>\n    <base href="/" />') : html;
         // Production ships the bundled CSS as a render-blocking <link>, so its
@@ -165,8 +174,8 @@ export const prerenderWebappShell = (prerenderedShells) => ({
       // One SSR server renders every shell the build needs; spinning one up per
       // shell would cost more than the rendering does.
       const homeShell = await prerender.withPrerenderServer(async (server) => {
-        const render = (view, notFound, docsSlug) =>
-          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
+        const render = (view, notFound, docsSlug, workflowEntry) =>
+          prerender.renderLandingShellWithServer(server, view, notFound, docsSlug, workflowEntry);
         prerenderedShells.set("home", await render("home"));
         assertShellLoomCanvas(prerenderedShells.get("home"));
         prerenderedShells.set("patcher", await render("patcher"));
@@ -182,6 +191,9 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("test", await render("test"));
         prerenderedShells.set("whats-new", await render("whats-new"));
         prerenderedShells.set("notFound", await render("patcher", true));
+        for (const route of Object.values(WORKFLOW_ENTRY_ROUTES)) {
+          prerenderedShells.set(route.slug, await render(route.view, false, "docs", route.slug));
+        }
         for (const route of DOC_ROUTES) {
           prerenderedShells.set(route.slug, await render("docs", false, route.slug));
         }

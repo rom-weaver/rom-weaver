@@ -1,10 +1,12 @@
 import type { MessageId } from "../presentation/localization/catalog.ts";
+import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /** One tool pointer: a tab to switch to, plus the beta gate it lives behind. */
 type RelatedToolLink = {
   /** True for a tool that stays behind the beta-tools setting (Trim). */
   beta?: boolean;
+  entry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
   hintId?: MessageId;
   labelId: MessageId;
   view: WebappView;
@@ -99,8 +101,8 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   },
   "docs/use-cheats": {
     tools: [
-      { labelId: "ui.docs.toolApply", view: "patcher" },
-      { labelId: "ui.docs.toolCreate", view: "creator" },
+      { entry: "apply-cheats", labelId: "ui.docs.toolApplyCheats", view: "patcher" },
+      { entry: "create-rom-cheat-patch", labelId: "ui.docs.toolCreateCheats", view: "creator" },
     ],
   },
   "not-found": {

@@ -10,7 +10,7 @@ import {
 } from "../../src/webapp/api-catalog.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { createRootManifestSource } from "./channel.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
@@ -84,7 +84,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           true,
         ),
       );
-      for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+      for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
         fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route));
       }
       const patcherHtml = withRoutePreloadLinks(withShell("patcher"), routePreloadLinks.get("patcher"));
@@ -186,6 +186,18 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source));
       }
       for (const [slug, html] of [
+        ...Object.values(WORKFLOW_ENTRY_ROUTES).map((route) => [
+          route.slug,
+          injectLdJson(
+            createWorkflowRouteHtml(
+              withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get(route.view)),
+              route,
+              channel,
+              channelLabel,
+            ),
+            route,
+          ),
+        ]),
         ["apply-patches", applyHtml],
         ["weave-patches", weaveHtml],
         ["create-rom-patch", createHtml],

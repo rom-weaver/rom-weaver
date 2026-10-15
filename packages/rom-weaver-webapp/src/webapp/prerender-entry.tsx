@@ -61,6 +61,7 @@ const renderLandingShellHtml = async (
   currentView: WebappRootProps["state"]["currentView"] = "home",
   notFound = false,
   docsSlug = "docs",
+  workflowEntry: WebappRootProps["workflowEntry"] = null,
 ): Promise<string> => {
   if (!notFound) {
     await preloadWorkflowRoute(currentView);
@@ -87,6 +88,7 @@ const renderLandingShellHtml = async (
       actions: createPrerenderActions(),
       confirmationDialog: createEmptyConfirmationDialogState(),
       docsSlug,
+      workflowEntry,
       notFound,
       pageUpdate: getPageUpdateState({
         serviceWorkerCache: { updateReady: false },
