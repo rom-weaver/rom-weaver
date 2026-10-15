@@ -19,7 +19,7 @@ test("accepts same-origin app routes and leaves ordinary links alone", () => {
   expect(getSoftNavigationUrl(click(externalLink), externalLink, currentUrl)).toBeNull();
 
   const newTabLink = document.createElement("a");
-  newTabLink.href = "http://localhost/create-patch";
+  newTabLink.href = "http://localhost/create-rom-patch";
   newTabLink.target = "_blank";
   document.body.append(newTabLink);
   expect(getSoftNavigationUrl(click(newTabLink), newTabLink, currentUrl)).toBeNull();

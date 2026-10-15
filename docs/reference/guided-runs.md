@@ -14,14 +14,14 @@ A guided run is a card that walks one browser workflow step by step on homebrew 
 
 ## Runs
 
-| Run                                                                      | Steps | Files                                                            |
-| ------------------------------------------------------------------------ | ----- | ---------------------------------------------------------------- |
-| [Apply](https://rom-weaver.com/apply-patches?guide=apply)                | 5     | Waits for you to add files; **Continue** loads `first-weave.zip` |
-| [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats)  | 4     | Loads `hello-world.nes`                                          |
-| [Weave](https://rom-weaver.com/weave-patches?guide=weave)                | 5     | Loads `first-weave.zip`                                          |
-| [Create](https://rom-weaver.com/create-patch?guide=create)               | 5     | Loads `hello-world.nes` and `modified-world.nes`                 |
-| [Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) | 4     | Loads `hello-world.nes`                                          |
-| [Test](https://rom-weaver.com/test-rom?guide=test)                       | 2     | Loads `hello-world.nes`                                          |
+| Run                                                                          | Steps | Files                                                            |
+| ---------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------- |
+| [Apply](https://rom-weaver.com/apply-patches?guide=apply)                    | 5     | Waits for you to add files; **Continue** loads `first-weave.zip` |
+| [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats)      | 4     | Loads `hello-world.nes`                                          |
+| [Weave](https://rom-weaver.com/weave-patches?guide=weave)                    | 5     | Loads `first-weave.zip`                                          |
+| [Create](https://rom-weaver.com/create-rom-patch?guide=create)               | 5     | Loads `hello-world.nes` and `modified-world.nes`                 |
+| [Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) | 4     | Loads `hello-world.nes`                                          |
+| [Test](https://rom-weaver.com/test-rom?guide=test)                           | 2     | Loads `hello-world.nes`                                          |
 
 Guided Apply's steps are add your files, check your original ROM (with the Simple and Detailed views), identify the original ROM, patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
 

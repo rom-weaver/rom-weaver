@@ -116,7 +116,7 @@ describe("DocsPage", () => {
     setSeoMetadata(
       "Create ROM patches online | rom-weaver",
       "Create ROM patches locally in your browser.",
-      "https://rom-weaver.com/create-patch",
+      "https://rom-weaver.com/create-rom-patch",
     );
     rerender(<DocsPage active slug="docs" />);
 
@@ -982,7 +982,7 @@ Fixture description.
 
   it.each([
     ["docs/apply-rom-patches", "patcher", "/apply-patches", "Apply ROM patches"],
-    ["docs/create-rom-patches", "creator", "/create-patch", "Create ROM patches"],
+    ["docs/create-rom-patches", "creator", "/create-rom-patch", "Create ROM patches"],
     ["docs/create-bundles", "weave", "/weave-patches", "Weave ROM patches"],
     ["docs/identify-roms-browser", "identify", "/identify-rom", "Identify ROMs"],
     ["docs/search-rom-checksums", "identify", "/identify-rom", "Identify ROMs"],
@@ -1014,7 +1014,7 @@ Fixture description.
   it("updates the tool links when navigating between guides", () => {
     const { rerender } = render(<DocsPage active slug="docs/use-cheats" />);
     const toolPaths = () => [...document.querySelectorAll(".docs-tools a")].map((link) => link.getAttribute("href"));
-    expect(toolPaths()).toEqual(["/apply-patches", "/create-patch"]);
+    expect(toolPaths()).toEqual(["/apply-patches", "/create-rom-patch"]);
 
     rerender(<DocsPage active slug="docs/create-bundles" />);
     expect(toolPaths()).toEqual(["/weave-patches"]);
@@ -1049,6 +1049,6 @@ Fixture description.
       </RomWeaverSettingsProvider>,
     );
     expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-patches");
-    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-patch");
+    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-rom-patch");
   });
 });

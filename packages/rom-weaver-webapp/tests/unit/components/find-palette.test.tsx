@@ -37,7 +37,7 @@ const TABS = [
   {
     dock: true,
     group: "patches",
-    href: "create-patch",
+    href: "create-rom-patch",
     icon: <svg aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",

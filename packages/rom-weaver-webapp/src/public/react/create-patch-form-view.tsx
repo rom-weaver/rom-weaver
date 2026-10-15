@@ -8,7 +8,7 @@ import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.ts
 import { useUiLocalizer } from "./settings-context.tsx";
 
 /**
- * Presentational shell for the create-patch workflow. The stateful
+ * Presentational shell for the create-rom-patch workflow. The stateful
  * CreatePatchForm controller builds these prop bundles and hands them over; the
  * view owns nothing but layout - the page section, the unified drop zone, the
  * empty vs. staged source branch, the swap row, the output step and any active

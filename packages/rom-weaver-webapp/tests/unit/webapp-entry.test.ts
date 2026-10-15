@@ -237,7 +237,7 @@ describe("boot", () => {
   });
 
   it("hydrates the prerendered shell with the served document's view and settings", async () => {
-    await loadWebapp({ betaTools: true, prerendered: true, url: "/create-patch" });
+    await loadWebapp({ betaTools: true, prerendered: true, url: "/create-rom-patch" });
 
     const hydrationProps = mocks.renders[0];
     expect(hydrationProps?.state.currentView).toBe("creator");
@@ -759,7 +759,7 @@ describe("routing", () => {
     await flush();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
   });
 
   it("starts a guided sample on its own view", async () => {
@@ -781,12 +781,12 @@ describe("routing", () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     await loadWebapp();
 
-    clickAnchor("/create-patch");
+    clickAnchor("/create-rom-patch");
     await flush();
     await nextFrame();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
     expect(scrollTo).toHaveBeenCalledWith({ behavior: "auto", left: 0, top: 0 });
   });
 
@@ -819,7 +819,7 @@ describe("routing", () => {
   it("follows back and forward navigation", async () => {
     await loadWebapp();
 
-    window.history.pushState({}, "", "/create-patch");
+    window.history.pushState({}, "", "/create-rom-patch");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
@@ -854,7 +854,7 @@ describe("routing", () => {
   it("does not soft-navigate from the not-found document", async () => {
     await loadWebapp({ notFound: true, url: "/nope" });
 
-    clickAnchor("/create-patch");
+    clickAnchor("/create-rom-patch");
     await flush();
 
     expect(window.location.pathname).toBe("/nope");

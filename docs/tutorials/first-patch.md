@@ -88,7 +88,7 @@ To see the sample files for yourself, choose **Download a test weave** from **Pa
 
 The same practice files drive two more guided runs:
 
-- [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
+- [Guided Create](https://rom-weaver.com/create-rom-patch?guide=create) makes a patch from two homebrew ROMs.
 - [Guided Weave Patches](https://rom-weaver.com/weave-patches?guide=weave) turns the Apply Patches sample into a patch-only release archive.
 
 These are optional follow-up exercises. [Guided practice runs](../reference/guided-runs.md) lists every guided run, its steps, and its files.
@@ -98,7 +98,7 @@ These are optional follow-up exercises. [Guided practice runs](../reference/guid
 The supplied homebrew ROM also has guided cheat-code exercises:
 
 - [Guided Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) adds a working practice code to the patch order.
-- [Guided Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) turns a working practice code into a patch.
+- [Guided Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) turns a working practice code into a patch.
 
 These guides label the sample as practice. The checksum above is still the result of the two-patch tutorial. A cheat changes the output bytes, so do not expect that checksum after you select one.
 

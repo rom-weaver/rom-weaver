@@ -8,7 +8,7 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
 import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
 
 /**
- * Pure output/source presentation helpers for the create-patch form, extracted
+ * Pure output/source presentation helpers for the create-rom-patch form, extracted
  * from `CreatePatchForm`. These derive the completed-output download face
  * (format / size / compression-ratio label), the execution output name, the
  * displayed source-info projections, and the static hero/support lists - all

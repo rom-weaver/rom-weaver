@@ -19,14 +19,14 @@ const DOCS_SCREENSHOT_CASES = [
     dismissGuide: true,
     docsRoute: "docs/create-rom-patches",
     name: "create-inputs",
-    route: "/create-patch?guide=create",
+    route: "/create-rom-patch?guide=create",
     target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
   },
   {
     dismissGuide: true,
     docsRoute: "docs/create-rom-patches",
     name: "create-output",
-    route: "/create-patch?guide=create",
+    route: "/create-rom-patch?guide=create",
     target: "#patch-builder-row-output",
   },
   {

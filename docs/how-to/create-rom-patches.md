@@ -18,7 +18,7 @@ Create a patch from a clean ROM and your edited version, or combine an ordered s
 
 **Original** is the clean, untouched game; **Modified** is your finished translation, fix, restoration, or hack. rom-weaver records what must change to turn one into the other, so the direction matters - swapping them creates a patch that undoes your work.
 
-Never done this before? The [guided Create tour](https://rom-weaver.com/create-patch?guide=create) runs the same workflow on two tiny homebrew ROMs.
+Never done this before? The [guided Create tour](https://rom-weaver.com/create-rom-patch?guide=create) runs the same workflow on two tiny homebrew ROMs.
 
 ## Prepare a clean release pair
 
@@ -32,7 +32,7 @@ Write down the region, revision, and header state now. The Create cards will sho
 
 ## Add Original and Modified
 
-1. Open [Create](https://rom-weaver.com/create-patch).
+1. Open [Create](https://rom-weaver.com/create-rom-patch).
 2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. If more ROM candidates are available than Create can use, choose the Original and Modified files from the list. Extra files are not staged after you choose. If both files appear to be the same ROM, confirm before using them as a pair. **Modified ROM** is the default mode.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
@@ -70,7 +70,7 @@ Choose **Patches & cheats** on **0x03 Modified**; the step becomes **0x03 Change
 4. Order the enabled changes and resolve input-check or cheat warnings.
 5. Choose the patch filename and format, then **Create patch & download**.
 
-The patch reproduces these changes when applied to the Original ROM. Try the [guided cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats), or check [supported-code limits](use-browser-cheats.md).
+The patch reproduces these changes when applied to the Original ROM. Try the [guided cheats tour](https://rom-weaver.com/create-rom-patch?guide=create-cheats), or check [supported-code limits](use-browser-cheats.md).
 
 Expand **Download patched ROM** for ROM compression options, or **Download the weave** to share. See [weave packaging](create-bundles.md#build-the-patch-recipe) when cheats are enabled.
 

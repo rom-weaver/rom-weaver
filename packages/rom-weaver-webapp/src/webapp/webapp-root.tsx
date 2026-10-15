@@ -105,7 +105,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     dock: true,
     group: "patches",
-    href: "create-patch",
+    href: "create-rom-patch",
     icon: <FileDiff aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",

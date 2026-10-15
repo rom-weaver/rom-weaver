@@ -63,7 +63,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     body: "ui.home.routeEditedBody",
     file: "my-hack.sfc",
     go: "ui.home.goCreate",
-    slug: "create-patch",
+    slug: "create-rom-patch",
     swatch: "weft-2",
     title: "ui.home.routeEdited",
   },

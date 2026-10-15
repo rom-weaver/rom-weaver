@@ -63,7 +63,7 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "apply-patches",
     "weave-patches",
     "checksum",
-    "create-patch",
+    "create-rom-patch",
     "extract",
     "identify-rom",
     "ppf-undo",

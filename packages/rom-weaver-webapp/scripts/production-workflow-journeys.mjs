@@ -162,7 +162,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     assertJourneyBytes(rebuilt.bytes, expected, `${label} -> Apply exact combined result`);
   };
 
-  const createPicker = await openWorkflow(page, baseUrl, "create-patch", "patch-builder-input-file-unified");
+  const createPicker = await openWorkflow(page, baseUrl, "create-rom-patch", "patch-builder-input-file-unified");
   await configureUncompressedOutput(page);
   const mode = page.getByRole("group", { name: "Create patch from", exact: true });
   const modifiedMode = mode.getByRole("button", { name: "Modified ROM", exact: true });
@@ -216,7 +216,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
   page.on("pageerror", (error) => failures.push(error.message));
   const { original, modified } = makeJourneyInputs();
   try {
-    const picker = await openWorkflow(page, baseUrl, "create-patch", "patch-builder-input-file-unified");
+    const picker = await openWorkflow(page, baseUrl, "create-rom-patch", "patch-builder-input-file-unified");
     await configureUncompressedOutput(page);
     await picker.setInputFiles([inputFile("original.bin", original), inputFile("modified.bin", modified)]);
     await waitForEnabled(page, "patch-builder-button-create");
