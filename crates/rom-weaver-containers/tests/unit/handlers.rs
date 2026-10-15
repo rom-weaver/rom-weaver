@@ -736,6 +736,63 @@ mod tests {
             .unwrap_or_default()
     }
 
+    fn z3ds_created_underlying_magic(name: &str, payload: &[u8]) -> [u8; 4] {
+        let temp_dir = temp_dir_path(&format!("z3ds-magic-{name}"));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, payload).expect("write fixture");
+        let output = temp_dir.join("out.z3ds");
+        Z3dsContainerHandler
+            .create(
+                &ContainerCreateRequest {
+                    archive_names: None,
+                    inputs: vec![input_path],
+                    output: output.clone(),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("z3ds create succeeds");
+        let written = fs::read(&output).expect("read z3ds");
+        assert_eq!(&written[..4], b"Z3DS");
+        written[4..8].try_into().expect("underlying magic")
+    }
+
+    #[test]
+    fn z3ds_create_writes_upstream_underlying_magic_for_real_images() {
+        let mut ncsd = vec![0xa5_u8; 4096];
+        ncsd[0x100..0x104].copy_from_slice(b"NCSD");
+        assert_eq!(z3ds_created_underlying_magic("ncsd", &ncsd), *b"NCSD");
+        let mut ncch = vec![0xa5_u8; 4096];
+        ncch[0x100..0x104].copy_from_slice(b"NCCH");
+        assert_eq!(z3ds_created_underlying_magic("ncch", &ncch), *b"NCCH");
+        let mut cia = vec![0_u8; 4096];
+        cia[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
+        assert_eq!(z3ds_created_underlying_magic("cia", &cia), *b"CIA\0");
+        assert_eq!(
+            z3ds_created_underlying_magic("3dsx", b"3DSX\0\0\0\0"),
+            *b"3DSX"
+        );
+        assert_eq!(
+            z3ds_created_underlying_magic("other", &[0x5a; 4096]),
+            [0x5a; 4]
+        );
+    }
+
+    #[test]
+    fn z3ds_extract_name_maps_legacy_cia_header_size_magic() {
+        assert_eq!(
+            Z3dsContainerHandler.extract_name_with_underlying_magic(
+                Path::new("rom.z3ds"),
+                Some([0x20, 0x20, 0, 0])
+            ),
+            "rom.cia".to_string()
+        );
+    }
+
     #[test]
     fn z3ds_create_warns_when_input_is_not_3ds_content() {
         let warnings = z3ds_create_warnings("random", &[0x5a; 4096]);

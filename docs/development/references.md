@@ -80,6 +80,7 @@ This page lists the format specifications and implementations used to check rom-
 - XZ format specification: <https://tukaani.org/xz/format.html>
 - Zstandard format: RFC 8878 <https://datatracker.ietf.org/doc/html/rfc8878>
 - CHD tooling/docs (`chdman`): <https://docs.mamedev.org/tools/chdman.html>
+- Z3DS (no formal spec; the Azahar implementation defines the header): the compression CLI at <https://github.com/azahar-emu/azahar/blob/master/src/citra_cli/compression_cli.cpp> and the loaders that report `underlying_magic` (`NCSD`, `NCCH`, `CIA\0`, `3DSX`) in <https://github.com/azahar-emu/azahar/tree/master/src/core/loader>
 
 ## Quick mapping for `rom-weaver` patch families
 
