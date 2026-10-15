@@ -979,7 +979,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       applyInput.options = {
         ...applyInput.options,
         retainUncompressedOutput: undefined,
-        output: { ...applyInput.options?.output, compression: "none", header: "keep" },
+        // The user's Apply name MAY carry an archive extension that would misclassify the raw intermediate ROM.
+        output: { ...applyInput.options?.output, compression: "none", header: "keep", outputName: original.fileName },
       };
       const runtime: WorkflowRuntime = {
         ...this.runtime,

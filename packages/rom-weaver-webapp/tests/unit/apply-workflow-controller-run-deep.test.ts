@@ -200,6 +200,13 @@ describe("ApplyWorkflowController.createCombinedPatch", () => {
     expect(mocks.runCreateWorkflow).toHaveBeenCalledTimes(2);
   });
 
+  it("names the intermediate ROM after the original, not the compressed output name", async () => {
+    const { controller } = arrange();
+    controller.outputState.outputName = "MyHack.zip";
+    await controller.createCombinedPatch({ format: "bps", output: { outputName: "combined.bps" } });
+    expect(mocks.runApplyWorkflow.mock.calls[0][0].options.output.outputName).toBe("rom.sfc");
+  });
+
   it("releases the worker output when apply fails after producing it", async () => {
     const { controller, runtime, worker } = arrange();
     mocks.runApplyWorkflow.mockImplementation(async (_input, adapter) => {
