@@ -975,7 +975,7 @@ Fixture description.
     const strip = footer?.querySelector("nav.related-strip");
     expect(strip).not.toBeNull();
     const toolButton = strip?.querySelector(".related-row-tool") as HTMLButtonElement;
-    expect(toolButton.textContent).toContain("Trim tool");
+    expect(toolButton.textContent).toContain("Trim ROMs");
     fireEvent.click(toolButton);
     expect(onSelectTab).toHaveBeenCalledWith("trim");
   });

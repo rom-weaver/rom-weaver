@@ -1530,11 +1530,6 @@ msgstr "Spielstand erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.createTool"
-msgstr "Erstellen-Tool"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.patchCreated"
 msgstr "{fileName} wurde aus {count, plural, one {# ROM-Cheat} other {# ROM-Cheats}} erstellt."
 
@@ -2372,11 +2367,6 @@ msgstr "Identifikationsdaten"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolIdentify"
 msgstr "ROMs identifizieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyTool"
-msgstr "Identifizieren-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3760,11 +3750,6 @@ msgstr "Mögliches Format: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.undoTool"
-msgstr "PPF rückgängig machen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Übungsdateien"
 
@@ -4352,11 +4337,6 @@ msgstr "Speichern"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.saveAsPatch"
 msgstr "Als Patch speichern"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.saveTool"
-msgstr "Spielstand-Editor"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5287,11 +5267,6 @@ msgstr "Kürzen"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolTrim"
 msgstr "ROMs kürzen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.trimTool"
-msgstr "Trimmen-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

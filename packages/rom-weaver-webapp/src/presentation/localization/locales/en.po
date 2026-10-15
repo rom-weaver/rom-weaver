@@ -1530,11 +1530,6 @@ msgstr "Create save"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.createTool"
-msgstr "Create tool"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.patchCreated"
 msgstr "Created {fileName} from {count, plural, one {# ROM cheat} other {# ROM cheats}}."
 
@@ -2372,11 +2367,6 @@ msgstr "identify data"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolIdentify"
 msgstr "Identify ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyTool"
-msgstr "Identify tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3760,11 +3750,6 @@ msgstr "Potential format: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.undoTool"
-msgstr "PPF undo"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Practice files"
 
@@ -4352,11 +4337,6 @@ msgstr "Save"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.saveAsPatch"
 msgstr "Save as patch"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.saveTool"
-msgstr "Save Editor"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5287,11 +5267,6 @@ msgstr "Trim"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolTrim"
 msgstr "Trim ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.trimTool"
-msgstr "Trim tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

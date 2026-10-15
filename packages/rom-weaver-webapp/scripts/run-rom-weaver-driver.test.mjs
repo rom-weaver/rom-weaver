@@ -8,12 +8,12 @@ const read = (relativePath) => readFileSync(new URL(relativePath, import.meta.ur
 // the site root. Keep its route and file picker tied to the app and the journeys.
 test("run-rom-weaver webapp driver opens the Apply route and its file picker", () => {
   const driver = read("../../../.agents/skills/run-rom-weaver/webapp-driver.mjs");
-  const controller = read("../src/webapp/webapp-controller.ts");
+  const routes = read("../src/webapp/app-routes.ts");
   const journeys = read("./production-workflow-journeys.mjs");
 
   const route = driver.match(/new URL\("([^"]+)", BASE_URL/)?.[1];
   assert.equal(route, "apply-patches");
-  assert.match(controller, new RegExp(`"${route}": "patcher"`));
+  assert.match(routes, new RegExp(`"${route}": "patcher"`));
 
   const pickerIds = [...driver.matchAll(/locator\("#([\w-]+)"\)/g)].map((match) => match[1]);
   assert.ok(pickerIds.length > 0);

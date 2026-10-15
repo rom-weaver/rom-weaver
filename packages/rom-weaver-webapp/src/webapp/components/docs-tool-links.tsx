@@ -1,24 +1,8 @@
 import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { RELATED_LINKS } from "../related-links.ts";
-import { readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../webapp-controller.ts";
-import type { WebappView } from "../webapp-state-types.ts";
-
-const TOOL_LABELS: Partial<Record<WebappView, MessageId>> = {
-  patcher: "ui.docs.toolApply",
-  creator: "ui.docs.toolCreate",
-  weave: "ui.docs.toolWeave",
-  checksum: "ui.docs.toolChecksum",
-  compress: "ui.docs.toolCompress",
-  extract: "ui.docs.toolExtract",
-  identify: "ui.docs.toolIdentify",
-  test: "ui.docs.toolTest",
-  trim: "ui.docs.toolTrim",
-  "save-editor": "ui.docs.toolSave",
-  "ppf-undo": "ui.docs.toolUndo",
-};
+import { readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
 
 const DocsToolLinks = ({ slug }: { slug: string }) => {
   const localizer = useUiLocalizer();
@@ -39,7 +23,7 @@ const DocsToolLinks = ({ slug }: { slug: string }) => {
               className="btn ghost docs-tool"
               href={new URL(VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid")).pathname}
             >
-              {localizer.message(TOOL_LABELS[tool.view] ?? tool.labelId)}
+              {localizer.message(tool.labelId)}
               <ArrowRight aria-hidden="true" size={14} />
             </a>
           </li>
