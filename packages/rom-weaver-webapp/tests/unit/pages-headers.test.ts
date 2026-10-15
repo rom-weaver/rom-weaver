@@ -8,9 +8,11 @@ const headersFile = `/*
   ! Link
 
 /assets/*
+  ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
 /assets/identify-index.json
+  ! Cache-Control
   Cache-Control: no-cache
 
 /rom-weaver-service-worker.js
@@ -55,6 +57,35 @@ describe("pages _headers matching", () => {
   it("ignores comments, blank lines, and indented lines with no pattern", () => {
     expect(parsePagesHeaders("  Orphan: 1\n\n# comment\n/*\n  X: 2\n")).toEqual([
       { headers: [["X", "2"]], match: expect.any(RegExp) },
+    ]);
+  });
+
+  it("appends a header that a later rule sets again without unsetting it", () => {
+    const layered = parsePagesHeaders("/*\n  X: 1\n\n/a\n  X: 2\n\n/b\n  ! X\n  X: 3\n");
+    expect(matchPagesHeaders(layered, "/a").X).toBe("1, 2");
+    expect(matchPagesHeaders(layered, "/b").X).toBe("3");
+  });
+
+  it("matches placeholders inside a segment and substitutes them into values", () => {
+    const markdown = parsePagesHeaders(
+      '/docs/:page.md\n  Link: <https://rom-weaver.com/docs/:page>; rel="canonical"\n\n/files/*\n  X-Path: :splat\n',
+    );
+    expect(matchPagesHeaders(markdown, "/docs/use-cheats.md").Link).toEqual([
+      '<https://rom-weaver.com/docs/use-cheats>; rel="canonical"',
+    ]);
+    expect(matchPagesHeaders(markdown, "/docs/a/b.md").Link).toBeUndefined();
+    expect(matchPagesHeaders(markdown, "/docs/.md").Link).toBeUndefined();
+    expect(matchPagesHeaders(markdown, "/files/a/b.txt")["X-Path"]).toBe("a/b.txt");
+  });
+
+  it("replaces a placeholder Link through an exception that unsets it", () => {
+    const markdown = parsePagesHeaders(
+      '/:page.md\n  Link: <https://rom-weaver.com/:page>; rel="canonical"\n\n/index.md\n  ! Link\n  Link: <https://rom-weaver.com/>; rel="canonical"\n\n/auth.md\n  ! Link\n',
+    );
+    expect(matchPagesHeaders(markdown, "/index.md").Link).toEqual(['<https://rom-weaver.com/>; rel="canonical"']);
+    expect(matchPagesHeaders(markdown, "/auth.md").Link).toBeUndefined();
+    expect(matchPagesHeaders(markdown, "/checksum.md").Link).toEqual([
+      '<https://rom-weaver.com/checksum>; rel="canonical"',
     ]);
   });
 

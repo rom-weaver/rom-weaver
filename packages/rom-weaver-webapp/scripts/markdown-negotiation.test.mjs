@@ -84,6 +84,17 @@ test("other routes and methods bypass negotiation", async () => {
   }
 });
 
+test("workflow HTML pages advertise their Markdown alternate", async () => {
+  const { response } = await negotiate("text/html", { path: "/checksum" });
+  assert.equal(response.headers.get("Link"), '</checksum.md>; rel="alternate"; type="text/markdown"');
+  for (const options of [{ path: "/" }, { path: "/checksum", htmlStatus: 404 }, { path: "/docs/get-started" }]) {
+    const { response: other } = await negotiate("text/html", options);
+    assert.equal(other.headers.get("Link"), null, JSON.stringify(options));
+  }
+  const { response: markdown } = await negotiate("text/markdown", { path: "/checksum" });
+  assert.equal(markdown.headers.get("Link"), null);
+});
+
 test("unsuccessful HTML responses are never cached", async () => {
   const { response } = await negotiate("text/html", { htmlStatus: 404 });
   assert.equal(response.headers.get("Cache-Control"), "no-store");
