@@ -1204,8 +1204,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const abortWorkflow = () => workflow.abort(abortSignal?.reason);
         abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
-          setCompletedOutput(null);
-          setCompletedCheats(undefined);
           const selectedCheats = selectedCheatsRef.current;
           workflow.setCheats?.(
             selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
@@ -1292,6 +1290,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const applyPatches = useCallback(
     (input: ApplyWorkflowSessionInput) =>
       executePatchWorkflow(input, async (workflow) => {
+        setCompletedOutput(null);
+        setCompletedCheats(undefined);
         const result = (await workflow.run()) as BrowserApplyResult;
         handleApplyComplete(result);
         return normalizeApplyResult(result);
