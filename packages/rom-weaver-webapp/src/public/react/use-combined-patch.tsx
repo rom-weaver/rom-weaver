@@ -60,7 +60,9 @@ const useCombinedPatch = ({
   const output = useRef<BrowserCreateResult | null>(null);
   const notifiedOutput = useRef<BrowserCreateResult | null>(null);
   const generation = useRef<{ revision: string; settingsSignature: string } | null>(null);
-  const resolvedName = fileName.trim() || `${getFileNameWithoutExtension(name || "combined")}-combined`;
+  // Preparing the run re-estimates the caller's display name, so a running job MUST keep the name it started with.
+  const [runName, setRunName] = useState<string | null>(null);
+  const resolvedName = fileName.trim() || `${getFileNameWithoutExtension((runName ?? name) || "combined")}-combined`;
   const executionSettings: Partial<CreateSettings> = {
     ...settings,
     format: format as CreateSettings["format"],
@@ -84,6 +86,7 @@ const useCombinedPatch = ({
     disposeOutput();
     setCompleted(null);
     setError("");
+    setRunName(null);
     setBusy(false);
     setProgress(null);
     return () => {
@@ -98,6 +101,7 @@ const useCombinedPatch = ({
     const currentGeneration = generation.current;
     const abortController = new AbortController();
     controller.current = abortController;
+    setRunName(name);
     setBusy(true);
     setError("");
     const isCurrent = () => !abortController.signal.aborted && currentGeneration === generation.current;
@@ -134,6 +138,7 @@ const useCombinedPatch = ({
     } finally {
       if (controller.current === abortController) {
         controller.current = null;
+        setRunName(null);
         setBusy(false);
         setProgress(null);
       }

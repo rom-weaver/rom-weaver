@@ -122,6 +122,25 @@ describe("useCombinedPatch", () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
+  it("finishes a run when the default name changes while it prepares", async () => {
+    const pending = deferred<BrowserCreateResult>();
+    const patch = createdPatch();
+    const run = vi.fn<Options["run"]>().mockReturnValue(pending.promise);
+    const initial = options(run);
+    const { result, rerender } = renderHook((props: Options) => useCombinedPatch(props), { initialProps: initial });
+    let running!: Promise<void>;
+    await act(async () => {
+      running = result.current.run();
+    });
+    rerender({ ...initial, name: "game [patch].nes" });
+    expect(run.mock.calls[0][0].signal.aborted).toBe(false);
+    await act(async () => {
+      pending.resolve(patch.result);
+      await running;
+    });
+    expect(patch.downloaded).toEqual([[...patch.bytes]]);
+  });
+
   it("keeps a created patch after download failure and retries without creating it again", async () => {
     const patch = createdPatch();
     vi.mocked(patch.result.output.saveAs).mockRejectedValueOnce(new Error("download failed"));
