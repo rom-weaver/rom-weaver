@@ -1,4 +1,5 @@
 import { createLogger } from "../../lib/logging.ts";
+import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import {
   classifyArchiveBucket,
   isArchiveFileName,
@@ -17,12 +18,13 @@ import {
 const logger = createLogger("drop-destination");
 
 /** The workflows a drop can be sent to. Ids match `WebappView`. */
-type DropDestination = "creator" | "patcher" | "test";
+type DropDestination = "creator" | "patcher" | "test" | "weave";
 
 type DropFileKind = "patch" | "rom" | "save" | "unknown";
 
 type DropCounts = {
   patches: number;
+  weaves: number;
   /** Files with a known ROM or container name, cue/gdi tracks folded into their sheet. */
   roms: number;
   /** Raw battery saves (`.sav`, `.srm`…), which Test loads alongside their ROM. */
@@ -40,6 +42,7 @@ type DropCounts = {
  */
 type DropEntry = {
   archiveBucket?: "patch" | "rom";
+  weave?: boolean;
   name: string;
 };
 
@@ -70,7 +73,7 @@ const isPatchArchiveName = (name: string) => isPatchFileName(baseName(name).repl
 const isSaveFileName = (name: string) => SAVE_NAME.test(name);
 
 const classifyDropEntry = (entry: DropEntry): DropFileKind => {
-  if (isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
+  if (entry.weave || isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
   if (isArchiveFileName(entry.name)) {
     if (entry.archiveBucket) return entry.archiveBucket;
     return isPatchArchiveName(entry.name) ? "patch" : "rom";
@@ -84,9 +87,10 @@ const classifyDropEntry = (entry: DropEntry): DropFileKind => {
  * is one ROM, so `.bin`/`.raw` tracks stop counting once a sheet is present.
  */
 const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
-  const counts: DropCounts = { patches: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
+  const counts: DropCounts = { patches: 0, weaves: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
   const hasSheet = entries.some((entry) => SHEET_NAME.test(entry.name));
   for (const entry of entries) {
+    if (entry.weave || isWeaveFileName(entry.name)) counts.weaves += 1;
     const kind = classifyDropEntry(entry);
     if (kind === "patch") counts.patches += 1;
     else if (kind === "save") counts.saves += 1;
@@ -102,16 +106,18 @@ const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
  * Where a drop on the landing page should go. Unknown files count as ROMs here
  * because every candidate workflow stages them as inputs.
  *
+ * - a weave, with or without companion files → Apply or Weave
  * - patches only, or one ROM with patches → Apply
  * - one ROM with a save → Test, which loads the save with it
  * - one ROM → Apply or Test
  * - two or more ROMs → Create
  * - two or more ROMs with patches → Create or Apply, flagged as mixed
  */
-const planDropDestinations = ({ patches, roms, saves, unknown }: DropCounts): DropPlan => {
+const planDropDestinations = ({ patches, weaves, roms, saves, unknown }: DropCounts): DropPlan => {
   const inputs = roms + unknown;
   let plan: DropPlan;
-  if (inputs === 0) plan = { destinations: patches ? ["patcher"] : [], mixed: false };
+  if (weaves > 0) plan = { destinations: ["patcher", "weave"], mixed: false };
+  else if (inputs === 0) plan = { destinations: patches ? ["patcher"] : [], mixed: false };
   else if (inputs === 1 && patches === 0 && saves > 0) plan = { destinations: ["test"], mixed: false };
   else if (inputs === 1) plan = { destinations: patches ? ["patcher"] : ["patcher", "test"], mixed: false };
   else if (patches === 0) plan = { destinations: ["creator"], mixed: false };
@@ -152,27 +158,27 @@ const isUsableDropFile = (view: string, name: string, archiveBucket?: DropEntry[
 
 type ListArchiveNames = (archive: File) => Promise<string[]>;
 
-// Loaded on demand so the archive reader stays out of the entry chunk.
-const listArchiveNames: ListArchiveNames = async (archive) => {
-  const { listDroppedArchiveEntryNames } = await import("../../lib/input/input-preparation-archive.ts");
-  return listDroppedArchiveEntryNames(archive);
-};
-
 /**
- * Name each dropped file, listing archives whose name alone reads as a ROM so a
- * zipped patch routes like a patch. A failed listing keeps the ROM verdict, as
- * the Apply tab's own drop does.
+ * Archive contents MUST take precedence over a patch-like outer filename so
+ * a packaged weave still offers both workflows. Failed listings keep the name verdict.
  */
-const readDropEntries = (files: readonly File[], listNames = listArchiveNames): Promise<DropEntry[]> =>
+const readDropEntries = (
+  files: readonly File[],
+  listNames: ListArchiveNames = listDroppedArchiveEntryNames,
+): Promise<DropEntry[]> =>
   Promise.all(
     files.map(async (file): Promise<DropEntry> => {
       const entry = { name: file.name };
-      if (!isArchiveFileName(file.name) || classifyDropEntry(entry) !== "rom") return entry;
+      if (!isArchiveFileName(file.name) || isWeaveFileName(file.name)) return entry;
       const names = await listNames(file).catch((error: unknown) => {
         logger.debug("dropped archive listing failed", { error, name: file.name });
         return [] as string[];
       });
-      return { archiveBucket: classifyArchiveBucket(file, names), name: file.name };
+      if (!names.length) return entry;
+      const weave = names.some((name) =>
+        /^(?:\.\/|\/)?rom-weaver-(?:weave|bundle)\.json$/i.test(name.replaceAll("\\", "/")),
+      );
+      return { archiveBucket: weave ? "patch" : classifyArchiveBucket(file, names), name: file.name, weave };
     }),
   );
 

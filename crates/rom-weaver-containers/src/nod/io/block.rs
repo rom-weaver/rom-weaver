@@ -66,7 +66,7 @@ pub fn new(mut stream: Box<dyn DiscStream>) -> Result<Box<dyn BlockReader>> {
 
 /// Creates a new [`BlockReader`] instance from a filesystem path.
 pub fn open(filename: &Path) -> Result<Box<dyn BlockReader>> {
-    let path_result = fs::canonicalize(filename);
+    let path_result = super::resolve_path(filename);
     if let Err(err) = path_result {
         return Err(Error::Io(
             format!("Failed to open {}", filename.display()),

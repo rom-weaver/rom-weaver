@@ -220,7 +220,7 @@ const selectActiveVirtualFilesForRun = (
 ) => {
   const command = readRomWeaverRunInputCommand(commandOrRequest);
   const referencedPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
-  if (command.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
+  if (command.type === "compress" && [...referencedPaths].some((path) => /\.(cue|gdi)$/i.test(path))) {
     return activeVirtualFiles;
   }
   if (!referencedPaths.size) return activeVirtualFiles;

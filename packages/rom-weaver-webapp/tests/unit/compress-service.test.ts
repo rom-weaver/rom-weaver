@@ -330,6 +330,60 @@ describe("compress service", () => {
       expect(await entries[0]?.file.text()).toBe('FILE "game.bin" BINARY\n');
     });
 
+    it("rewrites archived GDI folder references while preserving track layout", async () => {
+      const text = '2\r\n1 0 4 2352 "tracks/track 01.bin" 0\r\n2 45000 4 2352 track02.bin 128\r\n';
+      const { runtime } = extractRuntime({
+        "Disc/game.gdi": file("game.gdi", text),
+        "Disc/tracks/track 01.bin": file("t", new Uint8Array(2352)),
+        "Disc/track02.bin": file("t", new Uint8Array(2352)),
+      });
+      const entries = await extractCompressEntries(
+        file("disc.zip"),
+        ["Disc/game.gdi", "Disc/tracks/track 01.bin", "Disc/track02.bin"],
+        runtime,
+      );
+      expect(await entries[0]?.file.text()).toBe(text.replace('"tracks/track 01.bin"', '"track 01.bin"'));
+      expect(await getCompressFormats(entries.map((entry) => entry.file))).toEqual(["zip", "7z", "chd"]);
+    });
+
+    it.each(["zip", "7z"] as const)("preserves case-distinct GDI tracks when repacking as %s", async (format) => {
+      const text = "2\n1 0 4 2352 A.bin 0\n2 45000 4 2352 a.bin 0\n";
+      const { runtime } = extractRuntime({
+        "disc.gdi": file("disc.gdi", text),
+        "A.bin": file("A.bin", new Uint8Array([1])),
+        "a.bin": file("a.bin", new Uint8Array([2])),
+      });
+      const entries = await extractCompressEntries(file("disc.zip"), ["disc.gdi", "A.bin", "a.bin"], runtime);
+      const compression = makeRuntime();
+      await compressFiles(
+        entries.map((entry) => entry.file),
+        options(format),
+        compression.runtime,
+      );
+      const files = compression.create.mock.calls[0]?.[0].entries?.map((entry) => entry.file);
+      expect(await files?.[0]?.text()).toBe(text);
+      const upper = files?.[1];
+      const lower = files?.[2];
+      if (!(upper && lower)) throw new Error("Both track files must reach archive compression");
+      expect(new Uint8Array(await upper.arrayBuffer())).toEqual(new Uint8Array([1]));
+      expect(new Uint8Array(await lower.arrayBuffer())).toEqual(new Uint8Array([2]));
+    });
+
+    it.each(["cue", "gdi"])("rewrites %s letter-case mismatches only when unambiguous", async (extension) => {
+      const text = extension === "gdi" ? "1\n1 0 4 2352 TRACK.BIN 0\n" : 'FILE "TRACK.BIN" BINARY\n';
+      const sheet = `disc.${extension}`;
+      for (const names of [["Track.bin"], ["Track.bin", "track.bin"]]) {
+        const { runtime } = extractRuntime({
+          [sheet]: file(sheet, text),
+          ...Object.fromEntries(names.map((name) => [name, file(name)])),
+        });
+        const entries = await extractCompressEntries(file("disc.zip"), [sheet, ...names], runtime);
+        expect(await entries[0]?.file.text()).toBe(
+          names.length === 1 ? text.replace(/"?TRACK.BIN"?/, '"Track.bin"') : text,
+        );
+      }
+    });
+
     it("selects names with wildcard characters literally", async () => {
       const { extract, runtime } = extractRuntime({});
       extract.mockImplementationOnce(async () => {
@@ -393,4 +447,29 @@ describe("compress service", () => {
       expect(outputs[0]?.dispose).toHaveBeenCalledOnce();
     });
   });
+});
+
+it("offers and creates CHD only for a complete GDI group", async () => {
+  const gdi = file("disc.gdi", '2\n1 0 4 2352 "track 01.bin" 0\n2 45000 4 2352 track02.bin 0\n');
+  const firstTrack = file("track 01.bin", new Uint8Array(2352));
+  const tracks = [firstTrack, file("track02.bin", new Uint8Array(2352))];
+  const { create, runtime } = makeRuntime();
+  expect(await getCompressFormats([gdi, ...tracks])).toEqual(["zip", "7z", "chd"]);
+  expect((await getCompressSource([gdi, ...tracks]))?.metadata).toMatchObject({ mode: "gd" });
+  expect(await getCompressFormats([gdi, firstTrack])).toEqual(["zip", "7z"]);
+  expect(await getCompressFormats([gdi, ...tracks, file("extra.bin")])).toEqual(["zip", "7z"]);
+  await expect(compressFiles([gdi, firstTrack], options("chd"), runtime)).rejects.toThrow("missing track");
+  await compressFiles([gdi, ...tracks], options("chd"), runtime);
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      source: gdi,
+      fileName: "disc.gdi",
+      romSpecific: {
+        chd: expect.objectContaining({
+          mode: "gd",
+          imageFiles: tracks.map((source) => ({ fileName: source.name, source })),
+        }),
+      },
+    }),
+  );
 });

@@ -5,7 +5,8 @@ import {
 } from "../lib/compression/container-format-registry.ts";
 import { toPublicOutput } from "../lib/apply/patch-apply-service.ts";
 import { createBlobBackedPatchFile, getPatchFileCleanup } from "../lib/input/binary-service.ts";
-import { parseCueFileReferences } from "../lib/input/archive.ts";
+import { parseCueFileReferences, parseGdiFileReferences } from "../lib/input/archive.ts";
+import { replaceGdiFileReferences } from "../workers/protocol/gdi-file-utils.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
 import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../lib/output/output-build-service.ts";
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
@@ -39,9 +40,9 @@ type OpenedCompressEntry = { file: File; output: PublicOutput; path: string };
 type CompressArchiveListing = { entries: ListedCompressEntry[]; extracted?: OpenedCompressEntry[] };
 
 type ValidatedCompressInput = {
-  cue?: File;
+  sheet?: File;
   files: File[];
-  cueProblem?: string;
+  sheetProblem?: string;
   source: CompressSource;
 };
 
@@ -62,8 +63,8 @@ const assertFiles = (files: File[]) => {
 
 const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> => {
   assertFiles(files);
-  const cueFiles = files.filter((file) => getExtension(file.name) === "cue");
-  if (cueFiles.length === 0) {
+  const sheetFiles = files.filter((file) => ["cue", "gdi"].includes(getExtension(file.name)));
+  if (sheetFiles.length === 0) {
     return {
       files,
       source: {
@@ -77,38 +78,45 @@ const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> =>
       },
     };
   }
-  if (cueFiles.length !== 1) {
+  if (sheetFiles.length !== 1) {
     return {
       files,
-      cueProblem: "Compress accepts one CUE disc group at a time",
+      sheetProblem: "Compress accepts one disc sheet group at a time",
       source: { fileName: files[0]?.name || "input.bin", size: files[0]?.size || 0 },
     };
   }
-  const cue = cueFiles[0];
-  if (!cue) throw new Error("CUE input is unavailable");
-  const references = parseCueFileReferences(await cue.text()).map((reference) => reference.fileName);
-  let cueProblem: string | undefined;
-  if (references.length === 0) cueProblem = `CUE file has no referenced tracks: ${cue.name}`;
+  const sheet = sheetFiles[0];
+  if (!sheet) throw new Error("Disc sheet input is unavailable");
+  const isGdi = getExtension(sheet.name) === "gdi";
+  const sheetLabel = isGdi ? "GDI" : "CUE";
+  const sheetText = await sheet.text();
+  const references = isGdi
+    ? parseGdiFileReferences(sheetText)
+    : parseCueFileReferences(sheetText).map((reference) => reference.fileName);
+  let sheetProblem: string | undefined;
+  if (references.length === 0) sheetProblem = `${sheetLabel} file has no referenced tracks: ${sheet.name}`;
   const trackName = (name: string) => getBaseFileName(name).toLowerCase();
   const referenced = new Set(references.map(trackName));
-  if (!cueProblem && referenced.size !== references.length)
-    cueProblem = `CUE file has ambiguous track names: ${cue.name}`;
-  const suppliedTracks = files.filter((file) => file !== cue);
+  if (!sheetProblem && referenced.size !== references.length)
+    sheetProblem = `${sheetLabel} file has ambiguous track names: ${sheet.name}`;
+  const suppliedTracks = files.filter((file) => file !== sheet);
   const suppliedNames = new Set(suppliedTracks.map((file) => trackName(file.name)));
-  if (!cueProblem && suppliedNames.size !== suppliedTracks.length)
-    cueProblem = "CUE disc group has ambiguous track names";
+  if (!sheetProblem && suppliedNames.size !== suppliedTracks.length)
+    sheetProblem = `${sheetLabel} disc group has ambiguous track names`;
   const missing = references.filter((name) => !suppliedNames.has(trackName(name)));
-  if (!cueProblem && missing.length > 0) cueProblem = `CUE file references missing track: ${missing[0]}`;
+  if (!sheetProblem && missing.length > 0) sheetProblem = `${sheetLabel} file references missing track: ${missing[0]}`;
   const extra = suppliedTracks.find((file) => !referenced.has(trackName(file.name)));
-  if (!cueProblem && extra) cueProblem = `CUE disc group contains an unreferenced file: ${extra.name}`;
+  if (!sheetProblem && extra) sheetProblem = `${sheetLabel} disc group contains an unreferenced file: ${extra.name}`;
   return {
-    cue,
-    cueProblem,
+    sheet,
+    sheetProblem,
     files,
     source: {
-      fileName: cue.name,
-      size: cue.size,
-      metadata: { cuePath: cue.name, format: "CD", mode: "cd" },
+      fileName: sheet.name,
+      size: sheet.size,
+      metadata: isGdi
+        ? { gdiPath: sheet.name, format: "GD-ROM", mode: "gd" }
+        : { cuePath: sheet.name, format: "CD", mode: "cd" },
     },
   };
 };
@@ -121,7 +129,7 @@ const getCompressSource = async (files: File[]): Promise<CompressSource | null> 
 const getCompressFormats = async (files: File[]): Promise<ConcreteCompressFormat[]> => {
   if (files.length === 0) return [];
   const input = await validateInputs(files);
-  if (input.cue) return input.cueProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
+  if (input.sheet) return input.sheetProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
   if (input.files.length !== 1) return [...ARCHIVE_FORMATS];
 
   const source = { ...input.source, metadata: { ...input.source.metadata } };
@@ -139,22 +147,23 @@ const getCompressFormats = async (files: File[]): Promise<ConcreteCompressFormat
 };
 
 const createAssets = async (input: ValidatedCompressInput): Promise<InputAsset[]> => {
-  const cueText = input.cue ? await input.cue.text() : undefined;
+  const sheetText = input.sheet ? await input.sheet.text() : undefined;
+  const isGdi = input.sheet && getExtension(input.sheet.name) === "gdi";
   return Promise.all(
     input.files.map(async (source, index) => {
       const file = await createBlobBackedPatchFile(source, source.name, undefined, null, { materialize: false });
-      const isCue = source === input.cue;
-      if (isCue) file.metadata = { ...file.metadata, cueText };
-      else if (!input.cue) file.metadata = { ...file.metadata, ...input.source.metadata };
+      const isSheet = source === input.sheet;
+      if (isSheet) file.metadata = { ...file.metadata, ...(isGdi ? { gdiText: sheetText } : { cueText: sheetText }) };
+      else if (!input.sheet) file.metadata = { ...file.metadata, ...input.source.metadata };
       let kind: InputAsset["kind"] = "rom";
-      if (input.cue) kind = isCue ? "cue" : "track";
+      if (input.sheet) kind = isSheet ? (isGdi ? "gdi" : "cue") : "track";
       return {
         file,
         fileName: source.name,
-        groupId: input.cue ? "compress-cue-group" : undefined,
+        groupId: input.sheet ? "compress-disc-group" : undefined,
         id: `compress-${index}`,
         kind,
-        patchable: !isCue,
+        patchable: !isSheet,
         size: source.size,
       } satisfies InputAsset;
     }),
@@ -178,9 +187,9 @@ const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
 // Each `File` is the disk-backed snapshot of its stored copy, so it is never read into memory. Entries
 // keep their base name so CUE references still match; entries that share a base name in different
 // folders take their folder path instead, or every compress run rejects them as duplicates.
-const MAX_CUE_REWRITE_BYTES = 1024 * 1024;
+const MAX_SHEET_REWRITE_BYTES = 1024 * 1024;
 
-const resolveCueReference = (cuePath: string, reference: string): string => {
+const resolveSheetReference = (cuePath: string, reference: string): string => {
   const folder = cuePath.split("/").slice(0, -1);
   const parts: string[] = [];
   for (const part of [...folder, ...reference.replace(/\\/g, "/").split("/")]) {
@@ -204,14 +213,18 @@ const encodeBytes = (text: string): Uint8Array<ArrayBuffer> => {
   return new Uint8Array(bytes);
 };
 
-// Staged entries sit side by side under new names, so a CUE that reached its tracks through folders
-// MUST point at the staged names, or a ZIP or 7z made from them holds a sheet with missing tracks.
-const rewriteCueReferences = async (cue: File, cuePath: string, nameByPath: Map<string, string>): Promise<File> => {
-  if (cue.size > MAX_CUE_REWRITE_BYTES) return cue;
+// Disc sheets MUST reference staged names after archive entries are flattened or renamed.
+const rewriteSheetReferences = async (
+  cue: File,
+  cuePath: string,
+  resolveName: (path: string) => string | undefined,
+): Promise<File> => {
+  if (cue.size > MAX_SHEET_REWRITE_BYTES) return cue;
   const text = decodeBytes(new Uint8Array(await cue.arrayBuffer()));
   let changed = false;
-  const rewritten = replaceCueFileReferences(text, (reference) => {
-    const name = nameByPath.get(resolveCueReference(cuePath, reference).toLowerCase());
+  const replaceReferences = /\.gdi$/i.test(cue.name) ? replaceGdiFileReferences : replaceCueFileReferences;
+  const rewritten = replaceReferences(text, (reference) => {
+    const name = resolveName(resolveSheetReference(cuePath, reference));
     if (!name || name === reference) return undefined;
     changed = true;
     return name;
@@ -233,7 +246,13 @@ const toOpenedEntries = async (
     const baseName = getEntryBaseName(path);
     return (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
   };
-  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path).toLowerCase(), nameOf(path)]));
+  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path), nameOf(path)]));
+  const foldedNames = new Map<string, string | undefined>();
+  for (const [path, name] of nameByPath) {
+    const folded = path.toLowerCase();
+    foldedNames.set(folded, foldedNames.has(folded) ? undefined : name);
+  }
+  const resolveName = (path: string) => nameByPath.get(path) ?? foldedNames.get(path.toLowerCase());
   const entries: OpenedCompressEntry[] = [];
   for (const { output, path } of picked) {
     const stored = await output.vfs.getFile?.(output.path);
@@ -243,7 +262,9 @@ const toOpenedEntries = async (
       type: stored.type || "application/octet-stream",
     });
     entries.push({
-      file: /\.cue$/i.test(path) ? await rewriteCueReferences(file, normalizeEntryPath(path), nameByPath) : file,
+      file: /\.(cue|gdi)$/i.test(path)
+        ? await rewriteSheetReferences(file, normalizeEntryPath(path), resolveName)
+        : file,
       output,
       path,
     });
@@ -371,7 +392,7 @@ const compressFiles = async (
     });
   }
   const input = await validateInputs(files);
-  if (compression === "chd" && input.cueProblem) throw new Error(input.cueProblem);
+  if (compression === "chd" && input.sheetProblem) throw new Error(input.sheetProblem);
   const supported = await getCompressFormats(files);
   if (!supported.includes(compression as ConcreteCompressFormat)) {
     throw new Error(`Compression format ${compression} does not support this file set`);

@@ -3315,6 +3315,11 @@ msgstr "Diese Dateien in Anwenden öffnen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.drop.opening"
+msgstr "{page} wird geöffnet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Öffnet die Anleitung"
 
@@ -5777,3 +5782,23 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteApplyWeave"
+msgstr "Die Patches des Weaves auf ein ROM anwenden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.noteEditWeave"
+msgstr "Die Patch-Anleitung bearbeiten und als Weave teilen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeWeaveBody"
+msgstr "Patches anwenden oder die Anleitung bearbeiten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.drop.routeWeaveTitle"
+msgstr "Was möchtest du mit diesem Weave tun?"

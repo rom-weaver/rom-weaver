@@ -1,7 +1,9 @@
+import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { Localizer } from "../presentation/localization/index.ts";
 import type { MessageId } from "../presentation/localization/catalog.ts";
 import { getSettingsLabel } from "../presentation/settings.ts";
 import { createLogger } from "../lib/logging.ts";
+import { lookupExpectedRom, searchExpectedRomTitles } from "../lib/apply/expected-rom-lookup.ts";
 import type { WorkflowTab } from "./components/shell.tsx";
 import { searchDocs } from "./docs-search.mjs";
 import { SETTINGS_FIELD_METADATA, SETTINGS_PANEL_SECTIONS } from "./settings/settings-metadata.ts";
@@ -78,7 +80,6 @@ const loadIdentifyFindEntries = async (
   const algorithm = identifyHashAlgorithm(hex);
   if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) {
     if (!algorithm) return [];
-    const { lookupExpectedRom } = await import("../lib/apply/expected-rom-lookup.ts");
     const result = await lookupExpectedRom({ checksums: { [algorithm]: hex } }, { signal });
     if (!result || result.status === "unavailable") return [];
     return result.matches.slice(0, IDENTIFY_RESULT_LIMIT).map((match, index) => ({
@@ -90,7 +91,6 @@ const loadIdentifyFindEntries = async (
       label: match.name,
     }));
   }
-  const { searchExpectedRomTitles } = await import("../lib/apply/expected-rom-lookup.ts");
   const result = await searchExpectedRomTitles(normalized, { limit: IDENTIFY_RESULT_LIMIT, signal });
   if (result.status === "unavailable") return [];
   return result.titles.map((title) => ({
@@ -301,11 +301,10 @@ const toRoute = (entry: FindEntry): GuideRoute => ({
 
 let guidesPromise: Promise<readonly GuideRoute[]> | null = null;
 
-/** The guide metadata and its prebuilt text are two lazy chunks; both load on the first search. */
+/** The prebuilt guide search text loads on the first search. */
 const loadGuideRoutes = (): Promise<readonly GuideRoute[]> => {
-  guidesPromise ??= Promise.all([import("virtual:rom-weaver-docs"), import("virtual:rom-weaver-docs-search")]).then(
-    ([{ DOC_ROUTES }, { SEARCH_ENTRIES }]) =>
-      DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
+  guidesPromise ??= import("virtual:rom-weaver-docs-search").then(
+    ({ SEARCH_ENTRIES }) => DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
     (error) => {
       guidesPromise = null;
       logger.warn("Find guide index failed to load", {

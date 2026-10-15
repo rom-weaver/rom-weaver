@@ -22,6 +22,7 @@ import {
   OPFS_PROXY_OP_OPEN,
   OPFS_PROXY_OP_READ,
   OPFS_PROXY_OP_SIZE,
+  OPFS_PROXY_OP_TRUNCATE,
   OPFS_PROXY_OP_UNLINK,
   OPFS_PROXY_OP_WRITE,
   OPFS_PROXY_STATE_DONE,
@@ -48,6 +49,9 @@ class MockFile {
   liveHandles = 0;
   createdHandles = 0;
   closeError: Error | null = null;
+  readResult: number | null = null;
+  writeResult: number | null = null;
+  ignoreTruncate = false;
 }
 
 class MockSyncAccessHandle {
@@ -60,6 +64,7 @@ class MockSyncAccessHandle {
     return this.file.fakeSize ?? this.file.bytes.byteLength;
   }
   read(buffer: Uint8Array, options?: { at?: number }): number {
+    if (this.file.readResult !== null) return this.file.readResult;
     const at = options?.at ?? 0;
     const available = Math.max(0, this.file.bytes.byteLength - at);
     const n = Math.min(buffer.byteLength, available);
@@ -67,6 +72,7 @@ class MockSyncAccessHandle {
     return n;
   }
   write(buffer: Uint8Array, options?: { at?: number }): number {
+    if (this.file.writeResult !== null) return this.file.writeResult;
     const at = options?.at ?? 0;
     const end = at + buffer.byteLength;
     if (end > this.file.bytes.byteLength) {
@@ -78,6 +84,7 @@ class MockSyncAccessHandle {
     return buffer.byteLength;
   }
   truncate(size: number): void {
+    if (this.file.ignoreTruncate) return;
     const next = new Uint8Array(size);
     next.set(this.file.bytes.subarray(0, Math.min(size, this.file.bytes.byteLength)));
     this.file.bytes = next;
@@ -199,6 +206,32 @@ function startServer(
 }
 
 describe("opfs proxy SIZE 64-bit encoding", () => {
+  it("rejects a native truncate that silently leaves the file unchanged", async () => {
+    const root = new MockDirectoryHandle();
+    const { channel, server } = startServer(root, ["/work"]);
+    try {
+      const opened = await request(channel, {
+        auxLow: CREATE_FLAG | WRITABLE_FLAG,
+        opcode: OPFS_PROXY_OP_OPEN,
+        path: "/work/output.iso",
+      });
+      expect(opened.status).toBe(OPFS_PROXY_STATUS_OK);
+      const file = root.files.get("output.iso")?.file;
+      if (!file) throw new Error("output file was not created");
+      file.ignoreTruncate = true;
+      const truncated = await request(channel, {
+        auxLow: 1459978240,
+        handle: opened.result,
+        opcode: OPFS_PROXY_OP_TRUNCATE,
+      });
+      expect(truncated.status).toBe(OPFS_PROXY_STATUS_EIO);
+      expect(file.bytes.byteLength).toBe(0);
+    } finally {
+      server.stop();
+      await server.done;
+    }
+  });
+
   it("reports a >= 2 GiB size without truncating to a signed 32-bit value", async () => {
     const root = new MockDirectoryHandle();
     const { channel, server } = startServer(root, ["/work"]);
@@ -428,4 +461,35 @@ describe("waitForAtomicsStateChange shouldAbort", () => {
     });
     expect(result).toBe("timed-out");
   });
+});
+
+describe("opfs proxy native byte counts", () => {
+  it.each([OPFS_PROXY_OP_READ, OPFS_PROXY_OP_WRITE])(
+    "rejects impossible native counts for opcode %i instead of publishing success",
+    async (opcode) => {
+      const root = new MockDirectoryHandle();
+      const traces: string[] = [];
+      const { channel, server } = startServer(root, ["/work"], (line) => traces.push(line));
+      try {
+        const opened = await request(channel, {
+          auxLow: CREATE_FLAG | WRITABLE_FLAG,
+          opcode: OPFS_PROXY_OP_OPEN,
+          path: "/work/count.bin",
+        });
+        const file = root.files.get("count.bin")?.file;
+        expect(file).toBeDefined();
+        if (!file) throw new Error("proxy did not create count.bin");
+        for (const invalid of [4294967288, -8, NaN, 1.5]) {
+          if (opcode === OPFS_PROXY_OP_READ) file.readResult = invalid;
+          else file.writeResult = invalid;
+          const response = await request(channel, { handle: opened.result, length: 16, opcode });
+          expect(response.status).toBe(OPFS_PROXY_STATUS_EIO);
+          expect(traces.at(-1)).toContain(`invalid byte count ${invalid}`);
+        }
+      } finally {
+        server.stop();
+        await server.done;
+      }
+    },
+  );
 });

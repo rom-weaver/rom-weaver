@@ -65,7 +65,138 @@ impl ciso::read::Read for CsoSourceReader {
     }
 }
 
-type CsoImageReader = CsoReader<io::Error, CsoSourceReader>;
+struct CsoReader<R> {
+    source: R,
+    logical_bytes: u64,
+    block_size: usize,
+    alignment: u8,
+    source_size: u64,
+    index: Vec<u32>,
+}
+
+type CsoImageReader = CsoReader<CsoSourceReader>;
+
+impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
+    fn invalid(message: &str) -> io::Error {
+        io::Error::new(io::ErrorKind::InvalidData, message)
+    }
+
+    fn new(mut source: R) -> io::Result<Self> {
+        let mut bytes = [0; 24];
+        source.read(0, &mut bytes)?;
+        let header = ciso::layout::CSOHeader::deserialize::<io::Error>(&bytes)
+            .map_err(|error| Self::invalid(&error.to_string()))?;
+        let block_size = header.block_size as usize;
+        if block_size == 0 || block_size > 16 * 1024 * 1024 || header.alignment > 31 {
+            return Err(Self::invalid("invalid CSO block size or alignment"));
+        }
+        let blocks = header.uncompressed_size.div_ceil(block_size as u64);
+        let table_bytes = blocks
+            .checked_add(1)
+            .and_then(|count| count.checked_mul(4))
+            .ok_or_else(|| Self::invalid("CSO index size overflow"))?;
+        let data_start = 24_u64
+            .checked_add(table_bytes)
+            .ok_or_else(|| Self::invalid("CSO index offset overflow"))?;
+        let source_size = source.size()?;
+        if data_start > source_size {
+            return Err(Self::invalid("CSO index extends beyond source"));
+        }
+        let table_len = usize::try_from(table_bytes)
+            .map_err(|_| Self::invalid("CSO index exceeds address space"))?;
+        let mut table = vec![0; table_len];
+        source.read(24, &mut table)?;
+        let index = table
+            .chunks_exact(4)
+            .map(|bytes| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+            .collect::<Vec<_>>();
+        let mut previous = data_start;
+        for entry in &index {
+            let offset = u64::from(entry & 0x7fff_ffff) << header.alignment;
+            if offset < previous || offset > source_size {
+                return Err(Self::invalid(
+                    "CSO block offsets are unordered or outside source",
+                ));
+            }
+            previous = offset;
+        }
+        Ok(Self {
+            source,
+            logical_bytes: header.uncompressed_size,
+            block_size,
+            alignment: header.alignment,
+            source_size,
+            index,
+        })
+    }
+
+    fn file_size(&self) -> u64 {
+        self.logical_bytes
+    }
+
+    fn read_offset(&mut self, mut pos: u64, mut output: &mut [u8]) -> io::Result<()> {
+        if pos
+            .checked_add(output.len() as u64)
+            .is_none_or(|end| end > self.logical_bytes)
+        {
+            return Err(Self::invalid("CSO read exceeds logical size"));
+        }
+        while !output.is_empty() {
+            let block = (pos / self.block_size as u64) as usize;
+            let within = (pos % self.block_size as u64) as usize;
+            let entry = self.index[block];
+            let start = u64::from(entry & 0x7fff_ffff) << self.alignment;
+            let mut end = u64::from(self.index[block + 1] & 0x7fff_ffff) << self.alignment;
+            // The ciso writer rounds the final sentinel down to its alignment boundary.
+            if block + 2 == self.index.len() && self.source_size - end < (1_u64 << self.alignment) {
+                end = self.source_size;
+            }
+            let block_len = (self.logical_bytes - block as u64 * self.block_size as u64)
+                .min(self.block_size as u64) as usize;
+            let count = output.len().min(block_len - within);
+            if entry & 0x8000_0000 == 0 {
+                if end - start < block_len as u64 {
+                    return Err(Self::invalid("CSO raw block is truncated"));
+                }
+                self.source
+                    .read(start + within as u64, &mut output[..count])?;
+            } else {
+                let mut length = [0; 4];
+                if end - start < 4 {
+                    return Err(Self::invalid("CSO compressed block is truncated"));
+                }
+                self.source.read(start, &mut length)?;
+                let length = u32::from_le_bytes(length);
+                let stored_len = (length & 0x7fff_ffff) as usize;
+                if stored_len == 0
+                    || stored_len > self.block_size + self.block_size / 255 + 16
+                    || stored_len as u64 > end - start - 4
+                {
+                    return Err(Self::invalid("invalid CSO LZ4 block length"));
+                }
+                let mut stored = vec![0; stored_len];
+                self.source.read(start + 4, &mut stored)?;
+                let mut decoded = vec![0; self.block_size];
+                if length & 0x8000_0000 != 0 {
+                    if stored_len != block_len {
+                        return Err(Self::invalid("invalid CSO uncompressed LZ4 block length"));
+                    }
+                    decoded[..stored_len].copy_from_slice(&stored);
+                } else {
+                    let decoded_len = lz4_flex::block::decompress_into(&stored, &mut decoded)
+                        .map_err(|_| Self::invalid("invalid CSO LZ4 compressed block"))?;
+                    if decoded_len != block_len {
+                        return Err(Self::invalid("invalid CSO LZ4 compressed block"));
+                    }
+                }
+                output[..count].copy_from_slice(&decoded[within..within + count]);
+            }
+            pos += count as u64;
+            output = &mut output[count..];
+        }
+        Ok(())
+    }
+}
 
 pub(crate) struct CsoContainerHandler {
     descriptor: &'static FormatDescriptor,
@@ -376,5 +507,305 @@ impl ContainerHandlerOperations for CsoContainerHandler {
     ) -> Result<OperationReport> {
         let _ = (request, context);
         Err(extract_only_create_error(self.descriptor.name))
+    }
+}
+
+#[cfg(test)]
+mod reader_regressions {
+    use super::*;
+
+    fn image_with_spans(
+        block_size: u32,
+        logical_bytes: u64,
+        alignment: u8,
+        index: &[u32],
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let mut bytes = ciso::layout::CSOHeader::new().serialize().to_vec();
+        bytes[8..16].copy_from_slice(&logical_bytes.to_le_bytes());
+        bytes[16..20].copy_from_slice(&block_size.to_le_bytes());
+        bytes[21] = alignment;
+        for entry in index {
+            bytes.extend_from_slice(&entry.to_le_bytes());
+        }
+        bytes.extend_from_slice(payload);
+        bytes
+    }
+
+    #[test]
+    fn cso_final_sentinel_tail_respects_alignment_boundary() {
+        for tail in [3, 4, 5] {
+            let payload = (0..4 + tail).map(|index| index as u8).collect::<Vec<_>>();
+            let bytes = image_with_spans(8, 7, 2, &[8, 9], &payload);
+            let mut reader =
+                CsoReader::new(std::io::Cursor::new(bytes)).expect("valid aligned index");
+            let mut output = [0; 7];
+            let result = reader.read_offset(0, &mut output);
+            if tail < 4 {
+                result.expect("rounded-down final sentinel retains its partial alignment tail");
+                assert_eq!(output, payload[..7]);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "tail {tail} exceeds the final sentinel's alignment unit"
+                );
+            }
+        }
+        let bytes = image_with_spans(1, 2, 2, &[9, 9, 9], &[7, 8]);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("ordered index");
+        assert!(
+            reader.read_offset(0, &mut [0]).is_err(),
+            "a nonfinal block cannot borrow the file's alignment tail"
+        );
+    }
+
+    #[test]
+    fn cso_reads_partial_final_logical_block() {
+        let payload = (0..10).collect::<Vec<u8>>();
+        let bytes = image_with_spans(8, 10, 0, &[36, 44, 46], &payload);
+        let mut reader =
+            CsoReader::new(std::io::Cursor::new(bytes)).expect("partial final geometry");
+        let mut output = [0; 3];
+        reader
+            .read_offset(7, &mut output)
+            .expect("read across partial final block");
+        assert_eq!(output, [7, 8, 9]);
+    }
+
+    #[test]
+    fn cso_declared_spans_bound_raw_and_compressed_reads() {
+        let bytes = image_with_spans(8, 8, 0, &[32, 36], &[7; 16]);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("ordered raw index");
+        assert!(reader.read_offset(0, &mut [0; 8]).is_err());
+        let mut payload = (0x8000_0008_u32).to_le_bytes().to_vec();
+        payload.extend_from_slice(&[7; 8]);
+        for span in [0, 1, 2, 3, 11, 12] {
+            let bytes = image_with_spans(8, 8, 0, &[32 | 0x8000_0000, 32 + span], &payload);
+            let mut reader =
+                CsoReader::new(std::io::Cursor::new(bytes)).expect("ordered compressed index");
+            let mut output = [0; 8];
+            let result = reader.read_offset(0, &mut output);
+            if span == 12 {
+                result.expect("complete uncompressed LZ4 frame block");
+                assert_eq!(output, [7; 8]);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "declared span {span} cannot read the payload beyond it"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cso_lz4_literal_blocks_accept_valid_expansion() {
+        for size in [2048_usize, 65536] {
+            let mut compressed = vec![0xf0];
+            let mut remaining = size - 15;
+            while remaining >= 255 {
+                compressed.push(255);
+                remaining -= 255;
+            }
+            compressed.push(remaining as u8);
+            let original = (0..size).map(|index| index as u8).collect::<Vec<_>>();
+            compressed.extend_from_slice(&original);
+            let mut payload = (compressed.len() as u32).to_le_bytes().to_vec();
+            payload.extend_from_slice(&compressed);
+            let bytes = image_with_spans(
+                size as u32,
+                size as u64,
+                0,
+                &[32 | 0x8000_0000, 32 + payload.len() as u32],
+                &payload,
+            );
+            let mut reader =
+                CsoReader::new(std::io::Cursor::new(bytes)).expect("valid literal block geometry");
+            let mut output = vec![0; size];
+            reader
+                .read_offset(0, &mut output)
+                .expect("valid expanded LZ4 literal stream");
+            assert_eq!(output, original);
+        }
+    }
+
+    fn match_block(offset: u8, preceding_match: bool) -> Vec<u8> {
+        let mut compressed = if preceding_match {
+            vec![0x10, b'A', 1, 0, 0x0f, offset, 0]
+        } else {
+            vec![0x1f, b'A', offset, 0]
+        };
+        compressed.extend_from_slice(&[255; 7]);
+        compressed.push(if preceding_match { 234 } else { 238 });
+        compressed.extend_from_slice(&[0x50, b'B', b'B', b'B', b'B', b'B']);
+        let mut payload = (compressed.len() as u32).to_le_bytes().to_vec();
+        payload.extend_from_slice(&compressed);
+        image_with_spans(
+            2048,
+            2048,
+            0,
+            &[0x8000_0020, 32 + payload.len() as u32],
+            &payload,
+        )
+    }
+
+    #[test]
+    fn cso_lz4_rejects_zero_match_offsets() {
+        for preceding_match in [false, true] {
+            let bytes = match_block(0, preceding_match);
+            let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+            let error = reader
+                .read_offset(0, &mut [0; 2048])
+                .expect_err("zero offset after literals or a match must be rejected");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        }
+    }
+
+    #[test]
+    fn cso_lz4_match_offsets_preserve_bytes_and_bounds() {
+        for preceding_match in [false, true] {
+            let bytes = match_block(1, preceding_match);
+            for logical_bytes in [2047_u64, 2048, 2049] {
+                let mut bytes = bytes.clone();
+                bytes[8..16].copy_from_slice(&logical_bytes.to_le_bytes());
+                bytes[16..20].copy_from_slice(&4096_u32.to_le_bytes());
+                let mut reader =
+                    CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+                let mut output = vec![0; logical_bytes as usize];
+                let result = reader.read_offset(0, &mut output);
+                if logical_bytes == 2048 {
+                    result.expect("valid offset one");
+                    assert_eq!(&output[..2043], &[b'A'; 2043]);
+                    assert_eq!(&output[2043..], &[b'B'; 5]);
+                    let mut tail = [0; 6];
+                    reader
+                        .read_offset(2042, &mut tail)
+                        .expect("partial match read");
+                    assert_eq!(tail, [b'A', b'B', b'B', b'B', b'B', b'B']);
+                    assert!(reader.read_offset(2048, &mut [0]).is_err());
+                } else {
+                    assert!(
+                        result.is_err(),
+                        "decoded size must equal logical block length"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cso_oversized_lz4_payload_is_rejected_before_body_read() {
+        struct ObservedSource {
+            bytes: Vec<u8>,
+            body_reads: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        }
+        impl ciso::read::Read for ObservedSource {
+            type ReadError = io::Error;
+            fn size(&mut self) -> io::Result<u64> {
+                Ok(self.bytes.len() as u64)
+            }
+            fn read(&mut self, pos: u64, output: &mut [u8]) -> io::Result<()> {
+                if pos >= 36 {
+                    self.body_reads
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                let start = pos as usize;
+                output.copy_from_slice(&self.bytes[start..start + output.len()]);
+                Ok(())
+            }
+        }
+        let length = 2048 + 2048 / 255 + 17;
+        let mut payload = (length as u32).to_le_bytes().to_vec();
+        payload.resize(4 + length, 0);
+        let bytes = image_with_spans(
+            2048,
+            2048,
+            0,
+            &[32 | 0x8000_0000, 32 + payload.len() as u32],
+            &payload,
+        );
+        let body_reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let source = ObservedSource {
+            bytes,
+            body_reads: body_reads.clone(),
+        };
+        let mut reader = CsoReader::new(source).expect("valid geometry");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
+        assert_eq!(
+            body_reads.load(std::sync::atomic::Ordering::Relaxed),
+            0,
+            "invalid compressed length must be rejected before reading its body"
+        );
+    }
+
+    #[test]
+    fn cso_v2_raw_and_lz4_blocks_support_partial_reads() {
+        let mut seed = 1_u32;
+        let raw = (0..4096)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            })
+            .collect::<Vec<_>>();
+        for (source, compressed) in [(raw, false), (vec![0; 4096], true)] {
+            let mut image = std::io::Cursor::new(Vec::new());
+            ciso::write::write_ciso_image(&mut std::io::Cursor::new(&source), &mut image, |_| {})
+                .expect("write v2 fixture");
+            let bytes = image.into_inner();
+            let entry = u32::from_le_bytes(bytes[24..28].try_into().expect("index entry"));
+            assert_eq!(entry & 0x8000_0000 != 0, compressed);
+            let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("open v2 fixture");
+            let mut output = vec![0; 3000];
+            reader
+                .read_offset(37, &mut output)
+                .expect("partial multi-block read");
+            assert_eq!(output, source[37..3037]);
+        }
+    }
+
+    #[test]
+    fn cso_rejects_invalid_geometry_and_index() {
+        for (block_size, alignment, first, last) in [
+            (0, 0, 32, 2080),
+            (2048, 32, 32, 2080),
+            (2048, 0, 2080, 32),
+            (2048, 0, 32, 4096),
+            (2048, 0, 0, 2080),
+        ] {
+            let mut bytes = ciso::layout::CSOHeader::new().serialize().to_vec();
+            bytes[8..16].copy_from_slice(&2048_u64.to_le_bytes());
+            bytes[16..20].copy_from_slice(&u32::to_le_bytes(block_size));
+            bytes[21] = alignment;
+            bytes.extend_from_slice(&u32::to_le_bytes(first));
+            bytes.extend_from_slice(&u32::to_le_bytes(last));
+            bytes.resize(2080, 0);
+            assert!(CsoReader::new(std::io::Cursor::new(bytes)).is_err());
+        }
+    }
+
+    #[test]
+    fn cso_invalid_lz4_payload_returns_error() {
+        let mut bytes = ciso::layout::CSOHeader::new().serialize().to_vec();
+        bytes[8..16].copy_from_slice(&2048_u64.to_le_bytes());
+        bytes[21] = 0;
+        bytes.extend_from_slice(&(32_u32 | 0x8000_0000).to_le_bytes());
+        bytes.extend_from_slice(&37_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u32.to_le_bytes());
+        bytes.push(0);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
+    }
+
+    #[test]
+    fn cso_malformed_compressed_block_returns_error() {
+        let mut bytes = ciso::layout::CSOHeader::new().serialize().to_vec();
+        bytes[8..16].copy_from_slice(&2048_u64.to_le_bytes());
+        bytes[21] = 0;
+        bytes.extend_from_slice(&(32_u32 | 0x8000_0000).to_le_bytes());
+        bytes.extend_from_slice(&2080_u32.to_le_bytes());
+        bytes.resize(2080, 0x55);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("valid geometry");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
     }
 }

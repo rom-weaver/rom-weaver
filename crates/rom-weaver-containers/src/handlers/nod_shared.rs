@@ -455,10 +455,9 @@ impl NodHandlerCore {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
-        let mut output = BufWriter::new(create_extract_output_file(
-            &plan.output_path,
-            request.overwrite,
-        )?);
+        let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
+        output.set_len(plan.disc_size)?;
+        let mut output = BufWriter::new(output);
         let progress_label = format!("extracting `{}`", self.format_name());
         let bytes_written = copy_reader_with_progress(
             &mut plan.disc,

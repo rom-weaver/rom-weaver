@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { requestBrowserOpfsStorage } = vi.hoisted(() => ({
   requestBrowserOpfsStorage: vi.fn(
@@ -19,6 +19,38 @@ describe("browser OPFS cleanup", () => {
   beforeEach(() => {
     requestBrowserOpfsStorage.mockReset();
     requestBrowserOpfsStorage.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("preserves live-tab outputs and reclaims abandoned storage after the last tab closes", async () => {
+    let liveTabs = 0;
+    const locks = {
+      request: vi.fn(
+        async (_name: string, options: LockOptions, callback: (lock: { name: string } | null) => unknown) => {
+          if (options.ifAvailable) return callback(liveTabs ? null : { name: _name });
+          if (options.mode !== "shared") throw new Error("Expected shared tab lease");
+          liveTabs += 1;
+          return callback({ name: _name });
+        },
+      ),
+    };
+    vi.stubGlobal("navigator", { locks });
+    vi.resetModules();
+    const firstTab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await firstTab.startBrowserOpfsBootCleanup();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({ action: "remove", filePath: "/work/operations" });
+    requestBrowserOpfsStorage.mockClear();
+    vi.resetModules();
+    const secondTab = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await secondTab.startBrowserOpfsBootCleanup();
+    expect(requestBrowserOpfsStorage).not.toHaveBeenCalled();
+    expect(liveTabs).toBe(2);
+    liveTabs = 0;
+    vi.resetModules();
+    const laterSession = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await laterSession.startBrowserOpfsBootCleanup();
+    expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({ action: "remove", filePath: "/work/operations" });
   });
 
   it("sweeps emulator retention only for the boot cleanup", async () => {

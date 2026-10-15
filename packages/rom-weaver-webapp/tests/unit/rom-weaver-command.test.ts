@@ -301,6 +301,15 @@ describe("command readers", () => {
       "unsupported tools command: reverse",
     );
   });
+
+  it.each(["patch", "weave", "bundle", "tools", "save"])("rejects prototype method names under %s", (family) => {
+    for (const type of ["constructor", "toString", "__proto__", "__defineSetter__"]) {
+      const command = asCommand({ type: family, args: { type, args: {} } });
+      expect(() => getRomWeaverCommandLabel(command)).toThrow(
+        family === "tools" ? "unsupported tools command" : /Unhandled rom-weaver command shape|unsupported/,
+      );
+    }
+  });
 });
 
 describe("collectRomWeaverRunInputPaths", () => {
@@ -432,6 +441,13 @@ describe("romWeaverCommandSupportsThreads", () => {
     expect(() => romWeaverCommandSupportsThreads(asCommand({ args: { type: "reverse" }, type: "weave" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
+  });
+
+  it.each(["patch", "weave", "bundle"])("rejects prototype method names before threading %s", (family) => {
+    for (const type of ["constructor", "toString", "__proto__", "__defineSetter__"]) {
+      const command = asCommand({ type: family, args: { type, args: {} } });
+      expect(() => romWeaverCommandSupportsThreads(command)).toThrow(/Unhandled rom-weaver command shape/);
+    }
   });
 });
 

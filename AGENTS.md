@@ -51,7 +51,7 @@ Before pushing webapp or published-doc changes, run a production webapp build
 and `check:size`; lint and pre-commit hooks do not cover generated asset sizes.
 Use `docs/development/reproduce-ci-locally.md#prevent-repeat-failures` for the
 commands and the additional checks for UI changes. Investigate unexpected
-growth before proposing a budget increase; never raise a limit just to pass CI.
+growth, then apply the byte-count limit policy below.
 
 Codex and Claude use this same pre-push gate (`CLAUDE.md` imports this file).
 Select browser test files using the guide's behavior-to-test table; use the full
@@ -60,6 +60,18 @@ tests for build/tooling changes. The CI-script hook checks classifier and runtim
 dependency changes; it does not replace browser tests. Build once in production,
 check sizes before browser/E2E work, and reuse that current bundle for E2E as
 documented. Report which checks passed and any checks that could not run.
+
+## Byte-count limits
+
+Automatically raise byte-count limits that block CI, tests, or size checks when
+an increase totals at most 10,000 bytes per limit in the PR. This is standing
+user consent; do not ask again within that allowance. Measure the total increase
+against the PR's base, including earlier commits. Ask before larger increases.
+
+Keep the checks enabled, record measured sizes and the old and new limits, and
+rerun affected checks. Budget changes still require review. This permission
+covers byte-count limits; other assertions and thresholds retain their existing
+rules.
 
 ## Additional correctness checks
 
@@ -184,4 +196,5 @@ mode hangs on `+` in test paths).
 - Rust: `crates/*/tests/unit/`, CLI end-to-end in
   `crates/rom-weaver-cli/tests/cli_smoke/`
 - Browser: `packages/rom-weaver-webapp/tests/browser/` (Playwright + vitest)
-- Never skip/remove/modify tests to make a change pass.
+- Never skip or remove tests to make a change pass. Byte-count limit changes
+  follow the policy above; do not weaken other test assertions.

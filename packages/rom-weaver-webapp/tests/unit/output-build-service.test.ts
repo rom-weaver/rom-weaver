@@ -199,14 +199,14 @@ describe("buildSessionOutputFiles", () => {
     );
   });
 
-  it("throws when a CHD disc-group output has no CUE or no tracks", async () => {
+  it("throws when a CHD disc-group output has no disc sheet or no tracks", async () => {
     const romA = await makeFile("rom-a-bytes", "gameA.bin");
     const romB = await makeFile("rom-b-bytes", "gameB.bin");
     const assets = [makeAsset("a1", "rom", romA), makeAsset("a2", "rom", romB)];
     const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
 
     await expect(buildSessionOutputFiles(assets, new Map(), options)).rejects.toThrow(
-      "CHD output requires a CUE disc group with tracks",
+      "CHD output requires a disc sheet group with tracks",
     );
   });
 
@@ -226,7 +226,7 @@ describe("buildSessionOutputFiles", () => {
     const cueFile = await makeFile('FILE "t1.bin" BINARY', "disc.cue");
     const trackA = await makeFile("track-a-bytes", "t1.bin");
     const assets = [makeAsset("cue", "cue", cueFile, "group"), makeAsset("t1", "track", trackA, "group")];
-    const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
+    const options: ApplyWorkflowOptions = { output: { compression: "chd", container: { profile: "min" } } } as never;
     const chdOutputFile = await makeFile("chd-bytes", "disc.chd");
     const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
     const runtime = { compression: { create } } as unknown as WorkflowRuntime;
@@ -239,6 +239,7 @@ describe("buildSessionOutputFiles", () => {
     expect(request.format).toBe("chd");
     expect(request.outputName).toBe("disc.chd");
     expect(request.romSpecific.chd.mode).toBe("cd");
+    expect(request.romSpecific.chd.compressionProfile).toBe("min");
     expect(request.romSpecific.chd.imageFiles).toEqual([{ fileName: "t1.bin", source: expect.anything() }]);
     expect(result.files).toEqual([chdOutputFile]);
   });
@@ -311,7 +312,7 @@ describe("createSingleFileRomSpecificOutput", () => {
 
     const result = await createSingleFileRomSpecificOutput({
       compression: "chd",
-      options: { output: { outputName: "game.chd" } } as never,
+      options: { output: { outputName: "game.chd", container: { profile: "min" } } } as never,
       outputFile,
       runtime,
     });
@@ -320,6 +321,7 @@ describe("createSingleFileRomSpecificOutput", () => {
     const request = create.mock.calls[0]?.[0];
     expect(request.format).toBe("chd");
     expect(request.fileName).toBe("game.bin");
+    expect(request.romSpecific.chd.compressionProfile).toBe("min");
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
   });

@@ -188,12 +188,12 @@ describe("runRomWeaverJson", () => {
     expect(traceLines.some((line) => line.includes("activeVirtualFiles"))).toBe(true);
   });
 
-  it("keeps all active files for cue-based disc compression", async () => {
+  it.each(["cue", "gdi"])("keeps all active files for %s disc compression", async (sheet) => {
     state.virtualFiles = [
-      { path: "/work/disc.cue", source: new Uint8Array([1]) },
+      { path: `/work/disc.${sheet}`, source: new Uint8Array([1]) },
       { path: "/work/disc.bin", source: new Uint8Array([2]) },
     ];
-    await runRomWeaverJson(command("compress", "/work/disc.cue"));
+    await runRomWeaverJson(command("compress", `/work/disc.${sheet}`));
     expect(state.run).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ virtualFiles: state.virtualFiles }),

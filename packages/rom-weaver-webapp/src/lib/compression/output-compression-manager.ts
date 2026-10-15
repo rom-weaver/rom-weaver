@@ -21,6 +21,7 @@ import {
   COMPRESSION_PROFILE_NAMES,
   type GeneratedCompressionProfile,
   getGeneratedCompressionCodecFieldCodecs,
+  getGeneratedCompressionCodecLevelMin,
   getGeneratedCompressionProfileLevel,
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
@@ -294,10 +295,11 @@ const OutputCompressionManager = (() => {
         if (parsed.hasLevel) return entry;
 
         const maxLevel = getChdCodecLevelMax(codec);
-        if (maxLevel === null) return codec;
+        const minLevel = getGeneratedCompressionCodecLevelMin(codec);
+        if (maxLevel === null || minLevel === null) return codec;
 
-        const profileLevel = _getCompressionProfileLevel(compressionProfile, codec, codec === "cdzs" ? "" : "");
-        return `${codec}:${Math.max(0, Math.min(maxLevel, profileLevel))}`;
+        const profileLevel = _getCompressionProfileLevel(compressionProfile, codec, "");
+        return `${codec}:${Math.max(minLevel, Math.min(maxLevel, profileLevel))}`;
       })
       .join(",");
   };
