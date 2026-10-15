@@ -61,7 +61,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 >
 > ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild. This workflow is available through the native CLI, not browser Apply.
 >
-> ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create and the CLI format recommendation offer MOD only for that Original. CLI `patch create --format mod` accepts another Original with a warning; applying that patch requires `--ignore-checksum-validation`.
+> ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** list MOD for any Original. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
