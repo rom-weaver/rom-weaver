@@ -487,6 +487,25 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
+// A weave's expected ROM is the run's expected input (`--expect-in`), as in the CLI weave apply.
+// Apply's `--expect-in` is checksum-only, so size tokens stay with the plan-mode validation. The
+// strict-validation override (or a non-strict setting) skips the check, like the CLI's
+// `--ignore-checksum-validation` skips weave checks.
+const getExpectedRomChecksums = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  options: ApplyPatchOptions,
+) => {
+  if (options.validation?.requireInputChecksumMatch !== true) return undefined;
+  const tokens = patchIndices
+    .map((patchIndex) => patchOptions?.[patchIndex]?.expectedRomChecks)
+    .find(Boolean)
+    ?.split(",")
+    .map((token) => token.trim())
+    .filter((token) => token && !/^(min-)?size=/i.test(token));
+  return tokens?.length ? tokens : undefined;
+};
+
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
     output &&
@@ -533,6 +552,7 @@ const applyPatchesToAsset = async ({
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
   const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
+  const expectedRomChecksums = getExpectedRomChecksums(patchIndices, patchOptions, options);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -565,6 +585,7 @@ const applyPatchesToAsset = async ({
       ...(patchTargets ? { patchTargets } : {}),
       ...(patchInputChecks ? { patchInputChecks } : {}),
       ...(patchOutputChecks ? { patchOutputChecks } : {}),
+      ...(expectedRomChecksums ? { validateWithChecksums: expectedRomChecksums } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,

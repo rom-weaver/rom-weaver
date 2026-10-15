@@ -105,6 +105,12 @@ type PatchApplyUserOptions = {
   inputChecks?: string;
   /** Expected checks for this patch's output, forwarded to patch-apply. */
   outputChecks?: string;
+  /**
+   * Expected-ROM checks (`algo=hex` / `size=N` tokens) for the ROM this patch's run starts from,
+   * forwarded as the run's expected input (`--expect-in`) under strict input validation. Not a
+   * declaration about this patch's own input.
+   */
+  expectedRomChecks?: string;
   /** Which state this patch's embedded input checks describe. */
   basis?: "base" | "previous";
   /** Raw hex checksum to validate the target input before apply (algorithm auto-detected by length). */

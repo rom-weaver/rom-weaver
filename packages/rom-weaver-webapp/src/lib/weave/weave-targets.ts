@@ -121,21 +121,47 @@ const gateWeaveChainChecks = (
 };
 
 /**
- * Index of the patch that consumes the supplied ROM: the first enabled entry with no explicit
- * `input` that targets the root ROM (no target, or a `rom` target without a member). The weave's
- * ROM checks (`rom.checks`) describe those bytes, so the engine verifies them there, exactly as the
- * CLI weave apply does. Returns -1 when no entry reads the root ROM.
+ * True when a weave entry reads the supplied ROM: it names no `target` lane and either no
+ * `input` or a ROM `input` on the weave's own ROM member. Mirrors `input_is_root_rom` in the CLI
+ * weave apply (`weave_apply.rs`).
  */
-const firstRootRomPatchIndex = (
-  entries: readonly { input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }[],
-): number =>
-  entries.findIndex(
-    (entry) => entry.enabled && !entry.input && (!entry.target || ("rom" in entry.target && !entry.target.member)),
-  );
+const readsWeaveRootRom = (
+  entry: { input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput },
+  romMember: string | undefined,
+): boolean => !entry.target && (!entry.input || ("rom" in entry.input && entry.input.member === romMember));
+
+type WeaveRootRomEntry = {
+  input?: ParsedWeavePatchInput;
+  target?: ParsedWeavePatchInput;
+  enabled: boolean;
+  /** The entry's own authored input checks as `algo=hex` tokens. */
+  inputChecks?: string;
+};
+
+/**
+ * The run's expected-ROM checks, as the CLI weave apply folds them into its expected input
+ * (`--expect-in`): the weave's `rom.checks`, plus the first selected entry's own input checks when
+ * that entry reads the supplied ROM. They are verified once against the ROM the chain starts from,
+ * never as a per-patch declaration. `index` is the first enabled entry that reads the supplied ROM
+ * (the entry whose run carries the check); undefined when no entry reads it or nothing is declared.
+ */
+const resolveWeaveRootRomChecks = (
+  entries: readonly WeaveRootRomEntry[],
+  rom: { checks?: ParsedWeaveChecks; member?: string },
+): { index: number; tokens: string } | undefined => {
+  const firstEnabled = entries.findIndex((entry) => entry.enabled);
+  const index = entries.findIndex((entry) => entry.enabled && readsWeaveRootRom(entry, rom.member));
+  if (index < 0) return undefined;
+  const tokens = [weaveCheckTokens(rom.checks), index === firstEnabled ? entries[index]?.inputChecks : undefined]
+    .filter(Boolean)
+    .join(",");
+  return tokens ? { index, tokens } : undefined;
+};
 
 export {
-  firstRootRomPatchIndex,
   gateWeaveChainChecks,
+  readsWeaveRootRom,
+  resolveWeaveRootRomChecks,
   weaveCheckTokens,
   resolveWeaveChecks,
   selectWeaveMembers,

@@ -1,6 +1,6 @@
 import {
-  firstRootRomPatchIndex,
   gateWeaveChainChecks,
+  resolveWeaveRootRomChecks,
   weaveCheckTokens,
   selectWeaveMembers,
   validatePatchDependencies,
@@ -426,15 +426,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [updateWeaveMetaForIds],
   );
-  // The weave's expected-ROM checks go to the patch that reads the supplied ROM, so a wrong ROM is
-  // rejected like a patch's own source checksum. A patch's own authored checks win.
-  const getRootRomCheckTokens = useCallback(
+  // The weave's expected ROM for the current order and enablement, verified as the run's expected
+  // input the way the CLI weave apply does. Recomputed on every plan pass and run.
+  const getWeaveRootRomChecks = useCallback(
     (entries: ReadonlyArray<{ input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }>) => {
-      const tokens = weaveCheckTokens(activeWeaveSessionRef.current?.chainEndpointChecks.input);
-      const index = tokens ? firstRootRomPatchIndex(entries) : -1;
-      return { index, tokens };
+      const session = activeWeaveSessionRef.current;
+      if (!session) return undefined;
+      const ids = getPatchIds();
+      return resolveWeaveRootRomChecks(
+        entries.map((entry, index) => ({
+          ...entry,
+          inputChecks: weaveCheckTokens(weaveMetaRef.current.get(ids[index] || "")?.inputChecks),
+        })),
+        { checks: session.romChecks, member: session.romMember },
+      );
     },
-    [],
+    [getPatchIds],
   );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {
@@ -444,6 +451,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           id?: string;
           input?: ParsedWeavePatchInput;
           basis?: "auto" | "base" | "previous";
+          expectedRomChecks?: string;
           inputChecks?: string;
           outputChecks?: string;
         }
@@ -455,17 +463,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         mode: patchInputBasisRef.current,
         overrides: ids.map((id) => weaveMetaRef.current.get(id || "")?.basis),
       });
-      const rootRom = getRootRomCheckTokens(
-        ids.map((id, index) => {
-          const meta = weaveMetaRef.current.get(id || "");
-          return { enabled: !disabled.has(index), input: meta?.input, target: meta?.target };
-        }),
-      );
       const gatedChecks = gateWeaveChainChecks(
         ids.map((id, index) => {
           const meta = weaveMetaRef.current.get(id || "");
-          const inputChecks =
-            weaveCheckTokens(meta?.inputChecks) ?? (index === rootRom.index ? rootRom.tokens : undefined);
+          const inputChecks = weaveCheckTokens(meta?.inputChecks);
           return {
             target: meta?.target,
             input: meta?.input,
@@ -476,6 +477,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           };
         }),
       );
+      const rootRom = getWeaveRootRomChecks(
+        ids.map((id, index) => {
+          const meta = weaveMetaRef.current.get(id || "");
+          return { enabled: !disabled.has(index), input: meta?.input, target: meta?.target };
+        }),
+      );
       ids.forEach((id, index) => {
         const meta = weaveMetaRef.current.get(id || "");
         const { inputChecks, outputChecks } = gatedChecks[index] || {};
@@ -484,13 +491,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           id: meta?.id || id,
           ...(meta?.input ? { input: meta.input } : {}),
           ...(basis === "auto" ? {} : { basis }),
+          ...(rootRom?.index === index ? { expectedRomChecks: rootRom.tokens } : {}),
           ...(inputChecks ? { inputChecks } : {}),
           ...(outputChecks ? { outputChecks } : {}),
         });
       });
       return chainMeta;
     },
-    [getDisabledPatchIndexes, getPatchIds, getRootRomCheckTokens],
+    [getDisabledPatchIndexes, getPatchIds, getWeaveRootRomChecks],
   );
 
   // Latest patch list mirror for flows outside the staging pipeline (weave export).
@@ -1160,17 +1168,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         };
       });
       const enabled = runOptions.map((_option, index) => !disabledPatchIds.has(patchIds[index] || ""));
-      const rootRom = getRootRomCheckTokens(
-        runOptions.map((option, index) => ({
-          enabled: enabled[index] ?? true,
-          input: option.input,
-          target: option.target,
-        })),
-      );
-      if (rootRom.index >= 0 && rootRom.tokens) {
-        const rootOption = runOptions[rootRom.index];
-        if (rootOption && !rootOption.inputChecks) rootOption.inputChecks = rootRom.tokens;
-      }
       // A disabled entry breaks its lane's chain, so later declared states no longer describe the bytes.
       const gatedChecks = gateWeaveChainChecks(
         runOptions.map((option, index) => ({
@@ -1180,6 +1177,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         })),
       );
       for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
+      const rootRom = getWeaveRootRomChecks(
+        runOptions.map((option, index) => ({
+          enabled: enabled[index] ?? true,
+          input: option.input,
+          target: option.target,
+        })),
+      );
+      for (const [index, option] of runOptions.entries())
+        Object.assign(option, { expectedRomChecks: rootRom?.index === index ? rootRom.tokens : undefined });
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
@@ -1226,6 +1232,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             ...(option.target ? { target: option.target } : {}),
             inputChecks: option.inputChecks,
             outputChecks: option.outputChecks,
+            expectedRomChecks: option.expectedRomChecks,
           });
         }
         const readinessError = getWorkflowReadinessError(workflow.getInput() || stagedInput, workflow.getPatches());
@@ -1312,8 +1319,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       prepareWorkflow,
       filterEnabledPatchRun,
       getPatchIds,
+      getWeaveRootRomChecks,
       memberLaneChecksRef,
-      getRootRomCheckTokens,
       patchInputBasis,
       workflowHandle,
     ],

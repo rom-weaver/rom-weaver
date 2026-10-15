@@ -811,6 +811,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       target?: ApplyWorkflowPatchState["patchTarget"];
       inputChecks?: string;
       outputChecks?: string;
+      expectedRomChecks?: string;
       basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
@@ -872,6 +873,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         const value = option.outputChecks?.trim() || undefined;
         verificationChanged ||= stage.state.outputChecks !== value;
         stage.state.outputChecks = value;
+      }
+      if ("expectedRomChecks" in option) {
+        // Run-only: the plan pass receives these through its chain metadata, so the cheap
+        // readiness preflight does not change with them.
+        stage.state.expectedRomChecks = option.expectedRomChecks?.trim() || undefined;
       }
       if ("basis" in option) {
         verificationChanged ||= stage.state.basisChoice !== option.basis;
@@ -1633,7 +1639,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     /** Index-aligned declared chain metadata (weave/user basis + checks) per staged patch. */
     chainMeta?: ReadonlyMap<
       number,
-      { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
+      {
+        basis?: "auto" | "base" | "previous";
+        expectedRomChecks?: string;
+        inputChecks?: string;
+        outputChecks?: string;
+      }
     >;
     defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
@@ -1642,7 +1653,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{
-        chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
+        chain?: {
+          basis?: "auto" | "base" | "previous";
+          expectedRomChecks?: string;
+          inputChecks?: string;
+          outputChecks?: string;
+        };
         chainFingerprint?: string;
         preflight: InternalPatchChecksumPreflight;
         stage: StagedSource<TSource>;
@@ -1683,6 +1699,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
             entry.chain?.basis ?? "auto",
             entry.chain?.inputChecks ?? "",
             entry.chain?.outputChecks ?? "",
+            entry.chain?.expectedRomChecks ?? "",
           ]),
           defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
@@ -1814,6 +1831,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
         ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
         ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
+        ...(patch.state.expectedRomChecks ? { expectedRomChecks: patch.state.expectedRomChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
         // An undecided one is left unset so the engine's own inference runs.

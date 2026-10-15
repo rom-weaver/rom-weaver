@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverError } from "../../src/lib/errors.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
-import { validateApplyPatchTarget } from "../../src/lib/workflow/apply-patch-target-validation.ts";
+import {
+  validateApplyPatchTarget,
+  validateApplyPatchTargets,
+} from "../../src/lib/workflow/apply-patch-target-validation.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "../../src/lib/workflow/apply-workflow-state.ts";
 
 // A patch/target whose `filePath` makes getPatchFileExternalSource resolve a (non-null) external
@@ -62,6 +65,42 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     expect(validatePatch).toHaveBeenCalledWith(
       expect.objectContaining({ options: expect.objectContaining({ defaultPatchBasis: "auto" }) }),
     );
+  });
+
+  it("forwards the weave's expected ROM as the run's expected input, not a patch input check", async () => {
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
+    await validateApplyPatchTargets(
+      [
+        {
+          chain: { basis: "base", expectedRomChecks: "crc32=3e30b9b3,size=24592" },
+          preflight,
+          stage: createStage(),
+          target: createTarget(),
+        },
+      ],
+      createAdapters(validatePatch),
+    );
+    const options = validatePatch.mock.calls[0]?.[0]?.options;
+    expect(options).toMatchObject({ validateWithChecksums: ["crc32=3e30b9b3", "size=24592"] });
+    expect(options).not.toHaveProperty("patchInputChecks");
+  });
+
+  it("records a checksum mismatch on every grouped patch when the expected ROM does not match", async () => {
+    const stages = [createStage(), createStage()];
+    const validatePatch = vi
+      .fn()
+      .mockRejectedValue(new RomWeaverError("CHECKSUM_MISMATCH", "input checksum mismatch for crc32"));
+    await validateApplyPatchTargets(
+      stages.map((stage, index) => ({
+        chain: index === 0 ? { expectedRomChecks: "crc32=3e30b9b3" } : {},
+        preflight,
+        stage,
+        target: createTarget(),
+      })),
+      createAdapters(validatePatch),
+    );
+    expect(validatePatch).toHaveBeenCalledOnce();
+    expect(stages.map((stage) => stage.state.patchValidation?.status)).toEqual(["invalid", "invalid"]);
   });
 
   it("records a non-terminal 'unknown' verdict when validation is cancelled", async () => {

@@ -1,9 +1,9 @@
 import { parseWeaveCreateResult } from "../../src/lib/runtime/weave-result.ts";
 import { describe, expect, it } from "vitest";
 import {
-  firstRootRomPatchIndex,
   gateWeaveChainChecks,
   resolveWeaveChecks,
+  resolveWeaveRootRomChecks,
   selectWeaveMembers,
   validatePatchDependencies,
 } from "../../src/lib/weave/weave-targets.ts";
@@ -210,17 +210,48 @@ describe("weave chain check gating", () => {
   });
 });
 
-describe("firstRootRomPatchIndex", () => {
-  it("picks the first enabled patch that reads the supplied ROM", () => {
-    const member = { rom: true as const, member: "track02.bin" };
-    expect(firstRootRomPatchIndex([{ enabled: true }, { enabled: true }])).toBe(0);
-    expect(firstRootRomPatchIndex([{ enabled: false }, { enabled: true, target: { rom: true } }])).toBe(1);
+describe("resolveWeaveRootRomChecks", () => {
+  const rom = { checks: { checksums: { crc32: "3e30b9b3" }, size: 24592 } };
+
+  it("carries rom.checks on the first enabled patch that reads the supplied ROM", () => {
+    expect(resolveWeaveRootRomChecks([{ enabled: true }, { enabled: true }], rom)).toEqual({
+      index: 0,
+      tokens: "crc32=3e30b9b3,size=24592",
+    });
+    // An optional first patch that is off hands the check to the next enabled one; switching it
+    // on (or reordering) moves the check back, because callers recompute it per pass.
+    expect(resolveWeaveRootRomChecks([{ enabled: false }, { enabled: true }], rom)?.index).toBe(1);
+    expect(resolveWeaveRootRomChecks([{ enabled: true }, { enabled: true }], rom)?.index).toBe(0);
+  });
+
+  it("adds the first selected patch's own input checks only when it reads the supplied ROM", () => {
+    const own = "sha1=22f56591eb4dbb85fbb6398cd0c4554558f70603";
+    expect(resolveWeaveRootRomChecks([{ enabled: true, inputChecks: own }], rom)?.tokens).toBe(
+      `crc32=3e30b9b3,size=24592,${own}`,
+    );
+    // A later patch's input checks are a mid-chain state, not the ROM.
+    expect(resolveWeaveRootRomChecks([{ enabled: true }, { enabled: true, inputChecks: own }], rom)?.tokens).toBe(
+      "crc32=3e30b9b3,size=24592",
+    );
+    // A first patch on a ROM member lane describes that member, so only rom.checks apply, on the
+    // first patch that reads the ROM itself.
     expect(
-      firstRootRomPatchIndex([
-        { enabled: true, input: { patch: "a" } },
-        { enabled: true, target: member },
-      ]),
-    ).toBe(-1);
-    expect(firstRootRomPatchIndex([])).toBe(-1);
+      resolveWeaveRootRomChecks(
+        [{ enabled: true, inputChecks: own, target: { member: "track02.bin", rom: true } }, { enabled: true }],
+        rom,
+      ),
+    ).toEqual({ index: 1, tokens: "crc32=3e30b9b3,size=24592" });
+  });
+
+  it("matches the CLI's root-ROM rule for input and target", () => {
+    const member = { member: "track02.bin", rom: true as const };
+    expect(resolveWeaveRootRomChecks([{ enabled: true, target: { rom: true } }], rom)).toBeUndefined();
+    expect(resolveWeaveRootRomChecks([{ enabled: true, input: { patch: "a" } }], rom)).toBeUndefined();
+    expect(resolveWeaveRootRomChecks([{ enabled: true, input: member }], rom)).toBeUndefined();
+    expect(
+      resolveWeaveRootRomChecks([{ enabled: true, input: member }], { ...rom, member: "track02.bin" })?.index,
+    ).toBe(0);
+    expect(resolveWeaveRootRomChecks([{ enabled: true }], {})).toBeUndefined();
+    expect(resolveWeaveRootRomChecks([], rom)).toBeUndefined();
   });
 });

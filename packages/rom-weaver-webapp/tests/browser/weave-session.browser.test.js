@@ -14,6 +14,7 @@ import {
   mount,
   RAW_PATCH,
   RAW_ROM,
+  setFormControlValue,
   WRONG_INPUT_BPS,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
@@ -415,6 +416,186 @@ for (const { checks, label } of [
     }
   });
 }
+
+// The guided Apply sample (first-weave.zip): a headered NES ROM whose weave declares `basis: base`
+// on both patches and full rom.checks including size. The IPS bytes match the shipped sample.
+const SAMPLE_ROM = "tests/fixtures/cheats/hello-world.nes";
+const SAMPLE_ROM_CHECKS = {
+  checksums: {
+    crc32: "3e30b9b3",
+    md5: "df0e55e0f744b2d9734ef90e4454aa8f",
+    sha1: "22f56591eb4dbb85fbb6398cd0c4554558f70603",
+  },
+  size: 24592,
+};
+const ipsFile = (fileName, bytes) => new File([new Uint8Array(bytes)], fileName, { type: "application/octet-stream" });
+const IPS_EOF = [0x45, 0x4f, 0x46];
+const IPS_HEADER = [0x50, 0x41, 0x54, 0x43, 0x48];
+const SAMPLE_PATCHES = [
+  ipsFile("hello-to-rom.ips", [...IPS_HEADER, 0, 0, 0xa8, 0, 5, 0x12, 0x0f, 0x0d, 0, 0, ...IPS_EOF]),
+  ipsFile("world-to-weaver.ips", [...IPS_HEADER, 0, 0, 0xaf, 0, 5, 0x05, 0x01, 0x16, 0x05, 0x12, ...IPS_EOF]),
+];
+
+const buildSampleWeave = async ({ patches } = {}) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "rom-weaver.nes" },
+        patches: patches || [
+          { basis: "base", name: "Hello to ROM", path: "hello-to-rom.ips" },
+          { basis: "base", name: "World to WEAVER", path: "world-to-weaver.ips" },
+        ],
+        rom: { checks: SAMPLE_ROM_CHECKS, name: "hello-world.nes" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      ...SAMPLE_PATCHES.map((file) => ({ file, fileName: file.name })),
+    ],
+    "sample-weave.zip",
+  );
+};
+
+// Same size as the sample ROM, one byte changed outside the patched range.
+const loadWrongSampleRom = async () => {
+  const bytes = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  bytes[0x2000] ^= 0xff;
+  return new File([bytes], "hello-world.nes", { type: "application/octet-stream" });
+};
+
+const getChecksumOverride = () => {
+  const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+  return checkbox instanceof HTMLInputElement ? checkbox : null;
+};
+
+const mountStrict = (files) =>
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files, id: 1 },
+    }),
+  );
+
+test("sample weave applies on its matching ROM under strict validation", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadFixtureFile(SAMPLE_ROM)]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+    // The weave's ROM checks are the run's expected input, never patch 0's own input declaration.
+    expect(options?.validateWithChecksums).toEqual([
+      "crc32=3e30b9b3",
+      "md5=df0e55e0f744b2d9734ef90e4454aa8f",
+      "sha1=22f56591eb4dbb85fbb6398cd0c4554558f70603",
+    ]);
+    expect(options?.patchInputChecks).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+test("sample weave rejects a wrong ROM until the override is checked", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    const override = await waitForState(getChecksumOverride, 60000);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    expect(applySpy).not.toHaveBeenCalled();
+    override.click();
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    expect(applySpy.mock.calls[0]?.[0]?.options?.validateWithChecksums).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+for (const romKind of ["matching", "wrong"]) {
+  test(`expected-ROM checks follow an optional first patch switched on (${romKind} ROM)`, async () => {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({
+        patches: [
+          { name: "Hello to ROM", optional: true, path: "hello-to-rom.ips" },
+          { name: "World to WEAVER", path: "world-to-weaver.ips" },
+        ],
+      }),
+      romKind === "matching" ? loadFixtureFile(SAMPLE_ROM) : loadWrongSampleRom(),
+    ]);
+    const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+    try {
+      mountStrict([weaveArchive, romFile]);
+      await expect
+        .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+        .toEqual([false, true]);
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+      getPatchToggles()[0]?.click();
+      await expect
+        .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+        .toEqual([true, true]);
+      if (romKind === "wrong") {
+        const override = await waitForState(getChecksumOverride, 60000);
+        expect(applySpy).not.toHaveBeenCalled();
+        override.click();
+      }
+      await waitForApplyButtonEnabled();
+      if (romKind === "matching") expect(getChecksumOverride()).toBeNull();
+      await clickApplyButton();
+      expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+      const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+      expect(options?.patchInputChecks).toBeUndefined();
+      if (romKind === "matching") expect(options?.validateWithChecksums).toContain("crc32=3e30b9b3");
+    } finally {
+      applySpy.mockRestore();
+    }
+  });
+}
+
+test("expected-ROM checks follow a reordered sample weave", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadFixtureFile(SAMPLE_ROM)]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    document.querySelector("#rom-weaver-list-patch-stack .handle")?.click();
+    const positionInput = await waitForState(
+      () => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"),
+      30000,
+    );
+    setFormControlValue(positionInput, "2");
+    positionInput.blur();
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["world-to-weaver.ips", "hello-to-rom.ips"]);
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+    expect(options?.validateWithChecksums).toContain("crc32=3e30b9b3");
+    expect(options?.patchInputChecks).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
   // A pre-rename weave: its index is `rw.json`, not `rom-weaver-weave.json`.

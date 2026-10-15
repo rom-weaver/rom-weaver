@@ -48,6 +48,9 @@ type PatchChainDeclaration = {
   inputChecks?: string;
   /** Declared output checks as comma-separable `algo=hex` tokens. */
   outputChecks?: string;
+  /** The run's expected-ROM checks (`algo=hex` / `size=N` tokens), verified once against the ROM
+   * this chain starts from (`--expect-in`), never as this patch's own input declaration. */
+  expectedRomChecks?: string;
 };
 
 type PatchTargetValidationEntry<TSource> = {
@@ -343,6 +346,14 @@ const validatePreparedGroup = async <TSource>(
     }
   };
   emitToAll("Validating patch against selected target", null);
+  // A mismatch fails the whole call, so every grouped patch reads as a checksum mismatch and
+  // the strict-validation override applies, as it does for a patch's own source checksum.
+  const expectedRomChecks = prepared
+    .map(({ entry }) => entry.chain?.expectedRomChecks)
+    .find(Boolean)
+    ?.split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
 
   try {
     const result = await validatePatch({
@@ -380,6 +391,7 @@ const validatePreparedGroup = async <TSource>(
           : {}),
         plan: true,
         removeHeader: first.headerRemoved,
+        ...(expectedRomChecks?.length ? { validateWithChecksums: expectedRomChecks } : {}),
         threads: adapters.settings.workers?.threads,
       },
       patches: prepared.map(({ entry, patchFile, patchSource }) => ({

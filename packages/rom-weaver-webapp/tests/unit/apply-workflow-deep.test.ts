@@ -245,6 +245,34 @@ describe("runApplyWorkflow validation and preparation", () => {
     );
   });
 
+  it("verifies a weave's expected ROM as the run's checksum-only expected input under strict validation", async () => {
+    const run = async (requireInputChecksumMatch: boolean) => {
+      const inputAsset = asset();
+      const runtime = makeRuntime();
+      mocks.resolvePatchTargets.mockResolvedValue([inputAsset, inputAsset]);
+      mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 30 });
+      await runApplyWorkflow(
+        {
+          inputs: sourceRef("game.bin", 20),
+          options: { output: { outputName: "result.bin" }, validation: { requireInputChecksumMatch } },
+          parsedPatches: [parsedPatch("ips"), parsedPatch("ips")],
+          patchOptions: [{ basis: "base" }, { basis: "base", expectedRomChecks: "crc32=3e30b9b3,sha1=22f5,size=20" }],
+          patches: [sourceRef("first.ips", 4), sourceRef("second.ips", 4)],
+          preparedInputAssets: [inputAsset],
+          preparedPatchFiles: [patchFile("first.ips"), patchFile("second.ips")],
+        } as never,
+        runtime as never,
+      );
+      return runtime.patch.applyPatch.mock.calls[0]?.[0]?.options;
+    };
+    const strict = await run(true);
+    expect(strict).toMatchObject({ validateWithChecksums: ["crc32=3e30b9b3", "sha1=22f5"] });
+    expect(strict).not.toHaveProperty("patchInputChecks");
+    // The strict-validation override (or a non-strict setting) skips the check, like the CLI's
+    // --ignore-checksum-validation skips weave checks.
+    expect(await run(false)).not.toHaveProperty("validateWithChecksums");
+  });
+
   it("prepares multiple direct input assets and reports the no-patch path", async () => {
     const first = asset("one", "one.bin", 5);
     const second = asset("two", "two.bin", 6);
