@@ -72,7 +72,8 @@ export const cheatShardFileName = (slug) => `cheats-${slug}.json`;
 // unless it is provably dead:
 //   - no native code (missing/empty rawCode), a structured RetroArch entry
 //     (the raw_fields the Rust `has_structured_runtime_semantics` list), or a
-//     `?`/`XX` parameter placeholder (except valid Gold Finger data sentinels);
+//     `?`/`XX` parameter placeholder (except valid Gold Finger data sentinels
+//     and `X` letters inside NES/Genesis/32X Game Genie codes);
 //   - EVERY subcode decodes to a literal address the target system's ROM
 //     range can never contain. Subcodes are split the way Rust does (`+`, `,`,
 //     `;`, whitespace; the Xploder four-word grouping for gameboyadvance).
