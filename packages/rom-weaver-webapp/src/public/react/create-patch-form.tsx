@@ -712,7 +712,9 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   };
   const commitRoutedDrop = (routed: PendingCreateDrop) => {
     const assigned = routed.assignment.filter((file): file is File => file !== null);
-    const selectedSources = [original, modified, ...assigned].filter(
+    // Compare the resulting pair: a replaced slot's old source is not a duplicate of its replacement.
+    const [nextOriginal, nextModified] = routed.assignment;
+    const selectedSources = [nextOriginal ?? original, nextModified ?? modified].filter(
       (source): source is BinarySource => source !== null && source !== undefined,
     );
     if (assigned.length > 0 && hasDuplicateBinarySources(selectedSources)) {

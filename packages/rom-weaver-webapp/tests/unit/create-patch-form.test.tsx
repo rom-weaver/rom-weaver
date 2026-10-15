@@ -25,6 +25,12 @@ vi.mock("../../src/public/react/apply-patch-form.tsx", async () => {
           <button type="button" onClick={() => props.onCreateRomDrop?.([new File(["chosen"], "chosen.nes")], true)}>
             Choose test ROM as Modified
           </button>
+          <button
+            type="button"
+            onClick={() => props.onCreateRomDrop?.([new File(["modified"], "modified.nes", { lastModified: 1 })], true)}
+          >
+            Choose loaded Modified again
+          </button>
         </section>
       );
     },
@@ -315,6 +321,18 @@ describe("CreatePatchForm", () => {
       expect(latest?.workflow.setModified).toHaveBeenLastCalledWith(expect.objectContaining({ name: "chosen.nes" })),
     );
     expect(activeButton(container, "Modified ROM").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("does not call a re-chosen Modified ROM a duplicate of the one it replaces", async () => {
+    const { container } = await stageOriginalOnly({});
+    await upload(container, [new File(["modified"], "modified.nes", { lastModified: 1 })]);
+    await vi.waitFor(() => expect(latest?.workflow.setModified).toHaveBeenCalledOnce());
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    await act(async () => fireEvent.click(activeButton(container, "Choose loaded Modified again")));
+    await vi.waitFor(() => expect(activeButton(container, "Modified ROM").getAttribute("aria-pressed")).toBe("true"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(container.querySelector("#patch-builder-row-modified")?.textContent).toContain("modified.nes");
+    expect(container.ownerDocument.body.textContent).not.toContain("Use duplicate ROMs");
   });
 
   it("defaults to Modified ROM and offers Patches & cheats without beta tools", async () => {
