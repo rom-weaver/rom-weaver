@@ -57,7 +57,6 @@
 #include "archive_private.h"
 #include "archive_rb.h"
 #include "archive_write_private.h"
-#include "archive_zlib_private.h"
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define getuid()			0
@@ -7392,7 +7391,6 @@ zisofs_init_zstream(struct archive_write *a)
 	if (iso9660->zisofs.stream_valid)
 		r = deflateReset(&(iso9660->zisofs.stream));
 	else {
-		archive_zlib_set_allocators(&(iso9660->zisofs.stream));
 		r = deflateInit(&(iso9660->zisofs.stream),
 		    iso9660->zisofs.compression_level);
 		iso9660->zisofs.stream_valid = 1;
@@ -7962,10 +7960,8 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
 		/* Initialize compression library for new block. */
 		if (zisofs->stream_valid)
 			r = inflateReset(&zisofs->stream);
-		else {
-			archive_zlib_set_allocators(&zisofs->stream);
+		else
 			r = inflateInit(&zisofs->stream);
-		}
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Can't initialize zisofs decompression");

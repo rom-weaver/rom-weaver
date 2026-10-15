@@ -1,0 +1,25 @@
+diff --git a/util/mod.rs b/util/mod.rs
+index 80745b9b4..7ca79a25b 100644
+--- a/util/mod.rs
++++ b/util/mod.rs
+@@ -57,10 +57,18 @@ where T: BufRead + Seek
+         Ok(Self { base, pos: offset, begin: offset, end: offset + size })
+     }
+ 
++
+     /// Returns the length of the window.
+     #[inline]
+-    #[allow(clippy::len_without_is_empty)]
+-    pub fn len(&self) -> u64 { self.end - self.begin }
++    pub fn len(&self) -> u64 {
++        self.end - self.begin
++    }
++
++    #[inline]
++    /// Returns whether the window has no bytes.
++    pub fn is_empty(&self) -> bool {
++        self.len() == 0
++    }
+ }
+ 
+ impl<T> Read for WindowedReader<T>

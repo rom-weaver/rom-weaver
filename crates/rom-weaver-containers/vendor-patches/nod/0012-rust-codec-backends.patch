@@ -1,0 +1,537 @@
+diff --git a/util/aes.rs b/util/aes.rs
+index 87117659a..080eda9ce 100644
+--- a/util/aes.rs
++++ b/util/aes.rs
+@@ -9,91 +9,38 @@ use crate::{
+     util::array_ref,
+ };
+ 
+-#[cfg(feature = "openssl")]
+-thread_local! {
+-    static ENC_CIPHER_CTX: std::cell::RefCell<openssl::cipher_ctx::CipherCtx> = {
+-        let cipher = openssl::cipher::Cipher::fetch(None, "AES-128-CBC", None).unwrap();
+-        let mut ctx = openssl::cipher_ctx::CipherCtx::new().unwrap();
+-        ctx.set_padding(false);
+-        ctx.encrypt_init(Some(&cipher), None, None).unwrap();
+-        std::cell::RefCell::new(ctx)
+-    };
+-    static DEC_CIPHER_CTX: std::cell::RefCell<openssl::cipher_ctx::CipherCtx> = {
+-        let cipher = openssl::cipher::Cipher::fetch(None, "AES-128-CBC", None).unwrap();
+-        let mut ctx = openssl::cipher_ctx::CipherCtx::new().unwrap();
+-        ctx.set_padding(false);
+-        ctx.decrypt_init(Some(&cipher), None, None).unwrap();
+-        std::cell::RefCell::new(ctx)
+-    };
+-}
+-
+ /// Encrypts data in-place using AES-128-CBC with the given key and IV.
+ pub fn aes_cbc_encrypt(key: &KeyBytes, iv: &KeyBytes, data: &mut [u8]) {
+     assert_eq!(data.len() % 16, 0);
+-    #[cfg(not(feature = "openssl"))]
+     {
+         use aes::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::NoPadding};
+         <cbc::Encryptor<aes::Aes128>>::new(key.into(), iv.into())
+             .encrypt_padded::<NoPadding>(data, data.len())
+             .unwrap();
+     }
+-    #[cfg(feature = "openssl")]
+-    ENC_CIPHER_CTX.with_borrow_mut(|ctx| {
+-        ctx.encrypt_init(None, Some(key), Some(iv)).unwrap();
+-        let len = unsafe {
+-            // The openssl crate doesn't provide a safe API for using the same inbuf/outbuf.
+-            // However, this is valid with AES-CBC and no padding. Create a copy of the input
+-            // slice to appease the borrow checker.
+-            let input = std::slice::from_raw_parts(data.as_ptr(), data.len());
+-            ctx.cipher_update_unchecked(input, Some(data))
+-        }
+-        .unwrap();
+-        assert_eq!(len, data.len());
+-    });
+ }
+ 
+ /// Decrypts data in-place using AES-128-CBC with the given key and IV.
+ pub fn aes_cbc_decrypt(key: &KeyBytes, iv: &KeyBytes, data: &mut [u8]) {
+     assert_eq!(data.len() % 16, 0);
+-    #[cfg(not(feature = "openssl"))]
+     {
+         use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::NoPadding};
+         <cbc::Decryptor<aes::Aes128>>::new(key.into(), iv.into())
+             .decrypt_padded::<NoPadding>(data)
+             .unwrap();
+     }
+-    #[cfg(feature = "openssl")]
+-    DEC_CIPHER_CTX.with_borrow_mut(|ctx| {
+-        ctx.decrypt_init(None, Some(key), Some(iv)).unwrap();
+-        let len = unsafe {
+-            // The openssl crate doesn't provide a safe API for using the same inbuf/outbuf.
+-            // However, this is valid with AES-CBC and no padding. Create a copy of the input
+-            // slice to appease the borrow checker.
+-            let input = std::slice::from_raw_parts(data.as_ptr(), data.len());
+-            ctx.cipher_update_unchecked(input, Some(data))
+-        }
+-        .unwrap();
+-        assert_eq!(len, data.len());
+-    });
+ }
+ 
+ /// Decrypts data buffer-to-buffer using AES-128-CBC with the given key and IV.
+ pub fn aes_cbc_decrypt_b2b(key: &KeyBytes, iv: &KeyBytes, data: &[u8], out: &mut [u8]) {
+     assert_eq!(data.len() % 16, 0);
+     assert_eq!(data.len(), out.len());
+-    #[cfg(not(feature = "openssl"))]
+     {
+         use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::NoPadding};
+         <cbc::Decryptor<aes::Aes128>>::new(key.into(), iv.into())
+             .decrypt_padded_b2b::<NoPadding>(data, out)
+             .unwrap();
+     }
+-    #[cfg(feature = "openssl")]
+-    DEC_CIPHER_CTX.with_borrow_mut(|ctx| {
+-        ctx.decrypt_init(None, Some(key), Some(iv)).unwrap();
+-        let len = unsafe { ctx.cipher_update_unchecked(data, Some(out)) }.unwrap();
+-        assert_eq!(len, out.len());
+-    });
+ }
+ 
+ /// Encrypts a Wii partition sector in-place.
+@@ -119,7 +66,12 @@ pub fn decrypt_sector(out: &mut [u8; SECTOR_SIZE], key: &KeyBytes) {
+ pub fn decrypt_sector_b2b(data: &[u8; SECTOR_SIZE], out: &mut [u8; SECTOR_SIZE], key: &KeyBytes) {
+     // Data IV from encrypted hash block
+     let iv = *array_ref![data, 0x3D0, 16];
+-    aes_cbc_decrypt_b2b(key, &[0u8; 16], &data[..HASHES_SIZE], &mut out[..HASHES_SIZE]);
++    aes_cbc_decrypt_b2b(
++        key,
++        &[0u8; 16],
++        &data[..HASHES_SIZE],
++        &mut out[..HASHES_SIZE],
++    );
+     aes_cbc_decrypt_b2b(key, &iv, &data[HASHES_SIZE..], &mut out[HASHES_SIZE..]);
+ }
+ 
+diff --git a/util/compress.rs b/util/compress.rs
+index 683a6c45f..a112a0b48 100644
+--- a/util/compress.rs
++++ b/util/compress.rs
+@@ -71,7 +71,6 @@ impl DecompressionKind {
+             DecompressionKind::None => Ok(Some(buf.len())),
+             #[cfg(feature = "compress-zstd")]
+             DecompressionKind::Zstandard => zstd_api::get_content_size(buf),
+-            #[allow(unreachable_patterns)] // if compression features are disabled
+             _ => Ok(None),
+         }
+     }
+@@ -117,96 +116,63 @@ impl Compressor {
+             Compression::Lzma2(level) => lzma_api::compress_lzma2(level, buf, &mut self.buffer),
+             #[cfg(feature = "compress-zstd")]
+             Compression::Zstandard(level) => zstd_api::compress(buf, level, &mut self.buffer),
+-            #[allow(unreachable_patterns)] // if compression is disabled
+-            _ => Err(io::Error::other(format!("Unsupported compression: {:?}", self.kind))),
++            #[cfg(any(
++                not(feature = "compress-zlib"),
++                not(feature = "compress-bzip2"),
++                not(feature = "compress-lzma"),
++                not(feature = "compress-zstd")
++            ))]
++            _ => Err(io::Error::other(format!(
++                "Unsupported compression: {:?}",
++                self.kind))),
+         }
+     }
+ }
+ 
+-#[cfg(feature = "compress-zlib-vendored")]
+-use libz_sys as zlib_raw;
+-
+-#[cfg(all(feature = "compress-zlib", not(feature = "compress-zlib-vendored")))]
+-mod zlib_raw {
+-    use core::ffi::{c_int, c_ulong};
+-
+-    #[allow(non_camel_case_types)]
+-    pub type uLong = c_ulong;
+-    #[allow(non_camel_case_types)]
+-    pub type uLongf = c_ulong;
+-
+-    pub const Z_OK: c_int = 0;
+-    pub const Z_BUF_ERROR: c_int = -5;
+-
+-    #[cfg_attr(not(target_env = "msvc"), link(name = "z"))]
+-    #[cfg_attr(target_env = "msvc", link(name = "zlib", kind = "static"))]
+-    unsafe extern "C" {
+-        pub fn uncompress(
+-            dest: *mut u8,
+-            destLen: *mut uLongf,
+-            source: *const u8,
+-            sourceLen: uLong,
+-        ) -> c_int;
+-
+-        pub fn compress2(
+-            dest: *mut u8,
+-            destLen: *mut uLongf,
+-            source: *const u8,
+-            sourceLen: uLong,
+-            level: c_int,
+-        ) -> c_int;
+-    }
+-}
+-
+ #[cfg(feature = "compress-zlib")]
+ mod zlib_api {
+-    use std::{ffi::c_int, io};
++    use std::io;
+ 
+-    use super::zlib_raw;
++    use flate2::{Compress, Compression, Decompress, FlushCompress, FlushDecompress, Status};
+ 
++    // WASM's Z_SOLO build MUST receive explicit allocators. flate2 supplies them
++    // for the same zlib backend, unlike zlib's uncompress/compress2 helpers.
+     pub fn decompress(buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
+-        let mut out_len = zlib_raw::uLongf::try_from(out.len())
+-            .map_err(|_| io::Error::other("Output buffer length exceeds zlib limits"))?;
+-        let in_len = zlib_raw::uLong::try_from(buf.len())
+-            .map_err(|_| io::Error::other("Input buffer length exceeds zlib limits"))?;
+-        let code =
+-            unsafe { zlib_raw::uncompress(out.as_mut_ptr(), &mut out_len, buf.as_ptr(), in_len) };
+-        match code {
+-            zlib_raw::Z_OK => Ok(out_len as usize),
+-            _ => Err(io::Error::new(
++        let mut decoder = Decompress::new(true);
++        let status = decoder
++            .decompress(buf, out, FlushDecompress::Finish)
++            .map_err(|error| {
++                io::Error::new(
++                    io::ErrorKind::InvalidData,
++                    format!("zlib decompression failed: {error}"),
++                )
++            })?;
++        if status != Status::StreamEnd {
++            return Err(io::Error::new(
+                 io::ErrorKind::InvalidData,
+-                format!("zlib decompression failed with code {code}"),
+-            )),
++                "zlib decompression failed: incomplete stream or output buffer too small",
++            ));
+         }
++        Ok(decoder.total_out() as usize)
+     }
+ 
+     pub fn compress(buf: &[u8], level: u8, out: &mut Vec<u8>) -> io::Result<bool> {
+-        let in_len = zlib_raw::uLong::try_from(buf.len())
+-            .map_err(|_| io::Error::other("Input buffer length exceeds zlib limits"))?;
+-        let capacity = zlib_raw::uLongf::try_from(out.capacity())
+-            .map_err(|_| io::Error::other("Output buffer capacity exceeds zlib limits"))?;
+-        out.resize(out.capacity(), 0);
+-        let mut out_len = capacity;
+-        let code = unsafe {
+-            zlib_raw::compress2(
+-                out.as_mut_ptr(),
+-                &mut out_len,
+-                buf.as_ptr(),
+-                in_len,
+-                level as c_int,
+-            )
+-        };
+-        match code {
+-            zlib_raw::Z_OK => {
+-                out.truncate(out_len as usize);
+-                Ok(true)
+-            }
+-            zlib_raw::Z_BUF_ERROR => {
+-                out.clear();
+-                Ok(false)
+-            }
+-            _ => Err(io::Error::other(format!("zlib compression failed with code {code}"))),
++        if level > 9 {
++            return Err(io::Error::other(format!(
++                "zlib compression failed: invalid level {level}"
++            )));
+         }
++        let mut encoder = Compress::new(Compression::new(u32::from(level)), true);
++        out.resize(out.capacity(), 0);
++        let status = encoder
++            .compress(buf, out, FlushCompress::Finish)
++            .map_err(|error| io::Error::other(format!("zlib compression failed: {error}")))?;
++        if status != Status::StreamEnd {
++            out.clear();
++            return Ok(false);
++        }
++        out.truncate(encoder.total_out() as usize);
++        Ok(true)
+     }
+ }
+ 
+diff --git a/util/digest.rs b/util/digest.rs
+index 2b16fea79..83f764987 100644
+--- a/util/digest.rs
++++ b/util/digest.rs
+@@ -11,24 +11,15 @@ use crate::{
+ /// Hashes a byte slice with SHA-1.
+ #[instrument(skip_all)]
+ pub fn sha1_hash(buf: &[u8]) -> HashBytes {
+-    #[cfg(feature = "openssl")]
+-    {
+-        // The one-shot openssl::sha::sha1 ends up being much slower
+-        let mut hasher = openssl::sha::Sha1::new();
+-        hasher.update(buf);
+-        hasher.finish()
+-    }
+-    #[cfg(not(feature = "openssl"))]
+-    {
+-        use sha1::Digest;
+-        HashBytes::from(sha1::Sha1::digest(buf))
+-    }
++    use sha1::Digest;
++    HashBytes::from(sha1::Sha1::digest(buf))
+ }
+ 
+ /// Hashes a byte slice with XXH64.
+-#[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+ #[instrument(skip_all)]
+-pub fn xxh64_hash(buf: &[u8]) -> u64 { xxhash_rust::xxh64::xxh64(buf, 0) }
++pub fn xxh64_hash(buf: &[u8]) -> u64 {
++    xxhash_rust::xxh64::xxh64(buf, 0)
++}
+ 
+ #[cfg(feature = "threading")]
+ mod multi_threaded {
+@@ -41,7 +32,9 @@ mod multi_threaded {
+     type DigestThread = (Sender<Bytes>, JoinHandle<DigestResult>);
+ 
+     fn digest_thread<H>() -> DigestThread
+-    where H: Hasher + Send + 'static {
++    where
++        H: Hasher + Send + 'static,
++    {
+         let (tx, rx) = crossbeam_channel::bounded::<Bytes>(1);
+         let handle = thread::Builder::new()
+             .name(format!("Digest {}", H::NAME))
+@@ -67,15 +60,9 @@ mod multi_threaded {
+                 threads.push(digest_thread::<crc32fast::Hasher>());
+             }
+             if options.digest_md5 {
+-                #[cfg(feature = "openssl")]
+-                threads.push(digest_thread::<openssl_util::HasherMD5>());
+-                #[cfg(not(feature = "openssl"))]
+                 threads.push(digest_thread::<md5::Md5>());
+             }
+             if options.digest_sha1 {
+-                #[cfg(feature = "openssl")]
+-                threads.push(digest_thread::<openssl_util::HasherSHA1>());
+-                #[cfg(not(feature = "openssl"))]
+                 threads.push(digest_thread::<sha1::Sha1>());
+             }
+             if options.digest_xxh64 {
+@@ -96,14 +83,20 @@ mod multi_threaded {
+             // Blocking send to any remaining threads
+             for (idx, (tx, _)) in self.threads.iter().enumerate() {
+                 if sent & (1 << idx) == 0 {
+-                    tx.send(data.clone()).expect("Failed to send data to digest thread");
++                    tx.send(data.clone())
++                        .expect("Failed to send data to digest thread");
+                 }
+             }
+         }
+ 
+         #[instrument(name = "DigestManager::finish", skip_all)]
+         pub fn finish(self) -> DigestResults {
+-            let mut results = DigestResults { crc32: None, md5: None, sha1: None, xxh64: None };
++            let mut results = DigestResults {
++                crc32: None,
++                md5: None,
++                sha1: None,
++                xxh64: None,
++            };
+             for (tx, handle) in self.threads {
+                 drop(tx); // Close channel
+                 match handle.join().unwrap() {
+@@ -135,15 +128,9 @@ mod single_threaded {
+                 hashers.push(RefCell::new(Box::new(crc32fast::Hasher::new())));
+             }
+             if options.digest_md5 {
+-                #[cfg(feature = "openssl")]
+-                hashers.push(RefCell::new(Box::new(openssl_util::HasherMD5::new())));
+-                #[cfg(not(feature = "openssl"))]
+                 hashers.push(RefCell::new(Box::new(md5::Md5::new())));
+             }
+             if options.digest_sha1 {
+-                #[cfg(feature = "openssl")]
+-                hashers.push(RefCell::new(Box::new(openssl_util::HasherSHA1::new())));
+-                #[cfg(not(feature = "openssl"))]
+                 hashers.push(RefCell::new(Box::new(sha1::Sha1::new())));
+             }
+             if options.digest_xxh64 {
+@@ -161,7 +148,12 @@ mod single_threaded {
+ 
+         #[instrument(name = "DigestManager::finish", skip_all)]
+         pub fn finish(self) -> DigestResults {
+-            let mut results = DigestResults { crc32: None, md5: None, sha1: None, xxh64: None };
++            let mut results = DigestResults {
++                crc32: None,
++                md5: None,
++                sha1: None,
++                xxh64: None,
++            };
+             for hasher in self.hashers {
+                 match hasher.borrow_mut().finalize() {
+                     DigestResult::Crc32(v) => results.crc32 = Some(v),
+@@ -203,15 +195,18 @@ impl Hasher for md5::Md5 {
+     const NAME: &'static str = "MD5";
+ 
+     #[cfg(feature = "threading")]
+-    fn new() -> Self { Digest::new() }
++    fn new() -> Self {
++        Digest::new()
++    }
+ 
+     fn finalize(&mut self) -> DigestResult {
+         DigestResult::Md5(Digest::finalize_reset(self).into())
+     }
+ 
+-    #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+     #[instrument(name = "md5::Md5::update", skip_all)]
+-    fn update(&mut self, data: &[u8]) { Digest::update(self, data) }
++    fn update(&mut self, data: &[u8]) {
++        Digest::update(self, data)
++    }
+ }
+ 
+ impl Hasher for sha1::Sha1 {
+@@ -219,15 +214,18 @@ impl Hasher for sha1::Sha1 {
+     const NAME: &'static str = "SHA-1";
+ 
+     #[cfg(feature = "threading")]
+-    fn new() -> Self { Digest::new() }
++    fn new() -> Self {
++        Digest::new()
++    }
+ 
+     fn finalize(&mut self) -> DigestResult {
+         DigestResult::Sha1(Digest::finalize_reset(self).into())
+     }
+ 
+-    #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+     #[instrument(name = "sha1::Sha1::update", skip_all)]
+-    fn update(&mut self, data: &[u8]) { Digest::update(self, data) }
++    fn update(&mut self, data: &[u8]) {
++        Digest::update(self, data)
++    }
+ }
+ 
+ impl Hasher for crc32fast::Hasher {
+@@ -235,15 +233,18 @@ impl Hasher for crc32fast::Hasher {
+     const NAME: &'static str = "CRC32";
+ 
+     #[cfg(feature = "threading")]
+-    fn new() -> Self { crc32fast::Hasher::new() }
++    fn new() -> Self {
++        crc32fast::Hasher::new()
++    }
+ 
+     fn finalize(&mut self) -> DigestResult {
+         DigestResult::Crc32(crc32fast::Hasher::finalize(self.clone()))
+     }
+ 
+-    #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+     #[instrument(name = "crc32fast::Hasher::update", skip_all)]
+-    fn update(&mut self, data: &[u8]) { crc32fast::Hasher::update(self, data) }
++    fn update(&mut self, data: &[u8]) {
++        crc32fast::Hasher::update(self, data)
++    }
+ }
+ 
+ impl Hasher for xxhash_rust::xxh64::Xxh64 {
+@@ -251,90 +252,17 @@ impl Hasher for xxhash_rust::xxh64::Xxh64 {
+     const NAME: &'static str = "XXH64";
+ 
+     #[cfg(feature = "threading")]
+-    fn new() -> Self { xxhash_rust::xxh64::Xxh64::new(0) }
++    fn new() -> Self {
++        xxhash_rust::xxh64::Xxh64::new(0)
++    }
+ 
+     fn finalize(&mut self) -> DigestResult {
+         DigestResult::Xxh64(xxhash_rust::xxh64::Xxh64::digest(self))
+     }
+ 
+-    #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+     #[instrument(name = "xxhash_rust::xxh64::Xxh64::update", skip_all)]
+-    fn update(&mut self, data: &[u8]) { xxhash_rust::xxh64::Xxh64::update(self, data) }
+-}
+-
+-#[cfg(feature = "openssl")]
+-mod openssl_util {
+-    use tracing::instrument;
+-
+-    use super::{DigestResult, Hasher};
+-
+-    pub type HasherMD5 = HashWrapper<MessageDigestMD5>;
+-    pub type HasherSHA1 = HashWrapper<MessageDigestSHA1>;
+-
+-    pub struct HashWrapper<T>
+-    where T: MessageDigest
+-    {
+-        hasher: openssl::hash::Hasher,
+-        _marker: std::marker::PhantomData<T>,
+-    }
+-
+-    impl<T> HashWrapper<T>
+-    where T: MessageDigest
+-    {
+-        pub(super) fn new() -> Self {
+-            Self {
+-                hasher: openssl::hash::Hasher::new(T::new()).unwrap(),
+-                _marker: Default::default(),
+-            }
+-        }
+-    }
+-
+-    pub trait MessageDigest {
+-        fn new() -> openssl::hash::MessageDigest;
+-    }
+-
+-    pub struct MessageDigestMD5;
+-
+-    impl MessageDigest for MessageDigestMD5 {
+-        fn new() -> openssl::hash::MessageDigest { openssl::hash::MessageDigest::md5() }
+-    }
+-
+-    pub struct MessageDigestSHA1;
+-
+-    impl MessageDigest for MessageDigestSHA1 {
+-        fn new() -> openssl::hash::MessageDigest { openssl::hash::MessageDigest::sha1() }
+-    }
+-
+-    impl Hasher for HasherMD5 {
+-        #[cfg(feature = "threading")]
+-        const NAME: &'static str = "MD5";
+-
+-        #[cfg(feature = "threading")]
+-        fn new() -> Self { Self::new() }
+-
+-        fn finalize(&mut self) -> DigestResult {
+-            DigestResult::Md5((*self.hasher.finish().unwrap()).try_into().unwrap())
+-        }
+-
+-        #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+-        #[instrument(name = "openssl_util::HasherMD5::update", skip_all)]
+-        fn update(&mut self, data: &[u8]) { self.hasher.update(data).unwrap() }
+-    }
+-
+-    impl Hasher for HasherSHA1 {
+-        #[cfg(feature = "threading")]
+-        const NAME: &'static str = "SHA-1";
+-
+-        #[cfg(feature = "threading")]
+-        fn new() -> Self { Self::new() }
+-
+-        fn finalize(&mut self) -> DigestResult {
+-            DigestResult::Sha1((*self.hasher.finish().unwrap()).try_into().unwrap())
+-        }
+-
+-        #[allow(unused_braces)] // https://github.com/rust-lang/rust/issues/116347
+-        #[instrument(name = "openssl_util::HasherSHA1::update", skip_all)]
+-        fn update(&mut self, data: &[u8]) { self.hasher.update(data).unwrap() }
++    fn update(&mut self, data: &[u8]) {
++        xxhash_rust::xxh64::Xxh64::update(self, data)
+     }
+ }
+ 

@@ -97,12 +97,15 @@ zstd-sys = { workspace = true, features = ["zstdmt"] }
 openssl-sys = { version = "0.9.80", features = ["vendored"] }
 
 [build-dependencies]
+diffy = { version = "0.5.2", default-features = false }
+serde_json.workspace = true
 bindgen = "0.73.1"
 cc = "1"
 cmake = "0.1.58"
 path-slash = "0.2.1"
 
 [dev-dependencies]
+diffy = { version = "0.5.2", default-features = false }
 proptest = "1.6.0"
 claxon.workspace = true
 rand.workspace = true

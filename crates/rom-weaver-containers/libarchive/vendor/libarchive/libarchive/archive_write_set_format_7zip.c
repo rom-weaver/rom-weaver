@@ -31,9 +31,6 @@
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
 #endif
-#ifdef HAVE_PTHREAD_H
-#include <pthread.h>
-#endif
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -45,12 +42,6 @@
 #endif
 #if HAVE_LZMA_H
 #include <lzma.h>
-#endif
-#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
-/* 7-Zip's own LZMA2 encoder (public domain LZMA SDK, vendored at
- * crates/rom-weaver-containers/lzma-sdk), behind an opaque header because
- * libarchive's archive_ppmd_private.h collides with the SDK's 7zTypes.h. */
-#include "rom_weaver_lzma_sdk.h"
 #endif
 #ifdef HAVE_ZLIB_H
 #include <zlib.h>
@@ -73,7 +64,6 @@
 #include "archive_time_private.h"
 #include "archive_write_private.h"
 #include "archive_write_set_format_private.h"
-#include "archive_zlib_private.h"
 
 /*
  * Codec ID
@@ -159,9 +149,6 @@ struct la_zstream {
 
 	int			 valid;
 	void			*real_stream;
-	void			(*progress_callback)(void *, uint64_t);
-	void			 *progress_callback_data;
-	uint64_t		 progress_bytes_reported;
 	int			 (*code) (struct archive *a,
 				    struct la_zstream *lastrm,
 				    enum la_zaction action);
@@ -182,71 +169,6 @@ struct ppmd_stream {
 	uint8_t			*buff_end;
 	size_t			 buff_bytes;
 };
-
-#if defined(HAVE_LZMA_H) && defined(HAVE_PTHREAD_H)
-struct lzma2_mt_job {
-	pthread_t		 thread;
-	int			 joined;
-	uint8_t			*in;		/* [preset_size bytes][block bytes] */
-	size_t			 preset_size;	/* leading seed-dictionary bytes */
-	size_t			 in_size;	/* block (data) bytes after preset */
-	uint8_t			*out;
-	size_t			 out_size;
-	size_t			 out_pos;
-	lzma_options_lzma	 opt;
-	lzma_ret		 ret;
-	/* Shared input-bytes-encoded counter, advanced as this block streams. */
-	pthread_mutex_t		*progress_mutex;
-	uint64_t		*encoded_bytes;
-	pthread_cond_t		*progress_cond;	/* NULL when unavailable */
-	size_t			*running_jobs;	/* NULL when unavailable */
-	int			 done;		/* set under progress_mutex */
-};
-
-struct lzma2_mt_stream {
-	lzma_options_lzma	 opt;
-	uint8_t			*chunk;
-	size_t			 chunk_size;	/* block (encode) unit, may be < dict */
-	size_t			 chunk_used;
-	/*
-	 * When seeding is enabled the block is encoded smaller than the
-	 * dictionary so a single file splits into parallel blocks, and each
-	 * block after the first is seeded with the preceding up-to-dictionary
-	 * bytes (preset_dict) so cross-block matches survive. This keeps the
-	 * single-thread ratio while still parallelising one file, instead of
-	 * resetting the dictionary at every block boundary.
-	 */
-	uint8_t			*history;	/* last dict_size bytes, NULL if off */
-	size_t			 history_cap;	/* == dict_size when seeding */
-	size_t			 history_len;
-	struct lzma2_mt_job	*jobs;
-	size_t			 job_head;
-	size_t			 job_count;
-	size_t			 threads;
-	/*
-	 * Ring capacity. With a working condvar this is twice the thread
-	 * count: a block that finishes out of order parks its (already
-	 * compressed, input freed) result in the ring and its core picks up
-	 * the next block immediately, instead of every slot staying occupied
-	 * until the oldest block - possibly on a slow efficiency core -
-	 * finally completes. Concurrency is separately capped at `threads`
-	 * by the running-jobs gate.
-	 */
-	size_t			 job_slots;
-	size_t			 running_jobs;	/* advanced under progress_mutex */
-	size_t			 job_limit;
-	int			 end_marker_written;
-	void			(*progress_callback)(void *, uint64_t);
-	void			 *progress_callback_data;
-	uint64_t		 progress_bytes_reported;	/* last value emitted */
-	pthread_mutex_t		 progress_mutex;
-	uint64_t		 encoded_bytes;			/* total input encoded */
-	int			 progress_mutex_ready;
-	/* Wakes a blocked drain whenever encoded_bytes advances or a job ends. */
-	pthread_cond_t		 progress_cond;
-	int			 progress_cond_ready;
-};
-#endif
 
 struct coder {
 	unsigned		 codec;
@@ -310,19 +232,8 @@ struct _7zip {
 
 	int			 opt_threads;
 
-	/*
-	 * Hint of the total uncompressed bytes that will be written into the
-	 * single compressed folder. When set and smaller than the preset
-	 * dictionary, LZMA/LZMA2 reduce the dictionary to fit the data, which
-	 * avoids allocating a window larger than the input can ever reference.
-	 * 0 means "unknown".
-	 */
-	uint64_t		 size_hint;
-
 	struct la_zstream	 stream;
 	struct coder		 coder;
-	void			(*progress_callback)(void *, uint64_t);
-	void			 *progress_callback_data;
 
 	struct archive_string_conv *sconv;
 
@@ -386,20 +297,13 @@ static int	compression_code_bzip2(struct archive *,
 static int	compression_end_bzip2(struct archive *, struct la_zstream *);
 #endif
 static int	compression_init_encoder_lzma1(struct archive *,
-			    struct la_zstream *, int);
+		    struct la_zstream *, int);
 static int	compression_init_encoder_lzma2(struct archive *,
-			    struct la_zstream *, int, int, uint64_t,
-			    void (*)(void *, uint64_t), void *);
+		    struct la_zstream *, int);
 #if defined(HAVE_LZMA_H)
 static int	compression_code_lzma(struct archive *,
-			    struct la_zstream *, enum la_zaction);
+		    struct la_zstream *, enum la_zaction);
 static int	compression_end_lzma(struct archive *, struct la_zstream *);
-#if defined(HAVE_PTHREAD_H)
-static int	compression_code_lzma2_mt(struct archive *,
-			    struct la_zstream *, enum la_zaction);
-static int	compression_end_lzma2_mt(struct archive *,
-			    struct la_zstream *);
-#endif
 #endif
 static int	compression_init_encoder_ppmd(struct archive *,
 		    struct la_zstream *, uint8_t, uint32_t);
@@ -505,53 +409,6 @@ archive_write_set_format_7zip(struct archive *_a)
 	a->archive.archive_format = ARCHIVE_FORMAT_7ZIP;
 	a->archive.archive_format_name = "7zip";
 
-	return (ARCHIVE_OK);
-}
-
-int
-archive_write_set_format_7zip_progress_callback(struct archive *_a,
-    void (*progress_func)(void *, la_uint64_t), void *user_data)
-{
-	struct archive_write *a = (struct archive_write *)_a;
-	struct _7zip *zip;
-
-	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
-	    ARCHIVE_STATE_NEW | ARCHIVE_STATE_HEADER | ARCHIVE_STATE_DATA,
-	    "archive_write_set_format_7zip_progress_callback");
-
-	if (a->format_data == NULL || a->format_name == NULL ||
-	    strcmp(a->format_name, "7zip") != 0) {
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "7zip progress callback requires 7zip write format");
-		return (ARCHIVE_FATAL);
-	}
-
-	zip = (struct _7zip *)a->format_data;
-	zip->progress_callback = progress_func;
-	zip->progress_callback_data = user_data;
-	return (ARCHIVE_OK);
-}
-
-int
-archive_write_set_format_7zip_size_hint(struct archive *_a,
-    la_uint64_t uncompressed_bytes)
-{
-	struct archive_write *a = (struct archive_write *)_a;
-	struct _7zip *zip;
-
-	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
-	    ARCHIVE_STATE_NEW | ARCHIVE_STATE_HEADER | ARCHIVE_STATE_DATA,
-	    "archive_write_set_format_7zip_size_hint");
-
-	if (a->format_data == NULL || a->format_name == NULL ||
-	    strcmp(a->format_name, "7zip") != 0) {
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "7zip size hint requires 7zip write format");
-		return (ARCHIVE_FATAL);
-	}
-
-	zip = (struct _7zip *)a->format_data;
-	zip->size_hint = uncompressed_bytes;
 	return (ARCHIVE_OK);
 }
 
@@ -1997,7 +1854,6 @@ compression_init_encoder_deflate(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	archive_zlib_set_allocators(strm);
 	if (deflateInit2(strm, level, Z_DEFLATED,
 	    (withheader)?15:-15,
 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {
@@ -2210,874 +2066,41 @@ compression_init_encoder_bzip2(struct archive *a,
  * _7_LZMA1, _7_LZMA2 compressor.
  */
 #if defined(HAVE_LZMA_H)
-#if defined(HAVE_PTHREAD_H)
-#define LZMA2_MT_MIN_CHUNK_SIZE ((size_t)1 << 20)
-/*
- * Files at or below this stay single-threaded. Seeded parallel blocks keep
- * cross-block matches, so for compressible or already-compressed data (real
- * ROMs) they stay at size parity with a continuous stream; only literal-heavy
- * data pays ~2%. Keep the threshold low so files parallelise for speed, but
- * skip trivially small files where threading overhead is not worth it.
- */
-#define LZMA2_MT_SPLIT_THRESHOLD ((size_t)4 << 20)
-/* Encode the block in steps this size so progress advances within a block. */
-#define LZMA2_MT_PROGRESS_STEP ((size_t)1 << 20)
-
-static size_t
-compression_lzma2_mt_chunk_size(const lzma_options_lzma *opt)
-{
-	uint64_t chunk_size = opt->dict_size;
-
-	if (chunk_size < LZMA2_MT_MIN_CHUNK_SIZE)
-		chunk_size = LZMA2_MT_MIN_CHUNK_SIZE;
-	if (chunk_size > (uint64_t)(size_t)-1)
-		return (0);
-	return ((size_t)chunk_size);
-}
-
-static void
-compression_lzma2_mt_set_error(struct archive *a, lzma_ret ret)
-{
-	switch (ret) {
-	case LZMA_MEM_ERROR:
-		archive_set_error(a, ENOMEM,
-		    "Internal error initializing compression library: "
-		    "Cannot allocate memory");
-		break;
-	case LZMA_OPTIONS_ERROR:
-		archive_set_error(a, ARCHIVE_ERRNO_MISC,
-		    "lzma2 compression options are not supported");
-		break;
-	default:
-		archive_set_error(a, ARCHIVE_ERRNO_MISC,
-		    "lzma2 compression failed: raw encoder returned status %d",
-		    ret);
-		break;
-	}
-}
-
-static void
-compression_lzma2_mt_report(struct lzma2_mt_job *job, uint64_t bytes)
-{
-	if (bytes == 0 || job->encoded_bytes == NULL)
-		return;
-	pthread_mutex_lock(job->progress_mutex);
-	*job->encoded_bytes += bytes;
-	if (job->progress_cond != NULL)
-		pthread_cond_broadcast(job->progress_cond);
-	pthread_mutex_unlock(job->progress_mutex);
-}
-
-static void
-compression_lzma2_mt_encode(struct lzma2_mt_job *job)
-{
-	lzma_filter filters[2];
-	lzma_stream strm = LZMA_STREAM_INIT;
-	const uint8_t *next;
-	uint8_t *out;
-	size_t cap, left, produced;
-
-	if (job->in_size > (size_t)-1 - (job->in_size / 16) - 1024) {
-		job->ret = LZMA_MEM_ERROR;
-		return;
-	}
-	cap = job->in_size + (job->in_size / 16) + 1024;
-	if (cap < 1024)
-		cap = 1024;
-
-	/*
-	 * Seed the dictionary with the preceding bytes so this block can match
-	 * back into earlier blocks. The first block has preset_size == 0, which
-	 * leaves preset_dict NULL and makes its LZMA2 stream reset the
-	 * dictionary; later blocks keep the running window (no reset), so the
-	 * stripped-and-concatenated blocks form one valid LZMA2 stream.
-	 */
-	if (job->preset_size > 0) {
-		job->opt.preset_dict = job->in;
-		job->opt.preset_dict_size = (uint32_t)job->preset_size;
-	} else {
-		job->opt.preset_dict = NULL;
-		job->opt.preset_dict_size = 0;
-	}
-	filters[0].id = LZMA_FILTER_LZMA2;
-	filters[0].options = &job->opt;
-	filters[1].id = LZMA_VLI_UNKNOWN;
-	filters[1].options = NULL;
-
-	if (lzma_raw_encoder(&strm, filters) != LZMA_OK) {
-		job->ret = LZMA_PROG_ERROR;
-		return;
-	}
-	out = malloc(cap);
-	if (out == NULL) {
-		lzma_end(&strm);
-		job->ret = LZMA_MEM_ERROR;
-		return;
-	}
-	strm.next_out = out;
-	strm.avail_out = cap;
-	next = job->in + job->preset_size;
-	left = job->in_size;
-
-	/*
-	 * Stream the block in fixed steps so the shared encoded-bytes counter
-	 * (and thus user progress) advances within a block, not just when the
-	 * block finishes. Output is identical to a one-shot raw encode.
-	 */
-	for (;;) {
-		lzma_action action;
-		lzma_ret ret;
-		uint64_t before_in;
-
-		if (strm.avail_in == 0 && left > 0) {
-			size_t step = left < LZMA2_MT_PROGRESS_STEP
-			    ? left : LZMA2_MT_PROGRESS_STEP;
-			strm.next_in = next;
-			strm.avail_in = step;
-			next += step;
-			left -= step;
-		}
-		action = (left == 0 && strm.avail_in == 0)
-		    ? LZMA_FINISH : LZMA_RUN;
-
-		if (strm.avail_out == 0) {
-			uint8_t *bigger;
-			produced = (size_t)(strm.next_out - out);
-			if (cap > (size_t)-1 / 2 ||
-			    (bigger = realloc(out, cap * 2)) == NULL) {
-				free(out);
-				lzma_end(&strm);
-				job->ret = LZMA_MEM_ERROR;
-				return;
-			}
-			cap *= 2;
-			out = bigger;
-			strm.next_out = out + produced;
-			strm.avail_out = cap - produced;
-		}
-
-		before_in = strm.total_in;
-		ret = lzma_code(&strm, action);
-		compression_lzma2_mt_report(job, strm.total_in - before_in);
-
-		if (ret == LZMA_STREAM_END)
-			break;
-		if (ret != LZMA_OK) {
-			free(out);
-			lzma_end(&strm);
-			job->ret = ret;
-			return;
-		}
-	}
-
-	produced = (size_t)(strm.next_out - out);
-	if (strm.total_in < (uint64_t)job->in_size)
-		compression_lzma2_mt_report(job,
-		    (uint64_t)job->in_size - strm.total_in);
-	lzma_end(&strm);
-	if (produced == 0 || out[produced - 1] != 0) {
-		free(out);
-		job->ret = LZMA_DATA_ERROR;
-		return;
-	}
-	job->out = out;
-	job->out_size = produced - 1;	/* strip the trailing end marker */
-	job->ret = LZMA_OK;
-}
-
-static void *
-compression_lzma2_mt_worker(void *arg)
-{
-	struct lzma2_mt_job *job = (struct lzma2_mt_job *)arg;
-
-	compression_lzma2_mt_encode(job);
-	/*
-	 * The input (seed + block) is only needed while encoding; free it
-	 * here so a completed block parked in the ring holds just its
-	 * compressed output.
-	 */
-	free(job->in);
-	job->in = NULL;
-	/*
-	 * Mark completion under the progress lock and wake the main thread so
-	 * a drain blocked on this block, or a submit waiting on the
-	 * running-jobs gate, stops waiting - whether the encode succeeded or
-	 * failed.
-	 */
-	if (job->progress_cond != NULL) {
-		pthread_mutex_lock(job->progress_mutex);
-		job->done = 1;
-		if (job->running_jobs != NULL && *job->running_jobs > 0)
-			(*job->running_jobs)--;
-		pthread_cond_broadcast(job->progress_cond);
-		pthread_mutex_unlock(job->progress_mutex);
-	}
-	return (NULL);
-}
-
-static int
-compression_lzma2_mt_join(struct archive *a, struct lzma2_mt_job *job)
-{
-	int ret;
-
-	if (job->joined)
-		return (ARCHIVE_OK);
-	ret = pthread_join(job->thread, NULL);
-	if (ret != 0) {
-		archive_set_error(a, ret,
-		    "Couldn't join lzma2 worker thread");
-		return (ARCHIVE_FATAL);
-	}
-	job->joined = 1;
-	free(job->in);
-	job->in = NULL;
-	if (job->ret != LZMA_OK) {
-		compression_lzma2_mt_set_error(a, job->ret);
-		return (ARCHIVE_FATAL);
-	}
-	return (ARCHIVE_OK);
-}
-
-/*
- * Blocking join for the oldest in-flight block that keeps relaying the shared
- * encoded-bytes counter to the user progress callback while it waits, instead
- * of going silent inside pthread_join until the whole block is finished. On
- * fast inputs the encoder can otherwise outrun every progress sample and the
- * first emitted value is already the final one.
- */
-static int
-compression_lzma2_mt_wait_join(struct archive *a,
-    struct lzma2_mt_stream *strm, struct lzma2_mt_job *job)
-{
-	uint64_t encoded;
-
-	if (strm->progress_cond_ready && strm->progress_mutex_ready) {
-		pthread_mutex_lock(&strm->progress_mutex);
-		while (!job->done) {
-			encoded = strm->encoded_bytes;
-			if (strm->progress_callback != NULL &&
-			    encoded > strm->progress_bytes_reported) {
-				strm->progress_bytes_reported = encoded;
-				/* Call back without the lock so a slow (or
-				 * re-entrant) callback never stalls workers. */
-				pthread_mutex_unlock(&strm->progress_mutex);
-				strm->progress_callback(
-				    strm->progress_callback_data, encoded);
-				pthread_mutex_lock(&strm->progress_mutex);
-				continue;
-			}
-			pthread_cond_wait(&strm->progress_cond,
-			    &strm->progress_mutex);
-		}
-		pthread_mutex_unlock(&strm->progress_mutex);
-	}
-	return (compression_lzma2_mt_join(a, job));
-}
-
-static int
-compression_lzma2_mt_drain(struct archive *a, struct la_zstream *lastrm,
-    int wait)
-{
-	struct lzma2_mt_stream *strm;
-
-	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
-	while (strm->job_count > 0) {
-		struct lzma2_mt_job *job = &strm->jobs[strm->job_head];
-		size_t bytes;
-		int ret;
-
-		if (!job->joined) {
-			if (!wait)
-				return (ARCHIVE_OK);
-			ret = compression_lzma2_mt_wait_join(a, strm, job);
-			if (ret != ARCHIVE_OK)
-				return (ret);
-		}
-
-		bytes = job->out_size - job->out_pos;
-		if (bytes > lastrm->avail_out)
-			bytes = lastrm->avail_out;
-		if (bytes > 0) {
-			memcpy(lastrm->next_out, job->out + job->out_pos, bytes);
-			lastrm->next_out += bytes;
-			lastrm->avail_out -= bytes;
-			lastrm->total_out += bytes;
-			job->out_pos += bytes;
-		}
-		if (job->out_pos < job->out_size)
-			return (ARCHIVE_OK);
-
-		free(job->out);
-		memset(job, 0, sizeof(*job));
-		strm->job_head = (strm->job_head + 1) % strm->job_slots;
-		strm->job_count--;
-		if (lastrm->avail_out == 0)
-			return (ARCHIVE_OK);
-	}
-	return (ARCHIVE_OK);
-}
-
-/* Keep the most recent history_cap bytes so the next block can be seeded. */
-static void
-compression_lzma2_mt_history_push(struct lzma2_mt_stream *strm,
-    const uint8_t *data, size_t len)
-{
-	size_t cap = strm->history_cap;
-
-	if (cap == 0)
-		return;
-	if (len >= cap) {
-		memcpy(strm->history, data + (len - cap), cap);
-		strm->history_len = cap;
-		return;
-	}
-	if (strm->history_len + len > cap) {
-		size_t keep = cap - len;
-		memmove(strm->history,
-		    strm->history + (strm->history_len - keep), keep);
-		strm->history_len = keep;
-	}
-	memcpy(strm->history + strm->history_len, data, len);
-	strm->history_len += len;
-}
-
-/*
- * Wait until a worker core is free (fewer running jobs than threads),
- * relaying the shared encoded-bytes counter to the progress callback while
- * blocked, exactly like a waiting drain does.
- */
-static void
-compression_lzma2_mt_wait_running_slot(struct lzma2_mt_stream *strm)
-{
-	uint64_t encoded;
-
-	if (!strm->progress_cond_ready || !strm->progress_mutex_ready)
-		return;
-	pthread_mutex_lock(&strm->progress_mutex);
-	while (strm->running_jobs >= strm->threads) {
-		encoded = strm->encoded_bytes;
-		if (strm->progress_callback != NULL &&
-		    encoded > strm->progress_bytes_reported) {
-			strm->progress_bytes_reported = encoded;
-			pthread_mutex_unlock(&strm->progress_mutex);
-			strm->progress_callback(
-			    strm->progress_callback_data, encoded);
-			pthread_mutex_lock(&strm->progress_mutex);
-			continue;
-		}
-		pthread_cond_wait(&strm->progress_cond, &strm->progress_mutex);
-	}
-	strm->running_jobs++;
-	pthread_mutex_unlock(&strm->progress_mutex);
-}
-
-/*
- * Give back a slot taken by compression_lzma2_mt_wait_running_slot when the
- * job it was taken for never reaches a worker thread.
- */
-static void
-compression_lzma2_mt_release_running_slot(struct lzma2_mt_stream *strm)
-{
-	if (!strm->progress_cond_ready || !strm->progress_mutex_ready)
-		return;
-	pthread_mutex_lock(&strm->progress_mutex);
-	if (strm->running_jobs > 0)
-		strm->running_jobs--;
-	pthread_cond_broadcast(&strm->progress_cond);
-	pthread_mutex_unlock(&strm->progress_mutex);
-}
-
-static int
-compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
-{
-	struct lzma2_mt_job *job;
-	size_t job_index;
-	size_t preset_size;
-	int ret;
-
-	if (strm->chunk_used == 0)
-		return (ARCHIVE_OK);
-	if (strm->job_count >= strm->job_limit) {
-		archive_set_error(a, ARCHIVE_ERRNO_MISC,
-		    "Internal error queueing lzma2 worker thread");
-		return (ARCHIVE_FATAL);
-	}
-	compression_lzma2_mt_wait_running_slot(strm);
-
-	/* preset_size is 0 unless seeding is enabled (history_cap > 0). */
-	preset_size = strm->history_len;
-	job_index = (strm->job_head + strm->job_count) % strm->job_slots;
-	job = &strm->jobs[job_index];
-	memset(job, 0, sizeof(*job));
-	job->in = malloc(preset_size + strm->chunk_used);
-	if (job->in == NULL) {
-		compression_lzma2_mt_release_running_slot(strm);
-		archive_set_error(a, ENOMEM,
-		    "Can't allocate memory for lzma2 worker input");
-		return (ARCHIVE_FATAL);
-	}
-	if (preset_size > 0)
-		memcpy(job->in, strm->history, preset_size);
-	memcpy(job->in + preset_size, strm->chunk, strm->chunk_used);
-	job->preset_size = preset_size;
-	job->in_size = strm->chunk_used;
-	job->opt = strm->opt;
-	job->progress_mutex = &strm->progress_mutex;
-	job->encoded_bytes = &strm->encoded_bytes;
-	job->progress_cond = strm->progress_cond_ready ?
-	    &strm->progress_cond : NULL;
-	job->running_jobs = (strm->progress_cond_ready &&
-	    strm->progress_mutex_ready) ? &strm->running_jobs : NULL;
-	ret = pthread_create(&job->thread, NULL, compression_lzma2_mt_worker,
-	    job);
-	if (ret != 0) {
-		compression_lzma2_mt_release_running_slot(strm);
-		free(job->in);
-		memset(job, 0, sizeof(*job));
-		archive_set_error(a, ret,
-		    "Couldn't create lzma2 worker thread");
-		return (ARCHIVE_FATAL);
-	}
-	/* Roll this block into the seed window for the following block. */
-	compression_lzma2_mt_history_push(strm, strm->chunk, strm->chunk_used);
-	strm->job_count++;
-	strm->chunk_used = 0;
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_init_encoder_lzma2_mt(struct archive *a,
-    struct la_zstream *lastrm, const lzma_options_lzma *lzma_opt, int threads,
-    uint64_t size_hint,
-    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
-{
-	struct lzma2_mt_stream *strm;
-
-	strm = calloc(1, sizeof(*strm));
-	if (strm == NULL) {
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
-		archive_set_error(a, ENOMEM,
-		    "Can't allocate memory for lzma2 stream");
-		return (ARCHIVE_FATAL);
-	}
-	strm->opt = *lzma_opt;
-	strm->threads = (size_t)threads;
-	strm->job_slots = strm->threads * 2;
-	/* Raised to the full ring below once the condvar is known good. */
-	strm->job_limit = strm->threads;
-	strm->progress_callback = progress_callback;
-	strm->progress_callback_data = progress_callback_data;
-	strm->chunk_size = compression_lzma2_mt_chunk_size(lzma_opt);
-	if (strm->chunk_size == 0) {
-		free(strm);
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
-		archive_set_error(a, ENOMEM,
-		    "lzma2 chunk size is too large");
-		return (ARCHIVE_FATAL);
-	}
-	/*
-	 * Split one file into parallel blocks, seeding each later block with
-	 * the preceding dictionary bytes so cross-block matches survive. The
-	 * block is one thread's share of the file, floored at the minimum
-	 * chunk and capped at 2x the dictionary: the cap bounds per-worker
-	 * memory on huge inputs and, more importantly, yields more blocks
-	 * than threads there, so the OS rebalances them across asymmetric
-	 * (performance/efficiency) cores instead of the wall clock tracking
-	 * the slowest core's single equal-share block. Every split block is
-	 * seeded; an unseeded block resets the dictionary and loses every
-	 * match that crosses the boundary, which costs several percent of
-	 * output size on inputs larger than the dictionary.
-	 */
-	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1) {
-		uint64_t cap = (uint64_t)lzma_opt->dict_size * 2;
-		uint64_t per = (size_hint + strm->threads - 1) / strm->threads;
-		if (per > cap) {
-			/*
-			 * Input too large for one block per thread at the
-			 * memory cap: use the smallest multiple of the thread
-			 * count that fits, so every wave of workers stays
-			 * full instead of leaving a straggler block that
-			 * serializes the tail.
-			 */
-			uint64_t blocks = (size_hint + cap - 1) / cap;
-			blocks = ((blocks + strm->threads - 1) / strm->threads)
-			    * strm->threads;
-			per = (size_hint + blocks - 1) / blocks;
-		}
-		if (per < LZMA2_MT_MIN_CHUNK_SIZE)
-			per = LZMA2_MT_MIN_CHUNK_SIZE;
-		if (per <= (uint64_t)(size_t)-1) {
-			strm->chunk_size = (size_t)per;
-			strm->history_cap = (size_t)lzma_opt->dict_size;
-		}
-	}
-	strm->chunk = malloc(strm->chunk_size);
-	strm->jobs = calloc(strm->job_slots, sizeof(*strm->jobs));
-	if (strm->history_cap > 0)
-		strm->history = malloc(strm->history_cap);
-	if (strm->chunk == NULL || strm->jobs == NULL ||
-	    (strm->history_cap > 0 && strm->history == NULL)) {
-		free(strm->chunk);
-		free(strm->jobs);
-		free(strm->history);
-		free(strm);
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
-		archive_set_error(a, ENOMEM,
-		    "Can't allocate memory for lzma2 stream");
-		return (ARCHIVE_FATAL);
-	}
-	if (pthread_mutex_init(&strm->progress_mutex, NULL) == 0)
-		strm->progress_mutex_ready = 1;
-	if (strm->progress_mutex_ready &&
-	    pthread_cond_init(&strm->progress_cond, NULL) == 0)
-		strm->progress_cond_ready = 1;
-	/*
-	 * With a working condvar the running-jobs gate caps concurrency, so
-	 * the whole ring may fill with parked results; without one,
-	 * concurrency is only bounded by the ring itself, so keep it at one
-	 * slot per thread.
-	 */
-	if (strm->progress_cond_ready)
-		strm->job_limit = strm->job_slots;
-	lastrm->real_stream = strm;
-	lastrm->valid = 1;
-	lastrm->code = compression_code_lzma2_mt;
-	lastrm->end = compression_end_lzma2_mt;
-	return (ARCHIVE_OK);
-}
-
-/* Emit user progress from the streamed encoded-bytes counter (main thread). */
-static void
-compression_lzma2_mt_emit_progress(struct lzma2_mt_stream *strm)
-{
-	uint64_t encoded;
-
-	if (strm->progress_callback == NULL || !strm->progress_mutex_ready)
-		return;
-	pthread_mutex_lock(&strm->progress_mutex);
-	encoded = strm->encoded_bytes;
-	pthread_mutex_unlock(&strm->progress_mutex);
-	if (encoded > strm->progress_bytes_reported) {
-		strm->progress_bytes_reported = encoded;
-		strm->progress_callback(strm->progress_callback_data, encoded);
-	}
-}
-
-static int
-compression_code_lzma2_mt(struct archive *a, struct la_zstream *lastrm,
-    enum la_zaction action)
-{
-	struct lzma2_mt_stream *strm;
-	int ret;
-
-	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
-
-	ret = compression_lzma2_mt_drain(a, lastrm, 0);
-	compression_lzma2_mt_emit_progress(strm);
-	if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
-		return (ret);
-
-	while (lastrm->avail_in > 0) {
-		size_t bytes;
-
-			while (strm->job_count >= strm->job_limit) {
-				ret = compression_lzma2_mt_drain(a, lastrm, 1);
-				if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
-					return (ret);
-		}
-
-		bytes = strm->chunk_size - strm->chunk_used;
-		if (bytes > lastrm->avail_in)
-			bytes = lastrm->avail_in;
-		memcpy(strm->chunk + strm->chunk_used, lastrm->next_in, bytes);
-		strm->chunk_used += bytes;
-		lastrm->next_in += bytes;
-		lastrm->avail_in -= bytes;
-		lastrm->total_in += bytes;
-
-		if (strm->chunk_used == strm->chunk_size) {
-			ret = compression_lzma2_mt_submit(a, strm);
-			if (ret != ARCHIVE_OK)
-				return (ret);
-		}
-	}
-
-	if (action == ARCHIVE_Z_FINISH) {
-		while (strm->job_count >= strm->job_limit) {
-			ret = compression_lzma2_mt_drain(a, lastrm, 1);
-			if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
-				return (ret);
-		}
-		ret = compression_lzma2_mt_submit(a, strm);
-		if (ret != ARCHIVE_OK)
-			return (ret);
-		while (strm->job_count > 0) {
-			ret = compression_lzma2_mt_drain(a, lastrm, 1);
-			compression_lzma2_mt_emit_progress(strm);
-			if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
-				return (ret);
-		}
-		if (!strm->end_marker_written) {
-			if (lastrm->avail_out == 0)
-				return (ARCHIVE_OK);
-			*lastrm->next_out++ = 0;
-			lastrm->avail_out--;
-			lastrm->total_out++;
-			strm->end_marker_written = 1;
-		}
-		return (ARCHIVE_EOF);
-	}
-
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
-{
-	struct lzma2_mt_stream *strm;
-	size_t i;
-
-	(void)a; /* UNUSED */
-	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
-	if (strm != NULL) {
-		for (i = 0; i < strm->job_count; i++) {
-			struct lzma2_mt_job *job =
-			    &strm->jobs[(strm->job_head + i) % strm->job_slots];
-			if (!job->joined)
-				pthread_join(job->thread, NULL);
-			free(job->in);
-			free(job->out);
-		}
-		if (strm->progress_cond_ready)
-			pthread_cond_destroy(&strm->progress_cond);
-		if (strm->progress_mutex_ready)
-			pthread_mutex_destroy(&strm->progress_mutex);
-		free(strm->jobs);
-		free(strm->chunk);
-		free(strm->history);
-		free(strm);
-	}
-	lastrm->valid = 0;
-	lastrm->real_stream = NULL;
-	return (ARCHIVE_OK);
-}
-#endif
-
-#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
-/*
- * LZMA2 through 7-Zip's own encoder, with the SDK's native block
- * multithreading. This is the default backend: it is the same coder and the
- * same thread split 7zz runs, so create time lands at 7zz parity instead of
- * liblzma's ~1.2x-per-byte premium.
- *
- * ROM_WEAVER_7Z_ENCODER=liblzma selects the seeded parallel-block liblzma path
- * below instead. That one seeds every parallel block with the preceding
- * dictionary bytes, so it produces output a few tenths of a percent *smaller*
- * than 7zz on inputs larger than the dictionary - but each worker re-indexes
- * its seed before encoding, which is exactly the work that made it slower than
- * 7zz. The trade is size for time; the SDK backend takes the 7zz side of it.
- */
-static int
-compression_code_lzma2_sdk(struct archive *a, struct la_zstream *lastrm,
-    enum la_zaction action)
-{
-	rw_lzma2_enc *enc = (rw_lzma2_enc *)lastrm->real_stream;
-	size_t in_len = lastrm->avail_in;
-	size_t out_len = lastrm->avail_out;
-	uint64_t consumed;
-	int done = 0;
-	int r;
-
-	r = rw_lzma2_enc_code(enc, lastrm->next_in, &in_len, lastrm->next_out,
-	    &out_len, action == ARCHIVE_Z_FINISH, &done);
-	if (r != RW_LZMA_OK) {
-		archive_set_error(a, r == RW_LZMA_ERR_MEM ? ENOMEM :
-		    ARCHIVE_ERRNO_MISC, "lzma2 compression failed (%d)", r);
-		return (ARCHIVE_FATAL);
-	}
-	lastrm->next_in += in_len;
-	lastrm->avail_in -= in_len;
-	lastrm->total_in += in_len;
-	lastrm->next_out += out_len;
-	lastrm->avail_out -= out_len;
-	lastrm->total_out += out_len;
-
-	if (lastrm->progress_callback != NULL) {
-		consumed = rw_lzma2_enc_consumed(enc);
-		if (consumed > lastrm->progress_bytes_reported) {
-			lastrm->progress_bytes_reported = consumed;
-			lastrm->progress_callback(
-			    lastrm->progress_callback_data, consumed);
-		}
-	}
-	return (done ? ARCHIVE_EOF : ARCHIVE_OK);
-}
-
-static int
-compression_end_lzma2_sdk(struct archive *a, struct la_zstream *lastrm)
-{
-	(void)a;/* UNUSED */
-	rw_lzma2_enc_free((rw_lzma2_enc *)lastrm->real_stream);
-	lastrm->real_stream = NULL;
-	lastrm->valid = 0;
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_init_encoder_lzma2_sdk(struct archive *a,
-    struct la_zstream *lastrm, int level, uint32_t dict_size, int threads,
-    uint64_t size_hint,
-    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
-{
-	rw_lzma2_enc *enc;
-
-	(void)a;/* UNUSED: every failure here defers to the caller's fallback */
-
-	enc = rw_lzma2_enc_new(level, threads, dict_size, size_hint);
-	if (enc == NULL) {
-		/*
-		 * Deliberately silent, and deliberately not fatal. The SDK
-		 * encoder is a blocking one-shot that has to be driven from a
-		 * thread of its own, and there are hosts where that thread
-		 * cannot exist - a browser run that asked for a single thread
-		 * gets a zero-sized WASI thread pool, so every spawn returns
-		 * EAGAIN. liblzma's encoder is a real streaming push encoder
-		 * that needs no thread, so the caller falls back to it and the
-		 * archive still gets written. Setting an archive error here
-		 * would poison a run that is about to succeed.
-		 */
-		return (ARCHIVE_FAILED);
-	}
-	lastrm->props = malloc(1);
-	if (lastrm->props == NULL) {
-		/* Same fallback as above; liblzma needs far less memory. */
-		rw_lzma2_enc_free(enc);
-		return (ARCHIVE_FAILED);
-	}
-	lastrm->props[0] = rw_lzma2_enc_props(enc);
-	lastrm->prop_size = 1;
-	lastrm->real_stream = enc;
-	lastrm->progress_callback = progress_callback;
-	lastrm->progress_callback_data = progress_callback_data;
-	lastrm->progress_bytes_reported = 0;
-	lastrm->valid = 1;
-	lastrm->code = compression_code_lzma2_sdk;
-	lastrm->end = compression_end_lzma2_sdk;
-	return (ARCHIVE_OK);
-}
-
-static int
-lzma2_sdk_encoder_enabled(void)
-{
-	const char *choice = getenv("ROM_WEAVER_7Z_ENCODER");
-
-	return (choice == NULL || strcmp(choice, "liblzma") != 0);
-}
-#endif /* ROM_WEAVER_7Z_SDK_LZMA2_ENCODER */
-
-/*
- * Round an uncompressed-size hint up to the smallest LZMA2-representable
- * dictionary size (2^n or 3*2^(n-1)), capped at the preset dictionary, so the
- * encoder window and the stored properties byte agree and never exceed what
- * the input can reference.
- */
-static uint32_t
-lzma_reduce_dict_size(uint64_t size_hint, uint32_t preset_dict)
-{
-	int b;
-
-	for (b = 0; b <= 40; b++) {
-		uint64_t cand = (uint64_t)(2 | (b & 1)) << (b / 2 + 11);
-		if (cand >= size_hint)
-			return (cand < (uint64_t)preset_dict)
-			    ? (uint32_t)cand : preset_dict;
-	}
-	return preset_dict;
-}
-
 static int
 compression_init_encoder_lzma(struct archive *a,
-    struct la_zstream *lastrm, int level, uint64_t filter_id, int threads,
-    uint64_t size_hint,
-    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
+    struct la_zstream *lastrm, int level, uint64_t filter_id)
 {
 	static const lzma_stream lzma_init_data = LZMA_STREAM_INIT;
 	lzma_stream *strm;
-	lzma_filter lzmafilters[2];
+	lzma_filter *lzmafilters;
 	lzma_options_lzma lzma_opt;
 	int r;
 
 	if (lastrm->valid)
 		compression_end(a, lastrm);
+	strm = calloc(1, sizeof(*strm) + sizeof(*lzmafilters) * 2);
+	if (strm == NULL) {
+		archive_set_error(a, ENOMEM,
+		    "Can't allocate memory for lzma stream");
+		return (ARCHIVE_FATAL);
+	}
+	lzmafilters = (lzma_filter *)(strm+1);
 	if (level > 9)
 		level = 9;
 	if (lzma_lzma_preset(&lzma_opt, level)) {
+		free(strm);
 		lastrm->real_stream = NULL;
 		archive_set_error(a, ENOMEM,
 		    "Internal error initializing compression library");
 		return (ARCHIVE_FATAL);
 	}
-	/*
-	 * Use 7-Zip's per-level LZMA2 dictionary table (probed from 7zz
-	 * 26.02: 256 KiB at -mx1 up to 256 MiB at -mx8/9) instead of
-	 * liblzma's smaller presets, so archive sizes stay at parity with
-	 * 7zz on inputs larger than the liblzma dictionary.
-	 *
-	 * This is `LzmaEncProps_Normalize`'s table verbatim, pointer-width
-	 * ceiling included: a 32-bit host tops out at 64 MiB because a
-	 * 256 MiB dictionary needs a ~3 GiB match finder, which fits no
-	 * 32-bit address space - wasm32's 4 GiB linear memory, but equally
-	 * the linux-ia32 and win32-ia32 binaries this project ships.
-	 */
-	if (filter_id == LZMA_FILTER_LZMA2) {
-		const int max_shift_level = (int)(sizeof(size_t) / 2 + 4);
-
-		if (level <= 4)
-			lzma_opt.dict_size = (uint32_t)1 << (level * 2 + 16);
-		else if (level <= max_shift_level)
-			lzma_opt.dict_size = (uint32_t)1 << (level + 20);
-		else
-			lzma_opt.dict_size =
-			    (uint32_t)1 << (sizeof(size_t) / 2 + 24);
-	}
-	/*
-	 * A dictionary larger than the data can never be referenced, so reduce
-	 * it to the input size (rounded up to the next representable dictionary
-	 * and capped at the preset). For LZMA2 this also shrinks the per-thread
-	 * chunk and encoder memory.
-	 */
-	if (size_hint > 0 && size_hint < (uint64_t)lzma_opt.dict_size)
-		lzma_opt.dict_size =
-		    lzma_reduce_dict_size(size_hint, lzma_opt.dict_size);
-#if ROM_WEAVER_7Z_SDK_LZMA2_ENCODER
-	/* The dictionary is already 7-Zip's per-level value, wasm-capped and
-	 * reduced to the input; hand it over verbatim so the SDK stores the
-	 * same properties byte liblzma would have.
-	 *
-	 * A failure here is a fallback, not an error: the SDK encoder needs a
-	 * thread it cannot always get (see compression_init_encoder_lzma2_sdk),
-	 * and liblzma below encodes the same format without one. It leaves
-	 * lastrm untouched on failure, so the liblzma path starts clean. */
-	if (filter_id == LZMA_FILTER_LZMA2 && lzma2_sdk_encoder_enabled()
-	    && compression_init_encoder_lzma2_sdk(a, lastrm, level,
-		    lzma_opt.dict_size, threads, size_hint, progress_callback,
-		    progress_callback_data) == ARCHIVE_OK)
-		return (ARCHIVE_OK);
-#endif
-
 	lzmafilters[0].id = filter_id;
 	lzmafilters[0].options = &lzma_opt;
 	lzmafilters[1].id = LZMA_VLI_UNKNOWN;/* Terminate */
-	lzmafilters[1].options = NULL;
 
-	r = lzma_properties_size(&(lastrm->prop_size), &(lzmafilters[0]));
+	r = lzma_properties_size(&(lastrm->prop_size), lzmafilters);
 	if (r != LZMA_OK) {
+		free(strm);
 		lastrm->real_stream = NULL;
 		archive_set_error(a, ARCHIVE_ERRNO_MISC,
 		    "lzma_properties_size failed");
@@ -3086,49 +2109,27 @@ compression_init_encoder_lzma(struct archive *a,
 	if (lastrm->prop_size) {
 		lastrm->props = malloc(lastrm->prop_size);
 		if (lastrm->props == NULL) {
+			free(strm);
 			lastrm->real_stream = NULL;
 			archive_set_error(a, ENOMEM,
 			    "Cannot allocate memory");
 			return (ARCHIVE_FATAL);
 		}
-		r = lzma_properties_encode(&(lzmafilters[0]),  lastrm->props);
+		r = lzma_properties_encode(lzmafilters,  lastrm->props);
 		if (r != LZMA_OK) {
+			free(strm);
 			lastrm->real_stream = NULL;
-			free(lastrm->props);
-			lastrm->props = NULL;
-			lastrm->prop_size = 0;
 			archive_set_error(a, ARCHIVE_ERRNO_MISC,
 			    "lzma_properties_encode failed");
 			return (ARCHIVE_FATAL);
 		}
 	}
 
-#if defined(HAVE_PTHREAD_H)
-	if (filter_id == LZMA_FILTER_LZMA2 && threads > 1)
-		return (compression_init_encoder_lzma2_mt(a, lastrm,
-		    &lzma_opt, threads, size_hint, progress_callback,
-		    progress_callback_data));
-#else
-	(void)threads; /* UNUSED */
-#endif
-
-	strm = calloc(1, sizeof(*strm));
-	if (strm == NULL) {
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
-		archive_set_error(a, ENOMEM,
-		    "Can't allocate memory for lzma stream");
-		return (ARCHIVE_FATAL);
-	}
 	*strm = lzma_init_data;
 	r = lzma_raw_encoder(strm, lzmafilters);
 	switch (r) {
 	case LZMA_OK:
 		lastrm->real_stream = strm;
-		lastrm->progress_callback = progress_callback;
-		lastrm->progress_callback_data = progress_callback_data;
-		lastrm->progress_bytes_reported = 0;
 		lastrm->valid = 1;
 		lastrm->code = compression_code_lzma;
 		lastrm->end = compression_end_lzma;
@@ -3136,20 +2137,14 @@ compression_init_encoder_lzma(struct archive *a,
 		break;
 	case LZMA_MEM_ERROR:
 		free(strm);
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
 		lastrm->real_stream = NULL;
 		archive_set_error(a, ENOMEM,
 		    "Internal error initializing compression library: "
 		    "Cannot allocate memory");
 		r =  ARCHIVE_FATAL;
 		break;
-	        default:
+        default:
 		free(strm);
-		free(lastrm->props);
-		lastrm->props = NULL;
-		lastrm->prop_size = 0;
 		lastrm->real_stream = NULL;
 		archive_set_error(a, ARCHIVE_ERRNO_MISC,
 		    "Internal error initializing compression library: "
@@ -3165,17 +2160,15 @@ compression_init_encoder_lzma1(struct archive *a,
     struct la_zstream *lastrm, int level)
 {
 	return compression_init_encoder_lzma(a, lastrm, level,
-		    LZMA_FILTER_LZMA1, 1, 0, NULL, NULL);
+		    LZMA_FILTER_LZMA1);
 }
 
 static int
 compression_init_encoder_lzma2(struct archive *a,
-    struct la_zstream *lastrm, int level, int threads, uint64_t size_hint,
-    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
+    struct la_zstream *lastrm, int level)
 {
 	return compression_init_encoder_lzma(a, lastrm, level,
-		    LZMA_FILTER_LZMA2, threads, size_hint, progress_callback,
-		    progress_callback_data);
+		    LZMA_FILTER_LZMA2);
 }
 
 static int
@@ -3200,12 +2193,6 @@ compression_code_lzma(struct archive *a,
 	lastrm->next_out = strm->next_out;
 	lastrm->avail_out = strm->avail_out;
 	lastrm->total_out = strm->total_out;
-	if (lastrm->progress_callback != NULL &&
-	    lastrm->total_in > lastrm->progress_bytes_reported) {
-		lastrm->progress_bytes_reported = lastrm->total_in;
-		lastrm->progress_callback(lastrm->progress_callback_data,
-		    lastrm->progress_bytes_reported);
-	}
 	switch (r) {
 	case LZMA_OK:
 		/* Non-finishing case */
@@ -3240,9 +2227,6 @@ compression_end_lzma(struct archive *a, struct la_zstream *lastrm)
 	free(strm);
 	lastrm->valid = 0;
 	lastrm->real_stream = NULL;
-	lastrm->progress_callback = NULL;
-	lastrm->progress_callback_data = NULL;
-	lastrm->progress_bytes_reported = 0;
 	return (ARCHIVE_OK);
 }
 #else
@@ -3258,15 +2242,10 @@ compression_init_encoder_lzma1(struct archive *a,
 }
 static int
 compression_init_encoder_lzma2(struct archive *a,
-    struct la_zstream *lastrm, int level, int threads, uint64_t size_hint,
-    void (*progress_callback)(void *, uint64_t), void *progress_callback_data)
+    struct la_zstream *lastrm, int level)
 {
 
 	(void) level; /* UNUSED */
-	(void) threads; /* UNUSED */
-	(void) size_hint; /* UNUSED */
-	(void) progress_callback; /* UNUSED */
-	(void) progress_callback_data; /* UNUSED */
 	if (lastrm->valid)
 		compression_end(a, lastrm);
 	return (compression_unsupported_encoder(a, lastrm, "lzma"));
@@ -3557,12 +2536,11 @@ _7z_compression_init_encoder(struct archive_write *a, unsigned compression,
 		    &(a->archive), &(zip->stream),
 		    compression_level);
 		break;
-		case _7Z_LZMA2:
-			r = compression_init_encoder_lzma2(
-			    &(a->archive), &(zip->stream),
-			    compression_level, zip->opt_threads, zip->size_hint,
-			    zip->progress_callback, zip->progress_callback_data);
-			break;
+	case _7Z_LZMA2:
+		r = compression_init_encoder_lzma2(
+		    &(a->archive), &(zip->stream),
+		    compression_level);
+		break;
 	case _7Z_PPMD:
 		r = compression_init_encoder_ppmd(
 		    &(a->archive), &(zip->stream),

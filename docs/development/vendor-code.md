@@ -7,6 +7,7 @@
 
 - [The publishing constraint](#the-publishing-constraint)
 - [What is vendored](#what-is-vendored)
+- [Patch queues and updates](#patch-queues-and-updates)
 - [`libarchive`, inlined into `rom-weaver-containers`](#libarchive-inlined-into-rom-weaver-containers)
   - [Refreshing the snapshot](#refreshing-the-snapshot)
   - [Going back to upstream](#going-back-to-upstream)
@@ -37,46 +38,70 @@ That has one consequence worth stating plainly: vendoring someone else's crate a
 
 ## What is vendored
 
-| Code | Form | Packaged as | Reason |
-| --- | --- | --- | --- |
-| `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Built by `crates/rom-weaver-containers/libarchive/build.rs`; carries local patches upstream has not taken |
-| `crates/rom-weaver-containers/lzma-sdk/vendor/C` | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's LZMA1/LZMA2 coders, used by the 7z reader and native writer |
-| `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
-| `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
+| Code                                                        | Form              | Packaged as                     | Reason                                                                        |
+| ----------------------------------------------------------- | ----------------- | ------------------------------- | ----------------------------------------------------------------------------- |
+| `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Pristine upstream sources; the build applies the tracked patch queue          |
+| `crates/rom-weaver-containers/lzma-sdk/vendor/C`            | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's LZMA1/LZMA2 coders, used by the 7z reader and native writer           |
+| `crates/rom-weaver-containers/src/nod`                      | Inlined module    | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
+| `crates/rom-weaver-containers/src/xdvdfs`                   | Inlined module    | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax`                             |
 
 Everything else that was once vendored has gone back upstream: `qbsdiff` and `chd` now come from crates.io, and the `akv` wrapper was removed outright. That is the preferred outcome whenever upstream can serve the need. Inlining is the fallback for when it cannot, and a published fork is the last resort.
 
 No vendored dependency has its own `rom-weaver-*` package.
 
+## Patch queues and updates
+
+The four modified dependencies have ordered patch queues under `crates/rom-weaver-containers/vendor-patches/<name>/`. Each `manifest.json` pins an upstream archive, revision, SHA-256, extraction rules, and destination. Its ordered `patches` entries explain each change, its upstream status, and relevant checks. The `nod` and `xdvdfs` queue READMEs record coverage limits.
+
+Generic fixes use the `source` stage. Project adaptations use `integration`; build-only changes use `build`, `wasm`, or `arm64`. Keep import rewriting, disabled features, and formatting in integration patches so generic fixes remain readable against upstream. Project-owned C bridges and shims stay separate, with copy/append adapters recorded in the manifest where applicable.
+
+Generate plain `git diff` patches beginning with `diff --git`; email headers are rejected. Patch files preserve upstream line endings; Git must not normalize their bytes.
+
+The shared maintainer command uses Node.js, Git, and `tar`; SDK extraction also needs `7zz`, `7z`, `7za`, or `bsdtar`. Start by listing the patches:
+
+```bash
+npm run vendor:list
+```
+
+Check every queue against its pinned upstream source:
+
+```bash
+npm run vendor:check
+```
+
+Archives are cached under `$XDG_CACHE_HOME/rom-weaver/vendor-sources`, falling back to `~/.cache/rom-weaver/vendor-sources`. Every use verifies the archive checksum. After the first download, `npm run vendor:check -- --offline` checks without network access. Add a dependency name such as `nod` to select one queue.
+
+To update a dependency, change its manifest's upstream revision, archive URL, root directory, and verified SHA-256. Run its check command and resolve each reported patch conflict. Add `--keep-work` to retain the extracted, pristine, and partially patched trees; the command prints their location. Remove a patch only after verifying upstream includes its required behavior. A successfully replayed queue may still differ from the committed source until refresh runs:
+
+```bash
+npm run vendor:refresh -- nod
+```
+
+Refresh verifies and replays the complete selected queues before replacing source trees. It saves replaced trees under `$XDG_STATE_HOME/agents/backups/rom-weaver/dependency-refresh`, falling back to `~/.local/state/agents/backups/rom-weaver/dependency-refresh`, and prints the backup path. Backups are retained. Check and refresh reject source checksum mismatches, incompatible patch context, unsafe paths, and symbolic links.
+
+C and assembly snapshots stay pristine: Cargo applies their patches to copies under `OUT_DIR`. Rust modules are committed after source and integration patches are applied. Explicit `preserve` entries retain version notes and the xdvdfs license omitted from its published archive; they are not regenerated. `check` detects unexplained additions, removals, and changed source bytes, and also dry-runs the C queues for native, WASM, and ARM64 stages.
+
+Normal Cargo builds apply C patches through the Rust build helper. They do not run this maintainer command or require Node.js, Git, an external patch program, or source downloads. The manifests and patches are packaged with `rom-weaver-containers`.
+
+After changing a queue, run `npm run vendor:check`, its listed regression checks, and the validation commands at the end of this page. Patch replay proves reproducibility, not behavior: output parity and malformed-input tests remain necessary.
+
 ## `libarchive`, inlined into `rom-weaver-containers`
 
-The libarchive C sources live at `crates/rom-weaver-containers/libarchive/vendor/libarchive/`, and `libarchive/build.rs` builds them with CMake. They are the only libarchive source rom-weaver builds - a local `cargo build` and a `cargo install rom-weaver-cli` compile the same tree.
-
-Local patches are developed in the fork [brandonocasey/libarchive](https://github.com/brandonocasey/libarchive), which keeps the reviewable history against upstream and is where a contribution back to upstream starts. The inlined copy is a snapshot of one fork commit, recorded in `crates/rom-weaver-containers/libarchive/vendor/LIBARCHIVE_VERSION`.
+The pristine libarchive sources live at `crates/rom-weaver-containers/libarchive/vendor/libarchive/`. The manifest in `vendor-patches/libarchive/` pins the exact upstream commit and records the patches previously developed in [brandonocasey/libarchive](https://github.com/brandonocasey/libarchive). Updating no longer requires that fork checkout.
 
 ### Refreshing the snapshot
 
-```bash
-node scripts/vendor-libarchive.mjs <path-to-libarchive-checkout> [ref]
-```
+Use the [shared patch workflow](#patch-queues-and-updates) with the `libarchive` dependency name. `LIBARCHIVE_VERSION` points to its manifest. Source pruning is recorded in the manifest: tests, documentation, examples, and unused release/build helpers stay out of the published crate.
 
-The script copies `git archive` output and prunes what the build never compiles: the five test trees (`libarchive/test` alone is ~13 MB of test data, plus `cat`, `cpio`, `tar`, and `unzip`), `test_utils`, `doc`, `examples`, `contrib`, and `.github`. `build.rs` sets `ENABLE_TEST=OFF`, so none of it is ever built. **Do not prune anything else CMake reads** - that would force an edit to the vendored tree and turn every future refresh from a copy into a merge.
+`libarchive/build.rs` copies the pristine snapshot into `OUT_DIR`, applies common patches and project adapters, then applies WASM patches when appropriate. Feature-dependent CMake source selection remains in the build integration. The patch removing unconditional test-subdirectory calls keeps the pruned source configurable with tests disabled.
 
-There is one wrinkle: upstream calls `add_subdirectory(test)` unconditionally in all five directories and lets the test tree itself check `ENABLE_TEST`, so a pruned tree fails to *configure* even with tests off. `build.rs` strips those five calls (`TEST_SUBDIRECTORY_OWNERS`). If a refresh ever fails with `add_subdirectory given source "test" which is not an existing directory`, that list and the script's prune list have drifted apart.
+The queue includes threaded bzip2, ZIP Zstd tuning, WASI zlib allocators, LZMA2 threading/progress, SDK backend integration, and gzip integrity checks. Separate gzip patches verify member CRC32/size and drain filters at archive EOF, so nested filters cannot bypass trailer validation.
 
-Pruning is also what keeps the published crate viable: the full tree packages to about 6.3 MB against crates.io's 10 MiB limit, the pruned one to about 1.3 MB.
-
-Every transformation - the test-subdirectory strip, the wasm patches in `libarchive/patches/wasm/`, the all-target patches in `libarchive/patches/`, and the `CMakeLists.txt` source-list edits - is applied to a staged copy under `OUT_DIR`, never to the committed tree.
-
-`libarchive/patches/7zip_solid_block.c` appends `rom_weaver_7zip_entry_solid_block()` to the staged 7zip reader so extract chunking can see which solid block an entry lives in; the accessor has to live in that translation unit because `struct _7zip` is file-local, and it is declared by hand in `src/libarchive/read.rs` rather than through bindgen because no header declares it. `build.rs` asserts every struct field the accessor reads before appending, so a refresh that renames one fails the build with the field name instead of a compiler error in a generated file.
-
-The all-target `gzip_validation` patch checks every member's CRC32 and uncompressed size. The snapshot initializes a CRC accumulator but never updates or verifies it. The patch validates trailers for gzip streams and gzip-filtered archives, including concatenated members. `build.rs` requires the original source fragment, so incompatible snapshot updates fail during staging.
-
-The companion `gzip_eof_validation` patch runs when archive parsing ends with a gzip filter present. Downstream decoders can finish before upstream gzip trailers, including nested gzip and UU-encoded TAR. It drains each decoder directly, validating every gzip member and preserving other codecs' checks.
+`libarchive/patches/7zip_solid_block.c` remains a project-owned accessor for extraction scheduling. Its append adapter is recorded in the manifest. The accessor lives in the 7zip reader's translation unit because the struct it reads is private; its declaration remains in `src/libarchive/read.rs`.
 
 ### Going back to upstream
 
-There is no version of this that ends in a crates.io dependency - libarchive is a C library, and `libarchive-sys` style crates do not carry the local patches or the wasm build. The realistic end state is upstream accepting the fork's commits, at which point the fork resets to an upstream tag and the snapshot is refreshed from it. Track that in the fork's branches, not here.
+Drop each generic patch once its behavior is included in the pinned upstream release. The clean C snapshot can remain vendored for reproducible native and WASM builds. The project-specific bridges and source selection may remain even after upstream accepts every generic fix.
 
 ## LZMA SDK, inlined into `rom-weaver-containers`
 
@@ -84,20 +109,14 @@ There is no version of this that ends in a crates.io dependency - libarchive is 
 
 The SDK supplies the same codec implementation as `7zz`, with local decoder patches described below. This lets rom-weaver compare output and performance against `7zz`; it does not guarantee equal speed on every input.
 
-The exact upstream drop is pinned in `crates/rom-weaver-containers/lzma-sdk/LZMA_SDK_VERSION` (version, source URL, and the SHA-256 of the published `.7z`). Refresh it with:
+The exact drop, source URL, archive SHA-256, included C/assembly files, and license mapping are pinned in `vendor-patches/lzma-sdk/manifest.json`. `lzma-sdk/LZMA_SDK_VERSION` records the version and points to that manifest. Use `npm run vendor:refresh -- lzma-sdk` after updating the pin and resolving its patches.
 
-```bash
-node scripts/vendor-lzma-sdk.mjs           # re-fetch the pinned version
-new_version=26.02                           # replace with a verified release
-node scripts/vendor-lzma-sdk.mjs "$new_version"
-```
-
-The script fetches `https://www.7-zip.org/a/lzma<ver>.7z`, extracts it with whatever 7z reader is on `PATH`, and copies only the files the coders need (`VENDORED_FILES` in the script): LZMA1/LZMA2 encode+decode, the match finders, the SDK's `Threads`/`MtCoder`/`MtDec` layer, and the shared headers. Everything else in the SDK's `C/` directory - AES, PPMd, BCJ2, the 7z archive reader, the sample programs - stays out of the tree. The copy is **verbatim**: local C and assembly patches live outside `vendor/` and apply only to staged sources under `OUT_DIR`, so a refresh stays a copy rather than a merge. Keep it that way.
+The copy is verbatim. The manifest selects LZMA1/LZMA2 coders, match finders, threading helpers, and assembly decoders. The portable and ARM64 optimizations are unified patches applied only under `OUT_DIR`. The project-owned SDK bridge and alignment-safe endian-access header remain under `lzma-sdk/glue/`.
 
 Build wiring lives in `libarchive/build.rs`:
 
 - `build_lzma_sdk` compiles the sources at `-O3` regardless of the Cargo profile. They are third-party coders nobody steps through, and a debug-profile build of them makes the test suite unusably slow.
-- The threaded units (`LzFindMt`, `MtCoder`, `MtDec`, `Threads`) are dropped and `Z7_ST` is defined on **every** wasm target, which also drops the glue's encoder bridge and leaves `rom-weaver-app.wasm` encoding 7z with liblzma. See [The SDK encoder is native-only](#the-sdk-encoder-is-native-only) for why. The *decoder* is unaffected and stays on the SDK everywhere - `LzmaDec` and `Lzma2Dec` have no threads.
+- The threaded units (`LzFindMt`, `MtCoder`, `MtDec`, `Threads`) are dropped and `Z7_ST` is defined on **every** wasm target, which also drops the glue's encoder bridge and leaves `rom-weaver-app.wasm` encoding 7z with liblzma. See [The SDK encoder is native-only](#the-sdk-encoder-is-native-only) for why. The _decoder_ is unaffected and stays on the SDK everywhere - `LzmaDec` and `Lzma2Dec` have no threads.
 - `Z7_AFFINITY_DISABLE` is set on every wasm target: wasi-libc has no `sched_setaffinity` and no `<cpuid.h>`/`<sys/auxv.h>`.
 - Every portable-C decoder stages `LzmaDec.c` and ports the assembly loop's short-distance match copies: distance 1 uses `memset`, while distances 2 through 8 cache and copy one full period of the repeated pattern. Clang lowers the fill to WebAssembly `memory.fill` and the short patterns to fixed loads and stores. Other matches and the serial range decoder stay on the upstream C loop.
 - The SDK's hand-written decode loop (`vendor/Asm/`, selected with `Z7_LZMA_DEC_OPT`) replaces `LzmaDec.c`'s C loop wherever it can be assembled. Its staged ARM64 source caches the same distance-2 through distance-8 periods as the portable loop. It decodes the same bitstream and is what `7zz` itself runs. Before these short-period copies, the upstream loop accounts for ~26% of a 1 GiB LZMA1 extract's time. The matrix below lists which platforms get it.
@@ -110,13 +129,13 @@ The assembly version was measured end-to-end on native ARM64 over ten runs per c
 
 `libarchive` always owns the 7z container framing, folder graph, and backend routing. It is not a third LZMA implementation. The two codec providers have one policy:
 
-| Operation | Targets | Codec provider | Reason |
-| --- | --- | --- | --- |
-| Read LZMA1/LZMA2 without a liblzma-executed filter chain | all | 7-Zip SDK decoder | One decoder API everywhere; its implementation is assembly where supported and portable C otherwise |
-| Read LZMA filter chains | all | liblzma | liblzma already owns delta and architecture-filter execution |
-| Write LZMA1 | all | liblzma | The SDK integration adds no LZMA1 encoder |
-| Write LZMA2 | native | 7-Zip SDK encoder by default; liblzma fallback/override | Uses the SDK encoder with a fallback if its bridge thread cannot start |
-| Write LZMA2 | WebAssembly | liblzma | The SDK encoder bridge is disabled for WASM targets |
+| Operation                                                | Targets     | Codec provider                                          | Reason                                                                                              |
+| -------------------------------------------------------- | ----------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Read LZMA1/LZMA2 without a liblzma-executed filter chain | all         | 7-Zip SDK decoder                                       | One decoder API everywhere; its implementation is assembly where supported and portable C otherwise |
+| Read LZMA filter chains                                  | all         | liblzma                                                 | liblzma already owns delta and architecture-filter execution                                        |
+| Write LZMA1                                              | all         | liblzma                                                 | The SDK integration adds no LZMA1 encoder                                                           |
+| Write LZMA2                                              | native      | 7-Zip SDK encoder by default; liblzma fallback/override | Uses the SDK encoder with a fallback if its bridge thread cannot start                              |
+| Write LZMA2                                              | WebAssembly | liblzma                                                 | The SDK encoder bridge is disabled for WASM targets                                                 |
 
 The SDK decoder's assembly and C loops are implementations of the same `rw_lzma_dec_*` interface, not separate backends. Build flags name the two actual capabilities independently: `ROM_WEAVER_7Z_SDK_DECODER` and `ROM_WEAVER_7Z_SDK_LZMA2_ENCODER`.
 
@@ -132,15 +151,15 @@ Native builds keep a second safety net: if the bridge thread cannot start for an
 
 ### Which platforms get the assembly decode loop
 
-| Target | Decode loop | Why |
-| --- | --- | --- |
-| `aarch64-*` except Windows | assembly, always | The staged `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool |
-| `aarch64-pc-windows-*` | portable C with short-period copies | The MSVC build path does not assemble the SDK's GNU-as `.S` file |
-| `x86_64-*-linux-*`, BSDs | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX` |
-| `x86_64-pc-windows-*` | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64` |
-| `x86_64-apple-darwin` | portable C with short-period copies | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
-| `i686-*`, other arches | portable C with short-period copies | The SDK ships no loop this build uses for them |
-| `wasm32-*` | portable C with short-period copies | No assembler; clang lowers the fill to `memory.fill` and the cached periods to fixed loads/stores |
+| Target                     | Decode loop                                            | Why                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aarch64-*` except Windows | assembly, always                                       | The staged `Asm/arm64/LzmaDecOpt.S` is GNU-as syntax; clang assembles it with no extra tool                                                             |
+| `aarch64-pc-windows-*`     | portable C with short-period copies                    | The MSVC build path does not assemble the SDK's GNU-as `.S` file                                                                                        |
+| `x86_64-*-linux-*`, BSDs   | assembly when a MASM-compatible assembler is on `PATH` | `Asm/x86/LzmaDecOpt.asm` is MASM syntax and no C compiler reads it. `-elf64 -DABI_LINUX`                                                                |
+| `x86_64-pc-windows-*`      | assembly when `ml64` (or jwasm/asmc/uasm) is on `PATH` | MSVC's own `ml64` is already there under `VsDevCmd`. `-win64`                                                                                           |
+| `x86_64-apple-darwin`      | portable C with short-period copies                    | Nothing in reach emits Mach-O: jwasm has no Mach-O writer, asmc only bootstraps on an x86 host, and uasm's tree does not compile on a current Unix host |
+| `i686-*`, other arches     | portable C with short-period copies                    | The SDK ships no loop this build uses for them                                                                                                          |
+| `wasm32-*`                 | portable C with short-period copies                    | No assembler; clang lowers the fill to `memory.fill` and the cached periods to fixed loads/stores                                                       |
 
 `build.rs` probes `jwasm`, `asmc`, `asmc64`, `uasm`, then `ml64`, or takes an explicit path from `ROM_WEAVER_LZMA_ASM` (`ROM_WEAVER_UASM` is accepted as an alias). **A missing assembler is never a build failure** - it prints a `cargo:warning` naming what it looked for and compiles the C loop instead. A build that found one says so in a warning too, so which loop a binary carries is always visible in its build log.
 
@@ -156,26 +175,11 @@ GameCube and Wii disc support comes from [encounter/nod](https://github.com/enco
 
 The inlined copy is adapted from [encounter/nod](https://github.com/encounter/nod) and is intentionally self-contained; no nod checkout is required to build or publish rom-weaver.
 
-Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local patches are developed in the fork [rom-weaver/nod](https://github.com/rom-weaver/nod) on the `local-changes` branch, which is kept as upstream `main` plus the changes currently under upstream review. `NOD_VERSION` records the exact base, fork commit, and included pull requests; anything that lands upstream is dropped from `local-changes` rather than carried twice.
+`src/nod/NOD_VERSION` points to `vendor-patches/nod/manifest.json`. That manifest pins the upstream source and both license files. Its source patches capture the local behavior, including preloader read-ahead, Wii FST alignment, partition bounds, DOL/FST arithmetic, GCZ geometry, and NFS sparse-sector handling.
 
-Unlike `LIBARCHIVE_VERSION`, `NOD_VERSION` records a **base, not a mirror**, and it lists the exact categories the two trees differ by. There is no `vendor-nod` script, so re-syncing is a deliberate merge rather than a copy.
+The final integration patch adapts crate paths, feature gates, backends, and formatting to this workspace. It also records the existing dead-code and binding omissions. Generic changes are kept before that patch, so formatting and inlining do not obscure the fixes.
 
-Most of the apparent drift is formatting: nod's `rustfmt.toml` uses nightly-only options (`fn_single_line`, `use_small_heuristics = "Max"`, `imports_granularity`) while this repo has no `rustfmt.toml` and takes stable defaults. Format both sides the same way before drawing any conclusion from a diff - `io/wia.rs` looks like 250 changed lines and is actually identical.
-
-The audit behind that list was done by copying both trees into a neutral directory, rewriting `crate::nod::` back to `crate::`, running the same stable `rustfmt` over both, and diffing:
-
-```bash
-rsync -a --include='*/' --include='*.rs' --exclude='*' <fork>/nod/src/ /tmp/a/
-rsync -a --include='*/' --include='*.rs' --exclude='*' \
-  crates/rom-weaver-containers/src/nod/ /tmp/b/
-mv /tmp/a/lib.rs /tmp/a/mod.rs
-find /tmp/b -name '*.rs' -exec sed -i '' 's/crate::nod::/crate::/g' {} +
-for f in $(cd /tmp/b && find . -name '*.rs'); do
-  rustfmt --edition 2021 --emit files /tmp/a/$f /tmp/b/$f; diff /tmp/a/$f /tmp/b/$f
-done
-```
-
-Anything that diff reports outside the categories in `NOD_VERSION` is a real divergence and should be either upstreamed or written down.
+Use `npm run vendor:check -- nod` to reconstruct the module and compare every source byte. Use the [shared refresh workflow](#patch-queues-and-updates) to update it. A nod fork checkout and manual source synchronization are no longer required.
 
 When a published nod version contains the needed API and feature support, replace the copy with the registry crate:
 
@@ -191,9 +195,11 @@ The inlined module drops nod's Python bindings and OpenSSL backend because rom-w
 
 Xbox XISO support comes from [antangelo/xdvdfs](https://github.com/antangelo/xdvdfs) (MIT). The source lives at `crates/rom-weaver-containers/src/xdvdfs/`, with upstream's `LICENSE` beside it, and is re-exported as `rom_weaver_containers::xdvdfs`.
 
-Its base is recorded in `crates/rom-weaver-containers/src/xdvdfs/XDVDFS_VERSION`, including the crates.io checksum of the exact `.crate` it came from. Like `NOD_VERSION` it records a **base, not a mirror**, and lists the categories the two trees differ by; see [Local changes against 0.8.3](#local-changes-against-083) below for the narrative version.
+`src/xdvdfs/XDVDFS_VERSION` points to `vendor-patches/xdvdfs/manifest.json`, which pins the published archive and its crates.io checksum. Three patches separate directory-cycle protection, removal of the unused remap module, and project integration. The integration patch preserves the existing feature, edition, and test adaptations described below.
 
-Two things make a diff against upstream awkward. Upstream 0.8.3 is edition 2021 and this workspace is edition 2024, so neither side parses under the other's edition and each has to be formatted under its own. And unlike nod, formatting is *not* a source of noise here - neither project has a `rustfmt.toml`, so both already use stable defaults.
+Use `npm run vendor:check -- xdvdfs` to verify reconstruction. The published archive omits its license file, so refresh preserves the existing `LICENSE` alongside the version note.
+
+Two things make a diff against upstream awkward. Upstream 0.8.3 is edition 2021 and this workspace is edition 2024, so neither side parses under the other's edition and each has to be formatted under its own. And unlike nod, formatting is _not_ a source of noise here - neither project has a `rustfmt.toml`, so both already use stable defaults.
 
 ### Why it is not a crates.io dependency
 
@@ -206,7 +212,7 @@ write = ["std"]
 remap = ["dep:wax"]
 ```
 
-That is [antangelo/xdvdfs#189](https://github.com/antangelo/xdvdfs/pull/189) (`6b05af7`, merged 2026-07-18). It matters for reading this vendored tree: in 0.8.3 the `remap` module is declared unconditionally, so there is no feature to turn it off, and the inlined copy simply deletes it. The content here is therefore 0.8.3 plus the outcome of that commit, which is why `XDVDFS_VERSION` records the sha alongside the release.
+That is [antangelo/xdvdfs#189](https://github.com/antangelo/xdvdfs/pull/189) (`6b05af7`, merged 2026-07-18). It matters for reading this vendored tree: in 0.8.3 the `remap` module is declared unconditionally, so there is no feature to turn it off, and the inlined copy simply deletes it. The content here is therefore 0.8.3 plus the outcome of that commit, which is why the queue records that upstream change alongside the release pin.
 
 However, no release has been cut since 0.8.3 (2024-11-13). This was still true as of 2026-07-25, with crates.io's `write` feature still listing `wax`. A `git` dependency is not an option because crates.io rejects any crate that has one. Keeping it as a vendored workspace member would have meant publishing `rom-weaver-xdvdfs`, so it is inlined instead.
 

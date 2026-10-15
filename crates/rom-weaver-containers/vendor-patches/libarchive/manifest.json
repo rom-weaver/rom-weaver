@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "name": "libarchive",
+  "source": {
+    "url": "https://codeload.github.com/libarchive/libarchive/tar.gz/ded82291ab41d5e355831b96b0e1ff49e24d8939",
+    "revision": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+    "sha256": "042f0efe7147063ff9ba10f1a38ed080e949bcbd04bdbf3592b8846dd11b1da2",
+    "format": "tar",
+    "root": "libarchive-ded82291ab41d5e355831b96b0e1ff49e24d8939"
+  },
+  "destination": "crates/rom-weaver-containers/libarchive/vendor/libarchive",
+  "exclude": [
+    ".git",
+    ".github",
+    ".cirrus.yml",
+    "libarchive/test",
+    "cat/test",
+    "cpio/test",
+    "tar/test",
+    "unzip/test",
+    "test_utils",
+    "doc",
+    "examples",
+    "contrib",
+    "build/autoconf",
+    "build/ci",
+    "build/release",
+    "build/utils",
+    "build/autogen.sh",
+    "build/bump-version.sh",
+    "build/clean.sh",
+    "build/makerelease.sh"
+  ],
+  "patches": [
+    {
+      "file": "0001-threaded-bzip2.patch",
+      "stage": "source",
+      "reason": "feat(bzip2): add threaded compression",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/3a49003a8e2b73ec456edf12755168263c54ff6e"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --test vendor_patch_queue"]
+    },
+    {
+      "file": "0002-zip-zstd-compression-level.patch",
+      "stage": "source",
+      "reason": "fix(zip): handle zstd compression-level correctly",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/c79c413ac55349f190382b947965ef84ba23838c"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib zip_zstd_levels_preserve_requested_values",
+        "cargo test -p rom-weaver-containers --lib zip_create_accepts_zstd_range_edges"
+      ]
+    },
+    {
+      "file": "0003-zip-zstd-tuning.patch",
+      "stage": "source",
+      "reason": "perf(zip): tune zstd compression",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/8a816575c8a6180bc7128166b675e2e0801fc141"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib zip_zstd_create_single_threads_small_input",
+        "cargo test -p rom-weaver-cli --test cli_smoke zip_zstd_large_incompressible_payload_round_trips"
+      ]
+    },
+    {
+      "file": "0004-wasi-zlib-allocators.patch",
+      "stage": "source",
+      "reason": "fix: set zlib allocators for wasi",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/263846bfb979b1eef83c24a5e9fc60fab2f68e36"
+      },
+      "tests": ["mise run wasm-check"]
+    },
+    {
+      "file": "0005-7zip-threaded-lzma2.patch",
+      "stage": "source",
+      "reason": "feat(7zip): add multithreaded LZMA2 encoding",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/76a77a37c222fc6023196b15e32b24ebae57a010"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib seven_z_runtime_threads_match_capabilities_for_create_and_extract"
+      ]
+    },
+    {
+      "file": "0006-7zip-lzma2-progress.patch",
+      "stage": "source",
+      "reason": "feat(7zip): report LZMA2 encoding progress",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/c26207393a683710f99513fa321945d4da3dfe50"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+      ]
+    },
+    {
+      "file": "0007-7zip-public-uint64-api.patch",
+      "stage": "source",
+      "reason": "7zip: use la_uint64_t in the public progress/size-hint API",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/18387bec75be283d34cd94af73dc217ec4ca26d4"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+      ]
+    },
+    {
+      "file": "0008-7zip-worker-progress-relay.patch",
+      "stage": "source",
+      "reason": "fix(7zip): relay LZMA2 MT progress while draining blocked on a worker",
+      "upstream": {
+        "status": "fork",
+        "url": "https://github.com/brandonocasey/libarchive/commit/967bb0dfef336ce4f6de7f17623cd4a12fae5032"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+      ]
+    },
+    {
+      "file": "0009-archive_read_support_format_7zip.patch",
+      "stage": "integration",
+      "reason": "Decode bare LZMA1/LZMA2 folders using the opaque SDK adapter.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip"]
+    },
+    {
+      "file": "0010-archive_write_set_format_7zip.patch",
+      "stage": "integration",
+      "reason": "Encode LZMA2 using the opaque SDK adapter and preserve progress relay.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib seven_z_multi_block_seeded_create_round_trips",
+        "cargo test -p rom-weaver-cli --test cli_smoke seven_z_lzma2_threaded_single_chunk_emits_codec_progress"
+      ]
+    },
+    {
+      "file": "0011-archive_read_support_format_zip.patch",
+      "stage": "source",
+      "reason": "Accept a completed Zstd ZIP entry when the input frame is fully consumed.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke zip_zstd_large_incompressible_payload_round_trips"
+      ]
+    },
+    {
+      "file": "0012-7zip_sdk_null_advance.patch",
+      "stage": "build",
+      "reason": "Avoid advancing a null SDK input pointer for zero input.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip"]
+    },
+    {
+      "file": "0013-gzip_validation.patch",
+      "stage": "build",
+      "reason": "Validate gzip member CRC32 and uncompressed size.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke gzip_concatenated_members_validate_each_crc_and_size"
+      ]
+    },
+    {
+      "file": "0014-gzip_eof_validation.patch",
+      "stage": "build",
+      "reason": "Complete gzip integrity validation at archive EOF.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke padded_gzip_tar_validates_unread_members_before_emitting_output"
+      ]
+    },
+    {
+      "file": "0015-pruned-test-subdirectories.patch",
+      "stage": "build",
+      "reason": "Pruned test trees MUST NOT be requested during CMake configuration.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --test vendor_patch_queue"]
+    },
+    {
+      "file": "0016-wasm-tempdir.patch",
+      "stage": "wasm",
+      "reason": "Use an available WASI temporary directory without requiring host environment paths.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["mise run wasm-check"]
+    },
+    {
+      "file": "0017-wasm-thread-defaults.patch",
+      "stage": "wasm",
+      "reason": "Preserve WASM thread defaults and avoid requesting a single Zstd worker.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["mise run wasm-check"]
+    }
+  ],
+  "materialized": false,
+  "adapters": [
+    {
+      "file": "libarchive/patches/wasm/archive_write_set_format_wasm_shim.c",
+      "target": "libarchive/archive_write_set_format_wasm_shim.c",
+      "mode": "copy"
+    },
+    {
+      "file": "libarchive/patches/7zip_solid_block.c",
+      "target": "libarchive/archive_read_support_format_7zip.c",
+      "mode": "append"
+    }
+  ]
+}

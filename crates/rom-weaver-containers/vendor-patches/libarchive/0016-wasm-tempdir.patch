@@ -1,0 +1,18 @@
+diff --git a/libarchive/archive_util.c b/libarchive/archive_util.c
+--- a/libarchive/archive_util.c
++++ b/libarchive/archive_util.c
+@@ -479,10 +479,14 @@
+ 	if (__archive_issetugid() == 0)
+ 		tmp = getenv("TMPDIR");
+ 	if (tmp == NULL)
++#ifdef __wasi__
++		tmp = "/work";
++#else
+ #ifdef _PATH_TMP
+ 		tmp = _PATH_TMP;
+ #else
+                 tmp = "/tmp";
++#endif
+ #endif
+ 	archive_strcpy(temppath, tmp);
+ 	if (temppath->length == 0 || temppath->s[temppath->length-1] != '/')

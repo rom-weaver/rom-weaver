@@ -1,16 +1,14 @@
+#[path = "patch_queue.rs"]
+mod patch_queue;
+
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const WASM_PATCH_ROOT: &str = "libarchive/patches/wasm";
-const LZMA_SDK_PATCH_ROOT: &str = "lzma-sdk/patches";
-const PATCH_ROOT: &str = "libarchive/patches";
-// Appended to the staged 7zip reader on every target so the solid-block index of
-// the current entry is reachable from Rust.
-const SEVENZ_SOLID_BLOCK_PATCH_FILE: &str = "7zip_solid_block.c";
 const VENDORED_LIBARCHIVE: &str = "libarchive/vendor/libarchive";
-const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor/C";
+const VENDORED_LZMA_SDK: &str = "lzma-sdk/vendor";
 // rom-weaver's own opaque wrapper over the SDK. libarchive ships its own
 // IByteIn/IByteOut typedefs (archive_ppmd_private.h), so the SDK headers can
 // never be included from libarchive itself - only this glue sees them.
@@ -36,9 +34,7 @@ const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c
 // The SDK assembly decoder accepts the same bitstream as the C decoder.
 // ARM64 uses GNU assembler syntax; x86-64 needs a MASM-compatible assembler
 // and falls back to C when none is available (see docs/development/vendor-code.md).
-const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
 const LZMA_SDK_ARM64_ASM_SOURCE: &str = "LzmaDecOpt.S";
-const LZMA_SDK_ARM64_ASM_INCLUDE: &str = "7zAsm.S";
 const LZMA_SDK_X86_ASM_SOURCE: &str = "LzmaDecOpt.asm";
 // Probed in order. jwasm is first because it is the one that builds from source
 // on any host in seconds (Sybase Open Watcom licence, plain C), which is what
@@ -49,22 +45,6 @@ const LZMA_SDK_X86_ASSEMBLERS: &[&str] = &["jwasm", "asmc", "asmc64", "uasm", "m
 // Explicit override: an absolute path (or bare command name) to use instead of
 // probing. ROM_WEAVER_UASM is accepted as an alias for the same thing.
 const LZMA_SDK_ASM_ENV: &[&str] = &["ROM_WEAVER_LZMA_ASM", "ROM_WEAVER_UASM"];
-// Every directory whose CMakeLists.txt adds a `test` subdirectory that
-// scripts/vendor-libarchive.mjs prunes.
-const TEST_SUBDIRECTORY_OWNERS: &[&str] = &["libarchive", "cat", "cpio", "tar", "unzip"];
-const WASM_PATCH_FILES: &[&str] = &[
-    "archive_write_set_format_wasm_shim.c",
-    "archive_util_tempdir.original.txt",
-    "archive_util_tempdir.replacement.txt",
-    "cmakelists_drop_entries.txt",
-];
-const LZMA_SDK_PATCH_FILES: &[&str] = &[
-    "portable/lzma-dec-short-distance-copy.original.txt",
-    "portable/lzma-dec-short-distance-copy.replacement.txt",
-    "arm64/lzma-dec-short-distance-copy.original.txt",
-    "arm64/lzma-dec-short-distance-copy.replacement.txt",
-];
-
 const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_free",
     "archive_errno",
@@ -222,27 +202,31 @@ pub fn build() {
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_LIBARCHIVE_WRITE_EXTRA");
-    emit_vendor_patch_rerun_if_changed(&manifest_dir);
 
     let source_dir = prepare_source_tree(&manifest_dir, &libarchive_dir, &out_dir);
     let target_sysroot = target_compiler_sysroot();
-    let lzma_sdk_dir = manifest_dir.join(VENDORED_LZMA_SDK);
+    let sdk_vendor = manifest_dir.join(VENDORED_LZMA_SDK);
+    println!("cargo:rerun-if-changed={}", sdk_vendor.display());
+    let sdk_staged = out_dir.join("lzma-sdk-src");
+    if sdk_staged.exists() {
+        fs::remove_dir_all(&sdk_staged).expect("failed to clear staged SDK source tree");
+    }
+    copy_dir_recursive(&sdk_vendor, &sdk_staged).expect("failed to stage SDK sources");
+    let mut sdk_stages = vec!["source", "integration", "build"];
+    if lzma_sdk_arm64_asm_enabled() {
+        sdk_stages.push("arm64");
+    }
+    patch_queue::apply_queue(&manifest_dir, "lzma-sdk", &sdk_staged, &sdk_stages)
+        .expect("failed to apply SDK patch queue");
+    let lzma_sdk_dir = sdk_staged.join("C");
     let lzma_glue_dir = manifest_dir.join(LZMA_SDK_GLUE);
-    let lzma_asm_dir = manifest_dir.join(VENDORED_LZMA_SDK_ASM);
-    println!("cargo:rerun-if-changed={}", lzma_sdk_dir.display());
+    let lzma_asm_dir = sdk_staged.join("Asm");
     println!("cargo:rerun-if-changed={}", lzma_glue_dir.display());
-    println!("cargo:rerun-if-changed={}", lzma_asm_dir.display());
 
     build_libarchive(&source_dir, &lzma_glue_dir, target_sysroot.as_deref());
     // The SDK archive MUST follow libarchive on the link line so a single-pass
     // linker can resolve the 7z reader and writer's SDK references.
-    build_lzma_sdk(
-        &manifest_dir,
-        &lzma_sdk_dir,
-        &lzma_glue_dir,
-        &lzma_asm_dir,
-        &out_dir,
-    );
+    build_lzma_sdk(&lzma_sdk_dir, &lzma_glue_dir, &lzma_asm_dir, &out_dir);
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
@@ -398,73 +382,7 @@ uses the portable C loop (slower than 7zz). Install jwasm or set ROM_WEAVER_LZMA
     None
 }
 
-fn lzma_sdk_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
-    manifest_dir.join(LZMA_SDK_PATCH_ROOT).join(relative_path)
-}
-
-fn prepare_lzma_sdk_portable_decoder(
-    manifest_dir: &Path,
-    source_dir: &Path,
-    out_dir: &Path,
-) -> PathBuf {
-    let staged = out_dir.join("lzma-sdk-portable-LzmaDec.c");
-    fs::copy(source_dir.join("LzmaDec.c"), &staged)
-        .expect("failed to stage the portable LZMA SDK decoder");
-    replace_file_fragment(
-        &staged,
-        &lzma_sdk_patch_path(
-            manifest_dir,
-            "portable/lzma-dec-short-distance-copy.original.txt",
-        ),
-        &lzma_sdk_patch_path(
-            manifest_dir,
-            "portable/lzma-dec-short-distance-copy.replacement.txt",
-        ),
-        "portable LZMA SDK short-distance match copy",
-    )
-    .expect("failed to patch the portable LZMA SDK decoder");
-    staged
-}
-
-fn prepare_lzma_sdk_asm_decoder(
-    manifest_dir: &Path,
-    asm_dir: &Path,
-    out_dir: &Path,
-    architecture: &str,
-    source_name: &str,
-    include_name: &str,
-) -> PathBuf {
-    let source_dir = asm_dir.join(architecture);
-    let staged_dir = out_dir.join(format!("lzma-sdk-{architecture}-asm"));
-    fs::create_dir_all(&staged_dir).expect("failed to create staged LZMA SDK assembly directory");
-    fs::copy(source_dir.join(include_name), staged_dir.join(include_name))
-        .expect("failed to stage the LZMA SDK assembly include");
-    let staged = staged_dir.join(source_name);
-    fs::copy(source_dir.join(source_name), &staged)
-        .expect("failed to stage the LZMA SDK assembly decoder");
-    replace_file_fragment(
-        &staged,
-        &lzma_sdk_patch_path(
-            manifest_dir,
-            &format!("{architecture}/lzma-dec-short-distance-copy.original.txt"),
-        ),
-        &lzma_sdk_patch_path(
-            manifest_dir,
-            &format!("{architecture}/lzma-dec-short-distance-copy.replacement.txt"),
-        ),
-        &format!("{architecture} LZMA SDK short-distance match copy"),
-    )
-    .expect("failed to patch the LZMA SDK assembly decoder");
-    staged
-}
-
-fn build_lzma_sdk(
-    manifest_dir: &Path,
-    source_dir: &Path,
-    glue_dir: &Path,
-    asm_dir: &Path,
-    out_dir: &Path,
-) {
+fn build_lzma_sdk(source_dir: &Path, glue_dir: &Path, asm_dir: &Path, out_dir: &Path) {
     let mut build = cc::Build::new();
     build
         .include(source_dir)
@@ -498,12 +416,7 @@ fn build_lzma_sdk(
     // Give every portable C target the assembly loop's fast paths for repeated
     // short-distance matches while keeping the vendored SDK snapshot
     // byte-for-byte upstream.
-    let portable_decoder = prepare_lzma_sdk_portable_decoder(manifest_dir, source_dir, out_dir);
     for source in LZMA_SDK_CORE_SOURCES {
-        if *source == "LzmaDec.c" {
-            build.file(&portable_decoder);
-            continue;
-        }
         build.file(source_dir.join(source));
     }
     for source in LZMA_SDK_GLUE_SOURCES {
@@ -529,22 +442,13 @@ fn build_lzma_sdk(
     }
 
     if lzma_sdk_arm64_asm_enabled() {
-        let source = prepare_lzma_sdk_asm_decoder(
-            manifest_dir,
-            asm_dir,
-            out_dir,
-            "arm64",
-            LZMA_SDK_ARM64_ASM_SOURCE,
-            LZMA_SDK_ARM64_ASM_INCLUDE,
-        );
+        let source = asm_dir.join("arm64").join(LZMA_SDK_ARM64_ASM_SOURCE);
         build.define("Z7_LZMA_DEC_OPT", None);
         build.include(source.parent().unwrap());
         build.file(source);
     } else if is_x86_64_target() {
         let source = asm_dir.join("x86").join(LZMA_SDK_X86_ASM_SOURCE);
-        if let Some(object) =
-            lzma_sdk_x86_asm_object(&source, &PathBuf::from(env::var("OUT_DIR").unwrap()))
-        {
+        if let Some(object) = lzma_sdk_x86_asm_object(&source, out_dir) {
             // Assembled ahead of cc's own invocation because it is MASM syntax that
             // no C compiler driver understands; the object just joins the archive.
             build.define("Z7_LZMA_DEC_OPT", None);
@@ -622,42 +526,6 @@ fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
     manifest_dir.join(WASM_PATCH_ROOT).join(relative_path)
 }
 
-fn patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
-    manifest_dir.join(PATCH_ROOT).join(relative_path)
-}
-
-fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
-    for name in [
-        "7zip_sdk_null_advance.original.txt",
-        "7zip_sdk_null_advance.replacement.txt",
-        "gzip_validation.original.txt",
-        "gzip_validation.replacement.txt",
-        "gzip_eof_validation.original.txt",
-        "gzip_eof_validation.replacement.txt",
-    ] {
-        println!(
-            "cargo:rerun-if-changed={}",
-            patch_path(manifest_dir, name).display()
-        );
-    }
-    for patch_file in WASM_PATCH_FILES {
-        println!(
-            "cargo:rerun-if-changed={}",
-            wasm_patch_path(manifest_dir, patch_file).display()
-        );
-    }
-    for patch_file in LZMA_SDK_PATCH_FILES {
-        println!(
-            "cargo:rerun-if-changed={}",
-            lzma_sdk_patch_path(manifest_dir, patch_file).display()
-        );
-    }
-    println!(
-        "cargo:rerun-if-changed={}",
-        patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE).display()
-    );
-}
-
 fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
     let wasm_target = is_wasm32_target();
     let staged = out_dir.join(if wasm_target {
@@ -670,56 +538,25 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     }
     if !libarchive_dir.join("CMakeLists.txt").is_file() {
         panic!(
-            "vendored libarchive source is missing from {}; refresh it with scripts/vendor-libarchive.mjs",
+            "vendored libarchive source is missing from {}; refresh it with scripts/vendor-dependencies.mjs refresh libarchive",
             libarchive_dir.display()
         );
     }
-    // Every step below rewrites sources in place, so they all run against this
-    // staged copy; the vendored tree stays a verbatim snapshot of the fork.
     copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
-    drop_test_subdirectories(&staged).expect("failed to drop libarchive test subdirectories");
-    replace_file_fragment(
-        &staged.join("libarchive/archive_write_set_format_7zip.c"),
-        &patch_path(manifest_dir, "7zip_sdk_null_advance.original.txt"),
-        &patch_path(manifest_dir, "7zip_sdk_null_advance.replacement.txt"),
-        "7zip SDK zero-length null pointer advancement",
-    )
-    .expect("failed to patch 7zip SDK finalization pointer arithmetic");
-    replace_file_fragment(
-        &staged.join("libarchive/archive_read_support_filter_gzip.c"),
-        &patch_path(manifest_dir, "gzip_validation.original.txt"),
-        &patch_path(manifest_dir, "gzip_validation.replacement.txt"),
-        "gzip member CRC32 and uncompressed size validation",
-    )
-    .expect("failed to patch libarchive gzip integrity validation");
-    replace_file_fragment(
-        &staged.join("libarchive/archive_read.c"),
-        &patch_path(manifest_dir, "gzip_eof_validation.original.txt"),
-        &patch_path(manifest_dir, "gzip_eof_validation.replacement.txt"),
-        "gzip validation at archive end-of-file",
-    )
-    .expect("failed to patch libarchive gzip completion validation");
-    let write_extra = write_extra_enabled();
-    add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
-        .expect("failed to add libarchive format shim");
-    add_archive_read_7zip_solid_block_accessor(
+    patch_queue::apply_queue(
         manifest_dir,
-        &staged.join("libarchive/archive_read_support_format_7zip.c"),
+        "libarchive",
+        &staged,
+        &["source", "integration", "build"],
     )
-    .expect("failed to add libarchive 7zip solid-block accessor");
+    .expect("failed to apply libarchive patch queue");
+    patch_queue::apply_adapters(manifest_dir, "libarchive", &staged)
+        .expect("failed to install libarchive project adapters");
     if wasm_target {
-        patch_archive_util_tempdir_for_wasm(
-            manifest_dir,
-            &staged.join("libarchive/archive_util.c"),
-        )
-        .expect("failed to patch libarchive temporary directory fallback for wasm");
+        patch_queue::apply_queue(manifest_dir, "libarchive", &staged, &["wasm"])
+            .expect("failed to apply libarchive WASM patch queue");
     }
-    if wasm_target {
-        patch_archive_write_set_format_7zip_for_wasm(
-            &staged.join("libarchive/archive_write_set_format_7zip.c"),
-        )
-        .expect("failed to patch libarchive 7zip defaults for wasm");
-    }
+    let write_extra = write_extra_enabled();
     patch_cmakelists(
         manifest_dir,
         &staged.join("libarchive/CMakeLists.txt"),
@@ -746,167 +583,6 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> std::io::Result<()> 
     Ok(())
 }
 
-fn add_wasm_archive_write_format_shim(
-    manifest_dir: &Path,
-    libarchive_source_dir: &Path,
-) -> std::io::Result<()> {
-    let shim_source = fs::read_to_string(wasm_patch_path(
-        manifest_dir,
-        "archive_write_set_format_wasm_shim.c",
-    ))?;
-    fs::write(
-        libarchive_source_dir.join("archive_write_set_format_wasm_shim.c"),
-        shim_source,
-    )?;
-    Ok(())
-}
-
-fn replace_file_fragment(
-    target_path: &Path,
-    original_fragment_path: &Path,
-    replacement_fragment_path: &Path,
-    description: &str,
-) -> std::io::Result<()> {
-    let content = fs::read_to_string(target_path)?;
-    let normalize_line_endings = |fragment: String| {
-        let fragment = fragment.replace("\r\n", "\n");
-        if content.contains("\r\n") {
-            fragment.replace('\n', "\r\n")
-        } else {
-            fragment
-        }
-    };
-    let original = normalize_line_endings(fs::read_to_string(original_fragment_path)?);
-    let replacement = normalize_line_endings(fs::read_to_string(replacement_fragment_path)?);
-
-    if content.contains(&replacement) {
-        return Ok(());
-    }
-
-    let patched = content.replace(&original, &replacement);
-    if patched == content {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("{description} was not found in {}", target_path.display()),
-        ));
-    }
-
-    fs::write(target_path, patched)?;
-    Ok(())
-}
-
-fn patch_archive_util_tempdir_for_wasm(
-    manifest_dir: &Path,
-    archive_util_path: &Path,
-) -> std::io::Result<()> {
-    replace_file_fragment(
-        archive_util_path,
-        &wasm_patch_path(manifest_dir, "archive_util_tempdir.original.txt"),
-        &wasm_patch_path(manifest_dir, "archive_util_tempdir.replacement.txt"),
-        "libarchive archive_util.c tempdir fallback block",
-    )
-}
-
-// Every field the appended accessor reads. Checking them here turns a vendor
-// refresh that renames or drops one into a build failure naming the field,
-// instead of a compiler error inside a generated source file.
-const SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS: &[&str] = &[
-    "uint32_t\t\t folderIndex;",
-    "uint64_t\t\t numFolders;",
-    "struct _7zip_entry\t*entry;",
-    "struct _7z_coders_info\t ci;",
-];
-
-// Append the solid-block accessor to the staged 7zip reader. It has to live in
-// that translation unit: `struct _7zip` and `struct _7zip_entry` are file-local,
-// so no out-of-tree file can read `zip->entry->folderIndex`.
-fn add_archive_read_7zip_solid_block_accessor(
-    manifest_dir: &Path,
-    sevenz_path: &Path,
-) -> std::io::Result<()> {
-    let content = fs::read_to_string(sevenz_path)?;
-    for field in SEVENZ_SOLID_BLOCK_REQUIRED_FIELDS {
-        if !content.contains(field) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "libarchive 7zip reader field `{}` was not found in {}; the solid-block accessor needs it",
-                    field.replace('\t', " "),
-                    sevenz_path.display()
-                ),
-            ));
-        }
-    }
-    let accessor = fs::read_to_string(patch_path(manifest_dir, SEVENZ_SOLID_BLOCK_PATCH_FILE))?;
-    if content.contains("rom_weaver_7zip_entry_solid_block") {
-        return Ok(());
-    }
-    fs::write(sevenz_path, format!("{content}\n{accessor}"))
-}
-
-fn patch_archive_write_set_format_7zip_for_wasm(sevenz_path: &Path) -> std::io::Result<()> {
-    let content = fs::read_to_string(sevenz_path)?;
-    let patched_threads = content.replace("zip->opt_threads = 1;", "zip->opt_threads = 0;");
-    if patched_threads == content {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "libarchive 7zip default thread assignment was not found in {}",
-                sevenz_path.display()
-            ),
-        ));
-    }
-
-    let patched_workers = patched_threads.replace(
-        "ZSTD_CCtx_setParameter(strm, ZSTD_c_nbWorkers, threads);",
-        "if (threads > 1)\n\t\tZSTD_CCtx_setParameter(strm, ZSTD_c_nbWorkers, threads);",
-    );
-    if patched_workers == patched_threads {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "libarchive 7zip zstd worker assignment was not found in {}",
-                sevenz_path.display()
-            ),
-        ));
-    }
-
-    fs::write(sevenz_path, patched_workers)?;
-    Ok(())
-}
-
-// Upstream adds each `test` subdirectory unconditionally and lets the test tree
-// itself check ENABLE_TEST, so a source tree pruned of test data fails to
-// configure even with tests off. Drop the calls in the staged copy rather than
-// in the vendored tree, which stays a verbatim snapshot of the fork.
-fn drop_test_subdirectories(staged: &Path) -> std::io::Result<()> {
-    for component in TEST_SUBDIRECTORY_OWNERS {
-        let cmakelists_path = staged.join(component).join("CMakeLists.txt");
-        if !cmakelists_path.is_file() {
-            continue;
-        }
-        let content = fs::read_to_string(&cmakelists_path)?;
-        let mut patched = String::with_capacity(content.len());
-        let mut dropped = false;
-        for line in content.lines() {
-            if line.trim().eq_ignore_ascii_case("add_subdirectory(test)") {
-                dropped = true;
-                continue;
-            }
-            patched.push_str(line);
-            patched.push('\n');
-        }
-        if !dropped {
-            panic!(
-                "expected an add_subdirectory(test) call in {}; the vendored libarchive layout changed",
-                cmakelists_path.display()
-            );
-        }
-        fs::write(&cmakelists_path, patched)?;
-    }
-    Ok(())
-}
-
 fn patch_cmakelists(
     manifest_dir: &Path,
     cmakelists_path: &Path,
@@ -916,6 +592,7 @@ fn patch_cmakelists(
     let mut drop_entries = HashSet::new();
     if wasm_target {
         let drop_entries_path = wasm_patch_path(manifest_dir, "cmakelists_drop_entries.txt");
+        println!("cargo:rerun-if-changed={}", drop_entries_path.display());
         drop_entries.extend(
             fs::read_to_string(drop_entries_path)?
                 .lines()

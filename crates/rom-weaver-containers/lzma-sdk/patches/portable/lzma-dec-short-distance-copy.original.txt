@@ -1,3 +1,0 @@
-          do
-            *(dest) = (Byte)*(dest + src);
-          while (++dest != lim);

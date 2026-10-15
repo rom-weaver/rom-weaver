@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# quality-reason: Unified patches MUST preserve upstream whitespace and line endings byte-for-byte.
+crates/rom-weaver-containers/vendor-patches/**/*.patch -whitespace -text

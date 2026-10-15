@@ -1,0 +1,40 @@
+diff --git a/libarchive/CMakeLists.txt b/libarchive/CMakeLists.txt
+--- a/libarchive/CMakeLists.txt
++++ b/libarchive/CMakeLists.txt
+@@ -289,4 +289,3 @@
+   INSTALL(FILES ${include_HEADERS} DESTINATION include)
+ ENDIF()
+ 
+-add_subdirectory(test)
+diff --git a/cat/CMakeLists.txt b/cat/CMakeLists.txt
+--- a/cat/CMakeLists.txt
++++ b/cat/CMakeLists.txt
+@@ -39,4 +39,3 @@
+   ENDIF(ENABLE_INSTALL)
+ ENDIF(ENABLE_CAT)
+ 
+-add_subdirectory(test)
+diff --git a/cpio/CMakeLists.txt b/cpio/CMakeLists.txt
+--- a/cpio/CMakeLists.txt
++++ b/cpio/CMakeLists.txt
+@@ -52,4 +52,3 @@
+ ENDIF(ENABLE_CPIO)
+ 
+ # Test suite
+-add_subdirectory(test)
+diff --git a/tar/CMakeLists.txt b/tar/CMakeLists.txt
+--- a/tar/CMakeLists.txt
++++ b/tar/CMakeLists.txt
+@@ -52,4 +52,3 @@
+   ENDIF(ENABLE_INSTALL)
+ ENDIF(ENABLE_TAR)
+ 
+-add_subdirectory(test)
+diff --git a/unzip/CMakeLists.txt b/unzip/CMakeLists.txt
+--- a/unzip/CMakeLists.txt
++++ b/unzip/CMakeLists.txt
+@@ -44,4 +44,3 @@
+   ENDIF(ENABLE_INSTALL)
+ ENDIF(ENABLE_UNZIP)
+ 
+-add_subdirectory(test)
