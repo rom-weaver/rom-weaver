@@ -23,7 +23,7 @@ type RelatedEntry = {
 
 /**
  * What to point at next, keyed by `WebappView` for a workflow's result panel
- * and by docs slug for a guide's footer. The two key spaces never collide -
+ * and by docs slug for a guide's tool links. The two key spaces never collide -
  * every `WebappView` id is a bare word and every docs slug starts with
  * `docs/` or is exactly `docs`.
  */
@@ -35,7 +35,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ beta: true, labelId: "ui.related.trimTool", view: "trim" }],
   },
   "docs/create-bundles": {
-    tools: [{ labelId: "ui.related.applyTool", view: "patcher" }],
+    tools: [{ labelId: "ui.home.goWeave", view: "weave" }],
   },
   "docs/create-rom-patches": {
     tools: [{ labelId: "ui.related.createTool", view: "creator" }],
@@ -45,6 +45,63 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   },
   "docs/test-roms": {
     tools: [{ labelId: "ui.related.testTool", view: "test" }],
+  },
+  "docs/checksum-roms-browser": {
+    tools: [{ labelId: "ui.home.goChecksum", view: "checksum" }],
+  },
+  "docs/convert-roms-browser": {
+    tools: [{ labelId: "ui.home.goCompress", view: "compress" }],
+  },
+  "docs/convert-rvz-to-iso": {
+    tools: [{ labelId: "ui.home.goExtract", view: "extract" }],
+  },
+  "docs/convert-to-chd": {
+    tools: [{ labelId: "ui.home.goCompress", view: "compress" }],
+  },
+  "docs/convert-to-rvz": {
+    tools: [{ labelId: "ui.home.goCompress", view: "compress" }],
+  },
+  "docs/convert-to-z3ds": {
+    tools: [{ labelId: "ui.home.goCompress", view: "compress" }],
+  },
+  "docs/create-game-saves-browser": {
+    tools: [{ beta: true, labelId: "ui.related.saveTool", view: "save-editor" }],
+  },
+  "docs/edit-gen3-saves": {
+    tools: [{ beta: true, labelId: "ui.related.saveTool", view: "save-editor" }],
+  },
+  "docs/extract-chd": {
+    tools: [{ labelId: "ui.home.goExtract", view: "extract" }],
+  },
+  "docs/extract-files-browser": {
+    tools: [{ labelId: "ui.home.goExtract", view: "extract" }],
+  },
+  "docs/extract-z3ds": {
+    tools: [{ labelId: "ui.home.goExtract", view: "extract" }],
+  },
+  "docs/get-started": {
+    tools: [{ labelId: "ui.related.applyTool", view: "patcher" }],
+  },
+  "docs/identify-roms-browser": {
+    tools: [{ labelId: "ui.related.identifyTool", view: "identify" }],
+  },
+  "docs/patch-compressed-disc": {
+    tools: [{ labelId: "ui.related.applyTool", view: "patcher" }],
+  },
+  "docs/search-rom-checksums": {
+    tools: [{ labelId: "ui.related.identifyTool", view: "identify" }],
+  },
+  "docs/trim-roms-browser": {
+    tools: [{ beta: true, labelId: "ui.related.trimTool", view: "trim" }],
+  },
+  "docs/undo-ppf-browser": {
+    tools: [{ labelId: "ui.related.undoTool", view: "ppf-undo" }],
+  },
+  "docs/use-cheats": {
+    tools: [
+      { labelId: "ui.related.applyTool", view: "patcher" },
+      { labelId: "ui.related.createTool", view: "creator" },
+    ],
   },
   "not-found": {
     guide: { slug: "docs" },

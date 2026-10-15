@@ -21,6 +21,7 @@
 @import "./notices.css" layer(controls);
 @import "./fields.css" layer(controls);
 @import "./buttons.css" layer(controls);
+@import "./related-strip.css" layer(readouts);
 @import "./keyframes.css" layer(overrides);
 @import "./responsive.css" layer(overrides);
 /* Misnamed but render-critical: carries the wide-screen `.app` layout and workflow step

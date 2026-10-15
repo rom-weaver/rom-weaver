@@ -3,7 +3,7 @@ import { DOC_SOURCES } from "../docs-routing.mjs";
 import { RELATED_LINKS } from "../related-links.ts";
 
 type RelatedStripProps = {
-  /** A `WebappView` id (workflow result) or a docs slug (guide footer). */
+  /** A `WebappView` id (workflow result) or a docs slug (guide tools). */
   entryKey: string;
   /** The same handler the nav uses to switch tabs; never resolved here. */
   onSelectTab: (id: string) => void;

@@ -52,6 +52,14 @@
 .rw-app .btn.ghost {
   background: transparent;
 }
+.rw-app .btn.docs-tool {
+  height: auto;
+  min-height: 44px;
+  padding: var(--sp-xs) var(--sp-m);
+  font-weight: 550;
+  color: var(--ink-2);
+  text-decoration: none;
+}
 /* Landing-page hero size. It lives here rather than in home.css because
    buttons.css sits in a later cascade layer, where a size set anywhere earlier
    would lose on layer order however specific it was. */

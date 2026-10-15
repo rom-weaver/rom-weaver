@@ -432,7 +432,7 @@ Fixture description.
     expect(
       screen.getByRole("heading", { level: 1, name: "Create and share a patch weave in the browser" }),
     ).toBeTruthy();
-    expect(document.querySelectorAll(".docs-article > h2 > .docs-section-link")).toHaveLength(
+    expect(document.querySelectorAll(".docs-article h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
     expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
@@ -980,8 +980,75 @@ Fixture description.
     expect(onSelectTab).toHaveBeenCalledWith("trim");
   });
 
-  it("does not mount the related-links strip without an onSelectTab handler", () => {
+  it.each([
+    ["docs/apply-rom-patches", "patcher", "/apply-patches", "Apply ROM patches"],
+    ["docs/create-rom-patches", "creator", "/create-patch", "Create ROM patches"],
+    ["docs/create-bundles", "weave", "/weave-patches", "Weave ROM patches"],
+    ["docs/identify-roms-browser", "identify", "/identify-rom", "Identify ROMs"],
+    ["docs/search-rom-checksums", "identify", "/identify-rom", "Identify ROMs"],
+    ["docs/checksum-roms-browser", "checksum", "/checksum", "Calculate ROM checksums"],
+    ["docs/convert-to-chd", "compress", "/compress", "Compress and convert ROMs"],
+    ["docs/convert-rvz-to-iso", "extract", "/extract", "Extract and convert ROMs"],
+    ["docs/test-roms", "test", "/test-rom", "Test ROMs"],
+    ["docs/trim-roms-browser", "trim", "/trim-rom", "Trim ROMs"],
+    ["docs/edit-gen3-saves", "save-editor", "/save-editor", "Edit game saves"],
+    ["docs/undo-ppf-browser", "ppf-undo", "/ppf-undo", "Undo PPF patches"],
+    ["docs/get-started", "patcher", "/apply-patches", "Apply ROM patches"],
+  ])("links to the matching tool below the heading of %s and keeps its footer button", (slug, view, href, label) => {
+    const onSelectTab = vi.fn();
+    render(<DocsPage active onSelectTab={onSelectTab} slug={slug} />);
+    const nav = screen.getByRole("navigation", { name: "Tools for this guide" });
+    const article = document.querySelector(".docs-article") as HTMLElement;
+    const heading = article.querySelector("h1") as HTMLElement;
+    const link = nav.querySelector("a") as HTMLAnchorElement;
+    expect(article.contains(nav)).toBe(true);
+    expect(heading.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.nextElementSibling?.matches(".docs-markdown")).toBe(true);
+    expect(link.getAttribute("href")).toBe(href);
+    expect(link.textContent).toBe(label);
+    expect(document.querySelector(".docs-footer .related-strip")?.getAttribute("aria-label")).toBe("Related");
+    fireEvent.click(document.querySelector(".docs-footer .related-row-tool") as HTMLButtonElement);
+    expect(onSelectTab).toHaveBeenCalledWith(view);
+  });
+
+  it("updates the tool links when navigating between guides", () => {
+    const { rerender } = render(<DocsPage active slug="docs/use-cheats" />);
+    const toolPaths = () => [...document.querySelectorAll(".docs-tools a")].map((link) => link.getAttribute("href"));
+    expect(toolPaths()).toEqual(["/apply-patches", "/create-patch"]);
+
+    rerender(<DocsPage active slug="docs/create-bundles" />);
+    expect(toolPaths()).toEqual(["/weave-patches"]);
+
+    rerender(<DocsPage active slug="docs/privacy" />);
+    expect(document.querySelector(".docs-tools")).toBeNull();
+    expect(document.querySelectorAll(".docs-article h1")).toHaveLength(1);
+  });
+
+  it("keeps native tool links available without an onSelectTab handler", () => {
     render(<DocsPage active slug="docs/cli-trim" />);
     expect(document.querySelector(".docs-footer nav.related-strip")).toBeNull();
+    expect(screen.getByRole("link", { name: "Trim ROMs" }).getAttribute("href")).toBe("/trim-rom");
+    expect(document.querySelector(".docs-tools li")?.getAttribute("data-beta")).toBe("true");
+  });
+
+  it("preserves the deployment subpath in tool links", () => {
+    window.history.replaceState({}, "", "/rom-weaver/docs/use-cheats");
+    render(<DocsPage active slug="docs/use-cheats" />);
+    expect(screen.getByRole("link", { name: "Apply ROM patches" }).getAttribute("href")).toBe(
+      "/rom-weaver/apply-patches",
+    );
+  });
+
+  it.each([
+    ["es", "Aplicar parches a ROMs", "Crear parches de ROMs"],
+    ["de", "ROM-Patches anwenden", "ROM-Patches erstellen"],
+  ])("uses descriptive tool names in %s", (language, applyLabel, createLabel) => {
+    render(
+      <RomWeaverSettingsProvider settings={{ language }}>
+        <DocsPage active slug="docs/use-cheats" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-patches");
+    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-patch");
   });
 });

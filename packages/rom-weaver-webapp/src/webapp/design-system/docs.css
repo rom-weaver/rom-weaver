@@ -198,6 +198,9 @@ html:has(.docs-workbench) {
 .rw-app .docs-article > * {
   max-width: none;
 }
+.rw-app .docs-markdown {
+  display: contents;
+}
 .rw-app .docs-article h1,
 .rw-app .docs-article h2,
 .rw-app .docs-article h3 {
@@ -224,7 +227,7 @@ html:has(.docs-workbench) {
    underline plus a link glyph hanging in the left gutter on hover/press. The
    glyph's em offset must stay inside the article's 18px padding floor - the
    panel behind it clips at `overflow: hidden`. */
-.rw-app .docs-article a.docs-section-link {
+.rw-app .docs-markdown a.docs-section-link {
   font-weight: inherit;
   color: inherit;
   text-decoration: none;
@@ -245,18 +248,18 @@ html:has(.docs-workbench) {
   transition: opacity 0.15s var(--ease);
 }
 @media (hover: hover) {
-  .rw-app .docs-article a.docs-section-link:hover .docs-section-title {
+  .rw-app .docs-markdown a.docs-section-link:hover .docs-section-title {
     text-decoration-line: underline;
   }
-  .rw-app .docs-article a.docs-section-link:hover .docs-section-link-icon {
+  .rw-app .docs-markdown a.docs-section-link:hover .docs-section-link-icon {
     opacity: 1;
   }
 }
-.rw-app .docs-article a.docs-section-link:active .docs-section-title {
+.rw-app .docs-markdown a.docs-section-link:active .docs-section-title {
   text-decoration-line: underline;
 }
-.rw-app .docs-article a.docs-section-link:active .docs-section-link-icon,
-.rw-app .docs-article a.docs-section-link:focus-visible .docs-section-link-icon {
+.rw-app .docs-markdown a.docs-section-link:active .docs-section-link-icon,
+.rw-app .docs-markdown a.docs-section-link:focus-visible .docs-section-link-icon {
   opacity: 1;
 }
 .rw-app .docs-article h3 {
@@ -314,7 +317,7 @@ html:has(.docs-workbench) {
   font-weight: 500;
 }
 /* the standfirst: the paragraph that answers "is this the right page?" */
-.rw-app .docs-article h1 + p {
+.rw-app .docs-markdown ~ .docs-markdown > p:first-child {
   padding-bottom: var(--sp-xl);
   margin: 0;
   font-size: 1.06rem;
@@ -322,31 +325,31 @@ html:has(.docs-workbench) {
   color: var(--ink-2);
   border-bottom: 1px solid var(--seam-soft);
 }
-.rw-app .docs-article p,
-.rw-app .docs-article li {
+.rw-app .docs-markdown p,
+.rw-app .docs-markdown li {
   line-height: 1.72;
   color: var(--ink-2);
 }
-.rw-app .docs-article p {
+.rw-app .docs-markdown p {
   margin-block: var(--sp-l);
 }
-.rw-app .docs-article ul,
-.rw-app .docs-article ol {
+.rw-app .docs-markdown ul,
+.rw-app .docs-markdown ol {
   padding-inline-start: 1.15rem;
   margin-block: var(--sp-l);
 }
-.rw-app .docs-article li {
+.rw-app .docs-markdown li {
   padding-inline-start: 0.3rem;
   margin-block: var(--sp-s);
 }
-.rw-app .docs-article li::marker {
+.rw-app .docs-markdown li::marker {
   color: var(--seam-strong);
 }
 .rw-app .docs-article strong {
   font-weight: 700;
   color: var(--ink);
 }
-.rw-app .docs-article a {
+.rw-app .docs-markdown a {
   font-weight: 600;
   color: var(--thread-text);
   text-decoration: underline;
@@ -355,11 +358,11 @@ html:has(.docs-workbench) {
   text-underline-offset: 0.17em;
 }
 @media (hover: hover) {
-  .rw-app .docs-article a:hover {
+  .rw-app .docs-markdown a:hover {
     text-decoration-color: var(--thread);
   }
 }
-.rw-app .docs-article a:active {
+.rw-app .docs-markdown a:active {
   text-decoration-color: var(--thread);
 }
 
@@ -390,7 +393,7 @@ html:has(.docs-workbench) {
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
 }
-.rw-app .docs-article pre code {
+.rw-app .docs-markdown pre code {
   padding: 0;
   color: var(--ink-2);
   background: transparent;
@@ -1417,7 +1420,7 @@ html:has(.docs-workbench) {
      to the block, not per line, so it shifts every real line of the command as
      well and invents nesting that is not in the source. The trailing `\` is
      what marks a continuation here. */
-  .rw-app .docs-article pre code {
+  .rw-app .docs-markdown pre code {
     overflow-wrap: break-word;
     white-space: pre-wrap;
   }
