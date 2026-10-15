@@ -568,3 +568,7 @@ mod tests {
         assert!(empty.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/rom_identity.rs"]
+mod pbp_tests;
