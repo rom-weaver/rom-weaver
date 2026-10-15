@@ -1,26 +1,20 @@
 # Agent instructions
 
-## Worktrees
-
-This repository has no Git submodules; every vendored source is committed
-in-tree, so a linked worktree contains all source files when it is created.
-Install dependencies and copy generated assets with the setup helper below.
-
-Remove worktrees with the repository helper:
-
-```bash
-node scripts/remove-worktree.mjs .worktrees/<name>
-```
-
-The helper refuses to remove a worktree with tracked or untracked changes.
-
----
-
 ## rom-weaver
 
 ROM workflow CLI (native + WASM) with a React webapp. Read
 `docs/development/ARCHITECTURE.md` first - it covers the crate graph, registry traits,
 threading model, and the Rust⇄TypeScript boundary.
+
+## Worktrees
+
+There are no Git submodules. Prepare a new worktree with
+`node scripts/setup-worktree.mjs` and remove one with
+`node scripts/remove-worktree.mjs .worktrees/<name>`, which refuses worktrees
+with changes (`docs/development/development.md#linked-worktrees`). Give each
+checkout its own `target/`; a shared one can reuse stale staged C sources
+(recover with `cargo clean -p rom-weaver-containers`). Never put `/` or `+` in
+a worktree name (vitest browser mode hangs on `+` in test paths).
 
 ## Commands
 
@@ -36,124 +30,85 @@ npm --prefix packages/rom-weaver-webapp run lint    # oxfmt + biome (CSS) + oxli
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm  # wasm-layer browser tests
 ```
 
-Pre-commit hooks (lefthook) select formatting, static analysis, type generation,
-dependency-policy, and WASM checks from the changed paths; each selected check
-still runs over its full owning workspace. CI adds tests and builds according to
-its change classification. `docs/development/ci.md` maps every workflow, the
-shared actions, caching, and the release fan-out.
-
-Before pushing webapp or published-doc changes, run a production webapp build
-and `check:size`; lint and pre-commit hooks do not cover generated asset sizes.
-Use `docs/development/reproduce-ci-locally.md#prevent-repeat-failures` for the
-commands and the additional checks for UI changes. Investigate unexpected
-growth, then apply the byte-count limit policy below.
-
-Codex and Claude use this same pre-push gate (`CLAUDE.md` imports this file).
-Select browser test files using the guide's behavior-to-test table; use the full
-suite when shared behavior makes the affected files unclear. Run webapp script
-tests for build/tooling changes. The CI-script hook checks classifier and runtime
-dependency changes; it does not replace browser tests. Build once in production,
-check sizes before browser/E2E work, and reuse that current bundle for E2E as
-documented.
+Before pushing webapp or published-doc changes, follow
+`docs/development/reproduce-ci-locally.md#prevent-repeat-failures`: one
+production build and `check:size`; for UI changes, also browser tests picked
+from its behavior-to-test table (full suite when shared behavior makes the
+selection unclear) and E2E reusing that bundle.
 
 ## Byte-count limits
 
-Automatically raise byte-count limits that block CI, tests, or size checks when
-an increase totals at most 10,000 bytes per limit in the PR. This is standing
-user consent; do not ask again within that allowance. Measure the total increase
-against the PR's base, including earlier commits. Ask before larger increases.
-
-Keep the checks enabled, record measured sizes and the old and new limits, and
-rerun affected checks. Budget changes still require review. This permission
-covers byte-count limits; other assertions and thresholds retain their existing
-rules.
+Investigate unexpected growth first. Then, with standing consent and without
+asking again, automatically raise a byte-count limit that blocks CI, tests, or
+size checks when its total increase in the PR, measured against the PR base
+including earlier commits, is at most 10,000 bytes. Ask before larger
+increases. Keep the checks enabled, record measured sizes and the old and new
+limits, and rerun affected checks. Budget changes still need review; other
+assertions and thresholds keep their existing rules.
 
 ## Additional correctness checks
 
-Run `mise run quality-architecture` and `mise run quality-selection` for source, manifest, protocol, worker or test-selection changes. Run `mise run quality-guardrails <base-ref>` before committing; inspect review findings as well as blocking errors. New skips/suppressions need adjacent `quality-reason:` with a concrete reason. These checks do not replace thread guards or typegen.
+Commands and details:
+`docs/development/reproduce-ci-locally.md#additional-correctness-checks`.
 
-For changed core/checksum/patch/container algorithms run the relevant edge/property tests and `mise run quality-mutation diff <base-ref>`. For parser changes run `mise run quality-fuzz smoke`; relevant native extraction changes also run `mise run quality-reference` after building the CLI. Mutation survivors, timeouts and build failures are different findings; none may be relabeled automatically.
+- Before committing: `mise run quality-guardrails <base-ref>`; inspect review
+  findings as well as errors. New skips/suppressions need an adjacent
+  `quality-reason:` with a concrete reason.
+- Core/checksum/patch/container algorithm changes: relevant edge/property tests
+  and `mise run quality-mutation diff <base-ref>`. Survivors, timeouts, and
+  build failures are distinct findings; never relabel them automatically.
+- Parser changes: `mise run quality-fuzz smoke`; native extraction changes also
+  run `mise run quality-reference` after building the CLI.
+- Bug fixes: `quality-regression-proof` where practical; report the exact
+  base/candidate behavioral evidence. Compile, setup, or zero-test failures
+  prove nothing.
+- Worker lifecycle changes: `browser-runtime-lifecycle.test.mjs` and
+  `browser-opfs-many-entries.test.mjs` (`ROM_WEAVER_WASM_EXHAUSTIVE=1` for
+  deeper seeded sequences).
 
-For bug fixes, use `quality-regression-proof` where practical and report the exact base/candidate behavioral test evidence. Compile/setup/zero-test failures do not prove a regression caught the bug. For worker lifecycle changes run the seeded lifecycle tests and real OPFS resource assertions, including `browser-runtime-lifecycle.test.mjs` and `browser-opfs-many-entries.test.mjs`. Use `ROM_WEAVER_WASM_EXHAUSTIVE=1` for deeper seeded sequences. See `docs/development/reproduce-ci-locally.md#additional-correctness-checks`.
-
-Exclusion, oracle, budget and verification-script changes require explicit review. Keep generated fuzz corpus growth, solver/build output and crashes out of commits. Deep sanitizer/Miri/Kani lanes have documented limited scopes; never claim they prove whole-workspace correctness or instrument untested/uninstrumented paths.
+Exclusion, oracle, budget, and verification-script changes need explicit
+review. Keep fuzz corpus growth, solver/build output, and crashes out of
+commits. Sanitizer/Miri/Kani lanes have limited documented scopes; never claim
+they prove whole-workspace correctness.
 
 ## Hard rules
 
 - **Byte-identical parity.** Compression/patch output is validated against
   reference tools (chdman, dolphin-tool). Perf changes must not alter output
   bytes; run the relevant `cli_smoke` tests.
-- **Typegen drift fails CI.** Any change to `#[derive(TS)]` types or format
-  registry metadata needs `npm run typegen` and the regenerated files
-  committed.
-- **Dependency policy is `.config/deny.toml`.** New crates must land under an
-  already-allowed license; disallowed licenses and unknown sources fail CI
-  (`mise run deny-policy`). Vulnerabilities do **not** fail CI - advisories run
-  in the non-gating `security` job and surface as warnings, so a fresh CVE
-  never blocks unrelated work. They are still expected to get fixed; suppress
-  one only via an `ignore` entry with a written reason - never by loosening
-  `unmaintained`/`yanked`. Unused-dep false positives go in the owning crate's
-  `[package.metadata.cargo-machete]`, also with a reason.
+- **Typegen drift fails CI.** After changing `#[derive(TS)]` types or format
+  registry metadata, run `mise run typegen` and commit the regenerated files.
+- **Dependency policy is `.config/deny.toml`.** New crates need an
+  already-allowed license. Advisories don't gate CI but still get fixed;
+  suppress one only via a reasoned `ignore` entry, never by loosening
+  `unmaintained`/`yanked`. Unused-dep false positives go in the crate's
+  `[package.metadata.cargo-machete]` with a reason.
 - **One error type.** Add variants to `RomWeaverError`
   (`crates/rom-weaver-core/src/error.rs`); never introduce per-crate error
   enums.
-- **Browser OPFS code runs in Dedicated Workers only** - no main-thread
-  (`window`) usage. All OPFS access goes through the dedicated OPFS proxy
-  worker; spawned wasm threads open and read their own OPFS files through it
-  (the old read-on-main gates are retired). See "Browser I/O paths" in
-  `docs/development/ARCHITECTURE.md`.
-- **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines -
-  trace output is the primary debugging tool for wasm/browser issues.
-- **Formatting ownership.** CSS uses Biome; everything else uses oxfmt.
+- **Browser OPFS code runs in Dedicated Workers only**, never on the main
+  thread; all OPFS access goes through the OPFS proxy worker ("Browser I/O
+  paths" in `docs/development/ARCHITECTURE.md`).
+- **Tracing.** Use `trace!`/`debug!` liberally in Rust pipelines - it is the
+  primary debugging tool for wasm/browser issues.
 - Before changing CSS, design-system styles, or CSS tooling, read and follow
-  [the CSS rules](.agents/references/css.md), including hover/active pairing,
-  cascade layers, formatting ownership, and exception requirements.
+  [the CSS rules](.agents/references/css.md).
 - Relative imports only in TypeScript (no path aliases).
 
 ## Documentation
 
-`docs/` follows [Diátaxis](https://diataxis.fr/): every page serves exactly one
-mode, and the folder names the mode.
-
-- **`tutorials/`** - learning. Guided practice runs against supplied sample
-  files, numbered start to finish, ending in verification. Background prose
-  belongs in explanation, linked.
-- **`how-to/`** - tasks. Start at the task; each recipe uses only the flags
-  that task needs. No practice-run openers (link the tutorial in one line), no
-  flag-by-flag catalogs (link the reference), no "why" essays (link the
-  explanation).
-- **`reference/`** - facts. No advice, no steps, no advocacy. Flag catalogs,
-  tables, exit codes, formats. A troubleshooting or install procedure found
-  here moves to a how-to.
-- **`explanation/`** - understanding. No procedures and no UI instructions;
-  pages should be able to say "nothing here is a procedure" truthfully.
-- When a section drifts into another mode, move it to the owning page and
-  leave a one-line link both ways - do not duplicate content across pages. The
-  FAQ is a router: answers live on owning pages, the FAQ only links.
-- `hosting/` and `development/` are audience folders, with the same
-  mode-per-page discipline applied loosely: a subject-organized page
-  (`vendor-code.md`, `performance.md`) stays whole when splitting by mode
-  would scatter one subject's story.
-- Browser guides never contain terminal commands and CLI guides never describe
-  cards or drag handles (`explanation/browser-and-cli.md` promises this).
-- **Published slugs never break.** Slugs live in `DOC_SOURCES`
-  (`packages/rom-weaver-webapp/src/webapp/docs-routing.mjs`); a new page is
-  added there (its folder decides its nav shelf), to the `docs/README.md` map,
-  and to `llms.txt` when reader-relevant. Moving a page keeps its slug;
-  retiring a GitHub-served path needs a stub (see `docs/hosting/cli.md`) or a
-  `_redirects` rule.
-- Regenerate TOCs with `node scripts/update-markdown-toc.mjs <files>`.
+Before changing `docs/` or published doc routing (`DOC_SOURCES`, `llms.txt`,
+`_redirects`), read and follow
+[the documentation rules](.agents/references/docs.md) (Diátaxis modes,
+published slugs).
 
 ## Releases
 
 Before release work, version changes, release automation, or npm/Docker
 publishing, read and follow [the release rules](.agents/references/releases.md).
-Release Please owns version bumps; never hand-edit versions or publish a draft
-release before its fan-out finishes.
 
 Pick commit and PR title types with
 [the commit guide](docs/development/commits.md#choosing-a-type).
-
 
 ## Layout pointers
 
@@ -163,31 +118,8 @@ Pick commit and PR title types with
 - Browser wasm runtime (OPFS, thread pool, worker client):
   `packages/rom-weaver-webapp/src/wasm`
 - Webapp workflows/forms: `packages/rom-weaver-webapp/src`
-- Vendored source is all in-tree under `crates/rom-weaver-containers`: the
-  libarchive C sources at `libarchive/vendor/libarchive` (refresh with
-  `scripts/vendor-libarchive.mjs`), the 7-Zip LZMA SDK C sources at
-  `lzma-sdk/vendor/C` (refresh with `scripts/vendor-lzma-sdk.mjs`; verbatim, no
-  local patches), the nod and xdvdfs Rust sources under
-  `src/nod` and `src/xdvdfs`. There are no git submodules.
-
-## Worktree setup
-
-Fresh worktrees need `scripts/setup-worktree.mjs` (real `npm ci` installs +
-wasm artifact copy - symlink-mirrored node_modules silently stall vitest's
-browser mode). One checkout can share a `target/` between native and wasm
-builds: cargo keys every build script's OUT_DIR by target triple and profile,
-so the cmake builds never collide (the old libarchive submodule-era breakage
-is gone). Sharing one target dir between _checkouts_ is not safe: same crate,
-same triple, same profile means the same OUT_DIR and the same compiled build
-script, and cargo's mtime-based freshness can silently reuse the other
-checkout's staged libarchive tree; `cargo clean -p rom-weaver-containers`
-is the recovery. A fresh target dir per worktree is cheap when ccache is
-installed - it replays the C compiles across target dirs and worktrees under
-the main checkout. Never put `/` or `+` in a worktree name (vitest browser
-mode hangs on `+` in test paths).
-
-## Tests
-
-- Rust: `crates/*/tests/unit/`, CLI end-to-end in
-  `crates/rom-weaver-cli/tests/cli_smoke/`
-- Browser: `packages/rom-weaver-webapp/tests/browser/` (Playwright + vitest)
+- Vendored libarchive, LZMA SDK, nod, and xdvdfs sources:
+  `crates/rom-weaver-containers` (`docs/development/vendor-code.md`)
+- Tests: Rust in `crates/*/tests/unit/`, CLI end-to-end in
+  `crates/rom-weaver-cli/tests/cli_smoke/`, browser in
+  `packages/rom-weaver-webapp/tests/browser/`
