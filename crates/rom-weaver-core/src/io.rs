@@ -16,6 +16,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::parallel_heap::{parallel_heap_reserve, reserve_parallel_heap, wasm_heap_pages};
 use crate::{IoOp, IoResultExt, Result, RomWeaverError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,7 +270,11 @@ where
     let work_rx = Mutex::new(work_rx);
     let (result_tx, result_rx) = mpsc::sync_channel::<Result<(usize, TOutput)>>(inflight);
 
-    thread::scope(|scope| -> Result<()> {
+    // Each spawn below allocates a worker stack while earlier workers already run, so without a
+    // reservation the heap grows mid-section and can trap a sibling on browser wasi-threads.
+    reserve_parallel_heap(parallel_heap_reserve(worker_count));
+    let heap_pages_before = wasm_heap_pages();
+    let outcome = thread::scope(|scope| -> Result<()> {
         for _ in 0..worker_count {
             let work_rx = &work_rx;
             let result_tx = result_tx.clone();
@@ -402,7 +407,14 @@ where
             Some(error) => Err(error),
             None => Ok(()),
         }
-    })
+    });
+    tracing::debug!(
+        worker_count,
+        heap_pages_before = ?heap_pages_before,
+        heap_pages_after = ?wasm_heap_pages(),
+        "ordered streaming compress workers joined"
+    );
+    outcome
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
