@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { documentNodes, parseDocument } from "../../scripts/html-document.mjs";
@@ -62,7 +64,55 @@ describe("getEmulatorJsAspectRatio", () => {
   });
 });
 
+/** The libretro core EmulatorJS 4.2.3 picks first for each system the app can select. */
+const EMULATORJS_SYSTEM_CORES: Readonly<Record<string, string>> = {
+  atari7800: "prosystem",
+  gb: "gambatte",
+  gba: "mgba",
+  lynx: "handy",
+  n64: "mupen64plus_next",
+  nds: "melonds",
+  nes: "fceumm",
+  psp: "ppsspp",
+  psx: "pcsx_rearmed",
+  segaGG: "genesis_plus_gx",
+  segaMD: "genesis_plus_gx",
+  segaMS: "smsplus",
+  segaSaturn: "yabause",
+  snes: "snes9x",
+};
+
+const vendoredEmulatorFiles = Object.keys(
+  JSON.parse(readFileSync(fileURLToPath(new URL("../../vendor/emulatorjs.lock.json", import.meta.url)), "utf8")).files,
+);
+
+const readEmulatorConfig = (system: string) => {
+  const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game", system);
+  const script = document.slice(document.indexOf("<script>") + "<script>".length, document.indexOf("</script>"));
+  const window: Record<string, unknown> = {};
+  window.parent = window;
+  const context: Record<string, unknown> = { navigator: { maxTouchPoints: 0 }, window };
+  runInNewContext(script, context);
+  return context as { EJS_threads: boolean; EJS_defaultOptions: Record<string, string> };
+};
+
 describe("createEmulatorDocument", () => {
+  it("runs Saturn on the single-threaded yabause build", () => {
+    const config = readEmulatorConfig("segaSaturn");
+
+    expect(config.EJS_threads).toBe(false);
+    expect(config.EJS_defaultOptions.ejs_threads).toBe("disabled");
+  });
+
+  it.each(Object.entries(EMULATORJS_SYSTEM_CORES))("requests a vendored WebGL 2 build for %s", (system, core) => {
+    const config = readEmulatorConfig(system);
+    const threads = config.EJS_defaultOptions.ejs_threads === "enabled";
+
+    expect(config.EJS_threads).toBe(threads);
+    expect(config.EJS_defaultOptions.webgl2Enabled).toBe("enabled");
+    expect(vendoredEmulatorFiles).toContain(`cores/${core}${threads ? "-thread" : ""}-wasm.data`);
+  });
+
   it("sends CHD saves and load requests under the canonical checksum", () => {
     const checksum = "a".repeat(40);
     const document = createEmulatorDocument("/data/", "blob:game", `${checksum}.chd`, "psx", { saveId: checksum });
