@@ -293,6 +293,11 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   });
 
+  it("does not offer Apply's sample guides on Create", () => {
+    const { container } = renderView({ mode: "create", ui: createEmptyPatcherUiState() });
+    expect(container.querySelector(".sample-tutorial-start")).toBeNull();
+  });
+
   it("keeps file input hooks unique when Apply and Weave stay mounted", () => {
     const apply = renderView({ ui: createEmptyPatcherUiState() });
     const weave = renderView({ mode: "weave", ui: createEmptyPatcherUiState() });

@@ -969,7 +969,7 @@ function ApplyWorkflowFormView({
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDropFiles}
         onboarding={
-          pendingDrops.length ? null : (
+          pendingDrops.length || createPage ? null : (
             <ApplySampleStart
               weavePage={weavePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
