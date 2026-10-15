@@ -133,18 +133,57 @@
       // is parsed, while the shell is painted and clickable well before that.
       // src/webapp/shell-click-replay.ts describes the targets before hydration
       // and replays what it can once React's handlers are attached.
+      //
+      // File picks and drops are buffered too, and kept until the first mount:
+      // a chosen file lives on the retained <input>, and a dropped one exists
+      // only inside its drop event. Both are re-delivered by shell-click-replay.ts.
       (function () {
+        function hasFiles(event) {
+          var types = event.dataTransfer && event.dataTransfer.types;
+          return !!types && Array.prototype.indexOf.call(types, "Files") !== -1;
+        }
         function record(event) {
           if (buffer.clicks.length < 4) buffer.clicks.push({ target: event.target, time: Date.now() });
         }
+        function recordPick(event) {
+          var input = event.target;
+          if (!input || input.type !== "file" || !input.files || !input.files.length) return;
+          if (buffer.selections.length < 8) {
+            buffer.selections.push({ files: Array.prototype.slice.call(input.files), kind: "pick", target: input });
+          }
+        }
+        // Without a dragover handler the browser refuses the drop and then
+        // navigates to the file, so claim file drags the shell cannot take yet.
+        function allowDrop(event) {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }
+        function recordDrop(event) {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          var files = Array.prototype.slice.call(event.dataTransfer.files);
+          if (files.length && buffer.selections.length < 8) {
+            buffer.selections.push({ files: files, kind: "drop", target: event.target });
+          }
+        }
         var buffer = {
           clicks: [],
+          selections: [],
           stop: function () {
             document.removeEventListener("click", record, true);
+          },
+          stopSelections: function () {
+            document.removeEventListener("change", recordPick, true);
+            document.removeEventListener("dragover", allowDrop, true);
+            document.removeEventListener("drop", recordDrop, true);
           },
         };
         window.ROM_WEAVER_SHELL_CLICKS = buffer;
         document.addEventListener("click", record, true);
+        document.addEventListener("change", recordPick, true);
+        document.addEventListener("dragover", allowDrop, true);
+        document.addEventListener("drop", recordDrop, true);
       })();
     </script>
     <script>

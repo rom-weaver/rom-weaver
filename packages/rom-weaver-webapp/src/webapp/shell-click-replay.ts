@@ -29,7 +29,16 @@ const INTERACTIVE_SELECTOR = [
 // Replayed clicks have no trusted user activation, so omit file pickers, new windows, and downloads.
 const GESTURE_GATED_SELECTOR = 'input[type="file"], a[download], a[target="_blank"]';
 
-type ShellClickBuffer = { clicks: { target: EventTarget | null; time: number }[]; stop: () => void };
+type ShellSelection = { files: File[]; kind: "drop" | "pick"; target: EventTarget | null };
+type ShellClickBuffer = {
+  clicks: { target: EventTarget | null; time: number }[];
+  selections?: ShellSelection[];
+  stop: () => void;
+  stopSelections?: () => void;
+};
+
+const readShellBuffer = () =>
+  (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
 
 let pending: HTMLElement[] = [];
 
@@ -58,7 +67,7 @@ const interactiveTarget = (target: EventTarget | null): HTMLElement | null => {
  * Call once, immediately before hydration begins.
  */
 const captureShellClicks = () => {
-  const buffer = (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
+  const buffer = readShellBuffer();
   if (!buffer) return;
   buffer.stop();
   const now = Date.now();
@@ -86,4 +95,68 @@ const replayShellClicks = (appRootElement: HTMLElement) => {
   }
 };
 
-export { captureShellClicks, replayShellClicks };
+const toFileList = (files: File[]) => {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  return transfer;
+};
+
+const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection) => {
+  const original = selection.target instanceof HTMLInputElement ? selection.target : null;
+  if (!original) return;
+  const retained = appRootElement.contains(original);
+  const input = retained
+    ? original
+    : original.id
+      ? appRootElement.querySelector<HTMLInputElement>(`input[type="file"]#${CSS.escape(original.id)}`)
+      : null;
+  if (!input || input.disabled) {
+    logger.debug("Dropped a pre-mount file pick whose hydrated input is unavailable", { id: original.id });
+    return;
+  }
+  if (retained) {
+    // The mounted tree already consumed it: its change handler resets the value.
+    if (input.files?.length === 0) return;
+  } else {
+    input.files = toFileList(selection.files).files;
+  }
+  logger.debug("Delivering a file pick that landed before the first mount", { count: selection.files.length });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
+const deliverDrop = (appRootElement: HTMLElement, selection: ShellSelection) => {
+  const original = selection.target instanceof Element ? selection.target : null;
+  const target = original && appRootElement.contains(original) ? original : appRootElement;
+  logger.debug("Delivering a file drop that landed before the first mount", { count: selection.files.length });
+  target.dispatchEvent(
+    new DragEvent("drop", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: toFileList(selection.files),
+    }),
+  );
+};
+
+/**
+ * Re-delivers files picked or dropped on the prerendered shell before the first mount.
+ * Call after the first render commits; delivery waits one task so effect-installed
+ * page handlers exist by the time a drop is dispatched.
+ */
+const replayShellSelections = (appRootElement: HTMLElement) => {
+  const buffer = readShellBuffer();
+  if (!buffer?.selections) return;
+  buffer.stopSelections?.();
+  const selections = buffer.selections.splice(0);
+  if (!selections.length) return;
+  logger.debug("Captured file selections that landed before the first mount", { count: selections.length });
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      for (const selection of selections) {
+        if (selection.kind === "pick") deliverPick(appRootElement, selection);
+        else deliverDrop(appRootElement, selection);
+      }
+    }, 0);
+  });
+};
+
+export { captureShellClicks, replayShellClicks, replayShellSelections };

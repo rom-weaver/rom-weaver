@@ -7,7 +7,8 @@
  */
 
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { captureShellClicks, replayShellClicks } from "../../src/webapp/shell-click-replay.ts";
+import indexHtml from "../../index.html?raw";
+import { captureShellClicks, replayShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
 
 const SHELL_MARKUP = `
   <header>
@@ -147,4 +148,130 @@ test("caps how many pre-mount clicks are replayed", () => {
   replayShellClicks(appRoot);
 
   expect(clicked).toEqual(["rom-weaver-button-reset", "Create"]);
+});
+
+// File picks and drops: the real inline script from index.html is evaluated, so
+// the buffer shape and the replay cannot drift apart.
+const installRealCaptureScript = () => {
+  window.ROM_WEAVER_SHELL_CLICKS?.stop();
+  const script = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const element = document.createElement("script");
+  element.textContent = script.replace(/^<script>|<\/script>$/g, "");
+  document.head.append(element);
+  element.remove();
+};
+
+const makeFiles = (...names) => names.map((name) => new File([name], name));
+const transferOf = (files) => {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  return transfer;
+};
+const settle = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 20)));
+
+// Stands in for React's handlers on the retained zone: onChange then a value reset, onDrop.
+const hydrateZone = (received) => {
+  const input = appRoot.querySelector("#rom-weaver-input-file-unified");
+  input.addEventListener("change", () => {
+    received.push(["pick", Array.from(input.files, (file) => file.name)]);
+    input.value = "";
+  });
+  appRoot.addEventListener("drop", (event) => {
+    received.push(["drop", Array.from(event.dataTransfer.files, (file) => file.name)]);
+  });
+  return input;
+};
+
+test("delivers a multi-file pick made before the mount to the hydrated input", async () => {
+  installRealCaptureScript();
+  const input = appRoot.querySelector("#rom-weaver-input-file-unified");
+  input.files = transferOf(makeFiles("a.bin", "b.ips")).files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([["pick", ["a.bin", "b.ips"]]]);
+});
+
+test("does not deliver a pick the mounted tree already consumed", async () => {
+  installRealCaptureScript();
+  const input = appRoot.querySelector("#rom-weaver-input-file-unified");
+  input.files = transferOf(makeFiles("a.bin")).files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  input.value = "";
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([]);
+});
+
+test("moves a pick onto the replacement input when the mount rebuilt the shell", async () => {
+  installRealCaptureScript();
+  const input = appRoot.querySelector("#rom-weaver-input-file-unified");
+  input.files = transferOf(makeFiles("a.bin")).files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+
+  captureShellClicks();
+  appRoot.innerHTML = SHELL_MARKUP;
+  const received = [];
+  hydrateZone(received);
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([["pick", ["a.bin"]]]);
+});
+
+test("claims and re-delivers a multi-file drop made before the mount", async () => {
+  installRealCaptureScript();
+  const over = new DragEvent("dragover", {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer: transferOf(makeFiles("a.bin")),
+  });
+  appRoot.querySelector(".drop.hero").dispatchEvent(over);
+  const drop = new DragEvent("drop", {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer: transferOf(makeFiles("a.bin", "b.ips")),
+  });
+  appRoot.querySelector(".drop.hero").dispatchEvent(drop);
+  expect(over.defaultPrevented).toBe(true);
+  expect(drop.defaultPrevented).toBe(true);
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([["drop", ["a.bin", "b.ips"]]]);
+});
+
+test("leaves non-file drags alone and stops buffering at the mount", async () => {
+  installRealCaptureScript();
+  const textDrop = new DragEvent("drop", { bubbles: true, cancelable: true });
+  appRoot.dispatchEvent(textDrop);
+  expect(textDrop.defaultPrevented).toBe(false);
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  replayShellSelections(appRoot);
+  appRoot
+    .querySelector(".drop.hero")
+    .dispatchEvent(
+      new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transferOf(makeFiles("late.bin")) }),
+    );
+  await settle();
+
+  expect(received).toEqual([["drop", ["late.bin"]]]);
+  expect(window.ROM_WEAVER_SHELL_CLICKS.selections).toEqual([]);
 });

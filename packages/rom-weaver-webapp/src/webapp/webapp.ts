@@ -26,7 +26,7 @@ import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { preloadCatalog } from "../presentation/localization/index.ts";
 import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
-import { captureShellClicks, replayShellClicks } from "./shell-click-replay.ts";
+import { captureShellClicks, replayShellClicks, replayShellSelections } from "./shell-click-replay.ts";
 import {
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
@@ -340,6 +340,7 @@ const markWebappMounted = () => {
   if (!firstMount) return;
   // Last, so any state change it triggers lands on a fully settled first frame.
   replayShellClicks(appRootElement);
+  replayShellSelections(appRootElement);
 };
 
 const WebappClientRoot = (props: WebappRootProps) => {
