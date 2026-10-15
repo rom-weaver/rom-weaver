@@ -101,12 +101,13 @@ for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
     throw new Error(`${route.slug || "home"} must have one descriptive workflow heading`);
   }
 
-  const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), `/${route.slug}`).Link?.join(", ") ?? "";
-  assertIncludes(
-    pageLinks,
-    `</${route.slug || "index"}.md>; rel="alternate"; type="text/markdown"`,
-    `${route.slug || "home"} Markdown header discovery`,
-  );
+  // The middleware sends the other workflow pages' alternate Link.
+  if (!route.slug) {
+    const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), "/").Link?.join(", ") ?? "";
+    assertIncludes(pageLinks, '</index.md>; rel="alternate"; type="text/markdown"', "home Markdown header discovery");
+  } else if (!MARKDOWN_ROUTES.find(({ path: routePath }) => routePath === `/${route.slug}`)?.alternateLink) {
+    throw new Error(`${route.slug} needs a middleware Markdown alternate Link`);
+  }
 
   assertIncludes(
     read(`${route.slug || "index"}.md`),

@@ -6,7 +6,6 @@ import {
   OPENAPI_PATH,
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../../src/webapp/api-catalog.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { rootDir } from "./paths.mjs";
 
@@ -63,38 +62,19 @@ export const writeCloudflareHeadersAsset = (channel) => {
         `<${WEBAPP_URL_SESSION_DOC_PATH}>; rel="service-doc"; type="text/html"`,
         '</llms.txt>; rel="describedby"; type="text/plain"',
       ].join(", ");
-      const pageDiscoveryHeaders = Object.values(WORKFLOW_SEO_ROUTES)
-        .map(({ slug }) => {
-          const routePath = `/${slug}`;
-          const markdownPath = `/${slug || "index"}.md`;
-          const links = [`<${markdownPath}>; rel="alternate"; type="text/markdown"`];
-          if (routePath === "/") links.unshift(discoveryLinks);
-          return `${routePath}\n  Link: ${links.join(", ")}\n`;
-        })
-        .join("\n");
-      // Pages applies at most 100 rules, so placeholder rules type every top-level and
-      // docs Markdown twin; Pages substitutes `:page` into the canonical Link. A twin
-      // whose canonical is not its own path detaches that Link after them, and one no
-      // placeholder covers gets a rule of its own. auth.md keeps no canonical.
-      const markdownRule = (pattern, canonicalPath) =>
-        `${pattern}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${canonicalPath}>; rel="canonical"\n`;
-      const placeholderCovers = (markdownPath) => /^\/(?:docs\/)?[^/]+\.md$/.test(markdownPath);
-      const markdownExceptions = MARKDOWN_ROUTES.filter(
-        ({ path: routePath, markdownPath }) => !placeholderCovers(markdownPath) || markdownPath !== `${routePath}.md`,
-      ).map(({ path: routePath, markdownPath }) =>
-        placeholderCovers(markdownPath)
-          ? `${markdownPath}\n  ! Link\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`
-          : markdownRule(markdownPath, routePath),
-      );
-      const markdownHeaders = [
-        markdownRule("/:page.md", "/:page"),
-        markdownRule("/docs/:page.md", "/docs/:page"),
-        "/auth.md\n  ! Link\n",
-        ...markdownExceptions,
-      ].join("\n");
+      // Pages applies at most 100 rules, so the middleware sends the other workflow
+      // pages' Markdown alternate Link; sws.toml mirrors this homepage rule.
+      const homeDiscoveryHeaders = `/\n  Link: ${discoveryLinks}, </index.md>; rel="alternate"; type="text/markdown"\n`;
+      // Exact rules, not `:page` placeholders: a placeholder also matches missing
+      // Markdown URLs and would serve their HTML 404 page as text/markdown.
+      const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
+      const markdownHeaders = MARKDOWN_ROUTES.map(
+        ({ path: routePath, markdownPath }) =>
+          `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`,
+      ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${pageDiscoveryHeaders}\n${apiCatalogHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homeDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
