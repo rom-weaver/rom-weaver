@@ -72,14 +72,29 @@ export const writeCloudflareHeadersAsset = (channel) => {
           return `${routePath}\n  Link: ${links.join(", ")}\n`;
         })
         .join("\n");
-      const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
-      const markdownHeaders = MARKDOWN_ROUTES.map(
-        ({ path: routePath, markdownPath }) =>
-          `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`,
-      ).join("\n");
+      // Pages applies at most 100 rules, so placeholder rules type every top-level and
+      // docs Markdown twin; Pages substitutes `:page` into the canonical Link. A twin
+      // whose canonical is not its own path detaches that Link after them, and one no
+      // placeholder covers gets a rule of its own. auth.md keeps no canonical.
+      const markdownRule = (pattern, canonicalPath) =>
+        `${pattern}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${canonicalPath}>; rel="canonical"\n`;
+      const placeholderCovers = (markdownPath) => /^\/(?:docs\/)?[^/]+\.md$/.test(markdownPath);
+      const markdownExceptions = MARKDOWN_ROUTES.filter(
+        ({ path: routePath, markdownPath }) => !placeholderCovers(markdownPath) || markdownPath !== `${routePath}.md`,
+      ).map(({ path: routePath, markdownPath }) =>
+        placeholderCovers(markdownPath)
+          ? `${markdownPath}\n  ! Link\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`
+          : markdownRule(markdownPath, routePath),
+      );
+      const markdownHeaders = [
+        markdownRule("/:page.md", "/:page"),
+        markdownRule("/docs/:page.md", "/docs/:page"),
+        "/auth.md\n  ! Link\n",
+        ...markdownExceptions,
+      ].join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${pageDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${pageDiscoveryHeaders}\n${apiCatalogHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {

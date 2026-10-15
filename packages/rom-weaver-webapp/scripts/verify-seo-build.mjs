@@ -84,7 +84,17 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
     "text/markdown; charset=utf-8",
     `${markdownPath} content type`,
   );
+  // Exactly one canonical: a placeholder rule's Link plus an exception's would be two.
+  const canonicalLinks = markdownResponseHeaders.Link ?? [];
+  if (canonicalLinks.length !== 1 || canonicalLinks[0] !== `<${SITE_ORIGIN}${routePath}>; rel="canonical"`) {
+    throw new Error(
+      `${markdownPath} canonical header must be ${SITE_ORIGIN}${routePath}; found ${canonicalLinks.join(", ")}`,
+    );
+  }
 }
+const authMarkdownHeaders = matchPagesHeaders(parsePagesHeaders(headers), "/auth.md");
+assertIncludes(authMarkdownHeaders["Content-Type"] ?? "", "text/markdown; charset=utf-8", "/auth.md content type");
+if (authMarkdownHeaders.Link) throw new Error("/auth.md must not carry a canonical Link");
 for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
   const html = read(`${route.slug || "index"}.html`);
   if (!hasDescriptiveHeading(html, SITE_NAME)) {
@@ -108,8 +118,6 @@ for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
   assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="/${route.slug}.md"`, "Markdown discovery");
-  assertIncludes(headers, `/${route.slug}.md\n  Content-Type: text/markdown; charset=utf-8`, "Markdown content type");
-  assertIncludes(headers, `Link: <https://rom-weaver.com/${route.slug}>; rel="canonical"`, "Markdown canonical header");
 }
 
 for (const route of [
@@ -145,6 +153,8 @@ for (const [index, line] of headerLines.entries()) {
     throw new Error(`_headers pattern ${JSON.stringify(line)} must be preceded by a blank line`);
   }
 }
+// Cloudflare Pages ignores every _headers rule after the 100th.
+if (parsePagesHeaders(headers).length > 100) throw new Error("_headers exceeds the 100-rule limit");
 assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
 assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}`, "API catalog content type");
