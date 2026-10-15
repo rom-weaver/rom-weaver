@@ -16,6 +16,7 @@ import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
 import { PRERENDER_ROOT } from "./prerender-shell.mjs";
 import {
+  createLlmsSource,
   generatedLicenseAssetSources,
   generatedSampleAssetPaths,
   getGeneratedSampleAsset,
@@ -38,7 +39,7 @@ const copyFile = (from, to) => {
   fs.copyFileSync(from, to);
 };
 
-export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
+export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks, siteOrigin) => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -51,6 +52,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         if (assetPath === "/manifest.json") {
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
           fs.writeFileSync(outputPath, createRootManifestSource(channel, channelLabel));
+          continue;
+        }
+        if (assetPath === "/llms.txt") {
+          fs.writeFileSync(outputPath, createLlmsSource(rootStaticAssetSources[assetPath], siteOrigin));
           continue;
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
@@ -85,7 +90,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ),
       );
       for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
-        fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route));
+        fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route, siteOrigin));
       }
       const patcherHtml = withRoutePreloadLinks(withShell("patcher"), routePreloadLinks.get("patcher"));
       const applyHtml = injectLdJson(
@@ -183,7 +188,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         fs.writeFileSync(extensionlessPath, docsHtml);
         fs.writeFileSync(directoryIndexPath, docsHtml);
         const source = DOC_SOURCES.find((entry) => entry.slug === route.slug);
-        writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source));
+        writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source), siteOrigin);
       }
       for (const [slug, html] of [
         ...Object.values(WORKFLOW_ENTRY_ROUTES).map((route) => [
@@ -237,13 +242,14 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         );
       }
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
-      // Every channel serves the catalog. Its links use the canonical production
-      // origin, matching the canonical URLs and Markdown headers; only the
-      // sitemap stays production-only. This also lets a PR preview verify the
-      // catalog on Cloudflare Pages before merge.
+      // Every channel serves the catalog. Its links use the origin the build is
+      // served from (production unless ROM_WEAVER_SITE_ORIGIN says otherwise),
+      // while canonical URLs and headers stay on production; only the sitemap
+      // stays production-only. This also lets a PR preview verify the catalog on
+      // Cloudflare Pages before merge.
       fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
-      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
-      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
+      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource(siteOrigin));
+      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource(siteOrigin));
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
         recursive: true,

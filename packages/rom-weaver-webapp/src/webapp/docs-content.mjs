@@ -1,5 +1,5 @@
 import { Lexer, Marked, Parser, Renderer } from "marked";
-import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
+import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN, siteSamplePath } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser weave: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
@@ -153,6 +153,8 @@ const rewriteDocHref = (href, slug, sourceFile) => {
   if (/^docs\/rom-weaver-(?:weave|bundle)-v[12]\.schema\.json$/.test(repositoryPath)) {
     return `/${repositoryPath.slice("docs/".length)}${resolved.hash}`;
   }
+  const samplePath = siteSamplePath(repositoryPath);
+  if (samplePath) return samplePath;
   const docsPath = repositoryPath.startsWith("docs/") ? repositoryPath.slice("docs/".length) : "";
   const route = DOC_SOURCES.find((entry) => entry.file === docsPath);
   if (route) return `/${route.slug}${resolved.hash}`;

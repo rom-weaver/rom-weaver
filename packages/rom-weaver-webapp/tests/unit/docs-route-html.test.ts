@@ -92,3 +92,26 @@ describe("documentation descriptions", () => {
     ).toThrow("must start with a descriptive paragraph");
   });
 });
+
+describe("documentation sample links", () => {
+  const source = { file: "tutorials/example.md", label: "Example", slug: "docs/example" };
+
+  it("serves repository practice files from the site at the same path", () => {
+    const { html } = createDocRoute(
+      source,
+      "# Example\n\nIntro.\n\n[disc](../samples/compressed-disc/practice-disc.chd)\n[other](../samples/compressed-disc/missing.chd)\n",
+    );
+    expect(html).toContain('href="/docs/samples/compressed-disc/practice-disc.chd"');
+    expect(html).toContain("/blob/main/docs/samples/compressed-disc/missing.chd");
+  });
+
+  it("keeps generated practice files and app routes on the current deployment", () => {
+    const { html } = createDocRoute(
+      source,
+      "# Example\n\nIntro.\n\n[zip](https://rom-weaver.com/first-weave.zip)\n[app](https://rom-weaver.com/compress)\n",
+    );
+    expect(html).toContain('href="/first-weave.zip"');
+    expect(html).toContain('href="/compress"');
+    expect(html).not.toContain("https://rom-weaver.com");
+  });
+});

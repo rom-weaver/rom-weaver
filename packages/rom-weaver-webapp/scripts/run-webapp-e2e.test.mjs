@@ -263,6 +263,13 @@ describe("assertNoProductionDocsSamples", () => {
       /^Error: docs\/get-started still downloads 2 sample\(s\) from production$/,
     );
   });
+
+  it("throws naming the slug and count when an article link still points at production", () => {
+    assert.throws(
+      () => assertNoProductionDocsSamples({ local: 1, production: 0, productionLinks: 3 }, "docs/get-started"),
+      /^Error: docs\/get-started still links to production from 3 anchor\(s\)$/,
+    );
+  });
 });
 
 describe("buildWorkerReuseManifestCase", () => {

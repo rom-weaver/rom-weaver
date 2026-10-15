@@ -1110,9 +1110,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
             ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
         );
         const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
+        const anchorOrigins = [...document.querySelectorAll(".docs-article a[href]")].map((link) =>
+          URL.canParse(link.href) ? new URL(link.href).origin : "",
+        );
         return {
           local: countBlocksNaming(location.origin),
           production: countBlocksNaming(productionOrigin),
+          productionLinks: anchorOrigins.filter((origin) => origin === productionOrigin).length,
         };
       }, SITE_ORIGIN);
       assertNoProductionDocsSamples(samples, slug);
@@ -1172,6 +1176,8 @@ export const assertSingleDocsHeading = (headingCount, slug) => {
 // assertSingleDocsHeading above.
 export const assertNoProductionDocsSamples = (samples, slug) => {
   if (samples.production) throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+  if (samples.productionLinks)
+    throw new Error(`${slug} still links to production from ${samples.productionLinks} anchor(s)`);
 };
 
 // Pure half of createWorkerReuseCorpus's manifest.json: the one deterministic

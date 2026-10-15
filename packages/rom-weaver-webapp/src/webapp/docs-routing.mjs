@@ -3,6 +3,20 @@ import { SITE_NAME } from "./workflow-seo.mjs";
 const SITE_ORIGIN = "https://rom-weaver.com";
 
 /**
+ * Practice files that live in the repository and are served by the site at the
+ * same path, so guides can link them relatively and work on GitHub and on any
+ * deployment. The build serves exactly these (scripts/vite-config/root-static-assets.mjs).
+ */
+const SITE_SAMPLE_PATHS = Object.freeze([
+  "docs/samples/compressed-disc/practice-disc.chd",
+  "docs/samples/compressed-disc/01-first.bps",
+  "docs/samples/compressed-disc/02-second.bps",
+]);
+
+/** @param {string} repositoryPath path from the repository root, without a leading slash */
+const siteSamplePath = (repositoryPath) => (SITE_SAMPLE_PATHS.includes(repositoryPath) ? `/${repositoryPath}` : null);
+
+/**
  * @typedef {{
  *   file: string,
  *   audience?: "browser" | "cli",
@@ -478,4 +492,6 @@ export {
   isLegalDocRoute,
   readDocsSlugFromPathname,
   SITE_ORIGIN,
+  SITE_SAMPLE_PATHS,
+  siteSamplePath,
 };

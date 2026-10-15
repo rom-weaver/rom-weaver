@@ -19,9 +19,9 @@ This tiny synthetic disc contains test data, not a commercial game. It is not a 
 
 Save these three files to your device:
 
-- [practice-disc.chd](https://rom-weaver.com/docs/samples/compressed-disc/practice-disc.chd): the compressed starting disc.
-- [01-first.bps](https://rom-weaver.com/docs/samples/compressed-disc/01-first.bps): the first change.
-- [02-second.bps](https://rom-weaver.com/docs/samples/compressed-disc/02-second.bps): a change that requires the first patch's result.
+- [practice-disc.chd](../samples/compressed-disc/practice-disc.chd): the compressed starting disc.
+- [01-first.bps](../samples/compressed-disc/01-first.bps): the first change.
+- [02-second.bps](../samples/compressed-disc/02-second.bps): a change that requires the first patch's result.
 
 Keep the original CHD. Each patch changes the same 16-byte region in its extracted BIN, so the order matters.
 
