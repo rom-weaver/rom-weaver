@@ -10,6 +10,8 @@ const repositoryOrigin = "https://github.com/rom-weaver/rom-weaver/blob/main";
 // Canonical line stays on production: it names the page, not where this copy lives.
 export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
   const resolveHref = (href) => {
+    const absolute = /^https?:\/\//i.test(href) && URL.canParse(href) ? new URL(href) : null;
+    if (absolute?.origin === SITE_ORIGIN) return `${siteOrigin}${absolute.pathname}${absolute.search}${absolute.hash}`;
     if (/^(?:[a-z]+:|\/\/|#)/i.test(href)) return href;
     if (href.startsWith("/")) return `${siteOrigin}${href}`;
     const url = new URL(href, `https://repository.invalid/docs/${source.file}`);

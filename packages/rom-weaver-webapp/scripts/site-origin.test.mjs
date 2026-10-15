@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { createApiCatalogSource, createOpenApiSource } from "../src/webapp/api-catalog.mjs";
-import { SITE_ORIGIN, SITE_SAMPLE_PATHS } from "../src/webapp/docs-routing.mjs";
+import { DOC_SOURCES, SITE_ORIGIN, SITE_SAMPLE_PATHS } from "../src/webapp/docs-routing.mjs";
 import { createDocsMarkdown } from "./docs-discovery.mjs";
 import { PRODUCTION_SITE_ORIGIN, resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { createLlmsSource, rootStaticAssetSourcesForChannel } from "./vite-config/root-static-assets.mjs";
@@ -53,10 +53,27 @@ test("Markdown alternates link to the serving origin and keep the production can
   assert.ok(docs.startsWith(`Canonical: ${SITE_ORIGIN}/docs/apply-rom-patches\n`));
   assert.ok(docs.includes(`[CLI](<${NIGHTLY}/docs/cli.md>)`));
   assert.ok(docs.includes(`[App](<${NIGHTLY}/compress>)`));
+  const absolute = createDocsMarkdown(
+    source,
+    `[Apply](${SITE_ORIGIN}/apply-patches?mode=rom#top) [Other](https://rom-weaver.com.example/x)\n`,
+    NIGHTLY,
+  );
+  assert.ok(absolute.includes(`[Apply](<${NIGHTLY}/apply-patches?mode=rom#top>)`));
+  assert.ok(absolute.includes("[Other](<https://rom-weaver.com.example/x>)"));
   const workflow = createWorkflowMarkdown(WORKFLOW_SEO_ROUTES.compress, NIGHTLY);
   assert.ok(workflow.startsWith(`Canonical: ${SITE_ORIGIN}/compress\n`));
   assert.ok(workflow.includes(`[Open in browser](${NIGHTLY}/compress)`));
   assert.ok(workflow.includes(`[Documentation](${NIGHTLY}/docs.md)`));
+});
+
+test("no published Markdown alternate links to production from another origin", () => {
+  const docsRoot = path.resolve(import.meta.dirname, "../../../docs");
+  for (const source of DOC_SOURCES) {
+    const file = path.join(docsRoot, source.file);
+    if (!fs.existsSync(file)) continue;
+    const markdown = createDocsMarkdown(source, fs.readFileSync(file, "utf8"), NIGHTLY);
+    assert.equal(markdown.includes(`](<${SITE_ORIGIN}`), false, `${source.file} links to production`);
+  }
 });
 
 test("repository sample links resolve to the file the site serves", () => {
