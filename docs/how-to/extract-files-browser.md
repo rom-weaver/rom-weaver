@@ -25,6 +25,8 @@ To decompress Nintendo 3DS files, follow [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3
 
 Extract opens one archive per run. If you add several files at once, it extracts the first and names the others it skipped; add them in another run.
 
+For an NFS disc, add `hif_000000.nfs`, the remaining `hif_*.nfs` parts, and `htk.bin` together in the same file selection or drop. Wait for the ISO to appear in **Files**.
+
 To stop a long extraction, cancel it from the progress bar. Select **Extract again** to restart it.
 
 ## Download the files

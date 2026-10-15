@@ -162,6 +162,7 @@ type RuntimeRomSpecificHooks = {
 };
 
 type RuntimeRomSpecificCreateChdInput = RuntimeRomSpecificHooks & {
+  compressionProfile?: RuntimeRomSpecificCreateChdOptions["compressionProfile"];
   compressionCodecs?: RuntimeRomSpecificCreateChdOptions["compressionCodecs"];
   cueFilePath?: RuntimeRomSpecificCreateChdOptions["cueFilePath"];
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];

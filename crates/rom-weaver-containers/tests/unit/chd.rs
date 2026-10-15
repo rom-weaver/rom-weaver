@@ -1947,3 +1947,69 @@ fn chd_cd_codec_trial_skips_cdlz_for_incompressible_sectors() {
     assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
     assert_eq!(payload, hunk);
 }
+
+#[test]
+fn chd_raw_extract_sizes_output_before_streaming() {
+    struct OutputSizes {
+        path: PathBuf,
+        lengths: std::sync::Mutex<Vec<u64>>,
+    }
+    impl rom_weaver_core::ProgressSink for OutputSizes {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            if event.stage == "extract" && self.path.exists() {
+                self.lengths
+                    .lock()
+                    .unwrap()
+                    .push(fs::metadata(&self.path).unwrap().len());
+            }
+        }
+    }
+    let dir = std::env::temp_dir().join(format!("rw-chd-unit-{}-sized-output", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let source = vec![0x5a; 1024 * 1024 + 123];
+    let input = dir.join("input.bin");
+    let archive = dir.join("output.chd");
+    let out_dir = dir.join("extracted");
+    fs::write(&input, &source).unwrap();
+    let handler = ChdContainerHandler;
+    handler
+        .create_raw_store_with_rust_backend_for_tests(&input, &archive)
+        .unwrap();
+    let observed = Arc::new(OutputSizes {
+        path: out_dir.join("output.bin"),
+        lengths: std::sync::Mutex::new(Vec::new()),
+    });
+    let context = OperationContext::new(
+        rom_weaver_core::ThreadBudget::Fixed(1),
+        dir.join("temp"),
+        observed.clone(),
+        rom_weaver_core::CancellationToken::new(),
+    );
+    handler
+        .extract(
+            &ContainerExtractRequest {
+                source: archive,
+                selections: Vec::new(),
+                kind_filter: Default::default(),
+                out_dir,
+                split_bin: false,
+                ignore_common_files: false,
+                overwrite: false,
+                parent: None,
+                containing_archive: None,
+            },
+            &context,
+        )
+        .unwrap();
+    assert_eq!(fs::read(&observed.path).unwrap(), source);
+    let lengths = observed.lengths.lock().unwrap();
+    assert!(
+        !lengths.is_empty(),
+        "extraction must emit progress during streaming"
+    );
+    assert!(
+        lengths.iter().all(|length| *length == source.len() as u64),
+        "known-size output must have its final length throughout streaming: {lengths:?}"
+    );
+    fs::remove_dir_all(&dir).unwrap();
+}

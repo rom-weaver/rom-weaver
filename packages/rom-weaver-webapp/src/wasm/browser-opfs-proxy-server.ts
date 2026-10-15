@@ -405,7 +405,9 @@ class OpfsProxyServer {
     const target = data.subarray(0, Math.min(length, data.byteLength));
     if (entry.blob) return this.readBlobAt(entry.blob, offset, target);
     if (!entry.handle) throw new ProxyErrno(ERRNO_IO);
-    return entry.handle.read(target, { at: offset });
+    const read = entry.handle.read(target, { at: offset });
+    validateByteCount(read, target.byteLength, "read", offset);
+    return read;
   }
 
   // Slice a read range out of a Blob input into the (SAB-backed) slot buffer. Async - only the dedicated
@@ -427,6 +429,7 @@ class OpfsProxyServer {
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const source = data.subarray(0, Math.min(length, data.byteLength));
     const written = entry.handle.write(source, { at: offset });
+    validateByteCount(written, source.byteLength, "write", offset);
     this.bumpVersion(entry.id);
     return written;
   }
@@ -437,6 +440,10 @@ class OpfsProxyServer {
     if (!(entry.writable && entry.handle)) throw new ProxyErrno(ERRNO_ROFS);
     const size = readAux(control);
     entry.handle.truncate(size);
+    const actual = entry.handle.getSize();
+    if (actual !== size) {
+      throw new Error(`OPFS truncate failed for ${entry.path}: requested ${size}, got ${actual}`);
+    }
     this.bumpVersion(entry.id);
     return 0;
   }
@@ -651,6 +658,12 @@ class ProxyErrno extends Error {
     super(`proxy errno ${errno}`);
     this.name = "ProxyErrno";
     this.errno = errno;
+  }
+}
+
+function validateByteCount(count: number, requested: number, operation: string, offset: number): void {
+  if (!Number.isInteger(count) || count < 0 || count > requested) {
+    throw new Error(`OPFS ${operation} returned invalid byte count ${count} for ${requested} bytes at ${offset}`);
   }
 }
 

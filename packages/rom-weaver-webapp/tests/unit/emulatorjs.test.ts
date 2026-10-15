@@ -1,5 +1,6 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { documentNodes, parseDocument } from "../../scripts/html-document.mjs";
 import {
   createEmulatorDocument,
   createEmulatorGameIdentity,
@@ -89,10 +90,20 @@ describe("createEmulatorDocument", () => {
     ]);
   });
 
-  it("resolves a denied screen wake lock instead of leaving an unhandled rejection", async () => {
-    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
-    const script = [...document.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((match) => match[1] ?? "")
+  it.each([
+    ["lowercase", "<script>", "</script>"],
+    ["uppercase", "<SCRIPT>", "</SCRIPT>"],
+    ["mixed case with attributes", '<ScRiPt type="text/javascript">', "</sCrIpT >"],
+  ])("resolves a denied screen wake lock with %s script tags", async (_label, openingTag, closingTag) => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes")
+      .replaceAll("<script>", openingTag)
+      .replaceAll("</script>", closingTag);
+    const script = [...documentNodes(parseDocument(document))]
+      .filter((node) => node.tagName === "script" && node.sourceCodeLocation?.startTag)
+      .map((node) => {
+        const location = node.sourceCodeLocation;
+        return document.slice(location.startTag.endOffset, location.endTag?.startOffset ?? location.endOffset);
+      })
       .find((body) => body.includes("wakeLock"));
     expect(script).toBeDefined();
     const wakeLock = { request: vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError")) };

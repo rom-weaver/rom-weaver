@@ -29,6 +29,29 @@ describe("ExtractForm", () => {
     vi.clearAllMocks();
   });
 
+  it("keeps NFS parts and their key together, including on retry", async () => {
+    runtime.extract.mockRejectedValue(new Error("try again"));
+    const key = new File([new Uint8Array(16)], "htk.bin");
+    const first = new File(["EGGS"], "hif_000000.nfs");
+    const second = new File(["part"], "hif_000001.nfs");
+    render(<ExtractForm />);
+
+    const picker = screen.getByLabelText("Drop an archive or disc image to extract it") as HTMLInputElement;
+    expect(picker.multiple).toBe(true);
+    fireEvent.change(picker, { target: { files: [key, second, first] } });
+
+    await screen.findByText("try again");
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [key, second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Extract again" }));
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(2));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [key, second] }),
+    );
+  });
+
   it("extracts the first of several dropped files and names the ones it did not use", async () => {
     runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
     render(

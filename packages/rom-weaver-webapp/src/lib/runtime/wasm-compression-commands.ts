@@ -223,6 +223,7 @@ const runRomWeaverProbeWorker = async (
     romFilter?: boolean;
     patchFilter?: boolean;
     sourcePath: string;
+    knownInputPaths?: string[];
     splitBin?: boolean;
     signal?: AbortSignal;
   },
@@ -247,6 +248,7 @@ const runRomWeaverProbeWorker = async (
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
+      knownInputPaths: input.knownInputPaths,
       onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,

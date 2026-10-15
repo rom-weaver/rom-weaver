@@ -237,6 +237,7 @@ const createRuntimeRomSpecificOutputFiles = async (
       romSpecific: {
         chd: {
           compressionCodecs: outputPlan.chdCompressionCodecs,
+          compressionProfile: getCompressionProfile(options),
           cueFilePath: outputPlan.chdCuePath,
           mode: outputPlan.chdCreateMode,
           sourceMode: outputPlan.chdSourceMode,
@@ -520,9 +521,10 @@ const buildSessionOutputFiles = async (
     };
   }
   if (archiveCompression === "chd") {
-    const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
+    const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue" || asset.kind === "gdi");
     const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
-    if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a CUE disc group with tracks");
+    if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a disc sheet group with tracks");
+    const mode = cueOutput.asset.kind === "gdi" ? "gd" : "cd";
     if (!runtime?.compression.create) throw new Error("Runtime CHD compression capability is unavailable");
     const cueFile = clonePatchFile(cueOutput.file, cueOutput.asset.fileName);
     const source = createRuntimeSourceFromPatchFile(cueFile, cueOutput.asset.fileName);
@@ -557,9 +559,10 @@ const buildSessionOutputFiles = async (
       outputName: `${baseName}.chd`,
       romSpecific: {
         chd: {
-          compressionCodecs: getChdCompressionCodecs("cd", options),
+          compressionCodecs: getChdCompressionCodecs(mode, options),
+          compressionProfile: getCompressionProfile(options),
           imageFiles,
-          mode: "cd",
+          mode,
         },
       },
       source,
