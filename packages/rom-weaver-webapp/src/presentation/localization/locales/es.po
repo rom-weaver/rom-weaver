@@ -420,6 +420,11 @@ msgstr "Añade más archivos cuando quieras"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyCheatsDescription"
+msgstr "Añade códigos de trucos compatibles a tu ROM y descarga el juego modificado. Los archivos permanecen en tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.modified.title"
 msgstr "Añade la ROM modificada"
 
@@ -532,6 +537,16 @@ msgstr "Aplicar de todos modos pese a la discrepancia de comprobación del parch
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Aplica parches BPS, IPS, UPS y xdelta. Abre archivos comprimidos, aplica parches en orden y elige el formato de salida. Tus archivos se quedan en tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolApplyCheats"
+msgstr "Aplicar códigos de trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyCheatsThesis"
+msgstr "Aplica códigos de trucos a ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -947,6 +962,11 @@ msgstr "Código de truco"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheatCodes"
 msgstr "Parches y trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.cheatsGuide"
+msgstr "Lee la guía de códigos de trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1500,6 +1520,11 @@ msgstr "Crear y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCreateCheats"
+msgstr "Crear un parche a partir de códigos de trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Crear ejemplo"
 
@@ -1522,6 +1547,11 @@ msgstr "Crear parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolCreate"
 msgstr "Crear parches de ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createCheatsThesis"
+msgstr "Crea parches de ROMs a partir de códigos de trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5282,6 +5312,11 @@ msgstr "Pruébalo"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Activar todos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createCheatsDescription"
+msgstr "Convierte códigos de trucos compatibles en un parche para tu ROM. Los archivos permanecen en tu dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -43,6 +43,8 @@ type UnifiedDropZoneProps = {
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
   lead?: { line1: MessageId; description: MessageId };
+  /** Renders the lead as the page's h1; a hidden sibling form turns it off so the page keeps one. */
+  heading?: boolean;
   /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
   guide?: WorkflowGuide;
   /** Onboarding control (the per-page sample link) that leads the empty-state help row. */
@@ -86,6 +88,7 @@ const UnifiedDropZone = ({
   beforeDropZone,
   guide,
   headerExtra,
+  heading = true,
   heroLabel,
   heroLabelCoarse,
   info,
@@ -150,7 +153,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title ?? localizer.message("ui.drop.inputs")}
     >
-      <h1 className="sr-only">{localizer.message(lead.line1)}</h1>
+      {heading ? <h1 className="sr-only">{localizer.message(lead.line1)}</h1> : null}
       {beforeDropZone}
       <DropZone
         {...dropZoneProps}

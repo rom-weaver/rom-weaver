@@ -15,7 +15,7 @@ vi.mock("../../src/public/react/apply-patch-form.tsx", async () => {
         if (files) setStack((current) => [...current, ...files.map((file) => file.name)]);
       }, [props.pageDrop]);
       return (
-        <section data-testid="aggregate-create" data-active={props.active}>
+        <section data-testid="aggregate-create" data-active={props.active} data-cheats-page={props.cheatsPage}>
           {props.createModeControls}
           <output data-testid="aggregate-original">{props.inputs?.[0]?.name}</output>
           <output data-testid="aggregate-stack">{stack.join(",")}</output>
@@ -293,6 +293,50 @@ describe("CreatePatchForm", () => {
       fireEvent.change(input);
     });
   };
+
+  it.each(["cheats", undefined] as const)("opens the %s entry in its mode", async (entry) => {
+    const { container } = renderForm(withSeams({ entry }));
+    expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe(String(entry === "cheats"));
+    const aggregate = container.querySelector('[data-testid="aggregate-create"]');
+    expect(aggregate?.getAttribute("data-cheats-page") ?? null).toBe(entry === "cheats" ? "true" : null);
+    // The hidden Modified ROM form leaves the page heading to the visible form.
+    expect(container.querySelectorAll("h1")).toHaveLength(entry === "cheats" ? 0 : 1);
+  });
+
+  it("switches mode once per entry while keeping staged ROMs", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+    const seams = withSeams({
+      defaultOriginal: new File(["original"], "original.nes"),
+      defaultModified: new File(["modified"], "modified.nes"),
+    });
+    const { container, rerender } = renderForm(seams);
+    await vi.waitFor(() => expect(latest?.workflow.setModified).toHaveBeenCalled());
+    const workflow = latest?.workflow;
+    const changeEntry = async (entry: "cheats" | undefined, disabled = false) => {
+      await act(async () =>
+        rerender(
+          <RomWeaverSettingsProvider settings={{}}>
+            <CreatePatchFormForTest {...seams} entry={entry} disabled={disabled} />
+          </RomWeaverSettingsProvider>,
+        ),
+      );
+    };
+    const pressed = (label: string) => activeButton(container, label).getAttribute("aria-pressed");
+    await changeEntry("cheats", true);
+    expect(pressed("Modified ROM")).toBe("true");
+    await changeEntry("cheats");
+    expect(pressed("Patches & cheats")).toBe("true");
+    await act(async () => fireEvent.click(activeButton(container, "Modified ROM")));
+    await changeEntry("cheats");
+    expect(pressed("Modified ROM")).toBe("true");
+    expect(container.textContent).toContain("modified.nes");
+    expect(latest?.workflow).toBe(workflow);
+    expect(workflow?.setOriginal).toHaveBeenCalledTimes(1);
+    expect(workflow?.setModified).toHaveBeenCalledTimes(1);
+    await changeEntry(undefined);
+    await changeEntry("cheats");
+    expect(pressed("Patches & cheats")).toBe("true");
+  });
 
   it("keeps Patches & cheats active for a ROM dropped on the page", async () => {
     const props = withSeams();

@@ -1,6 +1,6 @@
 # Use cheats in the browser
 
-Add supported cheat codes to the Apply workflow. The output ROM contains the changes; it does not need a running cheat engine.
+Add supported cheat codes with [Apply cheat codes](https://rom-weaver.com/apply-cheats). The output ROM contains the changes; it does not need a running cheat engine.
 
 The same cheat picker is available in Apply and Create. Identify lets you inspect known codes without changing a ROM.
 
@@ -30,7 +30,7 @@ The picker includes **Make the greeting start with M** (`80970D`) and **Change t
   <figcaption>The shared picker lists practice codes for the supplied ROM.</figcaption>
 </figure>
 
-1. Add the original ROM to the **Apply** page.
+1. Open [Apply cheat codes](https://rom-weaver.com/apply-cheats) and add the original ROM.
 2. In **Patches & Cheats**, select **Add cheats to the patch order**.
 3. Choose the system and game if the dialog asks.
 4. Search the list and add the cheats you want.
@@ -84,7 +84,7 @@ The status names the output file. The [cheat reference](../reference/cheat-datab
 
 The [guided Create cheats tour](https://rom-weaver.com/create-rom-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
 
-On **Create**, select **Patches & cheats** on **0x03 Modified**, then follow [combined patch creation](create-rom-patches.md#build-from-patches-and-cheats). It uses Apply's cheat picker and supports patches alongside cheats.
+Open [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch), which starts in **Patches & cheats**, then follow [combined patch creation](create-rom-patches.md#build-from-patches-and-cheats). It uses Apply's cheat picker and supports patches alongside cheats.
 
 ## Inspect cheats without changing a ROM
 
@@ -93,7 +93,7 @@ On **Create**, select **Patches & cheats** on **0x03 Modified**, then follow [co
 3. Search the matched game's known codes.
 4. Open **Code details** to inspect the original database fields and import warnings.
 
-Identify shows inspection data only. It can list checksum-only and archive candidates without claiming that a code is compatible with the selected bytes. Use Apply or Create to classify and use a code.
+Identify shows inspection data only. It can list checksum-only and archive candidates without claiming that a code is compatible with the selected bytes. Use [Apply cheat codes](https://rom-weaver.com/apply-cheats) or [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch) to classify and use a code.
 
 <figure class="docs-screenshot">
   <img src="../screenshots/cheat-identify-mobile-dark.webp" alt="Identify showing original cheat database fields without add controls" width="390" height="844">

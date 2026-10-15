@@ -420,6 +420,11 @@ msgstr "Jederzeit weitere Dateien hinzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyCheatsDescription"
+msgstr "Füge unterstützte Cheat-Codes zu deinem ROM hinzu und lade das modifizierte Spiel herunter. Die Dateien bleiben auf deinem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.modified.title"
 msgstr "Das geänderte ROM hinzufügen"
 
@@ -532,6 +537,16 @@ msgstr "Trotz abweichender Patch- und ROM-Prüfung anwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Wende BPS-, IPS-, UPS- und xdelta-Patches an. Öffne Archive, wende Patches der Reihe nach an und wähle dein Ausgabeformat. Deine Dateien bleiben auf deinem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.toolApplyCheats"
+msgstr "Cheat-Codes anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyCheatsThesis"
+msgstr "Cheat-Codes auf ROMs anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -947,6 +962,11 @@ msgstr "Cheat-Code"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.cheatCodes"
 msgstr "Patches & Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.cheatsGuide"
+msgstr "Lies die Anleitung für Cheat-Codes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1500,6 +1520,11 @@ msgstr "Erstellen und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.toolCreateCheats"
+msgstr "Einen Patch aus Cheat-Codes erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryCreate"
 msgstr "Patch bauen"
 
@@ -1522,6 +1547,11 @@ msgstr "Patch erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolCreate"
 msgstr "ROM-Patches erstellen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createCheatsThesis"
+msgstr "ROM-Patches aus Cheat-Codes erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5282,6 +5312,11 @@ msgstr "Probier es aus"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Alle einschalten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createCheatsDescription"
+msgstr "Erstelle aus unterstützten Cheat-Codes einen Patch für dein ROM. Die Dateien bleiben auf deinem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

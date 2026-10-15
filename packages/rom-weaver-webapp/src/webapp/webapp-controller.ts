@@ -1,3 +1,4 @@
+import { WORKFLOW_ENTRY_ROUTES, readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { applyAccent } from "./accent.ts";
 import {
   copySettings,
@@ -70,6 +71,8 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
   if (view === "docs" && readRouteSegments().includes("docs")) return;
+  const entry = readWorkflowEntryFromPathname(window.location.pathname);
+  if (entry && WORKFLOW_ENTRY_ROUTES[entry].view === view) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
   if (nextUrl.href === window.location.href) return;

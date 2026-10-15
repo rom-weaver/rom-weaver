@@ -19,6 +19,8 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  "apply-cheats": "patcher",
+  "create-rom-cheat-patch": "creator",
   "create-rom-patch": "creator",
   "apply-patches": "patcher",
   "bundle-patches": "weave",

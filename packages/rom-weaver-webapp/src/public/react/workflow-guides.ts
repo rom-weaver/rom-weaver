@@ -6,6 +6,7 @@ import type { WorkflowGuide } from "./components/ds/unified-drop-zone.tsx";
  * published doc slugs (see `DOC_SOURCES` in `webapp/docs-routing.mjs`).
  */
 const WORKFLOW_GUIDES = {
+  cheats: { path: "docs/use-cheats", label: "ui.hero.cheatsGuide" },
   apply: { path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" },
   weave: { path: "docs/create-bundles", label: "ui.hero.weaveGuide" },
   compress: { path: "docs/convert-roms-browser", label: "ui.hero.compressGuide" },

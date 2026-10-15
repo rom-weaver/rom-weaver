@@ -79,6 +79,7 @@ type NoticeController = StoreController<NoticeState> & {
 type ApplyPatchFormProps = {
   assetBaseUrl?: string;
   mode?: ApplyPatchFormMode;
+  cheatsPage?: boolean;
   inputs?: BinarySource[];
   patches?: BinarySource[];
   settings?: ApplyPatchFormSettings;

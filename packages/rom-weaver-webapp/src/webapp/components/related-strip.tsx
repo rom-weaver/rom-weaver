@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { readAppBaseUrl } from "../app-routes.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { DOC_SOURCES } from "../docs-routing.mjs";
 import { RELATED_LINKS } from "../related-links.ts";
@@ -11,7 +13,7 @@ type RelatedStripProps = {
 
 /**
  * "What's next" strip: up to two tool rows and one guide row. Tool rows switch
- * the app's own tab through `onSelectTab`; guide rows are plain links so the
+ * the app's own tab through `onSelectTab`; task and guide rows are plain links so the
  * document-level soft-navigation listener (see `webapp.ts`) picks them up.
  *
  * Beta tool rows are marked with `data-beta` and hidden by CSS from
@@ -24,6 +26,8 @@ type RelatedStripProps = {
  */
 const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
   const localizer = useUiLocalizer();
+  const [appBaseUrl, setAppBaseUrl] = useState("/");
+  useEffect(() => setAppBaseUrl(readAppBaseUrl()), []);
   const entry = RELATED_LINKS[entryKey];
   const tools = entry?.tools ?? [];
   const guideRoute = entry?.guide ? DOC_SOURCES.find((route) => route.slug === entry.guide?.slug) : undefined;
@@ -31,15 +35,31 @@ const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
   return (
     <nav aria-label={localizer.message("ui.related.heading")} className="related-strip">
       <ul>
-        {tools.map((tool) => (
-          <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
-            <button className="related-row related-row-tool" onClick={() => onSelectTab(tool.view)} type="button">
+        {tools.map((tool) => {
+          const label = (
+            <>
               <span className="related-kind mono">{localizer.message("ui.related.kindTool")}</span>
               <span className="related-label">{localizer.message(tool.labelId)}</span>
               <span className="related-hint">{localizer.message(tool.hintId ?? "ui.related.hintTool")}</span>
-            </button>
-          </li>
-        ))}
+            </>
+          );
+          return (
+            <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
+              {tool.entry ? (
+                <a
+                  className="related-row related-row-tool"
+                  href={new URL(tool.entry, new URL(appBaseUrl, "https://app.invalid")).pathname}
+                >
+                  {label}
+                </a>
+              ) : (
+                <button className="related-row related-row-tool" onClick={() => onSelectTab(tool.view)} type="button">
+                  {label}
+                </button>
+              )}
+            </li>
+          );
+        })}
         {guideRoute ? (
           <li>
             <a className="related-row related-row-guide" href={`/${guideRoute.slug}`}>

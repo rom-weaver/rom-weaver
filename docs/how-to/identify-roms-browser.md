@@ -56,7 +56,7 @@ Follow [Search ROM checksums](search-rom-checksums-browser.md) to look up an exi
 3. Search the matched game's known codes.
 4. Open **Code details** for original database fields and import warnings.
 
-This view is for inspection. It includes checksum-only matches and candidates found inside archives, even when rom-weaver has not verified that a code is compatible with those exact bytes. Open [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) or [Create a cheat patch](https://rom-weaver.com/create-rom-patch?guide=create-cheats) to classify and use a code.
+This view is for inspection. It includes checksum-only matches and candidates found inside archives, even when rom-weaver has not verified that a code is compatible with those exact bytes. Open [Apply cheat codes](https://rom-weaver.com/apply-cheats) or [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch) to classify and use a code.
 
 ## Compare a checksum
 

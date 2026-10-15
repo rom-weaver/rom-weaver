@@ -1485,12 +1485,16 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   );
   useEffect(() => onBusyChange?.(busy || createQueued), [busy, createQueued, onBusyChange]);
 
-  return <CreatePatchFormView {...model} />;
+  return <CreatePatchFormView {...model} active={props.active} />;
 }
 
+// The cheat entry page opens Patches & cheats, where cheat codes live.
+const entrySourceMode = (entry: CreatePatchFormProps["entry"]) => (entry === "cheats" ? "patches" : "rom");
+
 function CreatePatchForm(props: CreatePatchFormProps) {
-  const [sourceMode, setSourceMode] = useState<"rom" | "patches">("rom");
-  const [patchesMounted, setPatchesMounted] = useState(false);
+  const [sourceMode, setSourceMode] = useState<"rom" | "patches">(entrySourceMode(props.entry));
+  const [patchesMounted, setPatchesMounted] = useState(props.entry === "cheats");
+  const appliedEntryRef = useRef(props.entry);
   const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
   const [romBusy, setRomBusy] = useState(false);
   const [patchesBusy, setPatchesBusy] = useState(false);
@@ -1515,6 +1519,19 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   useEffect(() => {
     sourceModeRef.current = sourceMode;
   }, [sourceMode]);
+  // Each new entry request switches the mode once, after any running work, so the
+  // reader can still change it afterwards.
+  const modeLocked = !!props.disabled || romBusy || patchesBusy;
+  useEffect(() => {
+    if (props.entry === undefined) {
+      appliedEntryRef.current = undefined;
+      return;
+    }
+    if (appliedEntryRef.current === props.entry || modeLocked) return;
+    appliedEntryRef.current = props.entry;
+    if (props.entry === "cheats") setPatchesMounted(true);
+    setSourceMode(entrySourceMode(props.entry));
+  }, [props.entry, modeLocked]);
   // ROM-only drops stay in Patches & cheats while it is active; its form decides the ROM's slot.
   const queueDrop = (files: File[], romMode?: "rom", replacesModified = false) => {
     const id = ++nextDropId.current;
@@ -1548,13 +1565,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     },
     () => undefined,
   );
-  const controls = (
-    <CreateSourceModeToggle
-      value={activeMode}
-      onChange={changeMode}
-      disabled={!!props.disabled || romBusy || patchesBusy}
-    />
-  );
+  const controls = <CreateSourceModeToggle value={activeMode} onChange={changeMode} disabled={modeLocked} />;
   const romDrop = delivery?.mode === "rom" ? delivery : null;
   const patchDrop = delivery?.mode === "patches" ? delivery : null;
   return (
@@ -1578,6 +1589,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           <ApplyPatchForm
             mode="create"
             active={activeMode === "patches"}
+            cheatsPage={props.entry === "cheats"}
             assetBaseUrl={props.assetBaseUrl}
             inputs={inputs}
             onInputsChange={(inputs) => changeOriginal(inputs[0] || null)}

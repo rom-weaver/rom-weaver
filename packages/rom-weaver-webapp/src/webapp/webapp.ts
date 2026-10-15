@@ -16,6 +16,7 @@ import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
@@ -585,6 +586,7 @@ const renderWebappRoot = (): undefined => {
       onConfirm: () => closeAgentApprovalDialog(true),
     },
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
+    workflowEntry: readWorkflowEntryFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({

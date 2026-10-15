@@ -75,6 +75,7 @@ import {
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
 import { SectionNotice } from "./apply-section-notice.tsx";
 import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStart } from "./apply-drop-after.tsx";
+import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 /** What the add-files step needs from the form: whether the bench is ready to
@@ -498,6 +499,7 @@ function ApplyWorkflowFormView({
   onPracticeCheatSampleChange,
   onUnifiedDrop,
   mode = "apply",
+  cheatsPage = false,
   patchEnablement,
   patchInputBasis,
   onPatchInputBasisChange,
@@ -547,6 +549,7 @@ function ApplyWorkflowFormView({
   onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   onPracticeCheatSampleChange?: (active: boolean) => void;
   mode?: "apply" | "weave" | "create";
+  cheatsPage?: boolean;
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
@@ -578,14 +581,24 @@ function ApplyWorkflowFormView({
   const localizer = useUiLocalizer();
   const weavePage = mode === "weave";
   const createPage = mode === "create";
-  const workflowGuide = { create: WORKFLOW_GUIDES.create, weave: WORKFLOW_GUIDES.weave, apply: WORKFLOW_GUIDES.apply }[
-    mode
-  ];
-  const workflowLead = {
+  let guide: (typeof WORKFLOW_GUIDES)[keyof typeof WORKFLOW_GUIDES] = {
+    create: WORKFLOW_GUIDES.create,
+    weave: WORKFLOW_GUIDES.weave,
+    apply: WORKFLOW_GUIDES.apply,
+  }[mode];
+  const workflowLead: Record<typeof mode, { line1: MessageId; description: MessageId }> = {
     create: { line1: "ui.hero.createThesis", description: "ui.hero.createDescription" },
     weave: { line1: "ui.hero.weaveThesis", description: "ui.hero.weaveDescription" },
     apply: { line1: "ui.hero.thesis", description: "ui.hero.applyDescription" },
-  } as const;
+  };
+  let lead = workflowLead[mode];
+  // The cheat entry pages keep their workflow and swap in the cheat guide and copy.
+  if (cheatsPage && !weavePage) {
+    guide = WORKFLOW_GUIDES.cheats;
+    lead = createPage
+      ? { line1: "ui.hero.createCheatsThesis", description: "ui.hero.createCheatsDescription" }
+      : { line1: "ui.hero.applyCheatsThesis", description: "ui.hero.applyCheatsDescription" };
+  }
   const unifiedInputId = `rom-weaver-input-file-unified${mode === "apply" ? "" : `-${mode}`}`;
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
@@ -952,7 +965,7 @@ function ApplyWorkflowFormView({
           </>
         }
         big={workflowEmpty}
-        guide={workflowGuide}
+        guide={guide}
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
@@ -965,12 +978,13 @@ function ApplyWorkflowFormView({
           </ul>
         }
         inputId={unifiedInputId}
-        lead={workflowLead[mode]}
+        lead={lead}
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDropFiles}
         onboarding={
           pendingDrops.length || createPage ? null : (
             <ApplySampleStart
+              cheatsPage={cheatsPage}
               weavePage={weavePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
               onLoadApplySample={startApplySample}

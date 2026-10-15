@@ -16,6 +16,8 @@ import { useUiLocalizer } from "./settings-context.tsx";
  * galleries) without booting the workflow, wasm or worker pool.
  */
 type CreatePatchFormViewModel = {
+  /** False while Patches & cheats is the visible Create mode. */
+  active?: boolean;
   /** Active candidate-selection dialog (or nothing). */
   dialog?: ReactNode;
   /** True once a create run has produced a downloadable patch. */
@@ -38,6 +40,7 @@ type CreatePatchFormViewModel = {
 };
 
 const CreatePatchFormView = ({
+  active,
   dialog,
   done,
   dropZone,
@@ -54,6 +57,7 @@ const CreatePatchFormView = ({
     <section className="panel" id="patch-builder-container">
       <UnifiedDropZone
         {...dropZone}
+        heading={active !== false}
         lead={{
           line1: "ui.hero.createThesis",
           description: "ui.hero.createDescription",

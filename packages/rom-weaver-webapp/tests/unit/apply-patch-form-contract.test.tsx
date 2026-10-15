@@ -229,6 +229,37 @@ describe("legacy package settings normalization", () => {
 });
 
 describe("ApplyPatchForm - empty mount", () => {
+  it("changes the entry heading and guide without loading a sample or replacing staged inputs", async () => {
+    const { container, rerender } = renderForm({ cheatsPage: true });
+    expect(container.querySelector("h1")?.textContent).toBe("Apply cheat codes to ROMs");
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toContain("docs/use-cheats");
+    expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeNull();
+    const input = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [new File(["rom-bytes"], "game.bin")] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalledTimes(1));
+    const workflow = latestFakeWorkflow;
+    rerender(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm cheatsPage={false} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(latestFakeWorkflow).toBe(workflow);
+    expect(workflow?.setInput).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
+  });
+
+  it("gives the Create cheat entry its heading, description and guide", () => {
+    const { container } = renderForm({ cheatsPage: true, mode: "create" });
+    expect(container.querySelector("h1")?.textContent).toBe("Create ROM patches from cheat codes");
+    expect(container.textContent).toContain(
+      "Turn supported cheat codes into a patch for your ROM. Files stay on your device.",
+    );
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toContain("docs/use-cheats");
+  });
+
   beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => {
     vi.unstubAllGlobals();

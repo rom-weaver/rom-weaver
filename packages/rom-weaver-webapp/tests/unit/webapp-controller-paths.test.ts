@@ -218,3 +218,19 @@ describe("stable Identify routing", () => {
     expect(controller.getState().currentView).toBe("identify");
   });
 });
+
+describe("task entry routes", () => {
+  it.each([
+    ["apply-cheats", "patcher"],
+    ["create-rom-cheat-patch", "creator"],
+  ] as const)("keeps %s on initialization and selecting its view", (slug, view) => {
+    window.history.replaceState({}, "", `/roms/${slug}/index.html`);
+    const controller = createController({});
+    expect(controller.getState().currentView).toBe(view);
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe(view);
+    expect(controller.selectView(view)).toBe(view);
+    expect(window.location.pathname).toBe(`/roms/${slug}/index.html`);
+    controller.selectView("checksum");
+    expect(window.location.pathname).toBe("/roms/checksum");
+  });
+});

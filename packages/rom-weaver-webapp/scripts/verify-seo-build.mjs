@@ -12,7 +12,12 @@ import {
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
-import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import {
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  WORKFLOW_ENTRY_ROUTES,
+  WORKFLOW_SEO_ROUTES,
+} from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
@@ -95,6 +100,11 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
 const authMarkdownHeaders = matchPagesHeaders(parsePagesHeaders(headers), "/auth.md");
 assertIncludes(authMarkdownHeaders["Content-Type"] ?? "", "text/markdown; charset=utf-8", "/auth.md content type");
 if (authMarkdownHeaders.Link) throw new Error("/auth.md must not carry a canonical Link");
+for (const route of Object.values(WORKFLOW_ENTRY_ROUTES)) {
+  if (!hasDescriptiveHeading(read(`${route.slug}.html`), SITE_NAME)) {
+    throw new Error(`${route.slug} must have one descriptive workflow heading`);
+  }
+}
 for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
   const html = read(`${route.slug || "index"}.html`);
   if (!hasDescriptiveHeading(html, SITE_NAME)) {

@@ -39,7 +39,9 @@ const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const LINK_AUDIT_WORKFLOW_ROUTES = [
   "",
   "apply-patches",
+  "apply-cheats",
   "create-rom-patch",
+  "create-rom-cheat-patch",
   "checksum",
   "compress",
   "identify-rom",
