@@ -148,6 +148,17 @@ describe("CHD disc images", () => {
     expect(workflowMocks.ingestRom).toHaveBeenCalled();
   });
 
+  it("extracts a Saturn CHD because yabause cannot read one", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { rawSha1: "c".repeat(40) },
+      entries: [],
+      platform: "Sega Saturn",
+    });
+
+    await loadEmulatorRom(new Blob(["chd"]), "game.chd");
+    expect(workflowMocks.ingestRom).toHaveBeenCalled();
+  });
+
   it("extracts a CHD the probe could not name a platform for", async () => {
     workflowMocks.probeRom.mockResolvedValueOnce({ chd: { rawSha1: "c".repeat(40) }, entries: [] });
 

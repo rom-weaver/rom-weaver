@@ -5,7 +5,11 @@ import {
   createEmulatorDocument,
   createEmulatorGameIdentity,
 } from "../../src/public/react/components/emulator-document.ts";
-import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
+import {
+  coreReadsChd,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+} from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
   it("maps save editor platform ids to playable cores", () => {
@@ -88,6 +92,18 @@ describe("createEmulatorDocument", () => {
       },
       { source: "rom-weaver-emulator", kind: "request-load-sram", gameId: checksum, gameName: checksum },
     ]);
+  });
+
+  it("keeps an ISO's saves under the bare checksum written before the name kept its extension", () => {
+    const checksum = "b".repeat(40);
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.iso" });
+    const document = createEmulatorDocument("/data/", "blob:game", identity.gameName, "segaSaturn", {
+      gameId: identity.gameId,
+      saveId: identity.saveId,
+    });
+    expect(document).toContain(`EJS_gameName = "${checksum}.iso"`);
+    expect(document).toContain(`const gameId = "${checksum}"`);
+    expect(document).toContain(`EJS_gameID = ${identity.gameId}`);
   });
 
   it.each([
@@ -251,14 +267,43 @@ describe("emulator game identity", () => {
     expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
   });
 
-  it("leaves every other format on the bare checksum", () => {
+  it.each(["iso", "cue", "bin", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf"])(
+    "keeps the .%s extension of a disc image",
+    (extension) => {
+      const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+      const identity = createEmulatorGameIdentity({ checksum, fileName: `Game.${extension.toUpperCase()}` });
+      expect(identity.gameName).toBe(`${checksum}.${extension}`);
+      expect(identity.saveId).toBe(checksum);
+      expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
+    },
+  );
+
+  it("leaves cartridge ROMs and extensionless names on the bare checksum", () => {
     const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
-    expect(createEmulatorGameIdentity({ checksum, fileName: "game.bin" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game.nes" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game.iso.txt" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game" }).gameName).toBe(checksum);
   });
 
   it("rejects a non-SHA-1 identity", () => {
     expect(() => createEmulatorGameIdentity({ checksum: "12345678" })).toThrow(
       "The emulator game identity requires a SHA-1 checksum.",
     );
+  });
+});
+
+describe("CHD pass-through cores", () => {
+  it("passes a CHD to the cores whose reader handles it", () => {
+    expect(coreReadsChd("psx")).toBe(true);
+    expect(coreReadsChd("segaMD")).toBe(true);
+  });
+
+  it("extracts a Saturn CHD because yabause has no CHD reader", () => {
+    expect(coreReadsChd("segaSaturn")).toBe(false);
+  });
+
+  it("extracts a CHD for every other core", () => {
+    expect(coreReadsChd("psp")).toBe(false);
+    expect(coreReadsChd(undefined)).toBe(false);
   });
 });

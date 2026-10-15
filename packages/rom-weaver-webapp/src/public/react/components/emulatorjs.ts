@@ -60,11 +60,13 @@ const getEmulatorJsAspectRatio = (core?: string): string =>
 
 /**
  * The vendored cores that read a CHD themselves, taken from each core's
- * libretro `valid_extensions`: pcsx_rearmed, yabause, and genesis_plus_gx list
- * `chd`. Every other core needs the disc extracted first - ppsspp accepts only
- * `elf, iso, cso, prx, pbp`, and smsplus no disc image at all.
+ * libretro `valid_extensions` and reader code: pcsx_rearmed and
+ * genesis_plus_gx read `chd`. yabause advertises `chd` but its `ISOCDInit` has
+ * no CHD reader and rejects the file as a raw ISO, so a Saturn CHD is
+ * extracted first. Every other core needs the disc extracted too - ppsspp
+ * accepts only `elf, iso, cso, prx, pbp`, and smsplus no disc image at all.
  */
-const CHD_CAPABLE_CORES: ReadonlySet<string> = new Set(["psx", "segaMD", "segaSaturn"]);
+const CHD_CAPABLE_CORES: ReadonlySet<string> = new Set(["psx", "segaMD"]);
 
 const coreReadsChd = (core?: string): boolean => !!core && CHD_CAPABLE_CORES.has(core);
 

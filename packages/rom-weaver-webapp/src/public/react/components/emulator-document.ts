@@ -21,7 +21,38 @@ const hashString = (value: string): number => {
 };
 
 /**
- * CHD filenames MUST retain their extension for core dispatch.
+ * Disc image extensions the vendored disc cores (pcsx_rearmed, yabause,
+ * genesis_plus_gx, ppsspp) read or EmulatorJS acts on. EmulatorJS names the
+ * file it writes into the core after `EJS_gameName`, picks its loader and
+ * invents a `MODE1/2352` cue sheet from that name, so a disc MUST keep its
+ * real extension or a 2048-byte-sector ISO is misread.
+ */
+const DISC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "bin",
+  "ccd",
+  "chd",
+  "cso",
+  "cue",
+  "gdi",
+  "img",
+  "iso",
+  "m3u",
+  "mdf",
+  "mds",
+  "pbp",
+  "toc",
+]);
+
+const discImageSuffix = (fileName: string | undefined): string => {
+  const extension = (fileName || "")
+    .trim()
+    .match(/\.([a-z0-9]+)$/i)?.[1]
+    ?.toLowerCase();
+  return extension && DISC_IMAGE_EXTENSIONS.has(extension) ? `.${extension}` : "";
+};
+
+/**
+ * Disc image filenames MUST retain their extension for core dispatch.
  * App saves use the payload checksum independently of that filename.
  */
 const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentityInput) => {
@@ -29,11 +60,10 @@ const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentity
   if (!/^[a-f0-9]{40}$/.test(normalizedChecksum)) {
     throw new Error("The emulator game identity requires a SHA-1 checksum.");
   }
-  const suffix = /\.chd$/i.test((fileName || "").trim()) ? ".chd" : "";
   return {
     gameId: hashString(normalizedChecksum),
     saveId: normalizedChecksum,
-    gameName: `${normalizedChecksum}${suffix}`,
+    gameName: `${normalizedChecksum}${discImageSuffix(fileName)}`,
   };
 };
 
