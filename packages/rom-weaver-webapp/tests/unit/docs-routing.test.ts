@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createDocsSeoMetadata,
@@ -213,5 +215,26 @@ describe("docGroupTitle", () => {
 
   it("capitalizes only the first character of a longer folder name", () => {
     expect(docGroupTitle("hosting/self-hosting.md")).toBe("Hosting");
+  });
+});
+
+describe("DOC_SOURCES editability", () => {
+  it("marks every source that git does not track as non-editable", () => {
+    const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
+    const tracked = new Set(
+      execFileSync("git", ["ls-files", "--", "."], { cwd: docsDirectory, encoding: "utf8" }).split("\n"),
+    );
+    const untrackedEditable = DOC_SOURCES.filter(
+      (source) => source.editable !== false && !tracked.has(source.file),
+    ).map((source) => source.file);
+    expect(untrackedEditable).toEqual([]);
+  });
+
+  it("does not mark a tracked source as non-editable", () => {
+    const docsDirectory = path.resolve(import.meta.dirname, "../../../../docs");
+    const tracked = new Set(
+      execFileSync("git", ["ls-files", "--", "."], { cwd: docsDirectory, encoding: "utf8" }).split("\n"),
+    );
+    expect(DOC_SOURCES.filter((source) => source.editable === false && tracked.has(source.file))).toEqual([]);
   });
 });

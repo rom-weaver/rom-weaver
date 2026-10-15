@@ -12,6 +12,7 @@ const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver/blob/main";
  * @typedef {{ id: string, label: string }} DocSection
  * @typedef {{
  *   description: string,
+ *   editable?: false,
  *   group: string,
  *   html: string,
  *   label: string,
@@ -270,11 +271,11 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
 };
 
 /**
- * @param {{ file: string, group?: string, label: string, slug: string }} source
+ * @param {{ editable?: false, file: string, group?: string, label: string, slug: string }} source
  * @param {string} markdown
  * @returns {Readonly<DocRoute>}
  */
-const createDocRoute = ({ file, group, label, slug }, markdown) => {
+const createDocRoute = ({ editable, file, group, label, slug }, markdown) => {
   const title = markdown.match(/^#\s+(.+)$/m)?.[1];
   if (!title) throw new Error(`${file} must have one level-one heading`);
   const paragraph = Lexer.lex(stripDoctoc(markdown, false)).find((token) => token.type === "paragraph");
@@ -283,6 +284,7 @@ const createDocRoute = ({ file, group, label, slug }, markdown) => {
   const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({
     description,
+    ...(editable === false ? { editable } : {}),
     group: group ?? docGroupTitle(file),
     html,
     label,
