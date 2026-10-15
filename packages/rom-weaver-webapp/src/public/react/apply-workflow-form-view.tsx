@@ -1115,6 +1115,7 @@ function ApplyWorkflowFormView({
               weaveExport={weaveExport}
               weaveTools={weaveTools}
               disabled={outputDisabled || !weaveExport.ready || !romInputs.length}
+              combinedCheats={cheatsOn}
               fileName={outputState.displayFileName}
               headerField={
                 header.visible ? renderOutputHeaderField("rom-weaver-select-weave-output-header") : undefined
