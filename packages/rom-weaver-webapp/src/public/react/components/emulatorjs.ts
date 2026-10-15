@@ -80,4 +80,18 @@ const getEmulatorJsCore = (platform?: string, fileName?: string): string | undef
   return match ? EXTENSION_CORES[match[0]] : undefined;
 };
 
-export { coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore };
+/**
+ * Famicom Disk System images run on the nes core (fceumm), which needs the
+ * FDS BIOS (`disksys.rom`) the site does not supply. Without it the core
+ * crashes the browser tab, so the player must not start; user-provided BIOS
+ * files are tracked in rom-weaver/rom-weaver#1223.
+ */
+const FDS_PLATFORM = "Nintendo Famicom Disk System";
+const FDS_BIOS_ISSUE_URL = "https://github.com/rom-weaver/rom-weaver/issues/1223";
+
+const requiresUnsuppliedBios = (game: { fileName?: string; platform?: string }): boolean => {
+  if (game.platform?.trim() === FDS_PLATFORM) return true;
+  return !!game.fileName && /\.fds$/i.test(game.fileName.trim());
+};
+
+export { FDS_BIOS_ISSUE_URL, coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore, requiresUnsuppliedBios };

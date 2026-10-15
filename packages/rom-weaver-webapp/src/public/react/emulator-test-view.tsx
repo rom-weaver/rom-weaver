@@ -39,7 +39,12 @@ import {
 } from "./components/ds/sample-tutorial.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
-import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
+import {
+  FDS_BIOS_ISSUE_URL,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  requiresUnsuppliedBios,
+} from "./components/emulatorjs.ts";
 import { isSaveFileName } from "./drop-destination.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
@@ -549,7 +554,9 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
   const webglBlocked = error?.blocksPlayer === true;
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked);
+  // Every route into Test ends at currentGame, so this one check covers pickers, archives, URL sessions and Apply.
+  const missingBios = Boolean(currentGame && requiresUnsuppliedBios(currentGame));
+  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios);
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
   const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;
@@ -721,6 +728,14 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
             >
               <b>{error.summary}</b> {error.detail}
             </Notice>
+          ) : currentGame && missingBios ? (
+            <Notice id="emulator-test-error" level="error">
+              <b>{localizer.message("ui.test.fdsBios.summary", { fileName: currentGame.fileName })}</b>{" "}
+              {localizer.message("ui.test.fdsBios.detail")}{" "}
+              <a href={FDS_BIOS_ISSUE_URL} rel="noreferrer" target="_blank">
+                {localizer.message("ui.test.fdsBios.link")}
+              </a>
+            </Notice>
           ) : undefined
         }
         big={workflowEmpty}
@@ -820,7 +835,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                   {saveLoadMessage}
                 </p>
               ) : null}
-              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
+              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
@@ -854,11 +869,11 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                     ) : null}
                   </div>
                 </dialog>
-              ) : currentGame && currentCore && preparing ? (
+              ) : currentGame && currentCore && preparing && !missingBios ? (
                 <div className="emulator-player-loading">
                   <FileProgress indeterminate label="Preparing the ROM..." value="working" />
                 </div>
-              ) : currentGame && !webglBlocked ? (
+              ) : currentGame && !webglBlocked && !missingBios ? (
                 <div className="emulator-player-loading" />
               ) : null}
             </div>

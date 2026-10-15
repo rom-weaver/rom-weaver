@@ -9,6 +9,7 @@ import {
   coreReadsChd,
   getEmulatorJsAspectRatio,
   getEmulatorJsCore,
+  requiresUnsuppliedBios,
 } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
@@ -340,5 +341,17 @@ describe("CHD pass-through cores", () => {
   it("extracts a CHD for every other core", () => {
     expect(coreReadsChd("psp")).toBe(false);
     expect(coreReadsChd(undefined)).toBe(false);
+  });
+});
+
+describe("requiresUnsuppliedBios", () => {
+  it("flags Famicom Disk System images by platform or extension", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.bin", platform: "Nintendo Famicom Disk System" })).toBe(true);
+    expect(requiresUnsuppliedBios({ fileName: "GAME.FDS" })).toBe(true);
+  });
+
+  it("leaves cartridge systems alone", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.nes", platform: "Nintendo Entertainment System" })).toBe(false);
+    expect(requiresUnsuppliedBios({ fileName: "game.sfc" })).toBe(false);
   });
 });

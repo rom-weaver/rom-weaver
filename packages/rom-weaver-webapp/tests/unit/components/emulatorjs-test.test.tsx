@@ -418,6 +418,38 @@ describe("EmulatorTestView", () => {
     expect(getEmulatorSessionState().entries[0]?.platform).toBe("Sony Playstation Portable");
   });
 
+  it("does not start the core for an FDS image and links the BIOS issue", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    loadRomMock.mockResolvedValue({
+      blob: new Blob(["disk"]),
+      checksum: "b".repeat(40),
+      fileName: "game.fds",
+      platform: "Nintendo Famicom Disk System",
+    });
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["disk"], "game.fds.zip")] },
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("game.fds needs the Famicom Disk System BIOS.");
+    expect(alert.querySelector("a")?.getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/issues/1223");
+    expect(screen.queryByTitle("EmulatorJS test for game.fds")).toBeNull();
+  });
+
+  it("does not start the core for a retained FDS session entry", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry({ fileName: "patched.fds", id: "fds", platform: "Nintendo Famicom Disk System" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("patched.fds needs the Famicom Disk System BIOS.");
+    expect(screen.queryByTitle("EmulatorJS test for patched.fds")).toBeNull();
+  });
+
   it("replaces the current game without a game list", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
