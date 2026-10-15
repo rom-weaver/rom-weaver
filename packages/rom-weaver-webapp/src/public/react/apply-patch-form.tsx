@@ -60,6 +60,8 @@ import {
 } from "./apply-workflow-staging-model.ts";
 import { resolveWeaveArchiveFormat } from "./weave-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
+import { Modal } from "./components/ds/modal.tsx";
+import { SelectionTree } from "./components/ds/selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
@@ -1774,6 +1776,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     props.onError,
     selectFile,
   );
+  const [createRomChoice, setCreateRomChoice] = useState<File[] | null>(null);
   const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
     if (mode !== "create" || !props.onCreateRomDrop) {
       handleUnifiedDrop(files, undefined, undefined, onSettled);
@@ -1788,7 +1791,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           !entries.some((entry) => entry.hasPatches) &&
           counts.roms + counts.unknown > 0
         ) {
-          props.onCreateRomDrop?.(files);
+          if (files.length !== 1) {
+            props.onCreateRomDrop?.(files);
+            onSettled?.();
+            return;
+          }
+          if (!props.inputs?.length) {
+            handleUnifiedDrop(files, undefined, undefined, onSettled);
+            return;
+          }
+          // Over an existing Original, one ROM could replace it or become the Modified ROM, so ask.
+          setCreateRomChoice(files);
           onSettled?.();
           return;
         }
@@ -2012,6 +2025,38 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         startup={startup}
       />
       {candidateSelectionDialog}
+      {createRomChoice ? (
+        <Modal
+          onClose={() => setCreateRomChoice(null)}
+          open
+          subtitle={localizer.message("ui.combinedPatch.romChoice.subtitle", { name: createRomChoice[0]?.name || "" })}
+          title={localizer.message("ui.combinedPatch.romChoice.title")}
+          variant="select-modal"
+        >
+          <SelectionTree
+            items={[
+              {
+                id: "original",
+                name: localizer.message("ui.combinedPatch.romChoice.replace"),
+                note: localizer.message("ui.combinedPatch.romChoice.replaceNote"),
+                selectable: true,
+              },
+              {
+                id: "modified",
+                name: localizer.message("ui.combinedPatch.romChoice.modified"),
+                note: localizer.message("ui.combinedPatch.romChoice.modifiedNote"),
+                selectable: true,
+              },
+            ]}
+            onSelect={(id) => {
+              const files = createRomChoice;
+              setCreateRomChoice(null);
+              if (id === "original") handleUnifiedDrop(files);
+              else props.onCreateRomDrop?.(files);
+            }}
+          />
+        </Modal>
+      ) : null}
     </>
   );
 }

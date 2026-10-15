@@ -414,6 +414,54 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     expect(workflow.setInput).toHaveBeenCalledTimes(2);
   });
 
+  it("stages one ROM as the aggregate Create original without asking when none is loaded", async () => {
+    const onCreateRomDrop = vi.fn();
+    const onInputsChange = vi.fn();
+    const { container, queryByRole } = renderForm({ mode: "create", inputs: [], onCreateRomDrop, onInputsChange });
+    const rom = new File(["rom"], "game.bin");
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-create") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [rom] });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => expect(onInputsChange).toHaveBeenCalledWith([rom]));
+    expect(onCreateRomDrop).not.toHaveBeenCalled();
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    ["Replace the Original ROM", "original"],
+    ["Use as the Modified ROM", "modified"],
+  ] as const)("asks where one ROM goes over an aggregate Create original: %s", async (choice, slot) => {
+    const onCreateRomDrop = vi.fn();
+    const onInputsChange = vi.fn();
+    const { container, findByRole } = renderForm({
+      mode: "create",
+      inputs: [new File(["rom"], "game.bin")],
+      onCreateRomDrop,
+      onInputsChange,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalled());
+    onInputsChange.mockClear();
+    const rom = new File(["other"], "other.bin");
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-create") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [rom] });
+      fireEvent.change(fileInput);
+    });
+    const option = await findByRole("button", { name: new RegExp(choice) });
+    expect(onCreateRomDrop).not.toHaveBeenCalled();
+    expect(onInputsChange).not.toHaveBeenCalled();
+    await act(async () => fireEvent.click(option));
+    if (slot === "modified") {
+      expect(onCreateRomDrop).toHaveBeenCalledExactlyOnceWith([rom]);
+      expect(onInputsChange).not.toHaveBeenCalled();
+    } else {
+      await vi.waitFor(() => expect(onInputsChange).toHaveBeenCalledWith([rom]));
+      expect(onCreateRomDrop).not.toHaveBeenCalled();
+    }
+  });
+
   it("cancels queued execution without aborting the reusable workflow", async () => {
     const onApplyComplete = vi.fn();
     const { container, getByRole } = renderForm({

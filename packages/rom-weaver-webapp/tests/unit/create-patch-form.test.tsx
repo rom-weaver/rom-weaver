@@ -285,6 +285,23 @@ describe("CreatePatchForm", () => {
     });
   };
 
+  it("keeps Patches & cheats active for a ROM dropped on the page", async () => {
+    const props = withSeams();
+    const view = (pageDrop?: { files: File[]; id: number }) => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <CreatePatchFormForTest {...props} pageDrop={pageDrop} />
+      </RomWeaverSettingsProvider>
+    );
+    const { container, rerender } = render(view());
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    const rom = new File(["rom"], "other.nes");
+    await act(async () => rerender(view({ files: [rom], id: 1 })));
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe("other.nes"),
+    );
+    expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("defaults to Modified ROM and offers Patches & cheats without beta tools", async () => {
     const { container } = await stageOriginalOnly({});
     expect(activeButton(container, "Modified ROM").getAttribute("aria-pressed")).toBe("true");

@@ -1501,18 +1501,25 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     if (mode === "patches") setPatchesMounted(true);
     setSourceMode(mode);
   };
-  const routeDrop = (files: File[]) => {
+  const sourceModeRef = useRef(sourceMode);
+  useEffect(() => {
+    sourceModeRef.current = sourceMode;
+  }, [sourceMode]);
+  // ROM-only drops stay in Patches & cheats while it is active; its form decides the ROM's slot.
+  const queueDrop = (files: File[], romMode?: "rom") => {
     const id = ++nextDropId.current;
     dropQueue.current = dropQueue.current
       .catch(() => undefined)
       .then(async () => {
         const entries = await readDropEntries(files);
         const counts = countDropEntries(entries);
-        const mode = counts.patches || counts.weaves || entries.some((entry) => entry.hasPatches) ? "patches" : "rom";
+        const hasPatches = counts.patches || counts.weaves || entries.some((entry) => entry.hasPatches);
+        const mode = hasPatches ? "patches" : romMode || sourceModeRef.current;
         setDeliveries((current) => [...current, { files, id, mode }]);
       })
       .catch((error: unknown) => props.onError?.(error instanceof Error ? error : new Error(String(error))));
   };
+  const routeDrop = (files: File[]) => queueDrop(files);
   const delivery = deliveries[0];
   const activeMode = delivery?.mode || sourceMode;
   useEffect(() => {
@@ -1571,7 +1578,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             threads={props.threads}
             pageDrop={patchDrop}
             createModeControls={controls}
-            onCreateRomDrop={routeDrop}
+            onCreateRomDrop={(files) => queueDrop(files, "rom")}
             onCreateComplete={props.onCreateComplete}
             onError={props.onError}
             onProgress={props.onProgress}

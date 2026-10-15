@@ -533,6 +533,27 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.combinedPatch.needsRom",
     message: "Add one original ROM to create a combined patch.",
   }),
+  "ui.combinedPatch.romChoice.title": msg({ id: "ui.combinedPatch.romChoice.title", message: "Use this ROM as" }),
+  "ui.combinedPatch.romChoice.subtitle": msg({
+    id: "ui.combinedPatch.romChoice.subtitle",
+    message: "{name} - an Original ROM is already loaded.",
+  }),
+  "ui.combinedPatch.romChoice.replace": msg({
+    id: "ui.combinedPatch.romChoice.replace",
+    message: "Replace the Original ROM",
+  }),
+  "ui.combinedPatch.romChoice.replaceNote": msg({
+    id: "ui.combinedPatch.romChoice.replaceNote",
+    message: "Stay in Patches & cheats with this ROM as the original.",
+  }),
+  "ui.combinedPatch.romChoice.modified": msg({
+    id: "ui.combinedPatch.romChoice.modified",
+    message: "Use as the Modified ROM",
+  }),
+  "ui.combinedPatch.romChoice.modifiedNote": msg({
+    id: "ui.combinedPatch.romChoice.modifiedNote",
+    message: "Switch to Modified ROM and compare it with the current original.",
+  }),
   "ui.combinedPatch.unavailable": msg({
     id: "ui.combinedPatch.unavailable",
     message: "The combined patch is unavailable in this browser.",
