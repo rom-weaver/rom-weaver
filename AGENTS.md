@@ -102,6 +102,10 @@ Before changing `docs/` or published doc routing (`DOC_SOURCES`, `llms.txt`,
 [the documentation rules](.agents/references/docs.md) (Diátaxis modes,
 published slugs).
 
+The pre-commit hook regenerates TOCs only for `docs/` and a fixed file list; in
+any other Markdown file with a doctoc block (such as crate READMEs), run
+`node scripts/update-markdown-toc.mjs <files>`.
+
 ## Releases
 
 Before release work, version changes, release automation, or npm/Docker
