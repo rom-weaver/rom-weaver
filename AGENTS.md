@@ -2,16 +2,11 @@
 
 ## Worktrees
 
-When starting work, always create and use a new linked worktree. Do not make
-changes directly in the primary checkout; use `.worktrees/<name>` for the
-working tree.
-
 This repository has no Git submodules; every vendored source is committed
 in-tree, so a linked worktree contains all source files when it is created.
 Install dependencies and copy generated assets with the setup helper below.
 
-Before cleanup, verify the worktree has no real changes, then use the repository
-helper:
+Remove worktrees with the repository helper:
 
 ```bash
 node scripts/remove-worktree.mjs .worktrees/<name>
@@ -59,7 +54,7 @@ suite when shared behavior makes the affected files unclear. Run webapp script
 tests for build/tooling changes. The CI-script hook checks classifier and runtime
 dependency changes; it does not replace browser tests. Build once in production,
 check sizes before browser/E2E work, and reuse that current bundle for E2E as
-documented. Report which checks passed and any checks that could not run.
+documented.
 
 ## Byte-count limits
 
@@ -75,7 +70,7 @@ rules.
 
 ## Additional correctness checks
 
-Run `mise run quality-architecture` and `mise run quality-selection` for source, manifest, protocol, worker or test-selection changes. Run `mise run quality-guardrails <base-ref>` before committing; inspect review findings as well as blocking errors. New skips/suppressions need adjacent `quality-reason:` with a concrete reason; never add focused tests. These checks do not replace thread guards or typegen.
+Run `mise run quality-architecture` and `mise run quality-selection` for source, manifest, protocol, worker or test-selection changes. Run `mise run quality-guardrails <base-ref>` before committing; inspect review findings as well as blocking errors. New skips/suppressions need adjacent `quality-reason:` with a concrete reason. These checks do not replace thread guards or typegen.
 
 For changed core/checksum/patch/container algorithms run the relevant edge/property tests and `mise run quality-mutation diff <base-ref>`. For parser changes run `mise run quality-fuzz smoke`; relevant native extraction changes also run `mise run quality-reference` after building the CLI. Mutation survivors, timeouts and build failures are different findings; none may be relabeled automatically.
 
@@ -196,5 +191,3 @@ mode hangs on `+` in test paths).
 - Rust: `crates/*/tests/unit/`, CLI end-to-end in
   `crates/rom-weaver-cli/tests/cli_smoke/`
 - Browser: `packages/rom-weaver-webapp/tests/browser/` (Playwright + vitest)
-- Never skip or remove tests to make a change pass. Byte-count limit changes
-  follow the policy above; do not weaken other test assertions.
