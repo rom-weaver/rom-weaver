@@ -1077,6 +1077,26 @@ fn nes_game_genie_with_x_letters_is_bakeable_through_the_16k_mirror() {
 }
 
 #[test]
+fn genesis_and_32x_game_genie_with_xx_are_not_parameterized() {
+    for system in [CheatSystem::Genesis, CheatSystem::Sega32x] {
+        for kind in [None, Some(CheatKind::GameGenie)] {
+            let mut entry = record(system, "AXXA-CA6C");
+            entry.code_kind = kind;
+            let classified = classify_record(&vec![0; 0x10_0000], &entry);
+            assert!(
+                !matches!(
+                    classified.resolution,
+                    CheatResolution::Unsupported { ref reason }
+                        if reason == "the entry needs a parameter value"
+                ),
+                "{system:?} {kind:?}: {:?}",
+                classified.resolution
+            );
+        }
+    }
+}
+
+#[test]
 fn x_placeholders_in_hex_codes_stay_parameterized() {
     let cases = [
         (CheatSystem::Nes, "80XX10", Some(CheatKind::ProActionReplay)),

@@ -139,13 +139,35 @@ const isValidGoldFingerCode = (value) => {
   return ((sum - 0x160) & 0xff) === Number.parseInt(code.slice(11, 13), 16);
 };
 
+// Mirrors Rust `infer_kind` for the systems whose Game Genie alphabet holds `X`.
+const inferGameGenieKind = (code, cheatSystem) => {
+  const normalized = normalizeCode(code);
+  if (cheatSystem === "nes") return !/[0-9]/u.test(normalized);
+  const allHex = normalized !== "" && /^[0-9A-F]+$/u.test(normalized);
+  return !(code.includes(":") || (allHex && normalized.length !== 8));
+};
+
+// Mirrors Rust `game_genie_letters_include_x`: NES, Genesis, and 32X Game Genie
+// alphabets contain `X`, so `XX` is data when every split code reads as Game Genie.
+const gameGenieLettersIncludeX = (value, cheatSystem, kind) => {
+  if (!["nes", "genesis", "sega32x"].includes(cheatSystem)) return false;
+  const codes = splitCodes(value);
+  return (
+    codes.length > 0 &&
+    codes.every((code) =>
+      kind ? kind === "game-genie" : inferGameGenieKind(code, cheatSystem),
+    )
+  );
+};
+
 const containsParameterPlaceholder = (value, cheatSystem, codeKind) => {
   if (value.includes("?")) return true;
   if (!value.toUpperCase().includes("XX")) return false;
   return !(
-    cheatSystem === "snes" &&
-    (codeKind === "gold-finger" || normalizeCode(value).length === 14) &&
-    isValidGoldFingerCode(value)
+    (cheatSystem === "snes" &&
+      (codeKind === "gold-finger" || normalizeCode(value).length === 14) &&
+      isValidGoldFingerCode(value)) ||
+    gameGenieLettersIncludeX(value, cheatSystem, codeKind)
   );
 };
 
@@ -288,7 +310,7 @@ export function isBakeableCandidate(cheatSystem, record) {
   const rawCode = record.rawCode;
   if (rawCode === null || rawCode === undefined || rawCode.trim() === "") return false;
   if (hasStructuredRuntimeSemantics(record)) return false;
-  if (containsParameterPlaceholder(rawCode, cheatSystem, record.codeKind)) return false;
+  if (containsParameterPlaceholder(rawCode, cheatSystem, record.codeKind ?? record.kindHint)) return false;
   if (
     (cheatSystem === "nes" && record.codeKind === "pro-action-rocky") ||
     (cheatSystem === "gameboyadvance" &&
