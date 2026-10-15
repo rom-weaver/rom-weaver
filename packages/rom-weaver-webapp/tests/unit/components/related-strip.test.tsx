@@ -63,7 +63,7 @@ describe("RelatedStrip", () => {
     const { container } = render(withSettings(<RelatedStrip entryKey="docs/cli-trim" onSelectTab={vi.fn()} />, {}));
     expect(container.querySelectorAll(".related-row-guide")).toHaveLength(0);
     const labels = [...container.querySelectorAll(".related-row-tool .related-label")].map((el) => el.textContent);
-    expect(labels).toEqual(["Trim tool"]);
+    expect(labels).toEqual(["Trim ROMs"]);
   });
 
   it("keeps a beta-only strip in the markup for the CSS gate to hide", () => {

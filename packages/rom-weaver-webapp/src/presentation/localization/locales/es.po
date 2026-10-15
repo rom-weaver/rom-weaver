@@ -1530,11 +1530,6 @@ msgstr "Crear partida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.createTool"
-msgstr "Herramienta Crear"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.patchCreated"
 msgstr "Se creó {fileName} a partir de {count, plural, one {# truco de ROM} other {# trucos de ROM}}."
 
@@ -2372,11 +2367,6 @@ msgstr "datos de identificación"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolIdentify"
 msgstr "Identificar ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyTool"
-msgstr "Herramienta Identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3760,11 +3750,6 @@ msgstr "Formato posible: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.undoTool"
-msgstr "Deshacer PPF"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Archivos de práctica"
 
@@ -4352,11 +4337,6 @@ msgstr "Guardar"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.saveAsPatch"
 msgstr "Guardar como parche"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.saveTool"
-msgstr "Editor de partidas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5287,11 +5267,6 @@ msgstr "Recortar"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolTrim"
 msgstr "Recortar ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.trimTool"
-msgstr "Herramienta Recortar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
