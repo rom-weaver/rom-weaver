@@ -2,7 +2,7 @@ import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 
 import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
 import { fillMemberLaneChecks } from "../../lib/weave/weave-member-checks.ts";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
-import { weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
+import { firstRootRomPatchIndex, weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
@@ -265,8 +265,17 @@ const useWeaveApplySession = ({
           if (!isCurrent()) return;
           const memberLaneChecks = await resolveMemberLaneChecks(session);
           if (!isCurrent()) return;
+          // The weave's expected-ROM checks (first patch inputChecks, else rom.checks) belong to the
+          // patch that reads the supplied ROM, so the engine and the preflight reject a wrong ROM.
+          const romChecksIndex = firstRootRomPatchIndex(
+            session.entries.map((entry) => ({ enabled: !entry.optional, input: entry.input, target: entry.target })),
+          );
+          const romCheckTokens = weaveCheckTokens(session.chainEndpointChecks.input);
+          const laneChecks = new Map(memberLaneChecks);
+          if (romChecksIndex >= 0 && romCheckTokens && !laneChecks.has(romChecksIndex))
+            laneChecks.set(romChecksIndex, session.chainEndpointChecks.input as ParsedWeaveChecks);
           memberLaneChecksRef.current = new Map(
-            [...memberLaneChecks].flatMap(([index, checks]) => {
+            [...laneChecks].flatMap(([index, checks]) => {
               const id = ids[index];
               const tokens = weaveCheckTokens(checks);
               return id && tokens ? [[id, tokens] as const] : [];
@@ -287,9 +296,7 @@ const useWeaveApplySession = ({
                 ...(entry.basis ? { basis: entry.basis } : {}),
                 ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
                 ...(validateInputChecksum ? { validateInputChecksum } : {}),
-                ...(memberLaneChecks.has(index)
-                  ? { inputChecks: weaveCheckTokens(memberLaneChecks.get(index)) || "" }
-                  : {}),
+                ...(laneChecks.has(index) ? { inputChecks: weaveCheckTokens(laneChecks.get(index)) || "" } : {}),
                 // A local weave can finish staging before its session metadata lands. Its option update
                 // clears the earlier verdict, so revalidate once after the final seeded entry.
                 revalidate: index === session.entries.length - 1,

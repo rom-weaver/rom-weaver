@@ -120,4 +120,24 @@ const gateWeaveChainChecks = (
   });
 };
 
-export { gateWeaveChainChecks, weaveCheckTokens, resolveWeaveChecks, selectWeaveMembers, validatePatchDependencies };
+/**
+ * Index of the patch that consumes the supplied ROM: the first enabled entry with no explicit
+ * `input` that targets the root ROM (no target, or a `rom` target without a member). The weave's
+ * ROM checks (`rom.checks`) describe those bytes, so the engine verifies them there, exactly as the
+ * CLI weave apply does. Returns -1 when no entry reads the root ROM.
+ */
+const firstRootRomPatchIndex = (
+  entries: readonly { input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }[],
+): number =>
+  entries.findIndex(
+    (entry) => entry.enabled && !entry.input && (!entry.target || ("rom" in entry.target && !entry.target.member)),
+  );
+
+export {
+  firstRootRomPatchIndex,
+  gateWeaveChainChecks,
+  weaveCheckTokens,
+  resolveWeaveChecks,
+  selectWeaveMembers,
+  validatePatchDependencies,
+};

@@ -98,7 +98,7 @@ test("local without-rom weave drop seeds optional patches off", async () => {
       { name: "Alternate", optional: true, path: "alternate.ips" },
     ],
     rom: {
-      checks: { checksums: { crc32: "d7ae93df" } },
+      checks: { checksums: { crc32: "c6fb1252" } },
       name: "game.bin",
     },
     version: 1,
@@ -298,7 +298,7 @@ test("imported weave whose optional patch is off applies without touching the to
           { name: "Core", path: "change.ips" },
           { name: "Off", optional: true, path: "wrong-input-same-size.bps" },
         ],
-        rom: { checks: { checksums: { crc32: "d7ae93df" } }, name: "game.bin" },
+        rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
         version: 1,
       }),
     ],
@@ -333,6 +333,89 @@ test("imported weave whose optional patch is off applies without touching the to
   }
 });
 
+// RAW_ROM (game.bin) is 13 bytes: crc32 c6fb1252, sha1 1d73a56886d4cd676b771bca857cf64b227e3677.
+const RAW_ROM_CHECKS = {
+  checksums: { crc32: "c6fb1252", sha1: "1d73a56886d4cd676b771bca857cf64b227e3677" },
+  size: 13,
+};
+
+const buildExpectedRomWeave = async (checks, patchFile) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "expected-rom-output" },
+        patches: [{ name: "Core", path: "change.ips" }],
+        rom: { checks, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+    ],
+    "expected-rom.zip",
+  );
+};
+
+test("weave expected-ROM checks accept the matching ROM", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildExpectedRomWeave(RAW_ROM_CHECKS, patchFile);
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files: [weaveArchive, romFile], id: 1 },
+    }),
+  );
+  await waitForApplyButtonEnabled();
+  expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+for (const { checks, label } of [
+  { checks: { checksums: { crc32: "a1cecd74", sha1: RAW_ROM_CHECKS.checksums.sha1 }, size: 13 }, label: "checksum" },
+  { checks: { checksums: { sha1: "96ff406466d366276a84a48947ae14cac4065e1c" } }, label: "sha-1 only" },
+  { checks: { checksums: { crc32: "c6fb1252" }, size: 14 }, label: "size" },
+]) {
+  test(`weave expected-ROM ${label} mismatch blocks apply until override is checked`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const weaveArchive = await buildExpectedRomWeave(checks, patchFile);
+    const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+    try {
+      mount(
+        createElement(ApplyPatchForm, {
+          defaultSettings: { validation: { requireInputChecksumMatch: true } },
+          pageDrop: { files: [weaveArchive, romFile], id: 1 },
+        }),
+      );
+      const override = await waitForState(() => {
+        const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+        return checkbox instanceof HTMLInputElement ? checkbox : null;
+      }, 60000);
+      await expect
+        .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad"), {
+          timeout: 60000,
+        })
+        .not.toBeNull();
+      // The weave's output-name defaults land after staging and reset the override, so let them settle.
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("expected-rom-output");
+      expect(applySpy).not.toHaveBeenCalled();
+
+      override.click();
+      await waitForApplyButtonEnabled();
+      await clickApplyButton();
+      expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+      expect(applySpy).toHaveBeenCalledTimes(1);
+    } finally {
+      applySpy.mockRestore();
+    }
+  });
+}
+
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
   // A pre-rename weave: its index is `rw.json`, not `rom-weaver-weave.json`.
   // Detection must fall back to content-probing so it still auto-selects. A
@@ -348,7 +431,7 @@ test("archive whose index is named rw.json (not canonical) is content-probed and
       { name: "Core", path: "change.ips" },
       { name: "Alternate", optional: true, path: "alternate.ips" },
     ],
-    rom: { checks: { checksums: { crc32: "d7ae93df" } }, name: "game.bin" },
+    rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
     version: 1,
   };
   const decoy = new File([JSON.stringify({ title: "not a weave" })], "metadata.json", { type: "application/json" });

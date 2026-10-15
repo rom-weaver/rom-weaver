@@ -1,4 +1,5 @@
 import {
+  firstRootRomPatchIndex,
   gateWeaveChainChecks,
   weaveCheckTokens,
   selectWeaveMembers,
@@ -425,6 +426,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [updateWeaveMetaForIds],
   );
+  // The weave's expected-ROM checks go to the patch that reads the supplied ROM, so a wrong ROM is
+  // rejected like a patch's own source checksum. A patch's own authored checks win.
+  const getRootRomCheckTokens = useCallback(
+    (entries: ReadonlyArray<{ input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }>) => {
+      const tokens = weaveCheckTokens(activeWeaveSessionRef.current?.chainEndpointChecks.input);
+      const index = tokens ? firstRootRomPatchIndex(entries) : -1;
+      return { index, tokens };
+    },
+    [],
+  );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {
       const chainMeta = new Map<
@@ -444,10 +455,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         mode: patchInputBasisRef.current,
         overrides: ids.map((id) => weaveMetaRef.current.get(id || "")?.basis),
       });
+      const rootRom = getRootRomCheckTokens(
+        ids.map((id, index) => {
+          const meta = weaveMetaRef.current.get(id || "");
+          return { enabled: !disabled.has(index), input: meta?.input, target: meta?.target };
+        }),
+      );
       const gatedChecks = gateWeaveChainChecks(
         ids.map((id, index) => {
           const meta = weaveMetaRef.current.get(id || "");
-          const inputChecks = weaveCheckTokens(meta?.inputChecks);
+          const inputChecks =
+            weaveCheckTokens(meta?.inputChecks) ?? (index === rootRom.index ? rootRom.tokens : undefined);
           return {
             target: meta?.target,
             input: meta?.input,
@@ -472,7 +490,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       });
       return chainMeta;
     },
-    [getDisabledPatchIndexes, getPatchIds],
+    [getDisabledPatchIndexes, getPatchIds, getRootRomCheckTokens],
   );
 
   // Latest patch list mirror for flows outside the staging pipeline (weave export).
@@ -1142,6 +1160,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         };
       });
       const enabled = runOptions.map((_option, index) => !disabledPatchIds.has(patchIds[index] || ""));
+      const rootRom = getRootRomCheckTokens(
+        runOptions.map((option, index) => ({
+          enabled: enabled[index] ?? true,
+          input: option.input,
+          target: option.target,
+        })),
+      );
+      if (rootRom.index >= 0 && rootRom.tokens) {
+        const rootOption = runOptions[rootRom.index];
+        if (rootOption && !rootOption.inputChecks) rootOption.inputChecks = rootRom.tokens;
+      }
       // A disabled entry breaks its lane's chain, so later declared states no longer describe the bytes.
       const gatedChecks = gateWeaveChainChecks(
         runOptions.map((option, index) => ({
@@ -1284,6 +1313,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       filterEnabledPatchRun,
       getPatchIds,
       memberLaneChecksRef,
+      getRootRomCheckTokens,
       patchInputBasis,
       workflowHandle,
     ],

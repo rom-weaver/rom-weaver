@@ -1,6 +1,7 @@
 import { parseWeaveCreateResult } from "../../src/lib/runtime/weave-result.ts";
 import { describe, expect, it } from "vitest";
 import {
+  firstRootRomPatchIndex,
   gateWeaveChainChecks,
   resolveWeaveChecks,
   selectWeaveMembers,
@@ -206,5 +207,20 @@ describe("weave chain check gating", () => {
         entry({ target: track, authoredInputChecks: false }),
       ])[1]?.inputChecks,
     ).toBe("crc32=11111111");
+  });
+});
+
+describe("firstRootRomPatchIndex", () => {
+  it("picks the first enabled patch that reads the supplied ROM", () => {
+    const member = { rom: true as const, member: "track02.bin" };
+    expect(firstRootRomPatchIndex([{ enabled: true }, { enabled: true }])).toBe(0);
+    expect(firstRootRomPatchIndex([{ enabled: false }, { enabled: true, target: { rom: true } }])).toBe(1);
+    expect(
+      firstRootRomPatchIndex([
+        { enabled: true, input: { patch: "a" } },
+        { enabled: true, target: member },
+      ]),
+    ).toBe(-1);
+    expect(firstRootRomPatchIndex([])).toBe(-1);
   });
 });
