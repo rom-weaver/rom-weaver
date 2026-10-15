@@ -16,6 +16,7 @@ import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { type CreatorMode, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "./app-routes.ts";
 import { readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
@@ -247,6 +248,28 @@ const replaceLegacyWeaveRoute = (): boolean => {
   return true;
 };
 const weaveRouteWasReplaced = replaceLegacyWeaveRoute();
+
+// `?mode=` on a Create URL is one-shot: it leaves the address bar once a render hands it to
+// the root, so Back or Forward to that entry cannot reapply it over the reader's own choice.
+// Until then it stays in the URL, so a boot-gate reload for cross-origin isolation reads it
+// again. The request is held until the reader leaves Create, so a form that mounts later
+// still receives it.
+let pendingCreatorMode: CreatorMode | null = null;
+let creatorModeInUrl = false;
+const takeCreatorModeFromUrl = () => {
+  const mode = readCreatorModeFromSearch(window.location.search);
+  if (!mode || readWorkflowViewFromPath() !== "creator") return;
+  pendingCreatorMode = mode;
+  creatorModeInUrl = true;
+};
+const dropCreatorModeFromUrl = () => {
+  if (!creatorModeInUrl) return;
+  creatorModeInUrl = false;
+  const url = new URL(window.location.href);
+  url.search = removeCreatorModeFromSearch(url.search);
+  window.history.replaceState(window.history.state, "", url);
+};
+takeCreatorModeFromUrl();
 // Which static document the host actually served, captured after legacy weave
 // links have been normalized but before the controller writes its route.
 const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
@@ -460,6 +483,8 @@ const renderWebappRoot = (): undefined => {
   }
   const serviceWorkerCache = serviceWorkerClient.getState();
   const state = webappController.getState();
+  if (state.currentView !== "creator") pendingCreatorMode = null;
+  if (!shouldHydrate) dropCreatorModeFromUrl();
   const hydrationSettings = shouldHydrate
     ? {
         ...getDefaultSettings(),
@@ -587,6 +612,8 @@ const renderWebappRoot = (): undefined => {
     },
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
     workflowEntry: readWorkflowEntryFromPathname(window.location.pathname),
+    // The prerendered shell cannot know the query; the render after hydration applies it.
+    creatorMode: shouldHydrate ? null : pendingCreatorMode,
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({
@@ -709,6 +736,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (!url) return;
     event.preventDefault();
     window.history.pushState(window.history.state, "", url);
+    takeCreatorModeFromUrl();
     syncRouteFromUrl(() => {
       if (url.hash) {
         const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));

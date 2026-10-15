@@ -1,3 +1,4 @@
+import type { CreatorMode } from "./app-routes.ts";
 import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { PageUpdateState } from "./page-update-state.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
@@ -33,6 +34,8 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 type WebappRootProps = {
   docsSlug?: string;
   workflowEntry?: keyof typeof WORKFLOW_ENTRY_ROUTES | null;
+  /** A `?mode=` request for Create; switching to another tab drops it from the URL. */
+  creatorMode?: CreatorMode | null;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   /**

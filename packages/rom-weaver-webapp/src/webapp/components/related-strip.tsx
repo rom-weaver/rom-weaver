@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { readAppBaseUrl } from "../app-routes.ts";
+import { appendCreatorMode, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { DOC_SOURCES } from "../docs-routing.mjs";
 import { RELATED_LINKS } from "../related-links.ts";
@@ -45,10 +45,14 @@ const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
           );
           return (
             <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
-              {tool.entry ? (
+              {tool.entry || tool.mode ? (
                 <a
                   className="related-row related-row-tool"
-                  href={new URL(tool.entry, new URL(appBaseUrl, "https://app.invalid")).pathname}
+                  href={appendCreatorMode(
+                    new URL(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid"))
+                      .pathname,
+                    tool.mode,
+                  )}
                 >
                   {label}
                 </a>

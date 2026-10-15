@@ -294,7 +294,7 @@ describe("CreatePatchForm", () => {
     });
   };
 
-  it.each(["cheats", undefined] as const)("opens the %s entry in its mode", async (entry) => {
+  it.each(["cheats", "rom", undefined] as const)("opens the %s entry in its requested mode", async (entry) => {
     const { container } = renderForm(withSeams({ entry }));
     expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe(String(entry === "cheats"));
     const aggregate = container.querySelector('[data-testid="aggregate-create"]');
@@ -303,16 +303,17 @@ describe("CreatePatchForm", () => {
     expect(container.querySelectorAll("h1")).toHaveLength(entry === "cheats" ? 0 : 1);
   });
 
-  it("switches mode once per entry while keeping staged ROMs", async () => {
+  it("switches mode once per entry request while keeping staged ROMs", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
     const seams = withSeams({
+      entry: "rom",
       defaultOriginal: new File(["original"], "original.nes"),
       defaultModified: new File(["modified"], "modified.nes"),
     });
     const { container, rerender } = renderForm(seams);
     await vi.waitFor(() => expect(latest?.workflow.setModified).toHaveBeenCalled());
     const workflow = latest?.workflow;
-    const changeEntry = async (entry: "cheats" | undefined, disabled = false) => {
+    const changeEntry = async (entry: "cheats" | "rom" | undefined, disabled = false) => {
       await act(async () =>
         rerender(
           <RomWeaverSettingsProvider settings={{}}>
@@ -322,20 +323,25 @@ describe("CreatePatchForm", () => {
       );
     };
     const pressed = (label: string) => activeButton(container, label).getAttribute("aria-pressed");
-    await changeEntry("cheats", true);
-    expect(pressed("Modified ROM")).toBe("true");
     await changeEntry("cheats");
     expect(pressed("Patches & cheats")).toBe("true");
-    await act(async () => fireEvent.click(activeButton(container, "Modified ROM")));
-    await changeEntry("cheats");
+    await changeEntry(undefined);
+    expect(pressed("Patches & cheats")).toBe("true");
+    await changeEntry("rom", true);
+    expect(pressed("Patches & cheats")).toBe("true");
+    await changeEntry("rom");
     expect(pressed("Modified ROM")).toBe("true");
     expect(container.textContent).toContain("modified.nes");
     expect(latest?.workflow).toBe(workflow);
     expect(workflow?.setOriginal).toHaveBeenCalledTimes(1);
     expect(workflow?.setModified).toHaveBeenCalledTimes(1);
-    await changeEntry(undefined);
-    await changeEntry("cheats");
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    await changeEntry("rom");
     expect(pressed("Patches & cheats")).toBe("true");
+    // A later request for the same mode, after the first one cleared, applies again.
+    await changeEntry(undefined);
+    await changeEntry("rom");
+    expect(pressed("Modified ROM")).toBe("true");
   });
 
   it("keeps Patches & cheats active for a ROM dropped on the page", async () => {

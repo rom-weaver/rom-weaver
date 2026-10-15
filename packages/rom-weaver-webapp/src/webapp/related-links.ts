@@ -1,4 +1,5 @@
 import type { MessageId } from "../presentation/localization/catalog.ts";
+import type { CreatorMode } from "./app-routes.ts";
 import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { WebappView } from "./webapp-state-types.ts";
 
@@ -7,6 +8,8 @@ type RelatedToolLink = {
   /** True for a tool that stays behind the beta-tools setting (Trim). */
   beta?: boolean;
   entry?: keyof typeof WORKFLOW_ENTRY_ROUTES;
+  /** Create mode the link requests with `?mode=`. */
+  mode?: CreatorMode;
   hintId?: MessageId;
   labelId: MessageId;
   view: WebappView;
@@ -40,7 +43,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.docs.toolWeave", view: "weave" }],
   },
   "docs/create-rom-patches": {
-    tools: [{ labelId: "ui.docs.toolCreate", view: "creator" }],
+    tools: [{ labelId: "ui.docs.toolCreate", mode: "rom", view: "creator" }],
   },
   "docs/fix-checksum-errors": {
     tools: [{ labelId: "ui.docs.toolIdentify", view: "identify" }],

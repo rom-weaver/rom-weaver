@@ -104,4 +104,32 @@ const readAppBaseUrl = (): string => {
   return baseUrl.href;
 };
 
-export { readAppBaseUrl, readRouteSegments, readWorkflowViewFromPath, VIEW_TO_ROUTE_SLUG };
+type CreatorMode = "cheats" | "rom";
+
+/** `?mode=rom` or `?mode=cheats` asks Create to switch how the modification is supplied. */
+const readCreatorModeFromSearch = (search: string): CreatorMode | null => {
+  const mode = new URLSearchParams(search).get("mode");
+  return mode === "cheats" || mode === "rom" ? mode : null;
+};
+
+const appendCreatorMode = (href: string, mode: CreatorMode | undefined): string =>
+  mode ? `${href}?mode=${mode}` : href;
+
+/** Drops `mode` from a raw query string; URLSearchParams would re-encode the other values. */
+const removeCreatorModeFromSearch = (search: string): string =>
+  search
+    .replace(/^\?/u, "")
+    .split("&")
+    .filter((part) => part !== "mode" && !part.startsWith("mode="))
+    .join("&");
+
+export {
+  appendCreatorMode,
+  type CreatorMode,
+  readAppBaseUrl,
+  readCreatorModeFromSearch,
+  removeCreatorModeFromSearch,
+  readRouteSegments,
+  readWorkflowViewFromPath,
+  VIEW_TO_ROUTE_SLUG,
+};

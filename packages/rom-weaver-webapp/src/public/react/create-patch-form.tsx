@@ -1488,7 +1488,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   return <CreatePatchFormView {...model} active={props.active} />;
 }
 
-// The cheat entry page opens Patches & cheats, where cheat codes live.
+// The cheat entry page and a `?mode=cheats` request open Patches & cheats, where cheat codes live.
 const entrySourceMode = (entry: CreatePatchFormProps["entry"]) => (entry === "cheats" ? "patches" : "rom");
 
 function CreatePatchForm(props: CreatePatchFormProps) {
