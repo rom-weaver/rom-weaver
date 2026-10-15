@@ -982,7 +982,7 @@ Fixture description.
 
   it.each([
     ["docs/apply-rom-patches", "patcher", "/apply-patches", "Apply ROM patches"],
-    ["docs/create-rom-patches", "creator", "/create-rom-patch", "Create ROM patches"],
+    ["docs/create-rom-patches", "creator", "/create-rom-patch?mode=rom", "Create ROM patches"],
     ["docs/create-bundles", "weave", "/weave-patches", "Weave ROM patches"],
     ["docs/identify-roms-browser", "identify", "/identify-rom", "Identify ROMs"],
     ["docs/search-rom-checksums", "identify", "/identify-rom", "Identify ROMs"],
@@ -994,7 +994,7 @@ Fixture description.
     ["docs/edit-gen3-saves", "save-editor", "/save-editor", "Edit game saves"],
     ["docs/undo-ppf-browser", "ppf-undo", "/ppf-undo", "Undo PPF patches"],
     ["docs/get-started", "patcher", "/apply-patches", "Apply ROM patches"],
-  ])("links to the matching tool below the heading of %s and keeps its footer button", (slug, view, href, label) => {
+  ])("links to the matching tool below the heading and footer of %s", (slug, view, href, label) => {
     const onSelectTab = vi.fn();
     render(<DocsPage active onSelectTab={onSelectTab} slug={slug} />);
     const nav = screen.getByRole("navigation", { name: "Tools for this guide" });
@@ -1007,8 +1007,13 @@ Fixture description.
     expect(link.getAttribute("href")).toBe(href);
     expect(link.textContent).toBe(label);
     expect(document.querySelector(".docs-footer .related-strip")?.getAttribute("aria-label")).toBe("Related");
-    fireEvent.click(document.querySelector(".docs-footer .related-row-tool") as HTMLButtonElement);
-    expect(onSelectTab).toHaveBeenCalledWith(view);
+    const footerTool = document.querySelector(".docs-footer .related-row-tool") as HTMLElement;
+    if (footerTool instanceof HTMLAnchorElement) {
+      expect(footerTool.getAttribute("href")).toBe(href);
+    } else {
+      fireEvent.click(footerTool);
+      expect(onSelectTab).toHaveBeenCalledWith(view);
+    }
   });
 
   it("points both cheat guide shortcuts and footer links to task pages", () => {

@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   preloadDocsRouteHtml: vi.fn(() => Promise.resolve()),
   preloadWorkflowRoute: vi.fn(() => Promise.resolve()),
   readPwaState: vi.fn(() => false),
+  bootGated: false,
   renderDuringHydration: false,
   renders: [] as WebappRootProps[],
   resetBrowserTransientOpfs: vi.fn(() => Promise.resolve()),
@@ -67,6 +68,15 @@ vi.mock("../../src/webapp/pwa/pwa-service-worker-client.ts", () => ({
     return mocks.serviceWorkerClient;
   },
 }));
+vi.mock("../../src/webapp/pwa/service-worker-boot-gate.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/webapp/pwa/service-worker-boot-gate.ts")>();
+  return {
+    createServiceWorkerBootGate: (...args: Parameters<typeof actual.createServiceWorkerBootGate>) => {
+      const gate = actual.createServiceWorkerBootGate(...args);
+      return { ...gate, isGated: () => mocks.bootGated || gate.isGated() };
+    },
+  };
+});
 vi.mock("../../src/webapp/components/shell.tsx", () => ({ readPwaState: mocks.readPwaState }));
 vi.mock("../../src/webapp/workflow-routes.tsx", () => ({
   preloadDocsRouteHtml: mocks.preloadDocsRouteHtml,
@@ -775,6 +785,64 @@ describe("routing", () => {
     expect(latest().state.currentView).toBe("creator");
     expect(window.location.search).toBe("?guide=create");
     expect(started).toEqual(["create"]);
+  });
+
+  it("hands a Create mode request to the root once and takes it out of the address bar", async () => {
+    await loadWebapp({ url: "/create-rom-patch?mode=cheats&ref=a%20b" });
+
+    expect(latest().creatorMode).toBe("cheats");
+    expect(window.location.search).toBe("?ref=a%20b");
+
+    latest().actions.onSelectView("patcher");
+    await flush();
+    expect(latest().creatorMode).toBeNull();
+
+    latest().actions.onSelectView("creator");
+    await flush();
+    expect(latest().creatorMode).toBeNull();
+  });
+
+  it("keeps a Create mode in the address bar while the boot gate holds rendering", async () => {
+    mocks.bootGated = true;
+    try {
+      await loadWebapp({ url: "/create-rom-patch?mode=cheats" });
+    } finally {
+      mocks.bootGated = false;
+    }
+
+    // A reload for cross-origin isolation reuses this URL, so the request must survive it.
+    expect(mocks.renders).toHaveLength(0);
+    expect(window.location.search).toBe("?mode=cheats");
+  });
+
+  it("applies the Create mode only after hydrating the prerendered shell", async () => {
+    await loadWebapp({ prerendered: true, url: "/create-rom-patch?mode=rom" });
+
+    expect(mocks.renders[0]?.creatorMode).toBeNull();
+    latest().actions.onSelectView("creator");
+    await flush();
+    expect(latest().creatorMode).toBe("rom");
+  });
+
+  it("takes a Create mode from a followed link but not from Back or Forward", async () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    await loadWebapp();
+
+    clickAnchor("/create-rom-patch?mode=rom");
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("creator");
+    expect(latest().creatorMode).toBe("rom");
+    expect(window.location.search).toBe("");
+
+    latest().actions.onSelectView("patcher");
+    await flush();
+    window.history.replaceState({}, "", "/create-rom-patch?mode=rom");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("creator");
+    expect(latest().creatorMode).toBeNull();
   });
 
   it("soft-navigates a same-origin workflow link and scrolls to the top", async () => {

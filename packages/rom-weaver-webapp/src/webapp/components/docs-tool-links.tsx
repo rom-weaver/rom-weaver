@@ -2,7 +2,7 @@ import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { RELATED_LINKS } from "../related-links.ts";
-import { readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
+import { appendCreatorMode, readAppBaseUrl, VIEW_TO_ROUTE_SLUG } from "../app-routes.ts";
 
 const DocsToolLinks = ({ slug }: { slug: string }) => {
   const localizer = useUiLocalizer();
@@ -21,10 +21,11 @@ const DocsToolLinks = ({ slug }: { slug: string }) => {
           <li data-beta={tool.beta ? "true" : undefined} key={tool.view}>
             <a
               className="btn ghost docs-tool"
-              href={
+              href={appendCreatorMode(
                 new URL(tool.entry ?? VIEW_TO_ROUTE_SLUG[tool.view], new URL(appBaseUrl, "https://app.invalid"))
-                  .pathname
-              }
+                  .pathname,
+                tool.mode,
+              )}
             >
               {localizer.message(tool.labelId)}
               <ArrowRight aria-hidden="true" size={14} />

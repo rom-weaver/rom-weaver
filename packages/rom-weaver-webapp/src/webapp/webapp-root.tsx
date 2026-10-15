@@ -473,6 +473,7 @@ function WebappRoot({
   urlSession,
   docsSlug = "docs",
   workflowEntry = null,
+  creatorMode = null,
   notFound: initiallyNotFound = false,
   assetBaseUrl,
 }: WebappRootProps) {
@@ -916,8 +917,9 @@ function WebappRoot({
         </div>
       </section>
     ) : null;
-  // The cheat page opens Create in Patches & cheats.
-  const creatorEntry = workflowEntry === "create-rom-cheat-patch" ? "cheats" : undefined;
+  // The cheat page owns its mode; elsewhere a `?mode=` request picks it.
+  let creatorEntry = creatorMode ?? undefined;
+  if (workflowEntry === "create-rom-cheat-patch") creatorEntry = "cheats";
   const pageHasPendingChanges = shouldWarnBeforeUnload({
     creatorState: state.creatorSession,
     outputState: state.patcherSession,

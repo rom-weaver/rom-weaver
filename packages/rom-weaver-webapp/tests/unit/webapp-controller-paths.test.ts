@@ -7,6 +7,7 @@ import {
   type SettingsState,
 } from "../../src/webapp/settings/settings-state.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "../../src/webapp/webapp-controller.ts";
+import { readCreatorModeFromSearch, removeCreatorModeFromSearch } from "../../src/webapp/app-routes.ts";
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -216,6 +217,21 @@ describe("stable Identify routing", () => {
     window.history.replaceState({}, "", path);
     const controller = createController({ storage });
     expect(controller.getState().currentView).toBe("identify");
+  });
+});
+
+describe("Create mode requests", () => {
+  it("reads only the supported modes", () => {
+    expect(readCreatorModeFromSearch("?mode=rom")).toBe("rom");
+    expect(readCreatorModeFromSearch("?guide=create&mode=cheats")).toBe("cheats");
+    expect(readCreatorModeFromSearch("?mode=codes")).toBeNull();
+    expect(readCreatorModeFromSearch("")).toBeNull();
+  });
+
+  it("drops only the mode and keeps the rest of the query as written", () => {
+    expect(removeCreatorModeFromSearch("?mode=rom&weave=/weaves/a.zip")).toBe("weave=/weaves/a.zip");
+    expect(removeCreatorModeFromSearch("?guide=create&mode&modes=1")).toBe("guide=create&modes=1");
+    expect(removeCreatorModeFromSearch("?mode=cheats")).toBe("");
   });
 });
 
