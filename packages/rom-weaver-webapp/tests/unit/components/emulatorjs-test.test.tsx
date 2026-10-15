@@ -450,6 +450,45 @@ describe("EmulatorTestView", () => {
     expect(screen.queryByTitle("EmulatorJS test for patched.fds")).toBeNull();
   });
 
+  it("does not start the core for a headerless FDS image under a renamed output", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const disk = new Uint8Array(64);
+    disk.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")]);
+    addEntry(entry({ blob: new Blob([disk]), fileName: "Zelda v1.1", id: "renamed-fds" }));
+
+    render(withSettings(<EmulatorTestView />));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Zelda v1.1 needs the Famicom Disk System BIOS.");
+    expect(screen.queryByTitle("EmulatorJS test for Zelda v1.1")).toBeNull();
+  });
+
+  it("shows the BIOS notice next to a save mismatch error", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "other.sav",
+      platform: "gba",
+    });
+    loadRomMock.mockResolvedValue({
+      blob: new Blob(["disk"]),
+      checksum: "b".repeat(40),
+      fileName: "game.fds",
+      platform: "Nintendo Famicom Disk System",
+    });
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["disk"], "game.fds.zip")] },
+    });
+
+    const alerts = await screen.findAllByRole("alert");
+    const text = alerts.map((alert) => alert.textContent).join(" ");
+    expect(text).toContain("game.fds does not match other.sav.");
+    expect(text).toContain("game.fds needs the Famicom Disk System BIOS.");
+  });
+
   it("replaces the current game without a game list", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

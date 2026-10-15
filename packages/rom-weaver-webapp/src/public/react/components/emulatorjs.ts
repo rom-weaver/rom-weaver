@@ -94,4 +94,28 @@ const requiresUnsuppliedBios = (game: { fileName?: string; platform?: string }):
   return !!game.fileName && /\.fds$/i.test(game.fileName.trim());
 };
 
-export { FDS_BIOS_ISSUE_URL, coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore, requiresUnsuppliedBios };
+const FDS_DISK_SIGNATURE = Array.from("*NINTENDO-HVC*", (char) => char.charCodeAt(0));
+const FDS_HEADER_BYTES = 16;
+
+/**
+ * Headerless FDS images carry no platform and may have any file name, but every
+ * disk side starts with a block-1 marker byte then `*NINTENDO-HVC*`. An optional
+ * 16-byte `FDS\x1A` header precedes it.
+ */
+const hasFdsDiskSignature = async (blob: Blob): Promise<boolean> => {
+  const bytes = new Uint8Array(
+    await new Response(blob.slice(0, FDS_HEADER_BYTES + 1 + FDS_DISK_SIGNATURE.length)).arrayBuffer(),
+  );
+  const matchesAt = (offset: number) =>
+    bytes[offset] === 1 && FDS_DISK_SIGNATURE.every((byte, index) => bytes[offset + 1 + index] === byte);
+  return matchesAt(0) || matchesAt(FDS_HEADER_BYTES);
+};
+
+export {
+  FDS_BIOS_ISSUE_URL,
+  coreReadsChd,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  hasFdsDiskSignature,
+  requiresUnsuppliedBios,
+};

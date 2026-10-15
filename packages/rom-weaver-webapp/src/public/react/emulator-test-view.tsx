@@ -43,6 +43,7 @@ import {
   FDS_BIOS_ISSUE_URL,
   getEmulatorJsAspectRatio,
   getEmulatorJsCore,
+  hasFdsDiskSignature,
   requiresUnsuppliedBios,
 } from "./components/emulatorjs.ts";
 import { isSaveFileName } from "./drop-destination.ts";
@@ -555,8 +556,30 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     : null;
   const webglBlocked = error?.blocksPlayer === true;
   // Every route into Test ends at currentGame, so this one check covers pickers, archives, URL sessions and Apply.
-  const missingBios = Boolean(currentGame && requiresUnsuppliedBios(currentGame));
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios);
+  // Apply can hand over a headerless FDS image under any output name, so the bytes decide as well.
+  const [fdsBytes, setFdsBytes] = useState<{ blob: Blob; isFds: boolean } | null>(null);
+  useEffect(() => {
+    if (!currentBlob) {
+      setFdsBytes(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void hasFdsDiskSignature(currentBlob)
+      .catch(() => false)
+      .then((isFds) => {
+        if (!cancelled) setFdsBytes({ blob: currentBlob, isFds });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBlob]);
+  const fdsChecking = Boolean(currentBlob && fdsBytes?.blob !== currentBlob);
+  const missingBios = Boolean(
+    currentGame && (requiresUnsuppliedBios(currentGame) || (fdsBytes?.blob === currentBlob && fdsBytes?.isFds)),
+  );
+  const canPlay = Boolean(
+    currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios && !fdsChecking,
+  );
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
   const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;
@@ -641,6 +664,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       error,
       progress: loadProgress,
       canPlay,
+      missingBios,
       player: getAgentPlayerState(),
       pendingSave: pendingSave ? { present: true } : null,
       saveLoadStatus,
@@ -720,22 +744,27 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           </>
         }
         beforeDropZone={
-          error ? (
-            <Notice
-              id="emulator-test-error"
-              level="error"
-              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
-            >
-              <b>{error.summary}</b> {error.detail}
-            </Notice>
-          ) : currentGame && missingBios ? (
-            <Notice id="emulator-test-error" level="error">
-              <b>{localizer.message("ui.test.fdsBios.summary", { fileName: currentGame.fileName })}</b>{" "}
-              {localizer.message("ui.test.fdsBios.detail")}{" "}
-              <a href={FDS_BIOS_ISSUE_URL} rel="noreferrer" target="_blank">
-                {localizer.message("ui.test.fdsBios.link")}
-              </a>
-            </Notice>
+          error || (currentGame && missingBios) ? (
+            <>
+              {error ? (
+                <Notice
+                  id="emulator-test-error"
+                  level="error"
+                  onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+                >
+                  <b>{error.summary}</b> {error.detail}
+                </Notice>
+              ) : null}
+              {currentGame && missingBios ? (
+                <Notice id="emulator-test-bios" level="error">
+                  <b>{localizer.message("ui.test.fdsBios.summary", { fileName: currentGame.fileName })}</b>{" "}
+                  {localizer.message("ui.test.fdsBios.detail")}{" "}
+                  <a href={FDS_BIOS_ISSUE_URL} rel="noreferrer" target="_blank">
+                    {localizer.message("ui.test.fdsBios.link")}
+                  </a>
+                </Notice>
+              ) : null}
+            </>
           ) : undefined
         }
         big={workflowEmpty}
@@ -791,7 +820,13 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                 <button aria-label="Stop and unload game" className="btn ghost slim" onClick={stopGame} type="button">
                   Stop
                 </button>
-                {canPlay ? (
+                {currentGame &&
+                currentCore &&
+                gameUrl &&
+                currentIdentity &&
+                !webglBlocked &&
+                !missingBios &&
+                !fdsChecking ? (
                   <>
                     <button
                       aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -835,7 +870,13 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                   {saveLoadMessage}
                 </p>
               ) : null}
-              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios ? (
+              {currentGame &&
+              currentCore &&
+              gameUrl &&
+              currentIdentity &&
+              !webglBlocked &&
+              !missingBios &&
+              !fdsChecking ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
