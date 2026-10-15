@@ -62,10 +62,10 @@ If both files have identical contents, Create warns that the patch would change 
 
 ## Build from patches and cheats
 
-Choose **Patches & cheats** on **0x03 Changes**. Patch uploads, including archives, select this mode automatically. Switching modes preserves your inputs.
+Patch uploads, including archives, select **Patches & cheats** automatically, and ROM-only uploads select **Modified ROM**. Switching modes preserves your inputs.
 
 1. Add one clean **Original** ROM; multi-file ROMs are unsupported.
-2. Add patches or choose **Add cheats to the patch order**.
+2. Choose **Patches & cheats** on **0x03 Modified**; the step becomes **0x03 Changes**. Add patches or choose **Add cheats to the patch order**.
 3. Select database cheats or use **Add code manually**.
 4. Order the enabled changes and resolve input-check or cheat warnings.
 5. Choose the patch filename and format, then **Create patch & download**.
