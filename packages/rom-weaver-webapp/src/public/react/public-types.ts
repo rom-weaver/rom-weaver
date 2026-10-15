@@ -39,7 +39,8 @@ type ApplyPatchFormProps = Omit<BaseApplyPatchFormProps, "onApplyComplete"> & {
   patchType?: string;
   defaultPatchType?: string;
   onPatchTypeChange?: (patchType: string) => void;
-  onCreateRomDrop?: (files: File[]) => void;
+  /** `asModified` marks one ROM the user chose as the Modified ROM; it replaces a filled Modified slot. */
+  onCreateRomDrop?: (files: File[], asModified?: boolean) => void;
   onCreateComplete?: (result: BrowserCreateResult) => void;
   onBusyChange?: (busy: boolean) => void;
   onApplyComplete?: (result: BrowserApplyResult) => void;

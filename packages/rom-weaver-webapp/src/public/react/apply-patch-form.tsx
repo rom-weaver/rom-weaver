@@ -2052,7 +2052,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               const files = createRomChoice;
               setCreateRomChoice(null);
               if (id === "original") handleUnifiedDrop(files);
-              else props.onCreateRomDrop?.(files);
+              else props.onCreateRomDrop?.(files, true);
             }}
           />
         </Modal>

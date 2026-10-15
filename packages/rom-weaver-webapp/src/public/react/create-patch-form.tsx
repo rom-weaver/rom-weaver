@@ -355,6 +355,8 @@ type InternalCreatePatchFormProps = CreatePatchFormProps & {
   active?: boolean;
   sourceModeControls?: ReactNode;
   onUnifiedDrop?: (files: File[]) => void;
+  /** The page drop is a ROM chosen as the Modified ROM, so it replaces a filled Modified slot. */
+  pageDropReplacesModified?: boolean;
   onActivateRomMode?: () => void;
   onBusyChange?: (busy: boolean) => void;
   createWorkflow?: typeof CreateWorkflow;
@@ -720,13 +722,13 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     }
     applyRoutedDrop(routed);
   };
-  const handleUnifiedDrop = (files: File[], practiceSample = false) => {
+  const handleUnifiedDrop = (files: File[], practiceSample = false, replaceModified = false) => {
     if (!practiceSample) {
       sampleLoadGenerationRef.current += 1;
       setSampleLoading(false);
       setSampleTutorial(null);
     }
-    const slotFilled = [!!original, !!modified];
+    const slotFilled = [!!original, !!modified && !replaceModified];
     const routed = routeByOrder(files, slotFilled);
     const emptySlotCount = slotFilled.filter((filled) => !filled).length;
     if (emptySlotCount > 0 && routed.roms.length > emptySlotCount) {
@@ -823,7 +825,11 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
 
   // Forward a page-level drop (dragging anywhere on the page) to the unified
   // handler so the whole tab is a drop target, not just the dropzone box.
-  usePageDropForwarder(props.pageDrop, (files) => handleUnifiedDrop(files), handledPageDropIdRef);
+  usePageDropForwarder(
+    props.pageDrop,
+    (files) => handleUnifiedDrop(files, false, !!props.pageDropReplacesModified),
+    handledPageDropIdRef,
+  );
   const cancelSourceStaging = (role: "modified" | "original") => {
     setCreateQueued(false);
     resetStagedCreateWorkflow();
@@ -1487,7 +1493,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [romBusy, setRomBusy] = useState(false);
   const [patchesBusy, setPatchesBusy] = useState(false);
   const [cheatSampleRequestId, setCheatSampleRequestId] = useState(0);
-  const [deliveries, setDeliveries] = useState<(PageFileDrop & { mode: "rom" | "patches" })[]>([]);
+  const [deliveries, setDeliveries] = useState<
+    (PageFileDrop & { mode: "rom" | "patches"; replacesModified?: boolean })[]
+  >([]);
   const nextDropId = useRef(0);
   const dropQueue = useRef(Promise.resolve());
   const handledPageDropIdRef = useRef<number | null>(null);
@@ -1506,7 +1514,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     sourceModeRef.current = sourceMode;
   }, [sourceMode]);
   // ROM-only drops stay in Patches & cheats while it is active; its form decides the ROM's slot.
-  const queueDrop = (files: File[], romMode?: "rom") => {
+  const queueDrop = (files: File[], romMode?: "rom", replacesModified = false) => {
     const id = ++nextDropId.current;
     dropQueue.current = dropQueue.current
       .catch(() => undefined)
@@ -1515,7 +1523,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         const counts = countDropEntries(entries);
         const hasPatches = counts.patches || counts.weaves || entries.some((entry) => entry.hasPatches);
         const mode = hasPatches ? "patches" : romMode || sourceModeRef.current;
-        setDeliveries((current) => [...current, { files, id, mode }]);
+        setDeliveries((current) => [...current, { files, id, mode, replacesModified }]);
       })
       .catch((error: unknown) => props.onError?.(error instanceof Error ? error : new Error(String(error))));
   };
@@ -1556,6 +1564,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           original={original}
           onOriginalChange={changeOriginal}
           pageDrop={romDrop}
+          pageDropReplacesModified={!!romDrop?.replacesModified}
           onUnifiedDrop={routeDrop}
           onActivateRomMode={() => changeMode("rom")}
           sourceModeControls={controls}
@@ -1578,7 +1587,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             threads={props.threads}
             pageDrop={patchDrop}
             createModeControls={controls}
-            onCreateRomDrop={(files) => queueDrop(files, "rom")}
+            onCreateRomDrop={(files, asModified) => queueDrop(files, "rom", !!asModified)}
             onCreateComplete={props.onCreateComplete}
             onError={props.onError}
             onProgress={props.onProgress}

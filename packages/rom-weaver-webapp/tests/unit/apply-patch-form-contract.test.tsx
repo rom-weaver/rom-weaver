@@ -454,7 +454,7 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     expect(onInputsChange).not.toHaveBeenCalled();
     await act(async () => fireEvent.click(option));
     if (slot === "modified") {
-      expect(onCreateRomDrop).toHaveBeenCalledExactlyOnceWith([rom]);
+      expect(onCreateRomDrop).toHaveBeenCalledExactlyOnceWith([rom], true);
       expect(onInputsChange).not.toHaveBeenCalled();
     } else {
       await vi.waitFor(() => expect(onInputsChange).toHaveBeenCalledWith([rom]));

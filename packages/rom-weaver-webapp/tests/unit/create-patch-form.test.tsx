@@ -22,6 +22,9 @@ vi.mock("../../src/public/react/apply-patch-form.tsx", async () => {
           <button type="button" onClick={() => setStack((current) => [...current, "manual cheat"])}>
             Add test cheat
           </button>
+          <button type="button" onClick={() => props.onCreateRomDrop?.([new File(["chosen"], "chosen.nes")], true)}>
+            Choose test ROM as Modified
+          </button>
         </section>
       );
     },
@@ -300,6 +303,18 @@ describe("CreatePatchForm", () => {
       expect(container.querySelector('[data-testid="aggregate-stack"]')?.textContent).toBe("other.nes"),
     );
     expect(activeButton(container, "Patches & cheats").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("replaces a filled Modified ROM with a ROM chosen as Modified in Patches & cheats", async () => {
+    const { container } = await stageOriginalOnly({});
+    await upload(container, [new File(["modified"], "modified.nes")]);
+    await vi.waitFor(() => expect(latest?.workflow.setModified).toHaveBeenCalledOnce());
+    await act(async () => fireEvent.click(activeButton(container, "Patches & cheats")));
+    await act(async () => fireEvent.click(activeButton(container, "Choose test ROM as Modified")));
+    await vi.waitFor(() =>
+      expect(latest?.workflow.setModified).toHaveBeenLastCalledWith(expect.objectContaining({ name: "chosen.nes" })),
+    );
+    expect(activeButton(container, "Modified ROM").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("defaults to Modified ROM and offers Patches & cheats without beta tools", async () => {
