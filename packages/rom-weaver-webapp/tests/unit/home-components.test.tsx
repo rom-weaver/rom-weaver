@@ -182,7 +182,7 @@ describe("HomePage", () => {
       "/tools/compress",
       "/tools/extract",
       "/tools/identify-rom",
-      "/tools/create-patch",
+      "/tools/create-rom-patch",
       "/tools/apply-patches",
       "/tools/test-rom",
       "/tools/checksum",
@@ -303,7 +303,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector(".home-main-actions a.btn")?.getAttribute("href")).toBe("/apply-patches");
-    expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
+    expect(container.querySelector("a[href='/create-rom-patch']")).toBeTruthy();
   });
 
   it("updates homepage copy and workflow names when the language changes", () => {

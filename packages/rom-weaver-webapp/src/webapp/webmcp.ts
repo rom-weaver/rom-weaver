@@ -20,7 +20,7 @@ const progressKeys = new Set(["progress", "percent", "timingText", "throughputTe
 const approvalSnapshotReplacer = (key: string, value: unknown) => (progressKeys.has(key) ? undefined : value);
 const workflowPages = {
   patcher: "apply-patches",
-  creator: "create-patch",
+  creator: "create-rom-patch",
   weave: "weave-patches",
   compress: "compress",
   extract: "extract",

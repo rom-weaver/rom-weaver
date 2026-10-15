@@ -11,7 +11,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   creator: Object.freeze({
     description:
       "Create BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, and other ROM patches online from modified ROMs or supported cheat codes. No uploads.",
-    slug: "create-patch",
+    slug: "create-rom-patch",
     title: `Create ROM patches online | ${SITE_NAME}`,
   }),
   checksum: Object.freeze({

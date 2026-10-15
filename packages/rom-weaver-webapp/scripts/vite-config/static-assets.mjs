@@ -188,7 +188,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
       for (const [slug, html] of [
         ["apply-patches", applyHtml],
         ["weave-patches", weaveHtml],
-        ["create-patch", createHtml],
+        ["create-rom-patch", createHtml],
         ["checksum", checksumHtml],
         ["compress", compressHtml],
         ["extract", extractHtml],

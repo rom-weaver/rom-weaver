@@ -2,7 +2,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   weave: "weave-patches",
-  creator: "create-patch",
+  creator: "create-rom-patch",
   checksum: "checksum",
   compress: "compress",
   // The landing page is the app base itself, so its slug is empty and
@@ -19,6 +19,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  "create-rom-patch": "creator",
   "apply-patches": "patcher",
   "bundle-patches": "weave",
   bundle: "weave",

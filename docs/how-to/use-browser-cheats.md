@@ -82,7 +82,7 @@ The status names the output file. The [cheat reference](../reference/cheat-datab
 
 ## Create a patch from cheat codes
 
-The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
+The [guided Create cheats tour](https://rom-weaver.com/create-rom-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
 
 On **Create**, select **Patches & cheats** on **0x03 Modified**, then follow [combined patch creation](create-rom-patches.md#build-from-patches-and-cheats). It uses Apply's cheat picker and supports patches alongside cheats.
 

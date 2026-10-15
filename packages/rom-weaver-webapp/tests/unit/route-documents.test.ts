@@ -14,7 +14,10 @@ test("ignores a trailing slash so both spellings of a route resolve alike", () =
 
 test("keeps a request that already names its document", () => {
   expect(routeDocumentCandidates("/docs/cli/index.html")).toEqual(["docs/cli/index.html"]);
-  expect(routeDocumentCandidates("/create-patch.html")).toEqual(["create-patch.html", "create-patch/index.html"]);
+  expect(routeDocumentCandidates("/create-rom-patch.html")).toEqual([
+    "create-rom-patch.html",
+    "create-rom-patch/index.html",
+  ]);
 });
 
 test("declines the site root, which is precached under its own name", () => {

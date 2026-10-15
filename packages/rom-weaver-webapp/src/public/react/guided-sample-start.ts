@@ -13,8 +13,8 @@ const GUIDED_SAMPLE_HREFS = {
   apply: "/apply-patches?guide=apply",
   "apply-cheats": "/apply-patches?guide=apply-cheats",
   weave: "/weave-patches?guide=weave",
-  create: "/create-patch?guide=create",
-  "create-cheats": "/create-patch?guide=create-cheats",
+  create: "/create-rom-patch?guide=create",
+  "create-cheats": "/create-rom-patch?guide=create-cheats",
   test: "/test-rom?guide=test",
 } as const;
 

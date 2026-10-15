@@ -175,6 +175,7 @@ describe("the landing route at the app base", () => {
       ["/weave", "weave"],
       ["/create", "creator"],
       ["/create-patch", "creator"],
+      ["/create-rom-patch", "creator"],
       ["/checksum", "checksum"],
       ["/checksum.html", "checksum"],
       ["/compress", "compress"],
@@ -195,7 +196,7 @@ describe("the landing route at the app base", () => {
   });
 
   it("writes the app base back to the address bar when the landing page is selected", () => {
-    window.history.replaceState({}, "", "/rom-weaver/create-patch");
+    window.history.replaceState({}, "", "/rom-weaver/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
 

@@ -39,7 +39,7 @@ const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const LINK_AUDIT_WORKFLOW_ROUTES = [
   "",
   "apply-patches",
-  "create-patch",
+  "create-rom-patch",
   "checksum",
   "compress",
   "identify-rom",
@@ -259,8 +259,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
   try {
     for (const testCase of [
       { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
-      { finalView: "creator", initialView: "creator", path: "create-patch/" },
-      { finalView: "creator", initialView: "creator", path: "create-patch?guide=create-cheats" },
+      { finalView: "creator", initialView: "creator", path: "create-rom-patch/" },
+      { finalView: "creator", initialView: "creator", path: "create-rom-patch?guide=create-cheats" },
       { finalView: "trim", initialView: "trim", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },

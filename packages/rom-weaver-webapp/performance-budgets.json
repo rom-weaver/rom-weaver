@@ -102,7 +102,7 @@
       },
       {
         "name": "Create",
-        "path": "/create-patch/"
+        "path": "/create-rom-patch/"
       }
     ],
     "scores": {

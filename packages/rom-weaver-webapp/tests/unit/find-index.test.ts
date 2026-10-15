@@ -12,7 +12,7 @@ vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => identifyMocks);
 const TABS = [
   { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
   { href: "weave", icon: null, id: "weave", label: "Weaves" },
-  { href: "create-patch", icon: null, id: "creator", label: "Create Patch" },
+  { href: "create-rom-patch", icon: null, id: "creator", label: "Create Patch" },
   {
     beta: true,
     group: "tools" as const,
@@ -129,7 +129,7 @@ describe("searchFind", () => {
       id: "tool:weave",
       label: "Weave Patches",
     });
-    expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
+    expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-rom-patch" });
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });
     expect(searchFind(index, "bsdiff")[0]?.entry).toMatchObject({ id: "tool:patcher" });
     expect(searchFind(index, "untrim")[0]?.entry).toMatchObject({

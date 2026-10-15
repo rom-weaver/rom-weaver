@@ -119,11 +119,11 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("loads the create workflow from its path", () => {
-    window.history.replaceState({}, "", "/create-patch");
+    window.history.replaceState({}, "", "/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     expect(readWorkflowViewFromPath()).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
   });
 
   it("loads the identify workflow from its path", () => {
@@ -156,13 +156,13 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("resolves a candidate URL without changing the current browser path", () => {
     expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
-    expect(readWorkflowViewFromPath("/create-patch")).toBe("creator");
+    expect(readWorkflowViewFromPath("/create-rom-patch")).toBe("creator");
     expect(readWorkflowViewFromPath("/identify-rom")).toBe("identify");
     expect(window.location.pathname).toBe("/");
   });
 
   it("preserves a self-hosted subpath while switching workflows", () => {
-    window.history.replaceState({}, "", "/rom-weaver/create-patch/");
+    window.history.replaceState({}, "", "/rom-weaver/create-rom-patch/");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
@@ -196,14 +196,14 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
 
     controller.selectView("creator");
-    expect(window.location.pathname).toBe("/rom-weaver/create-patch");
+    expect(window.location.pathname).toBe("/rom-weaver/create-rom-patch");
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
     window.history.replaceState({}, "", "/apply-patch?weave=first-weave.zip");
     const controller = createController();
     controller.selectView("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
     expect(window.location.search).toBe("?weave=first-weave.zip");
     expect(window.location.hash).toBe("");
   });

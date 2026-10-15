@@ -252,7 +252,7 @@ describe("the workbench shell", () => {
     expect(tabHrefs.filter((href) => !href?.startsWith("/rom-weaver/"))).toEqual([]);
 
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
-    expect(assign).toHaveBeenCalledWith("/rom-weaver/create-patch");
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/create-rom-patch");
     fireEvent.click(navRow(container, "Docs"));
     expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
   });
@@ -276,7 +276,7 @@ describe("the workbench shell", () => {
 
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
-    expect(assign).toHaveBeenCalledWith("/create-patch");
+    expect(assign).toHaveBeenCalledWith("/create-rom-patch");
   });
 
   it("keeps the not-found Docs link on the site root instead of a protocol-relative URL", async () => {

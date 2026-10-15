@@ -18,14 +18,14 @@ describe("readAppBaseUrl", () => {
     expect(new URL(at("/apply-patch/")).pathname).toBe("/");
     expect(new URL(at("/apply-patch")).pathname).toBe("/");
     expect(new URL(at("/apply-patch.html")).pathname).toBe("/");
-    expect(new URL(at("/create-patch")).pathname).toBe("/");
-    expect(new URL(at("/create-patch.html")).pathname).toBe("/");
+    expect(new URL(at("/create-rom-patch")).pathname).toBe("/");
+    expect(new URL(at("/create-rom-patch.html")).pathname).toBe("/");
     expect(new URL(at("/trim-rom/")).pathname).toBe("/");
   });
 
   test("keeps a sub-path deployment prefix", () => {
     expect(new URL(at("/roms/apply-patch/")).pathname).toBe("/roms/");
-    expect(new URL(at("/roms/create-patch")).pathname).toBe("/roms/");
+    expect(new URL(at("/roms/create-rom-patch")).pathname).toBe("/roms/");
     expect(new URL(at("/roms/")).pathname).toBe("/roms/");
   });
 
@@ -85,7 +85,9 @@ describe("resolveGuidedSampleHref", () => {
   });
 
   test("keeps guide links inside a sub-path deployment", () => {
-    expect(resolveGuidedSampleHref("https://weaver.example/roms/", "create")).toBe("/roms/create-patch?guide=create");
+    expect(resolveGuidedSampleHref("https://weaver.example/roms/", "create")).toBe(
+      "/roms/create-rom-patch?guide=create",
+    );
   });
 
   test("keeps the authored link when the base is invalid", () => {

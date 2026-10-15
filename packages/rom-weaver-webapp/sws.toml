@@ -114,22 +114,47 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/create"
-destination = "/create-patch"
+destination = "/create-rom-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/create/"
-destination = "/create-patch"
+destination = "/create-rom-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/create.html"
-destination = "/create-patch"
+destination = "/create-rom-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/create/index.html"
-destination = "/create-patch"
+destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create-patch"
+destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create-patch/"
+destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create-patch.html"
+destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create-patch/index.html"
+destination = "/create-rom-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create-patch.md"
+destination = "/create-rom-patch.md"
 kind = 301
 
 [[advanced.redirects]]

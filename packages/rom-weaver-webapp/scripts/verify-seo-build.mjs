@@ -55,7 +55,7 @@ const homeHtml = read("index.html");
 const applyHtml = read("apply-patches.html");
 const weaveHtml = read("weave-patches.html");
 const notFoundHtml = read("404.html");
-const createHtml = read("create-patch.html");
+const createHtml = read("create-rom-patch.html");
 const checksumHtml = read("checksum.html");
 const compressHtml = read("compress.html");
 const extractHtml = read("extract.html");
@@ -125,7 +125,7 @@ for (const route of [
   "apply-patches",
   "weave-patches",
   "checksum",
-  "create-patch",
+  "create-rom-patch",
   "extract",
   "identify-rom",
   "test-rom",
@@ -284,13 +284,17 @@ if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em da
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
   assertIncludes(redirects, `${source} /weave-patches 301`, `${source} compatibility redirect`);
 }
+for (const source of ["/create-patch", "/create-patch/", "/create-patch.html", "/create-patch/index.html"]) {
+  assertIncludes(redirects, `${source} /create-rom-patch 301`, `${source} renamed Create redirect`);
+}
+assertIncludes(redirects, "/create-patch.md /create-rom-patch.md 301", "renamed Create Markdown redirect");
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
   assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
   "https://rom-weaver.com/apply-patches",
-  "https://rom-weaver.com/create-patch",
+  "https://rom-weaver.com/create-rom-patch",
   "https://rom-weaver.com/identify-rom",
   "https://rom-weaver.com/docs",
   "https://rom-weaver.com/docs/apply-rom-patches",
@@ -335,7 +339,7 @@ assertIncludes(homeHtml, "Online ROM patcher.", "home headline");
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
 assertIncludes(homeHtml, 'class="btn ghost" href="/apply-patches"', "home Apply action");
 assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
-assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
+assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
 // Home is the only current Project destination on the landing page.
 const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
@@ -403,7 +407,7 @@ assertIncludes(
 );
 assertIncludes(
   createHtml,
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
   "create prerendered workflow",
 );
 assertIncludes(identifyHtml, 'id="panel-identify"', "identify prerendered workflow");
@@ -438,7 +442,7 @@ for (const route of [
 }
 assertIncludes(
   read("create/index.html"),
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -480,7 +484,7 @@ assertIncludes(homeHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)
 assertIncludes(applyHtml, '"@type":"SoftwareApplication"', "apply SoftwareApplication JSON-LD");
 if (applyHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
-assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-patch"', "create JSON-LD canonical url");
+assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-rom-patch"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
 for (const route of DOC_ROUTES) {
@@ -528,7 +532,7 @@ for (const route of DOC_ROUTES) {
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
     assertIncludes(docsHtml, 'href="/apply-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
-    assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
+    assertIncludes(docsHtml, 'href="/create-rom-patch?guide=create"', `${route.slug} guided Create link`);
     assertIncludes(docsHtml, 'href="/weave-patches?guide=weave"', `${route.slug} guided Weave Patches link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
@@ -598,7 +602,7 @@ for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
 for (const [route, panel] of Object.entries({
   "apply-patches": "panel-patcher",
   checksum: "panel-checksum",
-  "create-patch": "panel-creator",
+  "create-rom-patch": "panel-creator",
   extract: "panel-extract",
   "identify-rom": "panel-identify",
   "ppf-undo": "panel-ppf-undo",
@@ -619,7 +623,8 @@ for (const [legacy, canonical] of Object.entries({
   "apply-patch": "apply-patches",
   bundle: "weave-patches",
   "bundle-patches": "weave-patches",
-  create: "create-patch",
+  create: "create-rom-patch",
+  "create-patch": "create-rom-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
@@ -664,7 +669,7 @@ if (production) {
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
-  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-patch", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-rom-patch", "sitemap");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract", "extract sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {
