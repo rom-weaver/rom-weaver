@@ -41,6 +41,8 @@ const readShellBuffer = () =>
   (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
 
 let pending: HTMLElement[] = [];
+// Selections buffered before this index predate hydrateRoot. Later ones reached React's live root listeners.
+let selectionsBeforeHydration = 0;
 
 const isGestureGated = (element: Element) => {
   if (element.matches(GESTURE_GATED_SELECTOR) || element.querySelector(GESTURE_GATED_SELECTOR)) return true;
@@ -70,6 +72,7 @@ const captureShellClicks = () => {
   const buffer = readShellBuffer();
   if (!buffer) return;
   buffer.stop();
+  selectionsBeforeHydration = buffer.selections?.length ?? 0;
   const now = Date.now();
   pending = buffer.clicks
     .filter((click) => now - click.time <= MAX_REPLAY_AGE_MS)
@@ -101,7 +104,7 @@ const toFileList = (files: File[]) => {
   return transfer;
 };
 
-const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection) => {
+const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection, consumed: boolean) => {
   const original = selection.target instanceof HTMLInputElement ? selection.target : null;
   if (!original) return;
   const retained = appRootElement.contains(original);
@@ -114,12 +117,9 @@ const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection) => 
     logger.debug("Dropped a pre-mount file pick whose hydrated input is unavailable", { id: original.id });
     return;
   }
-  if (retained) {
-    // The mounted tree already consumed it: its change handler resets the value.
-    if (input.files?.length === 0) return;
-  } else {
-    input.files = toFileList(selection.files).files;
-  }
+  // The mounted tree's change handler already took this input's latest pick and reset the value.
+  if (retained && consumed) return;
+  input.files = toFileList(selection.files).files;
   logger.debug("Delivering a file pick that landed before the first mount", { count: selection.files.length });
   input.dispatchEvent(new Event("change", { bubbles: true }));
 };
@@ -149,12 +149,23 @@ const replayShellSelections = (appRootElement: HTMLElement) => {
   const selections = buffer.selections.splice(0);
   if (!selections.length) return;
   logger.debug("Captured file selections that landed before the first mount", { count: selections.length });
+  const boundary = selectionsBeforeHydration;
+  selectionsBeforeHydration = 0;
   requestAnimationFrame(() => {
     setTimeout(() => {
-      for (const selection of selections) {
-        if (selection.kind === "pick") deliverPick(appRootElement, selection);
-        else deliverDrop(appRootElement, selection);
+      // Only each input's latest pick is still on it; a reset input means React took that one.
+      const lastPickByInput = new Map<EventTarget | null, ShellSelection>();
+      for (const selection of selections)
+        if (selection.kind === "pick") lastPickByInput.set(selection.target, selection);
+      const consumedPicks = new Set<ShellSelection>();
+      for (const [target, selection] of lastPickByInput) {
+        if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
       }
+      selections.forEach((selection, index) => {
+        if (selection.kind === "pick") deliverPick(appRootElement, selection, consumedPicks.has(selection));
+        else if (index < boundary) deliverDrop(appRootElement, selection);
+        else logger.debug("Skipped a file drop that React already received during hydration");
+      });
     }, 0);
   });
 };

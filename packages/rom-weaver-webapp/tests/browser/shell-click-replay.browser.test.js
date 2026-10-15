@@ -275,3 +275,46 @@ test("leaves non-file drags alone and stops buffering at the mount", async () =>
   expect(received).toEqual([["drop", ["late.bin"]]]);
   expect(window.ROM_WEAVER_SHELL_CLICKS.selections).toEqual([]);
 });
+
+test("delivers every pick made on the same input before the mount", async () => {
+  installRealCaptureScript();
+  const input = appRoot.querySelector("#rom-weaver-input-file-unified");
+  for (const name of ["rom.sfc", "fix.ips"]) {
+    input.files = transferOf(makeFiles(name)).files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([
+    ["pick", ["rom.sfc"]],
+    ["pick", ["fix.ips"]],
+  ]);
+});
+
+test("does not re-deliver a drop React received after hydration began", async () => {
+  installRealCaptureScript();
+  const zone = appRoot.querySelector(".drop.hero");
+  const dropFiles = (...names) =>
+    zone.dispatchEvent(
+      new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transferOf(makeFiles(...names)) }),
+    );
+  dropFiles("early.bin");
+
+  const received = [];
+  captureShellClicks();
+  hydrateZone(received);
+  // The real onDrop runs for a drop between hydrateRoot and the mount.
+  dropFiles("racing.bin");
+  replayShellSelections(appRoot);
+  await settle();
+
+  expect(received).toEqual([
+    ["drop", ["racing.bin"]],
+    ["drop", ["early.bin"]],
+  ]);
+});
