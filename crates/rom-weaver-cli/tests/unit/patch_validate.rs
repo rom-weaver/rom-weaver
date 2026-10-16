@@ -1067,6 +1067,7 @@ fn apply_base_planning_only_hashes_what_a_later_step_can_use() {
         &input,
         representation,
         &previous_only,
+        true,
         &context,
     )
     .expect("base variants");
@@ -1091,6 +1092,7 @@ fn apply_base_planning_only_hashes_what_a_later_step_can_use() {
         &input,
         representation,
         &declared_base,
+        true,
         &context,
     )
     .expect("base variants");
@@ -1130,6 +1132,7 @@ fn apply_base_planning_hashes_a_declared_first_base_check_only() {
         &input,
         representation,
         &first_step(None),
+        true,
         &context,
     )
     .expect("base variants");
@@ -1144,6 +1147,7 @@ fn apply_base_planning_hashes_a_declared_first_base_check_only() {
         &input,
         representation,
         &first_step(Some(PatchInputBasis::Base)),
+        true,
         &context,
     )
     .expect("base variants");
@@ -1161,10 +1165,26 @@ fn apply_base_planning_hashes_a_declared_first_base_check_only() {
         &missing,
         representation,
         &first_step(Some(PatchInputBasis::Base)),
+        true,
         &context,
     )
     .expect_err("a declared first base check is a strict request");
     assert!(matches!(error, RomWeaverError::Io(_)));
+
+    // A declared base step that reads another source is checked against
+    // that source at run time, so the base stays unhashed and best-effort.
+    let variants = CliApp::plan_apply_base_variants(
+        &missing,
+        representation,
+        &missing,
+        representation,
+        &first_step(Some(PatchInputBasis::Base)),
+        false,
+        &context,
+    )
+    .expect("an unreadable base is not required for another source");
+    assert_eq!(variants.len(), 1);
+    assert!(variants[0].state.checksums.is_empty());
 }
 
 #[test]
@@ -1201,6 +1221,7 @@ fn apply_base_planning_adds_the_prepared_input_as_its_own_variant() {
             n64_byte_order: None,
         },
         &plan_inputs,
+        true,
         &context,
     )
     .expect("base variants");
@@ -1239,6 +1260,7 @@ fn apply_base_planning_propagates_a_read_error_a_declared_base_step_needs() {
         &missing,
         representation,
         &plan_inputs,
+        true,
         &context,
     )
     .expect_err("a declared base check is a strict request");

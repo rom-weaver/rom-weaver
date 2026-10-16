@@ -1815,18 +1815,20 @@ impl CliApp {
         prepared_input: &Path,
         prepared_representation: patch_plan::BaseRepresentation,
         plan_inputs: &[patch_plan::PlanPatchInput],
+        first_step_reads_base: bool,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::BaseVariant>> {
         let mut algorithms = Vec::new();
         let mut has_required_base_state = false;
         for (index, input) in plan_inputs.iter().enumerate() {
             let declared_base = input.declared_basis == Some(PatchInputBasis::Base);
-            // The first step runs on the base either way, so only a declared
-            // base check needs hashed variants there: without them a pinned
-            // size alone decides the verdict and can conflict with the
-            // headerless variant. Its embedded endpoints are matched by the
-            // handler-normalized endpoint selection instead.
-            if (index == 0 && !declared_base)
+            // A first step that reads the base needs hashed variants only for
+            // a declared base check: without them a pinned size alone decides
+            // the verdict and can conflict with the headerless variant. Its
+            // embedded endpoints are matched by the handler-normalized
+            // endpoint selection instead. A first step reading another source
+            // is verified against that source at run time.
+            if (index == 0 && !(declared_base && first_step_reads_base))
                 || input.declared_basis == Some(PatchInputBasis::Previous)
             {
                 continue;
@@ -1852,7 +1854,7 @@ impl CliApp {
         }
         debug!(
             ?algorithms,
-            has_required_base_state, "planning apply base variants"
+            has_required_base_state, first_step_reads_base, "planning apply base variants"
         );
         let build_variants = || -> Result<Vec<patch_plan::BaseVariant>> {
             let mut variants = Self::base_variants_for_algorithms(
@@ -2485,6 +2487,7 @@ mod tests {
             &input,
             representation,
             &plan_inputs,
+            true,
             &context,
         )
         .expect_err("apply inference cancellation must propagate");

@@ -49,6 +49,7 @@ impl CliApp {
             base_inputs.prepared,
             prepared_representation,
             &plan_inputs,
+            base_inputs.first_step_reads_base,
             context,
         )?;
         let resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
