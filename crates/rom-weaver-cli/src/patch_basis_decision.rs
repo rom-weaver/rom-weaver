@@ -132,7 +132,7 @@ impl CliApp {
     /// Every whole-file input expectation the patch itself carries, one entry
     /// per endpoint variant (RUP carries one per file variant per direction).
     /// An unreadable or unclaimed patch contributes nothing, with a reason.
-    fn embedded_input_states(
+    pub(super) fn embedded_input_states(
         &self,
         patch: Option<&Path>,
         context: &OperationContext,

@@ -2718,6 +2718,145 @@ fn weave_rom_checks_on_the_headerless_form_leave_patch_evidence_in_charge() {
     assert_eq!(bytes, Some(modified));
 }
 
+/// Applies a `format` patch made from the supplied dump `rom` to `modified`
+/// through a weave whose `rom.checks` describe another dump, `recorded`,
+/// with `input_checks` on the patch entry. Returns the report label and the
+/// output bytes.
+fn apply_patch_for_the_supplied_dump(
+    rom_name: &str,
+    rom: &[u8],
+    recorded: &[u8],
+    modified: &[u8],
+    format: &str,
+    input_checks: Option<serde_json::Value>,
+) -> (String, Vec<u8>) {
+    let temp = setup_temp_dir();
+    fs::write(temp.child(rom_name).path(), rom).expect("rom fixture");
+    fs::write(temp.child("modified.bin").path(), modified).expect("modified fixture");
+    let patch_name = format!("update.{format}");
+    create_patch_file(
+        temp.child(rom_name).path(),
+        temp.child("modified.bin").path(),
+        format,
+        temp.child(&patch_name).path(),
+    );
+    let mut patch_entry = json!({ "path": patch_name });
+    if let Some(input_checks) = input_checks {
+        patch_entry["inputChecks"] = input_checks;
+    }
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        json!({
+            "version": 1,
+            "rom": {
+                "path": rom_name,
+                "checks": { "checksums": { "crc32": crc32_hex(recorded) }, "size": recorded.len() },
+            },
+            "patches": [patch_entry],
+        })
+        .to_string(),
+    )
+    .expect("weave fixture");
+    let output = temp.child(format!("out-{rom_name}"));
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal");
+    let emitted = terminal["details"]["emitted_files"][0]["path"]
+        .as_str()
+        .expect("emitted output path");
+    (
+        terminal["label"].as_str().expect("label").to_owned(),
+        fs::read(emitted).expect("output"),
+    )
+}
+
+#[test]
+fn weave_rom_checks_on_another_form_yield_to_the_patch_input_checks_and_embedded_md5() {
+    // Each patch was made for the supplied dump itself and says so, through
+    // its declared inputChecks or the RUP source MD5, so the matched form of
+    // rom.checks MUST NOT change the layout.
+    let body: Vec<u8> = (0..64_u8).collect();
+    let nes = with_nes_header(&body);
+    let mut nes_modified = nes.clone();
+    nes_modified[0x20] = 0xAA;
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..4092_u32).map(|index| (index % 251) as u8));
+    let v64: Vec<u8> = z64
+        .chunks_exact(2)
+        .flat_map(|pair| [pair[1], pair[0]])
+        .collect();
+    let mut v64_modified = v64.clone();
+    v64_modified[0x41] ^= 0xFF;
+    let md5_checks =
+        |bytes: &[u8]| json!({ "checksums": { "md5": md5_hex(bytes) }, "size": bytes.len() });
+    for (case, rom_name, rom, recorded, modified, format, input_checks) in [
+        (
+            "nes inputChecks",
+            "game.nes",
+            &nes,
+            &body,
+            &nes_modified,
+            "ips",
+            Some(md5_checks(&nes)),
+        ),
+        (
+            "nes rup",
+            "game.nes",
+            &nes,
+            &body,
+            &nes_modified,
+            "rup",
+            None,
+        ),
+        (
+            "n64 inputChecks",
+            "game.v64",
+            &v64,
+            &z64,
+            &v64_modified,
+            "ips",
+            Some(md5_checks(&v64)),
+        ),
+        (
+            "n64 rup",
+            "game.v64",
+            &v64,
+            &z64,
+            &v64_modified,
+            "rup",
+            None,
+        ),
+    ] {
+        let (label, bytes) = apply_patch_for_the_supplied_dump(
+            rom_name,
+            rom,
+            recorded,
+            modified,
+            format,
+            input_checks,
+        );
+        assert_eq!(
+            &bytes, modified,
+            "patch evidence keeps the layout ({case}): {label}"
+        );
+        assert!(
+            !label.contains("taken as headerless") && !label.contains("taken as big-endian"),
+            "patch evidence keeps the layout ({case}): {label}"
+        );
+    }
+}
+
 #[test]
 fn weave_apply_rejects_disabled_named_patch_input_producer() {
     let temp = setup_temp_dir();

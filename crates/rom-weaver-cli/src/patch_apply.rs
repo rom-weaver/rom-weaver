@@ -1719,6 +1719,23 @@ impl CliApp {
         let first_patch = resolved_patches
             .first()
             .map(|patch| patch.resolved.as_path());
+        // Any declared input checksum or embedded source check, of any
+        // algorithm, is the patch's own layout evidence and outranks the form
+        // the weave ROM checks matched.
+        let weave_rom_form = weave_rom_form.filter(|form| {
+            let own_evidence = !expected_input_checksums.is_empty()
+                || self
+                    .embedded_input_states(first_patch, context)
+                    .iter()
+                    .any(patch_plan::PlanState::has_checksum_evidence);
+            if own_evidence {
+                debug!(
+                    ?form,
+                    "weave ROM form ignored: the first patch carries its own input checks"
+                );
+            }
+            !own_evidence
+        });
         let (strip_header, inferred_basis_note) =
             match chain_header_modes.first().copied().unwrap_or_default() {
                 PatchApplyHeaderMode::Strip => (true, None),
