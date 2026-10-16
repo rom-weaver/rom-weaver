@@ -553,6 +553,8 @@ impl StagingDir {
             match builder.create(&path) {
                 Ok(()) => {
                     trace!(path = %path.display(), "created private stream staging directory");
+                    // Drop is skipped by the forced second-interrupt exit; register for removal there.
+                    rom_weaver_core::register_live_temp_dir(&path);
                     return Ok(Self(path));
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -564,6 +566,7 @@ impl StagingDir {
 
 impl Drop for StagingDir {
     fn drop(&mut self) {
+        rom_weaver_core::unregister_live_temp_dir(&self.0);
         if let Err(error) = fs::remove_dir_all(&self.0) {
             tracing::warn!(path = %self.0.display(), %error, "failed to remove stream staging directory");
         }

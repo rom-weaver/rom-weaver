@@ -82,7 +82,7 @@ fn live_temp_dirs() -> &'static Mutex<Vec<std::path::PathBuf>> {
     PATHS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Track a temp directory owned by a live `TempPathAllocator`, so a process that must leave
+/// Track a temp directory or file owned by a live guard (`TempPathAllocator`, staging dir, stdin spool), so a process that must leave
 /// without running destructors (a forced second Ctrl-C) can still remove it. Native only.
 pub fn register_live_temp_dir(path: &std::path::Path) {
     if cfg!(target_arch = "wasm32") {
@@ -100,14 +100,19 @@ pub fn unregister_live_temp_dir(path: &std::path::Path) {
     }
 }
 
-/// Remove every tracked temp directory. Called right before the process exits without
+/// Remove every tracked temp path. Called right before the process exits without
 /// unwinding, since `Drop` will not run then.
 pub fn remove_live_temp_dirs() {
     let Ok(mut paths) = live_temp_dirs().lock() else {
         return;
     };
     for path in paths.drain(..) {
-        let _ = std::fs::remove_dir_all(&path);
+        // Entries are directories (allocators, staging) or single files (stdin spool).
+        if path.is_dir() {
+            let _ = std::fs::remove_dir_all(&path);
+        } else {
+            let _ = std::fs::remove_file(&path);
+        }
     }
 }
 
