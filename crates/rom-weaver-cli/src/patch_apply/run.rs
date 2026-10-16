@@ -47,6 +47,8 @@ struct PatchApplyRun {
     resolved_input: PathBuf,
     extracted_archives: usize,
     name_warning: Option<String>,
+    /// Labels for the weave `rom.checks` verified against the resolved ROM.
+    weave_rom_check_labels: Vec<String>,
     output: PathBuf,
     output_was_inferred: bool,
     temp_paths: Vec<PathBuf>,
@@ -326,6 +328,7 @@ impl CliApp {
             resolved_input: PathBuf::new(),
             extracted_archives: 0,
             name_warning: None,
+            weave_rom_check_labels: Vec::new(),
             output: PathBuf::new(),
             output_was_inferred: false,
             temp_paths: Vec::new(),
@@ -440,20 +443,23 @@ impl CliApp {
         Ok(())
     }
 
-    /// Compare the weave's `rom.checks` with the ROM file it resolved to,
-    /// before any header strip or byte-order conversion; weave create hashes
-    /// those same raw bytes. `--ignore-checksum-validation` skips the check.
-    fn verify_weave_rom_checks(run: &PatchApplyRun) -> Result<()> {
+    /// Compare the weave's `rom.checks` with the ROM file it resolved to.
+    /// A weave may be recorded from another dump of the same game, so a
+    /// match against the header-stripped or another N64 byte-order form of
+    /// that file is accepted too. The checks never steer the header or
+    /// byte-order decision. `--ignore-checksum-validation` skips them.
+    /// Returns the verification labels for the report.
+    fn verify_weave_rom_checks(run: &PatchApplyRun) -> Result<Vec<String>> {
         let Some((source_label, requirements)) = run
             .weave_resolution
             .as_ref()
             .and_then(|resolution| resolution.rom_checks.as_ref())
         else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         if run.args.ignore_checksum_validation {
             debug!(source = %source_label, "weave ROM checks skipped by --ignore-checksum-validation");
-            return Ok(());
+            return Ok(Vec::new());
         }
         trace!(
             source = %source_label,
@@ -462,9 +468,6 @@ impl CliApp {
             size = ?requirements.size,
             "verifying weave ROM checks against the resolved ROM"
         );
-        if requirements.size.is_some() {
-            Self::validate_patch_size(&run.resolved_input, "input", requirements.size, None)?;
-        }
         // Disc cached checksums describe the whole disc, not the track.
         let no_hints = BTreeMap::new();
         let hints = if run.disc_context.is_none() {
@@ -472,17 +475,75 @@ impl CliApp {
         } else {
             &no_hints
         };
-        Self::validate_patch_apply_expected_checksums(
+        let raw = (|| -> Result<Vec<String>> {
+            let mut labels = Vec::new();
+            if requirements.size.is_some() {
+                labels.push(Self::validate_patch_size(
+                    &run.resolved_input,
+                    "input",
+                    requirements.size,
+                    None,
+                )?);
+            }
+            if !requirements.checksums.is_empty() {
+                labels.push(Self::validate_patch_apply_expected_checksums(
+                    &run.resolved_input,
+                    &requirements.checksums,
+                    hints,
+                    "input",
+                    &run.context,
+                )?);
+            }
+            Ok(labels)
+        })();
+        let raw_error = match raw {
+            Ok(labels) => {
+                // The verified values are the resolved file's own checksums.
+                run.context
+                    .seed_checksums(&run.resolved_input, &requirements.checksums);
+                return Ok(labels);
+            }
+            Err(error @ RomWeaverError::Validation(_)) if run.disc_context.is_none() => error,
+            Err(error) => return Err(error),
+        };
+        let declared = patch_plan::PlanState {
+            checksums: requirements.checksums.clone(),
+            size: requirements.size,
+        };
+        let algorithms = requirements.checksums.keys().cloned().collect::<Vec<_>>();
+        let representation = Self::base_representation(&run.resolved_input, None, None)?;
+        let variants = Self::base_variants_for_algorithms(
             &run.resolved_input,
-            &requirements.checksums,
-            hints,
-            "input",
+            &algorithms,
             &run.context,
+            false,
+            "",
+            representation,
         )?;
-        // The verified values are the resolved file's own checksums.
-        run.context
-            .seed_checksums(&run.resolved_input, &requirements.checksums);
-        Ok(())
+        // The raw form already failed the exact comparison above.
+        let Some(variant) = variants.iter().find(|variant| {
+            variant.name != "raw"
+                && patch_plan::base_state_verdict(&declared, std::slice::from_ref(variant))
+                    == patch_plan::PatchInputVerdict::Passed
+        }) else {
+            debug!(%raw_error, "weave ROM checks match no form of the resolved ROM");
+            return Err(raw_error);
+        };
+        debug!(
+            variant = %variant.name,
+            "weave ROM checks match a transformed form of the resolved ROM"
+        );
+        let rendered = declared
+            .checksums
+            .iter()
+            .map(|(algorithm, value)| format!("{algorithm}={value}"))
+            .chain(declared.size.map(|size| format!("size={size}")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Ok(vec![format!(
+            "input checks verified against the ROM's {} form ({rendered})",
+            variant.name
+        )])
     }
 
     /// Resolve the ROM the chain starts from and the output it writes, then
@@ -539,7 +600,6 @@ impl CliApp {
                 .and_then(|resolution| resolution.expected_rom_name.as_deref()),
             &run.resolved_input,
         );
-        Self::verify_weave_rom_checks(run).map_err(|error| run.fail_error("validate", error))?;
         let (output, output_was_inferred) = self
             .resolve_patch_apply_output_path(
                 run.args.output.take(),
@@ -603,6 +663,12 @@ impl CliApp {
                 .seed_checksums(&run.resolved_input, &run.cached_input_checksums);
         }
         run.temp_paths = input_cleanup_paths;
+        // Hashing the ROM waits until the cheap output and access checks pass.
+        run.weave_rom_check_labels = Self::verify_weave_rom_checks(run).map_err(|error| {
+            let mut report = run.fail_error("validate", error);
+            Self::append_report_warnings(&mut report, run.name_warning.clone());
+            report
+        })?;
         Ok(())
     }
 
@@ -1103,7 +1169,10 @@ impl CliApp {
             Self::update_emit_weave_bases(emit_steps, &patch_steps);
         }
         Ok(PatchApplyChain {
-            checksum_verification_labels,
+            checksum_verification_labels: std::mem::take(&mut run.weave_rom_check_labels)
+                .into_iter()
+                .chain(checksum_verification_labels)
+                .collect(),
             apply_input,
             header_state,
             n64_order,

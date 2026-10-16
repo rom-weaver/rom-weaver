@@ -97,7 +97,7 @@ The [full format table](../reference/formats.md#patch-formats) is the authoritat
 
 Some dumps contain a copier header before the ROM data. Others, especially Nintendo 64 dumps, store the same data in different byte orders. A patch needs the form its author used.
 
-rom-weaver first compares the available expected checksums against supported variants. Explicit checks and a weave's input checks for its first patch take precedence over a patch's own source checks. A weave's expected-ROM checks describe the file as supplied, so rom-weaver compares them with that file unchanged and they do not choose a layout. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
+rom-weaver first compares the available expected checksums against supported variants. Explicit checks and a weave's input checks for its first patch take precedence over a patch's own source checks. A weave's expected-ROM checks describe the file as supplied, so rom-weaver compares them with that file unchanged and they do not choose a layout. A weave can be recorded from another dump of the same game, so the CLI also accepts a match on the file's header-stripped form or another N64 byte order. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
 
 For the first patch, missing checksum evidence can trigger inference from patch records, validation failures, and the resulting platform header. N64 inference can also use a rewritten boot checksum. These are fallbacks, not checksum proof. Later chain steps use checksum evidence rather than repeating first-patch inference.
 

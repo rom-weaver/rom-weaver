@@ -1899,7 +1899,7 @@ impl CliApp {
         }
     }
 
-    fn base_variants_for_algorithms(
+    pub(super) fn base_variants_for_algorithms(
         input: &Path,
         algorithms: &[String],
         context: &OperationContext,

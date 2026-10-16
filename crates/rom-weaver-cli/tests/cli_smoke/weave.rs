@@ -2133,6 +2133,16 @@ fn weave_rom_checks_match_a_headered_nes_rom_for_a_headerless_bps() {
         0,
     );
     assert_eq!(terminal["status"], "succeeded", "matching ROM: {terminal}");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains(&format!("input size verified (size={})", rom.len()))
+            && label.contains(&format!(
+                "input checksum(s) verified (crc32={}, md5={})",
+                crc32_hex(&rom),
+                md5_hex(&rom)
+            )),
+        "verified labels: {terminal}"
+    );
     assert_eq!(bytes, Some(with_nes_header(&modified)));
 
     let (terminal, bytes) = apply_weave_with_rom_checks(
@@ -2264,6 +2274,159 @@ fn weave_rom_checks_leave_the_snes_header_decision_to_the_patch() {
         "header decision: {terminal}"
     );
     assert_eq!(bytes, Some(modified));
+}
+
+#[test]
+fn weave_rom_checks_accept_another_dump_of_the_recorded_rom() {
+    let temp = setup_temp_dir();
+    // Recorded from a headerless NES ROM; the user supplies a headered dump.
+    let body: Vec<u8> = (0..64_u8).collect();
+    let mut modified = body.clone();
+    modified[0x20] = 0xAA;
+    fs::write(temp.child("body.nes").path(), &body).expect("body fixture");
+    fs::write(temp.child("modified.nes").path(), &modified).expect("modified fixture");
+    create_patch_file(
+        temp.child("body.nes").path(),
+        temp.child("modified.nes").path(),
+        "bps",
+        temp.child("update.bps").path(),
+    );
+    fs::write(temp.child("game.nes").path(), with_nes_header(&body)).expect("rom fixture");
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "update.bps",
+        json!({ "checksums": { "crc32": crc32_hex(&body) }, "size": body.len() }),
+        "out.nes",
+        &[],
+        0,
+    );
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains(&format!(
+                "input checks verified against the ROM's headerless form (crc32={}, size={})",
+                crc32_hex(&body),
+                body.len()
+            )),
+        "headered dump: {terminal}"
+    );
+    assert_eq!(bytes, Some(with_nes_header(&modified)));
+
+    // Recorded from a big-endian `.z64`; the user supplies a byte-swapped `.v64`.
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..4092_u32).map(|index| (index % 251) as u8));
+    let mut z64_modified = z64.clone();
+    z64_modified[0x40] ^= 0xFF;
+    fs::write(temp.child("body.z64").path(), &z64).expect("z64 fixture");
+    fs::write(temp.child("modified.z64").path(), &z64_modified).expect("modified z64 fixture");
+    create_patch_file(
+        temp.child("body.z64").path(),
+        temp.child("modified.z64").path(),
+        "bps",
+        temp.child("update-n64.bps").path(),
+    );
+    let swap_pairs = |bytes: &[u8]| -> Vec<u8> {
+        bytes
+            .chunks_exact(2)
+            .flat_map(|pair| [pair[1], pair[0]])
+            .collect()
+    };
+    fs::write(temp.child("game.v64").path(), swap_pairs(&z64)).expect("v64 fixture");
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.v64",
+        "update-n64.bps",
+        json!({ "checksums": { "crc32": crc32_hex(&z64) }, "size": z64.len() }),
+        "out.v64",
+        &[],
+        0,
+    );
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains(&format!(
+                "input checks verified against the ROM's n64-big-endian form (crc32={}, size={})",
+                crc32_hex(&z64),
+                z64.len()
+            )),
+        "byte-swapped dump: {terminal}"
+    );
+    assert_eq!(bytes, Some(swap_pairs(&z64_modified)));
+}
+
+#[test]
+fn weave_rom_check_failure_keeps_the_rom_name_warning() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.nes").path(), with_nes_header(&[0_u8; 64])).expect("rom fixture");
+    let patch = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        json!({
+            "version": 1,
+            "rom": { "name": "expected.nes", "checks": { "checksums": { "crc32": "00000000" } } },
+            "patches": [{ "path": patch.file_name().expect("name").to_str().expect("utf8") }],
+        })
+        .to_string(),
+    )
+    .expect("weave fixture");
+    let output = temp.child("out.nes");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--weave",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum mismatch for crc32"),
+        "wrong ROM: {terminal}"
+    );
+    assert!(
+        terminal
+            .to_string()
+            .contains("weave ROM name mismatch: expected `expected.nes`, found `game.nes`"),
+        "name warning: {terminal}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn weave_rom_checks_run_after_the_output_path_checks() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.nes").path(), with_nes_header(&[0_u8; 64])).expect("rom fixture");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    fs::write(temp.child("taken.nes").path(), b"keep").expect("existing output");
+    // A wrong ROM and a taken output: the cheap output check reports first.
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "main.ips",
+        json!({ "checksums": { "crc32": "00000000" } }),
+        "taken.nes",
+        &[],
+        1,
+    );
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains("refusing to overwrite existing output"),
+        "output check first: {terminal}"
+    );
+    assert_eq!(bytes, Some(b"keep".to_vec()));
 }
 
 #[test]
