@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { readPlatformMatrix, selectPlatformMatrix } from "./cli-platform-matrix.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
+import { makeTempDir } from "../test-temp-dirs.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const platforms = JSON.parse(readFileSync(join(repoRoot, ".github/cli-platforms.json"), "utf8"));
@@ -21,7 +21,7 @@ test("emits the platform list as a single-line matrix", () => {
 // An empty matrix is a "matrix contains no values" hard error in Actions, but a
 // truncated one is worse: the run stays green having built nothing.
 test("rejects an empty list rather than emitting a matrix with no legs", () => {
-  const file = join(mkdtempSync(join(tmpdir(), "cli-platforms-")), "empty.json");
+  const file = join(makeTempDir("cli-platforms-"), "empty.json");
   writeFileSync(file, "[]\n");
   assert.throws(() => readPlatformMatrix(file), /lists no CLI platforms/);
 });

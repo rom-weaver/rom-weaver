@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { makeTempDir } from "../test-temp-dirs.mjs";
 
 const script = fileURLToPath(new URL("./detect-wasi-sdk.sh", import.meta.url));
 
@@ -20,7 +21,7 @@ const detect = (home, { env = {}, candidates = NO_FIXED_CANDIDATES } = {}) =>
     env: { PATH: process.env.PATH, HOME: home, ...env },
   });
 
-const freshHome = () => mkdtempSync(join(os.tmpdir(), "wasi-sdk-test-"));
+const freshHome = () => makeTempDir("wasi-sdk-test-");
 
 test("prefers an explicit SDK path, then the newest local toolchain", () => {
   const home = freshHome();
