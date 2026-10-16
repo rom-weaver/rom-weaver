@@ -2781,11 +2781,10 @@ fn apply_patch_for_the_supplied_dump(
     )
 }
 
-#[test]
-fn weave_rom_checks_on_another_form_yield_to_the_patch_input_checks_and_embedded_md5() {
-    // Each patch was made for the supplied dump itself and says so, through
-    // its declared inputChecks or the RUP source MD5, so the matched form of
-    // rom.checks MUST NOT change the layout.
+/// Each patch was made for the supplied dump itself and says so, through
+/// its declared inputChecks (IPS) or the RUP source MD5, so the form that
+/// rom.checks matched MUST NOT change the layout. Runs the `only_format` cases.
+fn assert_patch_evidence_keeps_the_layout(only_format: &str) {
     let body: Vec<u8> = (0..64_u8).collect();
     let nes = with_nes_header(&body);
     let mut nes_modified = nes.clone();
@@ -2838,6 +2837,9 @@ fn weave_rom_checks_on_another_form_yield_to_the_patch_input_checks_and_embedded
             None,
         ),
     ] {
+        if format != only_format {
+            continue;
+        }
         let (label, bytes) = apply_patch_for_the_supplied_dump(
             rom_name,
             rom,
@@ -2855,6 +2857,16 @@ fn weave_rom_checks_on_another_form_yield_to_the_patch_input_checks_and_embedded
             "patch evidence keeps the layout ({case}): {label}"
         );
     }
+}
+
+#[test]
+fn weave_rom_checks_on_another_form_yield_to_the_patch_input_checks() {
+    assert_patch_evidence_keeps_the_layout("ips");
+}
+
+#[test]
+fn weave_rom_checks_on_another_form_yield_to_an_embedded_source_md5() {
+    assert_patch_evidence_keeps_the_layout("rup");
 }
 
 #[test]
