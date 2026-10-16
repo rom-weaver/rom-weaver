@@ -2594,6 +2594,11 @@ fn weave_rom_checks_on_the_headerless_form_strip_the_header_for_a_patch_without_
             &modified,
             patch_entry.clone(),
         );
+        assert_eq!(
+            bytes,
+            with_nes_header(&modified),
+            "nes output bytes from rom.checks {patch_entry}"
+        );
         assert!(
             terminal["label"]
                 .as_str()
@@ -2601,9 +2606,11 @@ fn weave_rom_checks_on_the_headerless_form_strip_the_header_for_a_patch_without_
                 .contains("patch header basis taken as headerless"),
             "header basis from rom.checks {patch_entry}: {terminal}"
         );
-        assert_eq!(bytes, with_nes_header(&modified), "{patch_entry}");
     }
+}
 
+#[test]
+fn weave_rom_checks_on_the_headerless_form_strip_a_snes_copier_header() {
     // 512-byte copier header + 32 KiB payload, with the record well past the
     // header so the record geometry cannot settle the basis.
     let body = vec![0xA5_u8; 32768];
@@ -2618,6 +2625,8 @@ fn weave_rom_checks_on_the_headerless_form_strip_the_header_for_a_patch_without_
         &modified,
         json!({}),
     );
+    // Copier headers are not restored on output.
+    assert_eq!(bytes, modified, "snes output bytes from rom.checks");
     assert!(
         terminal["label"]
             .as_str()
@@ -2625,8 +2634,6 @@ fn weave_rom_checks_on_the_headerless_form_strip_the_header_for_a_patch_without_
             .contains("patch header basis taken as headerless"),
         "header basis from rom.checks snes: {terminal}"
     );
-    // Copier headers are not restored on output.
-    assert_eq!(bytes, modified);
 }
 
 #[test]
@@ -2660,6 +2667,11 @@ fn weave_rom_checks_on_another_n64_order_convert_for_a_patch_without_evidence() 
             &z64_modified,
             json!({}),
         );
+        assert_eq!(
+            bytes,
+            convert(&z64_modified),
+            "n64 output bytes from rom.checks {rom_name}"
+        );
         assert!(
             terminal["label"]
                 .as_str()
@@ -2667,7 +2679,6 @@ fn weave_rom_checks_on_another_n64_order_convert_for_a_patch_without_evidence() 
                 .contains("patch N64 byte order taken as big-endian"),
             "n64 order from rom.checks {rom_name}: {terminal}"
         );
-        assert_eq!(bytes, convert(&z64_modified), "{rom_name}");
     }
 }
 
