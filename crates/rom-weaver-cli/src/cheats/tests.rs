@@ -1044,3 +1044,76 @@ fn gba_records_keep_encrypted_lines_in_one_decoder_state() {
         CheatResolution::Unsupported { .. }
     ));
 }
+
+fn nrom_128() -> Vec<u8> {
+    let mut rom = vec![0xEA; 16 + 0x4000 + 0x2000];
+    rom[..4].copy_from_slice(b"NES\x1a");
+    rom[4] = 1;
+    rom[5] = 1;
+    rom
+}
+
+#[test]
+fn nes_game_genie_with_x_letters_is_bakeable_through_the_16k_mirror() {
+    // GOZSXX is a valid Game Genie code ($DAAA = $1C); its `XX` is data, and a
+    // 16 KiB PRG mirrors $C000 onto $8000.
+    for kind in [None, Some(CheatKind::GameGenie)] {
+        let mut gozsxx = record(CheatSystem::Nes, "GOZSXX");
+        gozsxx.code_kind = kind;
+        let classified = classify_record(&nrom_128(), &gozsxx);
+        assert_eq!(
+            classified.resolution,
+            CheatResolution::RomBakeable {
+                writes: vec![CheatWrite {
+                    offset: 0x1ABA,
+                    value: 0x1C,
+                    width: 1,
+                    compare: None,
+                }]
+            },
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
+fn genesis_and_32x_game_genie_with_xx_are_not_parameterized() {
+    for system in [CheatSystem::Genesis, CheatSystem::Sega32x] {
+        for kind in [None, Some(CheatKind::GameGenie)] {
+            let mut entry = record(system, "AXXA-CA6C");
+            entry.code_kind = kind;
+            let classified = classify_record(&vec![0; 0x10_0000], &entry);
+            assert!(
+                !matches!(
+                    classified.resolution,
+                    CheatResolution::Unsupported { ref reason }
+                        if reason == "the entry needs a parameter value"
+                ),
+                "{system:?} {kind:?}: {:?}",
+                classified.resolution
+            );
+        }
+    }
+}
+
+#[test]
+fn x_placeholders_in_hex_codes_stay_parameterized() {
+    let cases = [
+        (CheatSystem::Nes, "80XX10", Some(CheatKind::ProActionReplay)),
+        (CheatSystem::Nes, "80XX10", None),
+        (CheatSystem::Nes, "GOZSXX?", Some(CheatKind::GameGenie)),
+        (CheatSystem::Genesis, "FFXX00:0001", None),
+        (CheatSystem::GameBoy, "01XX8000", None),
+    ];
+    for (system, code, kind) in cases {
+        let mut entry = record(system, code);
+        entry.code_kind = kind;
+        assert_eq!(
+            classify_record(&vec![0; 0x10_0000], &entry).resolution,
+            CheatResolution::Unsupported {
+                reason: "the entry needs a parameter value".to_string()
+            },
+            "{system:?} {code}"
+        );
+    }
+}

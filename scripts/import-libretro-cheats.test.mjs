@@ -533,6 +533,20 @@ test("isBakeableCandidate keeps valid Gold Finger unused-byte sentinels", () => 
   assert.equal(isBakeableCandidate("nes", record("0000009XXXXA90")), false);
 });
 
+test("isBakeableCandidate keeps XX inside Game Genie codes and drops it elsewhere", () => {
+  assert.equal(isBakeableCandidate("nes", record("POZXXL")), true);
+  assert.equal(isBakeableCandidate("nes", record("POZXXL", { kindHint: "game-genie" })), true);
+  assert.equal(isBakeableCandidate("nes", record("POZXXL", { codeKind: "game-genie" })), true);
+  assert.equal(isBakeableCandidate("nes", record("POZXXL?")), false);
+  assert.equal(isBakeableCandidate("nes", record("POZXXL", { codeKind: "pro-action-replay" })), false);
+  assert.equal(isBakeableCandidate("nes", record("80XX10")), false);
+  assert.equal(isBakeableCandidate("nes", record("POZXXL+80XX10")), false);
+  assert.equal(isBakeableCandidate("genesis", record("AXXA-CA6C")), true);
+  assert.equal(isBakeableCandidate("sega32x", record("AXXA-CA6C")), true);
+  assert.equal(isBakeableCandidate("genesis", record("FFXX00:0001")), false);
+  assert.equal(isBakeableCandidate("gameboy", record("01XX8000")), false);
+});
+
 test("isBakeableCandidate: nes keeps Game Genie letters and drops RAM Pro Action Replay", () => {
   assert.equal(isBakeableCandidate("nes", record("0010:01")), false); // addr 0x0010 < 0x8000
   assert.equal(isBakeableCandidate("nes", record("F010:01")), true); // addr 0xF010 >= 0x8000

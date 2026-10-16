@@ -88,7 +88,7 @@ The distribution includes the full license text and the source revision in the t
 
 Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
-Before packaging, the build removes structured RetroArch entries, empty or placeholder codes, and entries whose every subcode has a known runtime-memory address. Gold Finger `XX` data slots are unused bytes, not parameters. Encrypted and versioned GBA blocks remain intact for the Rust decoder. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
+Before packaging, the build removes structured RetroArch entries, empty or placeholder codes (`?`, or `XX` except in Game Genie codes on NES, Genesis, and 32X, where `X` is a code letter), and entries whose every subcode has a known runtime-memory address. Gold Finger `XX` data slots are unused bytes, not parameters. Encrypted and versioned GBA blocks remain intact for the Rust decoder. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
 
 ## CLI database directory
 

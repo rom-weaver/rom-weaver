@@ -648,7 +648,33 @@ fn code_has_parameter(record: &CheatRecord, value: &str) -> bool {
         // XX denotes unused Gold Finger data slots; the decoder validates their positions.
         return value.contains('?');
     }
+    if game_genie_letters_include_x(record, value, kind) {
+        // `X` is a real Game Genie letter here (GOZSXX), not a placeholder.
+        tracing::trace!(id = %record.id, "treating X as Game Genie data, not a placeholder");
+        return value.contains('?');
+    }
     contains_parameter_placeholder(value)
+}
+
+/// NES and Genesis Game Genie alphabets contain `X`, so `XX` inside a code that
+/// reads as Game Genie is data. Every other family writes `XX` for a hole.
+fn game_genie_letters_include_x(
+    record: &CheatRecord,
+    value: &str,
+    kind: Option<CheatKind>,
+) -> bool {
+    if !matches!(
+        record.system,
+        CheatSystem::Nes | CheatSystem::Genesis | CheatSystem::Sega32x
+    ) {
+        return false;
+    }
+    let codes = split_codes(value);
+    !codes.is_empty()
+        && codes.iter().all(|code| {
+            kind.unwrap_or_else(|| infer_kind(code, &normalize(code), record.system))
+                == CheatKind::GameGenie
+        })
 }
 
 fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
