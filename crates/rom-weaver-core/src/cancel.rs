@@ -93,7 +93,8 @@ pub fn register_live_temp_dir(path: &std::path::Path) {
     }
 }
 
-/// Stop tracking a temp directory once its allocator has removed it itself.
+/// Stop tracking a temp directory or file once its owner has removed it itself. Call this after the removal, not before, so a
+/// forced exit during a slow removal still finds the path in `remove_live_temp_dirs`.
 pub fn unregister_live_temp_dir(path: &std::path::Path) {
     if let Ok(mut paths) = live_temp_dirs().lock() {
         paths.retain(|registered| registered != path);

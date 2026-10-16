@@ -37,10 +37,11 @@ mod native {
 
     impl Drop for StdinSpool {
         fn drop(&mut self) {
-            rom_weaver_core::unregister_live_temp_dir(&self.path);
+            // Unregister only after removal so a forced exit mid-remove still finds the path.
             if let Err(error) = fs::remove_file(&self.path) {
                 trace!(path = %self.path.display(), %error, "failed to remove stdin spool temp file");
             }
+            rom_weaver_core::unregister_live_temp_dir(&self.path);
         }
     }
 

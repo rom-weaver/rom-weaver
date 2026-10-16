@@ -566,9 +566,10 @@ impl StagingDir {
 
 impl Drop for StagingDir {
     fn drop(&mut self) {
-        rom_weaver_core::unregister_live_temp_dir(&self.0);
+        // Unregister only after removal so a forced exit mid-remove still finds the path.
         if let Err(error) = fs::remove_dir_all(&self.0) {
             tracing::warn!(path = %self.0.display(), %error, "failed to remove stream staging directory");
         }
+        rom_weaver_core::unregister_live_temp_dir(&self.0);
     }
 }
