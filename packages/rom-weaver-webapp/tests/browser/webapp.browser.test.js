@@ -117,8 +117,11 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
   validation: createEmptyValidationState(),
 });
 
+let selectExternalView;
+
 function WebappRootHarness({ initialView = "patcher", settings, updateReady = false, onReloadUpdate } = {}) {
   const [currentView, setCurrentView] = useState(initialView);
+  selectExternalView = setCurrentView;
   const props = useMemo(
     () => ({
       actions: { ...createNoopActions(), onSelectView: setCurrentView, onReloadUpdate },
@@ -288,6 +291,50 @@ test("Home cancels a pending file handoff when the user navigates away", async (
   } finally {
     finish();
     transition.mockRestore();
+  }
+});
+
+test.each(["history", "soft-link"])("Home cancels file routing on external %s navigation", async (navigation) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  const link = document.createElement("a");
+  link.href = "/docs";
+  link.textContent = "External Docs route";
+  rootElement.append(link);
+  const navigate = (event) => {
+    if (event.target !== link) return;
+    event.preventDefault();
+    selectExternalView("docs");
+  };
+  document.addEventListener("click", navigate);
+  try {
+    sendHomeSelection("drop", [selectionPatch("cancelled.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    if (navigation === "history") {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      selectExternalView("docs");
+    } else link.click();
+    await expect.poll(() => document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    openDestination();
+    finish();
+    await expect.poll(() => document.querySelector("#column").classList.contains("rw-drop-routing")).toBe(false);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    expect(patchNames()).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+    document.removeEventListener("click", navigate);
+    link.remove();
   }
 });
 

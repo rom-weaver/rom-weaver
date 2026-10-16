@@ -1,3 +1,4 @@
+import { getSoftNavigationUrl } from "./soft-navigation.ts";
 import { discardShellSelections } from "./shell-click-replay.ts";
 import { trackSelectionDelivery } from "../lib/input/selection-delivery.ts";
 import {
@@ -544,6 +545,24 @@ function WebappRoot({
     setPageDrops([]);
     setDropRoute(null);
   }, []);
+  useEffect(() => {
+    const handleSoftNavigation = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor) return;
+      const current = new URL(window.location.href);
+      const destination = getSoftNavigationUrl(event, anchor, current);
+      if (destination && (destination.pathname !== current.pathname || destination.search !== current.search)) {
+        cancelFileRouting();
+      }
+    };
+    window.addEventListener("popstate", cancelFileRouting);
+    document.addEventListener("click", handleSoftNavigation, true);
+    return () => {
+      window.removeEventListener("popstate", cancelFileRouting);
+      document.removeEventListener("click", handleSoftNavigation, true);
+    };
+  }, [cancelFileRouting]);
   const enqueuePageDrop = useCallback(
     (view: WebappView, files: File[]) =>
       new Promise<void>((resolve) => {
