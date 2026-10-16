@@ -367,17 +367,19 @@ fn z3ds_compressor_context_bytes(level: i32) -> usize {
     }
 }
 
-/// Heap the threaded create needs: the shared worker reservation plus the frames queued to and
-/// from the workers and every worker's lazily built zstd context. These are allocated while
-/// siblings run, so they must be reserved on the coordinating thread first.
+/// Heap the threaded create needs: the shared margin, each worker's 2 MiB thread stack and lazily
+/// built zstd context, and the frames in flight (`bounded_items_for_threads` queued to the workers
+/// and as many queued back). These are allocated while siblings run, so they must be reserved on
+/// the coordinating thread first.
 pub(crate) fn z3ds_create_heap_reserve(workers: usize, level: i32) -> usize {
-    let queued_frames = bounded_items_for_threads(workers)
-        .saturating_mul(2)
-        .saturating_add(workers);
-    queued_frames
+    const THREAD_STACK_BYTES: usize = 2 * 1024 * 1024;
+    let frames_in_flight = bounded_items_for_threads(workers).saturating_mul(2);
+    frames_in_flight
         .saturating_mul(Z3DS_DEFAULT_FRAME_SIZE_BYTES)
-        .saturating_add(workers.saturating_mul(z3ds_compressor_context_bytes(level)))
-        .saturating_add(parallel_heap_reserve(workers))
+        .saturating_add(workers.saturating_mul(
+            z3ds_compressor_context_bytes(level).saturating_add(THREAD_STACK_BYTES),
+        ))
+        .saturating_add(parallel_heap_reserve(0))
 }
 
 impl Z3dsContainerHandler {

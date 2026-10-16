@@ -615,10 +615,12 @@ mod tests {
         use super::super::z3ds::z3ds_create_heap_reserve;
         const MIB: usize = 1024 * 1024;
 
-        // 16 workers: (2 * 32 queued + 16 running) frames of 1 MiB, 16 level 22 contexts of
-        // 18 MiB, and the shared 32 MiB margin plus 4 MiB per worker.
-        assert_eq!(z3ds_create_heap_reserve(16, 22), (80 + 288 + 96) * MIB);
-        assert_eq!(z3ds_create_heap_reserve(16, 3), (80 + 32 + 96) * MIB);
+        // 16 workers: 4 * 16 frames of 1 MiB, a 2 MiB stack plus a context per worker, and the
+        // shared 32 MiB margin.
+        assert_eq!(z3ds_create_heap_reserve(16, 22), (64 + 16 * 20 + 32) * MIB);
+        assert_eq!(z3ds_create_heap_reserve(16, 3), (64 + 16 * 4 + 32) * MIB);
+        // 8 workers at level 13+ fit the 256 MiB memory rung.
+        assert!(z3ds_create_heap_reserve(8, 22) < 256 * MIB);
         assert_eq!(z3ds_create_heap_reserve(usize::MAX, 22), usize::MAX);
     }
 

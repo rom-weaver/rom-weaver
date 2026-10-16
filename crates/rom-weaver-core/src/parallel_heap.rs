@@ -36,7 +36,38 @@ pub fn reserve_parallel_heap(bytes: usize) {
         heap_pages = ?wasm_heap_pages(),
         "reserve parallel heap before spawning workers"
     );
-    reserve_block(bytes);
+    reserve_with_fallback(bytes, RESERVE_MARGIN_BYTES, reserve_block);
+}
+
+/// Requests `bytes`, halving after each refusal down to `floor`, and returns the size that was
+/// reserved. A smaller block still keeps most of the section's growth off the sibling threads.
+#[cfg(any(all(target_family = "wasm", rom_weaver_wasi_threads), test))]
+fn reserve_with_fallback(
+    bytes: usize,
+    floor: usize,
+    mut reserve: impl FnMut(usize) -> bool,
+) -> Option<usize> {
+    let mut size = bytes;
+    loop {
+        if reserve(size) {
+            return Some(size);
+        }
+        if size <= floor {
+            tracing::debug!(
+                bytes,
+                floor,
+                "parallel heap reservation refused down to the floor"
+            );
+            return None;
+        }
+        let next = (size / 2).max(floor);
+        tracing::debug!(
+            size,
+            next,
+            "parallel heap reservation refused; retrying smaller"
+        );
+        size = next;
+    }
 }
 
 /// Allocates and frees one block of `bytes`, leaving its pages in the allocator's free list. A

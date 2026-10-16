@@ -5,9 +5,9 @@ import { assertRunJsonSucceeded, joinGuestPath, withTempFixture, writeGuestFile 
 const IMAGE_BYTES = 24 * 1024 * 1024;
 const THREADS = 16;
 // Without the caller-sized heap reservation the first run trapped "memory access out of bounds" in
-// headless Chromium (16 level-22 workers allocate ~18 MiB zstd contexts while siblings run). Each
-// run holds ~400 MiB of shared memory until the page collects it, and 20 or more runs in one page
-// crashed the renderer, so keep this below that.
+// headless Chromium (16 level-22 workers allocate ~18 MiB zstd contexts while siblings run), so 12
+// runs are ample. Earlier 20+ run loops lost the renderer when a host-wide kernel OOM kill hit the
+// browser; keep the loop short so one run holds shared memory for a bounded time.
 const RUNS = 12;
 const RUN_TIMEOUT_MS = 60_000;
 
