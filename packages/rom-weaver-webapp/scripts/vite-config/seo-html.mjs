@@ -130,5 +130,6 @@ ${DOC_SOURCES.map((source) => {
 </urlset>
 `;
 
-export const createWorkflowMarkdown = (route) =>
-  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](https://rom-weaver.com/${route.slug})\n\n[Documentation](https://rom-weaver.com/docs.md)\n`;
+// The Canonical line names production; the links name the serving deployment.
+export const createWorkflowMarkdown = (route, siteOrigin = "https://rom-weaver.com") =>
+  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](${siteOrigin}/${route.slug})\n\n[Documentation](${siteOrigin}/docs.md)\n`;

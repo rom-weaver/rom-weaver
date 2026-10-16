@@ -10,7 +10,7 @@ import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { getBuildInfo, getVersionBranch } from "./scripts/version.mjs";
 import { writeBrotliSidecars } from "./scripts/vite-config/brotli-sidecars.mjs";
 import { serveChangelogAsset, writeChangelogAsset } from "./scripts/vite-config/changelog.mjs";
-import { resolveAppChannel, stampChannelIdentity } from "./scripts/vite-config/channel.mjs";
+import { resolveAppChannel, resolveSiteOrigin, stampChannelIdentity } from "./scripts/vite-config/channel.mjs";
 import { deferDevHotUpdates, runtimeScratchIgnorePatterns } from "./scripts/vite-config/dev-hot-updates.mjs";
 import { emulatorJsLock, serveEmulatorJsAssets } from "./scripts/vite-config/emulatorjs.mjs";
 import { securityHeaders, writeCloudflareHeadersAsset } from "./scripts/vite-config/headers.mjs";
@@ -46,6 +46,8 @@ export default defineConfig(({ command, mode }) => {
   const versionBranch = getVersionBranch(gitBranch, versionIsTagged);
   // An unset channel builds as production; dev and preview set their own default.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
+  // Origin named by llms.txt, the Markdown alternates, openapi.json and the API catalog.
+  const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
   const releaseVersion = appChannel === "prod" || appChannel === "beta" || appChannel === "nightly" ? appVersion : "";
   const serviceWorkerDefines = {
@@ -132,7 +134,7 @@ export default defineConfig(({ command, mode }) => {
       compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
       shareWorkerRuntimeChunks(),
-      serveRootStaticAssets(appChannel, appChannelLabel),
+      serveRootStaticAssets(appChannel, appChannelLabel, siteOrigin),
       serveEmulatorJsAssets(),
       serveChangelogAsset(releaseVersion),
       deferDevHotUpdates(),
@@ -140,7 +142,7 @@ export default defineConfig(({ command, mode }) => {
       react({ babel: { plugins: ["@lingui/babel-plugin-lingui-macro"] } }),
       prerenderWebappShell(prerenderedShells),
       preloadWorkflowRouteChunks(routePreloadLinks),
-      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
+      writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks, siteOrigin),
       writeChangelogAsset(releaseVersion),
       minifyDocumentInlineScripts(),
       writeCloudflareHeadersAsset(appChannel),

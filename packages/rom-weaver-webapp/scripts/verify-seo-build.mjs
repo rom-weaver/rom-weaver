@@ -11,6 +11,7 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import {
   SITE_ALTERNATE_NAMES,
@@ -33,6 +34,8 @@ const identifyDataIndex = JSON.parse(
 );
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
+// Discovery endpoints name the deployment that serves them; canonicals name production (SITE_ORIGIN).
+const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
@@ -193,8 +196,8 @@ if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
 const openapi = JSON.parse(read(OPENAPI_PATH));
 if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
 if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
-const expectedEndpoints = Object.keys(openapi.paths).map((pathname) => `${SITE_ORIGIN}${pathname}`);
-const catalogItems = catalog.linkset.find((entry) => entry.anchor === `${SITE_ORIGIN}${API_CATALOG_PATH}`)?.item;
+const expectedEndpoints = Object.keys(openapi.paths).map((pathname) => `${siteOrigin}${pathname}`);
+const catalogItems = catalog.linkset.find((entry) => entry.anchor === `${siteOrigin}${API_CATALOG_PATH}`)?.item;
 if (!Array.isArray(catalogItems)) throw new Error("API catalog must link to its API endpoints with item relations");
 const actualEndpoints = catalogItems.map((item) => item.href);
 if (
@@ -204,24 +207,33 @@ if (
   throw new Error("API catalog item links MUST match the OpenAPI paths");
 }
 for (const [index, entry] of catalog.linkset.entries()) {
-  if (typeof entry.anchor !== "string" || !entry.anchor.startsWith(SITE_ORIGIN)) {
+  if (typeof entry.anchor !== "string" || !entry.anchor.startsWith(siteOrigin)) {
     throw new Error(`API catalog entry ${index} has a missing or off-origin anchor`);
   }
   for (const relation of ["service-desc", "service-doc"]) {
     for (const link of entry[relation] ?? []) {
-      if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
+      if (!link.href?.startsWith(siteOrigin)) throw new Error(`API catalog ${relation} href is off-origin`);
     }
   }
 }
 for (const endpoint of expectedEndpoints) {
   const entry = catalog.linkset.find((candidate) => candidate.anchor === endpoint);
   if (!entry) throw new Error(`API catalog is missing metadata for endpoint ${endpoint}`);
-  if (entry["service-desc"]?.[0]?.href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
+  if (entry["service-desc"]?.[0]?.href !== `${siteOrigin}${OPENAPI_PATH}`) {
     throw new Error(`API catalog service-desc for ${endpoint} MUST point at the OpenAPI document`);
   }
-  if (entry["service-doc"]?.[0]?.href !== `${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}`) {
+  if (entry["service-doc"]?.[0]?.href !== `${siteOrigin}${WEBAPP_URL_SESSION_DOC_PATH}`) {
     throw new Error(`API catalog service-doc for ${endpoint} MUST point at the URL session guide section`);
   }
+}
+assertIncludes(llmsTxt, `](${siteOrigin}/apply-patches)`, "llms.txt web app link");
+assertIncludes(llmsTxt, `](${siteOrigin}/index.md)`, "llms.txt Markdown link");
+assertIncludes(read("index.md"), `](${siteOrigin}/docs.md)`, "home Markdown documentation link");
+if (openapi.servers?.[0]?.url !== siteOrigin) throw new Error(`OpenAPI server must be ${siteOrigin}`);
+if (siteOrigin !== SITE_ORIGIN) {
+  assertExcludes(llmsTxt, SITE_ORIGIN, "llms.txt production origin");
+  assertExcludes(read(API_CATALOG_PATH), SITE_ORIGIN, "API catalog production origin");
+  assertExcludes(read(OPENAPI_PATH), SITE_ORIGIN, "OpenAPI production origin");
 }
 assertIncludes(
   headers,
@@ -303,21 +315,21 @@ for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/ap
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
-  "https://rom-weaver.com/apply-patches",
-  "https://rom-weaver.com/create-rom-patch",
-  "https://rom-weaver.com/identify-rom",
-  "https://rom-weaver.com/docs",
-  "https://rom-weaver.com/docs/apply-rom-patches",
-  "https://rom-weaver.com/docs/cli",
-  "https://rom-weaver.com/docs/install",
-  "https://rom-weaver.com/docs/cli-get-started",
-  "https://rom-weaver.com/docs/compression-formats",
-  "https://rom-weaver.com/docs/supported-formats",
-  "https://rom-weaver.com/docs/create-bundles",
-  "https://rom-weaver.com/docs/create-rom-patches",
-  "https://rom-weaver.com/docs/faq",
-  "https://rom-weaver.com/docs/self-hosting",
-  "https://rom-weaver.com/docs/architecture",
+  `${siteOrigin}/apply-patches`,
+  `${siteOrigin}/create-rom-patch`,
+  `${siteOrigin}/identify-rom`,
+  `${siteOrigin}/docs`,
+  `${siteOrigin}/docs/apply-rom-patches`,
+  `${siteOrigin}/docs/cli`,
+  `${siteOrigin}/docs/install`,
+  `${siteOrigin}/docs/cli-get-started`,
+  `${siteOrigin}/docs/compression-formats`,
+  `${siteOrigin}/docs/supported-formats`,
+  `${siteOrigin}/docs/create-bundles`,
+  `${siteOrigin}/docs/create-rom-patches`,
+  `${siteOrigin}/docs/faq`,
+  `${siteOrigin}/docs/self-hosting`,
+  `${siteOrigin}/docs/architecture`,
   "https://github.com/rom-weaver/rom-weaver",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md",
