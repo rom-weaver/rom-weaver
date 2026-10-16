@@ -20,7 +20,7 @@ Settings covers language, byte units, output defaults, compression, and the samp
 
 On phones, leave Settings with bottom-right **Close**, a right swipe from the left edge, or the browser's back gesture.
 
-Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls apply immediately, as do the Theme and Accent choices inside the Settings dialog. Every other setting waits for **Save**.
+Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls apply immediately, as do the Theme and Accent choices inside the Settings dialog. **Optional ROM databases** download or delete immediately, and **Advanced** changes persist as you make them. Every other setting waits for **Save**.
 
 ## Enable beta tools
 
