@@ -1940,9 +1940,16 @@ fn weave_apply_verifies_a_declared_base_first_patch_against_its_rom_member() {
     let selected = temp.child("selected.bin");
     let selected_bytes = patched_rom_bytes(&[(1, 0x11)]);
     fs::write(selected.path(), &selected_bytes).expect("selected ROM fixture");
+    let larger = temp.child("larger.bin");
+    let larger_bytes = [WEAVE_ROM_BYTES, b"tail"].concat();
+    fs::write(larger.path(), &larger_bytes).expect("larger ROM fixture");
     let archive = temp.child("roms.tar.gz");
     write_tar_gz_fixture(
-        &[(root.path(), "root.bin"), (selected.path(), "selected.bin")],
+        &[
+            (root.path(), "root.bin"),
+            (selected.path(), "selected.bin"),
+            (larger.path(), "larger.bin"),
+        ],
         archive.path(),
     );
     write_offset_ips(&temp, "main.ips", 0, 0xAA);
@@ -2017,6 +2024,22 @@ fn weave_apply_verifies_a_declared_base_first_patch_against_its_rom_member() {
     );
     assert_eq!(terminal["status"], "succeeded", "root member: {terminal}");
     assert_eq!(bytes, Some(patched_rom_bytes(&[(0, 0xAA)])));
+
+    // A pinned size that differs from the root ROM's is still the member's.
+    let (terminal, bytes) = apply(
+        json!({
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "member": "root.bin" },
+            "patches": [entry("larger.bin", checks_for(&larger_bytes))],
+        }),
+        "larger-member.bin",
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "larger member: {terminal}");
+    let mut larger_expected = larger_bytes.clone();
+    larger_expected[0] = 0xAA;
+    assert_eq!(bytes, Some(larger_expected));
 
     let (terminal, bytes) = apply(
         json!({
