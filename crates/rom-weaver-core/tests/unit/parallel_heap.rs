@@ -23,3 +23,11 @@ fn reserve_parallel_heap_is_a_no_op_off_wasm() {
     reserve_parallel_heap(usize::MAX);
     assert_eq!(wasm_heap_pages(), None);
 }
+
+#[test]
+fn reserve_block_reports_a_refused_reservation_instead_of_aborting() {
+    use super::reserve_block;
+
+    assert!(reserve_block(MIB));
+    assert!(!reserve_block(usize::MAX));
+}

@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::{bounded_items_for_threads, parallel_heap_reserve, reserve_parallel_heap};
 use tracing::debug;
 
 pub(crate) struct Z3dsContainerHandler;
@@ -353,6 +354,30 @@ thread_local! {
     /// for every independent frame.
     static Z3DS_THREAD_COMPRESSOR: std::cell::RefCell<Option<(i32, ZstdCompressor<'static>)>> =
         const { std::cell::RefCell::new(None) };
+}
+
+/// Resident size of one zstd compression context after a 1 MiB frame, measured with
+/// `ZSTD_sizeof_CCtx` at levels 3 (1.2 MiB), 10 (10.5 MiB), and 19 through 22 (17.3 MiB).
+fn z3ds_compressor_context_bytes(level: i32) -> usize {
+    const MIB: usize = 1024 * 1024;
+    match level {
+        ..=3 => 2 * MIB,
+        4..=12 => 11 * MIB,
+        _ => 18 * MIB,
+    }
+}
+
+/// Heap the threaded create needs: the shared worker reservation plus the frames queued to and
+/// from the workers and every worker's lazily built zstd context. These are allocated while
+/// siblings run, so they must be reserved on the coordinating thread first.
+pub(crate) fn z3ds_create_heap_reserve(workers: usize, level: i32) -> usize {
+    let queued_frames = bounded_items_for_threads(workers)
+        .saturating_mul(2)
+        .saturating_add(workers);
+    queued_frames
+        .saturating_mul(Z3DS_DEFAULT_FRAME_SIZE_BYTES)
+        .saturating_add(workers.saturating_mul(z3ds_compressor_context_bytes(level)))
+        .saturating_add(parallel_heap_reserve(workers))
 }
 
 impl Z3dsContainerHandler {
@@ -1051,6 +1076,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 let mut input = BufReader::new(File::open(input_path)?);
                 input.seek(SeekFrom::Start(0))?;
 
+                reserve_parallel_heap(z3ds_create_heap_reserve(execution.effective_threads, level));
                 ordered_streaming_compress(
                     &create_tasks,
                     execution.effective_threads,

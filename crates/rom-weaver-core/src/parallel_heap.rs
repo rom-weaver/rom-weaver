@@ -36,10 +36,23 @@ pub fn reserve_parallel_heap(bytes: usize) {
         heap_pages = ?wasm_heap_pages(),
         "reserve parallel heap before spawning workers"
     );
-    let mut reserve: Vec<u8> = Vec::with_capacity(bytes);
+    reserve_block(bytes);
+}
+
+/// Allocates and frees one block of `bytes`, leaving its pages in the allocator's free list. A
+/// refused `memory.grow` is logged and skipped: the section then grows on demand as before rather
+/// than aborting the wasm.
+#[cfg(any(all(target_family = "wasm", rom_weaver_wasi_threads), test))]
+fn reserve_block(bytes: usize) -> bool {
+    let mut reserve: Vec<u8> = Vec::new();
+    if let Err(error) = reserve.try_reserve_exact(bytes) {
+        tracing::debug!(bytes, %error, "parallel heap reservation refused; growing on demand");
+        return false;
+    }
     reserve.push(0);
     std::hint::black_box(reserve.as_ptr());
     drop(reserve);
+    true
 }
 
 #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]

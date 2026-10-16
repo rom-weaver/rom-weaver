@@ -611,6 +611,18 @@ mod tests {
     }
 
     #[test]
+    fn z3ds_create_heap_reserve_covers_queued_frames_and_worker_contexts() {
+        use super::super::z3ds::z3ds_create_heap_reserve;
+        const MIB: usize = 1024 * 1024;
+
+        // 16 workers: (2 * 32 queued + 16 running) frames of 1 MiB, 16 level 22 contexts of
+        // 18 MiB, and the shared 32 MiB margin plus 4 MiB per worker.
+        assert_eq!(z3ds_create_heap_reserve(16, 22), (80 + 288 + 96) * MIB);
+        assert_eq!(z3ds_create_heap_reserve(16, 3), (80 + 32 + 96) * MIB);
+        assert_eq!(z3ds_create_heap_reserve(usize::MAX, 22), usize::MAX);
+    }
+
+    #[test]
     fn z3ds_registers_azahar_extensions() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("z3ds").expect("z3ds handler");
