@@ -111,4 +111,4 @@ const verifyWeaveRom = async (
 };
 
 export type { WeaveRomCheck, WeaveRomExpectation };
-export { resolveWeaveRomAsset, verifyWeaveRom };
+export { isTransformVariant, resolveWeaveRomAsset, verifyWeaveRom };

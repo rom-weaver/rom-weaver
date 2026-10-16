@@ -23,6 +23,8 @@ type Probe = {
   latestChainPlans: Map<string, unknown>;
   patches: Stage[];
   clearInput: () => Promise<void>;
+  chainLayoutBases: Map<string, unknown>;
+  abort: () => void;
   validatePatches: (options?: Record<string, unknown>) => Promise<void>;
 };
 
@@ -92,32 +94,60 @@ const makeController = (runtime: Record<string, unknown> = {}) => {
   return controller;
 };
 
-beforeEach(() => mocks.validateApplyPatchTargets.mockReset());
+const headerTarget = (controller: Probe) => {
+  const input = controller.inputSession?.view as unknown as { preparedInputAssets: Record<string, unknown>[] };
+  const target = input.preparedInputAssets[0];
+  if (!target) throw new Error("Missing staged ROM");
+  Object.assign(target, {
+    checksums: { crc32: "11111111" },
+    checksumVariants: [
+      {
+        id: "headerless",
+        label: "Header removed",
+        checksums: { crc32: "22222222" },
+        applyCompatibility: { removeHeader: true },
+        transforms: { removeHeader: { strippedBytes: 2 } },
+      },
+    ],
+  });
+  return target;
+};
+
+beforeEach(() => {
+  mocks.validateApplyPatchTargets.mockReset();
+});
 
 describe("ApplyWorkflowController.validatePatches", () => {
   it("recomputes layout when chain declarations change without changing the weave ROM", async () => {
     const controller = makeController();
-    const input = controller.inputSession?.view as unknown as { preparedInputAssets: Record<string, unknown>[] };
-    const target = input.preparedInputAssets[0];
-    if (!target) throw new Error("Missing staged ROM");
-    Object.assign(target, {
-      checksums: { crc32: "11111111" },
-      checksumVariants: [
-        {
-          id: "headerless",
-          label: "Header removed",
-          checksums: { crc32: "22222222" },
-          applyCompatibility: { removeHeader: true },
-          transforms: { removeHeader: { strippedBytes: 2 } },
-        },
-      ],
-    });
+    const target = headerTarget(controller);
     const first = patchStage("first");
     const second = patchStage("second");
     controller.patches = [first, second];
+    let inferredBases = ["base", "previous"];
+    let rawProbes = 0;
+    let unavailableProbe = false;
+    mocks.validateApplyPatchTargets.mockImplementation(async (entries, adapters) => {
+      if (adapters.settings.compatibility?.removeHeader !== false) return;
+      rawProbes += 1;
+      if (unavailableProbe) {
+        for (const entry of entries)
+          entry.stage.state.patchValidation = {
+            status: "unknown",
+            validationKey: "transient-probe",
+            targetInputId: "asset-1",
+            message: "Worker temporarily unavailable",
+          };
+        return;
+      }
+      adapters.onChainPlan?.("asset-1", {
+        per_patch: inferredBases.map((basis, index) => ({ basis, index })),
+      });
+    });
     const weaveRom = { checks: "crc32=22222222" };
     await controller.validatePatches({ weaveRom });
     expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    inferredBases = ["base", "base"];
     await controller.validatePatches({
       weaveRom,
       chainMeta: new Map([[1, { inputChecks: "sha256=raw-source-hash" }]]),
@@ -125,8 +155,12 @@ describe("ApplyWorkflowController.validatePatches", () => {
     expect(first.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
     expect(second.state.headerResolution).toMatchObject({ decided: false, mode: "keep" });
     expect(second.state.requirements).toBeUndefined();
+    inferredBases = ["base", "previous"];
     await controller.validatePatches({ weaveRom });
     expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    expect(rawProbes).toBe(3);
+    await controller.validatePatches({ weaveRom });
+    expect(rawProbes).toBe(3);
     const previousChecks = new Map([[1, { basis: "previous", inputChecks: "sha1=previous-output" }]]);
     await controller.validatePatches({ weaveRom, chainMeta: previousChecks });
     expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
@@ -146,6 +180,105 @@ describe("ApplyWorkflowController.validatePatches", () => {
       chainMeta: new Map([[0, { basis: "previous", inputChecks: "sha1=previous-output" }]]),
     });
     expect(second.state.headerResolution).toMatchObject({ decided: false, mode: "keep" });
+    controller.patches = [first, second];
+    Object.assign(target, { file: { fileName: "rom.sfc", filePath: "/work/replaced.sfc", fileSize: 8 } });
+    const beforeRetry = rawProbes;
+    unavailableProbe = true;
+    await controller.validatePatches({ weaveRom });
+    expect(second.state.patchValidation).toMatchObject({ status: "unknown" });
+    unavailableProbe = false;
+    await controller.validatePatches({ weaveRom });
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    await controller.validatePatches({ weaveRom });
+    expect(rawProbes).toBe(beforeRetry + 2);
+    expect(controller.chainLayoutBases.size).toBe(1);
+    await controller.clearInput();
+    expect(controller.chainLayoutBases.size).toBe(0);
+  });
+
+  it("does not cache an aborted layout probe and retries it on the next pass", async () => {
+    const controller = makeController();
+    headerTarget(controller);
+    const first = patchStage("first");
+    const second = patchStage("second");
+    controller.patches = [first, second];
+    let signal: AbortSignal | undefined;
+    mocks.validateApplyPatchTargets.mockImplementation(async (entries, adapters) => {
+      if (adapters.settings.compatibility?.removeHeader !== false) return;
+      signal = adapters.signal;
+      await new Promise((resolve) => signal?.addEventListener("abort", resolve, { once: true }));
+      for (const entry of entries)
+        entry.stage.state.patchValidation = {
+          status: "valid",
+          validationKey: "late-probe",
+          targetInputId: "asset-1",
+          message: "Late result",
+        };
+      adapters.onChainPlan("asset-1", {
+        per_patch: [
+          { index: 0, basis: "base" },
+          { index: 1, basis: "previous" },
+        ],
+      });
+    });
+    const options = { weaveRom: { checks: "crc32=22222222" } };
+    const validating = controller.validatePatches(options);
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    controller.abort();
+    await validating;
+    expect(signal?.aborted).toBe(true);
+    expect(controller.chainLayoutBases.size).toBe(0);
+    expect(second.state.patchValidation).toMatchObject({ status: "unknown" });
+    mocks.validateApplyPatchTargets.mockImplementation(async (_entries, adapters) => {
+      if (adapters.settings.compatibility?.removeHeader !== false) return;
+      adapters.onChainPlan("asset-1", {
+        per_patch: [
+          { index: 0, basis: "base" },
+          { index: 1, basis: "previous" },
+        ],
+      });
+    });
+    await controller.validatePatches(options);
+    expect(controller.chainLayoutBases.size).toBe(1);
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+  });
+
+  it("keeps interleaved target layouts and caches separate", async () => {
+    const controller = makeController();
+    const target = headerTarget(controller);
+    if (!controller.inputSession) throw new Error("Missing input session");
+    const assets = (controller.inputSession.view as unknown as { preparedInputAssets: Record<string, unknown>[] })
+      .preparedInputAssets;
+    assets.push({
+      ...target,
+      id: "asset-2",
+      file: { fileName: "other.sfc", filePath: "/work/other.sfc", fileSize: 8 },
+    });
+    const a = patchStage("a");
+    const b = patchStage("b", "asset-2");
+    const c = patchStage("c");
+    const d = patchStage("d", "asset-2");
+    b.state.headerChoice = "keep";
+    controller.patches = [a, b, c, d];
+    let probes = 0;
+    mocks.validateApplyPatchTargets.mockImplementation(async (entries, adapters) => {
+      if (adapters.settings.compatibility?.removeHeader !== false) return;
+      probes += 1;
+      adapters.onChainPlan(entries[0].target.id, {
+        per_patch: [
+          { index: 0, basis: "base" },
+          { index: 1, basis: "previous" },
+        ],
+      });
+    });
+    const options = { weaveRom: { checks: "crc32=22222222", member: "rom.sfc" } };
+    await controller.validatePatches(options);
+    expect(c.state.headerResolution).toMatchObject({ mode: "strip" });
+    expect(d.state.headerResolution).toMatchObject({ mode: "keep" });
+    expect(probes).toBe(2);
+    await controller.validatePatches(options);
+    expect(probes).toBe(2);
+    expect(controller.chainLayoutBases.size).toBe(2);
   });
 
   it("batches live patches by target, records plans, and passes chain declarations", async () => {

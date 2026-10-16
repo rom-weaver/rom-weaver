@@ -98,7 +98,12 @@ import {
   cloneChecksumRomProbe,
   getInputAssetChecksums,
 } from "./staged-source-checksums.ts";
-import { type WeaveRomCheck, type WeaveRomExpectation, verifyWeaveRom } from "./apply-weave-rom-check.ts";
+import {
+  isTransformVariant,
+  type WeaveRomCheck,
+  type WeaveRomExpectation,
+  verifyWeaveRom,
+} from "./apply-weave-rom-check.ts";
 
 /** A weave-ROM check for this pass: a verdict, or `unavailable` when hashing failed transiently. */
 type WeaveRomRunCheck =
@@ -133,6 +138,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
    * form reads it for chain verdict chips, order suggestions, and output enforceability. */
   readonly latestChainPlans = new Map<string, PatchValidationPlan>();
+  private readonly chainLayoutBases = new Map<
+    string,
+    { fingerprint: string; sources: unknown[]; bases: Array<"base" | "previous"> }
+  >();
   private publishedChainPlans: ReadonlyMap<string, PatchValidationPlan> = new Map();
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
@@ -215,8 +224,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
   setWeaveRom(expectation: WeaveRomExpectation | undefined): void {
     const next = expectation?.checks ? { ...expectation } : undefined;
-    if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member)
+    if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member) {
       this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
+    }
     this.weaveRom = next;
   }
 
@@ -318,6 +329,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.cancelWeaveRomHash();
     return this.mutate("setInput", async () => {
       this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
       });
@@ -407,6 +419,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.cancelWeaveRomHash();
     return this.mutate("clearInput", async () => {
       this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
       await this.releaseInputSession();
       this.inputs = [];
       this.inputSession = undefined;
@@ -769,6 +782,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       await this.releasePatchSources();
       this.patches = [];
       this.latestChainPlans.clear();
+      this.chainLayoutBases.clear();
       this.recomputeOutputState();
       this.trace("patches.clear", { patchCount });
     });
@@ -1827,11 +1841,17 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (!target) continue;
         const chain = options?.chainMeta?.get(index);
         const basis = chain?.basis ?? stage.state.basisChoice ?? options?.defaultPatchBasis ?? this.defaultPatchBasis;
-        await this.evaluatePatchReadiness(
-          stage,
-          chain?.inputChecks,
-          basis === "previous" ? previousByTarget.get(target.id)?.state : undefined,
-        );
+        if (
+          basis !== "auto" ||
+          !previousByTarget.has(target.id) ||
+          !target.checksumVariants?.some(isTransformVariant)
+        ) {
+          await this.evaluatePatchReadiness(
+            stage,
+            chain?.inputChecks,
+            basis === "previous" ? previousByTarget.get(target.id)?.state : undefined,
+          );
+        }
         const preflight = stage.state.checksumPreflight;
         if (!preflight) continue;
         pending.push({ chain, preflight, stage, target });
@@ -1846,7 +1866,108 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (bucket) bucket.push(entry);
         else chainsByTarget.set(entry.target.id, [entry]);
       }
+      const unresolvedLayout = new Set<StagedSource<TSource>>();
+      for (const targetId of this.chainLayoutBases.keys()) {
+        if (!chainsByTarget.has(targetId)) this.chainLayoutBases.delete(targetId);
+      }
       for (const [targetId, chain] of chainsByTarget) {
+        const target = chain[0]?.target;
+        const defaultBasis = options?.defaultPatchBasis ?? this.defaultPatchBasis;
+        const hasAuto = chain
+          .slice(1)
+          .some((entry) => (entry.chain?.basis ?? entry.stage.state.basisChoice ?? defaultBasis) === "auto");
+        if (
+          target?.checksumVariants?.some(isTransformVariant) &&
+          hasAuto &&
+          weaveRomVerdict?.status !== "unavailable" &&
+          !options?.skipWeaveRomHash
+        ) {
+          const sources = [target.file, ...chain.map((entry) => entry.stage.preparedPatchFile)];
+          const layoutFingerprint = JSON.stringify({
+            target: [target.id, target.size, target.checksums, target.checksumVariants],
+            defaultBasis,
+            chain: chain.map((entry) => [
+              entry.stage.state.id,
+              entry.stage.state.selectedCandidateId,
+              entry.stage.state.requirements,
+              entry.chain,
+              entry.stage.state.basisChoice,
+              entry.stage.state.inputChecks,
+              entry.stage.state.outputChecks,
+              entry.stage.state.validateInputChecksum,
+              entry.stage.state.validateOutputChecksum,
+              entry.stage.state.headerChoice,
+              entry.stage.state.n64ByteOrderChoice,
+            ]),
+          });
+          let cached = this.chainLayoutBases.get(targetId);
+          if (
+            cached?.fingerprint !== layoutFingerprint ||
+            sources.some((source, index) => cached?.sources[index] !== source)
+          ) {
+            // AUTO basis MUST come from the engine's endpoint planner, including embedded
+            // evidence. Probe original bytes on isolated states before grouping by layout.
+            const probes: typeof chain = chain.map((entry) => ({
+              ...entry,
+              stage: {
+                ...entry.stage,
+                state: {
+                  ...entry.stage.state,
+                  headerChoice: "keep" as const,
+                  n64ByteOrderChoice: "keep" as const,
+                  patchValidation: undefined,
+                  chainVerdict: undefined,
+                },
+              },
+            }));
+            let bases: Array<"base" | "previous"> | undefined;
+            const started = Date.now();
+            await validateApplyPatchTargets(probes, {
+              defaultPatchBasis: defaultBasis,
+              emitProgress: () => undefined,
+              onChainPlan: (_id, plan) => {
+                if (
+                  plan.per_patch.length === chain.length &&
+                  plan.per_patch.every((entry, index) => entry.index === index)
+                )
+                  bases = plan.per_patch.map((entry) => entry.basis);
+              },
+              runtime: this.runtime,
+              settings: {
+                ...this.settings,
+                compatibility: { ...this.settings.compatibility, removeHeader: false },
+              },
+              signal: this.abortController.signal,
+              workflowId: this.id,
+            });
+            this.trace("patch.layout.plan", {
+              targetId,
+              patches: chain.length,
+              elapsedMs: Date.now() - started,
+              resolved: !!bases,
+            });
+            if (bases && !this.abortController.signal.aborted) {
+              cached = { fingerprint: layoutFingerprint, sources, bases };
+              this.chainLayoutBases.set(targetId, cached);
+            } else {
+              this.chainLayoutBases.delete(targetId);
+              for (const [index, entry] of chain.entries()) {
+                const verdict = probes[index]?.stage.state.patchValidation;
+                entry.stage.state.patchValidation = verdict ? { ...verdict, status: "unknown" } : undefined;
+                unresolvedLayout.add(entry.stage);
+              }
+              continue;
+            }
+          }
+          for (const [index, entry] of chain.entries()) {
+            await this.evaluatePatchReadiness(
+              entry.stage,
+              entry.chain?.inputChecks,
+              cached.bases[index] === "previous" ? chain[index - 1]?.stage.state : undefined,
+            );
+            if (entry.stage.state.checksumPreflight) entry.preflight = entry.stage.state.checksumPreflight;
+          }
+        }
         const fingerprint = JSON.stringify({
           chain: chain.map((entry) => [
             entry.stage.state.id,
@@ -1900,7 +2021,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       };
       // Batch patches by input and header decision to share one runner boot and mount. Independent
       // groups still run concurrently; transient failures become retryable unknown verdicts.
-      await validateApplyPatchTargets(pending, adapters);
+      await validateApplyPatchTargets(
+        pending.filter((entry) => !unresolvedLayout.has(entry.stage)),
+        adapters,
+      );
       this.recomputeOutputState();
     });
   }

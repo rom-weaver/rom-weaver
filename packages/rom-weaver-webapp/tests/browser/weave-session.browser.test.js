@@ -1022,25 +1022,30 @@ test("a patch's declared inputChecks keep its raw layout when rom.checks match o
   expect(hex(output)).toBe(hex(applyRecords(headered, records)));
 });
 
-test.each(["crc32", "sha1"])("a later patch's declared %s outranks the weave layout", async (algorithm) => {
-  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
-  const rawChecks = await fileChecks(headered);
-  const inputChecks = { checksums: { [algorithm]: rawChecks.checksums[algorithm] } };
-  const firstRecords = [[0xa8, 0x12]];
-  const laterRecords = [[0xa9, 0x0f]];
-  const patches = [new File([createIps(firstRecords)], "first.ips"), new File([createIps(laterRecords)], "later.ips")];
-  const weaveArchive = await buildWeaveArchive(
-    {
-      output: { name: "transform-output" },
-      patches: patches.map((patch) => ({ basis: "base", inputChecks, path: patch.name })),
-      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
-      version: 1,
-    },
-    patches,
-  );
-  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
-  expect(hex(output)).toBe(hex(applyRecords(applyRecords(headered, firstRecords), laterRecords)));
-});
+test.each(["crc32", "md5", "sha1"].map((algorithm) => [algorithm, "base"]))(
+  "a later patch's declared %s with %s basis outranks the weave layout",
+  async (algorithm, basis) => {
+    const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+    const inputChecks = { checksums: { [algorithm]: SAMPLE_ROM_CHECKS.checksums[algorithm] } };
+    const firstRecords = [[0xa8, 0x12]];
+    const laterRecords = [[0xa9, 0x0f]];
+    const patches = [
+      new File([createIps(firstRecords)], "first.ips"),
+      new File([createIps(laterRecords)], "later.ips"),
+    ];
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "transform-output" },
+        patches: patches.map((patch) => ({ ...(basis === "base" ? { basis } : {}), inputChecks, path: patch.name })),
+        rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+        version: 1,
+      },
+      patches,
+    );
+    const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+    expect(hex(output)).toBe(hex(applyRecords(applyRecords(headered, firstRecords), laterRecords)));
+  },
+);
 
 test("a first patch's SHA256 declaration keeps the validation plan on its raw layout", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
@@ -1672,7 +1677,16 @@ test("a rom extracted from the weave archive shows the weave -> rom extract chai
     .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("change.ips")]));
 });
 
-test.each(["snes", "n64"])("previous-basis IPS chains preserve the %s weave layout", async (platform) => {
+test.each([
+  ["snes", "previous", "ips"],
+  ["n64", "previous", "ips"],
+  ["snes", "auto", "ips"],
+  ["n64", "auto", "ips"],
+  ["snes", "default previous", "ips"],
+  ["n64", "default previous", "ips"],
+  ["snes", "auto", "bps"],
+  ["n64", "auto", "bps"],
+])("%s %s-basis %s chains preserve the weave layout", async (platform, basis, format) => {
   const body =
     platform === "snes"
       ? withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER)
@@ -1691,26 +1705,67 @@ test.each(["snes", "n64"])("previous-basis IPS chains preserve the %s weave layo
   const afterSecond = applyRecords(afterFirst, secondRecords);
   const patches = [
     new File([createIps(firstRecords)], "first.ips"),
-    new File([createIps(secondRecords)], "second.ips"),
+    new File([format === "bps" ? createBps(afterFirst, afterSecond) : createIps(secondRecords)], `second.${format}`),
   ];
   const weaveArchive = await buildWeaveArchive(
     {
       output: { name: "transform-output" },
+      ...(basis === "default previous" ? { patchBasis: "previous" } : {}),
       patches: [
         { path: patches[0].name, outputChecks: await fileChecks(afterFirst) },
         {
           path: patches[1].name,
-          basis: "previous",
-          inputChecks: await fileChecks(afterFirst),
+          ...(basis === "previous" ? { basis } : {}),
+          ...(format === "ips" ? { inputChecks: await fileChecks(afterFirst) } : {}),
           outputChecks: await fileChecks(afterSecond),
         },
       ],
       rom: { checks: await fileChecks(body), name: romName },
-      version: 1,
+      version: basis === "default previous" ? 2 : 1,
     },
     patches,
   );
-  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([supplied], romName)]);
-  const normalized = platform === "n64" && output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
-  expect(hex(normalized)).toBe(hex(afterSecond));
+  const originalValidate = browserRuntime.patch.validatePatch;
+  const calls = [];
+  const validateSpy = vi.spyOn(browserRuntime.patch, "validatePatch").mockImplementation(async (input) => {
+    const started = performance.now();
+    try {
+      return await originalValidate.call(browserRuntime.patch, input);
+    } finally {
+      calls.push({
+        elapsedMs: performance.now() - started,
+        removeHeader: input.options.removeHeader,
+        n64ByteOrder: input.options.n64ByteOrder,
+      });
+    }
+  });
+  try {
+    const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([supplied], romName)]);
+    const normalized = platform === "n64" && output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+    expect(hex(normalized)).toBe(hex(afterSecond));
+  } finally {
+    console.log("LAYOUT_PLANNER_COST", JSON.stringify({ platform, basis, format, calls }));
+    validateSpy.mockRestore();
+  }
+});
+
+test("auto basis keeps an independent embedded raw BPS source", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const first = withBytes(headered, 0xa8, [0x12]);
+  const later = withBytes(headered, 0xa9, [0x0f]);
+  const patches = [
+    new File([createBps(headered, first)], "first.bps"),
+    new File([createBps(headered, later)], "later.bps"),
+  ];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      version: 1,
+      output: { name: "transform-output" },
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      patches: patches.map((patch) => ({ path: patch.name })),
+    },
+    patches,
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  expect(hex(output)).toBe(hex(withBytes(first, 0xa9, [0x0f])));
 });
