@@ -380,6 +380,13 @@ impl Z3dsContainerHandler {
         &self,
         underlying_magic: [u8; 4],
     ) -> Option<&'static str> {
+        // Files written by earlier versions stored the payload's first four bytes, which is the
+        // CIA header size (`20 20 00 00`) for a real CIA. Map it without decoding the payload.
+        // Earlier NCSD/NCCH images stored RSA signature bytes, which cannot be told apart from
+        // arbitrary data here, so they keep extracting as `.3ds` (or by their `.z*` extension).
+        if underlying_magic == CIA_HEADER_SIZE_BYTES {
+            return Some("cia");
+        }
         Z3DS_SUBTYPES
             .iter()
             .find(|subtype| subtype.underlying_magic == Some(underlying_magic))
@@ -980,7 +987,6 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let create_progress_bytes = Arc::new(AtomicU64::new(0));
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
-        let mut underlying_magic = [0_u8; 4];
         let mut head = [0_u8; NCSD_MAGIC_OFFSET + 4];
         let mut head_len = 0;
         let mut head_file = File::open(input_path)?;
@@ -993,9 +999,11 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             }
         }
         let head = &head[..head_len];
-        for (slot, byte) in underlying_magic.iter_mut().zip(head) {
-            *slot = *byte;
-        }
+        let underlying_magic = detect_underlying_magic(head);
+        debug!(
+            underlying_magic = %self.format_magic(underlying_magic),
+            "z3ds create underlying magic"
+        );
         let recognized_3ds = looks_like_3ds(head);
 
         let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
@@ -1173,6 +1181,33 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
 /// Offset of the NCSD/NCCH magic inside real `.3ds`/`.cci`/`.cxi` images.
 const NCSD_MAGIC_OFFSET: usize = 0x100;
 const NOT_3DS_WARNING: &str = "input is not recognizable 3DS content";
+
+/// A CIA starts with its little-endian header size, 0x2020.
+const CIA_HEADER_SIZE_BYTES: [u8; 4] = [0x20, 0x20, 0, 0];
+
+/// The Z3DS header's underlying magic for a payload, as upstream Azahar writes it: `NCSD`
+/// (.3ds/.cci), `NCCH` (.cxi), `CIA\0` (.cia) or `3DSX`. Real NCSD/NCCH images carry their magic
+/// at 0x100 (offset 0 is the RSA signature) and a CIA begins with its header size. Unrecognized
+/// payloads keep their first four bytes.
+fn detect_underlying_magic(head: &[u8]) -> [u8; 4] {
+    let at = |offset: usize| -> Option<[u8; 4]> {
+        head.get(offset..offset + 4)
+            .and_then(|bytes| bytes.try_into().ok())
+    };
+    if at(0) == Some(*b"3DSX") {
+        return *b"3DSX";
+    }
+    if let Some(magic) = at(NCSD_MAGIC_OFFSET).filter(|magic| matches!(magic, b"NCSD" | b"NCCH")) {
+        return magic;
+    }
+    if at(0) == Some(CIA_HEADER_SIZE_BYTES) {
+        return *b"CIA\0";
+    }
+    let mut first = [0_u8; 4];
+    let len = head.len().min(4);
+    first[..len].copy_from_slice(&head[..len]);
+    first
+}
 
 /// True when `head` (the first bytes of the input) starts like a 3DS image: a
 /// bare table magic, a CIA header size, or NCSD/NCCH at 0x100.

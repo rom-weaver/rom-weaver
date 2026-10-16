@@ -119,6 +119,8 @@ The browser's Z3DS output option selects the compressed extension from the sourc
 
 For `.z3ds`, the payload signature determines the extracted extension: NCSD becomes `.cci`, NCCH becomes `.cxi`, CIA becomes `.cia`, and 3DSX becomes `.3dsx`.
 
+Compression writes the payload type into the Z3DS header as `NCSD`, `NCCH`, `CIA\0`, or `3DSX`, as Azahar does, recognizing NCSD and NCCH at offset `0x100` and a CIA by its `0x2020` header size. A `.z3ds` written by an earlier rom-weaver release stored the payload's first four bytes instead, so only its CIA payloads still extract as `.cia`; NCSD and NCCH payloads extract as `.3ds`.
+
 Z3DS compression and extraction preserve the payload bytes. They do not decrypt files or convert between cartridge images, CIA packages, and homebrew executables.
 
 Browser procedures: [compress Nintendo 3DS files](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
