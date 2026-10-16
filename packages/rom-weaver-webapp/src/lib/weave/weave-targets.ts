@@ -120,4 +120,78 @@ const gateWeaveChainChecks = (
   });
 };
 
-export { gateWeaveChainChecks, weaveCheckTokens, resolveWeaveChecks, selectWeaveMembers, validatePatchDependencies };
+/**
+ * True when a weave entry reads the supplied ROM itself: no `target` lane (or a `rom` target
+ * without a member, the shape the browser export writes) and either no `input` or a ROM `input`
+ * on the weave's own ROM member.
+ */
+const readsWeaveRootRom = (
+  entry: { input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput },
+  romMember: string | undefined,
+): boolean =>
+  (!entry.target || ("rom" in entry.target && !entry.target.member)) &&
+  (!entry.input || ("rom" in entry.input && entry.input.member === romMember));
+
+type WeaveRomVerdict = {
+  status: "match" | "mismatch" | "unknown";
+  message?: string;
+  /** Declared algorithms the supplied checksums could not answer. */
+  missing: string[];
+};
+
+/**
+ * Compare a weave's expected-ROM tokens (`algo=hex`, `size=N`) with the supplied ROM file's own
+ * checksums and size. The weave's checks describe the file as supplied (weave export and
+ * `weave create` hash the source bytes), so they are compared with the untransformed file rather
+ * than handed to the engine, which would verify them after a header strip or N64 byte-order
+ * conversion and would let them steer its automatic header decision. Algorithms the checksums do
+ * not carry are listed in `missing` for the caller to compute; `unknown` means nothing compared.
+ */
+const compareWeaveRomChecks = (
+  tokens: string,
+  actual: { checksums?: Readonly<Record<string, string | undefined>>; size?: number },
+): WeaveRomVerdict => {
+  let compared = 0;
+  const missing: string[] = [];
+  for (const token of tokens.split(",")) {
+    const [rawKey = "", rawValue = ""] = token.split("=");
+    const key = rawKey.trim().toLowerCase();
+    const expected = rawValue.trim().toLowerCase();
+    if (!(key && expected)) continue;
+    if (key === "size") {
+      if (actual.size === undefined) continue;
+      compared += 1;
+      if (String(actual.size) !== expected)
+        return {
+          message: `Input size mismatch; expected ${expected}, actual ${actual.size}`,
+          missing,
+          status: "mismatch",
+        };
+      continue;
+    }
+    const value = actual.checksums?.[key]?.trim().toLowerCase().replace(/^0x/, "");
+    if (!value) {
+      if (!missing.includes(key)) missing.push(key);
+      continue;
+    }
+    compared += 1;
+    if (value !== expected)
+      return {
+        message: `Input checksum mismatch for ${key}; expected ${expected}, actual ${value}`,
+        missing,
+        status: "mismatch",
+      };
+  }
+  return { missing, status: compared ? "match" : "unknown" };
+};
+
+export type { WeaveRomVerdict };
+export {
+  compareWeaveRomChecks,
+  gateWeaveChainChecks,
+  readsWeaveRootRom,
+  weaveCheckTokens,
+  resolveWeaveChecks,
+  selectWeaveMembers,
+  validatePatchDependencies,
+};

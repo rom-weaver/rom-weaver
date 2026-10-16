@@ -171,7 +171,6 @@ describe("useWeaveApplySession", () => {
       header: "strip",
       id: "weave-first",
       revalidate: false,
-      validateInputChecksum: "1234abcd",
     });
     expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { id: "weave-second", revalidate: true });
     expect(setDisplayFileName).toHaveBeenCalledWith("Weave result");
@@ -247,7 +246,6 @@ describe("useWeaveApplySession", () => {
       inputChecks: "crc32=aaaaaaaa,size=10",
       revalidate: false,
       target: { member: "track01.bin", rom: true },
-      validateInputChecksum: "1234abcd",
     });
     expect([...result.current.memberLaneChecksRef.current]).toEqual([
       ["slot-1", "crc32=aaaaaaaa,size=10"],

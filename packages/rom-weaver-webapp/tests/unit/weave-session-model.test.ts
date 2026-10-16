@@ -178,6 +178,26 @@ describe("buildWeaveApplySessionPlan", () => {
     ]);
   });
 
+  it("takes the ROM endpoint from a first patch only when that patch reads the supplied ROM", () => {
+    const romChecks = { checksums: { crc32: "aaaaaaaa" } };
+    const trackTwoChecks = { checksums: { crc32: "bbbbbbbb" } };
+    const weave = {
+      patches: [{ inputChecks: trackTwoChecks, target: { member: "track02.bin", rom: true as const } }, {}],
+      rom: { checks: romChecks },
+      version: 2,
+    };
+    // track02's input state is not the ROM's, so it must not become the expected ROM.
+    expect(weaveChainEndpointChecks(weave)).toEqual({ input: romChecks });
+    const plan = buildWeaveApplySessionPlan(
+      parsedResult({
+        weave,
+        patchSources: [{ source: { kind: "url", url: "t2.ips" } }, { source: { kind: "url", url: "root.ips" } }],
+      }),
+      WEAVE_URL,
+    );
+    expect(plan.romChecks).toEqual(romChecks);
+  });
+
   it("keeps a targeted last patch's lane checks out of the final-output endpoint", () => {
     const romChecks = { checksums: { crc32: "aaaaaaaa" } };
     const trackOneChecks = { checksums: { crc32: "bbbbbbbb" } };

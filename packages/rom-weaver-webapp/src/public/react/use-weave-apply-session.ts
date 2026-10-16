@@ -277,7 +277,12 @@ const useWeaveApplySession = ({
           // because it applies only while the full weave chain remains intact.
           for (const [index, entry] of session.entries.entries()) {
             if (!isCurrent()) return;
-            const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
+            // Only a first patch's own declared input state seeds its input checksum, whichever ROM
+            // file or member it reads. The weave's rom.checks describe the file as supplied: a seeded
+            // CRC32 would join the preflight and steer the header decision for a patch made for
+            // headerless bytes. The workflow compares rom.checks with the supplied file instead.
+            const readsPatchOutput = !!entry.input && "patch" in entry.input;
+            const inputChecks = index === 0 && !readsPatchOutput ? entry.inputChecks?.checksums : undefined;
             const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
             await Promise.resolve(
               controllersRef.current.patchStack?.setPatchOption?.(index, {

@@ -24,6 +24,8 @@ type PatchProbeRequirements = {
    */
   filenameCrc32?: string;
   format?: string;
+  /** The patch embeds checksums of its source in some algorithm (a BPS CRC32, a RUP MD5). */
+  hasSourceChecksums?: boolean;
   minimumSourceSize?: number;
   patchCrc32?: string;
   recordCount?: number;
@@ -155,12 +157,14 @@ const patchProbeRequirementsFromDescriptor = (
   const targetCrc32 = toOptionalCrc32Hex(descriptor.targetCrc32);
   const patchCrc32 = toOptionalCrc32Hex(descriptor.patchCrc32);
   const filenameCrc32 = toOptionalCrc32Hex(descriptor.filenameChecksums?.crc32);
+  const hasSourceChecksums = !!descriptor.sourceChecksumVariants?.length;
   const sourceTitles = [
     ...new Set(descriptor.sourceIdentification?.matches.map((match) => match.name.trim()).filter(Boolean) || []),
   ];
   if (
     !(
       format ||
+      hasSourceChecksums ||
       minimumSourceSize !== undefined ||
       sourceSize !== undefined ||
       targetSize !== undefined ||
@@ -175,6 +179,7 @@ const patchProbeRequirementsFromDescriptor = (
   return {
     ...(filenameCrc32 ? { filenameCrc32 } : {}),
     ...(format ? { format } : {}),
+    ...(hasSourceChecksums ? { hasSourceChecksums } : {}),
     ...(minimumSourceSize === undefined ? {} : { minimumSourceSize }),
     ...(patchCrc32 ? { patchCrc32 } : {}),
     ...(recordCount === undefined ? {} : { recordCount }),

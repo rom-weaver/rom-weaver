@@ -130,6 +130,7 @@ const loadWeaveUrlSession = async (
       entries,
       key: plan.key,
       patchBasis: plan.patchBasis,
+      ...(plan.romChecks ? { romChecks: plan.romChecks } : {}),
       ...(plan.romMember ? { romMember: plan.romMember } : {}),
       ...(plan.name ? { name: plan.name } : {}),
       outputDefaults: plan.outputDefaults,

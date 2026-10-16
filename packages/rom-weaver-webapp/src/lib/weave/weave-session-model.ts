@@ -11,7 +11,7 @@ import type {
   ParsedWeaveSourceRef,
 } from "../../types/weave.ts";
 
-import { resolveWeaveChecks } from "./weave-targets.ts";
+import { readsWeaveRootRom, resolveWeaveChecks } from "./weave-targets.ts";
 
 type WeaveAcquisition = { kind: "url"; url: string } | { kind: "extracted"; extractedPath: string };
 
@@ -61,6 +61,8 @@ type WeaveApplySessionPlan = {
   entries: WeavePlanEntry[];
   /** ROM/final-output verification for the run (seeds the input/output validation checksums). */
   chainEndpointChecks: WeaveChainEndpointChecks;
+  /** The weave's own `rom.checks`: the run's expected ROM, whatever the first patch declares. */
+  romChecks?: ParsedWeaveChecks;
   outputDefaults: WeaveOutputDefaults;
 };
 
@@ -81,7 +83,9 @@ type WeaveChainEndpointChecks = {
 
 /**
  * The chain's verification endpoints: what the base ROM must be (the first
- * patch's own `inputChecks`, else the weave's `rom.checks`) and what the
+ * patch's own `inputChecks` when that patch reads the supplied ROM, else the
+ * weave's `rom.checks`; a first patch on a ROM member or `target` lane
+ * describes that lane, not the ROM) and what the
  * final result must be (the last patch's own `outputChecks`, else
  * `output.checks`). These verify the ROM and the run's output - they are NOT
  * attributed to individual patches: a patch's card only shows checks the
@@ -96,9 +100,9 @@ type WeaveChainEndpointChecks = {
 const weaveChainEndpointChecks = (weave: ParsedWeave): WeaveChainEndpointChecks => {
   const first = weave.patches[0];
   const last = weave.patches.at(-1);
-  const input =
-    resolveWeaveChecks(weave, first?.inputChecks, first?.inputChecksRef) ||
-    resolveWeaveChecks(weave, weave.rom?.checks, weave.rom?.checksRef);
+  const rom = resolveWeaveChecks(weave, weave.rom?.checks, weave.rom?.checksRef);
+  const firstReadsRom = !!first && readsWeaveRootRom(first, weave.rom?.member);
+  const input = (firstReadsRom && resolveWeaveChecks(weave, first.inputChecks, first.inputChecksRef)) || rom;
   const weaveOutput = resolveWeaveChecks(weave, weave.output?.checks, weave.output?.checksRef);
   const output = last?.target
     ? weaveOutput
@@ -139,10 +143,15 @@ const toAcquisition = (source: ParsedWeaveSourceRef, weaveUrl: string, label: st
 
 const weaveSessionDefaults = (
   weave: ParsedWeave,
-): Pick<WeaveApplySessionPlan, "chainEndpointChecks" | "romMember" | "name" | "patchBasis" | "outputDefaults"> => {
+): Pick<
+  WeaveApplySessionPlan,
+  "chainEndpointChecks" | "romChecks" | "romMember" | "name" | "patchBasis" | "outputDefaults"
+> => {
   const name = weaveSessionDisplayName(weave);
+  const romChecks = resolveWeaveChecks(weave, weave.rom?.checks, weave.rom?.checksRef);
   return {
     chainEndpointChecks: weaveChainEndpointChecks(weave),
+    ...(romChecks ? { romChecks } : {}),
     ...(weave.rom?.member ? { romMember: weave.rom.member } : {}),
     patchBasis: weave.version >= 2 ? weave.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),

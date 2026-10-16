@@ -6,6 +6,12 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
+  declaredInputChecks?: string;
+  previousLayout?: StagedSource<TSource>["state"];
+  /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
+   * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
+   * evidence of its own takes its header and byte-order decision from it. */
+  getWeaveLayoutCrc32?: (target: InputAsset) => string | undefined;
   /** Invoked when the patch is staged and parsed but has no ROM to verify against yet (the input is
    * still being prepared). Lets the row replace its lingering staging label with a "waiting on the
    * ROM" status instead of the misleading "checking nested archives in extracted outputs". */
@@ -105,6 +111,9 @@ const createChecksumPreflightVerdict = ({
 const createApplyPatchChecksumPreflight = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
+  weaveLayoutCrc32?: string,
+  declaredInputChecks?: string,
+  previousLayout?: StagedSource<TSource>["state"],
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
@@ -122,9 +131,31 @@ const createApplyPatchChecksumPreflight = <TSource>(
     filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
   };
   const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
-  const headerResolution = resolveApplyHeaderMode(wanted, available);
+  // A patch with no checksum evidence of its own applies to the layout the weave's ROM check
+  // matched. Any declared or embedded source check, in any algorithm, is the patch's own evidence
+  // and leaves the decision to it (and the engine). The weave CRC32 only steers the decision; it
+  // never joins the preflight requirement.
+  const ownLayoutEvidence =
+    wanted.sourceCrc32 !== undefined ||
+    wanted.filenameCrc32 !== undefined ||
+    !!requirements?.hasSourceChecksums ||
+    !!stage.state.inputChecks?.trim() ||
+    !!declaredInputChecks?.trim() ||
+    !!stage.state.validateInputChecksum?.trim();
+  const layoutWanted = !ownLayoutEvidence && weaveLayoutCrc32 ? { sourceCrc32: weaveLayoutCrc32 } : wanted;
+  const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
+  // Previous-output checks MUST keep the preceding layout; they describe patched bytes,
+  // not a separate layout of the original ROM. Explicit drawer choices still win below.
+  if (headerResolution && previousLayout?.headerResolution) {
+    headerResolution.mode = previousLayout.headerChoice ?? previousLayout.headerResolution.mode;
+    headerResolution.decided = previousLayout.headerChoice !== undefined || previousLayout.headerResolution.decided;
+  }
   stage.state.headerResolution = headerResolution;
-  const n64Resolution = resolveApplyN64ByteOrder(wanted, available);
+  const n64Resolution = resolveApplyN64ByteOrder(layoutWanted, available);
+  if (n64Resolution && previousLayout?.n64Resolution) {
+    n64Resolution.mode = previousLayout.n64ByteOrderChoice ?? previousLayout.n64Resolution.mode;
+    n64Resolution.decided = previousLayout.n64ByteOrderChoice !== undefined || previousLayout.n64Resolution.decided;
+  }
   stage.state.n64Resolution = n64Resolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -278,7 +309,15 @@ const settleApplyPatchTarget = async <TSource>(
   try {
     const target = await resolveApplyPatchTargetForStage(stage, assets);
     stage.state.status = target ? "ready" : "needsSelection";
-    const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
+    const preflight = target
+      ? createApplyPatchChecksumPreflight(
+          stage,
+          target,
+          adapters.getWeaveLayoutCrc32?.(target),
+          adapters.declaredInputChecks,
+          adapters.previousLayout,
+        )
+      : undefined;
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;

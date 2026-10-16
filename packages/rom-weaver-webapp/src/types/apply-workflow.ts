@@ -121,6 +121,8 @@ type ApplyWorkflowPatchState = {
     /** Required input crc32 parsed from the patch file name's `[crc32:..]` token. */
     filenameCrc32?: string;
     format?: string;
+    /** The patch embeds checksums of its source in some algorithm (a BPS CRC32, a RUP MD5). */
+    hasSourceChecksums?: boolean;
     minimumSourceSize?: number;
     patchCrc32?: string;
     recordCount?: number;

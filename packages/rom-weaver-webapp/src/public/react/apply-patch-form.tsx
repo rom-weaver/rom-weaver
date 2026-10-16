@@ -98,6 +98,15 @@ import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
 import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
+import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
+
+// The weave's `rom.checks` and `rom.member`, which the workflow verifies against the supplied ROM
+// for every weave, whatever its patches target.
+const weaveRomExpectation = (session: WeaveApplySession | null): WeaveRomExpectation | undefined => {
+  const checks = weaveCheckTokens(session?.romChecks);
+  if (!checks) return undefined;
+  return session?.romMember ? { checks, member: session.romMember } : { checks };
+};
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -265,6 +274,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     patches: [],
     preparationSettingsKey: "",
   });
+  /** The inputs of the most recently queued pass: what the workflow holds once the queue drains. */
+  const queuedInputsRef = useRef<BinarySource[]>([]);
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
   const propsWithSettings = {
@@ -536,6 +547,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     currentPatchNames,
     disabledPatchIds,
   });
+  // The weave's expected ROM follows the chain like its expected output: only while the bench holds
+  // the weave's patch list (names in order; toggles aside) do its rom.checks and ROM attribution
+  // describe this apply. Otherwise they stand down, and they apply again when the bench matches.
+  // weaveChainStatus cannot decide this: it stays null until the weave's metadata is seeded, which
+  // happens only once the list first matches.
+  const weaveRomEnforced = weaveSessionMatches;
+  const weaveRomEnforcedRef = useRef(weaveRomEnforced);
+  weaveRomEnforcedRef.current = weaveRomEnforced;
 
   // Reactive owner of the weave's expected-output check: engaged only while the
   // full authored chain is enabled (the weave's output.checks describe exactly
@@ -603,6 +622,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     weaveSourcesRef.current = null;
     forceInputWorkflowRefreshRef.current = false;
     workflowSyncRef.current = { executionSettingsKey: "", inputs: [], patches: [], preparationSettingsKey: "" };
+    queuedInputsRef.current = [];
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
@@ -998,6 +1018,29 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ],
   );
 
+  // A pass that changes the ROM waits behind queued passes, and a validation pass can be hashing
+  // the old ROM for the weave's checks. Cancel that hash when the queued inputs change, so the new
+  // ROM does not wait for it; passes still queued for the old ROM skip the hash (see
+  // isInputSuperseded).
+  const noteQueuedInputs = useCallback(
+    (snapshot: ApplyWorkflowSessionInput) => {
+      const previous = queuedInputsRef.current;
+      queuedInputsRef.current = snapshot.inputs;
+      if (!sameBinarySourceLists(previous, snapshot.inputs)) workflowHandle.peek()?.cancelWeaveRomHash?.();
+    },
+    [workflowHandle],
+  );
+
+  // A validation pass whose inputs a newer queued pass replaces skips the weave-ROM hash.
+  const isInputSuperseded = useCallback(
+    (snapshot: ApplyWorkflowSessionInput) => !sameBinarySourceLists(queuedInputsRef.current, snapshot.inputs),
+    [],
+  );
+  const enforcedWeaveRomExpectation = useCallback(
+    () => (weaveRomEnforcedRef.current ? weaveRomExpectation(activeWeaveSessionRef.current) : undefined),
+    [],
+  );
+
   const withPreparedWorkflow = useCallback(
     <TValue,>(
       snapshot: ApplyWorkflowSessionInput,
@@ -1013,9 +1056,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         inputCount: snapshot.inputs.length,
         patchCount: snapshot.patches.length,
       });
+      noteQueuedInputs(snapshot);
       return queueMutation(() => prepareWorkflow(snapshot, handlers, callback));
     },
-    [prepareWorkflow, queueMutation],
+    [noteQueuedInputs, prepareWorkflow, queueMutation],
   );
 
   // The session fires ROM and patch staging in the same tick (its coalescing window). Batch those
@@ -1079,6 +1123,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         promptPatchSelection: members.some((member) => member.handlers.selection?.promptPatchSelection !== false),
       },
     };
+    noteQueuedInputs(snapshot);
     void queueMutation(() =>
       prepareWorkflow(snapshot, mergedHandlers, async (prepared) => {
         for (const member of members) await member.run(prepared);
@@ -1086,7 +1131,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ).catch((error) => {
       for (const member of members) member.fail(error);
     });
-  }, [emitWorkflowProgress, prepareWorkflow, queueMutation, workflowHandle]);
+  }, [emitWorkflowProgress, noteQueuedInputs, prepareWorkflow, queueMutation, workflowHandle]);
 
   const enqueueStageBatch = useCallback(
     <TValue,>(
@@ -1206,6 +1251,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const abortWorkflow = () => workflow.abort(abortSignal?.reason);
         abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
+          workflow.setWeaveRom?.(enforcedWeaveRomExpectation());
           const selectedCheats = selectedCheatsRef.current;
           workflow.setCheats?.(
             selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
@@ -1219,6 +1265,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }
       };
 
+      noteQueuedInputs(input);
       return queueMutation(async () => {
         syncSelectionRefs(input);
         const baseSettings = createBaseApplyWorkflowSettings(input.options, threads);
@@ -1276,6 +1323,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [
       disabledPatchIds,
       emitWorkflowProgress,
+      enforcedWeaveRomExpectation,
+      noteQueuedInputs,
       threads,
       queueMutation,
       syncSelectionRefs,
@@ -1501,12 +1550,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             chainMeta: buildChainMeta(input.patches),
             defaultPatchBasis: patchInputBasis,
             disabledIndexes,
+            skipWeaveRomHash: isInputSuperseded(input),
+            weaveRom: enforcedWeaveRomExpectation(),
           });
           return buildInfos();
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, patchInputBasis, withPreparedWorkflow],
+    [
+      buildChainMeta,
+      emitApplyFormInputTrace,
+      enforcedWeaveRomExpectation,
+      getDisabledPatchIndexes,
+      isInputSuperseded,
+      patchInputBasis,
+      withPreparedWorkflow,
+    ],
   );
 
   const setPatchTarget = useCallback(
@@ -1583,6 +1642,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               chainMeta: buildChainMeta(input.patches),
               defaultPatchBasis: patchInputBasisRef.current,
               disabledIndexes: getDisabledPatchIndexes(input.patches),
+              skipWeaveRomHash: isInputSuperseded(input),
+              weaveRom: enforcedWeaveRomExpectation(),
             });
           }
           const refreshedInput = workflow.getInput();
@@ -1594,7 +1655,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
+    [
+      buildChainMeta,
+      emitApplyFormInputTrace,
+      enforcedWeaveRomExpectation,
+      getDisabledPatchIndexes,
+      isInputSuperseded,
+      withPreparedWorkflow,
+    ],
   );
 
   const hasRequestedPatches = expectedWorkflowPatchCountRef.current > 0;
@@ -1998,10 +2066,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
-        {...(activeWeaveSession?.chainEndpointChecks.input
+        {...(weaveRomEnforced && activeWeaveSession?.chainEndpointChecks.input
           ? { weaveExpectedRomChecks: activeWeaveSession.chainEndpointChecks.input }
           : {})}
-        {...(activeWeaveSession?.romExpectation ? { weaveRomExpectation: activeWeaveSession.romExpectation } : {})}
+        {...(weaveRomEnforced && activeWeaveSession?.romExpectation
+          ? { weaveRomExpectation: activeWeaveSession.romExpectation }
+          : {})}
         weaveTools={{
           hasOptionalEntries:
             !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
