@@ -1,0 +1,376 @@
+diff --git a/blockdev.rs b/blockdev.rs
+index a982e8a00..bbc52e823 100644
+--- a/blockdev.rs
++++ b/blockdev.rs
+@@ -12,7 +12,6 @@ const XDVD_OFFSETS: &[u64] = &[
+ ///
+ /// Calls to `read` will always be thread safe (that is, no two calls to `read` will
+ /// be made on the same blockdevice at the same time)
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ pub trait BlockDeviceRead<E>: Send + Sync {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), E>;
+@@ -22,7 +21,6 @@ pub trait BlockDeviceRead<E>: Send + Sync {
+ ///
+ /// Calls to trait methods will always be thread safe (that is, no two calls within the trait will
+ /// be made on the same blockdevice at the same time)
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ pub trait BlockDeviceWrite<E>: Send + Sync {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), E>;
+@@ -33,11 +31,9 @@ pub trait BlockDeviceWrite<E>: Send + Sync {
+     }
+ }
+ 
+-#[cfg(feature = "read")]
+ #[derive(Copy, Clone, Debug)]
+ pub struct OutOfBounds;
+ 
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ impl<T: AsRef<[u8]> + Send + Sync> BlockDeviceRead<OutOfBounds> for T {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), OutOfBounds> {
+@@ -53,7 +49,6 @@ impl<T: AsRef<[u8]> + Send + Sync> BlockDeviceRead<OutOfBounds> for T {
+     }
+ }
+ 
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ impl<E> BlockDeviceRead<E> for Box<dyn BlockDeviceRead<E>> {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), E> {
+@@ -61,7 +56,6 @@ impl<E> BlockDeviceRead<E> for Box<dyn BlockDeviceRead<E>> {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ impl<E> BlockDeviceWrite<E> for Box<dyn BlockDeviceWrite<E>> {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), E> {
+@@ -127,7 +121,6 @@ where
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ impl<T, E> BlockDeviceWrite<E> for OffsetWrapper<T, E>
+ where
+@@ -143,7 +136,6 @@ where
+     }
+ }
+ 
+-#[cfg(feature = "std")]
+ impl<T, E> std::io::Seek for OffsetWrapper<T, E>
+ where
+     T: BlockDeviceRead<E> + std::io::Seek,
+@@ -157,7 +149,6 @@ where
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "read"))]
+ #[maybe_async]
+ impl<R> BlockDeviceRead<std::io::Error> for R
+ where
+@@ -171,7 +162,6 @@ where
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "write"))]
+ #[maybe_async]
+ impl BlockDeviceWrite<std::io::Error> for std::fs::File {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), std::io::Error> {
+@@ -187,7 +177,6 @@ impl BlockDeviceWrite<std::io::Error> for std::fs::File {
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "write"))]
+ #[maybe_async]
+ impl BlockDeviceWrite<std::io::Error> for std::io::BufWriter<std::fs::File> {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), std::io::Error> {
+diff --git a/checksum.rs b/checksum.rs
+deleted file mode 100644
+index 546490a01..000000000
+--- a/checksum.rs
++++ /dev/null
+@@ -1,42 +0,0 @@
+-use alloc::{collections::BTreeMap, string::String};
+-use sha3::{Digest, Sha3_256};
+-
+-use crate::xdvdfs::{
+-    blockdev::BlockDeviceRead,
+-    layout::{DirectoryEntryNode, VolumeDescriptor},
+-    util,
+-};
+-use maybe_async::maybe_async;
+-
+-#[maybe_async]
+-pub async fn checksum<E>(
+-    dev: &mut impl BlockDeviceRead<E>,
+-    volume: &VolumeDescriptor,
+-) -> Result<[u8; 32], util::Error<E>> {
+-    let mut hasher = Sha3_256::new();
+-
+-    let tree = volume.root_table.file_tree(dev).await?;
+-    let mut iter: BTreeMap<String, DirectoryEntryNode> = BTreeMap::new();
+-
+-    for (dir, file) in tree {
+-        let path = alloc::format!("{}/{}", dir, file.name_str()?);
+-        iter.insert(path, file);
+-    }
+-
+-    for (path, file) in iter {
+-        let is_dir = file.node.dirent.is_directory();
+-
+-        hasher.update(path.as_bytes());
+-
+-        if !is_dir {
+-            let data = file.node.dirent.read_data_all(dev).await?;
+-            hasher.update(data);
+-        }
+-    }
+-
+-    let bytes = hasher.finalize();
+-    let output: [u8; 32] = bytes[..]
+-        .try_into()
+-        .expect("SHA256 output should be 32 bytes");
+-    Ok(output)
+-}
+diff --git a/layout.rs b/layout.rs
+index a462b0fc9..1673a382f 100644
+--- a/layout.rs
++++ b/layout.rs
+@@ -106,7 +106,6 @@ pub struct DirectoryEntryNode {
+ /// Intended use is for building the dirent tree within some other
+ /// data structure, and then creating the on-disk structure separately
+ #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+-#[cfg(feature = "write")]
+ pub struct DirectoryEntryData {
+     pub node: DirectoryEntryDiskData,
+     pub name: arrayvec::ArrayString<256>,
+@@ -230,7 +229,6 @@ impl DirectoryEntryDiskData {
+         }
+     }
+ 
+-    #[cfg(feature = "read")]
+     #[maybe_async]
+     pub async fn read_data<E>(
+         &self,
+@@ -248,7 +246,6 @@ impl DirectoryEntryDiskData {
+         Ok(())
+     }
+ 
+-    #[cfg(feature = "read")]
+     #[maybe_async]
+     pub async fn read_data_all<E>(
+         &self,
+@@ -269,7 +266,6 @@ impl DirectoryEntryDiskData {
+         Ok(buf)
+     }
+ 
+-    #[cfg(all(feature = "read", feature = "std"))]
+     pub fn seek_to(
+         &self,
+         seek: &mut impl std::io::Seek,
+@@ -298,7 +294,6 @@ impl DirectoryEntryNode {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl DirectoryEntryData {
+     pub fn name_slice(&self) -> &[u8] {
+         let name_len = self.node.filename_length as usize;
+@@ -338,14 +333,12 @@ impl DirectoryEntryData {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl PartialOrd for DirectoryEntryData {
+     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+         Some(self.cmp(other))
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl Ord for DirectoryEntryData {
+     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+         util::cmp_ignore_case_utf8(self.name_str(), other.name_str())
+diff --git a/mod.rs b/mod.rs
+index aabc75923..416176f5b 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -1,32 +1,49 @@
+-#![no_std]
+-
+-extern crate alloc;
+-#[cfg(feature = "std")]
+-extern crate std;
++//! Vendored copy of the `xdvdfs` crate (MIT, see `LICENSE` beside this file)
++//! from the 0.8.3 crates.io release by antangelo <https://github.com/antangelo/xdvdfs>.
++//!
++//! Inlined rather than depended on because upstream's published `write` feature
++//! forces `wax` - and with it `nom`, `regex`, `pori`, `const_format`, and
++//! `itertools` - into the graph. Upstream `main` already makes that optional
++//! behind a `remap` feature but has cut no release since 0.8.3 (2024-11-13).
++//! Carrying it as a separate workspace crate instead would mean publishing a
++//! renamed fork of someone else's crate to crates.io, because `cargo publish`
++//! requires every path dependency of a published crate to exist on the registry.
++//!
++//! To drop this once upstream releases: delete this directory, add `xdvdfs`
++//! with `default-features = false, features = ["std", "read", "write", "sync"]`
++//! to the workspace dependencies, and replace the `pub mod xdvdfs;` declaration
++//! in `lib.rs` with `pub use ::xdvdfs;`. Call sites in this crate,
++//! `rom-weaver-cli`, and `cli_smoke` keep the same paths either way.
++//!
++//! Local changes against the 0.8.3 release, kept deliberately small:
++//! - `#![no_std]` dropped, since crate-level attributes cannot apply to a
++//!   module. `extern crate alloc;` moved to this crate's root so the source's
++//!   `use alloc::*` imports still resolve.
++//! - `#[cfg(feature = ...)]` gates resolved to the feature set this workspace
++//!   pinned - `std`, `read`, `write`, `sync` on; `logging`, `checksum`,
++//!   `ciso_support`, `wax` off - because those cfgs would otherwise resolve
++//!   against `rom-weaver-containers`' own features. Code behind the disabled
++//!   features is deleted rather than left gated.
++//! - `crate::` paths rewritten to `crate::xdvdfs::`.
++//! - Clippy lifetime-elision fixes for this workspace's `-D warnings` gate.
++//! - Directory cycle guards for untrusted images; upstream replacements MUST
++//!   preserve these checks when listing, looking up paths, and rebuilding images.
+ 
++// Upstream gates these on its `logging` feature, which this workspace left off,
++// so they expand to nothing. Wiring them to `tracing` is a worthwhile follow-up
++// but would be a behavior change rather than a move.
+ macro_rules! traceln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::trace!($($x),*);
+-    };
++    ($($x:expr),*) => {};
+ }
+ 
+ macro_rules! debugln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::debug!($($x),*);
+-    };
++    ($($x:expr),*) => {};
+ }
+ 
+ pub mod blockdev;
+ pub mod layout;
+ pub mod util;
+ 
+-#[cfg(feature = "read")]
+ pub mod read;
+ 
+-#[cfg(feature = "write")]
+ pub mod write;
+-
+-#[cfg(all(feature = "checksum", feature = "std"))]
+-pub mod checksum;
+diff --git a/util.rs b/util.rs
+index 5a152e082..de8524c38 100644
+--- a/util.rs
++++ b/util.rs
+@@ -65,7 +65,6 @@ impl<E: Display> From<Error<E>> for alloc::string::String {
+     }
+ }
+ 
+-#[cfg(feature = "std")]
+ impl<E: Debug + Display> std::error::Error for Error<E> {}
+ 
+ impl<E> From<E> for Error<E> {
+diff --git a/write/fs/sector_linear.rs b/write/fs/sector_linear.rs
+index 4f3b6501e..4cb61bb9e 100644
+--- a/write/fs/sector_linear.rs
++++ b/write/fs/sector_linear.rs
+@@ -165,64 +165,3 @@ impl<E> core::ops::Index<u64> for SectorLinearBlockDevice<E> {
+             .unwrap_or(&SectorLinearBlockContents::Empty)
+     }
+ }
+-
+-#[cfg(feature = "ciso_support")]
+-pub struct CisoSectorInput<'a, E: Send + Sync, W: BlockDeviceWrite<E>, F: Filesystem<W, E>> {
+-    linear: SectorLinearBlockDevice<E>,
+-    fs: SectorLinearBlockFilesystem<'a, E, W, F>,
+-
+-    bdev_t: core::marker::PhantomData<W>,
+-}
+-
+-#[cfg(feature = "ciso_support")]
+-impl<'a, E, W, F> CisoSectorInput<'a, E, W, F>
+-where
+-    W: BlockDeviceWrite<E>,
+-    F: Filesystem<W, E>,
+-    E: Send + Sync,
+-{
+-    pub fn new(
+-        bdev: SectorLinearBlockDevice<E>,
+-        fs: SectorLinearBlockFilesystem<'a, E, W, F>,
+-    ) -> Self {
+-        Self {
+-            linear: bdev,
+-            fs,
+-            bdev_t: core::marker::PhantomData,
+-        }
+-    }
+-}
+-
+-#[cfg(feature = "ciso_support")]
+-#[maybe_async]
+-impl<E, W, F> ciso::write::SectorReader<E> for CisoSectorInput<'_, E, W, F>
+-where
+-    W: BlockDeviceWrite<E>,
+-    F: Filesystem<W, E>,
+-    E: Send + Sync,
+-{
+-    async fn size(&mut self) -> Result<u64, E> {
+-        self.linear.len().await
+-    }
+-
+-    async fn read_sector(&mut self, sector: usize, sector_size: u32) -> Result<Vec<u8>, E> {
+-        let mut buf = alloc::vec![0; sector_size as usize];
+-
+-        match &self.linear[sector as u64] {
+-            SectorLinearBlockContents::Empty => {}
+-            SectorLinearBlockContents::RawData(data) => {
+-                buf.copy_from_slice(data.as_slice());
+-            }
+-            SectorLinearBlockContents::File(path, sector_idx) => {
+-                let bytes_read = self
+-                    .fs
+-                    .fs
+-                    .copy_file_buf(path, &mut buf, sector_size as u64 * sector_idx)
+-                    .await?;
+-                assert_eq!(bytes_read, sector_size as u64);
+-            }
+-        };
+-
+-        Ok(buf)
+-    }
+-}
+diff --git a/write/fs/stdfs.rs b/write/fs/stdfs.rs
+index 0ff9faa4e..adefdc3b7 100644
+--- a/write/fs/stdfs.rs
++++ b/write/fs/stdfs.rs
+@@ -5,9 +5,6 @@ use alloc::vec::Vec;
+ use maybe_async::maybe_async;
+ use std::path::{Path, PathBuf};
+ 
+-#[cfg(not(feature = "sync"))]
+-use alloc::boxed::Box;
+-
+ use crate::xdvdfs::blockdev::BlockDeviceWrite;
+ 
+ use super::{FileEntry, FileType, Filesystem, PathVec};
+diff --git a/write/fs/xdvdfs.rs b/write/fs/xdvdfs.rs
+index da6fb4929..27555d9bb 100644
+--- a/write/fs/xdvdfs.rs
++++ b/write/fs/xdvdfs.rs
+@@ -2,9 +2,6 @@ use alloc::vec::Vec;
+ use core::fmt::Debug;
+ use core::fmt::Display;
+ 
+-#[cfg(not(feature = "sync"))]
+-use alloc::boxed::Box;
+-
+ use maybe_async::maybe_async;
+ 
+ use crate::xdvdfs::{

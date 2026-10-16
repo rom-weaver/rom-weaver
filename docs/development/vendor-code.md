@@ -53,7 +53,7 @@ No vendored dependency has its own `rom-weaver-*` package.
 
 The four modified dependencies have ordered patch queues under `crates/rom-weaver-containers/vendor-patches/<name>/`. Each `manifest.json` pins an upstream archive, revision, SHA-256, extraction rules, and destination. Its ordered `patches` entries explain each change, its upstream status, and relevant checks. The `nod` and `xdvdfs` queue READMEs record coverage limits.
 
-Generic fixes use the `source` stage. Project adaptations use `integration`; build-only changes use `build`, `wasm`, or `arm64`. Keep import rewriting, disabled features, and formatting in integration patches so generic fixes remain readable against upstream. Project-owned C bridges and shims stay separate, with copy/append adapters recorded in the manifest where applicable.
+Generic fixes use the `source` stage. Project adaptations use `integration`; build-only changes use `build`, `wasm`, or `arm64`. Keep import rewriting, disabled features, and formatting in integration patches so generic fixes remain readable against upstream. Give each integration concern its own patch, so reviewers can tell mechanical rewrites and formatting from hand edits. Project-owned C bridges and shims stay separate, with copy/append adapters recorded in the manifest where applicable.
 
 Generate plain `git diff` patches beginning with `diff --git`; email headers are rejected. Patch files preserve upstream line endings; Git must not normalize their bytes.
 
@@ -177,7 +177,7 @@ The inlined copy is adapted from [encounter/nod](https://github.com/encounter/no
 
 `src/nod/NOD_VERSION` points to `vendor-patches/nod/manifest.json`. That manifest pins the upstream source and both license files. Its source patches capture the local behavior, including preloader read-ahead, Wii FST alignment, partition bounds, DOL/FST arithmetic, GCZ geometry, and NFS sparse-sector handling.
 
-The final integration patch adapts crate paths, feature gates, backends, and formatting to this workspace. It also records the existing dead-code and binding omissions. Generic changes are kept before that patch, so formatting and inlining do not obscure the fixes.
+The last six integration patches adapt nod to this workspace, one concern each: Python binding removal, crate and doctest paths, rustfmt, lint allowances, dead-code cleanup, and test hooks. Generic changes are kept before them, so formatting and inlining do not obscure the fixes.
 
 Use `npm run vendor:check -- nod` to reconstruct the module and compare every source byte. Use the [shared refresh workflow](#patch-queues-and-updates) to update it. A nod fork checkout and manual source synchronization are no longer required.
 
@@ -195,7 +195,7 @@ The inlined module drops nod's Python bindings and OpenSSL backend because rom-w
 
 Xbox XISO support comes from [antangelo/xdvdfs](https://github.com/antangelo/xdvdfs) (MIT). The source lives at `crates/rom-weaver-containers/src/xdvdfs/`, with upstream's `LICENSE` beside it, and is re-exported as `rom_weaver_containers::xdvdfs`.
 
-`src/xdvdfs/XDVDFS_VERSION` points to `vendor-patches/xdvdfs/manifest.json`, which pins the published archive and its crates.io checksum. Three patches separate directory-cycle protection, removal of the unused remap module, and project integration. The integration patch preserves the existing feature, edition, and test adaptations described below.
+`src/xdvdfs/XDVDFS_VERSION` points to `vendor-patches/xdvdfs/manifest.json`, which pins the published archive and its crates.io checksum. Seven patches separate directory-cycle protection, removal of the unused remap module, and five integration steps: crate paths, pinned features, proc-bitfield compatibility, edition and lint fixes, and test adaptations. Together they preserve the existing adaptations described below.
 
 Use `npm run vendor:check -- xdvdfs` to verify reconstruction. The published archive omits its license file, so refresh preserves the existing `LICENSE` alongside the version note.
 

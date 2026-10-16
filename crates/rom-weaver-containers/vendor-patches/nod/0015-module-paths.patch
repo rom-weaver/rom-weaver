@@ -1,0 +1,1092 @@
+diff --git a/build/gc.rs b/build/gc.rs
+index ea113d945..2aabbd09f 100644
+--- a/build/gc.rs
++++ b/build/gc.rs
+@@ -8,7 +8,7 @@ use std::{
+ use tracing::debug;
+ use zerocopy::{FromZeros, IntoBytes};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     disc::{
+         BB2_OFFSET, BI2_SIZE, BOOT_SIZE, BootHeader, DiscHeader, GCN_MAGIC, MINI_DVD_SIZE,
+diff --git a/common.rs b/common.rs
+index 55f9692ba..3df74794a 100644
+--- a/common.rs
++++ b/common.rs
+@@ -4,7 +4,7 @@ use std::{borrow::Cow, fmt, str::FromStr, sync::Arc};
+ 
+ use zerocopy::FromBytes;
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result,
+     disc::{
+         BB2_OFFSET, BOOT_SIZE, BootHeader, DebugHeader, DiscHeader, SECTOR_SIZE, fst::Fst,
+@@ -48,12 +48,12 @@ impl Format {
+     /// Returns the default block size for the disc format, if any.
+     pub fn default_block_size(self) -> u32 {
+         match self {
+-            Format::Ciso => crate::io::ciso::DEFAULT_BLOCK_SIZE,
++            Format::Ciso => crate::nod::io::ciso::DEFAULT_BLOCK_SIZE,
+             #[cfg(feature = "compress-zlib")]
+-            Format::Gcz => crate::io::gcz::DEFAULT_BLOCK_SIZE,
+-            Format::Rvz => crate::io::wia::RVZ_DEFAULT_CHUNK_SIZE,
+-            Format::Wbfs => crate::io::wbfs::DEFAULT_BLOCK_SIZE,
+-            Format::Wia => crate::io::wia::WIA_DEFAULT_CHUNK_SIZE,
++            Format::Gcz => crate::nod::io::gcz::DEFAULT_BLOCK_SIZE,
++            Format::Rvz => crate::nod::io::wia::RVZ_DEFAULT_CHUNK_SIZE,
++            Format::Wbfs => crate::nod::io::wbfs::DEFAULT_BLOCK_SIZE,
++            Format::Wia => crate::nod::io::wia::WIA_DEFAULT_CHUNK_SIZE,
+             _ => 0,
+         }
+     }
+@@ -62,9 +62,9 @@ impl Format {
+     pub fn default_compression(self) -> Compression {
+         match self {
+             #[cfg(feature = "compress-zlib")]
+-            Format::Gcz => crate::io::gcz::DEFAULT_COMPRESSION,
+-            Format::Rvz => crate::io::wia::RVZ_DEFAULT_COMPRESSION,
+-            Format::Wia => crate::io::wia::WIA_DEFAULT_COMPRESSION,
++            Format::Gcz => crate::nod::io::gcz::DEFAULT_COMPRESSION,
++            Format::Rvz => crate::nod::io::wia::RVZ_DEFAULT_COMPRESSION,
++            Format::Wia => crate::nod::io::wia::WIA_DEFAULT_COMPRESSION,
+             _ => Compression::None,
+         }
+     }
+diff --git a/disc/direct.rs b/disc/direct.rs
+index a0dd91e03..f19a9579b 100644
+--- a/disc/direct.rs
++++ b/disc/direct.rs
+@@ -6,7 +6,7 @@ use std::{
+ 
+ use zerocopy::FromZeros;
+ 
+-use crate::{
++use crate::nod::{
+     Result,
+     common::KeyBytes,
+     disc::{DiscHeader, SECTOR_SIZE, wii::SECTOR_DATA_SIZE},
+diff --git a/disc/fst.rs b/disc/fst.rs
+index 9341d3987..bacc0c856 100644
+--- a/disc/fst.rs
++++ b/disc/fst.rs
+@@ -6,7 +6,7 @@ use encoding_rs::SHIFT_JIS;
+ use itertools::Itertools;
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, big_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result,
+     util::{array_ref, static_assert},
+ };
+diff --git a/disc/gcn.rs b/disc/gcn.rs
+index fe785cab9..61b458b92 100644
+--- a/disc/gcn.rs
++++ b/disc/gcn.rs
+@@ -7,7 +7,7 @@ use std::{
+ 
+ use zerocopy::{FromBytes, FromZeros, IntoBytes};
+ 
+-use crate::{
++use crate::nod::{
+     Result, ResultContext,
+     disc::{
+         ApploaderHeader, BB2_OFFSET, BI2_SIZE, BOOT_SIZE, BootHeader, DolHeader, SECTOR_GROUP_SIZE,
+diff --git a/disc/hashes.rs b/disc/hashes.rs
+index 5033fcce9..50e71dd8d 100644
+--- a/disc/hashes.rs
++++ b/disc/hashes.rs
+@@ -1,7 +1,7 @@
+ use tracing::instrument;
+ use zerocopy::{FromZeros, IntoBytes};
+ 
+-use crate::{
++use crate::nod::{
+     common::HashBytes,
+     disc::{
+         SECTOR_GROUP_SIZE, SECTOR_SIZE,
+diff --git a/disc/mod.rs b/disc/mod.rs
+index 573fb0ad3..c0ddddf2a 100644
+--- a/disc/mod.rs
++++ b/disc/mod.rs
+@@ -4,7 +4,7 @@ use std::{ffi::CStr, str::from_utf8};
+ 
+ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, big_endian::*};
+ 
+-use crate::{common::MagicBytes, util::static_assert};
++use crate::nod::{common::MagicBytes, util::static_assert};
+ 
+ pub(crate) mod direct;
+ pub mod fst;
+diff --git a/disc/preloader.rs b/disc/preloader.rs
+index 0fac9683a..d7fa7711f 100644
+--- a/disc/preloader.rs
++++ b/disc/preloader.rs
+@@ -22,7 +22,7 @@ use tracing::{Level, span};
+ use tracing::{debug, error, instrument};
+ use zerocopy::FromZeros;
+ 
+-use crate::{
++use crate::nod::{
+     IoResultContext,
+     common::PartitionInfo,
+     disc::{
+diff --git a/disc/reader.rs b/disc/reader.rs
+index 71172ed41..c2f8f69c9 100644
+--- a/disc/reader.rs
++++ b/disc/reader.rs
+@@ -9,7 +9,7 @@ use polonius_the_crab::{polonius, polonius_return};
+ use tracing::warn;
+ use zerocopy::{FromBytes, IntoBytes};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{PartitionInfo, PartitionKind},
+     disc::{
+diff --git a/disc/wii.rs b/disc/wii.rs
+index a6064c522..ec4816628 100644
+--- a/disc/wii.rs
++++ b/disc/wii.rs
+@@ -10,7 +10,7 @@ use std::{
+ 
+ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, big_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{HashBytes, KeyBytes, PartitionInfo},
+     disc::{
+diff --git a/disc/writer.rs b/disc/writer.rs
+index 5eca8efe3..6e947e5d5 100644
+--- a/disc/writer.rs
++++ b/disc/writer.rs
+@@ -6,7 +6,7 @@ use std::{
+ use bytes::{Bytes, BytesMut};
+ use dyn_clone::DynClone;
+ 
+-use crate::{
++use crate::nod::{
+     Result, ResultContext,
+     common::{PartitionInfo, PartitionKind},
+     disc::{
+@@ -112,7 +112,7 @@ where
+         return std::thread::scope(|s| {
+             use std::collections::VecDeque;
+ 
+-            use crate::Error;
++            use crate::nod::Error;
+ 
+             let (block_tx, block_rx) = crossbeam_channel::bounded(block_count as usize);
+             for block_idx in 0..block_count {
+@@ -289,7 +289,7 @@ mod tests {
+     use zerocopy::FromZeros;
+ 
+     use super::*;
+-    use crate::{
++    use crate::nod::{
+         common::PartitionKind,
+         disc::{BOOT_SIZE, wii::WiiPartitionHeader},
+         util::lfg::LaggedFibonacci,
+diff --git a/io/block.rs b/io/block.rs
+index c0f268182..b6c031af0 100644
+--- a/io/block.rs
++++ b/io/block.rs
+@@ -2,7 +2,7 @@ use std::{fs, io, io::Read, path::Path};
+ 
+ use dyn_clone::DynClone;
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{Format, KeyBytes, MagicBytes, PartitionInfo},
+     disc::{
+@@ -40,12 +40,12 @@ dyn_clone::clone_trait_object!(BlockReader);
+ pub fn new(mut stream: Box<dyn DiscStream>) -> Result<Box<dyn BlockReader>> {
+     let io: Box<dyn BlockReader> =
+         match detect_stream(stream.as_mut()).context("Detecting file type")? {
+-            Some(Format::Iso) => crate::io::iso::BlockReaderISO::new(stream)?,
+-            Some(Format::Ciso) => crate::io::ciso::BlockReaderCISO::new(stream)?,
++            Some(Format::Iso) => crate::nod::io::iso::BlockReaderISO::new(stream)?,
++            Some(Format::Ciso) => crate::nod::io::ciso::BlockReaderCISO::new(stream)?,
+             Some(Format::Gcz) => {
+                 #[cfg(feature = "compress-zlib")]
+                 {
+-                    crate::io::gcz::BlockReaderGCZ::new(stream)?
++                    crate::nod::io::gcz::BlockReaderGCZ::new(stream)?
+                 }
+                 #[cfg(not(feature = "compress-zlib"))]
+                 return Err(Error::DiscFormat("GCZ support is disabled".to_string()));
+@@ -53,9 +53,9 @@ pub fn new(mut stream: Box<dyn DiscStream>) -> Result<Box<dyn BlockReader>> {
+             Some(Format::Nfs) => {
+                 return Err(Error::DiscFormat("NFS requires a filesystem path".to_string()));
+             }
+-            Some(Format::Wbfs) => crate::io::wbfs::BlockReaderWBFS::new(stream)?,
+-            Some(Format::Wia | Format::Rvz) => crate::io::wia::BlockReaderWIA::new(stream)?,
+-            Some(Format::Tgc) => crate::io::tgc::BlockReaderTGC::new(stream)?,
++            Some(Format::Wbfs) => crate::nod::io::wbfs::BlockReaderWBFS::new(stream)?,
++            Some(Format::Wia | Format::Rvz) => crate::nod::io::wia::BlockReaderWIA::new(stream)?,
++            Some(Format::Tgc) => crate::nod::io::tgc::BlockReaderTGC::new(stream)?,
+             None => return Err(Error::DiscFormat("Unknown disc format".to_string())),
+         };
+     check_block_size(io.as_ref())?;
+@@ -82,27 +82,27 @@ pub fn open(filename: &Path) -> Result<Box<dyn BlockReader>> {
+     let io: Box<dyn BlockReader> = match detect_stream(stream.as_mut())
+         .context("Detecting file type")?
+     {
+-        Some(Format::Iso) => crate::io::iso::BlockReaderISO::new(stream)?,
+-        Some(Format::Ciso) => crate::io::ciso::BlockReaderCISO::new(stream)?,
++        Some(Format::Iso) => crate::nod::io::iso::BlockReaderISO::new(stream)?,
++        Some(Format::Ciso) => crate::nod::io::ciso::BlockReaderCISO::new(stream)?,
+         Some(Format::Gcz) => {
+             #[cfg(feature = "compress-zlib")]
+             {
+-                crate::io::gcz::BlockReaderGCZ::new(stream)?
++                crate::nod::io::gcz::BlockReaderGCZ::new(stream)?
+             }
+             #[cfg(not(feature = "compress-zlib"))]
+             return Err(Error::DiscFormat("GCZ support is disabled".to_string()));
+         }
+         Some(Format::Nfs) => match path.parent() {
+             Some(parent) if parent.is_dir() => {
+-                crate::io::nfs::BlockReaderNFS::new(path.parent().unwrap())?
++                crate::nod::io::nfs::BlockReaderNFS::new(path.parent().unwrap())?
+             }
+             _ => {
+                 return Err(Error::DiscFormat("Failed to locate NFS parent directory".to_string()));
+             }
+         },
+-        Some(Format::Tgc) => crate::io::tgc::BlockReaderTGC::new(stream)?,
+-        Some(Format::Wbfs) => crate::io::wbfs::BlockReaderWBFS::new(stream)?,
+-        Some(Format::Wia | Format::Rvz) => crate::io::wia::BlockReaderWIA::new(stream)?,
++        Some(Format::Tgc) => crate::nod::io::tgc::BlockReaderTGC::new(stream)?,
++        Some(Format::Wbfs) => crate::nod::io::wbfs::BlockReaderWBFS::new(stream)?,
++        Some(Format::Wia | Format::Rvz) => crate::nod::io::wia::BlockReaderWIA::new(stream)?,
+         None => return Err(Error::DiscFormat("Unknown disc format".to_string())),
+     };
+     check_block_size(io.as_ref())?;
+diff --git a/io/ciso.rs b/io/ciso.rs
+index 7c9ad6d78..df1809bbf 100644
+--- a/io/ciso.rs
++++ b/io/ciso.rs
+@@ -8,7 +8,7 @@ use std::{
+ use bytes::{BufMut, Bytes, BytesMut};
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, little_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{Compression, Format, MagicBytes},
+     disc::{
+diff --git a/io/gcz.rs b/io/gcz.rs
+index 30f9f0d38..7cd56e637 100644
+--- a/io/gcz.rs
++++ b/io/gcz.rs
+@@ -11,7 +11,7 @@ use bytes::{BufMut, Bytes, BytesMut};
+ use tracing::trace;
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, little_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{Compression, Format, MagicBytes},
+     disc::{
+diff --git a/io/iso.rs b/io/iso.rs
+index 7e1417242..97f3ae30e 100644
+--- a/io/iso.rs
++++ b/io/iso.rs
+@@ -1,6 +1,6 @@
+ use std::{io, io::BufRead};
+ 
+-use crate::{
++use crate::nod::{
+     Result, ResultContext,
+     common::Format,
+     disc::{SECTOR_SIZE, reader::DiscReader, writer::DiscWriter},
+diff --git a/io/nfs.rs b/io/nfs.rs
+index 3ce8097ee..bfb634963 100644
+--- a/io/nfs.rs
++++ b/io/nfs.rs
+@@ -9,7 +9,7 @@ use std::{
+ 
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, big_endian::U32};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{Format, KeyBytes, MagicBytes},
+     disc::SECTOR_SIZE,
+diff --git a/io/nkit.rs b/io/nkit.rs
+index 0f7686760..c110c8ce3 100644
+--- a/io/nkit.rs
++++ b/io/nkit.rs
+@@ -2,7 +2,7 @@ use std::io::{self, Read, Seek, Write};
+ 
+ use tracing::warn;
+ 
+-use crate::{
++use crate::nod::{
+     common::MagicBytes,
+     disc::DL_DVD_SIZE,
+     read::{DiscMeta, DiscStream},
+diff --git a/io/split.rs b/io/split.rs
+index f4eace846..f7e87ece0 100644
+--- a/io/split.rs
++++ b/io/split.rs
+@@ -4,7 +4,7 @@ use std::{
+     path::{Path, PathBuf},
+ };
+ 
+-use crate::{ErrorContext, Result, ResultContext, read::DiscStream};
++use crate::nod::{ErrorContext, Result, ResultContext, read::DiscStream};
+ 
+ #[derive(Debug)]
+ pub struct SplitFileReader {
+diff --git a/io/tgc.rs b/io/tgc.rs
+index 353410262..5ac1f8b5e 100644
+--- a/io/tgc.rs
++++ b/io/tgc.rs
+@@ -7,7 +7,7 @@ use std::{
+ use bytes::{BufMut, Bytes, BytesMut};
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, big_endian::U32};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     build::gc::{FileCallback, GCPartitionStream, WriteInfo, WriteKind, insert_junk_data},
+     common::{Compression, Format, MagicBytes, PartitionKind},
+diff --git a/io/wbfs.rs b/io/wbfs.rs
+index 11d89c712..a000a7a9d 100644
+--- a/io/wbfs.rs
++++ b/io/wbfs.rs
+@@ -8,7 +8,7 @@ use std::{
+ use bytes::{BufMut, Bytes, BytesMut};
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, big_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result, ResultContext,
+     common::{Compression, Format, MagicBytes},
+     disc::{
+diff --git a/io/wia.rs b/io/wia.rs
+index 8439d0b49..4012ece71 100644
+--- a/io/wia.rs
++++ b/io/wia.rs
+@@ -12,7 +12,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
+ use tracing::{debug, instrument, warn};
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, big_endian::*};
+ 
+-use crate::{
++use crate::nod::{
+     Error, IoResultContext, Result, ResultContext,
+     common::{Compression, Format, HashBytes, KeyBytes, MagicBytes},
+     disc::{
+@@ -1947,11 +1947,11 @@ fn compr_data(compression: Compression) -> io::Result<Box<[u8]>> {
+     match compression {
+         #[cfg(feature = "compress-lzma")]
+         Compression::Lzma(level) => {
+-            Ok(Box::new(crate::util::compress::lzma_api::lzma_props_encode_preset(level as u32)?))
++            Ok(Box::new(crate::nod::util::compress::lzma_api::lzma_props_encode_preset(level as u32)?))
+         }
+         #[cfg(feature = "compress-lzma")]
+         Compression::Lzma2(level) => {
+-            Ok(Box::new(crate::util::compress::lzma_api::lzma2_props_encode_preset(level as u32)?))
++            Ok(Box::new(crate::nod::util::compress::lzma_api::lzma2_props_encode_preset(level as u32)?))
+         }
+         _ => Ok(Box::default()),
+     }
+@@ -1973,7 +1973,7 @@ fn compress_bound(compression: Compression, size: usize) -> usize {
+             size.div_ceil(1000) + size + 1000
+         }
+         #[cfg(feature = "compress-zstd")]
+-        Compression::Zstandard(_) => crate::util::compress::zstd_api::compress_bound(size),
++        Compression::Zstandard(_) => crate::nod::util::compress::zstd_api::compress_bound(size),
+         _ => unimplemented!("CompressionKind::compress_bound {:?}", compression),
+     }
+ }
+diff --git a/lib.rs b/lib.rs
+deleted file mode 100644
+index 87028eda3..000000000
+--- a/lib.rs
++++ /dev/null
+@@ -1,267 +0,0 @@
+-#![allow(clippy::new_ret_no_self)]
+-#![warn(missing_docs)]
+-//! Library for reading and writing Nintendo Optical Disc (GameCube and Wii) images.
+-//!
+-//! Originally based on the C++ library [nod](https://github.com/AxioDL/nod),
+-//! but with extended format support and many additional features.
+-//!
+-//! Currently supported file formats:
+-//! - ISO (GCM)
+-//! - WIA / RVZ
+-//! - WBFS (+ NKit 2 lossless)
+-//! - CISO (+ NKit 2 lossless)
+-//! - NFS (Wii U VC, read-only)
+-//! - GCZ
+-//! - TGC
+-//!
+-//! # Examples
+-//!
+-//! Opening a disc image and reading a file:
+-//!
+-//! ```no_run
+-//! use std::io::Read;
+-//!
+-//! use nod::{
+-//!     common::PartitionKind,
+-//!     read::{DiscOptions, DiscReader, PartitionOptions},
+-//! };
+-//!
+-//! // Open a disc image and the first data partition.
+-//! let disc =
+-//!     DiscReader::new("path/to/file.iso", &DiscOptions::default()).expect("Failed to open disc");
+-//! let mut partition = disc
+-//!     .open_partition_kind(PartitionKind::Data, &PartitionOptions::default())
+-//!     .expect("Failed to open data partition");
+-//!
+-//! // Read partition metadata and the file system table.
+-//! let meta = partition.meta().expect("Failed to read partition metadata");
+-//! let fst = meta.fst().expect("File system table is invalid");
+-//!
+-//! // Find a file by path and read it into a string.
+-//! if let Some((_, node)) = fst.find("/MP3/Worlds.txt") {
+-//!     let mut s = String::new();
+-//!     partition
+-//!         .open_file(node)
+-//!         .expect("Failed to open file stream")
+-//!         .read_to_string(&mut s)
+-//!         .expect("Failed to read file");
+-//!     println!("{}", s);
+-//! }
+-//! ```
+-//!
+-//! Converting a disc image to raw ISO:
+-//!
+-//! ```no_run
+-//! use nod::read::{DiscOptions, DiscReader, PartitionEncryption};
+-//!
+-//! let options = DiscOptions {
+-//!     partition_encryption: PartitionEncryption::Original,
+-//!     // Use 4 threads to preload data as the disc is read. This can speed up sequential reads,
+-//!     // especially when the disc image format uses compression.
+-//!     preloader_threads: 4,
+-//! };
+-//! // Open a disc image.
+-//! let mut disc = DiscReader::new("path/to/file.rvz", &options).expect("Failed to open disc");
+-//!
+-//! // Create a new output file.
+-//! let mut out = std::fs::File::create("output.iso").expect("Failed to create output file");
+-//! // Read directly from the DiscReader and write to the output file.
+-//! // NOTE: Any copy method that accepts `Read` and `Write` can be used here,
+-//! // such as `std::io::copy`. This example utilizes `BufRead` for efficiency,
+-//! // since `DiscReader` has its own internal buffer.
+-//! nod::util::buf_copy(&mut disc, &mut out).expect("Failed to write data");
+-//! ```
+-//!
+-//! Converting a disc image to RVZ:
+-//!
+-//! ```no_run
+-//! use std::{
+-//!     fs::File,
+-//!     io::{Seek, Write},
+-//! };
+-//!
+-//! use nod::{
+-//!     common::{Compression, Format},
+-//!     read::{DiscOptions, DiscReader, PartitionEncryption},
+-//!     write::{DiscWriter, DiscWriterWeight, FormatOptions, ProcessOptions, ScrubLevel},
+-//! };
+-//!
+-//! let open_options = DiscOptions {
+-//!     partition_encryption: PartitionEncryption::Original,
+-//!     // Use 4 threads to preload data as the disc is read. This can speed up sequential reads,
+-//!     // especially when the disc image format uses compression.
+-//!     preloader_threads: 4,
+-//! };
+-//! // Open a disc image.
+-//! let disc = DiscReader::new("path/to/file.iso", &open_options).expect("Failed to open disc");
+-//! // Create a new output file.
+-//! let mut output_file = File::create("output.rvz").expect("Failed to create output file");
+-//!
+-//! let options = FormatOptions {
+-//!     format: Format::Rvz,
+-//!     compression: Compression::Zstandard(19),
+-//!     block_size: Format::Rvz.default_block_size(),
+-//! };
+-//! // Create a disc writer with the desired output format.
+-//! let mut writer = DiscWriter::new(disc, &options).expect("Failed to create writer");
+-//!
+-//! // Ideally we'd base this on the actual number of CPUs available.
+-//! // This is just an example.
+-//! let num_threads = match writer.weight() {
+-//!     DiscWriterWeight::Light => 0,
+-//!     DiscWriterWeight::Medium => 4,
+-//!     DiscWriterWeight::Heavy => 12,
+-//! };
+-//! let process_options = ProcessOptions {
+-//!     processor_threads: num_threads,
+-//!     // Enable checksum calculation for the _original_ disc data.
+-//!     // Digests will be stored in the output file for verification, if supported.
+-//!     // They will also be returned in the finalization result.
+-//!     digest_crc32: true,
+-//!     digest_md5: false, // MD5 is slow, skip it
+-//!     digest_sha1: true,
+-//!     digest_xxh64: true,
+-//!     scrub: ScrubLevel::None,
+-//! };
+-//! // Start processing the disc image.
+-//! let finalization = writer
+-//!     .process(
+-//!         |data, _progress, _total| {
+-//!             output_file.write_all(data.as_ref())?;
+-//!             // One could display progress here, if desired.
+-//!             Ok(())
+-//!         },
+-//!         &process_options,
+-//!     )
+-//!     .expect("Failed to process disc image");
+-//!
+-//! // Some disc writers calculate data during processing.
+-//! // If the finalization returns header data, seek to the beginning of the file and write it.
+-//! if !finalization.header.is_empty() {
+-//!     output_file.rewind().expect("Failed to seek");
+-//!     output_file.write_all(finalization.header.as_ref()).expect("Failed to write header");
+-//! }
+-//! output_file.flush().expect("Failed to flush output file");
+-//!
+-//! // Display the calculated digests.
+-//! println!("CRC32: {:08X}", finalization.crc32.unwrap());
+-//! // ...
+-//! ```
+-
+-// [WIP] Disc image building is incomplete and not yet exposed.
+-pub(crate) mod build;
+-pub mod common;
+-pub mod disc;
+-pub(crate) mod io;
+-pub mod read;
+-pub mod util;
+-pub mod write;
+-
+-/// Error types for nod.
+-#[derive(thiserror::Error, Debug)]
+-pub enum Error {
+-    /// An error for disc format related issues.
+-    #[error("disc format error: {0}")]
+-    DiscFormat(String),
+-    /// A general I/O error.
+-    #[error("{0}: {1}")]
+-    Io(String, #[source] std::io::Error),
+-    /// An unknown error.
+-    #[error("error: {0}")]
+-    Other(String),
+-}
+-
+-impl From<&str> for Error {
+-    #[inline]
+-    fn from(s: &str) -> Error { Error::Other(s.to_string()) }
+-}
+-
+-impl From<std::io::Error> for Error {
+-    #[inline]
+-    fn from(e: std::io::Error) -> Error { Error::Io("IO Error".to_string(), e) }
+-}
+-
+-impl From<String> for Error {
+-    #[inline]
+-    fn from(s: String) -> Error { Error::Other(s) }
+-}
+-
+-impl From<zerocopy::AllocError> for Error {
+-    #[inline]
+-    fn from(_: zerocopy::AllocError) -> Error {
+-        Error::Io(
+-            "allocation failed".to_string(),
+-            std::io::Error::from(std::io::ErrorKind::OutOfMemory),
+-        )
+-    }
+-}
+-
+-/// Helper result type for [`Error`].
+-pub type Result<T, E = Error> = core::result::Result<T, E>;
+-
+-/// Helper trait for adding context to errors.
+-pub trait ErrorContext {
+-    /// Adds context to an error.
+-    fn context(self, context: impl Into<String>) -> Error;
+-}
+-
+-impl ErrorContext for std::io::Error {
+-    #[inline]
+-    fn context(self, context: impl Into<String>) -> Error { Error::Io(context.into(), self) }
+-}
+-
+-/// Helper trait for adding context to result errors.
+-pub trait ResultContext<T> {
+-    /// Adds context to a result error.
+-    fn context(self, context: impl Into<String>) -> Result<T>;
+-
+-    /// Adds context to a result error using a closure.
+-    fn with_context<F>(self, f: F) -> Result<T>
+-    where F: FnOnce() -> String;
+-}
+-
+-impl<T, E> ResultContext<T> for Result<T, E>
+-where E: ErrorContext
+-{
+-    #[inline]
+-    fn context(self, context: impl Into<String>) -> Result<T> {
+-        self.map_err(|e| e.context(context))
+-    }
+-
+-    #[inline]
+-    fn with_context<F>(self, f: F) -> Result<T>
+-    where F: FnOnce() -> String {
+-        self.map_err(|e| e.context(f()))
+-    }
+-}
+-
+-pub(crate) trait IoErrorContext {
+-    fn io_context(self, context: impl Into<String>) -> std::io::Error;
+-}
+-
+-impl IoErrorContext for std::io::Error {
+-    #[inline]
+-    fn io_context(self, context: impl Into<String>) -> std::io::Error {
+-        std::io::Error::new(self.kind(), self.context(context))
+-    }
+-}
+-
+-pub(crate) trait IoResultContext<T> {
+-    fn io_context(self, context: impl Into<String>) -> std::io::Result<T>;
+-
+-    fn io_with_context<F>(self, f: F) -> std::io::Result<T>
+-    where F: FnOnce() -> String;
+-}
+-
+-impl<T> IoResultContext<T> for std::io::Result<T> {
+-    #[inline]
+-    fn io_context(self, context: impl Into<String>) -> std::io::Result<T> {
+-        self.map_err(|e| e.io_context(context))
+-    }
+-
+-    #[inline]
+-    fn io_with_context<F>(self, f: F) -> std::io::Result<T>
+-    where F: FnOnce() -> String {
+-        self.map_err(|e| e.io_context(f()))
+-    }
+-}
+diff --git a/mod.rs b/mod.rs
+new file mode 100644
+index 000000000..759f11fd8
+--- /dev/null
++++ b/mod.rs
+@@ -0,0 +1,267 @@
++#![allow(clippy::new_ret_no_self)]
++#![warn(missing_docs)]
++//! Library for reading and writing Nintendo Optical Disc (GameCube and Wii) images.
++//!
++//! Originally based on the C++ library [nod](https://github.com/AxioDL/nod),
++//! but with extended format support and many additional features.
++//!
++//! Currently supported file formats:
++//! - ISO (GCM)
++//! - WIA / RVZ
++//! - WBFS (+ NKit 2 lossless)
++//! - CISO (+ NKit 2 lossless)
++//! - NFS (Wii U VC, read-only)
++//! - GCZ
++//! - TGC
++//!
++//! # Examples
++//!
++//! Opening a disc image and reading a file:
++//!
++//! ```no_run
++//! use std::io::Read;
++//!
++//! use rom_weaver_containers::nod::{
++//!     common::PartitionKind,
++//!     read::{DiscOptions, DiscReader, PartitionOptions},
++//! };
++//!
++//! // Open a disc image and the first data partition.
++//! let disc =
++//!     DiscReader::new("path/to/file.iso", &DiscOptions::default()).expect("Failed to open disc");
++//! let mut partition = disc
++//!     .open_partition_kind(PartitionKind::Data, &PartitionOptions::default())
++//!     .expect("Failed to open data partition");
++//!
++//! // Read partition metadata and the file system table.
++//! let meta = partition.meta().expect("Failed to read partition metadata");
++//! let fst = meta.fst().expect("File system table is invalid");
++//!
++//! // Find a file by path and read it into a string.
++//! if let Some((_, node)) = fst.find("/MP3/Worlds.txt") {
++//!     let mut s = String::new();
++//!     partition
++//!         .open_file(node)
++//!         .expect("Failed to open file stream")
++//!         .read_to_string(&mut s)
++//!         .expect("Failed to read file");
++//!     println!("{}", s);
++//! }
++//! ```
++//!
++//! Converting a disc image to raw ISO:
++//!
++//! ```no_run
++//! use rom_weaver_containers::nod::read::{DiscOptions, DiscReader, PartitionEncryption};
++//!
++//! let options = DiscOptions {
++//!     partition_encryption: PartitionEncryption::Original,
++//!     // Use 4 threads to preload data as the disc is read. This can speed up sequential reads,
++//!     // especially when the disc image format uses compression.
++//!     preloader_threads: 4,
++//! };
++//! // Open a disc image.
++//! let mut disc = DiscReader::new("path/to/file.rvz", &options).expect("Failed to open disc");
++//!
++//! // Create a new output file.
++//! let mut out = std::fs::File::create("output.iso").expect("Failed to create output file");
++//! // Read directly from the DiscReader and write to the output file.
++//! // NOTE: Any copy method that accepts `Read` and `Write` can be used here,
++//! // such as `std::io::copy`. This example utilizes `BufRead` for efficiency,
++//! // since `DiscReader` has its own internal buffer.
++//! rom_weaver_containers::nod::util::buf_copy(&mut disc, &mut out).expect("Failed to write data");
++//! ```
++//!
++//! Converting a disc image to RVZ:
++//!
++//! ```no_run
++//! use std::{
++//!     fs::File,
++//!     io::{Seek, Write},
++//! };
++//!
++//! use rom_weaver_containers::nod::{
++//!     common::{Compression, Format},
++//!     read::{DiscOptions, DiscReader, PartitionEncryption},
++//!     write::{DiscWriter, DiscWriterWeight, FormatOptions, ProcessOptions, ScrubLevel},
++//! };
++//!
++//! let open_options = DiscOptions {
++//!     partition_encryption: PartitionEncryption::Original,
++//!     // Use 4 threads to preload data as the disc is read. This can speed up sequential reads,
++//!     // especially when the disc image format uses compression.
++//!     preloader_threads: 4,
++//! };
++//! // Open a disc image.
++//! let disc = DiscReader::new("path/to/file.iso", &open_options).expect("Failed to open disc");
++//! // Create a new output file.
++//! let mut output_file = File::create("output.rvz").expect("Failed to create output file");
++//!
++//! let options = FormatOptions {
++//!     format: Format::Rvz,
++//!     compression: Compression::Zstandard(19),
++//!     block_size: Format::Rvz.default_block_size(),
++//! };
++//! // Create a disc writer with the desired output format.
++//! let mut writer = DiscWriter::new(disc, &options).expect("Failed to create writer");
++//!
++//! // Ideally we'd base this on the actual number of CPUs available.
++//! // This is just an example.
++//! let num_threads = match writer.weight() {
++//!     DiscWriterWeight::Light => 0,
++//!     DiscWriterWeight::Medium => 4,
++//!     DiscWriterWeight::Heavy => 12,
++//! };
++//! let process_options = ProcessOptions {
++//!     processor_threads: num_threads,
++//!     // Enable checksum calculation for the _original_ disc data.
++//!     // Digests will be stored in the output file for verification, if supported.
++//!     // They will also be returned in the finalization result.
++//!     digest_crc32: true,
++//!     digest_md5: false, // MD5 is slow, skip it
++//!     digest_sha1: true,
++//!     digest_xxh64: true,
++//!     scrub: ScrubLevel::None,
++//! };
++//! // Start processing the disc image.
++//! let finalization = writer
++//!     .process(
++//!         |data, _progress, _total| {
++//!             output_file.write_all(data.as_ref())?;
++//!             // One could display progress here, if desired.
++//!             Ok(())
++//!         },
++//!         &process_options,
++//!     )
++//!     .expect("Failed to process disc image");
++//!
++//! // Some disc writers calculate data during processing.
++//! // If the finalization returns header data, seek to the beginning of the file and write it.
++//! if !finalization.header.is_empty() {
++//!     output_file.rewind().expect("Failed to seek");
++//!     output_file.write_all(finalization.header.as_ref()).expect("Failed to write header");
++//! }
++//! output_file.flush().expect("Failed to flush output file");
++//!
++//! // Display the calculated digests.
++//! println!("CRC32: {:08X}", finalization.crc32.unwrap());
++//! // ...
++//! ```
++
++// [WIP] Disc image building is incomplete and not yet exposed.
++pub(crate) mod build;
++pub mod common;
++pub mod disc;
++pub(crate) mod io;
++pub mod read;
++pub mod util;
++pub mod write;
++
++/// Error types for nod.
++#[derive(thiserror::Error, Debug)]
++pub enum Error {
++    /// An error for disc format related issues.
++    #[error("disc format error: {0}")]
++    DiscFormat(String),
++    /// A general I/O error.
++    #[error("{0}: {1}")]
++    Io(String, #[source] std::io::Error),
++    /// An unknown error.
++    #[error("error: {0}")]
++    Other(String),
++}
++
++impl From<&str> for Error {
++    #[inline]
++    fn from(s: &str) -> Error { Error::Other(s.to_string()) }
++}
++
++impl From<std::io::Error> for Error {
++    #[inline]
++    fn from(e: std::io::Error) -> Error { Error::Io("IO Error".to_string(), e) }
++}
++
++impl From<String> for Error {
++    #[inline]
++    fn from(s: String) -> Error { Error::Other(s) }
++}
++
++impl From<zerocopy::AllocError> for Error {
++    #[inline]
++    fn from(_: zerocopy::AllocError) -> Error {
++        Error::Io(
++            "allocation failed".to_string(),
++            std::io::Error::from(std::io::ErrorKind::OutOfMemory),
++        )
++    }
++}
++
++/// Helper result type for [`Error`].
++pub type Result<T, E = Error> = core::result::Result<T, E>;
++
++/// Helper trait for adding context to errors.
++pub trait ErrorContext {
++    /// Adds context to an error.
++    fn context(self, context: impl Into<String>) -> Error;
++}
++
++impl ErrorContext for std::io::Error {
++    #[inline]
++    fn context(self, context: impl Into<String>) -> Error { Error::Io(context.into(), self) }
++}
++
++/// Helper trait for adding context to result errors.
++pub trait ResultContext<T> {
++    /// Adds context to a result error.
++    fn context(self, context: impl Into<String>) -> Result<T>;
++
++    /// Adds context to a result error using a closure.
++    fn with_context<F>(self, f: F) -> Result<T>
++    where F: FnOnce() -> String;
++}
++
++impl<T, E> ResultContext<T> for Result<T, E>
++where E: ErrorContext
++{
++    #[inline]
++    fn context(self, context: impl Into<String>) -> Result<T> {
++        self.map_err(|e| e.context(context))
++    }
++
++    #[inline]
++    fn with_context<F>(self, f: F) -> Result<T>
++    where F: FnOnce() -> String {
++        self.map_err(|e| e.context(f()))
++    }
++}
++
++pub(crate) trait IoErrorContext {
++    fn io_context(self, context: impl Into<String>) -> std::io::Error;
++}
++
++impl IoErrorContext for std::io::Error {
++    #[inline]
++    fn io_context(self, context: impl Into<String>) -> std::io::Error {
++        std::io::Error::new(self.kind(), self.context(context))
++    }
++}
++
++pub(crate) trait IoResultContext<T> {
++    fn io_context(self, context: impl Into<String>) -> std::io::Result<T>;
++
++    fn io_with_context<F>(self, f: F) -> std::io::Result<T>
++    where F: FnOnce() -> String;
++}
++
++impl<T> IoResultContext<T> for std::io::Result<T> {
++    #[inline]
++    fn io_context(self, context: impl Into<String>) -> std::io::Result<T> {
++        self.map_err(|e| e.io_context(context))
++    }
++
++    #[inline]
++    fn io_with_context<F>(self, f: F) -> std::io::Result<T>
++    where F: FnOnce() -> String {
++        self.map_err(|e| e.io_context(f()))
++    }
++}
+diff --git a/read.rs b/read.rs
+index 47334d7ee..2852f51b8 100644
+--- a/read.rs
++++ b/read.rs
+@@ -8,7 +8,7 @@ use std::{
+ use dyn_clone::DynClone;
+ use zerocopy::FromBytes;
+ 
+-use crate::{
++use crate::nod::{
+     Result,
+     common::{Compression, Format, PartitionInfo, PartitionKind},
+     disc,
+@@ -338,12 +338,12 @@ impl dyn PartitionReader + '_ {
+     /// ```no_run
+     /// use std::io::Read;
+     ///
+-    /// use nod::{
++    /// use rom_weaver_containers::nod::{
+     ///     common::PartitionKind,
+     ///     read::{DiscOptions, DiscReader, PartitionOptions},
+     /// };
+     ///
+-    /// fn main() -> nod::Result<()> {
++    /// fn main() -> rom_weaver_containers::nod::Result<()> {
+     ///     let disc = DiscReader::new("path/to/file.iso", &DiscOptions::default())?;
+     ///     let mut partition =
+     ///         disc.open_partition_kind(PartitionKind::Data, &PartitionOptions::default())?;
+@@ -381,12 +381,12 @@ impl dyn PartitionReader {
+     /// ```no_run
+     /// use std::io::Read;
+     ///
+-    /// use nod::{
++    /// use rom_weaver_containers::nod::{
+     ///     common::PartitionKind,
+     ///     read::{DiscOptions, DiscReader, OwnedFileReader, PartitionOptions},
+     /// };
+     ///
+-    /// fn main() -> nod::Result<()> {
++    /// fn main() -> rom_weaver_containers::nod::Result<()> {
+     ///     let disc = DiscReader::new("path/to/file.iso", &DiscOptions::default())?;
+     ///     let mut partition =
+     ///         disc.open_partition_kind(PartitionKind::Data, &PartitionOptions::default())?;
+diff --git a/util/aes.rs b/util/aes.rs
+index 080eda9ce..79ae7a012 100644
+--- a/util/aes.rs
++++ b/util/aes.rs
+@@ -1,6 +1,6 @@
+ use tracing::instrument;
+ 
+-use crate::{
++use crate::nod::{
+     common::KeyBytes,
+     disc::{
+         SECTOR_SIZE,
+diff --git a/util/compress.rs b/util/compress.rs
+index a112a0b48..e67a68beb 100644
+--- a/util/compress.rs
++++ b/util/compress.rs
+@@ -2,7 +2,7 @@ use std::{ffi::CStr, io};
+ 
+ use tracing::instrument;
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result,
+     common::Compression,
+     io::wia::{WIACompression, WIADisc},
+diff --git a/util/digest.rs b/util/digest.rs
+index 83f764987..8ba071174 100644
+--- a/util/digest.rs
++++ b/util/digest.rs
+@@ -2,7 +2,7 @@ use bytes::Bytes;
+ use digest::Digest;
+ use tracing::instrument;
+ 
+-use crate::{
++use crate::nod::{
+     common::HashBytes,
+     io::nkit::NKitHeader,
+     write::{DiscFinalization, ProcessOptions},
+diff --git a/util/lfg.rs b/util/lfg.rs
+index 3f1c492f9..b4fe598e7 100644
+--- a/util/lfg.rs
++++ b/util/lfg.rs
+@@ -9,7 +9,7 @@ use bytes::Buf;
+ use tracing::instrument;
+ use zerocopy::{IntoBytes, transmute_ref};
+ 
+-use crate::{disc::SECTOR_SIZE, util::array_ref_mut};
++use crate::nod::{disc::SECTOR_SIZE, util::array_ref_mut};
+ 
+ /// Value of `k` for the LFG.
+ pub const LFG_K: usize = 521;
+diff --git a/util/read.rs b/util/read.rs
+index e3037c392..d74892412 100644
+--- a/util/read.rs
++++ b/util/read.rs
+@@ -2,7 +2,7 @@ use std::{io, io::Read, sync::Arc};
+ 
+ use zerocopy::{FromBytes, FromZeros, IntoBytes};
+ 
+-use crate::read::DiscStream;
++use crate::nod::read::DiscStream;
+ 
+ #[inline(always)]
+ pub fn read_from<T, R>(reader: &mut R) -> io::Result<T>
+diff --git a/write.rs b/write.rs
+index 01b17edd1..45a2ad817 100644
+--- a/write.rs
++++ b/write.rs
+@@ -4,7 +4,7 @@ use std::io;
+ 
+ use bytes::Bytes;
+ 
+-use crate::{
++use crate::nod::{
+     Error, Result,
+     common::{Compression, Format},
+     disc,
+@@ -122,12 +122,12 @@ impl DiscWriter {
+                 }
+                 Box::new(reader)
+             }
+-            Format::Ciso => crate::io::ciso::DiscWriterCISO::new(reader, &options)?,
++            Format::Ciso => crate::nod::io::ciso::DiscWriterCISO::new(reader, &options)?,
+             #[cfg(feature = "compress-zlib")]
+-            Format::Gcz => crate::io::gcz::DiscWriterGCZ::new(reader, &options)?,
+-            Format::Tgc => crate::io::tgc::DiscWriterTGC::new(reader, &options)?,
+-            Format::Wbfs => crate::io::wbfs::DiscWriterWBFS::new(reader, &options)?,
+-            Format::Wia | Format::Rvz => crate::io::wia::DiscWriterWIA::new(reader, &options)?,
++            Format::Gcz => crate::nod::io::gcz::DiscWriterGCZ::new(reader, &options)?,
++            Format::Tgc => crate::nod::io::tgc::DiscWriterTGC::new(reader, &options)?,
++            Format::Wbfs => crate::nod::io::wbfs::DiscWriterWBFS::new(reader, &options)?,
++            Format::Wia | Format::Rvz => crate::nod::io::wia::DiscWriterWIA::new(reader, &options)?,
+             format => return Err(Error::Other(format!("Unsupported write format: {format}"))),
+         };
+         Ok(DiscWriter(inner))

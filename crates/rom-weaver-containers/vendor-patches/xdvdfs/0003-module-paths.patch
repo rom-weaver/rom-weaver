@@ -1,0 +1,242 @@
+diff --git a/blockdev.rs b/blockdev.rs
+index a7e1dabee..a982e8a00 100644
+--- a/blockdev.rs
++++ b/blockdev.rs
+@@ -88,7 +88,7 @@ where
+     E: Send + Sync,
+ {
+     #[maybe_async]
+-    pub async fn new(dev: T) -> Result<Self, crate::util::Error<E>> {
++    pub async fn new(dev: T) -> Result<Self, crate::xdvdfs::util::Error<E>> {
+         let mut s = Self {
+             inner: dev,
+             offset: 0,
+@@ -98,13 +98,13 @@ where
+         for offset in XDVD_OFFSETS {
+             s.offset = *offset;
+ 
+-            let vol = crate::read::read_volume(&mut s).await;
++            let vol = crate::xdvdfs::read::read_volume(&mut s).await;
+             if vol.is_ok() {
+                 return Ok(s);
+             }
+         }
+ 
+-        Err(crate::util::Error::InvalidVolume)
++        Err(crate::xdvdfs::util::Error::InvalidVolume)
+     }
+ 
+     pub fn get_ref(&self) -> &T {
+diff --git a/checksum.rs b/checksum.rs
+index c74157e84..546490a01 100644
+--- a/checksum.rs
++++ b/checksum.rs
+@@ -1,7 +1,7 @@
+ use alloc::{collections::BTreeMap, string::String};
+ use sha3::{Digest, Sha3_256};
+ 
+-use crate::{
++use crate::xdvdfs::{
+     blockdev::BlockDeviceRead,
+     layout::{DirectoryEntryNode, VolumeDescriptor},
+     util,
+diff --git a/lib.rs b/lib.rs
+deleted file mode 100644
+index aabc75923..000000000
+--- a/lib.rs
++++ /dev/null
+@@ -1,32 +0,0 @@
+-#![no_std]
+-
+-extern crate alloc;
+-#[cfg(feature = "std")]
+-extern crate std;
+-
+-macro_rules! traceln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::trace!($($x),*);
+-    };
+-}
+-
+-macro_rules! debugln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::debug!($($x),*);
+-    };
+-}
+-
+-pub mod blockdev;
+-pub mod layout;
+-pub mod util;
+-
+-#[cfg(feature = "read")]
+-pub mod read;
+-
+-#[cfg(feature = "write")]
+-pub mod write;
+-
+-#[cfg(all(feature = "checksum", feature = "std"))]
+-pub mod checksum;
+diff --git a/mod.rs b/mod.rs
+new file mode 100644
+index 000000000..aabc75923
+--- /dev/null
++++ b/mod.rs
+@@ -0,0 +1,32 @@
++#![no_std]
++
++extern crate alloc;
++#[cfg(feature = "std")]
++extern crate std;
++
++macro_rules! traceln {
++    ($($x:expr),*) => {
++        #[cfg(all(feature = "std", feature = "logging"))]
++        log::trace!($($x),*);
++    };
++}
++
++macro_rules! debugln {
++    ($($x:expr),*) => {
++        #[cfg(all(feature = "std", feature = "logging"))]
++        log::debug!($($x),*);
++    };
++}
++
++pub mod blockdev;
++pub mod layout;
++pub mod util;
++
++#[cfg(feature = "read")]
++pub mod read;
++
++#[cfg(feature = "write")]
++pub mod write;
++
++#[cfg(all(feature = "checksum", feature = "std"))]
++pub mod checksum;
+diff --git a/util.rs b/util.rs
+index 0de7d6f23..5a152e082 100644
+--- a/util.rs
++++ b/util.rs
+@@ -106,7 +106,7 @@ pub fn cmp_ignore_case_utf8(a: &str, b: &str) -> core::cmp::Ordering {
+ 
+ #[cfg(test)]
+ mod test {
+-    use crate::util::cmp_ignore_case_utf8;
++    use crate::xdvdfs::util::cmp_ignore_case_utf8;
+ 
+     #[test]
+     fn test_str_ignore_case_alpha() {
+diff --git a/write/dirtab.rs b/write/dirtab.rs
+index d4b4ee427..96f0b7681 100644
+--- a/write/dirtab.rs
++++ b/write/dirtab.rs
+@@ -1,9 +1,9 @@
+-use crate::layout::{
++use crate::xdvdfs::layout::{
+     self, DirectoryEntryData, DirectoryEntryDiskData, DirectoryEntryDiskNode, DirentAttributes,
+     DiskRegion,
+ };
+-use crate::util;
+-use crate::write::avl;
++use crate::xdvdfs::util;
++use crate::xdvdfs::write::avl;
+ 
+ use alloc::string::ToString;
+ use alloc::{boxed::Box, string::String, vec::Vec};
+diff --git a/write/fs/mod.rs b/write/fs/mod.rs
+index 43ab8c6fa..6edd058cf 100644
+--- a/write/fs/mod.rs
++++ b/write/fs/mod.rs
+@@ -8,7 +8,7 @@ use alloc::boxed::Box;
+ use alloc::string::String;
+ use alloc::vec::Vec;
+ 
+-use crate::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
+ 
+ use maybe_async::maybe_async;
+ 
+diff --git a/write/fs/sector_linear.rs b/write/fs/sector_linear.rs
+index 6537e97b3..4f3b6501e 100644
+--- a/write/fs/sector_linear.rs
++++ b/write/fs/sector_linear.rs
+@@ -1,4 +1,4 @@
+-use crate::{blockdev::BlockDeviceWrite, layout};
++use crate::xdvdfs::{blockdev::BlockDeviceWrite, layout};
+ use alloc::boxed::Box;
+ use alloc::vec::Vec;
+ use maybe_async::maybe_async;
+diff --git a/write/fs/stdfs.rs b/write/fs/stdfs.rs
+index 31c056214..0ff9faa4e 100644
+--- a/write/fs/stdfs.rs
++++ b/write/fs/stdfs.rs
+@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
+ #[cfg(not(feature = "sync"))]
+ use alloc::boxed::Box;
+ 
+-use crate::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
+ 
+ use super::{FileEntry, FileType, Filesystem, PathVec};
+ 
+diff --git a/write/fs/xdvdfs.rs b/write/fs/xdvdfs.rs
+index 83cc55094..da6fb4929 100644
+--- a/write/fs/xdvdfs.rs
++++ b/write/fs/xdvdfs.rs
+@@ -7,7 +7,7 @@ use alloc::boxed::Box;
+ 
+ use maybe_async::maybe_async;
+ 
+-use crate::{
++use crate::xdvdfs::{
+     blockdev::{BlockDeviceRead, BlockDeviceWrite},
+     util,
+ };
+@@ -19,7 +19,7 @@ where
+     D: BlockDeviceRead<E> + Sized,
+ {
+     dev: D,
+-    volume: crate::layout::VolumeDescriptor,
++    volume: crate::xdvdfs::layout::VolumeDescriptor,
+     etype: core::marker::PhantomData<E>,
+ }
+ 
+@@ -29,7 +29,7 @@ where
+ {
+     #[maybe_async]
+     pub async fn new(mut dev: D) -> Option<XDVDFSFilesystem<E, D>> {
+-        let volume = crate::read::read_volume(&mut dev).await;
++        let volume = crate::xdvdfs::read::read_volume(&mut dev).await;
+ 
+         if let Ok(volume) = volume {
+             Some(Self {
+diff --git a/write/img.rs b/write/img.rs
+index a96e98e30..527ea4dd2 100644
+--- a/write/img.rs
++++ b/write/img.rs
+@@ -1,9 +1,9 @@
+ use alloc::collections::BTreeMap;
+ use alloc::string::String;
+ 
+-use crate::blockdev::BlockDeviceWrite;
+-use crate::write::{dirtab, fs, sector};
+-use crate::{layout, util};
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::write::{dirtab, fs, sector};
++use crate::xdvdfs::{layout, util};
+ 
+ use alloc::vec;
+ use alloc::vec::Vec;
+diff --git a/write/sector.rs b/write/sector.rs
+index 85715d957..39bb60544 100644
+--- a/write/sector.rs
++++ b/write/sector.rs
+@@ -1,4 +1,4 @@
+-use crate::layout::SECTOR_SIZE;
++use crate::xdvdfs::layout::SECTOR_SIZE;
+ 
+ pub struct SectorAllocator {
+     next_free: u32,

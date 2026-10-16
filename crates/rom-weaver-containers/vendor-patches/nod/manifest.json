@@ -125,7 +125,9 @@
         "status": "no-submission-found",
         "url": "https://github.com/encounter/nod"
       },
-      "tests": ["cargo test -p rom-weaver-containers --lib nod::"]
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
     },
     {
       "file": "0010-window-is-empty.patch",
@@ -135,7 +137,9 @@
         "status": "no-submission-found",
         "url": "https://github.com/encounter/nod"
       },
-      "tests": ["cargo test -p rom-weaver-containers --lib nod::"]
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
     },
     {
       "file": "0011-tracing-diagnostics.patch",
@@ -145,7 +149,9 @@
         "status": "no-submission-found",
         "url": "https://github.com/encounter/nod"
       },
-      "tests": ["cargo test -p rom-weaver-containers --lib nod::"]
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
     },
     {
       "file": "0012-rust-codec-backends.patch",
@@ -168,12 +174,75 @@
         "status": "project-specific",
         "url": "https://github.com/encounter/nod"
       },
-      "tests": ["cargo test -p rom-weaver-containers --lib nod::io::", "mise run build-wasm"]
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::",
+        "mise run build-wasm"
+      ]
     },
     {
-      "file": "0014-project-integration.patch",
+      "file": "0014-remove-python-bindings.patch",
       "stage": "integration",
-      "reason": "Inline the library as a workspace module; rewrite module/documentation paths, resolve pinned features, remove unused backends/dead code, attach existing test hooks, and reproduce workspace formatting/edition compatibility. Codec and WASI adaptations are isolated in preceding patches.",
+      "reason": "Remove the PyO3 bindings and their feature-gated module, which this workspace never enables.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0015-module-paths.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest paths to crate::nod:: and rom_weaver_containers::nod::. Mechanical; mod.rs appears as a delete and add because patch renames are unsupported.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0016-workspace-formatting.patch",
+      "stage": "integration",
+      "reason": "Apply workspace rustfmt defaults in place of upstream's rustfmt.toml. Formatting only; reproduce with `rustfmt --edition 2024 mod.rs`.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0017-workspace-lints.patch",
+      "stage": "integration",
+      "reason": "Allow upstream's collapsible-if and manual multiple-of style under the workspace clippy policy.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo clippy -p rom-weaver-containers --all-targets -- -D warnings"
+      ]
+    },
+    {
+      "file": "0018-dead-code-cleanup.patch",
+      "stage": "integration",
+      "reason": "Remove unused preloader fields, shutdown and commented-out thread tuning, unused NKit flags and a stale WIP comment; document the read-ahead floor and cache sizing.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0019-test-hooks.patch",
+      "stage": "integration",
+      "reason": "Attach the project's nod unit-test modules and add inline WIA/RVZ header, disc and block-reader validation tests.",
       "upstream": {
         "status": "project-specific",
         "url": "https://github.com/encounter/nod"
@@ -185,5 +254,7 @@
     }
   ],
   "materialized": true,
-  "preserve": ["NOD_VERSION"]
+  "preserve": [
+    "NOD_VERSION"
+  ]
 }

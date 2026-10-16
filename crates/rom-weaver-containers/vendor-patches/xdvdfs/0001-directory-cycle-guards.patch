@@ -95,3 +95,23 @@ index 60b8f9652..95d295d6f 100644
                  }
  
                  dirents.push((parent.clone(), *child));
+diff --git a/util.rs b/util.rs
+index fe0605618..0de7d6f23 100644
+--- a/util.rs
++++ b/util.rs
+@@ -8,6 +8,7 @@ pub enum Error<E> {
+     SerializationFailed(bincode::Error),
+     InvalidVolume,
+     DirectoryEmpty,
++    CyclicDirectory,
+     DoesNotExist,
+     StringEncodingError,
+     NoDirent,
+@@ -26,6 +27,7 @@ impl<E> Error<E> {
+             Self::SerializationFailed(_) => "Serialization failed",
+             Self::InvalidVolume => "Not an XDVDFS volume",
+             Self::DirectoryEmpty => "Directory is empty",
++            Self::CyclicDirectory => "Cyclic directory reference",
+             Self::DoesNotExist => "Entry does not exist",
+             Self::StringEncodingError => "Cannot decode string into UTF-8",
+             Self::NoDirent => "Path exists, but dirent does not (likely root)",
