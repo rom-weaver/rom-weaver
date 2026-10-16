@@ -1,5 +1,5 @@
 diff --git a/read.rs b/read.rs
-index 60b8f9652..95d295d6f 100644
+index 60b8f9652..6a24b0263 100644
 --- a/read.rs
 +++ b/read.rs
 @@ -3,6 +3,7 @@ use super::layout::{
@@ -34,16 +34,15 @@ index 60b8f9652..95d295d6f 100644
          let mut path_iter = path
              .trim_start_matches('/')
              .split_terminator('/')
-@@ -136,13 +145,19 @@ impl DirectoryEntryTable {
+@@ -136,13 +145,18 @@ impl DirectoryEntryTable {
              traceln!("[walk_path] Node: {:?}", dirent.node);
              let dirent_data = &dirent.node.dirent;
  
 +            let child_table = dirent_data.dirent_table();
-+            if let Some(table) = child_table
-+                && !table.is_empty()
-+                && !ancestors.insert(table.region.sector)
-+            {
-+                return Err(util::Error::CyclicDirectory);
++            if let Some(table) = child_table {
++                if !table.is_empty() && !ancestors.insert(table.region.sector) {
++                    return Err(util::Error::CyclicDirectory);
++                }
 +            }
 +
              if path_iter.peek().is_none() {
@@ -57,7 +56,7 @@ index 60b8f9652..95d295d6f 100644
          }
  
          unreachable!("path_iter has been consumed without returning last dirent")
-@@ -166,8 +181,12 @@ impl DirectoryEntryTable {
+@@ -166,8 +180,12 @@ impl DirectoryEntryTable {
          }
  
          let mut stack = vec![0];
@@ -70,7 +69,7 @@ index 60b8f9652..95d295d6f 100644
              let dirent = read_dirent(dev, offset).await?;
  
              if let Some(dirent) = dirent {
-@@ -202,14 +221,21 @@ impl DirectoryEntryTable {
+@@ -202,14 +220,21 @@ impl DirectoryEntryTable {
  
          let mut dirents = vec![];
  

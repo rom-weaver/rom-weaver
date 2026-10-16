@@ -20,6 +20,26 @@ index 76494bf39..46f4d6178 100644
              size += 4 - size % 4;
          }
  
+diff --git a/read.rs b/read.rs
+index 6a24b0263..95d295d6f 100644
+--- a/read.rs
++++ b/read.rs
+@@ -146,10 +146,11 @@ impl DirectoryEntryTable {
+             let dirent_data = &dirent.node.dirent;
+ 
+             let child_table = dirent_data.dirent_table();
+-            if let Some(table) = child_table {
+-                if !table.is_empty() && !ancestors.insert(table.region.sector) {
+-                    return Err(util::Error::CyclicDirectory);
+-                }
++            if let Some(table) = child_table
++                && !table.is_empty()
++                && !ancestors.insert(table.region.sector)
++            {
++                return Err(util::Error::CyclicDirectory);
+             }
+ 
+             if path_iter.peek().is_none() {
 diff --git a/util.rs b/util.rs
 index de8524c38..cae1cd8c2 100644
 --- a/util.rs
