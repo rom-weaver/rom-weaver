@@ -25,9 +25,11 @@ pub(super) struct WeaveApplyResolution {
     pub checks: Vec<NamedCheck>,
     /// `rom.checks`: the supplied ROM file as resolved (root or `rom.member`),
     /// before any header strip or byte-order conversion. They MUST be
-    /// compared against those raw bytes and never steer the header or N64
-    /// byte-order decision, which a patch's own input checks may describe
-    /// differently.
+    /// compared against those raw bytes first, and a raw match MUST NOT steer
+    /// the header or N64 byte-order decision. When only the header-stripped or
+    /// another N64 byte-order form matches, that form decides the layout only
+    /// if the first patch has no checksum evidence; for the N64 order, the
+    /// patch's decisive record structure also outranks it.
     pub rom_checks: Option<NamedCheck>,
     /// Advisory file-name expectation for a ROM supplied separately from the
     /// weave. Compared after auto-extraction resolves the logical ROM leaf.

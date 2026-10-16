@@ -2637,6 +2637,139 @@ fn weave_rom_checks_on_the_headerless_form_strip_a_snes_copier_header() {
 }
 
 #[test]
+fn weave_rom_checks_on_the_headerless_form_agree_with_decisive_ips_header_geometry() {
+    // The IPS record at offset 0 lands inside the copier header on the raw
+    // basis, so the record geometry alone also says headerless.
+    let body = vec![0xA5_u8; 32768];
+    let mut modified = body.clone();
+    modified[0] = b'Z';
+    let temp = setup_temp_dir();
+    let (_, bytes) = apply_weave_recorded_from_body(
+        &temp,
+        "game.smc",
+        &with_header(&body),
+        &body,
+        &modified,
+        json!({}),
+    );
+    // Copier headers are not restored on output.
+    assert_eq!(bytes, modified, "snes geometry and rom.checks agree");
+}
+
+#[test]
+fn weave_rom_checks_on_another_n64_order_yield_to_decisive_record_structure() {
+    // The IPS was made for the byte-swapped order and its records alone
+    // decide that; the weave was recorded from the big-endian dump, so the
+    // matched form MUST NOT override the record structure.
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..8188).map(|_| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 24) as u8
+    }));
+    let swap_pairs = |bytes: &[u8]| -> Vec<u8> {
+        bytes
+            .chunks_exact(2)
+            .flat_map(|pair| [pair[1], pair[0]])
+            .collect()
+    };
+    let reverse_words = |bytes: &[u8]| -> Vec<u8> {
+        bytes
+            .chunks_exact(4)
+            .flat_map(|word| [word[3], word[2], word[1], word[0]])
+            .collect()
+    };
+    let v64 = swap_pairs(&z64);
+    // Each record writes the byte that sits at its offset in the big-endian
+    // (even records) or little-endian (odd records) order, so at either wrong
+    // order the record edge matches the bytes underneath and is ruled out.
+    let mut v64_modified = v64.clone();
+    for (index, offset) in [
+        0x200,
+        0x401,
+        0x602,
+        0x803,
+        0xA00,
+        0xC01,
+        0xE02,
+        0x1003_usize,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let word = offset & !3;
+        let source = if index % 2 == 0 {
+            offset ^ 1
+        } else {
+            word + (offset - word + 2) % 4
+        };
+        assert_ne!(
+            v64[source], v64[offset],
+            "fixture record {offset:#x} changes a byte"
+        );
+        v64_modified[offset] = v64[source];
+    }
+    let z64_modified = swap_pairs(&v64_modified);
+    let temp = setup_temp_dir();
+    fs::write(temp.child("made-for.v64").path(), &v64).expect("v64 fixture");
+    fs::write(temp.child("modified.v64").path(), &v64_modified).expect("modified fixture");
+    create_patch_file(
+        temp.child("made-for.v64").path(),
+        temp.child("modified.v64").path(),
+        "ips",
+        temp.child("update.ips").path(),
+    );
+    for (rom_name, rom, expected) in [
+        ("game.v64", v64.clone(), v64_modified.clone()),
+        (
+            "game.n64",
+            reverse_words(&z64),
+            reverse_words(&z64_modified),
+        ),
+        ("game.z64", z64.clone(), z64_modified.clone()),
+    ] {
+        fs::write(temp.child(rom_name).path(), &rom).expect("rom fixture");
+        // Precondition: the record structure decides on its own.
+        let plain = temp.child(format!("plain-{rom_name}"));
+        run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                temp.child(rom_name).path().to_str().expect("path"),
+                "--patch",
+                temp.child("update.ips").path().to_str().expect("path"),
+                "--output",
+                plain.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(plain.path()).expect("plain output"),
+            expected,
+            "record structure alone ({rom_name})"
+        );
+        let (terminal, bytes) = apply_weave_with_rom_checks(
+            &temp,
+            rom_name,
+            "update.ips",
+            json!({ "checksums": { "crc32": crc32_hex(&z64) }, "size": z64.len() }),
+            &format!("out-{rom_name}"),
+            &[],
+            0,
+        );
+        assert_eq!(
+            bytes,
+            Some(expected),
+            "record structure outranks rom.checks ({rom_name}): {terminal}"
+        );
+    }
+}
+
+#[test]
 fn weave_rom_checks_on_another_n64_order_convert_for_a_patch_without_evidence() {
     let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
     z64.extend((0..4092_u32).map(|index| (index % 251) as u8));

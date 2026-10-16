@@ -2261,27 +2261,17 @@ impl CliApp {
                             .unwrap_or(source),
                         None,
                     ),
-                    // The weave was recorded from this order and the patch
-                    // proves nothing itself, so it was most likely made for it.
-                    None => match (inference, weave_rom_order) {
-                        (N64AutoInference::Structural, Some(order)) => {
-                            debug!(
-                                input = %input.display(),
-                                order = order.id(),
-                                "auto n64: the weave ROM checks match this byte order; converting before apply"
-                            );
-                            (
-                                order,
-                                Some(format!(
-                                    "patch N64 byte order taken as {} (the weave ROM checks match that form of the ROM)",
-                                    order.label()
-                                )),
-                            )
-                        }
-                        _ => self.infer_patch_n64_target(
-                            input, patch, source, inference, context, temp_paths,
-                        ),
-                    },
+                    None => self.infer_patch_n64_target(
+                        N64Inference {
+                            input,
+                            patch,
+                            source,
+                            inference,
+                            weave_rom_order,
+                        },
+                        context,
+                        temp_paths,
+                    ),
                 }
             }
             concrete => (concrete.target().unwrap_or(source), None),
@@ -2298,13 +2288,17 @@ impl CliApp {
     /// three.
     fn infer_patch_n64_target(
         &self,
-        input: &Path,
-        patch: Option<&Path>,
-        source: N64ByteOrder,
-        inference: N64AutoInference,
+        request: N64Inference<'_>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> (N64ByteOrder, Option<String>) {
+        let N64Inference {
+            input,
+            patch,
+            source,
+            inference,
+            weave_rom_order,
+        } = request;
         let (N64AutoInference::Structural, Some(patch)) = (inference, patch) else {
             trace!(
                 input = %input.display(),
@@ -2318,8 +2312,25 @@ impl CliApp {
             trace!(
                 input = %input.display(),
                 patch = %patch.display(),
-                "auto n64: nothing separates the three orders; keeping the current one"
+                "auto n64: nothing separates the three orders"
             );
+            // The weave was recorded from this order, so without evidence
+            // from the patch it beats keeping the current order.
+            if let Some(order) = weave_rom_order {
+                debug!(
+                    input = %input.display(),
+                    order = order.id(),
+                    "auto n64: the weave ROM checks match this byte order; converting before apply"
+                );
+                return (
+                    order,
+                    Some(format!(
+                        "patch N64 byte order taken as {} (the weave ROM checks match that form of the ROM)",
+                        order.label()
+                    )),
+                );
+            }
+            trace!(input = %input.display(), "auto n64: keeping the current order");
             return (source, Self::n64_order_guess_warning(source));
         };
         let note = format!(
@@ -3229,11 +3240,22 @@ pub(super) struct N64TargetRequest<'a> {
     pub(super) input: &'a Path,
     pub(super) patch: Option<&'a Path>,
     pub(super) expected_crc32: Option<&'a str>,
-    /// The order of the form the weave `rom.checks` matched, used when no
-    /// checksum proves the patch's order.
+    /// The order of the form the weave `rom.checks` matched, used only when
+    /// neither a checksum nor the patch's record structure settles the order.
     pub(super) weave_rom_order: Option<N64ByteOrder>,
     pub(super) mode: PatchN64ByteOrderMode,
     pub(super) inference: N64AutoInference,
+}
+
+/// What the checksumless half of `--n64-byte-order auto` weighs.
+struct N64Inference<'a> {
+    input: &'a Path,
+    patch: Option<&'a Path>,
+    source: N64ByteOrder,
+    inference: N64AutoInference,
+    /// The order of the form the weave `rom.checks` matched; used only when
+    /// the patch's record structure decides nothing.
+    weave_rom_order: Option<N64ByteOrder>,
 }
 
 /// The order the input is in, the order the patch needs, and how that was

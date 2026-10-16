@@ -450,8 +450,10 @@ impl CliApp {
     /// Compare the weave's `rom.checks` with the ROM file it resolved to.
     /// A weave may be recorded from another dump of the same game, so a
     /// match against the header-stripped or another N64 byte-order form of
-    /// that file is accepted too. The checks never steer the header or
-    /// byte-order decision. `--ignore-checksum-validation` skips them.
+    /// that file is accepted too. A raw match never steers the header or
+    /// byte-order decision; a transformed match may, as described on
+    /// `WeaveApplyResolution::rom_checks`. `--ignore-checksum-validation`
+    /// skips the checks.
     /// Returns the verification labels for the report and the matched
     /// transformed form, if the raw file did not match.
     fn verify_weave_rom_checks(
