@@ -323,13 +323,31 @@ const writeOpenSslConfig = (configPath, lanAddresses) => {
   );
 };
 
+const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+let shutdownInstalled = false;
+
+// The certificate directory holds a private key and its name embeds this process id,
+// so nothing reuses it after exit. Remove it from the moment it exists:
+// - the "exit" event covers normal exit, process.exit() and uncaught errors;
+// - a signal does not emit "exit", so until installShutdown takes over the signals this
+//   handler removes the directory and exits with the conventional 128 + signal status;
+// - once installShutdown runs, its graceful close owns the signals and ends in
+//   process.exit(), which fires the "exit" hook.
+// Only SIGKILL cannot be handled.
+const removeOnExit = (directory) => {
+  process.once("exit", () => fs.rmSync(directory, { recursive: true, force: true }));
+  for (const signal of TERMINATION_SIGNALS) {
+    process.once(signal, () => {
+      if (shutdownInstalled) return;
+      process.exit(128 + os.constants.signals[signal]);
+    });
+  }
+};
+
 const ensureCertificate = (lanAddresses) => {
   const paths = getCertificatePaths();
   fs.mkdirSync(paths.directory, { recursive: true });
-  // The directory name embeds this process id, so nothing reuses it after exit.
-  // The exit event also fires for process.exit() in the signal handler and for
-  // uncaught errors; only SIGKILL skips it.
-  process.once("exit", () => fs.rmSync(paths.directory, { recursive: true, force: true }));
+  removeOnExit(paths.directory);
   writeOpenSslConfig(paths.config, lanAddresses);
 
   if (!(fs.existsSync(paths.key) && fs.existsSync(paths.cert))) {
@@ -456,6 +474,7 @@ const formatStartupError = (error, options) => {
 };
 
 const installShutdown = (servers, viteServer, cleanup) => {
+  shutdownInstalled = true;
   let closing = false;
   const close = async (signal) => {
     if (closing) return;
@@ -469,8 +488,7 @@ const installShutdown = (servers, viteServer, cleanup) => {
     }
   };
 
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
+  for (const signal of TERMINATION_SIGNALS) process.once(signal, close);
 };
 
 const startWasmBuildWatcher = (viteServer) => {
