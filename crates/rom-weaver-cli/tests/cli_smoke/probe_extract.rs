@@ -2264,3 +2264,64 @@ fn raw_file_with_stream_signature_is_not_decoded_as_itself() {
         );
     }
 }
+
+#[test]
+fn extract_nested_empty_psar_pbp_preserves_rom_and_extracts_disc_pbp() {
+    let temp = setup_temp_dir();
+    let homebrew = build_test_empty_psar_pbp();
+    let disc = build_test_pbp_iso(72, 37);
+    let payloads = temp.child("payloads");
+    fs::create_dir_all(payloads.path()).expect("payload directory");
+    fs::write(payloads.child("EBOOT.PBP").path(), &homebrew).expect("homebrew fixture");
+    fs::write(
+        payloads.child("disc.pbp").path(),
+        build_test_pbp_fixture(vec![("SLUS00001", disc.clone())]),
+    )
+    .expect("disc fixture");
+    let inner = temp.child("mixed.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            payloads.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(inner.path(), "mixed.zip")], outer.path());
+    for (depth, archive) in [inner.path(), outer.path()].into_iter().enumerate() {
+        let output = temp.child(format!("extract-{depth}"));
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--input",
+                archive.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+        let leaf = emitted_file_entry(&terminal, "EBOOT.PBP");
+        assert_eq!(
+            fs::read(leaf["path"].as_str().expect("homebrew path")).expect("homebrew bytes"),
+            homebrew
+        );
+        let bin = emitted_file_entry(&terminal, "disc.bin");
+        assert_eq!(
+            fs::read(bin["path"].as_str().expect("disc path")).expect("disc bytes"),
+            disc
+        );
+        let files = terminal["details"]["emitted_files"]
+            .as_array()
+            .expect("emitted files");
+        assert_eq!(files.len(), 3, "only the PSP ROM and PS1 cue/bin leaves");
+    }
+}

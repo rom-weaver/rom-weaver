@@ -401,6 +401,13 @@ pub trait ContainerHandlerOperations: Send + Sync {
         let _ = source;
         ProbeConfidence::Extension
     }
+    /// True when `source` carries this format's signature but holds no payload to extract, so
+    /// it is itself the ROM (for example a PSP homebrew `EBOOT.PBP` with an empty `DATA.PSAR`).
+    /// Automatic payload resolution and recursive extraction MUST retain it as a ROM leaf.
+    fn is_self_contained_rom(&self, source: &Path) -> bool {
+        let _ = source;
+        false
+    }
     fn probe_details(
         &self,
         request: &ContainerProbeRequest,
@@ -621,6 +628,10 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             "container probe complete"
         );
         confidence
+    }
+
+    fn is_self_contained_rom(&self, source: &Path) -> bool {
+        self.inner.is_self_contained_rom(source)
     }
 
     fn probe_details(

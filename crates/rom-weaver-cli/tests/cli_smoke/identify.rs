@@ -1240,3 +1240,206 @@ fn identify_title_index_error_names_the_path() {
         "{json}"
     );
 }
+
+fn assert_default_pbp_rom_resolution(command: &str, source_name: &str) {
+    let temp = setup_temp_dir();
+    let source = temp.child(source_name);
+    fs::write(source.path(), build_test_empty_psar_pbp()).expect("PBP fixture");
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    let archive = temp.child("homebrew.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(archive.path(), "homebrew.zip")], outer.path());
+    for input in [source.path(), archive.path(), outer.path()] {
+        let mut args = vec![command, "--input", input.to_str().expect("path"), "--json"];
+        if command == "identify" {
+            args.extend(["--database", database.path().to_str().expect("path")]);
+        }
+        let terminal = isolated_json_event(&temp, &args, 0);
+        let details = if command == "identify" {
+            &terminal["details"]["identify"]
+        } else {
+            &terminal["details"]
+        };
+        assert_eq!(
+            details["checksums"]["sha1"],
+            checksum["details"]["checksums"]["sha1"]
+        );
+        if command == "identify" {
+            assert_eq!(details["detected_platform"], "Sony Playstation Portable");
+        } else {
+            assert_eq!(details["platform"], "Sony Playstation Portable");
+            assert_eq!(details["size"], 256);
+        }
+    }
+}
+
+#[test]
+fn checksum_default_preserves_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("checksum", "EBOOT.PBP");
+}
+
+#[test]
+fn identify_default_preserves_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("identify", "EBOOT.PBP");
+}
+
+#[test]
+fn checksum_and_identify_default_still_extract_disc_pbp() {
+    let temp = setup_temp_dir();
+    let disc = build_test_pbp_iso(72, 63);
+    let raw = temp.child("expected.bin");
+    fs::write(raw.path(), &disc).expect("raw fixture");
+    let expected = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            raw.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    )["details"]["checksums"]["sha1"]
+        .clone();
+    let source = temp.child("disc.pbp");
+    fs::write(
+        source.path(),
+        build_test_pbp_fixture(vec![("SLUS00001", disc)]),
+    )
+    .expect("PBP fixture");
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    for command in ["checksum", "identify"] {
+        let mut args = vec![
+            command,
+            "--input",
+            source.path().to_str().expect("path"),
+            "--json",
+        ];
+        if command == "identify" {
+            args.extend(["--database", database.path().to_str().expect("path")]);
+        }
+        let ambiguous = isolated_json_event(&temp, &args, 1);
+        assert!(
+            ambiguous["label"]
+                .as_str()
+                .expect("label")
+                .contains("ambiguous")
+        );
+        args.extend(["--select", "disc.bin"]);
+        let terminal = isolated_json_event(&temp, &args, 0);
+        let details = if command == "identify" {
+            &terminal["details"]["identify"]
+        } else {
+            &terminal["details"]
+        };
+        assert_eq!(details["checksums"]["sha1"], expected);
+    }
+}
+
+#[test]
+fn checksum_default_preserves_extensionless_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("checksum", "homebrew");
+}
+
+#[test]
+fn identify_default_preserves_extensionless_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("identify", "homebrew");
+}
+
+fn assert_stdin_pbp_rom_resolution(command: &str) {
+    let temp = setup_temp_dir();
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    let mut args = vec![command, "--input", "-", "--json"];
+    if command == "identify" {
+        args.extend(["--database", database.path().to_str().expect("path")]);
+    }
+    let mut process = Command::cargo_bin("rom-weaver").expect("binary");
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_DATA_HOME",
+        "TMPDIR",
+    ] {
+        process.env(key, temp.path());
+    }
+    let output = process
+        .args(args)
+        .write_stdin(build_test_empty_psar_pbp())
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let terminal = parse_single_json_line(&output);
+    let details = if command == "identify" {
+        &terminal["details"]["identify"]
+    } else {
+        &terminal["details"]
+    };
+    let source = temp.child("expected.PBP");
+    fs::write(source.path(), build_test_empty_psar_pbp()).expect("raw fixture");
+    let expected = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        details["checksums"]["sha1"],
+        expected["details"]["checksums"]["sha1"]
+    );
+    if command == "identify" {
+        assert_eq!(details["detected_platform"], "Sony Playstation Portable");
+    }
+}
+
+#[test]
+fn checksum_stdin_preserves_empty_psar_pbp_rom() {
+    assert_stdin_pbp_rom_resolution("checksum");
+}
+
+#[test]
+fn identify_stdin_preserves_empty_psar_pbp_rom() {
+    assert_stdin_pbp_rom_resolution("identify");
+}

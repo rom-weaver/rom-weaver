@@ -5329,31 +5329,67 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    fn psar_less_pbp(psar_offset: u32, file_size: usize) -> Vec<u8> {
+        let mut pbp = vec![0u8; file_size];
+        pbp[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
+        for section in 0..7 {
+            write_u32_le(&mut pbp, 8 + (section * 4), 0x28);
+        }
+        write_u32_le(&mut pbp, 0x24, psar_offset);
+        pbp
+    }
+
     #[test]
     fn pbp_probe_rejects_out_of_range_psar_offset() {
         let temp_dir = temp_dir_path("pbp-bad-psar-offset");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source = temp_dir.join("bad-psar.pbp");
-        // The PSAR offset field (0x24) is the last section-table slot, so to reach the dedicated
-        // PSAR guard (which rejects `>= file_size`) without first tripping the section-table guard
-        // (which rejects `> file_size`) the value must equal the file size exactly. A 0x30-byte
-        // file with the PSAR slot set to 0x30 passes the section checks but fails the PSAR check.
-        let file_size = 0x30u32;
-        let mut header = vec![0u8; file_size as usize];
-        header[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
-        for section in 0..7 {
-            write_u32_le(&mut header, 8 + (section * 4), 0x28);
-        }
-        write_u32_le(&mut header, 0x24, file_size); // PSAR offset == file size
-        fs::write(&source, header).expect("fixture");
+        fs::write(&source, psar_less_pbp(0x31, 0x30)).expect("fixture");
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("pbp").expect("pbp handler");
         let error = handler
             .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
-            .expect_err("out-of-range psar offset should fail");
+            .expect_err("psar offset past the end of the file should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid DATA.PSAR offset")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("out-of-range PBP section offset")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_with_empty_psar_is_a_self_contained_rom() {
+        let temp_dir = temp_dir_path("pbp-empty-psar-flag");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("EBOOT.PBP");
+        fs::write(&source, psar_less_pbp(0x30, 0x30)).expect("fixture");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        assert!(handler.is_self_contained_rom(&source));
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_probe_and_list_handle_an_empty_psar() {
+        let temp_dir = temp_dir_path("pbp-empty-psar");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("EBOOT.PBP");
+        // PSAR offset equals the file size: the normal encoding for PSP homebrew with no PSAR.
+        fs::write(&source, psar_less_pbp(0x30, 0x30)).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let report = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect("an empty DATA.PSAR probes");
+        assert!(report.label.contains("empty DATA.PSAR"), "{}", report.label);
+        let error = handler
+            .list_entries(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("nothing to list");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("empty DATA.PSAR")),
             "unexpected error: {error:?}"
         );
 

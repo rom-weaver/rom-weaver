@@ -335,7 +335,9 @@ impl CliApp {
             );
             return None;
         }
-        self.containers.probe(path)
+        self.containers
+            .probe(path)
+            .filter(|handler| !handler.is_self_contained_rom(path))
     }
 
     pub(super) fn should_probe_nested_candidate(

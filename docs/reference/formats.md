@@ -203,6 +203,8 @@ The Test page supports these platforms:
 - Sony PlayStation
 - Sony PSP
 
+A PBP with an empty `DATA.PSAR` section, such as a PSP homebrew `EBOOT.PBP`, has no disc to extract. rom-weaver treats it as a PSP ROM, including inside nested archives, and the Test page passes it to the emulator core unchanged. `checksum` and `identify` use the PBP itself. `probe` reports it as a self-contained PSP executable, and direct `extract` rejects it.
+
 The Test page passes recognized PlayStation and Mega Drive or Genesis `.chd` files to the emulator core without extraction. rom-weaver reads the payload SHA-1 from the CHD header and the platform from the disc data, without extracting the file. Every other CHD is extracted first, including a Saturn CHD (the Saturn core cannot read one), as is a CHD inside a ZIP or 7z archive. A disc image keeps its real extension (`.iso`, `.cue`, `.img`, `.mds`, `.mdf`, `.ccd`, `.gdi`, `.toc`, `.cso`, `.pbp`, `.m3u`, and `.bin` on PlayStation and Saturn) when it reaches the emulator, so EmulatorJS and the core can tell the format apart. A core can still lack an extension: the Saturn core does not list `.bin`, `.img`, or `.mdf`, so EmulatorJS treats those as raw 2352-byte tracks and invents a cue sheet. The one exception is a `.bin` whose cue sheet lists a single file with one `MODE1/2048` or `MODE2/2048` track: that `.bin` reaches the emulator as `.iso`, because its sectors are plain ISO data.
 
 rom-weaver does not bundle EmulatorJS cores for these platforms:
