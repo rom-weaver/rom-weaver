@@ -2637,6 +2637,40 @@ fn weave_rom_checks_on_the_headerless_form_strip_a_snes_copier_header() {
 }
 
 #[test]
+fn weave_rom_checks_on_the_headerless_form_yield_to_decisive_ips_header_geometry() {
+    // The IPS appends 16 bytes at the headered end of file, which starts past
+    // the end of the headerless bytes, so its geometry says raw. The matched
+    // headerless form MUST NOT override that.
+    let body: Vec<u8> = (0..64_u8).collect();
+    let rom = with_nes_header(&body);
+    let mut modified = rom.clone();
+    modified.extend(0xC0..0xD0_u8);
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.nes").path(), &rom).expect("rom fixture");
+    fs::write(temp.child("modified.nes").path(), &modified).expect("modified fixture");
+    create_patch_file(
+        temp.child("game.nes").path(),
+        temp.child("modified.nes").path(),
+        "ips",
+        temp.child("update.ips").path(),
+    );
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "update.ips",
+        json!({ "checksums": { "crc32": crc32_hex(&body) }, "size": body.len() }),
+        "out.nes",
+        &[],
+        0,
+    );
+    assert_eq!(
+        bytes,
+        Some(modified),
+        "ips geometry outranks rom.checks: {terminal}"
+    );
+}
+
+#[test]
 fn weave_rom_checks_on_the_headerless_form_agree_with_decisive_ips_header_geometry() {
     // The IPS record at offset 0 lands inside the copier header on the raw
     // basis, so the record geometry alone also says headerless.

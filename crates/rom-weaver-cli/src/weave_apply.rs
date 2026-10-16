@@ -28,8 +28,9 @@ pub(super) struct WeaveApplyResolution {
     /// compared against those raw bytes first, and a raw match MUST NOT steer
     /// the header or N64 byte-order decision. When only the header-stripped or
     /// another N64 byte-order form matches, that form decides the layout only
-    /// if the first patch has no checksum evidence; for the N64 order, the
-    /// patch's decisive record structure also outranks it.
+    /// when the first patch gives no clue of its own: no checksum or declared
+    /// check, and no decisive structural evidence (record geometry, the
+    /// ROM-header tiebreak, or the N64 boot-checksum tiebreak).
     pub rom_checks: Option<NamedCheck>,
     /// Advisory file-name expectation for a ROM supplied separately from the
     /// weave. Compared after auto-extraction resolves the logical ROM leaf.

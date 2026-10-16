@@ -581,7 +581,7 @@ struct PatchApplyPrepareChainInputs<'a> {
     expected_input_size: Option<u64>,
     repair_checksum: bool,
     /// The transformed ROM form the weave `rom.checks` matched; it settles
-    /// the header and N64 decision only when the patch proves nothing.
+    /// the header and N64 decision only when the patch gives no clue.
     weave_rom_form: Option<patch_plan::BaseRepresentation>,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
@@ -2125,8 +2125,10 @@ impl CliApp {
     /// in the patch, under whatever algorithm the patch offers - proves the
     /// patch was authored against the headerless bytes
     /// ([`Self::checksum_basis_proof`]). A patch with no checksum to prove it
-    /// falls back to structural evidence ([`Self::structural_strip_decision`]);
-    /// any remaining doubt keeps the input as-is. Later chain steps decide per
+    /// falls back to structural evidence, record geometry then the ROM-header
+    /// tiebreak ([`Self::structural_strip_decision`]). When nothing decides,
+    /// a weave whose `rom.checks` matched only the headerless bytes strips the
+    /// header; otherwise the input stays as-is. Later chain steps decide per
     /// patch in [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
         &self,
@@ -2182,11 +2184,28 @@ impl CliApp {
             }
             ChecksumBasisProof::NoEvidence => {}
         }
-        // The weave was recorded from the header-stripped bytes and the patch
-        // proves nothing itself, so it was most likely made for them too.
+        trace!(
+            input = %resolved_input.display(),
+            header = ?header_match.header,
+            "auto header: strippable header present but no required input checksum; falling back to structural evidence"
+        );
+        let header = header_match.header;
+        if let Some(patch) = first_resolved_patch
+            && let Some((strip, note)) = self.structural_strip_decision(
+                resolved_input,
+                patch,
+                header_match,
+                context,
+                temp_paths,
+            )
+        {
+            return (strip, Some(note));
+        }
+        // Nothing from the patch decides. On the ROM the weave was recorded
+        // from, the patch could only meet these headerless bytes.
         if weave_rom_headerless {
             debug!(
-                header = ?header_match.header,
+                ?header,
                 header_bytes = header_len,
                 "auto header: the weave ROM checks match the headerless bytes; stripping header before apply"
             );
@@ -2198,30 +2217,16 @@ impl CliApp {
                 ),
             );
         }
-        trace!(
-            input = %resolved_input.display(),
-            header = ?header_match.header,
-            "auto header: strippable header present but no required input checksum; falling back to structural evidence"
-        );
-        let Some(patch) = first_resolved_patch else {
-            return (false, None);
-        };
-        match self.structural_strip_decision(
-            resolved_input,
-            patch,
-            header_match,
-            context,
-            temp_paths,
-        ) {
-            Some((strip, note)) => (strip, Some(note)),
-            None => (false, None),
-        }
+        trace!(input = %resolved_input.display(), "auto header: no evidence decides; keeping input as-is");
+        (false, None)
     }
 
     /// Resolve the N64 order a patch should see. Auto acts on checksum proof
     /// first; a patch with no source CRC32 falls back to structural evidence
-    /// ([`Self::structural_n64_order_decision`]) when the caller allows it, and
-    /// any remaining doubt keeps the current bytes.
+    /// ([`Self::structural_n64_order_decision`]: record structure, then the
+    /// boot-checksum tiebreak) when the caller allows it. When nothing decides,
+    /// the order the weave `rom.checks` matched is used if there is one;
+    /// otherwise the current bytes stay.
     pub(super) fn resolve_patch_n64_target(
         &self,
         request: N64TargetRequest<'_>,
@@ -2284,8 +2289,8 @@ impl CliApp {
     }
 
     /// The checksumless half of `auto`: structural evidence plus the note that
-    /// reports it, or the current order and no note when nothing separates the
-    /// three.
+    /// reports it. When nothing separates the three, the order the weave
+    /// `rom.checks` matched, with its note, or else the current order.
     fn infer_patch_n64_target(
         &self,
         request: N64Inference<'_>,

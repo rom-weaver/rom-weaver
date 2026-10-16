@@ -21,8 +21,9 @@
 //!    console ROM the input was. A wrongly based patch scatters records across
 //!    the internal ROM header and the platform stops recognising its own ROM.
 //!
-//! When the evidence does not distinguish the candidates, the caller keeps
-//! the existing header state and reports any inferred decision.
+//! When the evidence does not distinguish the candidates, the caller strips the
+//! header if a weave's `rom.checks` matched only the headerless bytes, and
+//! otherwise keeps the existing header state. It reports any inferred decision.
 
 use super::*;
 
