@@ -8,6 +8,7 @@ type EmulatorDocumentOptions = {
 
 type EmulatorGameIdentityInput = {
   checksum: string;
+  core?: string;
   fileName?: string;
 };
 
@@ -28,7 +29,6 @@ const hashString = (value: string): number => {
  * real extension or a 2048-byte-sector ISO is misread.
  */
 const DISC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
-  "bin",
   "ccd",
   "chd",
   "cso",
@@ -43,19 +43,28 @@ const DISC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
   "toc",
 ]);
 
-const discImageSuffix = (fileName: string | undefined): string => {
+/**
+ * `.bin` is a raw CD track on these cores but a cartridge ROM on every other
+ * one (Mega Drive, Atari 7800). A cartridge keeps the bare checksum so its
+ * saved settings, which EmulatorJS keys on the game name, stay where they were.
+ */
+const BIN_DISC_CORES: ReadonlySet<string> = new Set(["psx", "segaSaturn"]);
+
+const discImageSuffix = (fileName: string | undefined, core: string | undefined): string => {
   const extension = (fileName || "")
     .trim()
     .match(/\.([a-z0-9]+)$/i)?.[1]
     ?.toLowerCase();
-  return extension && DISC_IMAGE_EXTENSIONS.has(extension) ? `.${extension}` : "";
+  if (!extension) return "";
+  if (extension === "bin") return core && BIN_DISC_CORES.has(core) ? ".bin" : "";
+  return DISC_IMAGE_EXTENSIONS.has(extension) ? `.${extension}` : "";
 };
 
 /**
  * Disc image filenames MUST retain their extension for core dispatch.
  * App saves use the payload checksum independently of that filename.
  */
-const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentityInput) => {
+const createEmulatorGameIdentity = ({ checksum, core, fileName }: EmulatorGameIdentityInput) => {
   const normalizedChecksum = checksum.replace(/[^a-f0-9]/gi, "").toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(normalizedChecksum)) {
     throw new Error("The emulator game identity requires a SHA-1 checksum.");
@@ -63,7 +72,7 @@ const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentity
   return {
     gameId: hashString(normalizedChecksum),
     saveId: normalizedChecksum,
-    gameName: `${normalizedChecksum}${discImageSuffix(fileName)}`,
+    gameName: `${normalizedChecksum}${discImageSuffix(fileName, core)}`,
   };
 };
 
@@ -92,6 +101,32 @@ const CLEAR_HIDDEN_SETTINGS = `
           } catch (error) {
             console.warn('Could not clear the hidden EmulatorJS settings for ' + key, error);
           }
+        }
+      })();`;
+
+/**
+ * A disc image's game name gained its extension after settings were already
+ * saved under the bare checksum, and EmulatorJS keys settings on the name
+ * (`ejs-<gameID>-<core>-<gameName>-settings`) with no separate option. Copy
+ * the old entry to the new key once so remaps, settings, and cheats survive.
+ * Safe to delete once no such saved setting can be in the wild.
+ */
+const createMigrateBareSettings = (gameId: number, saveId: string, gameName: string) => `
+      (() => {
+        const bare = ${toScriptString(saveId)};
+        const named = ${toScriptString(gameName)};
+        if (named === bare) return;
+        const prefix = 'ejs-' + ${gameId} + '-';
+        const oldTail = '-' + bare + '-settings';
+        try {
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key || !key.startsWith(prefix) || !key.endsWith(oldTail)) continue;
+            const next = key.slice(0, key.length - oldTail.length) + '-' + named + '-settings';
+            if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+          }
+        } catch (error) {
+          console.warn('Could not migrate the EmulatorJS settings for ' + bare, error);
         }
       })();`;
 
@@ -277,6 +312,7 @@ const createEmulatorDocument = (
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
     <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
+    <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName)}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName, options.saveId || gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
