@@ -1,5 +1,5 @@
 import { resolveAssetUrl } from "../public/react/asset-url.ts";
-import { SITE_ORIGIN } from "./docs-routing.mjs";
+import { SAMPLE_URL_PATTERN, SITE_ORIGIN } from "./docs-routing.mjs";
 
 /** The base the guides are authored against, and what the served document was rendered with. */
 const AUTHORED_SAMPLE_BASE = `${SITE_ORIGIN}/`;
@@ -10,7 +10,7 @@ const AUTHORED_SAMPLE_BASE = `${SITE_ORIGIN}/`;
 // production links into root-relative ones (docs-content.mjs), so the link pass
 // is the backstop that also keeps a sub-path deployment on its own base.
 const PRE_BLOCK = /<pre\b[^>]*>[\s\S]*?<\/pre>/g;
-const SAMPLE_URL = new RegExp(`${SITE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/([A-Za-z0-9._-]+)`, "g");
+const SAMPLE_URL = SAMPLE_URL_PATTERN;
 
 const ANCHOR_HREF = /(<a\b[^>]*?\shref=")([^"]*)(")/gi;
 

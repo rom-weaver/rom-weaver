@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Marked } from "marked";
-import { DOC_SOURCES, SITE_ORIGIN, siteSamplePath } from "../src/webapp/docs-routing.mjs";
+import { DOC_SOURCES, SAMPLE_URL_PATTERN, SITE_ORIGIN, siteSamplePath } from "../src/webapp/docs-routing.mjs";
 
 const repositoryOrigin = "https://github.com/rom-weaver/rom-weaver/blob/main";
 
@@ -32,7 +32,15 @@ export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
         `${token.type === "image" ? "!" : ""}[${token.text}](<${resolveHref(token.href)}>${title})`,
       );
     }
-    if (["code", "codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
+    // Sample commands in code blocks follow the serving origin, like the rendered page.
+    // Inline code and prose keep naming the project.
+    if (token.type === "code") {
+      replacements.set(
+        token.raw,
+        token.raw.replace(SAMPLE_URL_PATTERN, (_match, name) => `${siteOrigin}/${name}`),
+      );
+    }
+    if (["codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
   });
   // Longest matches MUST consume code samples before any links inside them.
   const patterns = [...replacements.keys()].filter(Boolean).sort((a, b) => b.length - a.length);

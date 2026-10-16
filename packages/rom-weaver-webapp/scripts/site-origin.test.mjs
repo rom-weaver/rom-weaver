@@ -73,7 +73,36 @@ test("no published Markdown alternate links to production from another origin", 
     if (!fs.existsSync(file)) continue;
     const markdown = createDocsMarkdown(source, fs.readFileSync(file, "utf8"), NIGHTLY);
     assert.equal(markdown.includes(`](<${SITE_ORIGIN}`), false, `${source.file} links to production`);
+    for (const block of markdown.matchAll(/^(```|~~~)[^\n]*\n[\s\S]*?^\1/gm)) {
+      assert.equal(
+        new RegExp(`${SITE_ORIGIN}/[A-Za-z0-9._-]+(?![A-Za-z0-9._~%/-])`).test(block[0]),
+        false,
+        `${source.file} has a sample command that targets production`,
+      );
+    }
   }
+});
+
+test("Markdown alternates point only fenced sample commands at the serving origin", () => {
+  const source = { file: "tutorials/cli-first-weave.md", slug: "docs/cli-first-weave" };
+  const markdown = [
+    `Prose names rom-weaver.com and \`curl ${SITE_ORIGIN}/inline.zip\`.`,
+    "",
+    "```bash",
+    `curl -O ${SITE_ORIGIN}/first-weave.zip`,
+    `curl -fsSL ${SITE_ORIGIN}/install.sh | sh`,
+    `curl ${SITE_ORIGIN}/docs/deep.md ${SITE_ORIGIN}.example/x https://rom-weaver.com.example/y`,
+    "```",
+    "",
+  ].join("\n");
+  const result = createDocsMarkdown(source, markdown, NIGHTLY);
+  assert.ok(result.includes(`curl -O ${NIGHTLY}/first-weave.zip\n`));
+  assert.ok(result.includes(`curl -fsSL ${NIGHTLY}/install.sh | sh\n`));
+  assert.ok(result.includes(`Prose names rom-weaver.com and \`curl ${SITE_ORIGIN}/inline.zip\`.`));
+  assert.ok(
+    result.includes(`curl ${SITE_ORIGIN}/docs/deep.md ${SITE_ORIGIN}.example/x https://rom-weaver.com.example/y\n`),
+  );
+  assert.equal(createDocsMarkdown(source, markdown), `Canonical: ${SITE_ORIGIN}/docs/cli-first-weave\n\n${markdown}`);
 });
 
 test("repository sample links resolve to the file the site serves", () => {

@@ -3,6 +3,17 @@ import { SITE_NAME } from "./workflow-seo.mjs";
 const SITE_ORIGIN = "https://rom-weaver.com";
 
 /**
+ * A sample command's URL: the production origin followed by exactly one path
+ * segment. Longer paths and origins that merely start with the host
+ * (`rom-weaver.com.example`) are not samples. Guides and Markdown alternates
+ * both retarget these inside code blocks only.
+ */
+const SAMPLE_URL_PATTERN = new RegExp(
+  `${SITE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/([A-Za-z0-9._-]+)(?![A-Za-z0-9._~%/-])`,
+  "g",
+);
+
+/**
  * Practice files that live in the repository and are served by the site at the
  * same path, so guides can link them relatively and work on GitHub and on any
  * deployment. The build serves exactly these (scripts/vite-config/root-static-assets.mjs).
@@ -491,6 +502,7 @@ export {
   groupDocRoutes,
   isLegalDocRoute,
   readDocsSlugFromPathname,
+  SAMPLE_URL_PATTERN,
   SITE_ORIGIN,
   SITE_SAMPLE_PATHS,
   siteSamplePath,
