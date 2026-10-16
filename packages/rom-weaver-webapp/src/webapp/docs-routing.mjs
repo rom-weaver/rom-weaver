@@ -6,6 +6,7 @@ const SITE_ORIGIN = "https://rom-weaver.com";
  * @typedef {{
  *   file: string,
  *   audience?: "browser" | "cli",
+ *   editable?: false,
  *   group?: string,
  *   label: string,
  *   slug: string,
@@ -298,7 +299,8 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),
-  Object.freeze({ file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
+  // Generated at build time and not tracked in git, so GitHub has nothing to edit.
+  Object.freeze({ editable: false, file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
   Object.freeze({ file: "legal/privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
 

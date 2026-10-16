@@ -13,6 +13,8 @@ declare module "virtual:rom-weaver-docs" {
    */
   export type DocRoute = {
     description: string;
+    /** `false` when the source is not tracked in git, so GitHub has no file to edit. */
+    editable?: false;
     /** Shelf this guide sits on, from the folder it lives in under `docs/`. */
     group: string;
     label: string;

@@ -878,6 +878,12 @@ Fixture description.
     );
   });
 
+  it("hides the edit link for a generated page that GitHub does not track", () => {
+    render(<DocsPage active slug="docs/notices" />);
+
+    expect(screen.queryByRole("link", { name: "Suggest changes on GitHub" })).toBeNull();
+  });
+
   it("holds the previous step's place on the first page rather than sliding next into it", () => {
     // The hub is route zero, so it has no previous. The empty span keeps Next
     // where Next belongs instead of letting it take the left-hand slot.

@@ -373,14 +373,16 @@ const ArticleEnd = ({ onSelectTab, slug }: { onSelectTab?: (id: string) => void;
         </button>
         {next ? <OnwardLink audience={audience} direction="next" route={next} /> : <span className="docs-step-gap" />}
       </nav>
-      <a
-        className="docs-source-link"
-        href={`${GITHUB_BASE_URL}/edit/main/${route.source}`}
-        rel="noreferrer"
-        target="_blank"
-      >
-        Suggest changes on GitHub
-      </a>
+      {route.editable === false ? null : (
+        <a
+          className="docs-source-link"
+          href={`${GITHUB_BASE_URL}/edit/main/${route.source}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Suggest changes on GitHub
+        </a>
+      )}
       {onSelectTab ? <RelatedStrip entryKey={route.slug} onSelectTab={onSelectTab} /> : null}
     </footer>
   );
