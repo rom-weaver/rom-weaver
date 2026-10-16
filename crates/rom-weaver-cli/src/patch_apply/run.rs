@@ -49,6 +49,9 @@ struct PatchApplyRun {
     name_warning: Option<String>,
     /// Labels for the weave `rom.checks` verified against the resolved ROM.
     weave_rom_check_labels: Vec<String>,
+    /// The transformed form of the resolved ROM that the weave `rom.checks`
+    /// matched when the raw file did not, for the header and N64 decision.
+    weave_rom_form: Option<patch_plan::BaseRepresentation>,
     output: PathBuf,
     output_was_inferred: bool,
     temp_paths: Vec<PathBuf>,
@@ -329,6 +332,7 @@ impl CliApp {
             extracted_archives: 0,
             name_warning: None,
             weave_rom_check_labels: Vec::new(),
+            weave_rom_form: None,
             output: PathBuf::new(),
             output_was_inferred: false,
             temp_paths: Vec::new(),
@@ -448,18 +452,21 @@ impl CliApp {
     /// match against the header-stripped or another N64 byte-order form of
     /// that file is accepted too. The checks never steer the header or
     /// byte-order decision. `--ignore-checksum-validation` skips them.
-    /// Returns the verification labels for the report.
-    fn verify_weave_rom_checks(run: &PatchApplyRun) -> Result<Vec<String>> {
+    /// Returns the verification labels for the report and the matched
+    /// transformed form, if the raw file did not match.
+    fn verify_weave_rom_checks(
+        run: &PatchApplyRun,
+    ) -> Result<(Vec<String>, Option<patch_plan::BaseRepresentation>)> {
         let Some((source_label, requirements)) = run
             .weave_resolution
             .as_ref()
             .and_then(|resolution| resolution.rom_checks.as_ref())
         else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         };
         if run.args.ignore_checksum_validation {
             debug!(source = %source_label, "weave ROM checks skipped by --ignore-checksum-validation");
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
         trace!(
             source = %source_label,
@@ -523,7 +530,7 @@ impl CliApp {
             Ok(labels)
         })();
         let raw_error = match raw {
-            Ok(labels) => return Ok(labels),
+            Ok(labels) => return Ok((labels, None)),
             Err(error @ RomWeaverError::Validation(_)) if run.disc_context.is_none() => error,
             Err(error) => return Err(error),
         };
@@ -577,10 +584,13 @@ impl CliApp {
             .chain(declared.size.map(|size| format!("size={size}")))
             .collect::<Vec<_>>()
             .join(", ");
-        Ok(vec![format!(
-            "input checks verified against the ROM's {} form ({rendered})",
-            variant.name
-        )])
+        Ok((
+            vec![format!(
+                "input checks verified against the ROM's {} form ({rendered})",
+                variant.name
+            )],
+            Some(variant.representation),
+        ))
     }
 
     /// Resolve the ROM the chain starts from and the output it writes, then
@@ -701,11 +711,12 @@ impl CliApp {
         }
         run.temp_paths = input_cleanup_paths;
         // Hashing the ROM waits until the cheap output and access checks pass.
-        run.weave_rom_check_labels = Self::verify_weave_rom_checks(run).map_err(|error| {
-            let mut report = run.fail_error("validate", error);
-            Self::append_report_warnings(&mut report, run.name_warning.clone());
-            report
-        })?;
+        (run.weave_rom_check_labels, run.weave_rom_form) = Self::verify_weave_rom_checks(run)
+            .map_err(|error| {
+                let mut report = run.fail_error("validate", error);
+                Self::append_report_warnings(&mut report, run.name_warning.clone());
+                report
+            })?;
         Ok(())
     }
 
@@ -1071,6 +1082,7 @@ impl CliApp {
             cached_input_checksums: &run.cached_input_checksums,
             expected_input_size: run.expected_input_size,
             repair_checksum: run.args.repair_checksum,
+            weave_rom_form: run.weave_rom_form,
             context: &run.context,
             temp_paths: &mut run.temp_paths,
         })?;

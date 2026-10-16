@@ -502,6 +502,7 @@ impl CliApp {
                         .expected_input_checksums
                         .get("crc32")
                         .map(String::as_str),
+                    weave_rom_order: None,
                     mode: run.n64_byte_order,
                     inference: N64AutoInference::ChecksumOnly,
                 },
