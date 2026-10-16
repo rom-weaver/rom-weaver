@@ -36,25 +36,25 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 | Format | Aliases | Extensions | Apply | Create |
 | --- | --- | --- | :---: | :---: |
 | IPS | none | `.ips` | ✅ | ✅ |
-| IPS32 | none | `.ips32` | ✅ | ✅ |
-| SOLID | `solidpatch`, `solid-patch` | `.solid` | ✅ | ✅ |
+| IPS32 | none | `.ips32` | ✅ | ⚠️ ⁴ |
+| SOLID | `solidpatch`, `solid-patch` | `.solid` | ✅ | ⚠️ ⁴ |
 | BPS | none | `.bps` | ✅ | ✅ |
 | UPS | none | `.ups` | ✅ | ✅ |
-| VCDIFF | `vcdiff` | `.vcdiff` | ✅ | ✅ |
+| VCDIFF | `vcdiff` | `.vcdiff` | ✅ | ⚠️ ⁴ |
 | xdelta | `xdelta3` | `.xdelta`, `.delta`, `.dat` | ✅ | ✅ |
-| GDIFF | `gdiff` | `.gdiff`, `.gdf` | ✅ | ✅ |
+| GDIFF | `gdiff` | `.gdiff`, `.gdf` | ✅ | ⚠️ ⁴ |
 | HDiffPatch/HPatchZ | `hdiffpatch`, `hdiff`, `hpatch`, `hpatchz` | `.hdiff`, `.hpatchz` | ⚠️ ¹ | ❌ |
 | APS (N64) | none | `.aps` | ✅ | ✅ |
-| APSGBA | `aps-gba` | `.apsgba` | ✅ | ✅ |
+| APSGBA | `aps-gba` | `.apsgba` | ✅ | ⚠️ ⁴ |
 | RUP | none | `.rup` | ✅ | ✅ |
 | PPF | none | `.ppf` | ✅ | ✅ |
-| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | ✅ | ✅ |
+| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | ✅ | ⚠️ ⁴ |
 | EBP | none | `.ebp` | ✅ | ✅ |
 | BDF/BSDIFF40 | `bdf`, `bsdiff`, `bsdiff40` | `.bdf`, `.bsdiff`, `.bsdiff40` | ✅ | ✅ |
 | BSP | `bspatch` | `.bsp`, `.bspatch` | ✅ | ❌ |
 | MOD | `pmsr` | `.mod`, `.pmsr` | ✅ | ⚠️ ³ |
-| DLDI | none | `.dldi` | ✅ | ✅ |
-| DPS | none | `.dps` | ✅ | ✅ |
+| DLDI | none | `.dldi` | ✅ | ⚠️ ⁴ |
+| DPS | none | `.dps` | ✅ | ⚠️ ⁴ |
 | DCP | none | `.dcp` | ⚠️ ² | ❌ |
 
 > ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
@@ -62,6 +62,8 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 > ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild. This workflow is available through the native CLI, not browser Apply.
 >
 > ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** list MOD for any Original. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
+>
+> ⁴ The native CLI creates this format. Browser Create does not offer it. Browser Apply supports it.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
