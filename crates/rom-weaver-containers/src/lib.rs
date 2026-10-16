@@ -22,6 +22,8 @@ mod formats;
 pub mod libarchive;
 mod libarchive_support;
 pub mod nod;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod xdvdfs;
 
 #[cfg(test)]

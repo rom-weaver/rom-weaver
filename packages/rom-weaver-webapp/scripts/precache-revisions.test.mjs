@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { makeTempDir } from "../../../scripts/test-temp-dirs.mjs";
 import { revisionUnhashedAssets } from "./precache-revisions.mjs";
 
 const buildDist = (files) => {
-  const distDir = mkdtempSync(path.join(tmpdir(), "precache-revisions-"));
+  const distDir = makeTempDir("precache-revisions-");
   mkdirSync(path.join(distDir, "assets"), { recursive: true });
   for (const [name, body] of Object.entries(files)) writeFileSync(path.join(distDir, name), body);
   return distDir;

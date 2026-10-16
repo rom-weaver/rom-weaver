@@ -19,6 +19,7 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
+    use crate::test_support::TempPath;
     use crate::{
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
@@ -81,26 +82,26 @@ mod tests {
         }
     }
 
-    fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
+    fn temp_file_path_with_extension(label: &str, extension: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-probe-{label}-{}-{timestamp}.{extension}",
             test_process_id(),
-        ))
+        )))
     }
 
-    fn temp_dir_path(label: &str) -> PathBuf {
+    fn temp_dir_path(label: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-tests-{label}-{}-{timestamp}",
             test_process_id(),
-        ))
+        )))
     }
 
     fn test_context(temp_root: &Path, threads: usize) -> OperationContext {
@@ -2174,9 +2175,13 @@ mod tests {
         let symlink_dir = None;
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xiso").unwrap();
-        for out_dir in [Some(temp_dir.clone()), Some(hardlink_dir), symlink_dir]
-            .into_iter()
-            .flatten()
+        for out_dir in [
+            Some(temp_dir.to_path_buf()),
+            Some(hardlink_dir),
+            symlink_dir,
+        ]
+        .into_iter()
+        .flatten()
         {
             let result = handler.extract(
                 &rom_weaver_core::ContainerExtractRequest {

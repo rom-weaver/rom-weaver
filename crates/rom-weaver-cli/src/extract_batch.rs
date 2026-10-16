@@ -189,15 +189,31 @@ mod tests {
     }
 
     // No tempfile dev-dep in this crate; derive a unique dir from pid + an atomic counter so parallel
-    // test runs never collide, and remove it at the end of the test.
-    fn unique_work_dir() -> PathBuf {
+    // test runs never collide. The guard removes it on success, failed assertion, and panic.
+    struct WorkDir(PathBuf);
+
+    impl std::ops::Deref for WorkDir {
+        type Target = Path;
+
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for WorkDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn unique_work_dir() -> WorkDir {
         use std::sync::atomic::{AtomicU32, Ordering};
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir =
             std::env::temp_dir().join(format!("rw-extract-batch-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).expect("create work dir");
-        dir
+        WorkDir(dir)
     }
 
     // Build a real zip containing `<stem>.bin` via the app's own compress command.
@@ -376,7 +392,5 @@ mod tests {
                 "`{stem}` concurrent extract must match the sequential extract"
             );
         }
-
-        let _ = fs::remove_dir_all(&work);
     }
 }

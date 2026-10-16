@@ -2,19 +2,17 @@
 //! (`src/libarchive/entries.rs`): the file-entry listing, the single-entry
 //! reader, format matching, and archive-name normalization.
 
-use std::path::PathBuf;
-
 use super::*;
 
-fn unique_temp_dir(tag: &str) -> PathBuf {
+fn unique_temp_dir(tag: &str) -> crate::test_support::TempPath {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock is after the unix epoch")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!(
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rom-weaver-entries-{tag}-{}-{nanos}",
         std::process::id()
-    ));
+    )));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }

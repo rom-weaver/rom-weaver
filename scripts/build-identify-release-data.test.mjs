@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
 import test from "node:test";
+import { makeTempDir } from "./test-temp-dirs.mjs";
 import { buildIdentifyReleaseData, parseArgs } from "./build-identify-release-data.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 const fixture = ({ grouped = false } = {}) => {
-  const root = mkdtempSync(join(os.tmpdir(), "rw-identify-release-"));
+  const root = makeTempDir("rw-identify-release-");
   const input = join(root, "input");
   mkdirSync(input);
   const packs = [

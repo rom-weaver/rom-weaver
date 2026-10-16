@@ -808,8 +808,10 @@ impl TempPathAllocator {
         // The root is already unique, so the inner namespace can be short.
         let entropy = namespace_entropy();
         let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
+        let root = parent.join(format!("{prefix}-{entropy:016x}-{sequence}"));
+        crate::register_live_temp_dir(&root);
         Self {
-            root: parent.join(format!("{prefix}-{entropy:016x}-{sequence}")),
+            root,
             namespace: "t".to_string(),
             counter: AtomicU64::new(0),
             owns_root: true,
@@ -844,6 +846,7 @@ impl TempPathAllocator {
         // per-instance random u64 (SipHash-seeded from OS entropy, no new deps) to disambiguate.
         let entropy = namespace_entropy();
         let namespace = format!("rw-{timestamp}-{process_id}-{sequence}-{entropy:016x}");
+        crate::register_live_temp_dir(&root.join(&namespace));
         Self {
             root,
             namespace,
@@ -897,9 +900,12 @@ fn browser_opfs_run_id() -> Option<String> {
 
 impl Drop for TempPathAllocator {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(self.root.join(&self.namespace));
+        let namespace_dir = self.root.join(&self.namespace);
+        let _ = fs::remove_dir_all(&namespace_dir);
+        crate::unregister_live_temp_dir(&namespace_dir);
         if self.owns_root {
             let _ = fs::remove_dir_all(&self.root);
+            crate::unregister_live_temp_dir(&self.root);
         }
     }
 }

@@ -11623,6 +11623,167 @@ mod termination_signals {
         assert!(temp.path().join("out.7z").exists());
         assert_no_temp_folder_left(temp.path());
     }
+
+    /// The second signal takes the forced `process::exit(130)` path, which skips every `Drop`; the
+    /// gap lets the first signal land first (back-to-back kills merge into one delivery).
+    #[test]
+    fn second_sigterm_after_a_gap_exits_130_and_leaves_no_temp_folder() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), false);
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(30));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// A stdin compress stages the piped bytes under `$TMPDIR/rom-weaver-stream-*`; the forced exit
+    /// must remove that too.
+    #[test]
+    fn second_sigterm_during_a_stdin_compress_leaves_no_staging() {
+        use std::io::Write;
+
+        let temp = setup_temp_dir();
+        let scratch = temp.path().join("tmp");
+        fs::create_dir_all(&scratch).expect("scratch tmp");
+        let payload = pseudo_random_bytes(48 * 1024 * 1024, 11);
+        let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+        command
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .env("TMPDIR", &scratch)
+            .args([
+                "compress", "--input", "-", "--format", "7z", "--level", "max",
+            ])
+            .arg("--output")
+            .arg(temp.path().join("out.7z"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn compress");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(&payload);
+        });
+        // The spool reaching its full size means stdin is drained and the compress is running.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        loop {
+            let spooled = fs::read_dir(&scratch)
+                .expect("read scratch")
+                .flatten()
+                .any(|dir| {
+                    dir.path()
+                        .join("input")
+                        .join("stdin.bin")
+                        .metadata()
+                        .is_ok_and(|meta| meta.len() == 48 * 1024 * 1024)
+                });
+            if spooled {
+                break;
+            }
+            assert!(Instant::now() < deadline, "stdin was never fully staged");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(30));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        writer.join().expect("writer");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        let leftovers: Vec<_> = fs::read_dir(&scratch)
+            .expect("read scratch")
+            .flatten()
+            .map(|entry| entry.file_name())
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp entries: {leftovers:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// `checksum --input -` spools stdin to `$TMPDIR/rom-weaver-stdin-*.tmp`, then hashes that file.
+    /// While the hash runs the forced exit skips `Drop`, so only the live-temp registration can
+    /// remove the spool. (A spool still being drained cancels cleanly within milliseconds and would
+    /// not exercise it.)
+    #[test]
+    fn second_sigterm_while_hashing_a_stdin_spool_leaves_no_spool_file() {
+        use std::io::Write;
+
+        const PAYLOAD: usize = 256 * 1024 * 1024;
+        let temp = setup_temp_dir();
+        let scratch = temp.path().join("tmp");
+        fs::create_dir_all(&scratch).expect("scratch tmp");
+        let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+        command
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .env("TMPDIR", &scratch)
+            .args([
+                "checksum",
+                "--input",
+                "-",
+                "--algo",
+                "sha256,sha1,md5,blake3,crc32",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn checksum");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let payload = pseudo_random_bytes(PAYLOAD, 13);
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(&payload);
+        });
+        let spool_len = || {
+            fs::read_dir(&scratch)
+                .expect("read scratch")
+                .flatten()
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("rom-weaver-stdin-") && name.ends_with(".tmp")
+                })
+                .filter_map(|entry| entry.metadata().ok())
+                .map(|meta| meta.len())
+                .max()
+        };
+        // A full-size spool means stdin hit EOF and the hash is running.
+        let deadline = Instant::now() + Duration::from_secs(120);
+        while spool_len() != Some(PAYLOAD as u64) {
+            assert!(Instant::now() < deadline, "stdin spool never filled");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Cancellation unwinds within milliseconds, so a spaced second signal would arrive after a
+        // clean exit; burst signals until the process is gone so one lands mid-unwind.
+        let status = loop {
+            unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+            if let Some(status) = child.try_wait().expect("try_wait") {
+                break status;
+            }
+            std::thread::sleep(Duration::from_micros(200));
+        };
+        writer.join().expect("writer");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        let leftovers: Vec<_> = fs::read_dir(&scratch)
+            .expect("read scratch")
+            .flatten()
+            .map(|entry| entry.file_name())
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp entries: {leftovers:?}");
+    }
 }
 
 #[test]

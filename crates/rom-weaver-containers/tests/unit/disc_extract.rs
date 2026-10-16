@@ -410,12 +410,12 @@ fn track_output_name_formats_with_track_number() {
 // --- Cue / gdi sheet parsing ------------------------------------------------
 
 /// Per-test scratch directory. The label keeps parallel tests from sharing a
-/// path; the caller removes the tree when the test ends.
-fn scratch_dir(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
+/// path; the guard removes the tree when the test ends, even on panic.
+fn scratch_dir(label: &str) -> crate::test_support::TempPath {
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-disc-extract-{}-{label}",
         std::process::id()
-    ));
+    )));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create scratch dir");
     dir

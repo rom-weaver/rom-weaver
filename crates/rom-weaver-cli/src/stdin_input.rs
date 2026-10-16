@@ -37,9 +37,11 @@ mod native {
 
     impl Drop for StdinSpool {
         fn drop(&mut self) {
+            // Unregister only after removal so a forced exit mid-remove still finds the path.
             if let Err(error) = fs::remove_file(&self.path) {
                 trace!(path = %self.path.display(), %error, "failed to remove stdin spool temp file");
             }
+            rom_weaver_core::unregister_live_temp_dir(&self.path);
         }
     }
 
@@ -61,6 +63,8 @@ mod native {
         path: PathBuf,
         mut file: File,
     ) -> crate::Result<Option<StdinSpool>> {
+        // Drop is skipped by the forced second-interrupt exit; register for removal there.
+        rom_weaver_core::register_live_temp_dir(&path);
         let spool = StdinSpool { path: path.clone() };
         let copied = (|| -> crate::Result<u64> {
             let bytes = copy_cancelable(reader, &mut file)?;

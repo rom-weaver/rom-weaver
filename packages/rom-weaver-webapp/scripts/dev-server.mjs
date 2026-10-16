@@ -323,9 +323,38 @@ const writeOpenSslConfig = (configPath, lanAddresses) => {
   );
 };
 
+const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+// Set by installShutdown once the servers exist; until then a signal just exits.
+let gracefulClose = null;
+
+// The certificate directory holds a private key and its name embeds this process id,
+// so nothing reuses it after exit. Remove it from the moment it exists:
+// - the "exit" event covers normal exit, process.exit() and uncaught errors;
+// - a signal does not emit "exit", so these persistent handlers turn it into process.exit()
+//   with the conventional 128 + signal status;
+// - once installShutdown has registered its graceful close, the first signal runs it, and
+//   a repeated signal exits immediately, because the close can hang on an open HTTP/2
+//   session and the default action would kill the process without running "exit".
+// Only SIGKILL cannot be handled.
+const removeOnExit = (directory) => {
+  process.once("exit", () => fs.rmSync(directory, { recursive: true, force: true }));
+  let signalled = false;
+  for (const signal of TERMINATION_SIGNALS) {
+    process.on(signal, () => {
+      if (gracefulClose && !signalled) {
+        signalled = true;
+        gracefulClose(signal);
+        return;
+      }
+      process.exit(128 + os.constants.signals[signal]);
+    });
+  }
+};
+
 const ensureCertificate = (lanAddresses) => {
   const paths = getCertificatePaths();
   fs.mkdirSync(paths.directory, { recursive: true });
+  removeOnExit(paths.directory);
   writeOpenSslConfig(paths.config, lanAddresses);
 
   if (!(fs.existsSync(paths.key) && fs.existsSync(paths.cert))) {
@@ -465,8 +494,7 @@ const installShutdown = (servers, viteServer, cleanup) => {
     }
   };
 
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
+  gracefulClose = close;
 };
 
 const startWasmBuildWatcher = (viteServer) => {
