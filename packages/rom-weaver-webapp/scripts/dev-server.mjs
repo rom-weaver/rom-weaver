@@ -324,21 +324,28 @@ const writeOpenSslConfig = (configPath, lanAddresses) => {
 };
 
 const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
-let shutdownInstalled = false;
+// Set by installShutdown once the servers exist; until then a signal just exits.
+let gracefulClose = null;
 
 // The certificate directory holds a private key and its name embeds this process id,
 // so nothing reuses it after exit. Remove it from the moment it exists:
 // - the "exit" event covers normal exit, process.exit() and uncaught errors;
-// - a signal does not emit "exit", so until installShutdown takes over the signals this
-//   handler removes the directory and exits with the conventional 128 + signal status;
-// - once installShutdown runs, its graceful close owns the signals and ends in
-//   process.exit(), which fires the "exit" hook.
+// - a signal does not emit "exit", so these persistent handlers turn it into process.exit()
+//   with the conventional 128 + signal status;
+// - once installShutdown has registered its graceful close, the first signal runs it, and
+//   a repeated signal exits immediately, because the close can hang on an open HTTP/2
+//   session and the default action would kill the process without running "exit".
 // Only SIGKILL cannot be handled.
 const removeOnExit = (directory) => {
   process.once("exit", () => fs.rmSync(directory, { recursive: true, force: true }));
+  let signalled = false;
   for (const signal of TERMINATION_SIGNALS) {
-    process.once(signal, () => {
-      if (shutdownInstalled) return;
+    process.on(signal, () => {
+      if (gracefulClose && !signalled) {
+        signalled = true;
+        gracefulClose(signal);
+        return;
+      }
       process.exit(128 + os.constants.signals[signal]);
     });
   }
@@ -474,7 +481,6 @@ const formatStartupError = (error, options) => {
 };
 
 const installShutdown = (servers, viteServer, cleanup) => {
-  shutdownInstalled = true;
   let closing = false;
   const close = async (signal) => {
     if (closing) return;
@@ -488,7 +494,7 @@ const installShutdown = (servers, viteServer, cleanup) => {
     }
   };
 
-  for (const signal of TERMINATION_SIGNALS) process.once(signal, close);
+  gracefulClose = close;
 };
 
 const startWasmBuildWatcher = (viteServer) => {
