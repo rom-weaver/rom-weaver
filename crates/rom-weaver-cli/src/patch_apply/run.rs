@@ -475,6 +475,7 @@ impl CliApp {
         } else {
             &no_hints
         };
+        let raw_size = fs::metadata(&run.resolved_input)?.len();
         let raw = (|| -> Result<Vec<String>> {
             let mut labels = Vec::new();
             if requirements.size.is_some() {
@@ -486,10 +487,35 @@ impl CliApp {
                 )?);
             }
             if !requirements.checksums.is_empty() {
+                let mut raw_values = requirements
+                    .checksums
+                    .keys()
+                    .filter_map(|algorithm| {
+                        hints
+                            .get(algorithm)
+                            .map(|value| (algorithm.clone(), value.clone()))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                let missing = requirements
+                    .checksums
+                    .keys()
+                    .filter(|algorithm| !raw_values.contains_key(*algorithm))
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                if !missing.is_empty() {
+                    raw_values.extend(checksum_file_values(
+                        &run.resolved_input,
+                        &missing,
+                        &run.context,
+                    )?);
+                }
+                // These are the file's own checksums whether or not they
+                // match, so the transformed-form fallback reuses them.
+                run.context.seed_checksums(&run.resolved_input, &raw_values);
                 labels.push(Self::validate_patch_apply_expected_checksums(
                     &run.resolved_input,
                     &requirements.checksums,
-                    hints,
+                    &raw_values,
                     "input",
                     &run.context,
                 )?);
@@ -497,21 +523,32 @@ impl CliApp {
             Ok(labels)
         })();
         let raw_error = match raw {
-            Ok(labels) => {
-                // The verified values are the resolved file's own checksums.
-                run.context
-                    .seed_checksums(&run.resolved_input, &requirements.checksums);
-                return Ok(labels);
-            }
+            Ok(labels) => return Ok(labels),
             Err(error @ RomWeaverError::Validation(_)) if run.disc_context.is_none() => error,
             Err(error) => return Err(error),
         };
+        // Only a strippable header or an N64 byte order gives another form,
+        // and its size is known before hashing.
+        let size_fits = |size: u64| requirements.size.is_none_or(|expected| expected == size);
+        let headerless_fits = Self::detect_strippable_rom_header(&run.resolved_input)
+            .ok()
+            .and_then(|header_match| header_match.stripped_bytes())
+            .is_some_and(|stripped| size_fits(raw_size.saturating_sub(stripped as u64)));
+        let n64_byte_order = Self::detect_n64_byte_order_path(&run.resolved_input)?;
+        let reorder_fits = n64_byte_order.is_some()
+            && !requirements.checksums.is_empty()
+            && raw_size.is_multiple_of(4)
+            && size_fits(raw_size);
+        if !headerless_fits && !reorder_fits {
+            debug!(%raw_error, "weave ROM checks fit no transformed form of the resolved ROM");
+            return Err(raw_error);
+        }
         let declared = patch_plan::PlanState {
             checksums: requirements.checksums.clone(),
             size: requirements.size,
         };
         let algorithms = requirements.checksums.keys().cloned().collect::<Vec<_>>();
-        let representation = Self::base_representation(&run.resolved_input, None, None)?;
+        let representation = Self::base_representation(&run.resolved_input, None, n64_byte_order)?;
         let variants = Self::base_variants_for_algorithms(
             &run.resolved_input,
             &algorithms,
@@ -1168,11 +1205,16 @@ impl CliApp {
             .map_err(|error| failed("validate", error))?;
             Self::update_emit_weave_bases(emit_steps, &patch_steps);
         }
+        // A first patch's inputChecks often repeat rom.checks; report the
+        // same verification once.
+        let mut labels = std::mem::take(&mut run.weave_rom_check_labels);
+        for label in checksum_verification_labels {
+            if !labels.contains(&label) {
+                labels.push(label);
+            }
+        }
         Ok(PatchApplyChain {
-            checksum_verification_labels: std::mem::take(&mut run.weave_rom_check_labels)
-                .into_iter()
-                .chain(checksum_verification_labels)
-                .collect(),
+            checksum_verification_labels: labels,
             apply_input,
             header_state,
             n64_order,

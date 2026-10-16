@@ -2430,6 +2430,97 @@ fn weave_rom_checks_run_after_the_output_path_checks() {
 }
 
 #[test]
+fn weave_rom_checks_repeated_by_the_first_patch_report_one_label() {
+    let temp = setup_temp_dir();
+    let rom: Vec<u8> = (0..64_u8).collect();
+    fs::write(temp.child("game.bin").path(), &rom).expect("rom fixture");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let checks = json!({ "checksums": { "crc32": crc32_hex(&rom), "md5": md5_hex(&rom) }, "size": rom.len() });
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        json!({
+            "version": 1,
+            "rom": { "path": "game.bin", "checks": checks },
+            "patches": [{ "path": "main.ips", "inputChecks": checks }],
+        })
+        .to_string(),
+    )
+    .expect("weave fixture");
+    let output = temp.child("out.bin");
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal");
+    let label = terminal["label"].as_str().expect("label");
+    assert_eq!(
+        (
+            label.matches("input size verified").count(),
+            label.matches("input checksum(s) verified").count()
+        ),
+        (1, 1),
+        "one label per verification: {terminal}"
+    );
+}
+
+#[test]
+fn weave_rom_check_size_mismatch_skips_hashing_without_another_form() {
+    let temp = setup_temp_dir();
+    // No copier header and no N64 byte order, so no other form can match.
+    let rom: Vec<u8> = (0..64_u8).collect();
+    fs::write(temp.child("game.bin").path(), &rom).expect("rom fixture");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        json!({
+            "version": 1,
+            "rom": {
+                "path": "game.bin",
+                "checks": { "checksums": { "crc32": crc32_hex(&rom) }, "size": rom.len() + 1 },
+            },
+            "patches": [{ "path": "main.ips" }],
+        })
+        .to_string(),
+    )
+    .expect("weave fixture");
+    let output = temp.child("out.bin");
+    let result = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--log-level",
+            "trace",
+            "patch",
+            "apply",
+            "--input",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8(result.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("input size mismatch")
+            && !stderr.contains("computing base checksums for verification plan"),
+        "size mismatch without hashing: {stderr}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
 fn weave_apply_rejects_disabled_named_patch_input_producer() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "game.bin");
