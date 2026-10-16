@@ -26,15 +26,15 @@ fn expect_error<T>(result: Result<T>) -> Error {
     }
 }
 
-fn temp_root(label: &str) -> PathBuf {
+fn temp_root(label: &str) -> crate::test_support::TempPath {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time")
         .as_nanos();
-    let path = std::env::temp_dir().join(format!(
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rom-weaver-nod-nfs-{label}-{}-{stamp}",
         std::process::id()
-    ));
+    )));
     fs::create_dir_all(&path).expect("create temp root");
     path
 }
