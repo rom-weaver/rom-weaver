@@ -498,10 +498,7 @@ impl CliApp {
                         .resolved_patches
                         .first()
                         .map(|patch| patch.resolved.as_path()),
-                    expected_crc32: run
-                        .expected_input_checksums
-                        .get("crc32")
-                        .map(String::as_str),
+                    expected_input_checksums: &run.expected_input_checksums,
                     weave_rom_order: None,
                     mode: run.n64_byte_order,
                     inference: N64AutoInference::ChecksumOnly,

@@ -623,7 +623,7 @@ struct BasisOutputScore<'a> {
 /// The checksum algorithms worth hashing for `required`: every algorithm some
 /// candidate pins, minus any the engine cannot compute. Order is stable so the
 /// trace output reads the same across runs.
-fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
+pub(super) fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
     let mut algorithms: Vec<String> = Vec::new();
     for state in required {
         for algorithm in state.checksums.keys() {

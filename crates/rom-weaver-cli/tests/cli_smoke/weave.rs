@@ -3036,6 +3036,122 @@ fn weave_rom_checks_on_another_form_yield_to_an_embedded_source_md5() {
     assert_patch_evidence_keeps_the_layout("rup");
 }
 
+fn assert_weave_n64_own_checks(format: &str, checksums: Option<serde_json::Value>, succeeds: bool) {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir(home.path()).expect("isolated home");
+    let home = home.path().to_str().expect("home path");
+    let envs = [
+        ("HOME", home),
+        ("XDG_CONFIG_HOME", home),
+        ("XDG_CACHE_HOME", home),
+        ("XDG_STATE_HOME", home),
+    ];
+    let mut z64 = vec![0x80, 0x37, 0x12, 0x40];
+    z64.extend((0..4092_u32).map(|index| (index % 251) as u8));
+    let swap = |bytes: &[u8]| {
+        bytes
+            .chunks_exact(2)
+            .flat_map(|pair| [pair[1], pair[0]])
+            .collect::<Vec<_>>()
+    };
+    let mut modified = z64.clone();
+    modified[0x40] ^= 0xFF;
+    fs::write(temp.child("base.z64").path(), &z64).expect("base");
+    fs::write(temp.child("modified.z64").path(), &modified).expect("modified");
+    fs::write(temp.child("source.v64").path(), swap(&z64)).expect("input");
+    let patch_name = format!("update.{format}");
+    command_stdout_with_env(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.z64").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.z64").path().to_str().expect("path"),
+            "--format",
+            format,
+            "--output",
+            temp.child(&patch_name).path().to_str().expect("path"),
+        ],
+        &envs,
+        0,
+    );
+    let mut patch = json!({ "path": patch_name });
+    if let Some(checksums) = checksums {
+        patch["inputChecks"] = json!({ "checksums": checksums });
+    }
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(weave.path(), json!({
+        "version": 1,
+        "rom": { "path": "source.v64", "checks": { "checksums": { "crc32": crc32_hex(&z64) }, "size": z64.len() } },
+        "patches": [patch]
+    }).to_string()).expect("weave");
+    let output = temp.child("out.v64");
+    let events = run_json_events_with_env(
+        &[
+            "patch-apply",
+            "--input",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        &envs,
+        if succeeds { 0 } else { 1 },
+    );
+    let terminal = events.last().expect("terminal");
+    if succeeds {
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            swap(&modified),
+            "own N64 checksum selects authored bytes: {terminal}"
+        );
+    } else {
+        assert_eq!(
+            terminal["status"], "failed",
+            "conflicting checks MUST fail: {terminal}"
+        );
+        assert!(
+            !output.path().exists(),
+            "failed checks MUST NOT publish output"
+        );
+    }
+}
+
+#[test]
+fn weave_n64_embedded_md5_selects_authored_order() {
+    for format in ["rup", "solid"] {
+        assert_weave_n64_own_checks(format, None, true);
+    }
+}
+
+#[test]
+fn weave_n64_declared_checks_select_authored_order() {
+    for checks in [
+        json!({ "md5": "b1e201554177068604830c335c3a0568" }),
+        json!({ "sha1": "ace0c16a44d8fe6493ad43c724d7d2f05559a1c6" }),
+        json!({ "md5": "b1e201554177068604830c335c3a0568", "sha1": "ace0c16a44d8fe6493ad43c724d7d2f05559a1c6" }),
+    ] {
+        assert_weave_n64_own_checks("ips", Some(checks), true);
+    }
+}
+
+#[test]
+fn weave_n64_conflicting_or_unmatched_checks_reject_input() {
+    for checks in [
+        json!({ "md5": "00000000000000000000000000000000" }),
+        json!({ "sha1": "0000000000000000000000000000000000000000" }),
+        json!({ "md5": "b1e201554177068604830c335c3a0568", "sha1": "0000000000000000000000000000000000000000" }),
+        json!({ "md5": "00000000000000000000000000000000", "sha1": "ace0c16a44d8fe6493ad43c724d7d2f05559a1c6" }),
+        json!({ "md5": "b1e201554177068604830c335c3a0568", "sha1": "e8e83dec7c9fb3d584cb433f1951895bcf3b7901" }),
+        json!({ "md5": "b449b8806ba1157996362c697ee2df5a", "sha1": "ace0c16a44d8fe6493ad43c724d7d2f05559a1c6" }),
+    ] {
+        assert_weave_n64_own_checks("ips", Some(checks), false);
+    }
+}
+
 #[test]
 fn weave_apply_rejects_disabled_named_patch_input_producer() {
     let temp = setup_temp_dir();

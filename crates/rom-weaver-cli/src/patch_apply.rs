@@ -1770,7 +1770,7 @@ impl CliApp {
                     N64AutoInference::ChecksumOnly
                 },
                 first_patch,
-                expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
+                expected_input_checksums,
                 weave_rom_n64_order: weave_rom_form.and_then(|form| form.n64_byte_order),
                 repair_checksum,
                 context,
@@ -2222,7 +2222,7 @@ impl CliApp {
     }
 
     /// Resolve the N64 order a patch should see. Auto acts on checksum proof
-    /// first; a patch with no source CRC32 falls back to structural evidence
+    /// first; a patch with no source checksum falls back to structural evidence
     /// ([`Self::structural_n64_order_decision`]: record structure, then the
     /// boot-checksum tiebreak) when the caller allows it. When nothing decides,
     /// the order the weave `rom.checks` matched is used if there is one;
@@ -2236,7 +2236,7 @@ impl CliApp {
         let N64TargetRequest {
             input,
             patch,
-            expected_crc32,
+            expected_input_checksums,
             weave_rom_order,
             mode,
             inference,
@@ -2254,19 +2254,21 @@ impl CliApp {
         let (target, inferred_note) = match mode {
             PatchN64ByteOrderMode::Keep => (source, None),
             PatchN64ByteOrderMode::Auto => {
-                let required_crc32 = expected_crc32.map(str::to_owned).or_else(|| {
-                    patch.and_then(|path| self.embedded_patch_source_crc32(path, context))
-                });
-                match required_crc32 {
-                    // A checksum that matches no variant means the input is not
-                    // the patch's base at all. Structural evidence assumes it is,
-                    // so proof that says otherwise ends the decision.
-                    Some(required) => (
-                        Self::resolve_n64_byte_order_for_crc32(input, &required, context)?
+                let required = if expected_input_checksums.is_empty() {
+                    self.embedded_input_states(patch, context)
+                } else {
+                    vec![patch_plan::PlanState {
+                        checksums: expected_input_checksums.clone(),
+                        size: None,
+                    }]
+                };
+                match required.is_empty() {
+                    false => (
+                        Self::resolve_n64_byte_order_for_checks(input, &required, context)?
                             .unwrap_or(source),
                         None,
                     ),
-                    None => self.infer_patch_n64_target(
+                    true => self.infer_patch_n64_target(
                         N64Inference {
                             input,
                             patch,
@@ -2414,7 +2416,7 @@ impl CliApp {
                 N64TargetRequest {
                     input: current_input,
                     patch: Some(resolved_patch),
-                    expected_crc32: None,
+                    expected_input_checksums: &BTreeMap::new(),
                     weave_rom_order: None,
                     mode,
                     inference: N64AutoInference::ChecksumOnly,
@@ -3219,7 +3221,7 @@ struct PreparePatchApplyInputInputs<'a> {
     n64_byte_order: PatchN64ByteOrderMode,
     inference: N64AutoInference,
     first_patch: Option<&'a Path>,
-    expected_crc32: Option<&'a str>,
+    expected_input_checksums: &'a BTreeMap<String, String>,
     weave_rom_n64_order: Option<N64ByteOrder>,
     repair_checksum: bool,
     context: &'a OperationContext,
@@ -3244,7 +3246,7 @@ pub(super) enum N64AutoInference {
 pub(super) struct N64TargetRequest<'a> {
     pub(super) input: &'a Path,
     pub(super) patch: Option<&'a Path>,
-    pub(super) expected_crc32: Option<&'a str>,
+    pub(super) expected_input_checksums: &'a BTreeMap<String, String>,
     /// The order of the form the weave `rom.checks` matched, used only when
     /// neither a checksum nor the patch's record structure settles the order.
     pub(super) weave_rom_order: Option<N64ByteOrder>,
@@ -3968,7 +3970,7 @@ impl CliApp {
             n64_byte_order,
             inference,
             first_patch,
-            expected_crc32,
+            expected_input_checksums,
             weave_rom_n64_order,
             repair_checksum,
             context,
@@ -4004,7 +4006,7 @@ impl CliApp {
             N64TargetRequest {
                 input: &apply_input,
                 patch: first_patch,
-                expected_crc32,
+                expected_input_checksums,
                 weave_rom_order: weave_rom_n64_order,
                 mode: n64_byte_order,
                 inference,
