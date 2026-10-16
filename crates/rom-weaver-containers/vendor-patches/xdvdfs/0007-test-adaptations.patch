@@ -1,0 +1,104 @@
+diff --git a/layout.rs b/layout.rs
+index 46f4d6178..eaf697530 100644
+--- a/layout.rs
++++ b/layout.rs
+@@ -364,37 +364,3 @@ impl DirectoryEntryDiskNode {
+             .map_err(|e| util::Error::SerializationFailed(e))
+     }
+ }
+-
+-#[cfg(test)]
+-mod test {
+-    use super::{DirectoryEntryDiskData, DirentAttributes, DiskRegion};
+-    use futures::executor;
+-
+-    #[test]
+-    fn test_read_file_empty() {
+-        let mut data: [u8; 8] = [0; 8];
+-
+-        let dirent = DirectoryEntryDiskData {
+-            data: DiskRegion { sector: 0, size: 0 },
+-            attributes: DirentAttributes(0),
+-            filename_length: 0,
+-        };
+-
+-        let mut buf = [0; 8];
+-        executor::block_on(dirent.read_data(&mut data, &mut buf)).unwrap();
+-    }
+-
+-    #[test]
+-    fn test_read_file_all_empty() {
+-        let mut data: [u8; 8] = [0; 8];
+-
+-        let dirent = DirectoryEntryDiskData {
+-            data: DiskRegion { sector: 0, size: 0 },
+-            attributes: DirentAttributes(0),
+-            filename_length: 0,
+-        };
+-
+-        let data = executor::block_on(dirent.read_data_all(&mut data)).unwrap();
+-        assert_eq!(data.len(), 0);
+-    }
+-}
+diff --git a/mod.rs b/mod.rs
+index 416176f5b..b2f41a8d9 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -47,3 +47,7 @@ pub mod util;
+ pub mod read;
+ 
+ pub mod write;
++
++#[cfg(all(test, not(target_family = "wasm")))]
++#[path = "../../tests/unit/xdvdfs.rs"]
++mod xdvdfs_tests;
+diff --git a/write/avl.rs b/write/avl.rs
+index 0c7fb751d..8f485f899 100644
+--- a/write/avl.rs
++++ b/write/avl.rs
+@@ -546,13 +546,13 @@ impl<'tree, T: Ord> core::iter::Iterator for AvlPreorderIter<'tree, T> {
+ #[cfg(test)]
+ mod test {
+     use super::*;
+-    use rand::{prelude::*, rngs, SeedableRng};
++    use rand::{SeedableRng, prelude::*, rngs};
+ 
+     #[test]
+     fn test_insert_invariants() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+ 
+@@ -575,7 +575,7 @@ mod test {
+     fn test_inorder_ordering() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+         let mut btree = std::collections::BTreeSet::new();
+@@ -628,7 +628,7 @@ mod test {
+     fn test_preorder_backend_ordering_large_data() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+ 
+diff --git a/write/fs/sector_linear.rs b/write/fs/sector_linear.rs
+index 930063a18..e4a89efc0 100644
+--- a/write/fs/sector_linear.rs
++++ b/write/fs/sector_linear.rs
+@@ -165,3 +165,7 @@ impl<E> core::ops::Index<u64> for SectorLinearBlockDevice<E> {
+             .unwrap_or(&SectorLinearBlockContents::Empty)
+     }
+ }
++
++#[cfg(test)]
++#[path = "../../../../tests/unit/xdvdfs_sector_linear.rs"]
++mod tests;

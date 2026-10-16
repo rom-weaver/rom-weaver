@@ -1,0 +1,260 @@
+diff --git a/disc/preloader.rs b/disc/preloader.rs
+index 26f341d84..5d89ca125 100644
+--- a/disc/preloader.rs
++++ b/disc/preloader.rs
+@@ -26,9 +26,7 @@ use crate::nod::{
+     IoResultContext,
+     common::PartitionInfo,
+     disc::{
+-        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE,
+-        hashes::{GroupHashes, hash_sector_group},
+-        wii::HASHES_SIZE,
++        DiscHeader, SECTOR_GROUP_SIZE, SECTOR_SIZE, hashes::hash_sector_group, wii::HASHES_SIZE,
+     },
+     io::{
+         block::{Block, BlockKind, BlockReader},
+@@ -64,10 +62,7 @@ pub struct SectorGroup {
+     pub start_sector: u32,
+     pub data: Bytes,
+     pub sector_bitmap: u64,
+-    #[allow(unused)]
+     pub io_duration: Option<Duration>,
+-    #[allow(unused)] // TODO WIA hash exceptions
+-    pub group_hashes: Option<Arc<GroupHashes>>,
+ }
+ 
+ impl SectorGroup {
+@@ -80,15 +75,10 @@ impl SectorGroup {
+ 
+ pub type SectorGroupResult = io::Result<SectorGroup>;
+ 
+-#[allow(unused)]
+ pub struct Preloader {
+     #[cfg(feature = "threading")]
+     request_tx: Sender<SectorGroupRequest>,
+     #[cfg(feature = "threading")]
+-    request_rx: Receiver<SectorGroupRequest>,
+-    #[cfg(feature = "threading")]
+-    stat_tx: Sender<PreloaderThreadStats>,
+-    #[cfg(feature = "threading")]
+     stat_rx: Receiver<PreloaderThreadStats>,
+     #[cfg(feature = "threading")]
+     threads: Mutex<PreloaderThreads>,
+@@ -97,11 +87,9 @@ pub struct Preloader {
+     loader: Mutex<SectorGroupLoader>,
+ }
+ 
+-#[allow(unused)]
+ #[cfg(feature = "threading")]
+ struct PreloaderThreads {
+     join_handles: Vec<JoinHandle<()>>,
+-    last_adjust: Instant,
+     num_samples: usize,
+     wait_time_avg: SingleSumSMA<Duration, u32, 100>,
+     req_time_avg: SingleSumSMA<Duration, u32, 100>,
+@@ -113,7 +101,6 @@ impl PreloaderThreads {
+     fn new(join_handles: Vec<JoinHandle<()>>) -> Self {
+         Self {
+             join_handles,
+-            last_adjust: Instant::now(),
+             num_samples: 0,
+             wait_time_avg: SingleSumSMA::<_, _, 100>::from_zero(Duration::default()),
+             req_time_avg: SingleSumSMA::<_, _, 100>::from_zero(Duration::default()),
+@@ -141,30 +128,16 @@ impl PreloaderThreads {
+                 utilization * 100.0,
+                 io_time * 100.0
+             );
+-            // if self.last_adjust.elapsed() > Duration::from_secs(2) {
+-            //     if utilization > 0.9 && io_time < 0.1 {
+-            //         println!("Preloader is CPU-bound, increasing thread count");
+-            //         let id = self.join_handles.len();
+-            //         self.join_handles.push(preloader_thread(
+-            //             id,
+-            //             outer.request_rx.clone(),
+-            //             outer.cache.clone(),
+-            //             outer.loader.lock().unwrap().clone(),
+-            //             outer.stat_tx.clone(),
+-            //         ));
+-            //         self.last_adjust = Instant::now();
+-            //     } /*else if io_time > 0.9 {
+-            //         println!("Preloader is I/O-bound, decreasing thread count");
+-            //         if self.join_handles.len() > 1 {
+-            //             let handle = self.join_handles.pop().unwrap();
+-            //
+-            //         }
+-            //     }*/
+-            // }
+         }
+     }
+ }
+ 
++/// Minimum number of sector groups to request ahead of the consumer. 16 groups is ~32 MiB,
++/// enough to ride out I/O latency spikes without stalling. More threads still deepen the
++/// window; this floor only matters when the thread count is low. Upstream: encounter/nod#27.
++#[cfg(feature = "threading")]
++const MIN_READ_AHEAD_GROUPS: usize = 16;
++
+ struct PreloaderCache {
+     #[cfg(feature = "threading")]
+     inflight: HashMap<SectorGroupRequest, WaitGroup>,
+@@ -181,10 +154,9 @@ impl Default for PreloaderCache {
+     }
+ }
+ 
+-#[cfg(feature = "threading")]
+-const MIN_READ_AHEAD_GROUPS: usize = 16;
+-
+ impl PreloaderCache {
++    /// Size the cache to fit the read-ahead window plus some reuse room, so prefetched groups
++    /// aren't evicted before they're used. Keeps at least the old fixed capacity of 64.
+     #[cfg(feature = "threading")]
+     fn for_read_ahead(read_ahead: usize, num_threads: usize) -> Self {
+         let capacity = (read_ahead + num_threads + 16).max(64);
+@@ -211,10 +183,8 @@ impl PreloaderCache {
+     }
+ }
+ 
+-#[allow(unused)]
+ #[cfg(feature = "threading")]
+ struct PreloaderThreadStats {
+-    thread_id: usize,
+     wait_time: Duration,
+     req_time: Duration,
+     io_time: Duration,
+@@ -261,7 +231,6 @@ fn preloader_thread(
+                 let req_time = end - start;
+                 if stat_tx
+                     .send(PreloaderThreadStats {
+-                        thread_id,
+                         wait_time,
+                         req_time,
+                         io_time,
+@@ -301,8 +270,6 @@ impl Preloader {
+         let loader = Mutex::new(loader);
+         Arc::new(Self {
+             request_tx,
+-            request_rx,
+-            stat_tx,
+             stat_rx,
+             threads,
+             cache,
+@@ -318,17 +285,6 @@ impl Preloader {
+         Arc::new(Self { cache, loader })
+     }
+ 
+-    #[allow(unused)]
+-    pub fn shutdown(self) {
+-        #[cfg(feature = "threading")]
+-        {
+-            let guard = self.threads.into_inner().unwrap();
+-            for handle in guard.join_handles {
+-                handle.join().unwrap();
+-            }
+-        }
+-    }
+-
+     #[instrument(name = "Preloader::fetch", skip_all)]
+     pub fn fetch(&self, request: SectorGroupRequest, max_groups: u32) -> SectorGroupResult {
+         #[cfg(feature = "threading")]
+@@ -341,7 +297,7 @@ impl Preloader {
+                 threads_guard.join_handles.len()
+             };
+             let mut cache_guard = self.cache.lock().map_err(map_poisoned)?;
+-            // Preload n groups ahead
++            // Preload read_ahead groups ahead
+             let read_ahead = num_threads.max(MIN_READ_AHEAD_GROUPS) as u32;
+             for i in 0..read_ahead {
+                 let group_idx = request.group_idx + i;
+@@ -431,8 +387,6 @@ struct LoadedSectorGroup {
+     sector_bitmap: u64,
+     /// Total duration of I/O operations
+     io_duration: Option<Duration>,
+-    /// Calculated sector group hashes
+-    group_hashes: Option<Arc<GroupHashes>>,
+ }
+ 
+ impl SectorGroupLoader {
+@@ -460,7 +414,6 @@ impl SectorGroupLoader {
+             start_sector,
+             sector_bitmap,
+             io_duration,
+-            group_hashes,
+         } = if request.partition_idx.is_some() {
+             self.load_partition_group(request, out)?
+         } else {
+@@ -473,7 +426,6 @@ impl SectorGroupLoader {
+             data: sector_group_buf.freeze(),
+             sector_bitmap,
+             io_duration,
+-            group_hashes,
+         })
+     }
+ 
+@@ -507,8 +459,6 @@ impl SectorGroupLoader {
+         let mut hash_exceptions = Vec::<WIAException>::new();
+         // Total duration of I/O operations
+         let mut io_duration = None;
+-        // Calculated sector group hashes
+-        let mut group_hashes = None;
+ 
+         // Read sector group
+         for sector in 0..64 {
+@@ -590,9 +540,6 @@ impl SectorGroupLoader {
+                     hashes.apply(sector_data, sector);
+                 }
+             }
+-
+-            // Persist hashes
+-            group_hashes = Some(Arc::from(hashes));
+         }
+ 
+         // Apply hash exceptions
+@@ -652,7 +599,6 @@ impl SectorGroupLoader {
+             start_sector: abs_group_sector,
+             sector_bitmap,
+             io_duration,
+-            group_hashes,
+         })
+     }
+ 
+@@ -712,7 +658,6 @@ impl SectorGroupLoader {
+             start_sector: abs_group_sector,
+             sector_bitmap,
+             io_duration,
+-            group_hashes: None,
+         })
+     }
+ }
+diff --git a/io/nkit.rs b/io/nkit.rs
+index 02056ae75..a963eb72e 100644
+--- a/io/nkit.rs
++++ b/io/nkit.rs
+@@ -9,7 +9,6 @@ use crate::nod::{
+     util::read::{read_at, read_from, read_u16_be, read_u32_be, read_u64_be, read_vec},
+ };
+ 
+-#[allow(unused)]
+ #[repr(u16)]
+ enum NKitHeaderFlags {
+     Size = 0x1,
+@@ -19,8 +18,6 @@ enum NKitHeaderFlags {
+     Xxhash64 = 0x10,
+     Key = 0x20,
+     Encrypted = 0x40,
+-    ExtraData = 0x80,
+-    IndexFile = 0x100,
+ }
+ 
+ const NKIT_HEADER_V1_FLAGS: u16 = NKitHeaderFlags::Crc32 as u16
+diff --git a/mod.rs b/mod.rs
+index 7fdf46115..fc3ca2559 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -154,7 +154,6 @@
+ //! // ...
+ //! ```
+ 
+-// [WIP] Disc image building is incomplete and not yet exposed.
+ pub(crate) mod build;
+ pub mod common;
+ pub mod disc;
