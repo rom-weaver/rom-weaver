@@ -1,6 +1,5 @@
 import {
   gateWeaveChainChecks,
-  resolveWeaveRootRomChecks,
   weaveCheckTokens,
   selectWeaveMembers,
   validatePatchDependencies,
@@ -99,6 +98,15 @@ import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
 import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
+import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
+
+// The weave's `rom.checks` and `rom.member`, which the workflow verifies against the supplied ROM
+// for every weave, whatever its patches target.
+const weaveRomExpectation = (session: WeaveApplySession | null): WeaveRomExpectation | undefined => {
+  const checks = weaveCheckTokens(session?.romChecks);
+  if (!checks) return undefined;
+  return session?.romMember ? { checks, member: session.romMember } : { checks };
+};
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -426,16 +434,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [updateWeaveMetaForIds],
   );
-  // The weave's expected ROM (`rom.checks`) for the current order and enablement: the run that
-  // starts from the supplied ROM compares it with that file. Recomputed on every plan pass and run.
-  const getWeaveRootRomChecks = useCallback(
-    (entries: ReadonlyArray<{ input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }>) => {
-      const session = activeWeaveSessionRef.current;
-      if (!session) return undefined;
-      return resolveWeaveRootRomChecks(entries, { checks: session.romChecks, member: session.romMember });
-    },
-    [],
-  );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {
       const chainMeta = new Map<
@@ -444,7 +442,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           id?: string;
           input?: ParsedWeavePatchInput;
           basis?: "auto" | "base" | "previous";
-          expectedRomChecks?: string;
           inputChecks?: string;
           outputChecks?: string;
         }
@@ -470,12 +467,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           };
         }),
       );
-      const rootRom = getWeaveRootRomChecks(
-        ids.map((id, index) => {
-          const meta = weaveMetaRef.current.get(id || "");
-          return { enabled: !disabled.has(index), input: meta?.input, target: meta?.target };
-        }),
-      );
       ids.forEach((id, index) => {
         const meta = weaveMetaRef.current.get(id || "");
         const { inputChecks, outputChecks } = gatedChecks[index] || {};
@@ -484,14 +475,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           id: meta?.id || id,
           ...(meta?.input ? { input: meta.input } : {}),
           ...(basis === "auto" ? {} : { basis }),
-          ...(rootRom?.index === index ? { expectedRomChecks: rootRom.tokens } : {}),
           ...(inputChecks ? { inputChecks } : {}),
           ...(outputChecks ? { outputChecks } : {}),
         });
       });
       return chainMeta;
     },
-    [getDisabledPatchIndexes, getPatchIds, getWeaveRootRomChecks],
+    [getDisabledPatchIndexes, getPatchIds],
   );
 
   // Latest patch list mirror for flows outside the staging pipeline (weave export).
@@ -1170,15 +1160,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         })),
       );
       for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
-      const rootRom = getWeaveRootRomChecks(
-        runOptions.map((option, index) => ({
-          enabled: enabled[index] ?? true,
-          input: option.input,
-          target: option.target,
-        })),
-      );
-      for (const [index, option] of runOptions.entries())
-        Object.assign(option, { expectedRomChecks: rootRom?.index === index ? rootRom.tokens : undefined });
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
@@ -1225,7 +1206,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             ...(option.target ? { target: option.target } : {}),
             inputChecks: option.inputChecks,
             outputChecks: option.outputChecks,
-            expectedRomChecks: option.expectedRomChecks,
           });
         }
         const readinessError = getWorkflowReadinessError(workflow.getInput() || stagedInput, workflow.getPatches());
@@ -1235,6 +1215,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const abortWorkflow = () => workflow.abort(abortSignal?.reason);
         abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
+          workflow.setWeaveRom?.(weaveRomExpectation(activeWeaveSessionRef.current));
           const selectedCheats = selectedCheatsRef.current;
           workflow.setCheats?.(
             selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
@@ -1312,7 +1293,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       prepareWorkflow,
       filterEnabledPatchRun,
       getPatchIds,
-      getWeaveRootRomChecks,
       memberLaneChecksRef,
       patchInputBasis,
       workflowHandle,
@@ -1531,6 +1511,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             chainMeta: buildChainMeta(input.patches),
             defaultPatchBasis: patchInputBasis,
             disabledIndexes,
+            weaveRom: weaveRomExpectation(activeWeaveSessionRef.current),
           });
           return buildInfos();
         },
@@ -1613,6 +1594,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               chainMeta: buildChainMeta(input.patches),
               defaultPatchBasis: patchInputBasisRef.current,
               disabledIndexes: getDisabledPatchIndexes(input.patches),
+              weaveRom: weaveRomExpectation(activeWeaveSessionRef.current),
             });
           }
           const refreshedInput = workflow.getInput();

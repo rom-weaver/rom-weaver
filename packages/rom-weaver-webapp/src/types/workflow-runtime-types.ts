@@ -105,12 +105,6 @@ type PatchApplyUserOptions = {
   inputChecks?: string;
   /** Expected checks for this patch's output, forwarded to patch-apply. */
   outputChecks?: string;
-  /**
-   * The weave's expected-ROM checks (`algo=hex` / `size=N` tokens) for the ROM this patch's run
-   * starts from, compared with that file's own checksums under strict input validation. Not a
-   * declaration about this patch's own input and never sent to the engine.
-   */
-  expectedRomChecks?: string;
   /** Which state this patch's embedded input checks describe. */
   basis?: "base" | "previous";
   /** Raw hex checksum to validate the target input before apply (algorithm auto-detected by length). */

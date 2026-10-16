@@ -817,6 +817,131 @@ test("weave rom.checks of a byte-swapped N64 ROM accept it for a big-endian BPS"
   expect(options?.validateWithChecksums).toBeUndefined();
 });
 
+const buildWeaveArchive = async (weave, patchFiles) =>
+  buildZip(
+    [
+      {
+        file: new File([JSON.stringify(weave)], "rom-weaver-weave.json", { type: "application/json" }),
+        fileName: "rom-weaver-weave.json",
+      },
+      ...patchFiles.map((file) => ({ file, fileName: file.name })),
+    ],
+    "rom-check-weave.zip",
+  );
+
+// Apply under strict validation: a matching ROM applies with no override; a wrong one shows the
+// override and reaches the engine only once it is checked.
+const expectStrictApply = async (files, { outputName, romMatches }) => {
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict(files);
+    if (romMatches) {
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain(outputName);
+      await waitForApplyButtonEnabled();
+      expect(getChecksumOverride()).toBeNull();
+    } else {
+      const override = await waitForState(getChecksumOverride, 60000);
+      // The weave's output-name defaults land after staging and reset the override, so let them settle.
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain(outputName);
+      expect(applySpy).not.toHaveBeenCalled();
+      override.click();
+      await waitForApplyButtonEnabled();
+    }
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    expect(applySpy.mock.calls[0]?.[0]?.options?.validateWithChecksums).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+};
+
+// The browser export writes `target: {rom: true}` on every patch, version 2 and patchBasis auto.
+for (const romMatches of [true, false]) {
+  test(`exported-shape weave verifies rom.checks (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const checks = romMatches
+      ? RAW_ROM_CHECKS
+      : { checksums: { crc32: "a1cecd74", sha1: "96ff406466d366276a84a48947ae14cac4065e1c" }, size: 14 };
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "exported-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+        rom: { checks, name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "exported-output", romMatches });
+  });
+}
+
+// `weave create --checksum sha256` writes algorithms staging does not compute; they are hashed on demand.
+for (const romMatches of [true, false]) {
+  test(`sha256-only rom.checks are computed and verified (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "sha256-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name }],
+        rom: { checks: { checksums: { sha256: romMatches ? sha256 : "0".repeat(64) } }, name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "sha256-output", romMatches });
+  });
+}
+
+// A member-lane weave: rom.member names the disc track the weave's ROM checks describe.
+for (const romMatches of [true, false]) {
+  test(`member-lane weave verifies rom.checks on rom.member (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const trackOneName = "member-lane-track01.bin";
+    const trackTwoName = "member-lane-track02.bin";
+    const trackOne = noiseBytes(2352 * 40, 0x01);
+    const trackTwo = noiseBytes(2352 * 40, 0x02);
+    const cue = new File(
+      [
+        `FILE "${trackOneName}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n` +
+          `FILE "${trackTwoName}" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n`,
+      ],
+      "member-lane.cue",
+      { type: "application/x-cue" },
+    );
+    const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+    const target = { member: trackTwoName, rom: true };
+    // The weave bundles the disc as one ROM archive. The wrong case declares track 1's checks for
+    // track 2, as a weave made from another disc would.
+    const disc = await buildZip(
+      [
+        { file: cue, fileName: cue.name },
+        { file: new File([trackOne], trackOneName), fileName: trackOneName },
+        { file: new File([trackTwo], trackTwoName), fileName: trackTwoName },
+      ],
+      "member-lane.zip",
+    );
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "member-lane-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Track", path: patchFile.name, target }],
+        rom: {
+          checks: await fileChecks(romMatches ? trackTwo : trackOne),
+          member: trackTwoName,
+          name: disc.name,
+          path: disc.name,
+        },
+        version: 2,
+      },
+      [patchFile, disc],
+    );
+    await expectStrictApply([weaveArchive], { outputName: "member-lane-output", romMatches });
+  });
+}
+
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
   // A pre-rename weave: its index is `rw.json`, not `rom-weaver-weave.json`.
   // Detection must fall back to content-probing so it still auto-selects. A

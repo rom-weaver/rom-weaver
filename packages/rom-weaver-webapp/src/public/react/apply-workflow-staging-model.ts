@@ -28,8 +28,6 @@ type ApplyPatchRunOptions = {
   target?: ParsedWeavePatchInput;
   inputChecks?: string;
   outputChecks?: string;
-  /** The weave's expected-ROM checks, carried by the run that starts from the supplied ROM. */
-  expectedRomChecks?: string;
   basis?: "base" | "previous";
   header?: "keep" | "strip";
   n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";

@@ -89,7 +89,12 @@ import {
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
-import { cloneChecksumRomProbe, getInputAssetChecksums } from "./staged-source-checksums.ts";
+import {
+  calculateInputChecksumsForFile,
+  cloneChecksumRomProbe,
+  getInputAssetChecksums,
+} from "./staged-source-checksums.ts";
+import { type WeaveRomExpectation, verifyWeaveRom } from "./apply-weave-rom-check.ts";
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
@@ -134,6 +139,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private discoveredSidecarPrimitiveSources = new Set<TSource>();
   private cheatRecords: CheatRecord[] = [];
   private cheatPositions: number[] = [];
+  /** The active weave's `rom.checks`, verified against the supplied ROM file. */
+  private weaveRom: WeaveRomExpectation | undefined;
+  /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
+  private readonly weaveRomChecksums = new WeakMap<object, Record<string, string>>();
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -187,6 +196,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.cheatRecords = records.map((record) => cloneValue(record));
     this.cheatPositions = [...cheatPositions];
     this.recomputeOutputState();
+  }
+
+  /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
+  setWeaveRom(expectation: WeaveRomExpectation | undefined): void {
+    this.weaveRom = expectation?.checks ? { ...expectation } : undefined;
   }
 
   /** Export the exact leaves staging prepared, so a weave export right after apply needs no
@@ -811,7 +825,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       target?: ApplyWorkflowPatchState["patchTarget"];
       inputChecks?: string;
       outputChecks?: string;
-      expectedRomChecks?: string;
       basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
@@ -874,11 +887,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         verificationChanged ||= stage.state.outputChecks !== value;
         stage.state.outputChecks = value;
       }
-      if ("expectedRomChecks" in option) {
-        // Run-only: the plan pass receives these through its chain metadata, so the cheap
-        // readiness preflight does not change with them.
-        stage.state.expectedRomChecks = option.expectedRomChecks?.trim() || undefined;
-      }
       if ("basis" in option) {
         verificationChanged ||= stage.state.basisChoice !== option.basis;
         stage.state.basisChoice = option.basis;
@@ -914,6 +922,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async run(): Promise<ApplyResult<TDestination>> {
     return this.mutate("run", async () => {
       await this.prepareRun();
+      // The strict-validation override (or a non-strict setting) skips the weave's ROM check, like
+      // the CLI's --ignore-checksum-validation skips weave checks.
+      if (this.settings.validation?.requireInputChecksumMatch === true) {
+        const verdict = await this.verifyWeaveRom();
+        if (verdict?.status === "mismatch")
+          throw new RomWeaverError("CHECKSUM_MISMATCH", verdict.message || "Input checksum mismatch");
+      }
       const result = await withAbortSignal(
         runApplyWorkflow(
           this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress)),
@@ -1544,6 +1559,48 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     session.view.state.romType = session.view.state.romType ? { ...session.view.state.romType } : undefined;
   }
 
+  /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
+   * algorithm staging did not compute. */
+  private async verifyWeaveRom(): Promise<Awaited<ReturnType<typeof verifyWeaveRom>> | undefined> {
+    const expectation = this.weaveRom;
+    if (!expectation) return undefined;
+    const verdict = await verifyWeaveRom(
+      expectation,
+      this.getPatchableInputAssets(),
+      this.weaveRomChecksums,
+      async (asset, algorithms) => {
+        try {
+          const result = await calculateInputChecksumsForFile({
+            algorithms,
+            emitProgress: (event) => this.emitProgress(event),
+            file: asset.file,
+            identify: false,
+            logLevel: this.settings.logging?.level,
+            onLog: this.settings.logging?.sink,
+            progressId: `${this.id}:weave-rom:${asset.id}`,
+            role: "input",
+            runtime: this.runtime,
+            signal: this.abortController.signal,
+            state: { fileName: asset.fileName, id: asset.id, size: asset.size },
+            workflow: "apply",
+          });
+          return result.checksums;
+        } catch (error) {
+          if (this.abortController.signal.aborted) throw error;
+          this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
+          return {};
+        }
+      },
+    );
+    this.trace("weave.rom.verify", {
+      assetId: verdict.assetId ?? "",
+      member: expectation.member ?? "",
+      missing: verdict.missing.join(","),
+      status: verdict.status,
+    });
+    return verdict;
+  }
+
   private getSelectedInputOwner(): StagedSource<TSource> | undefined {
     return this.inputStages.getSelectedOwner(this.inputSession) as StagedSource<TSource> | undefined;
   }
@@ -1639,26 +1696,20 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     /** Index-aligned declared chain metadata (weave/user basis + checks) per staged patch. */
     chainMeta?: ReadonlyMap<
       number,
-      {
-        basis?: "auto" | "base" | "previous";
-        expectedRomChecks?: string;
-        inputChecks?: string;
-        outputChecks?: string;
-      }
+      { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
     >;
     defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
+    /** The active weave's expected ROM; present (even undefined) replaces the stored one. */
+    weaveRom?: WeaveRomExpectation;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
+      if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
+      const weaveRomVerdict = await this.verifyWeaveRom();
       const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{
-        chain?: {
-          basis?: "auto" | "base" | "previous";
-          expectedRomChecks?: string;
-          inputChecks?: string;
-          outputChecks?: string;
-        };
+        chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
         chainFingerprint?: string;
         preflight: InternalPatchChecksumPreflight;
         stage: StagedSource<TSource>;
@@ -1699,10 +1750,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
             entry.chain?.basis ?? "auto",
             entry.chain?.inputChecks ?? "",
             entry.chain?.outputChecks ?? "",
-            entry.chain?.expectedRomChecks ?? "",
           ]),
           defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
+          weaveRom: this.weaveRom ?? null,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
       }
@@ -1733,6 +1784,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         runtime: this.runtime,
         settings: this.settings,
         signal: this.abortController.signal,
+        ...(weaveRomVerdict?.status === "mismatch"
+          ? { weaveRomMismatch: weaveRomVerdict.message || "Input checksum mismatch" }
+          : {}),
         workflowId: this.id,
       };
       // Batch patches by input and header decision to share one runner boot and mount. Independent
@@ -1831,7 +1885,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
         ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
         ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
-        ...(patch.state.expectedRomChecks ? { expectedRomChecks: patch.state.expectedRomChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
         // An undecided one is left unset so the engine's own inference runs.

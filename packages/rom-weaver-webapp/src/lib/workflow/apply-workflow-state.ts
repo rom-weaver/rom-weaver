@@ -37,9 +37,6 @@ type InternalSourceState = {
   patchTarget?: ApplyWorkflowPatchState["patchTarget"];
   inputChecks?: ApplyWorkflowPatchState["inputChecks"];
   outputChecks?: ApplyWorkflowPatchState["outputChecks"];
-  /** Run-level expected-ROM checks (`algo=hex` / `size=N` tokens) this patch's run verifies before
-   * patching: set on the first enabled weave patch that reads the supplied ROM. */
-  expectedRomChecks?: string;
   targetInputId?: string;
   targetInputFileName?: string;
   size?: number;

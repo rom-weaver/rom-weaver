@@ -24,10 +24,7 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import { type createPatchFile, getPatchFileExternalSource } from "../input/binary-service.ts";
-import { RomWeaverError } from "../errors.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
-import { compareWeaveRomChecks } from "../weave/weave-targets.ts";
-import { getInputAssetChecksums } from "../workflow/staged-source-checksums.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
@@ -490,35 +487,6 @@ const getPatchChecks = (
   return checks.some(Boolean) ? checks : undefined;
 };
 
-// A weave's expected ROM describes the supplied file, so the run compares it with that file's own
-// checksums before any header strip or N64 byte-order conversion. Sending it as the engine's
-// `--expect-in` would check transformed bytes and steer the automatic header decision. The
-// strict-validation override (or a non-strict setting) skips the check, like the CLI's
-// `--ignore-checksum-validation` skips weave checks.
-const assertExpectedRomMatches = (
-  asset: InputAsset,
-  patchIndices: number[],
-  patchOptions: PatchInput["patchOptions"],
-  options: ApplyPatchOptions,
-) => {
-  if (options.validation?.requireInputChecksumMatch !== true) return;
-  const tokens = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.expectedRomChecks).find(Boolean);
-  if (!tokens) return;
-  const verdict = compareWeaveRomChecks(tokens, { checksums: getInputAssetChecksums(asset), size: asset.size });
-  traceWorkflowStage(
-    options,
-    verdict.status === "mismatch" ? "stage.fail" : "stage.finish",
-    "weave.expected-rom",
-    "input",
-    {
-      asset: asset.fileName,
-      status: verdict.status,
-    },
-  );
-  if (verdict.status === "mismatch")
-    throw new RomWeaverError("CHECKSUM_MISMATCH", verdict.message || "Input checksum mismatch");
-};
-
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
     output &&
@@ -565,7 +533,6 @@ const applyPatchesToAsset = async ({
   const patchTargets = getPatchTargets(patchIndices, patchOptions, asset);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
   const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
-  assertExpectedRomMatches(asset, patchIndices, patchOptions, options);
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length

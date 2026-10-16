@@ -13,7 +13,6 @@ import {
   createApplyPatchValidationKey,
 } from "./apply-patch-readiness-state-machine.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
-import { compareWeaveRomChecks } from "../weave/weave-targets.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 // An aborted or transient worker failure is not a verdict on the patch. Caching one as a terminal
@@ -38,6 +37,9 @@ type PatchTargetValidationAdapters = {
   runtime: WorkflowRuntime;
   settings: Partial<ApplySettings>;
   signal: AbortSignal;
+  /** Set when the supplied ROM fails the active weave's `rom.checks`: every validated patch then
+   * reads as a checksum mismatch (so strict validation offers its override) without a worker call. */
+  weaveRomMismatch?: string;
   workflowId: string;
 };
 
@@ -49,9 +51,6 @@ type PatchChainDeclaration = {
   inputChecks?: string;
   /** Declared output checks as comma-separable `algo=hex` tokens. */
   outputChecks?: string;
-  /** The weave's expected-ROM checks (`algo=hex` / `size=N` tokens), compared with the supplied
-   * ROM file's own checksums before the plan call; never this patch's own input declaration. */
-  expectedRomChecks?: string;
 };
 
 type PatchTargetValidationEntry<TSource> = {
@@ -314,6 +313,15 @@ const validatePreparedGroup = async <TSource>(
 ): Promise<void> => {
   const first = prepared[0];
   if (!first) return;
+  if (adapters.weaveRomMismatch) {
+    for (const { entry, startedAt, validationKey } of prepared) {
+      applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
+        message: adapters.weaveRomMismatch,
+        status: "invalid",
+      });
+    }
+    return;
+  }
   // Every member's verdict is cached for this exact chain state: nothing to run. When any member
   // needs work the WHOLE chain rides in one plan-mode call - verdicts depend on chain position.
   if (prepared.every((preparedEntry) => preparedEntry.cached)) return;
@@ -346,26 +354,6 @@ const validatePreparedGroup = async <TSource>(
       });
     }
   };
-  // The weave's expected ROM describes the file as supplied, so it is compared with the staged
-  // file's own checksums, not sent to the engine (which checks after header/byte-order handling).
-  // A mismatch fails every grouped patch as a checksum mismatch, so the strict-validation override
-  // applies as it does for a patch's own source checksum.
-  const expectedRomChecks = prepared.map(({ entry }) => entry.chain?.expectedRomChecks).find(Boolean);
-  const romVerdict = expectedRomChecks
-    ? compareWeaveRomChecks(expectedRomChecks, {
-        checksums: getInputAssetChecksums(first.entry.target),
-        size: first.entry.target.size,
-      })
-    : undefined;
-  if (romVerdict?.status === "mismatch") {
-    for (const { entry, startedAt, validationKey } of prepared) {
-      applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
-        message: romVerdict.message || "Input checksum mismatch",
-        status: "invalid",
-      });
-    }
-    return;
-  }
   emitToAll("Validating patch against selected target", null);
 
   try {

@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverError } from "../../src/lib/errors.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
-import {
-  validateApplyPatchTarget,
-  validateApplyPatchTargets,
-} from "../../src/lib/workflow/apply-patch-target-validation.ts";
+import { validateApplyPatchTarget } from "../../src/lib/workflow/apply-patch-target-validation.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "../../src/lib/workflow/apply-workflow-state.ts";
 
 // A patch/target whose `filePath` makes getPatchFileExternalSource resolve a (non-null) external
@@ -67,49 +64,6 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     );
   });
 
-  // The target's own checksums are those of the file as supplied (game.rom, 4096 bytes).
-  const createCheckedTarget = () =>
-    ({ ...createTarget(), checksums: { crc32: "3e30b9b3", sha1: "22f5" } }) as InputAsset;
-
-  it("compares the weave's expected ROM with the supplied file and never sends it to the engine", async () => {
-    const stage = createStage();
-    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
-    await validateApplyPatchTargets(
-      [
-        {
-          chain: { basis: "base", expectedRomChecks: "crc32=3e30b9b3,size=4096" },
-          preflight,
-          stage,
-          target: createCheckedTarget(),
-        },
-      ],
-      createAdapters(validatePatch),
-    );
-    const options = validatePatch.mock.calls[0]?.[0]?.options;
-    expect(options).not.toHaveProperty("validateWithChecksums");
-    expect(options).not.toHaveProperty("patchInputChecks");
-    expect(stage.state.patchValidation?.status).toBe("valid");
-  });
-
-  it("fails every grouped patch as a checksum mismatch without a worker call when the ROM differs", async () => {
-    const stages = [createStage(), createStage()];
-    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
-    await validateApplyPatchTargets(
-      stages.map((stage, index) => ({
-        chain: index === 0 ? { expectedRomChecks: "crc32=a1cecd74,size=4096" } : {},
-        preflight,
-        stage,
-        target: createCheckedTarget(),
-      })),
-      createAdapters(validatePatch),
-    );
-    expect(validatePatch).not.toHaveBeenCalled();
-    expect(stages.map((stage) => stage.state.patchValidation?.status)).toEqual(["invalid", "invalid"]);
-    expect(stages[0]?.state.patchValidation?.message).toBe(
-      "Input checksum mismatch for crc32; expected a1cecd74, actual 3e30b9b3",
-    );
-  });
-
   it("records a non-terminal 'unknown' verdict when validation is cancelled", async () => {
     const stage = createStage();
     const validatePatch = vi.fn().mockRejectedValue(new RomWeaverError("CANCELLED", "Workflow was cancelled"));
@@ -166,5 +120,17 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     await validateApplyPatchTarget(stage, target, preflight, createAdapters(validatePatch));
     expect(validatePatch).toHaveBeenCalledTimes(1);
     expect(stage.state.patchValidation?.status).toBe("invalid");
+  });
+
+  it("fails the patch as a checksum mismatch, without a worker call, when the weave ROM mismatches", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
+    const message = "Input checksum mismatch for crc32; expected a1cecd74, actual 3e30b9b3";
+    await validateApplyPatchTarget(stage, createTarget(), preflight, {
+      ...createAdapters(validatePatch),
+      weaveRomMismatch: message,
+    });
+    expect(validatePatch).not.toHaveBeenCalled();
+    expect(stage.state.patchValidation).toMatchObject({ message, status: "invalid" });
   });
 });

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   compareWeaveRomChecks,
   gateWeaveChainChecks,
+  readsWeaveRootRom,
   resolveWeaveChecks,
-  resolveWeaveRootRomChecks,
   selectWeaveMembers,
   validatePatchDependencies,
 } from "../../src/lib/weave/weave-targets.ts";
@@ -211,37 +211,16 @@ describe("weave chain check gating", () => {
   });
 });
 
-describe("resolveWeaveRootRomChecks", () => {
-  const rom = { checks: { checksums: { crc32: "3e30b9b3" }, size: 24592 } };
-
-  it("carries rom.checks on the first enabled patch that reads the supplied ROM", () => {
-    expect(resolveWeaveRootRomChecks([{ enabled: true }, { enabled: true }], rom)).toEqual({
-      index: 0,
-      tokens: "crc32=3e30b9b3,size=24592",
-    });
-    // An optional first patch that is off hands the check to the next enabled one; switching it
-    // on (or reordering) moves the check back, because callers recompute it per pass.
-    expect(resolveWeaveRootRomChecks([{ enabled: false }, { enabled: true }], rom)?.index).toBe(1);
-    expect(resolveWeaveRootRomChecks([{ enabled: true }, { enabled: true }], rom)?.index).toBe(0);
-    // A first patch on a ROM member lane does not read the ROM itself.
-    expect(
-      resolveWeaveRootRomChecks(
-        [{ enabled: true, target: { member: "track02.bin", rom: true } }, { enabled: true }],
-        rom,
-      ),
-    ).toEqual({ index: 1, tokens: "crc32=3e30b9b3,size=24592" });
-  });
-
+describe("readsWeaveRootRom", () => {
   it("matches the CLI's root-ROM rule for input and target", () => {
     const member = { member: "track02.bin", rom: true as const };
-    expect(resolveWeaveRootRomChecks([{ enabled: true, target: { rom: true } }], rom)).toBeUndefined();
-    expect(resolveWeaveRootRomChecks([{ enabled: true, input: { patch: "a" } }], rom)).toBeUndefined();
-    expect(resolveWeaveRootRomChecks([{ enabled: true, input: member }], rom)).toBeUndefined();
-    expect(
-      resolveWeaveRootRomChecks([{ enabled: true, input: member }], { ...rom, member: "track02.bin" })?.index,
-    ).toBe(0);
-    expect(resolveWeaveRootRomChecks([{ enabled: true }], {})).toBeUndefined();
-    expect(resolveWeaveRootRomChecks([], rom)).toBeUndefined();
+    expect(readsWeaveRootRom({}, undefined)).toBe(true);
+    // The browser export writes `target: {rom: true}` on every patch; it still reads the ROM.
+    expect(readsWeaveRootRom({ target: { rom: true } }, undefined)).toBe(true);
+    expect(readsWeaveRootRom({ target: member }, undefined)).toBe(false);
+    expect(readsWeaveRootRom({ input: { patch: "a" } }, undefined)).toBe(false);
+    expect(readsWeaveRootRom({ input: member }, undefined)).toBe(false);
+    expect(readsWeaveRootRom({ input: member }, "track02.bin")).toBe(true);
   });
 });
 
@@ -249,21 +228,28 @@ describe("compareWeaveRomChecks", () => {
   const file = { checksums: { crc32: "3E30B9B3", md5: "df0e", sha1: "22f5" }, size: 24592 };
 
   it("compares every token the file can answer", () => {
-    expect(compareWeaveRomChecks("crc32=3e30b9b3,sha1=22f5,size=24592", file)).toEqual({ status: "match" });
+    expect(compareWeaveRomChecks("crc32=3e30b9b3,sha1=22f5,size=24592", file)).toEqual({
+      missing: [],
+      status: "match",
+    });
     expect(compareWeaveRomChecks("crc32=3e30b9b3,size=24576", file)).toEqual({
       message: "Input size mismatch; expected 24576, actual 24592",
+      missing: [],
       status: "mismatch",
     });
     expect(compareWeaveRomChecks("crc32=a1cecd74", file)).toEqual({
       message: "Input checksum mismatch for crc32; expected a1cecd74, actual 3e30b9b3",
+      missing: [],
       status: "mismatch",
     });
   });
 
-  it("reports unknown when nothing can be compared", () => {
-    expect(compareWeaveRomChecks("sha256=abcd", file)).toEqual({ status: "unknown" });
-    expect(compareWeaveRomChecks("crc32=3e30b9b3,size=24592", {})).toEqual({ status: "unknown" });
-    // An algorithm the file lacks is skipped, not a mismatch.
-    expect(compareWeaveRomChecks("sha256=abcd,crc32=3e30b9b3", file)).toEqual({ status: "match" });
+  it("lists algorithms the file cannot answer for the caller to compute", () => {
+    expect(compareWeaveRomChecks("sha256=abcd", file)).toEqual({ missing: ["sha256"], status: "unknown" });
+    expect(compareWeaveRomChecks("crc32=3e30b9b3,size=24592", {})).toEqual({ missing: ["crc32"], status: "unknown" });
+    expect(compareWeaveRomChecks("sha256=abcd,crc32=3e30b9b3", file)).toEqual({
+      missing: ["sha256"],
+      status: "match",
+    });
   });
 });
