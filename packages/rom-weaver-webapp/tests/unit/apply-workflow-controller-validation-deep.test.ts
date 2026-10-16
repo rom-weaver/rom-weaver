@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ validateApplyPatchTargets: vi.fn() }));
-vi.mock("../../src/lib/workflow/apply-patch-target-validation.ts", () => ({
+vi.mock("../../src/lib/workflow/apply-patch-target-validation.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/lib/workflow/apply-patch-target-validation.ts")>()),
   validateApplyPatchTargets: mocks.validateApplyPatchTargets,
 }));
 
+import { RomWeaverError } from "../../src/lib/errors.ts";
 import { ApplyWorkflowController } from "../../src/lib/workflow/apply-workflow-controller.ts";
 
 type Source = { name: string };
@@ -20,6 +22,7 @@ type Probe = {
   inputSession?: { role: "input"; sources: Source[]; stages: Stage[]; synthetic: boolean; view: Stage };
   latestChainPlans: Map<string, unknown>;
   patches: Stage[];
+  clearInput: () => Promise<void>;
   validatePatches: (options?: Record<string, unknown>) => Promise<void>;
 };
 
@@ -67,13 +70,23 @@ const patchStage = (id: string, target = "asset-1"): Stage => ({
   },
 });
 
-const makeController = () => {
-  const controller = new ApplyWorkflowController<Source, unknown>({ name: "browser" }, {
-    settings: {},
-  } as never) as unknown as Probe;
+const makeController = (runtime: Record<string, unknown> = {}) => {
+  const controller = new ApplyWorkflowController<Source, unknown>(
+    { name: "browser", ...runtime } as never,
+    {
+      settings: {},
+    } as never,
+  ) as unknown as Probe;
   const input = inputStage();
   input.preparedInputAssets = [
-    { file: patchFile("rom.sfc"), fileName: "rom.sfc", id: "asset-1", kind: "rom", patchable: true, size: 8 },
+    {
+      file: { ...patchFile("rom.sfc"), filePath: "/work/rom.sfc" },
+      fileName: "rom.sfc",
+      id: "asset-1",
+      kind: "rom",
+      patchable: true,
+      size: 8,
+    },
   ];
   controller.inputSession = { role: "input", sources: [input.source], stages: [input], synthetic: false, view: input };
   return controller;
@@ -148,5 +161,58 @@ describe("ApplyWorkflowController.validatePatches", () => {
     await controller.validatePatches();
     expect(mocks.validateApplyPatchTargets.mock.calls[0]?.[0]).toHaveLength(1);
     expect(mocks.validateApplyPatchTargets.mock.calls[0]?.[0]?.[0]?.target.fileName).toBe("rom.sfc");
+  });
+
+  // rom.checks with an algorithm staging does not compute, so validatePatches hashes it on demand.
+  const SHA256 = "ab".repeat(32);
+  const weaveRom = { checks: `sha256=${SHA256}` };
+  const hashed = { result: { assets: [{ checksums: { sha256: SHA256 } }], isRom: true } };
+  const weaveRomCalls = () =>
+    mocks.validateApplyPatchTargets.mock.calls.map(([pending, adapters]) => ({
+      fingerprint: pending[0]?.chainFingerprint,
+      weaveRom: adapters?.weaveRom,
+    }));
+
+  it("keeps a transiently failed weave-ROM hash retryable and re-validates once it succeeds", async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new RomWeaverError("WORKER_FAILED", "worker crashed"))
+      .mockResolvedValueOnce(hashed);
+    const controller = makeController({ ingest: { run } });
+    controller.patches = [patchStage("hash")];
+    mocks.validateApplyPatchTargets.mockResolvedValue(undefined);
+
+    await controller.validatePatches({ weaveRom });
+    await controller.validatePatches({ weaveRom });
+
+    expect(run).toHaveBeenCalledTimes(2);
+    const [failed, recovered] = weaveRomCalls();
+    expect(failed?.weaveRom).toMatchObject({ status: "unavailable" });
+    expect(recovered?.weaveRom).toBeUndefined();
+    // A new chain fingerprint, so the patches the failed pass marked re-validate.
+    expect(recovered?.fingerprint).not.toBe(failed?.fingerprint);
+  });
+
+  it("cancels an in-flight weave-ROM hash when the ROM is cleared", async () => {
+    let hashSignal: AbortSignal | undefined;
+    const run = vi.fn(
+      ({ signal }: { signal: AbortSignal }) =>
+        new Promise((_, reject) => {
+          hashSignal = signal;
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+    );
+    const controller = makeController({ ingest: { run } });
+    controller.patches = [patchStage("hash")];
+    mocks.validateApplyPatchTargets.mockResolvedValue(undefined);
+
+    const validating = controller.validatePatches({ weaveRom });
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    const clearing = controller.clearInput();
+    expect(hashSignal?.aborted).toBe(true);
+    await validating;
+    await clearing;
+    // The superseded pass leaves its patches retryable instead of failing them.
+    expect(weaveRomCalls()[0]?.weaveRom).toMatchObject({ status: "unavailable" });
   });
 });

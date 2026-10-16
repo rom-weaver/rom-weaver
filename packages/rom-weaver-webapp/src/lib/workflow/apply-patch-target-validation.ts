@@ -19,7 +19,14 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 // "invalid" (keyed on the stable inputs) would pin the poisoned result forever, because the
 // short-circuit in validateApplyPatchTarget only skips re-validation for terminal statuses. Treat
 // these as a retryable "unknown" so the next readiness pass re-validates.
-const TRANSIENT_VALIDATION_ERROR_CODES = new Set(["CANCELLED", "WORKER_FAILED", "WORKER_UNAVAILABLE"]);
+const TRANSIENT_VALIDATION_ERROR_CODES: ReadonlySet<string> = new Set([
+  "CANCELLED",
+  "WORKER_FAILED",
+  "WORKER_UNAVAILABLE",
+]);
+
+const isTransientValidationError = (error: unknown): boolean =>
+  TRANSIENT_VALIDATION_ERROR_CODES.has(toRomWeaverError(error).code);
 
 type PatchTargetValidationAdapters = {
   defaultPatchBasis?: "auto" | "base" | "previous";
@@ -37,9 +44,11 @@ type PatchTargetValidationAdapters = {
   runtime: WorkflowRuntime;
   settings: Partial<ApplySettings>;
   signal: AbortSignal;
-  /** Set when the supplied ROM fails the active weave's `rom.checks`: every validated patch then
-   * reads as a checksum mismatch (so strict validation offers its override) without a worker call. */
-  weaveRomMismatch?: string;
+  /** The supplied ROM's verdict against the active weave's `rom.checks`, when it did not match. A
+   * mismatch makes every validated patch that the engine does not already fail read as a checksum
+   * mismatch, so strict validation offers its override. A ROM that could not be hashed (transient)
+   * leaves every patch a retryable "unknown". */
+  weaveRom?: { message: string; status: "mismatch" | "unavailable" };
   workflowId: string;
 };
 
@@ -313,11 +322,11 @@ const validatePreparedGroup = async <TSource>(
 ): Promise<void> => {
   const first = prepared[0];
   if (!first) return;
-  if (adapters.weaveRomMismatch) {
+  if (adapters.weaveRom?.status === "unavailable") {
     for (const { entry, startedAt, validationKey } of prepared) {
       applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
-        message: adapters.weaveRomMismatch,
-        status: "invalid",
+        message: adapters.weaveRom.message,
+        status: "unknown",
       });
     }
     return;
@@ -403,6 +412,7 @@ const validatePreparedGroup = async <TSource>(
       signal: adapters.signal,
     });
     applyPreparedValidationResult(prepared, result, adapters);
+    applyWeaveRomMismatch(prepared, adapters);
   } catch (error) {
     const normalized = toRomWeaverError(error);
     // A cancelled run or transient worker failure marks the WHOLE batch retryable "unknown"; a real
@@ -415,6 +425,22 @@ const validatePreparedGroup = async <TSource>(
         status: transient ? "unknown" : "invalid",
       });
     }
+  }
+};
+
+// A weave ROM mismatch still lets the engine judge each patch, so a patch the engine fails keeps
+// its own verdict and message; every other patch becomes the weave's checksum mismatch.
+const applyWeaveRomMismatch = <TSource>(
+  prepared: PreparedValidation<TSource>[],
+  adapters: PatchTargetValidationAdapters,
+) => {
+  if (adapters.weaveRom?.status !== "mismatch") return;
+  for (const { entry, startedAt, validationKey } of prepared) {
+    if (entry.stage.state.patchValidation?.status === "invalid") continue;
+    applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
+      message: adapters.weaveRom.message,
+      status: "invalid",
+    });
   }
 };
 
@@ -444,4 +470,4 @@ const validateApplyPatchTarget = async <TSource>(
 ): Promise<void> => validateApplyPatchTargets([{ preflight, stage, target }], adapters);
 
 export type { PatchTargetValidationAdapters };
-export { validateApplyPatchTarget, validateApplyPatchTargets };
+export { isTransientValidationError, validateApplyPatchTarget, validateApplyPatchTargets };

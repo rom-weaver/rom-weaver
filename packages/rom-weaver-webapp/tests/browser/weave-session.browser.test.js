@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { expect, test, vi } from "vitest";
+import { RomWeaverError } from "../../src/lib/errors.ts";
 import { loadLocalWeaveSession } from "../../src/lib/weave/local-weave-session.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
@@ -941,6 +942,122 @@ for (const romMatches of [true, false]) {
     await expectStrictApply([weaveArchive], { outputName: "member-lane-output", romMatches });
   });
 }
+
+// A member-lane weave given only the extracted ROM member, not the archive it came from.
+for (const romMatches of [true, false]) {
+  test(`member-lane weave verifies rom.checks on the bare member file (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const memberName = "bare-member-track02.bin";
+    const member = noiseBytes(2352 * 40, 0x02);
+    const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "bare-member-output" },
+        patchBasis: "auto",
+        // `weave create --rom-member` names the member on rom only; its patches carry no target.
+        patches: [{ name: "Track", path: patchFile.name }],
+        rom: {
+          checks: await fileChecks(romMatches ? member : noiseBytes(member.length, 0x01)),
+          member: memberName,
+          name: "bare-member.zip",
+        },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, new File([member], memberName)], {
+      outputName: "bare-member-output",
+      romMatches,
+    });
+  });
+}
+
+// rom.checks recorded from the headerless or big-endian ROM still accept the user's headered or
+// byte-swapped dump, and the patch still lands on the bytes it targets.
+test("weave rom.checks of a headerless SNES ROM accept the headered dump", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(headerless),
+    "hack.ips",
+    createIps(records),
+    "game.sfc",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]);
+  const modified = applyRecords(headerless, records);
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+});
+
+test("weave rom.checks of a big-endian N64 ROM accept the byte-swapped dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(bigEndian),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.z64",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(modified));
+});
+
+// A transient failure hashing a declared algorithm leaves the patches retryable: Apply hashes again
+// and, once that works, applies the matching ROM without the override.
+test("a transient weave-ROM hash failure recovers on Apply", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "retry-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name }],
+      rom: { checks: { checksums: { sha256 } }, name: "game.bin" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  const original = browserRuntime.ingest.run;
+  let failed = false;
+  const ingestSpy = vi.spyOn(browserRuntime.ingest, "run").mockImplementation(async (input) => {
+    if (!failed && input.checksumAlgorithms?.join(",") === "sha256") {
+      failed = true;
+      throw new RomWeaverError("WORKER_FAILED", "The checksum worker stopped");
+    }
+    return original.call(browserRuntime.ingest, input);
+  });
+  try {
+    await expectStrictApply([weaveArchive, romFile], { outputName: "retry-output", romMatches: true });
+    expect(failed).toBe(true);
+    expect(ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length).toBe(2);
+  } finally {
+    ingestSpy.mockRestore();
+  }
+});
+
+// A patch the engine fails reports its own error even when the weave's ROM also mismatches, so the
+// user sees it before checking the override.
+test("a failing patch keeps its own error under a weave ROM mismatch", async () => {
+  const [romFile, wrongPatch] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(WRONG_INPUT_BPS)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "failing-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Wrong", path: "wrong-input.bps" }],
+      rom: { checks: { checksums: { crc32: "a1cecd74" } }, name: "game.bin" },
+      version: 2,
+    },
+    [new File([await wrongPatch.arrayBuffer()], "wrong-input.bps")],
+  );
+  mountStrict([weaveArchive, romFile]);
+  const detail = () => document.querySelector("#rom-weaver-list-patch-stack .pfault-detail")?.textContent || "";
+  await expect.poll(detail, { timeout: 60000 }).not.toBe("");
+  expect(detail()).not.toContain("a1cecd74");
+});
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
   // A pre-rename weave: its index is `rw.json`, not `rom-weaver-weave.json`.

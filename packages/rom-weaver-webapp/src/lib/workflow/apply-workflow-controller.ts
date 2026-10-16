@@ -55,7 +55,11 @@ import {
   clearApplyPatchTarget,
   evaluateApplyPatchReadiness,
 } from "./apply-patch-readiness-state-machine.ts";
-import { type PatchTargetValidationAdapters, validateApplyPatchTargets } from "./apply-patch-target-validation.ts";
+import {
+  isTransientValidationError,
+  type PatchTargetValidationAdapters,
+  validateApplyPatchTargets,
+} from "./apply-patch-target-validation.ts";
 import {
   applyPreparedInputMetadata,
   applyPreparedPatchMetadata,
@@ -94,7 +98,12 @@ import {
   cloneChecksumRomProbe,
   getInputAssetChecksums,
 } from "./staged-source-checksums.ts";
-import { type WeaveRomExpectation, verifyWeaveRom } from "./apply-weave-rom-check.ts";
+import { type WeaveRomCheck, type WeaveRomExpectation, verifyWeaveRom } from "./apply-weave-rom-check.ts";
+
+/** A weave-ROM check for this pass: a verdict, or `unavailable` when hashing failed transiently. */
+type WeaveRomRunCheck =
+  | WeaveRomCheck
+  | { message: string; missing: string[]; status: "unavailable"; variant?: undefined };
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
@@ -143,6 +152,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private weaveRom: WeaveRomExpectation | undefined;
   /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
   private readonly weaveRomChecksums = new WeakMap<object, Record<string, string>>();
+  /** Cancels the in-flight on-demand weave-ROM hash when the ROM is replaced or cleared. */
+  private weaveRomHashAbort: AbortController | undefined;
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -298,6 +309,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       onFinalized?: (input: ApplyWorkflowInputState | null) => void;
     },
   ): Promise<void> {
+    this.cancelWeaveRomHash();
     return this.mutate("setInput", async () => {
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
@@ -385,6 +397,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   async clearInput(): Promise<void> {
+    this.cancelWeaveRomHash();
     return this.mutate("clearInput", async () => {
       await this.releaseInputSession();
       this.inputs = [];
@@ -928,6 +941,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         const verdict = await this.verifyWeaveRom();
         if (verdict?.status === "mismatch")
           throw new RomWeaverError("CHECKSUM_MISMATCH", verdict.message || "Input checksum mismatch");
+        if (verdict?.status === "unavailable")
+          throw new RomWeaverError("WORKER_FAILED", verdict.message || "The weave's ROM could not be verified");
       }
       const result = await withAbortSignal(
         runApplyWorkflow(
@@ -1560,45 +1575,73 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
-   * algorithm staging did not compute. */
-  private async verifyWeaveRom(): Promise<Awaited<ReturnType<typeof verifyWeaveRom>> | undefined> {
+   * algorithm staging did not compute. A transient hashing failure, or a hash cancelled because
+   * the ROM changed, yields a retryable `unavailable` result instead of a verdict. */
+  private async verifyWeaveRom(): Promise<WeaveRomRunCheck | undefined> {
     const expectation = this.weaveRom;
     if (!expectation) return undefined;
-    const verdict = await verifyWeaveRom(
-      expectation,
-      this.getPatchableInputAssets(),
-      this.weaveRomChecksums,
-      async (asset, algorithms) => {
-        try {
-          const result = await calculateInputChecksumsForFile({
-            algorithms,
-            emitProgress: (event) => this.emitProgress(event),
-            file: asset.file,
-            identify: false,
-            logLevel: this.settings.logging?.level,
-            onLog: this.settings.logging?.sink,
-            progressId: `${this.id}:weave-rom:${asset.id}`,
-            role: "input",
-            runtime: this.runtime,
-            signal: this.abortController.signal,
-            state: { fileName: asset.fileName, id: asset.id, size: asset.size },
-            workflow: "apply",
-          });
-          return result.checksums;
-        } catch (error) {
-          if (this.abortController.signal.aborted) throw error;
-          this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
-          return {};
-        }
-      },
-    );
-    this.trace("weave.rom.verify", {
-      assetId: verdict.assetId ?? "",
-      member: expectation.member ?? "",
-      missing: verdict.missing.join(","),
-      status: verdict.status,
-    });
-    return verdict;
+    const workflowSignal = this.abortController.signal;
+    const hashAbort = new AbortController();
+    this.weaveRomHashAbort = hashAbort;
+    const forwardAbort = () => hashAbort.abort(workflowSignal.reason);
+    workflowSignal.addEventListener("abort", forwardAbort, { once: true });
+    try {
+      const verdict = await verifyWeaveRom(
+        expectation,
+        this.getPatchableInputAssets(),
+        this.weaveRomChecksums,
+        async (asset, algorithms) => {
+          try {
+            const result = await calculateInputChecksumsForFile({
+              algorithms,
+              emitProgress: (event) => this.emitProgress(event),
+              file: asset.file,
+              identify: false,
+              logLevel: this.settings.logging?.level,
+              onLog: this.settings.logging?.sink,
+              progressId: `${this.id}:weave-rom:${asset.id}`,
+              role: "input",
+              runtime: this.runtime,
+              signal: hashAbort.signal,
+              state: { fileName: asset.fileName, id: asset.id, size: asset.size },
+              workflow: "apply",
+            });
+            return result.checksums;
+          } catch (error) {
+            if (hashAbort.signal.aborted || isTransientValidationError(error)) throw error;
+            // Not transient: the algorithm cannot be computed here, which fails verification.
+            this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
+            return {};
+          }
+        },
+      );
+      this.trace("weave.rom.verify", {
+        assetId: verdict.assetId ?? "",
+        member: expectation.member ?? "",
+        missing: verdict.missing.join(","),
+        status: verdict.status,
+        variant: verdict.variant ?? "",
+      });
+      return verdict;
+    } catch (error) {
+      if (workflowSignal.aborted) throw error;
+      const message = toRomWeaverError(error).message;
+      this.trace("weave.rom.verify-unavailable", { message, superseded: hashAbort.signal.aborted });
+      return {
+        message: `The weave's ROM checksum could not be computed yet (${message}); it is checked again on the next pass`,
+        missing: [],
+        status: "unavailable",
+      };
+    } finally {
+      workflowSignal.removeEventListener("abort", forwardAbort);
+      if (this.weaveRomHashAbort === hashAbort) this.weaveRomHashAbort = undefined;
+    }
+  }
+
+  /** Cancel an in-flight weave-ROM hash: its file is about to be replaced. */
+  private cancelWeaveRomHash(): void {
+    this.weaveRomHashAbort?.abort(new RomWeaverError("CANCELLED", "The ROM changed"));
+    this.weaveRomHashAbort = undefined;
   }
 
   private getSelectedInputOwner(): StagedSource<TSource> | undefined {
@@ -1753,7 +1796,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           ]),
           defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
-          weaveRom: this.weaveRom ?? null,
+          // The ROM verdict joins the key so a retried hash that now resolves re-runs the chain.
+          weaveRom: this.weaveRom ? { ...this.weaveRom, status: weaveRomVerdict?.status ?? "unknown" } : null,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
       }
@@ -1784,8 +1828,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         runtime: this.runtime,
         settings: this.settings,
         signal: this.abortController.signal,
-        ...(weaveRomVerdict?.status === "mismatch"
-          ? { weaveRomMismatch: weaveRomVerdict.message || "Input checksum mismatch" }
+        ...(weaveRomVerdict?.status === "mismatch" || weaveRomVerdict?.status === "unavailable"
+          ? {
+              weaveRom: {
+                message: weaveRomVerdict.message || "Input checksum mismatch",
+                status: weaveRomVerdict.status,
+              },
+            }
           : {}),
         workflowId: this.id,
       };
