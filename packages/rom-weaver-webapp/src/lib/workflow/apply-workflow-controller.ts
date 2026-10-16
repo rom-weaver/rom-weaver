@@ -1577,9 +1577,17 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
    * algorithm staging did not compute. A transient hashing failure, or a hash cancelled because
    * the ROM changed, yields a retryable `unavailable` result instead of a verdict. */
-  private async verifyWeaveRom(): Promise<WeaveRomRunCheck | undefined> {
+  private async verifyWeaveRom(options?: { skipHash?: boolean }): Promise<WeaveRomRunCheck | undefined> {
     const expectation = this.weaveRom;
     if (!expectation) return undefined;
+    if (options?.skipHash) {
+      this.trace("weave.rom.verify-skipped", { member: expectation.member ?? "" });
+      return {
+        message: "The weave's ROM is being replaced; it is checked again once the new ROM is staged",
+        missing: [],
+        status: "unavailable",
+      };
+    }
     const workflowSignal = this.abortController.signal;
     const hashAbort = new AbortController();
     this.weaveRomHashAbort = hashAbort;
@@ -1638,8 +1646,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     }
   }
 
-  /** Cancel an in-flight weave-ROM hash: its file is about to be replaced. */
-  private cancelWeaveRomHash(): void {
+  /** Cancel an in-flight weave-ROM hash: its file is about to be replaced. Callers that queue an
+   * input change behind other work (the apply form) SHOULD call this before queueing it. */
+  cancelWeaveRomHash(): void {
     this.weaveRomHashAbort?.abort(new RomWeaverError("CANCELLED", "The ROM changed"));
     this.weaveRomHashAbort = undefined;
   }
@@ -1745,10 +1754,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     disabledIndexes?: ReadonlySet<number>;
     /** The active weave's expected ROM; present (even undefined) replaces the stored one. */
     weaveRom?: WeaveRomExpectation;
+    /** Set when a newer input change is queued behind this pass: the ROM about to be replaced is
+     * not hashed for the weave's checks, and its patches stay a retryable "unknown". */
+    skipWeaveRomHash?: boolean;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
-      const weaveRomVerdict = await this.verifyWeaveRom();
+      const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
       const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{

@@ -5,6 +5,7 @@ import { loadLocalWeaveSession } from "../../src/lib/weave/local-weave-session.t
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { loadWeaveUrlSession } from "../../src/webapp/url-session/weave-url-session.ts";
 import {
   clickApplyButton,
@@ -595,6 +596,67 @@ test("expected-ROM checks follow a reordered sample weave", async () => {
   }
 });
 
+// The weave's rom.checks follow the bench like its output checks: once the patch list diverges
+// from the weave they stand down, and they apply again when it matches the weave.
+const movePatchToPosition = async (position) => {
+  document.querySelector("#rom-weaver-list-patch-stack .handle")?.click();
+  const positionInput = await waitForState(
+    () => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"),
+    30000,
+  );
+  setFormControlValue(positionInput, String(position));
+  positionInput.blur();
+};
+
+test("a bench that diverges from the weave drops the weave's ROM checks", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const ownPatch = ipsFile("own-hack.ips", [...IPS_HEADER, 0, 0x30, 0, 0, 1, 0x42, ...IPS_EOF]);
+  const props = { defaultSettings: { validation: { requireInputChecksumMatch: true } } };
+  const root = mount(createElement(ApplyPatchForm, { ...props, pageDrop: { files: [weaveArchive, wrongRom], id: 1 } }));
+  await waitForState(getChecksumOverride, 60000);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(ApplyPatchForm, { ...props, pageDrop: { files: [ownPatch], id: 2 } }),
+    ),
+  );
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips", "own-hack.ips"]);
+  for (const name of ["hello-to-rom.ips", "world-to-weaver.ips"]) {
+    const index = getPatchStackFileNames().indexOf(name);
+    const remove = document.querySelectorAll("button[id^='rom-weaver-patch-menu-remove-']")[index];
+    if (!(remove instanceof HTMLButtonElement)) throw new Error(`Missing remove button for ${name}`);
+    remove.click();
+    await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).not.toContain(name);
+  }
+  expect(getPatchStackFileNames()).toEqual(["own-hack.ips"]);
+  await waitForApplyButtonEnabled();
+  expect(getChecksumOverride()).toBeNull();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+test("the weave's ROM checks apply again when the bench matches the weave", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  mountStrict([weaveArchive, wrongRom]);
+  await waitForState(getChecksumOverride, 60000);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+  await movePatchToPosition(2);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["world-to-weaver.ips", "hello-to-rom.ips"]);
+  await expect.poll(getChecksumOverride, { timeout: 30000 }).toBeNull();
+  await waitForApplyButtonEnabled();
+  await movePatchToPosition(2);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+  await expect.poll(getChecksumOverride, { timeout: 30000 }).not.toBeNull();
+});
+
 // Header and N64 byte-order cases: rom.checks describe the file as supplied (as weave export and
 // `weave create` write them), while the patch targets headerless or big-endian bytes. The checks
 // must neither block the matching ROM nor change the engine's automatic header decision.
@@ -1035,6 +1097,60 @@ test("a transient weave-ROM hash failure recovers on Apply", async () => {
     expect(failed).toBe(true);
     expect(ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length).toBe(2);
   } finally {
+    ingestSpy.mockRestore();
+  }
+});
+
+// Dropping another ROM while a validation pass hashes the old one cancels that hash, so the new ROM
+// stages without waiting for it and the old ROM is not hashed again.
+test("replacing the ROM in the form cancels the old ROM's weave hash", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "replace-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name }],
+      rom: { checks: { checksums: { sha256: "ab".repeat(32) } }, name: "game.bin" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  const otherBytes = new Uint8Array(await romFile.arrayBuffer());
+  otherBytes[0] ^= 0xff;
+  const otherRom = new File([otherBytes], "other-rom.bin", { type: "application/octet-stream" });
+  const original = browserRuntime.ingest.run;
+  const calls = [];
+  let heldSignal;
+  let releaseHeld;
+  // Hold the first on-demand SHA-256 hash until it is cancelled (or the test ends).
+  const ingestSpy = vi.spyOn(browserRuntime.ingest, "run").mockImplementation((input) => {
+    calls.push({ algorithms: (input.checksumAlgorithms || []).join(","), fileName: input.fileName });
+    if (input.checksumAlgorithms?.join(",") !== "sha256" || heldSignal)
+      return original.call(browserRuntime.ingest, input);
+    heldSignal = input.signal;
+    return new Promise((_, reject) => {
+      releaseHeld = () => reject(new RomWeaverError("WORKER_FAILED", "released by the test"));
+      input.signal?.addEventListener("abort", () => reject(input.signal.reason), { once: true });
+    });
+  });
+  try {
+    const props = { defaultSettings: { validation: { requireInputChecksumMatch: true } } };
+    const root = mount(
+      createElement(ApplyPatchForm, { ...props, pageDrop: { files: [weaveArchive, romFile], id: 1 } }),
+    );
+    await waitForState(() => heldSignal, 60000);
+    root.render(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings: { detailedViewEnabled: true } },
+        createElement(ApplyPatchForm, { ...props, pageDrop: { files: [otherRom], id: 2 } }),
+      ),
+    );
+    await expect.poll(() => heldSignal.aborted, { timeout: 10000 }).toBe(true);
+    await expect.poll(() => calls.some((call) => call.fileName === "other-rom.bin"), { timeout: 30000 }).toBe(true);
+    expect(calls.filter((call) => call.fileName === "game.bin" && call.algorithms === "sha256")).toHaveLength(1);
+  } finally {
+    releaseHeld?.();
     ingestSpy.mockRestore();
   }
 });

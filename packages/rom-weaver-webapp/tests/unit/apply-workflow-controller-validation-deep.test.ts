@@ -215,4 +215,15 @@ describe("ApplyWorkflowController.validatePatches", () => {
     // The superseded pass leaves its patches retryable instead of failing them.
     expect(weaveRomCalls()[0]?.weaveRom).toMatchObject({ status: "unavailable" });
   });
+
+  it("skips the weave-ROM hash for a pass whose ROM a queued input change replaces", async () => {
+    const run = vi.fn().mockResolvedValue(hashed);
+    const controller = makeController({ ingest: { run } });
+    controller.patches = [patchStage("hash")];
+    mocks.validateApplyPatchTargets.mockResolvedValue(undefined);
+
+    await controller.validatePatches({ skipWeaveRomHash: true, weaveRom });
+    expect(run).not.toHaveBeenCalled();
+    expect(weaveRomCalls()[0]?.weaveRom).toMatchObject({ status: "unavailable" });
+  });
 });
