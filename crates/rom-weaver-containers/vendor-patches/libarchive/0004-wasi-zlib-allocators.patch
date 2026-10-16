@@ -1,0 +1,315 @@
+diff --git a/libarchive/archive_read_support_filter_gzip.c b/libarchive/archive_read_support_filter_gzip.c
+index 726385e328..3048b7a077 100644
+--- a/libarchive/archive_read_support_filter_gzip.c
++++ b/libarchive/archive_read_support_filter_gzip.c
+@@ -49,6 +49,7 @@
+ #include "archive_endian.h"
+ #include "archive_private.h"
+ #include "archive_read_private.h"
++#include "archive_zlib_private.h"
+ 
+ #ifdef HAVE_ZLIB_H
+ struct private_data {
+@@ -360,6 +361,7 @@ consume_header(struct archive_read_filter *self)
+ 	state->stream.next_in = (unsigned char *)(uintptr_t)
+ 	    __archive_read_filter_ahead(self->upstream, 1, &avail);
+ 	state->stream.avail_in = (uInt)avail;
++	archive_zlib_set_allocators(&(state->stream));
+ 	ret = inflateInit2(&(state->stream),
+ 	    -15 /* Don't check for zlib header */);
+ 
+diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_read_support_format_7zip.c
+index 8926ac50a1..7dd4e32dfd 100644
+--- a/libarchive/archive_read_support_format_7zip.c
++++ b/libarchive/archive_read_support_format_7zip.c
+@@ -58,6 +58,7 @@
+ #include "archive_read_private.h"
+ #include "archive_time_private.h"
+ #include "archive_endian.h"
++#include "archive_zlib_private.h"
+ 
+ #ifndef HAVE_ZLIB_H
+ #include "archive_crc32.h"
+@@ -1576,9 +1577,11 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
+ #ifdef HAVE_ZLIB_H
+ 		if (zip->stream_valid)
+ 			r = inflateReset(&(zip->stream));
+-		else
++		else {
++			archive_zlib_set_allocators(&(zip->stream));
+ 			r = inflateInit2(&(zip->stream),
+ 			    -15 /* Don't check for zlib header */);
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Couldn't initialize zlib stream");
+diff --git a/libarchive/archive_read_support_format_cab.c b/libarchive/archive_read_support_format_cab.c
+index bf8ac6b1ca..479d91ffb3 100644
+--- a/libarchive/archive_read_support_format_cab.c
++++ b/libarchive/archive_read_support_format_cab.c
+@@ -47,6 +47,7 @@
+ #include "archive_private.h"
+ #include "archive_read_private.h"
+ #include "archive_endian.h"
++#include "archive_zlib_private.h"
+ 
+ 
+ struct lzx_dec {
+@@ -1447,9 +1448,11 @@ cab_read_ahead_cfdata_deflate(struct archive_read *a, ssize_t *avail)
+ 		cab->stream.total_out = 0;
+ 		if (cab->stream_valid)
+ 			r = inflateReset(&cab->stream);
+-		else
++		else {
++			archive_zlib_set_allocators(&cab->stream);
+ 			r = inflateInit2(&cab->stream,
+ 			    -15 /* Don't check for zlib header */);
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Can't initialize deflate decompression");
+diff --git a/libarchive/archive_read_support_format_iso9660.c b/libarchive/archive_read_support_format_iso9660.c
+index c69fcd272b..ee8334eba4 100644
+--- a/libarchive/archive_read_support_format_iso9660.c
++++ b/libarchive/archive_read_support_format_iso9660.c
+@@ -50,6 +50,7 @@
+ #include "archive_private.h"
+ #include "archive_read_private.h"
+ #include "archive_string.h"
++#include "archive_zlib_private.h"
+ 
+ /*
+  * An overview of ISO 9660 format:
+@@ -1659,8 +1660,10 @@ zisofs_read_data(struct archive_read *a,
+ 		/* Initialize compression library for new block. */
+ 		if (zisofs->stream_valid)
+ 			r = inflateReset(&zisofs->stream);
+-		else
++		else {
++			archive_zlib_set_allocators(&zisofs->stream);
+ 			r = inflateInit(&zisofs->stream);
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Can't initialize zisofs decompression");
+diff --git a/libarchive/archive_read_support_format_xar.c b/libarchive/archive_read_support_format_xar.c
+index 874501fc07..5f6eaaefad 100644
+--- a/libarchive/archive_read_support_format_xar.c
++++ b/libarchive/archive_read_support_format_xar.c
+@@ -58,6 +58,7 @@
+ #include "archive_entry_locale.h"
+ #include "archive_private.h"
+ #include "archive_read_private.h"
++#include "archive_zlib_private.h"
+ 
+ #if (!defined(HAVE_LIBXML_XMLREADER_H) && \
+      !defined(HAVE_BSDXML_H) && !defined(HAVE_EXPAT_H) && \
+@@ -1472,8 +1473,10 @@ decompression_init(struct archive_read *a, enum enctype encoding)
+ 	case GZIP:
+ 		if (xar->stream_valid)
+ 			r = inflateReset(&(xar->stream));
+-		else
++		else {
++			archive_zlib_set_allocators(&(xar->stream));
+ 			r = inflateInit(&(xar->stream));
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Couldn't initialize zlib stream");
+diff --git a/libarchive/archive_read_support_format_zip.c b/libarchive/archive_read_support_format_zip.c
+index 00796b288a..bf97ce8f13 100644
+--- a/libarchive/archive_read_support_format_zip.c
++++ b/libarchive/archive_read_support_format_zip.c
+@@ -73,6 +73,7 @@
+ #include "archive_read_private.h"
+ #include "archive_time_private.h"
+ #include "archive_ppmd8_private.h"
++#include "archive_zlib_private.h"
+ 
+ #ifndef HAVE_ZLIB_H
+ #include "archive_crc32.h"
+@@ -2522,9 +2523,11 @@ zip_deflate_init(struct archive_read *a, struct zip *zip)
+ 	if (!zip->decompress_init) {
+ 		if (zip->stream_valid)
+ 			r = inflateReset(&zip->stream);
+-		else
++		else {
++			archive_zlib_set_allocators(&zip->stream);
+ 			r = inflateInit2(&zip->stream,
+ 			    -15 /* Don't check for zlib header */);
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Can't initialize ZIP decompression");
+diff --git a/libarchive/archive_write_add_filter_gzip.c b/libarchive/archive_write_add_filter_gzip.c
+index 0a2f22408b..9fd9b011b0 100644
+--- a/libarchive/archive_write_add_filter_gzip.c
++++ b/libarchive/archive_write_add_filter_gzip.c
+@@ -43,6 +43,7 @@
+ #include "archive_private.h"
+ #include "archive_string.h"
+ #include "archive_write_private.h"
++#include "archive_zlib_private.h"
+ 
+ #if ARCHIVE_VERSION_NUMBER < 4000000
+ int
+@@ -278,6 +279,7 @@ archive_compressor_gzip_open(struct archive_write_filter *f)
+ 	f->write = archive_compressor_gzip_write;
+ 
+ 	/* Initialize compression library. */
++	archive_zlib_set_allocators(&(data->stream));
+ 	init_success = deflateInit2(&(data->stream),
+ 	    data->compression_level,
+ 	    Z_DEFLATED,
+diff --git a/libarchive/archive_write_set_format_7zip.c b/libarchive/archive_write_set_format_7zip.c
+index 1bbd24d632..3d682ff2b5 100644
+--- a/libarchive/archive_write_set_format_7zip.c
++++ b/libarchive/archive_write_set_format_7zip.c
+@@ -64,6 +64,7 @@
+ #include "archive_time_private.h"
+ #include "archive_write_private.h"
+ #include "archive_write_set_format_private.h"
++#include "archive_zlib_private.h"
+ 
+ /*
+  * Codec ID
+@@ -1854,6 +1855,7 @@ compression_init_encoder_deflate(struct archive *a,
+ 	strm->next_out = lastrm->next_out;
+ 	strm->avail_out = (uInt)lastrm->avail_out;
+ 	strm->total_out = (uLong)lastrm->total_out;
++	archive_zlib_set_allocators(strm);
+ 	if (deflateInit2(strm, level, Z_DEFLATED,
+ 	    (withheader)?15:-15,
+ 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {
+diff --git a/libarchive/archive_write_set_format_iso9660.c b/libarchive/archive_write_set_format_iso9660.c
+index 359a273736..e2f1816497 100644
+--- a/libarchive/archive_write_set_format_iso9660.c
++++ b/libarchive/archive_write_set_format_iso9660.c
+@@ -57,6 +57,7 @@
+ #include "archive_private.h"
+ #include "archive_rb.h"
+ #include "archive_write_private.h"
++#include "archive_zlib_private.h"
+ 
+ #if defined(_WIN32) && !defined(__CYGWIN__)
+ #define getuid()			0
+@@ -7391,6 +7392,7 @@ zisofs_init_zstream(struct archive_write *a)
+ 	if (iso9660->zisofs.stream_valid)
+ 		r = deflateReset(&(iso9660->zisofs.stream));
+ 	else {
++		archive_zlib_set_allocators(&(iso9660->zisofs.stream));
+ 		r = deflateInit(&(iso9660->zisofs.stream),
+ 		    iso9660->zisofs.compression_level);
+ 		iso9660->zisofs.stream_valid = 1;
+@@ -7960,8 +7962,10 @@ zisofs_extract(struct archive_write *a, struct zisofs_extract *zisofs,
+ 		/* Initialize compression library for new block. */
+ 		if (zisofs->stream_valid)
+ 			r = inflateReset(&zisofs->stream);
+-		else
++		else {
++			archive_zlib_set_allocators(&zisofs->stream);
+ 			r = inflateInit(&zisofs->stream);
++		}
+ 		if (r != Z_OK) {
+ 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 			    "Can't initialize zisofs decompression");
+diff --git a/libarchive/archive_write_set_format_xar.c b/libarchive/archive_write_set_format_xar.c
+index 6ecccdef64..962ba7eda7 100644
+--- a/libarchive/archive_write_set_format_xar.c
++++ b/libarchive/archive_write_set_format_xar.c
+@@ -62,6 +62,7 @@
+ #include "archive_rb.h"
+ #include "archive_string.h"
+ #include "archive_write_private.h"
++#include "archive_zlib_private.h"
+ 
+ /*
+  * Differences to xar utility.
+@@ -2702,6 +2703,7 @@ compression_init_encoder_gzip(struct archive *a,
+ 	strm->next_out = lastrm->next_out;
+ 	strm->avail_out = (uInt)lastrm->avail_out;
+ 	strm->total_out = (uLong)lastrm->total_out;
++	archive_zlib_set_allocators(strm);
+ 	if (deflateInit2(strm, level, Z_DEFLATED,
+ 	    (withheader)?15:-15,
+ 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {
+diff --git a/libarchive/archive_write_set_format_zip.c b/libarchive/archive_write_set_format_zip.c
+index 07dd443144..3fd6ceba73 100644
+--- a/libarchive/archive_write_set_format_zip.c
++++ b/libarchive/archive_write_set_format_zip.c
+@@ -73,6 +73,7 @@
+ #include "archive_time_private.h"
+ #include "archive_write_private.h"
+ #include "archive_write_set_format_private.h"
++#include "archive_zlib_private.h"
+ 
+ #ifndef HAVE_ZLIB_H
+ #include "archive_crc32.h"
+@@ -1476,6 +1477,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
+ 		zip->stream.deflate.opaque = Z_NULL;
+ 		zip->stream.deflate.next_out = zip->buf;
+ 		zip->stream.deflate.avail_out = (uInt)zip->len_buf;
++		archive_zlib_set_allocators(&zip->stream.deflate);
+ 		if (deflateInit2(&zip->stream.deflate, zip->compression_level,
+ 		    Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+ 			archive_set_error(&a->archive, ENOMEM,
+diff --git a/libarchive/archive_zlib_private.h b/libarchive/archive_zlib_private.h
+new file mode 100644
+index 0000000000..5be7bc2abf
+--- /dev/null
++++ b/libarchive/archive_zlib_private.h
+@@ -0,0 +1,54 @@
++/*-
++ * Copyright (c) 2026 Brandon Casey
++ *
++ * This file is in the public domain.
++ */
++
++#ifndef ARCHIVE_ZLIB_PRIVATE_H_INCLUDED
++#define ARCHIVE_ZLIB_PRIVATE_H_INCLUDED
++
++#ifndef __LIBARCHIVE_BUILD
++#error This header is only to be used internally to libarchive.
++#endif
++
++#ifdef HAVE_ZLIB_H
++
++#include <stdlib.h>
++#include <zlib.h>
++
++#if defined(__wasi__) || defined(__wasm32__) || defined(__wasm64__)
++static voidpf
++archive_zlib_alloc(voidpf opaque, uInt items, uInt size)
++{
++	(void)opaque;
++	if (size != 0 && (size_t)items > ((size_t)-1) / (size_t)size)
++		return (Z_NULL);
++	return (calloc((size_t)items, (size_t)size));
++}
++
++static void
++archive_zlib_free(voidpf opaque, voidpf address)
++{
++	(void)opaque;
++	free(address);
++}
++#endif
++
++static void
++archive_zlib_set_allocators(z_streamp stream)
++{
++#if defined(__wasi__) || defined(__wasm32__) || defined(__wasm64__)
++	if (stream == Z_NULL)
++		return;
++	if (stream->zalloc == (alloc_func)0)
++		stream->zalloc = archive_zlib_alloc;
++	if (stream->zfree == (free_func)0)
++		stream->zfree = archive_zlib_free;
++#else
++	(void)stream;
++#endif
++}
++
++#endif /* HAVE_ZLIB_H */
++
++#endif /* ARCHIVE_ZLIB_PRIVATE_H_INCLUDED */

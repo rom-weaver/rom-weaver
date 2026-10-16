@@ -62,7 +62,6 @@
 #include "archive_rb.h"
 #include "archive_string.h"
 #include "archive_write_private.h"
-#include "archive_zlib_private.h"
 
 /*
  * Differences to xar utility.
@@ -2703,7 +2702,6 @@ compression_init_encoder_gzip(struct archive *a,
 	strm->next_out = lastrm->next_out;
 	strm->avail_out = (uInt)lastrm->avail_out;
 	strm->total_out = (uLong)lastrm->total_out;
-	archive_zlib_set_allocators(strm);
 	if (deflateInit2(strm, level, Z_DEFLATED,
 	    (withheader)?15:-15,
 	    8, Z_DEFAULT_STRATEGY) != Z_OK) {

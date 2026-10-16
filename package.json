@@ -119,6 +119,9 @@
     "prepack": "mise run manpages",
     "test": "node --test scripts/*.test.mjs scripts/ci/*.test.mjs scripts/wasm/*.test.mjs",
     "audit:deps": "npm audit --audit-level=high",
+    "vendor:list": "node scripts/vendor-dependencies.mjs list",
+    "vendor:check": "node scripts/vendor-dependencies.mjs check",
+    "vendor:refresh": "node scripts/vendor-dependencies.mjs refresh",
     "typegen": "mise run typegen",
     "typegen:check": "mise run typegen-check",
     "version": "node scripts/sync-version.mjs"

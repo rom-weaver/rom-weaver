@@ -9,7 +9,7 @@ struct stream_state {
 };
 static void advance_stream(struct stream_state *lastrm, size_t in_len, size_t out_len)
 {
-#include "../../libarchive/patches/7zip_sdk_null_advance.replacement.txt"
+#include "rom_weaver_stream_advance.inc"
 }
 static void check_stream_advance(void)
 {

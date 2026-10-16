@@ -3,21 +3,39 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { readManifest } from "./vendor/manifest.mjs";
+import { applyPatches } from "./vendor/patches.mjs";
+
+function stageStreamAdvance(scratch) {
+  const root = process.cwd();
+  const manifest = readManifest(root, "libarchive");
+  const staged = path.join(scratch, "libarchive");
+  fs.cpSync(path.join(root, manifest.destination), staged, { recursive: true });
+  applyPatches(manifest, staged, ["source", "integration", "build"]);
+  const source = fs.readFileSync(path.join(staged, "libarchive/archive_write_set_format_7zip.c"), "utf8");
+  const bodies = [
+    ...source.matchAll(
+      /static int\ncompression_code_lzma2_sdk\([\s\S]*?\n\t\treturn \(ARCHIVE_FATAL\);\n\t\}([\s\S]*?)\n\tif \(lastrm->progress_callback/g,
+    ),
+  ];
+  assert.equal(bodies.length, 1, "SDK stream advancement body must remain identifiable");
+  fs.writeFileSync(path.join(scratch, "rom_weaver_stream_advance.inc"), bodies[0][1]);
+}
+
 for (const compiler of ["clang-18", "gcc"]) {
   // quality-reason: ASan/UBSan compiler runtime tests are supported by the Linux native lane; other hosts retain the structural checks below.
   test(
     `${compiler} SDK compatibility accessors preserve bytes at unaligned offsets`,
     { skip: process.platform !== "linux" },
     () => {
-      const directory = path.resolve(".agent/quality-native-unaligned");
+      const directory = path.resolve(".cache/agents/scratch/quality-native-unaligned");
       fs.mkdirSync(directory, { recursive: true });
       const scratch = fs.mkdtempSync(path.join(directory, "test-"));
       try {
+        stageStreamAdvance(scratch);
         const binary = path.join(scratch, "native-test");
         const source = "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned_test.c";
-        const header = path.resolve(
-          "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h",
-        );
+        const header = path.resolve("crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h");
         const compiled = spawnSync(
           compiler,
           [
@@ -29,6 +47,8 @@ for (const compiler of ["clang-18", "gcc"]) {
             "-fsanitize=address,undefined",
             "-fno-omit-frame-pointer",
             "-Icrates/rom-weaver-containers/lzma-sdk/vendor/C",
+            "-I",
+            scratch,
             "-include",
             header,
             source,
@@ -60,45 +80,37 @@ test("native integration retains portable compiler-specific forced inclusion", (
   assert.match(build, /\/FI/);
   assert.match(build, /flag\("-include"\)/);
   assert.match(build, /build.define\("_GNU_SOURCE", None\)/);
-  const header = fs.readFileSync(
-    "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h",
-    "utf8",
-  );
+  const header = fs.readFileSync("crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h", "utf8");
   assert.ok(header.indexOf('#include "Precomp.h"') < header.indexOf('#include "CpuArch.h"'));
   for (const suffix of ["16", "32", "64"]) {
-    for (const prefix of ["GetUi", "SetUi", "GetBe", "SetBe"])
-      assert.ok(header.includes(`#undef ${prefix}${suffix}`));
+    for (const prefix of ["GetUi", "SetUi", "GetBe", "SetBe"]) assert.ok(header.includes(`#undef ${prefix}${suffix}`));
   }
 });
 
 // quality-reason: this cross-assembly check uses clang-18 from the Linux native lane; other hosts retain the portable integration checks.
-test(
-  "ARM64 SDK assembly accepts the forced C compatibility header",
-  { skip: process.platform !== "linux" },
-  () => {
-    const directory = path.resolve(".agent/quality-native-unaligned");
-    fs.mkdirSync(directory, { recursive: true });
-    const scratch = fs.mkdtempSync(path.join(directory, "assembly-"));
-    try {
-      const result = spawnSync(
-        "clang-18",
-        [
-          "--target=aarch64-unknown-linux-gnu",
-          "-Icrates/rom-weaver-containers/lzma-sdk/vendor/C",
-          "-Icrates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64",
-          "-include",
-          "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h",
-          "-c",
-          "crates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64/LzmaDecOpt.S",
-          "-o",
-          path.join(scratch, "decoder.o"),
-        ],
-        { encoding: "utf8" },
-      );
-      assert.equal(result.status, 0, result.stderr || result.error?.message);
-      assert.ok(fs.statSync(path.join(scratch, "decoder.o")).size > 0);
-    } finally {
-      fs.rmSync(scratch, { recursive: true, force: true });
-    }
-  },
-);
+test("ARM64 SDK assembly accepts the forced C compatibility header", { skip: process.platform !== "linux" }, () => {
+  const directory = path.resolve(".cache/agents/scratch/quality-native-unaligned");
+  fs.mkdirSync(directory, { recursive: true });
+  const scratch = fs.mkdtempSync(path.join(directory, "assembly-"));
+  try {
+    const result = spawnSync(
+      "clang-18",
+      [
+        "--target=aarch64-unknown-linux-gnu",
+        "-Icrates/rom-weaver-containers/lzma-sdk/vendor/C",
+        "-Icrates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64",
+        "-include",
+        "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h",
+        "-c",
+        "crates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64/LzmaDecOpt.S",
+        "-o",
+        path.join(scratch, "decoder.o"),
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    assert.ok(fs.statSync(path.join(scratch, "decoder.o")).size > 0);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+});

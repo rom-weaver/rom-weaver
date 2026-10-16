@@ -49,7 +49,6 @@
 #include "archive_endian.h"
 #include "archive_private.h"
 #include "archive_read_private.h"
-#include "archive_zlib_private.h"
 
 #ifdef HAVE_ZLIB_H
 struct private_data {
@@ -361,7 +360,6 @@ consume_header(struct archive_read_filter *self)
 	state->stream.next_in = (unsigned char *)(uintptr_t)
 	    __archive_read_filter_ahead(self->upstream, 1, &avail);
 	state->stream.avail_in = (uInt)avail;
-	archive_zlib_set_allocators(&(state->stream));
 	ret = inflateInit2(&(state->stream),
 	    -15 /* Don't check for zlib header */);
 

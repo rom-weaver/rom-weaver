@@ -1,0 +1,62 @@
+diff --git a/io/block.rs b/io/block.rs
+index 319b47faa..c0f268182 100644
+--- a/io/block.rs
++++ b/io/block.rs
+@@ -62,11 +62,13 @@ pub fn new(mut stream: Box<dyn DiscStream>) -> Result<Box<dyn BlockReader>> {
+     Ok(io)
+ }
+ 
++
+ /// Creates a new [`BlockReader`] instance from a filesystem path.
+ pub fn open(filename: &Path) -> Result<Box<dyn BlockReader>> {
+-    let path_result = fs::canonicalize(filename);
++    let path_result = super::resolve_path(filename);
+     if let Err(err) = path_result {
+-        return Err(Error::Io(format!("Failed to open {}", filename.display()), err));
++        return Err(Error::Io(
++            format!("Failed to open {}", filename.display()), err));
+     }
+     let path = path_result.as_ref().unwrap();
+     let meta = fs::metadata(path);
+diff --git a/io/mod.rs b/io/mod.rs
+index 9a0e6da4f..302348a86 100644
+--- a/io/mod.rs
++++ b/io/mod.rs
+@@ -11,3 +11,15 @@ pub(crate) mod split;
+ pub(crate) mod tgc;
+ pub(crate) mod wbfs;
+ pub(crate) mod wia;
++
++pub(crate) fn resolve_path(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
++    // Browser WASI has no canonicalize syscall; its virtual filesystem validates paths on access.
++    #[cfg(target_family = "wasm")]
++    {
++        Ok(path.to_path_buf())
++    }
++    #[cfg(not(target_family = "wasm"))]
++    {
++        std::fs::canonicalize(path)
++    }
++}
+diff --git a/io/nfs.rs b/io/nfs.rs
+index 712f446be..3ce8097ee 100644
+--- a/io/nfs.rs
++++ b/io/nfs.rs
+@@ -161,11 +161,14 @@ impl BlockReaderNFS {
+         {
+             // Load key file
+             let primary_key_path =
+-                get_path(directory, ["..", "code", "htk.bin"].iter().collect::<PathBuf>());
++                get_path(directory,                 ["..", "code", "htk.bin"].iter().collect::<PathBuf>(),
++            );
+             let secondary_key_path = get_path(directory, "htk.bin");
+-            let mut key_path = primary_key_path.canonicalize();
++            let mut key_path = super::resolve_path(&primary_key_path)
++                .and_then(|path| path.metadata().map(|_| path));
+             if key_path.is_err() {
+-                key_path = secondary_key_path.canonicalize();
++                key_path = super::resolve_path(&secondary_key_path)
++                    .and_then(|path| path.metadata().map(|_| path));
+             }
+             if key_path.is_err() {
+                 return Err(Error::DiscFormat(format!(

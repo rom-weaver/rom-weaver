@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "name": "xdvdfs",
+  "source": {
+    "url": "https://static.crates.io/crates/xdvdfs/xdvdfs-0.8.3.crate",
+    "revision": "0.8.3",
+    "sha256": "1777c1ccae32a2185ac98adae015aed3fb06242084b5e7f8b08a811fe0e7b936",
+    "format": "tar",
+    "root": "xdvdfs-0.8.3/src"
+  },
+  "destination": "crates/rom-weaver-containers/src/xdvdfs",
+  "exclude": [],
+  "patches": [
+    {
+      "file": "0001-directory-cycle-guards.patch",
+      "stage": "source",
+      "reason": "Reject repeated binary-tree offsets and ancestor directory sectors in lookup and recursive traversal; allow empty directories and shared non-ancestor extents.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/antangelo/xdvdfs/blob/v0.8.3/xdvdfs-core/src/read.rs"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"]
+    },
+    {
+      "file": "0002-disable-remap.patch",
+      "stage": "integration",
+      "reason": "Remove the unused wax-dependent remap module; corresponds to upstream optional-remap change with the feature disabled.",
+      "upstream": {
+        "status": "merged",
+        "url": "https://github.com/antangelo/xdvdfs/pull/189"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"]
+    },
+    {
+      "file": "0003-project-integration.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module; resolve pinned features, disable logging, adapt edition/lint and proc-bitfield compatibility, and reproduce existing test adaptations.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": ["cargo test -p rom-weaver-containers --lib"]
+    }
+  ],
+  "materialized": true,
+  "preserve": ["XDVDFS_VERSION", "LICENSE"]
+}

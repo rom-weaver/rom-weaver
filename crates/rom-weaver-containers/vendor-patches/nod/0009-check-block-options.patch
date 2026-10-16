@@ -1,0 +1,113 @@
+diff --git a/disc/writer.rs b/disc/writer.rs
+index 3c39fd6fd..5eca8efe3 100644
+--- a/disc/writer.rs
++++ b/disc/writer.rs
+@@ -198,17 +198,21 @@ pub enum CheckBlockResult {
+     Junk,
+ }
+ 
++#[derive(Clone, Copy)]
++pub(crate) struct CheckBlockOptions {
++    pub disc_id: [u8; 4],
++    pub disc_num: u8,
++    pub scrub_update_partition: bool,
++}
++
+ /// Check if a block is zeroed or junk data.
+-#[allow(clippy::too_many_arguments)]
+ pub(crate) fn check_block(
+     buf: &[u8],
+     decrypted_block: &mut [u8],
+     input_position: u64,
+     partition_info: &[PartitionInfo],
+     lfg: &mut LaggedFibonacci,
+-    disc_id: [u8; 4],
+-    disc_num: u8,
+-    scrub_update_partition: bool,
++    options: CheckBlockOptions,
+ ) -> io::Result<CheckBlockResult> {
+     let start_sector = (input_position / SECTOR_SIZE as u64) as u32;
+     let end_sector = ((input_position + buf.len() as u64) / SECTOR_SIZE as u64) as u32;
+@@ -216,7 +220,7 @@ pub(crate) fn check_block(
+         p.has_hashes && start_sector >= p.data_start_sector && end_sector < p.data_end_sector
+     }) {
+         // Ignore update partition data
+-        if scrub_update_partition && partition.kind == PartitionKind::Update {
++        if options.scrub_update_partition && partition.kind == PartitionKind::Update {
+             return Ok(CheckBlockResult::Zeroed);
+         }
+ 
+@@ -264,7 +268,9 @@ pub(crate) fn check_block(
+         if buf.iter().all(|&b| b == 0) {
+             return Ok(CheckBlockResult::Zeroed);
+         }
+-        if lfg.check_sector_chunked(buf, disc_id, disc_num, input_position) == buf.len() {
++        if lfg.check_sector_chunked(buf, options.disc_id, options.disc_num, input_position)
++            == buf.len()
++        {
+             return Ok(CheckBlockResult::Junk);
+         }
+     }
+@@ -326,9 +332,11 @@ mod tests {
+             0,
+             std::slice::from_ref(partition),
+             &mut LaggedFibonacci::default(),
+-            OUTER_ID,
+-            0,
+-            false,
++            CheckBlockOptions {
++                disc_id: OUTER_ID,
++                disc_num: 0,
++                scrub_update_partition: false,
++            },
+         )
+         .unwrap()
+     }
+diff --git a/io/ciso.rs b/io/ciso.rs
+index 42ff99e89..7c9ad6d78 100644
+--- a/io/ciso.rs
++++ b/io/ciso.rs
+@@ -15,7 +15,7 @@ use crate::{
+         SECTOR_SIZE,
+         reader::DiscReader,
+         writer::{
+-            BlockProcessor, BlockResult, CheckBlockResult, DiscWriter, check_block, par_process,
++            BlockProcessor, BlockResult, CheckBlockOptions, CheckBlockResult, DiscWriter, check_block, par_process,
+             read_block,
+         },
+     },
+@@ -180,9 +180,7 @@ impl BlockProcessor for BlockProcessorCISO {
+             input_position,
+             self.inner.partitions(),
+             &mut self.lfg,
+-            self.disc_id,
+-            self.disc_num,
+-            self.scrub_update_partition,
++            CheckBlockOptions { disc_id: self.disc_id, disc_num: self.disc_num, scrub_update_partition: self.scrub_update_partition },
+         )? {
+             CheckBlockResult::Normal => {
+                 BlockResult { block_idx, disc_data, block_data, meta: CheckBlockResult::Normal }
+diff --git a/io/wbfs.rs b/io/wbfs.rs
+index 600dc478c..11d89c712 100644
+--- a/io/wbfs.rs
++++ b/io/wbfs.rs
+@@ -15,7 +15,7 @@ use crate::{
+         SECTOR_SIZE,
+         reader::DiscReader,
+         writer::{
+-            BlockProcessor, BlockResult, CheckBlockResult, DiscWriter, check_block, par_process,
++            BlockProcessor, BlockResult, CheckBlockOptions, CheckBlockResult, DiscWriter, check_block, par_process,
+             read_block,
+         },
+     },
+@@ -201,9 +201,7 @@ impl BlockProcessor for BlockProcessorWBFS {
+             input_position,
+             self.inner.partitions(),
+             &mut self.lfg,
+-            self.disc_id,
+-            self.disc_num,
+-            self.scrub_update_partition,
++            CheckBlockOptions { disc_id: self.disc_id, disc_num: self.disc_num, scrub_update_partition: self.scrub_update_partition },
+         )? {
+             CheckBlockResult::Normal => {
+                 BlockResult { block_idx, disc_data, block_data, meta: CheckBlockResult::Normal }

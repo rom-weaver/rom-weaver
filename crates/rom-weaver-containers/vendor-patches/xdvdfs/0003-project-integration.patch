@@ -1,0 +1,798 @@
+diff --git a/blockdev.rs b/blockdev.rs
+index a7e1dabee..bbc52e823 100644
+--- a/blockdev.rs
++++ b/blockdev.rs
+@@ -12,7 +12,6 @@ const XDVD_OFFSETS: &[u64] = &[
+ ///
+ /// Calls to `read` will always be thread safe (that is, no two calls to `read` will
+ /// be made on the same blockdevice at the same time)
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ pub trait BlockDeviceRead<E>: Send + Sync {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), E>;
+@@ -22,7 +21,6 @@ pub trait BlockDeviceRead<E>: Send + Sync {
+ ///
+ /// Calls to trait methods will always be thread safe (that is, no two calls within the trait will
+ /// be made on the same blockdevice at the same time)
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ pub trait BlockDeviceWrite<E>: Send + Sync {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), E>;
+@@ -33,11 +31,9 @@ pub trait BlockDeviceWrite<E>: Send + Sync {
+     }
+ }
+ 
+-#[cfg(feature = "read")]
+ #[derive(Copy, Clone, Debug)]
+ pub struct OutOfBounds;
+ 
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ impl<T: AsRef<[u8]> + Send + Sync> BlockDeviceRead<OutOfBounds> for T {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), OutOfBounds> {
+@@ -53,7 +49,6 @@ impl<T: AsRef<[u8]> + Send + Sync> BlockDeviceRead<OutOfBounds> for T {
+     }
+ }
+ 
+-#[cfg(feature = "read")]
+ #[maybe_async]
+ impl<E> BlockDeviceRead<E> for Box<dyn BlockDeviceRead<E>> {
+     async fn read(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), E> {
+@@ -61,7 +56,6 @@ impl<E> BlockDeviceRead<E> for Box<dyn BlockDeviceRead<E>> {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ impl<E> BlockDeviceWrite<E> for Box<dyn BlockDeviceWrite<E>> {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), E> {
+@@ -88,7 +82,7 @@ where
+     E: Send + Sync,
+ {
+     #[maybe_async]
+-    pub async fn new(dev: T) -> Result<Self, crate::util::Error<E>> {
++    pub async fn new(dev: T) -> Result<Self, crate::xdvdfs::util::Error<E>> {
+         let mut s = Self {
+             inner: dev,
+             offset: 0,
+@@ -98,13 +92,13 @@ where
+         for offset in XDVD_OFFSETS {
+             s.offset = *offset;
+ 
+-            let vol = crate::read::read_volume(&mut s).await;
++            let vol = crate::xdvdfs::read::read_volume(&mut s).await;
+             if vol.is_ok() {
+                 return Ok(s);
+             }
+         }
+ 
+-        Err(crate::util::Error::InvalidVolume)
++        Err(crate::xdvdfs::util::Error::InvalidVolume)
+     }
+ 
+     pub fn get_ref(&self) -> &T {
+@@ -127,7 +121,6 @@ where
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ #[maybe_async]
+ impl<T, E> BlockDeviceWrite<E> for OffsetWrapper<T, E>
+ where
+@@ -143,7 +136,6 @@ where
+     }
+ }
+ 
+-#[cfg(feature = "std")]
+ impl<T, E> std::io::Seek for OffsetWrapper<T, E>
+ where
+     T: BlockDeviceRead<E> + std::io::Seek,
+@@ -157,7 +149,6 @@ where
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "read"))]
+ #[maybe_async]
+ impl<R> BlockDeviceRead<std::io::Error> for R
+ where
+@@ -171,7 +162,6 @@ where
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "write"))]
+ #[maybe_async]
+ impl BlockDeviceWrite<std::io::Error> for std::fs::File {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), std::io::Error> {
+@@ -187,7 +177,6 @@ impl BlockDeviceWrite<std::io::Error> for std::fs::File {
+     }
+ }
+ 
+-#[cfg(all(feature = "std", feature = "write"))]
+ #[maybe_async]
+ impl BlockDeviceWrite<std::io::Error> for std::io::BufWriter<std::fs::File> {
+     async fn write(&mut self, offset: u64, buffer: &[u8]) -> Result<(), std::io::Error> {
+diff --git a/checksum.rs b/checksum.rs
+deleted file mode 100644
+index c74157e84..000000000
+--- a/checksum.rs
++++ /dev/null
+@@ -1,42 +0,0 @@
+-use alloc::{collections::BTreeMap, string::String};
+-use sha3::{Digest, Sha3_256};
+-
+-use crate::{
+-    blockdev::BlockDeviceRead,
+-    layout::{DirectoryEntryNode, VolumeDescriptor},
+-    util,
+-};
+-use maybe_async::maybe_async;
+-
+-#[maybe_async]
+-pub async fn checksum<E>(
+-    dev: &mut impl BlockDeviceRead<E>,
+-    volume: &VolumeDescriptor,
+-) -> Result<[u8; 32], util::Error<E>> {
+-    let mut hasher = Sha3_256::new();
+-
+-    let tree = volume.root_table.file_tree(dev).await?;
+-    let mut iter: BTreeMap<String, DirectoryEntryNode> = BTreeMap::new();
+-
+-    for (dir, file) in tree {
+-        let path = alloc::format!("{}/{}", dir, file.name_str()?);
+-        iter.insert(path, file);
+-    }
+-
+-    for (path, file) in iter {
+-        let is_dir = file.node.dirent.is_directory();
+-
+-        hasher.update(path.as_bytes());
+-
+-        if !is_dir {
+-            let data = file.node.dirent.read_data_all(dev).await?;
+-            hasher.update(data);
+-        }
+-    }
+-
+-    let bytes = hasher.finalize();
+-    let output: [u8; 32] = bytes[..]
+-        .try_into()
+-        .expect("SHA256 output should be 32 bytes");
+-    Ok(output)
+-}
+diff --git a/layout.rs b/layout.rs
+index a462b0fc9..eaf697530 100644
+--- a/layout.rs
++++ b/layout.rs
+@@ -48,7 +48,9 @@ pub struct VolumeDescriptor {
+ }
+ 
+ bitfield!(
+-#[repr(C)]
++// proc-bitfield 0.5 made bitfields `#[repr(transparent)]` themselves, so an
++// explicit `#[repr(C)]` here is now a hard error. Layout is unchanged - this
++// is a single-field newtype over `u8`.
+ #[derive(Deserialize, Serialize, Copy, Clone, Eq, PartialEq)]
+ pub struct DirentAttributes(pub u8): Debug {
+     pub attrs: u8 @ ..,
+@@ -106,7 +108,6 @@ pub struct DirectoryEntryNode {
+ /// Intended use is for building the dirent tree within some other
+ /// data structure, and then creating the on-disk structure separately
+ #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+-#[cfg(feature = "write")]
+ pub struct DirectoryEntryData {
+     pub node: DirectoryEntryDiskData,
+     pub name: arrayvec::ArrayString<256>,
+@@ -230,7 +231,6 @@ impl DirectoryEntryDiskData {
+         }
+     }
+ 
+-    #[cfg(feature = "read")]
+     #[maybe_async]
+     pub async fn read_data<E>(
+         &self,
+@@ -248,7 +248,6 @@ impl DirectoryEntryDiskData {
+         Ok(())
+     }
+ 
+-    #[cfg(feature = "read")]
+     #[maybe_async]
+     pub async fn read_data_all<E>(
+         &self,
+@@ -269,7 +268,6 @@ impl DirectoryEntryDiskData {
+         Ok(buf)
+     }
+ 
+-    #[cfg(all(feature = "read", feature = "std"))]
+     pub fn seek_to(
+         &self,
+         seek: &mut impl std::io::Seek,
+@@ -290,7 +288,7 @@ impl DirectoryEntryNode {
+ 
+     /// Returns a UTF-8 encoded representation of the file name
+     /// If the filename cannot be reencoded into UTF-8, returns None
+-    pub fn name_str<E>(&self) -> Result<alloc::borrow::Cow<str>, util::Error<E>> {
++    pub fn name_str<E>(&self) -> Result<alloc::borrow::Cow<'_, str>, util::Error<E>> {
+         let name_bytes = self.name_slice();
+         WINDOWS_1252
+             .decode_without_bom_handling_and_without_replacement(name_bytes)
+@@ -298,7 +296,6 @@ impl DirectoryEntryNode {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl DirectoryEntryData {
+     pub fn name_slice(&self) -> &[u8] {
+         let name_len = self.node.filename_length as usize;
+@@ -330,7 +327,7 @@ impl DirectoryEntryData {
+         let encoded_filename_len = self.encode_name(&mut [0; 256])?;
+         let mut size = 0xe + (encoded_filename_len as u32);
+ 
+-        if size % 4 > 0 {
++        if !size.is_multiple_of(4) {
+             size += 4 - size % 4;
+         }
+ 
+@@ -338,14 +335,12 @@ impl DirectoryEntryData {
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl PartialOrd for DirectoryEntryData {
+     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+         Some(self.cmp(other))
+     }
+ }
+ 
+-#[cfg(feature = "write")]
+ impl Ord for DirectoryEntryData {
+     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+         util::cmp_ignore_case_utf8(self.name_str(), other.name_str())
+@@ -369,37 +364,3 @@ impl DirectoryEntryDiskNode {
+             .map_err(|e| util::Error::SerializationFailed(e))
+     }
+ }
+-
+-#[cfg(test)]
+-mod test {
+-    use super::{DirectoryEntryDiskData, DirentAttributes, DiskRegion};
+-    use futures::executor;
+-
+-    #[test]
+-    fn test_read_file_empty() {
+-        let mut data: [u8; 8] = [0; 8];
+-
+-        let dirent = DirectoryEntryDiskData {
+-            data: DiskRegion { sector: 0, size: 0 },
+-            attributes: DirentAttributes(0),
+-            filename_length: 0,
+-        };
+-
+-        let mut buf = [0; 8];
+-        executor::block_on(dirent.read_data(&mut data, &mut buf)).unwrap();
+-    }
+-
+-    #[test]
+-    fn test_read_file_all_empty() {
+-        let mut data: [u8; 8] = [0; 8];
+-
+-        let dirent = DirectoryEntryDiskData {
+-            data: DiskRegion { sector: 0, size: 0 },
+-            attributes: DirentAttributes(0),
+-            filename_length: 0,
+-        };
+-
+-        let data = executor::block_on(dirent.read_data_all(&mut data)).unwrap();
+-        assert_eq!(data.len(), 0);
+-    }
+-}
+diff --git a/lib.rs b/lib.rs
+deleted file mode 100644
+index aabc75923..000000000
+--- a/lib.rs
++++ /dev/null
+@@ -1,32 +0,0 @@
+-#![no_std]
+-
+-extern crate alloc;
+-#[cfg(feature = "std")]
+-extern crate std;
+-
+-macro_rules! traceln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::trace!($($x),*);
+-    };
+-}
+-
+-macro_rules! debugln {
+-    ($($x:expr),*) => {
+-        #[cfg(all(feature = "std", feature = "logging"))]
+-        log::debug!($($x),*);
+-    };
+-}
+-
+-pub mod blockdev;
+-pub mod layout;
+-pub mod util;
+-
+-#[cfg(feature = "read")]
+-pub mod read;
+-
+-#[cfg(feature = "write")]
+-pub mod write;
+-
+-#[cfg(all(feature = "checksum", feature = "std"))]
+-pub mod checksum;
+diff --git a/mod.rs b/mod.rs
+new file mode 100644
+index 000000000..b2f41a8d9
+--- /dev/null
++++ b/mod.rs
+@@ -0,0 +1,53 @@
++//! Vendored copy of the `xdvdfs` crate (MIT, see `LICENSE` beside this file)
++//! from the 0.8.3 crates.io release by antangelo <https://github.com/antangelo/xdvdfs>.
++//!
++//! Inlined rather than depended on because upstream's published `write` feature
++//! forces `wax` - and with it `nom`, `regex`, `pori`, `const_format`, and
++//! `itertools` - into the graph. Upstream `main` already makes that optional
++//! behind a `remap` feature but has cut no release since 0.8.3 (2024-11-13).
++//! Carrying it as a separate workspace crate instead would mean publishing a
++//! renamed fork of someone else's crate to crates.io, because `cargo publish`
++//! requires every path dependency of a published crate to exist on the registry.
++//!
++//! To drop this once upstream releases: delete this directory, add `xdvdfs`
++//! with `default-features = false, features = ["std", "read", "write", "sync"]`
++//! to the workspace dependencies, and replace the `pub mod xdvdfs;` declaration
++//! in `lib.rs` with `pub use ::xdvdfs;`. Call sites in this crate,
++//! `rom-weaver-cli`, and `cli_smoke` keep the same paths either way.
++//!
++//! Local changes against the 0.8.3 release, kept deliberately small:
++//! - `#![no_std]` dropped, since crate-level attributes cannot apply to a
++//!   module. `extern crate alloc;` moved to this crate's root so the source's
++//!   `use alloc::*` imports still resolve.
++//! - `#[cfg(feature = ...)]` gates resolved to the feature set this workspace
++//!   pinned - `std`, `read`, `write`, `sync` on; `logging`, `checksum`,
++//!   `ciso_support`, `wax` off - because those cfgs would otherwise resolve
++//!   against `rom-weaver-containers`' own features. Code behind the disabled
++//!   features is deleted rather than left gated.
++//! - `crate::` paths rewritten to `crate::xdvdfs::`.
++//! - Clippy lifetime-elision fixes for this workspace's `-D warnings` gate.
++//! - Directory cycle guards for untrusted images; upstream replacements MUST
++//!   preserve these checks when listing, looking up paths, and rebuilding images.
++
++// Upstream gates these on its `logging` feature, which this workspace left off,
++// so they expand to nothing. Wiring them to `tracing` is a worthwhile follow-up
++// but would be a behavior change rather than a move.
++macro_rules! traceln {
++    ($($x:expr),*) => {};
++}
++
++macro_rules! debugln {
++    ($($x:expr),*) => {};
++}
++
++pub mod blockdev;
++pub mod layout;
++pub mod util;
++
++pub mod read;
++
++pub mod write;
++
++#[cfg(all(test, not(target_family = "wasm")))]
++#[path = "../../tests/unit/xdvdfs.rs"]
++mod xdvdfs_tests;
+diff --git a/util.rs b/util.rs
+index fe0605618..cae1cd8c2 100644
+--- a/util.rs
++++ b/util.rs
+@@ -8,6 +8,7 @@ pub enum Error<E> {
+     SerializationFailed(bincode::Error),
+     InvalidVolume,
+     DirectoryEmpty,
++    CyclicDirectory,
+     DoesNotExist,
+     StringEncodingError,
+     NoDirent,
+@@ -26,6 +27,7 @@ impl<E> Error<E> {
+             Self::SerializationFailed(_) => "Serialization failed",
+             Self::InvalidVolume => "Not an XDVDFS volume",
+             Self::DirectoryEmpty => "Directory is empty",
++            Self::CyclicDirectory => "Cyclic directory reference",
+             Self::DoesNotExist => "Entry does not exist",
+             Self::StringEncodingError => "Cannot decode string into UTF-8",
+             Self::NoDirent => "Path exists, but dirent does not (likely root)",
+@@ -41,14 +43,14 @@ impl<E> Error<E> {
+ impl<E: Display> Display for Error<E> {
+     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+         match self {
+-            Self::IOError(ref e) => {
++            Self::IOError(e) => {
+                 f.write_str("IOError: ")?;
+                 e.fmt(f)
+             }
+             Self::SizeOutOfBounds(offset, size) => f.write_str(
+                 alloc::format!("File size out of bounds: {} for size {}", offset, size).as_str(),
+             ),
+-            Self::SerializationFailed(ref e) => {
++            Self::SerializationFailed(e) => {
+                 f.write_str("Serialization failed: ")?;
+                 Display::fmt(e, f)
+             }
+@@ -63,7 +65,6 @@ impl<E: Display> From<Error<E>> for alloc::string::String {
+     }
+ }
+ 
+-#[cfg(feature = "std")]
+ impl<E: Debug + Display> std::error::Error for Error<E> {}
+ 
+ impl<E> From<E> for Error<E> {
+@@ -104,7 +105,7 @@ pub fn cmp_ignore_case_utf8(a: &str, b: &str) -> core::cmp::Ordering {
+ 
+ #[cfg(test)]
+ mod test {
+-    use crate::util::cmp_ignore_case_utf8;
++    use crate::xdvdfs::util::cmp_ignore_case_utf8;
+ 
+     #[test]
+     fn test_str_ignore_case_alpha() {
+diff --git a/write/avl.rs b/write/avl.rs
+index 90c706e41..8f485f899 100644
+--- a/write/avl.rs
++++ b/write/avl.rs
+@@ -144,16 +144,16 @@ impl<T: Ord> AvlTree<T> {
+         let parent = node.parent?;
+         let parent_node = &self.tree[parent];
+ 
+-        if let Some(idx) = parent_node.left_node {
+-            if idx == node_idx {
+-                return Some((parent, AvlDirection::Left));
+-            }
++        if let Some(idx) = parent_node.left_node
++            && idx == node_idx
++        {
++            return Some((parent, AvlDirection::Left));
+         }
+ 
+-        if let Some(idx) = parent_node.right_node {
+-            if idx == node_idx {
+-                return Some((parent, AvlDirection::Right));
+-            }
++        if let Some(idx) = parent_node.right_node
++            && idx == node_idx
++        {
++            return Some((parent, AvlDirection::Right));
+         }
+ 
+         unreachable!("AVL node-parent invariant violated");
+@@ -320,12 +320,13 @@ impl<T: Ord> AvlTree<T> {
+     }
+ 
+     fn rebalance(&mut self, leaf: usize) {
+-        assert!(self
+-            .tree
+-            .get(leaf)
+-            .as_ref()
+-            .filter(|node| node.left_node.is_none() && node.right_node.is_none())
+-            .is_some());
++        assert!(
++            self.tree
++                .get(leaf)
++                .as_ref()
++                .filter(|node| node.left_node.is_none() && node.right_node.is_none())
++                .is_some()
++        );
+ 
+         let mut current_idx = Some((leaf, AvlDirection::Leaf));
+         let mut prev_idx: Option<(usize, AvlDirection)> = None;
+@@ -390,7 +391,7 @@ impl<T: Ord> AvlTree<T> {
+     }
+ 
+     #[cfg(test)]
+-    pub fn inorder_iter(&self) -> AvlInorderIter<T> {
++    pub fn inorder_iter(&self) -> AvlInorderIter<'_, T> {
+         let mut stack = Vec::new();
+         let mut current_node = self.root;
+ 
+@@ -402,7 +403,7 @@ impl<T: Ord> AvlTree<T> {
+         AvlInorderIter { stack, tree: self }
+     }
+ 
+-    pub fn preorder_iter(&self) -> AvlPreorderIter<T> {
++    pub fn preorder_iter(&self) -> AvlPreorderIter<'_, T> {
+         let mut stack = Vec::new();
+         if let Some(idx) = self.root {
+             stack.push(idx);
+@@ -491,11 +492,13 @@ impl<T: Ord> core::ops::Deref for AvlNodeRef<'_, T> {
+     }
+ }
+ 
++#[cfg(test)]
+ pub struct AvlInorderIter<'tree, T: Ord> {
+     stack: Vec<usize>,
+     tree: &'tree AvlTree<T>,
+ }
+ 
++#[cfg(test)]
+ impl<'tree, T: Ord> core::iter::Iterator for AvlInorderIter<'tree, T> {
+     type Item = AvlNodeRef<'tree, T>;
+     fn next(&mut self) -> Option<Self::Item> {
+@@ -543,13 +546,13 @@ impl<'tree, T: Ord> core::iter::Iterator for AvlPreorderIter<'tree, T> {
+ #[cfg(test)]
+ mod test {
+     use super::*;
+-    use rand::{prelude::*, rngs, SeedableRng};
++    use rand::{SeedableRng, prelude::*, rngs};
+ 
+     #[test]
+     fn test_insert_invariants() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+ 
+@@ -572,7 +575,7 @@ mod test {
+     fn test_inorder_ordering() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+         let mut btree = std::collections::BTreeSet::new();
+@@ -625,7 +628,7 @@ mod test {
+     fn test_preorder_backend_ordering_large_data() {
+         let mut rng = rngs::StdRng::seed_from_u64(0x5842_4f58_5842_4f58);
+         let mut test_set: Vec<i32> = Vec::new();
+-        test_set.resize_with(1000, || rng.gen());
++        test_set.resize_with(1000, || rng.random());
+ 
+         let mut tree = AvlTree::default();
+ 
+diff --git a/write/dirtab.rs b/write/dirtab.rs
+index d4b4ee427..27475f2d4 100644
+--- a/write/dirtab.rs
++++ b/write/dirtab.rs
+@@ -1,14 +1,14 @@
+-use crate::layout::{
++use crate::xdvdfs::layout::{
+     self, DirectoryEntryData, DirectoryEntryDiskData, DirectoryEntryDiskNode, DirentAttributes,
+     DiskRegion,
+ };
+-use crate::util;
+-use crate::write::avl;
++use crate::xdvdfs::util;
++use crate::xdvdfs::write::avl;
+ 
+ use alloc::string::ToString;
+ use alloc::{boxed::Box, string::String, vec::Vec};
+ 
+-use super::sector::{required_sectors, SectorAllocator};
++use super::sector::{SectorAllocator, required_sectors};
+ 
+ /// Writer for directory entry tables
+ #[derive(Default)]
+@@ -33,7 +33,7 @@ pub struct DirectoryEntryTableDiskRepr {
+ fn sector_align(offset: u64, incr: u64) -> u32 {
+     let used_sectors = required_sectors(offset);
+     let needed_sectors = required_sectors(offset + incr);
+-    if offset % layout::SECTOR_SIZE as u64 > 0 && needed_sectors > used_sectors {
++    if !offset.is_multiple_of(layout::SECTOR_SIZE as u64) && needed_sectors > used_sectors {
+         layout::SECTOR_SIZE - (offset % layout::SECTOR_SIZE as u64) as u32
+     } else {
+         0
+@@ -213,7 +213,7 @@ impl DirectoryEntryTableWriter {
+             dirent_bytes.extend_from_slice(&bytes);
+             dirent_bytes.extend_from_slice(&name_bytes[0..name_len]);
+ 
+-            if size % 4 > 0 {
++            if !size.is_multiple_of(4) {
+                 let padding = 4 - size % 4;
+                 dirent_bytes.extend_from_slice(&alloc::vec![0xff; padding]);
+             }
+diff --git a/write/fs/mod.rs b/write/fs/mod.rs
+index 43ab8c6fa..2021fcf76 100644
+--- a/write/fs/mod.rs
++++ b/write/fs/mod.rs
+@@ -8,15 +8,13 @@ use alloc::boxed::Box;
+ use alloc::string::String;
+ use alloc::vec::Vec;
+ 
+-use crate::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
+ 
+ use maybe_async::maybe_async;
+ 
+-
+ mod sector_linear;
+ mod xdvdfs;
+ 
+-
+ pub use sector_linear::*;
+ pub use xdvdfs::*;
+ 
+@@ -62,7 +60,7 @@ impl PathVec {
+         self.components.is_empty()
+     }
+ 
+-    pub fn iter(&self) -> PathVecIter {
++    pub fn iter(&self) -> PathVecIter<'_> {
+         self.components.iter()
+     }
+ 
+diff --git a/write/fs/sector_linear.rs b/write/fs/sector_linear.rs
+index 6537e97b3..e4a89efc0 100644
+--- a/write/fs/sector_linear.rs
++++ b/write/fs/sector_linear.rs
+@@ -1,4 +1,4 @@
+-use crate::{blockdev::BlockDeviceWrite, layout};
++use crate::xdvdfs::{blockdev::BlockDeviceWrite, layout};
+ use alloc::boxed::Box;
+ use alloc::vec::Vec;
+ use maybe_async::maybe_async;
+@@ -114,7 +114,7 @@ where
+         assert_eq!(offset, 0);
+ 
+         let mut sector_span = size / layout::SECTOR_SIZE as u64;
+-        if size % layout::SECTOR_SIZE as u64 > 0 {
++        if !size.is_multiple_of(layout::SECTOR_SIZE as u64) {
+             sector_span += 1;
+         }
+ 
+@@ -166,63 +166,6 @@ impl<E> core::ops::Index<u64> for SectorLinearBlockDevice<E> {
+     }
+ }
+ 
+-#[cfg(feature = "ciso_support")]
+-pub struct CisoSectorInput<'a, E: Send + Sync, W: BlockDeviceWrite<E>, F: Filesystem<W, E>> {
+-    linear: SectorLinearBlockDevice<E>,
+-    fs: SectorLinearBlockFilesystem<'a, E, W, F>,
+-
+-    bdev_t: core::marker::PhantomData<W>,
+-}
+-
+-#[cfg(feature = "ciso_support")]
+-impl<'a, E, W, F> CisoSectorInput<'a, E, W, F>
+-where
+-    W: BlockDeviceWrite<E>,
+-    F: Filesystem<W, E>,
+-    E: Send + Sync,
+-{
+-    pub fn new(
+-        bdev: SectorLinearBlockDevice<E>,
+-        fs: SectorLinearBlockFilesystem<'a, E, W, F>,
+-    ) -> Self {
+-        Self {
+-            linear: bdev,
+-            fs,
+-            bdev_t: core::marker::PhantomData,
+-        }
+-    }
+-}
+-
+-#[cfg(feature = "ciso_support")]
+-#[maybe_async]
+-impl<E, W, F> ciso::write::SectorReader<E> for CisoSectorInput<'_, E, W, F>
+-where
+-    W: BlockDeviceWrite<E>,
+-    F: Filesystem<W, E>,
+-    E: Send + Sync,
+-{
+-    async fn size(&mut self) -> Result<u64, E> {
+-        self.linear.len().await
+-    }
+-
+-    async fn read_sector(&mut self, sector: usize, sector_size: u32) -> Result<Vec<u8>, E> {
+-        let mut buf = alloc::vec![0; sector_size as usize];
+-
+-        match &self.linear[sector as u64] {
+-            SectorLinearBlockContents::Empty => {}
+-            SectorLinearBlockContents::RawData(data) => {
+-                buf.copy_from_slice(data.as_slice());
+-            }
+-            SectorLinearBlockContents::File(path, sector_idx) => {
+-                let bytes_read = self
+-                    .fs
+-                    .fs
+-                    .copy_file_buf(path, &mut buf, sector_size as u64 * sector_idx)
+-                    .await?;
+-                assert_eq!(bytes_read, sector_size as u64);
+-            }
+-        };
+-
+-        Ok(buf)
+-    }
+-}
++#[cfg(test)]
++#[path = "../../../../tests/unit/xdvdfs_sector_linear.rs"]
++mod tests;
+diff --git a/write/fs/stdfs.rs b/write/fs/stdfs.rs
+index 31c056214..adefdc3b7 100644
+--- a/write/fs/stdfs.rs
++++ b/write/fs/stdfs.rs
+@@ -5,10 +5,7 @@ use alloc::vec::Vec;
+ use maybe_async::maybe_async;
+ use std::path::{Path, PathBuf};
+ 
+-#[cfg(not(feature = "sync"))]
+-use alloc::boxed::Box;
+-
+-use crate::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
+ 
+ use super::{FileEntry, FileType, Filesystem, PathVec};
+ 
+diff --git a/write/fs/xdvdfs.rs b/write/fs/xdvdfs.rs
+index 83cc55094..ae48cdeed 100644
+--- a/write/fs/xdvdfs.rs
++++ b/write/fs/xdvdfs.rs
+@@ -2,12 +2,9 @@ use alloc::vec::Vec;
+ use core::fmt::Debug;
+ use core::fmt::Display;
+ 
+-#[cfg(not(feature = "sync"))]
+-use alloc::boxed::Box;
+-
+ use maybe_async::maybe_async;
+ 
+-use crate::{
++use crate::xdvdfs::{
+     blockdev::{BlockDeviceRead, BlockDeviceWrite},
+     util,
+ };
+@@ -19,7 +16,7 @@ where
+     D: BlockDeviceRead<E> + Sized,
+ {
+     dev: D,
+-    volume: crate::layout::VolumeDescriptor,
++    volume: crate::xdvdfs::layout::VolumeDescriptor,
+     etype: core::marker::PhantomData<E>,
+ }
+ 
+@@ -29,7 +26,7 @@ where
+ {
+     #[maybe_async]
+     pub async fn new(mut dev: D) -> Option<XDVDFSFilesystem<E, D>> {
+-        let volume = crate::read::read_volume(&mut dev).await;
++        let volume = crate::xdvdfs::read::read_volume(&mut dev).await;
+ 
+         if let Ok(volume) = volume {
+             Some(Self {
+@@ -48,7 +45,7 @@ where
+     E: Send + Sync + Display + Debug + 'static,
+ {
+     fn from(value: util::Error<E>) -> Self {
+-        Self::new(std::io::ErrorKind::Other, value)
++        Self::other(value)
+     }
+ }
+ 
+diff --git a/write/img.rs b/write/img.rs
+index a96e98e30..527ea4dd2 100644
+--- a/write/img.rs
++++ b/write/img.rs
+@@ -1,9 +1,9 @@
+ use alloc::collections::BTreeMap;
+ use alloc::string::String;
+ 
+-use crate::blockdev::BlockDeviceWrite;
+-use crate::write::{dirtab, fs, sector};
+-use crate::{layout, util};
++use crate::xdvdfs::blockdev::BlockDeviceWrite;
++use crate::xdvdfs::write::{dirtab, fs, sector};
++use crate::xdvdfs::{layout, util};
+ 
+ use alloc::vec;
+ use alloc::vec::Vec;
+diff --git a/write/sector.rs b/write/sector.rs
+index 85715d957..39bb60544 100644
+--- a/write/sector.rs
++++ b/write/sector.rs
+@@ -1,4 +1,4 @@
+-use crate::layout::SECTOR_SIZE;
++use crate::xdvdfs::layout::SECTOR_SIZE;
+ 
+ pub struct SectorAllocator {
+     next_free: u32,
