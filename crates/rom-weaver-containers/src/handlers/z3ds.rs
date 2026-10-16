@@ -1194,6 +1194,9 @@ fn detect_underlying_magic(head: &[u8]) -> [u8; 4] {
         head.get(offset..offset + 4)
             .and_then(|bytes| bytes.try_into().ok())
     };
+    if at(0) == Some(*b"3DSX") {
+        return *b"3DSX";
+    }
     if let Some(magic) = at(NCSD_MAGIC_OFFSET).filter(|magic| matches!(magic, b"NCSD" | b"NCCH")) {
         return magic;
     }

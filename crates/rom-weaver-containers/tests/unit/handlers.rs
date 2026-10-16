@@ -783,6 +783,32 @@ mod tests {
     }
 
     #[test]
+    fn z3ds_create_preserves_3dsx_magic_when_rodata_contains_image_magic() {
+        for magic in [b"NCSD", b"NCCH", b"NONE"] {
+            let mut payload = vec![0_u8; 588];
+            payload[..4].copy_from_slice(b"3DSX");
+            payload[4..6].copy_from_slice(&44_u16.to_le_bytes());
+            payload[6..8].copy_from_slice(&8_u16.to_le_bytes());
+            payload[16..20].copy_from_slice(&4_u32.to_le_bytes());
+            payload[20..24].copy_from_slice(&512_u32.to_le_bytes());
+            payload[24..28].copy_from_slice(&4_u32.to_le_bytes());
+            payload[0x100..0x104].copy_from_slice(magic);
+            let underlying = z3ds_created_underlying_magic(
+                std::str::from_utf8(magic).expect("ASCII magic"),
+                &payload,
+            );
+            assert_eq!(underlying, *b"3DSX");
+            assert_eq!(
+                Z3dsContainerHandler.extract_name_with_underlying_magic(
+                    Path::new("generic.z3ds"),
+                    Some(underlying)
+                ),
+                "generic.3dsx"
+            );
+        }
+    }
+
+    #[test]
     fn z3ds_extract_name_maps_legacy_cia_header_size_magic() {
         assert_eq!(
             Z3dsContainerHandler.extract_name_with_underlying_magic(
