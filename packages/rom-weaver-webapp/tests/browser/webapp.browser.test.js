@@ -1,3 +1,5 @@
+import indexHtml from "../../index.html?raw";
+import { captureShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
 import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -115,8 +117,11 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
   validation: createEmptyValidationState(),
 });
 
+let selectExternalView;
+
 function WebappRootHarness({ initialView = "patcher", settings, updateReady = false, onReloadUpdate } = {}) {
   const [currentView, setCurrentView] = useState(initialView);
+  selectExternalView = setCurrentView;
   const props = useMemo(
     () => ({
       actions: { ...createNoopActions(), onSelectView: setCurrentView, onReloadUpdate },
@@ -166,6 +171,172 @@ const openMenuSheet = async () => {
   await expect.poll(() => document.querySelector(".menu-sheet")?.hidden).toBe(false);
   return document.querySelector(".menu-sheet");
 };
+
+const selectionPatch = (name) => new File([new Uint8Array([80, 65, 84, 67, 72, 0, 0, 1, 0, 1, 66, 69, 79, 70])], name);
+const sendHomeSelection = (kind, files) => {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  if (kind === "pick") {
+    const input = document.querySelector("#home-file-input");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  } else document.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+};
+const patchNames = () =>
+  [...document.querySelectorAll("#rom-weaver-list-patch-stack [data-file-name]")].map((node) => node.dataset.fileName);
+
+test.each(["pick", "drop"])("Home retains separate %s selections through routing to Apply", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  sendHomeSelection(kind, [selectionPatch("first.ips")]);
+  sendHomeSelection(kind, [selectionPatch("second.ips")]);
+  await expect.poll(() => patchNames().includes("second.ips")).toBe(true);
+  expect(patchNames()).toEqual(["first.ips", "second.ips"]);
+});
+
+test.each(["pick", "drop"])("Home retains a batch %s selection", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  sendHomeSelection(kind, [selectionPatch("first.ips"), selectionPatch("second.ips")]);
+  await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips"]);
+});
+
+test.each(["pick", "drop"])("Home queues newer %s arrivals while the destination transition waits", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("first.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    sendHomeSelection(kind, [selectionPatch("second.ips")]);
+    sendHomeSelection(kind, [selectionPatch("third.ips")]);
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips", "third.ips"]);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+test.each(["pick", "drop"])("Home replay waits for routing and includes newer buffered %s selections", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const script = document.createElement("script");
+  script.textContent = source.replace(/^<script>|<\/script>$/g, "");
+  document.head.append(script);
+  script.remove();
+  captureShellClicks();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("first.ips")]);
+    sendHomeSelection(kind, [selectionPatch("second.ips")]);
+    replayShellSelections(rootElement);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    expect(window.ROM_WEAVER_SHELL_CLICKS.deferSelections).toBe(true);
+    sendHomeSelection(kind, [selectionPatch("third.ips")]);
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips", "third.ips"]);
+    await expect.poll(() => window.ROM_WEAVER_SHELL_CLICKS.deferSelections).toBe(false);
+    expect(window.ROM_WEAVER_SHELL_CLICKS.selections).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+    window.ROM_WEAVER_SHELL_CLICKS.stop();
+    window.ROM_WEAVER_SHELL_CLICKS.stopSelections();
+    delete window.ROM_WEAVER_SHELL_CLICKS;
+  }
+});
+
+test("Home cancels a pending file handoff when the user navigates away", async () => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection("pick", [selectionPatch("cancelled.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    navRow("Home").click();
+    openDestination();
+    finish();
+    await expect.poll(() => document.querySelector("#panel-home")?.closest("[hidden]")).toBeNull();
+    navRow("Apply").click();
+    await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+    expect(patchNames()).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+test.each(["history", "soft-link"])("Home cancels file routing on external %s navigation", async (navigation) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  const link = document.createElement("a");
+  link.href = "/docs";
+  link.textContent = "External Docs route";
+  rootElement.append(link);
+  const navigate = (event) => {
+    if (event.target !== link) return;
+    event.preventDefault();
+    selectExternalView("docs");
+  };
+  document.addEventListener("click", navigate);
+  try {
+    sendHomeSelection("drop", [selectionPatch("cancelled.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    if (navigation === "history") {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      selectExternalView("docs");
+    } else link.click();
+    await expect.poll(() => document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    openDestination();
+    finish();
+    await expect.poll(() => document.querySelector("#column").classList.contains("rw-drop-routing")).toBe(false);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    expect(patchNames()).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+    document.removeEventListener("click", navigate);
+    link.remove();
+  }
+});
 
 test.each([
   ["home", "Apply Patches", "Apply & download"],

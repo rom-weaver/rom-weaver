@@ -1,3 +1,4 @@
+import { trackSelectionDelivery } from "../../lib/input/selection-delivery.ts";
 import { useState, useSyncExternalStore } from "react";
 import { Check, Copy, Download, Server, Stamp, Terminal } from "lucide-react";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
@@ -17,7 +18,7 @@ type HomePageProps = {
   /** Where the app is served. Route links resolve against it so a sub-path deployment keeps its prefix. */
   baseUrl: string;
   /** Files chosen in the hero picker; the shell routes them to the workflow that fits. */
-  onFiles?: (files: File[]) => void;
+  onFiles?: (files: File[]) => void | Promise<void>;
 };
 
 type InstallMethod = {
@@ -186,7 +187,7 @@ const HomePage = ({ baseUrl, onFiles }: HomePageProps): React.ReactElement => {
                   onChange={(event) => {
                     const files = Array.from(event.currentTarget.files ?? []);
                     event.currentTarget.value = "";
-                    if (files.length) onFiles?.(files);
+                    if (files.length) trackSelectionDelivery(event.nativeEvent, onFiles?.(files));
                   }}
                   type="file"
                 />

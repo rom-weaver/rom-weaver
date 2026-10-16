@@ -50,8 +50,32 @@ const collectEntryFiles = async (entry: FileSystemEntry, fallback?: File | null)
   return [];
 };
 
-const readDataTransferFiles = async (dataTransfer: DataTransfer | null): Promise<File[]> => {
+type DroppedFilesTransfer = {
+  files: ArrayLike<File>;
+  items?: ArrayLike<{
+    kind: string;
+    webkitGetAsEntry?: () => FileSystemEntry | null;
+    getAsFile?: () => File | null;
+  }>;
+};
+
+// Replayed drops MUST reuse flattened files so browser entry reads cannot delay delivery again.
+const flattenedTransfers = new WeakMap<DroppedFilesTransfer, File[]>();
+
+const createFileDataTransfer = (files: File[]) => {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  flattenedTransfers.set(
+    transfer,
+    files.filter((file) => !isHiddenName(file.name)),
+  );
+  return transfer;
+};
+
+const readDataTransferFiles = async (dataTransfer: DroppedFilesTransfer | null): Promise<File[]> => {
   if (!dataTransfer) return [];
+  const flattened = flattenedTransfers.get(dataTransfer);
+  if (flattened) return flattened;
   // Capture entries synchronously before any await - the transfer is cleared
   // once the drop handler returns.
   const collected: Promise<File[]>[] = [];
@@ -90,4 +114,5 @@ const readDataTransferFiles = async (dataTransfer: DataTransfer | null): Promise
   return files;
 };
 
-export { readDataTransferFiles };
+export { createFileDataTransfer, readDataTransferFiles };
+export type { DroppedFilesTransfer };

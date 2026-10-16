@@ -1,3 +1,6 @@
+import { getSoftNavigationUrl } from "./soft-navigation.ts";
+import { discardShellSelections } from "./shell-click-replay.ts";
+import { trackSelectionDelivery } from "../lib/input/selection-delivery.ts";
 import {
   Archive,
   BookOpen,
@@ -520,11 +523,72 @@ function WebappRoot({
   const applyRomLookupIdRef = useRef(0);
   const currentViewRef = useRef(state.currentView);
   currentViewRef.current = state.currentView;
-  const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
+  const [pageDrops, setPageDrops] = useState<WebappRootPageDrop[]>([]);
+  const pageDrop = pageDrops[0];
+  const pendingDropsRef = useRef(new Map<number, () => void>());
+  const routingQueueRef = useRef(Promise.resolve());
+  const routingGenerationRef = useRef(0);
+  const routeChoiceRef = useRef<(() => void) | null>(null);
   const pageDropIdRef = useRef(0);
   const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
   const [dropRouting, setDropRouting] = useState<DropRouting | null>(null);
   const dropRoutingTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cancelFileRouting = useCallback(() => {
+    discardShellSelections();
+    clearTimeout(dropRoutingTimerRef.current);
+    setDropRouting(null);
+    routingGenerationRef.current += 1;
+    routingQueueRef.current = Promise.resolve();
+    for (const resolve of pendingDropsRef.current.values()) resolve();
+    pendingDropsRef.current.clear();
+    routeChoiceRef.current?.();
+    routeChoiceRef.current = null;
+    setPageDrops([]);
+    setDropRoute(null);
+  }, []);
+  useEffect(() => {
+    const handleSoftNavigation = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor) return;
+      const current = new URL(window.location.href);
+      const destination = getSoftNavigationUrl(event, anchor, current);
+      if (destination && (destination.pathname !== current.pathname || destination.search !== current.search)) {
+        cancelFileRouting();
+      }
+    };
+    window.addEventListener("popstate", cancelFileRouting);
+    document.addEventListener("click", handleSoftNavigation, true);
+    return () => {
+      window.removeEventListener("popstate", cancelFileRouting);
+      document.removeEventListener("click", handleSoftNavigation, true);
+    };
+  }, [cancelFileRouting]);
+  const enqueuePageDrop = useCallback(
+    (view: WebappView, files: File[]) =>
+      new Promise<void>((resolve) => {
+        pageDropIdRef.current += 1;
+        const id = pageDropIdRef.current;
+        pendingDropsRef.current.set(id, resolve);
+        const onConsumed = () => {
+          pendingDropsRef.current.delete(id);
+          setPageDrops((previous) => previous.filter((entry) => entry.drop.id !== id));
+          resolve();
+        };
+        setPageDrops((previous) => [...previous, { view, drop: { files, id, onConsumed } }]);
+      }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      discardShellSelections();
+      routingGenerationRef.current += 1;
+      for (const resolve of pendingDropsRef.current.values()) resolve();
+      pendingDropsRef.current.clear();
+      routeChoiceRef.current?.();
+    },
+    [],
+  );
   // Sets the veil's routing phase; a hold clears it after that many ms.
   const showDropRouting = useCallback((routing: DropRouting | null, holdMs?: number) => {
     clearTimeout(dropRoutingTimerRef.current);
@@ -607,9 +671,10 @@ function WebappRoot({
   const pageDropFor = (view: WebappView) =>
     pageDrop && pageDrop.view === view && state.currentView === view ? pageDrop.drop : null;
   const openWhatsNew = useCallback(() => {
+    cancelFileRouting();
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
-  }, [actions]);
+  }, [actions, cancelFileRouting]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
     () =>
@@ -627,6 +692,7 @@ function WebappRoot({
   // affordance in the app resolves through this one router.
   const handleSelectTab = useCallback(
     (id: string) => {
+      cancelFileRouting();
       if (notFound) {
         if (id === "home") {
           window.location.assign(resolvedAssetBaseUrl);
@@ -655,7 +721,7 @@ function WebappRoot({
       pendingViewRef.current = null;
       selectViewWithTransition(() => actions.onSelectView(view));
     },
-    [actions, notFound, resolvedAssetBaseUrl],
+    [actions, cancelFileRouting, notFound, resolvedAssetBaseUrl],
   );
 
   // URL-session sources land in the matching workflow's drop pipeline exactly
@@ -664,84 +730,85 @@ function WebappRoot({
     (files: File[]) => {
       const sessionView = urlSession?.request?.kind === "weave" ? "weave" : "patcher";
       actions.onSelectView(sessionView);
-      pageDropIdRef.current += 1;
-      setPageDrop({
-        drop: {
-          files,
-          id: pageDropIdRef.current,
-        },
-        view: sessionView,
-      });
+      cancelFileRouting();
+      void enqueuePageDrop(sessionView, files);
     },
-    [actions, urlSession?.request?.kind],
+    [actions, cancelFileRouting, enqueuePageDrop, urlSession?.request?.kind],
   );
   // Hands a routed drop to its workflow exactly like a page-level drop on that tab.
   const deliverDrop = useCallback(
-    (view: WebappView, files: File[]) => {
+    async (view: WebappView, files: File[]) => {
       setDropRoute(null);
       if (!files.length) return;
+      const finishChoice = routeChoiceRef.current;
+      routeChoiceRef.current = null;
       logger.debug("delivering routed drop", { count: files.length, from: currentViewRef.current, view });
+      if (view === "test" && currentViewRef.current !== view) requestEmulatorStartFromUserAction();
       if (notFound) {
-        // A full navigation would discard the browser's dropped File objects.
         setRecoveredDrop(true);
-        if (view === "test") requestEmulatorStartFromUserAction();
         actions.onSelectView(view);
-      } else if (currentViewRef.current !== view) handleSelectTab(view);
-      pageDropIdRef.current += 1;
-      setPageDrop({ drop: { files, id: pageDropIdRef.current }, view });
+      } else if (currentViewRef.current !== view) {
+        pendingViewRef.current = null;
+        const generation = routingGenerationRef.current;
+        selectViewWithTransition(() => {
+          if (generation === routingGenerationRef.current) actions.onSelectView(view);
+        });
+      }
+      await enqueuePageDrop(view, files);
+      finishChoice?.();
     },
-    [actions, handleSelectTab, notFound],
+    [actions, enqueuePageDrop, notFound],
   );
-  // Pages without a suitable workflow MUST choose a destination before staging files.
-  // Only a page drop holds the veil: a picked file never raised it.
   const routeFiles = useCallback(
-    (files: File[], fromDrop = false) => {
+    (selected: File[] | Promise<File[]>, fromDrop = false, directView?: WebappView) => {
       const from = currentViewRef.current;
-      const routeVeil: typeof showDropRouting = (routing, holdMs) => {
-        if (fromDrop) showDropRouting(routing, holdMs);
-      };
-      routeVeil({ phase: "reading" });
-      void readDropEntries(files).then(
-        (entries) => {
-          if (currentViewRef.current !== from) {
-            logger.debug("dropped files left behind after navigating", { count: files.length, from });
-            routeVeil(null);
+      const generation = routingGenerationRef.current;
+      const delivery = routingQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (generation !== routingGenerationRef.current) return;
+          const files = await selected;
+          if (!files.length || generation !== routingGenerationRef.current) return;
+          if (directView) {
+            await enqueuePageDrop(directView, files);
             return;
           }
+          const routeVeil: typeof showDropRouting = (routing, holdMs) => {
+            if (fromDrop) showDropRouting(routing, holdMs);
+          };
+          routeVeil({ phase: "reading" });
+          const entries = await readDropEntries(files);
+          if (generation !== routingGenerationRef.current) return;
           const plan = planDropDestinations(countDropEntries(entries));
           const [only] = plan.destinations;
-          if (only && plan.destinations.length === 1) {
-            const fitsAll = entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket));
-            if (fitsAll) {
-              // The veil names the workflow while its chunk loads, so the switch lands on
-              // a complete form rather than an empty panel, then fades over it.
-              routeVeil({ phase: "opening", view: only });
-              void preloadWorkflowRoute(only)
-                .catch(() => undefined)
-                .then(() => {
-                  if (currentViewRef.current !== from) {
-                    logger.debug("dropped files left behind after navigating", { count: files.length, from });
-                    routeVeil(null);
-                    return;
-                  }
-                  routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
-                  deliverDrop(only, files);
-                });
-              return;
-            }
+          if (
+            only &&
+            plan.destinations.length === 1 &&
+            entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket))
+          ) {
+            routeVeil({ phase: "opening", view: only });
+            await preloadWorkflowRoute(only).catch(() => undefined);
+            if (generation !== routingGenerationRef.current) return;
+            routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
+            await deliverDrop(only, files);
+            return;
           }
           routeVeil(null);
           if (!only) return;
           pageDropIdRef.current += 1;
           setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
-        },
-        (error: unknown) => {
-          routeVeil(null);
+          await new Promise<void>((resolve) => {
+            routeChoiceRef.current = resolve;
+          });
+        })
+        .catch((error: unknown) => {
+          if (fromDrop && generation === routingGenerationRef.current) showDropRouting(null);
           throw error;
-        },
-      );
+        });
+      routingQueueRef.current = delivery;
+      return delivery;
     },
-    [deliverDrop, showDropRouting],
+    [deliverDrop, enqueuePageDrop, showDropRouting],
   );
   useEffect(
     () =>
@@ -801,11 +868,7 @@ function WebappRoot({
       // Hold the veil from the drop itself so it never fades out and back in
       // while the transfer is read.
       if (needsDestination) showDropRouting({ phase: "reading" });
-      void readDataTransferFiles(event.dataTransfer).then((files) => {
-        if (files.length === 0 || currentViewRef.current !== droppedView) {
-          if (needsDestination) showDropRouting(null);
-          return;
-        }
+      const readFiles = readDataTransferFiles(event.dataTransfer).then((files) => {
         markDropReceived();
         for (const file of files) recordDrop(file.name, droppedAtMs);
         logger.trace("unified drop zone received files", {
@@ -813,19 +876,9 @@ function WebappRoot({
           names: files.map((file) => file.name),
           source: "page",
         });
-        if (needsDestination) {
-          routeFiles(files, true);
-          return;
-        }
-        pageDropIdRef.current += 1;
-        setPageDrop({
-          drop: {
-            files,
-            id: pageDropIdRef.current,
-          },
-          view: droppedView,
-        });
+        return files;
       });
+      trackSelectionDelivery(event, routeFiles(readFiles, true, needsDestination ? undefined : droppedView));
     };
     // A workflow that cannot use a drop offers the one that can. This runs in
     // the capture phase, ahead of the tab's own drop zones, and only claims the
@@ -845,7 +898,7 @@ function WebappRoot({
       void readDataTransferFiles(event.dataTransfer).then((files) => {
         if (!files.length || currentViewRef.current !== fromView) return;
         if (needsDestination) {
-          routeFiles(files, true);
+          void routeFiles(files, true);
           return;
         }
         pageDropIdRef.current += 1;
@@ -1012,7 +1065,7 @@ function WebappRoot({
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}
-                    onSelectView={() => actions.onSelectView("test")}
+                    onSelectView={() => handleSelectTab("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("patcher")}
                     romLookupRequest={applyRomLookupRequest}
@@ -1028,7 +1081,7 @@ function WebappRoot({
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}
-                    onSelectView={() => actions.onSelectView("test")}
+                    onSelectView={() => handleSelectTab("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("weave")}
                     startup={state.startup}
@@ -1172,7 +1225,11 @@ function WebappRoot({
             <DropRouteDialog
               key={dropRoute.id}
               labelFor={(view) => WORKFLOW_TABS.find((tab) => tab.id === view)?.label ?? view}
-              onCancel={() => setDropRoute(null)}
+              onCancel={() => {
+                setDropRoute(null);
+                routeChoiceRef.current?.();
+                routeChoiceRef.current = null;
+              }}
               onDeliver={deliverDrop}
               request={dropRoute}
             />

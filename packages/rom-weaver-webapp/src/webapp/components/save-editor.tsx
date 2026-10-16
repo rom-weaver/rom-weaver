@@ -464,6 +464,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     handledDropRef.current = pageDrop.id;
     const file = pageDrop.files.find((candidate) => !/\.ppf$/i.test(candidate.name));
     if (file) selectSourceRef.current(file);
+    pageDrop.onConsumed?.();
   }, [pageDrop]);
   const validateField = (field: SaveField, text: string): string => {
     const numericKind = field.kind === "unsigned_integer" || field.kind === "signed_integer";
