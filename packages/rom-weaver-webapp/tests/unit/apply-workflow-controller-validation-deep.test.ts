@@ -95,6 +95,40 @@ const makeController = (runtime: Record<string, unknown> = {}) => {
 beforeEach(() => mocks.validateApplyPatchTargets.mockReset());
 
 describe("ApplyWorkflowController.validatePatches", () => {
+  it("recomputes layout when chain declarations change without changing the weave ROM", async () => {
+    const controller = makeController();
+    const input = controller.inputSession?.view as unknown as { preparedInputAssets: Record<string, unknown>[] };
+    const target = input.preparedInputAssets[0];
+    if (!target) throw new Error("Missing staged ROM");
+    Object.assign(target, {
+      checksums: { crc32: "11111111" },
+      checksumVariants: [
+        {
+          id: "headerless",
+          label: "Header removed",
+          checksums: { crc32: "22222222" },
+          applyCompatibility: { removeHeader: true },
+          transforms: { removeHeader: { strippedBytes: 2 } },
+        },
+      ],
+    });
+    const first = patchStage("first");
+    const second = patchStage("second");
+    controller.patches = [first, second];
+    const weaveRom = { checks: "crc32=22222222" };
+    await controller.validatePatches({ weaveRom });
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    await controller.validatePatches({
+      weaveRom,
+      chainMeta: new Map([[1, { inputChecks: "sha256=raw-source-hash" }]]),
+    });
+    expect(first.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    expect(second.state.headerResolution).toMatchObject({ decided: false, mode: "keep" });
+    expect(second.state.requirements).toBeUndefined();
+    await controller.validatePatches({ weaveRom });
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+  });
+
   it("batches live patches by target, records plans, and passes chain declarations", async () => {
     const controller = makeController();
     const first = patchStage("first");

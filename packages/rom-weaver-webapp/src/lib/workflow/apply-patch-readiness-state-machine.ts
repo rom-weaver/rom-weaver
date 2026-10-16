@@ -6,6 +6,7 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
+  declaredInputChecks?: string;
   /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
    * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
    * evidence of its own takes its header and byte-order decision from it. */
@@ -110,6 +111,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
   weaveLayoutCrc32?: string,
+  declaredInputChecks?: string,
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
@@ -136,6 +138,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
     wanted.filenameCrc32 !== undefined ||
     !!requirements?.hasSourceChecksums ||
     !!stage.state.inputChecks?.trim() ||
+    !!declaredInputChecks?.trim() ||
     !!stage.state.validateInputChecksum?.trim();
   const layoutWanted = !ownLayoutEvidence && weaveLayoutCrc32 ? { sourceCrc32: weaveLayoutCrc32 } : wanted;
   const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
@@ -295,7 +298,12 @@ const settleApplyPatchTarget = async <TSource>(
     const target = await resolveApplyPatchTargetForStage(stage, assets);
     stage.state.status = target ? "ready" : "needsSelection";
     const preflight = target
-      ? createApplyPatchChecksumPreflight(stage, target, adapters.getWeaveLayoutCrc32?.(target))
+      ? createApplyPatchChecksumPreflight(
+          stage,
+          target,
+          adapters.getWeaveLayoutCrc32?.(target),
+          adapters.declaredInputChecks,
+        )
       : undefined;
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);

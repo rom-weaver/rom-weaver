@@ -1022,6 +1022,55 @@ test("a patch's declared inputChecks keep its raw layout when rom.checks match o
   expect(hex(output)).toBe(hex(applyRecords(headered, records)));
 });
 
+test.each(["crc32", "sha1"])("a later patch's declared %s outranks the weave layout", async (algorithm) => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const rawChecks = await fileChecks(headered);
+  const inputChecks = { checksums: { [algorithm]: rawChecks.checksums[algorithm] } };
+  const firstRecords = [[0xa8, 0x12]];
+  const laterRecords = [[0xa9, 0x0f]];
+  const patches = [new File([createIps(firstRecords)], "first.ips"), new File([createIps(laterRecords)], "later.ips")];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: patches.map((patch) => ({ basis: "base", inputChecks, path: patch.name })),
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    patches,
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  expect(hex(output)).toBe(hex(applyRecords(applyRecords(headered, firstRecords), laterRecords)));
+});
+
+test("a first patch's SHA256 declaration keeps the validation plan on its raw layout", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", headered)));
+  const patchFile = new File([createIps([[0xa8, 0x12]])], "hack.ips");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ path: patchFile.name, inputChecks: { checksums: { sha256 } } }],
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  const originalValidate = browserRuntime.patch.validatePatch;
+  let result;
+  const validateSpy = vi.spyOn(browserRuntime.patch, "validatePatch").mockImplementation(async (input) => {
+    result = await originalValidate.call(browserRuntime.patch, input);
+    return result;
+  });
+  try {
+    mountStrict([weaveArchive, new File([headered], "hello-world.nes")]);
+    await expect.poll(() => result?.plan?.per_patch?.[0]?.input_verdict, { timeout: 30000 }).toBe("passed");
+    expect(result.plan.per_patch[0].matched).toEqual({ kind: "base", variant: "raw" });
+    expect(validateSpy.mock.calls.at(-1)?.[0]?.options.removeHeader).toBe(false);
+  } finally {
+    validateSpy.mockRestore();
+  }
+});
+
 test("a RUP's embedded MD5 keeps its raw layout when rom.checks match only the headerless body", async () => {
   const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
   const modified = withBytes(headered, 0xa8, [0x12, 0x0f, 0x0d]);

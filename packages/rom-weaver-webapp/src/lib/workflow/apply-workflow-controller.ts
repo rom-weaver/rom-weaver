@@ -1738,8 +1738,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
-  private async evaluatePatchReadiness(stage: StagedSource<TSource>): Promise<boolean> {
+  private async evaluatePatchReadiness(stage: StagedSource<TSource>, declaredInputChecks?: string): Promise<boolean> {
     return evaluateApplyPatchReadiness(stage, {
+      declaredInputChecks,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
         this.weaveRomLayout?.assetId === target.id ? this.weaveRomLayout.crc32 : undefined,
@@ -1808,8 +1809,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           skippedDisabled += 1;
           continue;
         }
-        const preflight = stage.state.checksumPreflight;
-        if (!(stage.state.status === "ready" && stage.state.targetInputId && preflight)) continue;
+        if (!(stage.state.status === "ready" && stage.state.targetInputId && stage.state.checksumPreflight)) continue;
         if (!(stage.parsedPatch && stage.preparedPatchFile)) continue;
         // The planner receives a linear patch list. An explicit named producer is resolved by
         // apply-time execution, so planning it against the current visual order would report a
@@ -1819,6 +1819,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
         );
         if (!target) continue;
+        await this.evaluatePatchReadiness(stage, options?.chainMeta?.get(index)?.inputChecks);
+        const preflight = stage.state.checksumPreflight;
+        if (!preflight) continue;
         pending.push({ chain: options?.chainMeta?.get(index), preflight, stage, target });
       }
       // Plan-mode verdicts depend on chain position, so each target chain gets a fingerprint of
