@@ -149,6 +149,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       currentGame?.checksum
         ? createEmulatorGameIdentity({
             checksum: currentGame.checksum,
+            core: currentGame.core,
             fileName: currentGame.fileName,
           })
         : null,

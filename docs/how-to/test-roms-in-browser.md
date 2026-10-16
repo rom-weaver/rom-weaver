@@ -39,7 +39,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-A PlayStation or Saturn disc image in CHD opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform is extracted first.
+A CHD that rom-weaver identifies as Sony PlayStation or Sega Mega Drive or Genesis opens without extraction. A CHD identified as Sega CD or Mega-CD has no bundled core and does not play. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform, including Saturn, is extracted first.
 
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 
