@@ -57,8 +57,9 @@ const variantSize = (variant: ChecksumVariant, rawSize: number): number | undefi
  *
  * The raw bytes are compared first. When they do not match, the staged header-stripped and N64
  * byte-order variants are tried, so a headered SMC or a .v64 dump passes a weave recorded from the
- * headerless .sfc or the .z64. A variant counts only when it answers every declared algorithm. The
- * match never reaches the engine, so it cannot steer the header or byte-order decision.
+ * headerless .sfc or the .z64. A variant counts only when it answers every declared algorithm.
+ * The checks never reach the engine's `--expect-in`; a variant match only supplies the layout for
+ * patches without source checks of their own (see the controller's `weaveRomLayout`).
  */
 const verifyWeaveRom = async (
   expectation: WeaveRomExpectation,
