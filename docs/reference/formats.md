@@ -183,7 +183,7 @@ The Test page supports these platforms:
 - Atari 7800
 - Atari Lynx
 - Nintendo Entertainment System
-- Nintendo Famicom Disk System
+- Nintendo Famicom Disk System (recognized, but does not start: it needs the FDS BIOS `disksys.rom`, which rom-weaver does not bundle and the Test page cannot load yet; tracked in [issue #1223](https://github.com/rom-weaver/rom-weaver/issues/1223))
 - Nintendo Game Boy
 - Nintendo Game Boy Color
 - Nintendo Game Boy Advance

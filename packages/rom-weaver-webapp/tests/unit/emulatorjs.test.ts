@@ -11,6 +11,8 @@ import {
   coreReadsChd,
   getEmulatorJsAspectRatio,
   getEmulatorJsCore,
+  hasFdsDiskSignature,
+  requiresUnsuppliedBios,
 } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
@@ -390,5 +392,35 @@ describe("CHD pass-through cores", () => {
   it("extracts a CHD for every other core", () => {
     expect(coreReadsChd("psp")).toBe(false);
     expect(coreReadsChd(undefined)).toBe(false);
+  });
+});
+
+describe("requiresUnsuppliedBios", () => {
+  it("flags Famicom Disk System images by platform or extension", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.bin", platform: "Nintendo Famicom Disk System" })).toBe(true);
+    expect(requiresUnsuppliedBios({ fileName: "GAME.FDS" })).toBe(true);
+  });
+
+  it("leaves cartridge systems alone", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.nes", platform: "Nintendo Entertainment System" })).toBe(false);
+    expect(requiresUnsuppliedBios({ fileName: "game.sfc" })).toBe(false);
+  });
+});
+
+describe("hasFdsDiskSignature", () => {
+  const disk = (headerBytes: number) => {
+    const bytes = new Uint8Array(headerBytes + 64);
+    bytes.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")], headerBytes);
+    return new Blob([bytes]);
+  };
+
+  it("finds the disk marker with and without the FDS header", async () => {
+    expect(await hasFdsDiskSignature(disk(0))).toBe(true);
+    expect(await hasFdsDiskSignature(disk(16))).toBe(true);
+  });
+
+  it("ignores other images", async () => {
+    expect(await hasFdsDiskSignature(new Blob([new Uint8Array(128)]))).toBe(false);
+    expect(await hasFdsDiskSignature(new Blob(["NES\x1a"]))).toBe(false);
   });
 });

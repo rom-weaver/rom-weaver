@@ -135,6 +135,7 @@ Use the **Delete** action in **Saves & storage** to remove one game. Use your br
 ## Fix a game that does not start
 
 - **No emulator core for this system:** check [browser emulator support](../reference/formats.md#browser-emulator-support).
+- **A Famicom Disk System `.fds` game shows a BIOS message:** these games need the FDS BIOS, and the Test page cannot load one yet, so the emulator does not start. The same applies to an `.fds` file inside a ZIP or 7z archive and to an Apply result. [Issue #1223](https://github.com/rom-weaver/rom-weaver/issues/1223) tracks BIOS support.
 - **WebGL 2 is required:** enable hardware acceleration or use a browser that supports WebGL 2.
 - **An archive does not load:** extract it yourself, then add the ROM file.
 - **A save does not appear:** load the same ROM bytes. rom-weaver uses the ROM's SHA-1 checksum to find its saves.

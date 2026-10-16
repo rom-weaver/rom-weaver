@@ -5932,3 +5932,18 @@ msgstr "Descargar el weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.combinedCheats"
 msgstr "Este weave contiene un parche combinado con los parches y trucos activados en su orden actual."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.fdsBios.summary"
+msgstr "{fileName} necesita la BIOS de Famicom Disk System."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.fdsBios.detail"
+msgstr "Los juegos de Famicom Disk System no funcionan sin la BIOS de FDS y aún no se admite cargar archivos BIOS."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.fdsBios.link"
+msgstr "Seguir la compatibilidad con la BIOS de FDS"

@@ -738,6 +738,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.tutorial.swap": msg({ id: "ui.create.tutorial.swap", message: "Swap" }),
   "ui.create.tutorial.archive": msg({ id: "ui.create.tutorial.archive", message: "Archive" }),
   "ui.create.tutorial.createDownload": msg({ id: "ui.create.tutorial.createDownload", message: "Create & download" }),
+  "ui.test.fdsBios.summary": msg({
+    id: "ui.test.fdsBios.summary",
+    message: "{fileName} needs the Famicom Disk System BIOS.",
+  }),
+  "ui.test.fdsBios.detail": msg({
+    id: "ui.test.fdsBios.detail",
+    message: "Famicom Disk System games cannot run without the FDS BIOS, and loading BIOS files is not supported yet.",
+  }),
+  "ui.test.fdsBios.link": msg({ id: "ui.test.fdsBios.link", message: "Follow FDS BIOS support" }),
   "ui.test.tutorial.load.title": msg({ id: "ui.test.tutorial.load.title", message: "A game is loaded" }),
   "ui.test.tutorial.load.body": msg({
     id: "ui.test.tutorial.load.body",

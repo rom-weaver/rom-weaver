@@ -39,7 +39,13 @@ import {
 } from "./components/ds/sample-tutorial.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
-import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
+import {
+  FDS_BIOS_ISSUE_URL,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  hasFdsDiskSignature,
+  requiresUnsuppliedBios,
+} from "./components/emulatorjs.ts";
 import { isSaveFileName } from "./drop-destination.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
@@ -320,19 +326,6 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   }, [currentGame]);
 
   useEffect(() => {
-    const dialog = fullscreenDialogRef.current;
-    if (!dialog || typeof dialog.showModal !== "function") return undefined;
-    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
-    // player is clipped away by it. The dialog wraps the player at all times so
-    // opening it never reparents the iframe, which would reload the game.
-    if (pseudoFullscreen && !dialog.open) dialog.showModal();
-    if (!pseudoFullscreen && dialog.open) dialog.close();
-    const handleClose = () => setPseudoFullscreen(false);
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [pseudoFullscreen]);
-
-  useEffect(() => {
     if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -549,7 +542,49 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
   const webglBlocked = error?.blocksPlayer === true;
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked);
+  // Every route into Test ends at currentGame, so this one check covers pickers, archives, URL sessions and Apply.
+  // Apply can hand over a headerless FDS image under any output name, so the bytes decide as well.
+  const [fdsBytes, setFdsBytes] = useState<{ blob: Blob; isFds: boolean } | null>(null);
+  useEffect(() => {
+    if (!currentBlob) {
+      setFdsBytes(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void hasFdsDiskSignature(currentBlob)
+      .catch(() => false)
+      .then((isFds) => {
+        if (!cancelled) setFdsBytes({ blob: currentBlob, isFds });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBlob]);
+  const fdsChecking = Boolean(currentBlob && fdsBytes?.blob !== currentBlob);
+  const missingBios = Boolean(
+    currentGame && (requiresUnsuppliedBios(currentGame) || (fdsBytes?.blob === currentBlob && fdsBytes?.isFds)),
+  );
+  const canPlay = Boolean(
+    currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios && !fdsChecking,
+  );
+  useEffect(() => {
+    if (missingBios) {
+      setPseudoFullscreen(false);
+      return undefined;
+    }
+    if (!canPlay) return undefined;
+    const dialog = fullscreenDialogRef.current;
+    if (!dialog || typeof dialog.showModal !== "function") return undefined;
+    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
+    // player is clipped away by it. The dialog wraps the player at all times so
+    // opening it never reparents the iframe, which would reload the game.
+    if (pseudoFullscreen && !dialog.open) dialog.showModal();
+    if (!pseudoFullscreen && dialog.open) dialog.close();
+    const handleClose = () => setPseudoFullscreen(false);
+    dialog.addEventListener("close", handleClose);
+    return () => dialog.removeEventListener("close", handleClose);
+  }, [canPlay, missingBios, pseudoFullscreen]);
+
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
   const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;
@@ -634,6 +669,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       error,
       progress: loadProgress,
       canPlay,
+      missingBios,
       player: getAgentPlayerState(),
       pendingSave: pendingSave ? { present: true } : null,
       saveLoadStatus,
@@ -713,14 +749,27 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           </>
         }
         beforeDropZone={
-          error ? (
-            <Notice
-              id="emulator-test-error"
-              level="error"
-              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
-            >
-              <b>{error.summary}</b> {error.detail}
-            </Notice>
+          error || (currentGame && missingBios) ? (
+            <>
+              {error ? (
+                <Notice
+                  id="emulator-test-error"
+                  level="error"
+                  onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+                >
+                  <b>{error.summary}</b> {error.detail}
+                </Notice>
+              ) : null}
+              {currentGame && missingBios ? (
+                <Notice id="emulator-test-bios" level="error">
+                  <b>{localizer.message("ui.test.fdsBios.summary", { fileName: currentGame.fileName })}</b>{" "}
+                  {localizer.message("ui.test.fdsBios.detail")}{" "}
+                  <a href={FDS_BIOS_ISSUE_URL} rel="noreferrer" target="_blank">
+                    {localizer.message("ui.test.fdsBios.link")}
+                  </a>
+                </Notice>
+              ) : null}
+            </>
           ) : undefined
         }
         big={workflowEmpty}
@@ -776,7 +825,13 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                 <button aria-label="Stop and unload game" className="btn ghost slim" onClick={stopGame} type="button">
                   Stop
                 </button>
-                {canPlay ? (
+                {currentGame &&
+                currentCore &&
+                gameUrl &&
+                currentIdentity &&
+                !webglBlocked &&
+                !missingBios &&
+                !fdsChecking ? (
                   <>
                     <button
                       aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -820,7 +875,13 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                   {saveLoadMessage}
                 </p>
               ) : null}
-              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
+              {currentGame &&
+              currentCore &&
+              gameUrl &&
+              currentIdentity &&
+              !webglBlocked &&
+              !missingBios &&
+              !fdsChecking ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
@@ -854,11 +915,11 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
                     ) : null}
                   </div>
                 </dialog>
-              ) : currentGame && currentCore && preparing ? (
+              ) : currentGame && currentCore && preparing && !missingBios ? (
                 <div className="emulator-player-loading">
                   <FileProgress indeterminate label="Preparing the ROM..." value="working" />
                 </div>
-              ) : currentGame && !webglBlocked ? (
+              ) : currentGame && !webglBlocked && !missingBios ? (
                 <div className="emulator-player-loading" />
               ) : null}
             </div>
