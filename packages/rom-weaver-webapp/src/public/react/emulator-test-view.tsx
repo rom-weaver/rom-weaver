@@ -326,19 +326,6 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   }, [currentGame]);
 
   useEffect(() => {
-    const dialog = fullscreenDialogRef.current;
-    if (!dialog || typeof dialog.showModal !== "function") return undefined;
-    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
-    // player is clipped away by it. The dialog wraps the player at all times so
-    // opening it never reparents the iframe, which would reload the game.
-    if (pseudoFullscreen && !dialog.open) dialog.showModal();
-    if (!pseudoFullscreen && dialog.open) dialog.close();
-    const handleClose = () => setPseudoFullscreen(false);
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [pseudoFullscreen]);
-
-  useEffect(() => {
     if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -580,6 +567,24 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   const canPlay = Boolean(
     currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios && !fdsChecking,
   );
+  useEffect(() => {
+    if (missingBios) {
+      setPseudoFullscreen(false);
+      return undefined;
+    }
+    if (!canPlay) return undefined;
+    const dialog = fullscreenDialogRef.current;
+    if (!dialog || typeof dialog.showModal !== "function") return undefined;
+    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
+    // player is clipped away by it. The dialog wraps the player at all times so
+    // opening it never reparents the iframe, which would reload the game.
+    if (pseudoFullscreen && !dialog.open) dialog.showModal();
+    if (!pseudoFullscreen && dialog.open) dialog.close();
+    const handleClose = () => setPseudoFullscreen(false);
+    dialog.addEventListener("close", handleClose);
+    return () => dialog.removeEventListener("close", handleClose);
+  }, [canPlay, missingBios, pseudoFullscreen]);
+
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
   const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;

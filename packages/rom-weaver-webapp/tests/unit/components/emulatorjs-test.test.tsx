@@ -629,3 +629,69 @@ describe("EmulatorTestView", () => {
     expect(emulatorAudioMocks.disposeEmulatorAudioContext).not.toHaveBeenCalled();
   });
 });
+
+describe("fallback fullscreen game validation", () => {
+  const openFullscreenGame = async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry());
+    const view = render(withSettings(<EmulatorTestView />));
+    await screen.findByTitle("EmulatorJS test for game.nes");
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    expect(document.querySelector("dialog")?.open).toBe(true);
+    expect(document.body.style.overflow).toBe("hidden");
+    return view;
+  };
+
+  it("keeps a validated replacement visible in fallback fullscreen and restores scrolling on stop", async () => {
+    const previousOverflow = document.body.style.overflow;
+    const view = await openFullscreenGame();
+    const oldFrame = screen.getByTitle("EmulatorJS test for game.nes");
+    view.rerender(withSettings(<EmulatorTestView pageDrop={{ id: 1, files: [new File(["second"], "second.nes")] }} />));
+    const replacement = await screen.findByTitle("EmulatorJS test for second.nes");
+    await waitFor(() => expect(document.querySelector("dialog")?.open).toBe(true));
+    expect(oldFrame.isConnected).toBe(false);
+    expect(replacement.closest("dialog")?.open).toBe(true);
+    expect(replacement.closest(".is-pseudo-fullscreen")).toBeTruthy();
+    expect(document.body.style.overflow).toBe("hidden");
+    fireEvent.click(screen.getByRole("button", { name: "Stop and unload game" }));
+    await waitFor(() => expect(document.querySelector("iframe")).toBeNull());
+    expect(document.querySelector(".is-pseudo-fullscreen")).toBeNull();
+    expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+
+  it("leaves fullscreen and unlocks scrolling when a renamed replacement requires the FDS BIOS", async () => {
+    const previousOverflow = document.body.style.overflow;
+    const view = await openFullscreenGame();
+    const disk = new Uint8Array(64);
+    disk.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")]);
+    view.rerender(withSettings(<EmulatorTestView pageDrop={{ id: 1, files: [new File([disk], "renamed.nes")] }} />));
+    expect((await screen.findByRole("alert")).textContent).toContain("renamed.nes needs the Famicom Disk System BIOS.");
+    await waitFor(() => expect(document.body.style.overflow).toBe(previousOverflow));
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(document.querySelector("dialog[open]")).toBeNull();
+    expect(document.querySelector(".is-pseudo-fullscreen")).toBeNull();
+  });
+
+  it("keeps exit and dialog-close controls working after replacement, and unlocks on unmount", async () => {
+    const previousOverflow = document.body.style.overflow;
+    const view = await openFullscreenGame();
+    view.rerender(withSettings(<EmulatorTestView pageDrop={{ id: 1, files: [new File(["second"], "second.nes")] }} />));
+    await screen.findByTitle("EmulatorJS test for second.nes");
+    await waitFor(() => expect(document.querySelector("dialog")?.open).toBe(true));
+    const exit = document.querySelector<HTMLButtonElement>(".emulator-pseudo-exit");
+    expect(exit).toBeTruthy();
+    fireEvent.click(exit as HTMLButtonElement);
+    await waitFor(() => expect(document.querySelector("dialog")?.open).toBe(false));
+    expect(document.body.style.overflow).toBe(previousOverflow);
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    expect(document.querySelector("dialog")?.open).toBe(true);
+    act(() => document.querySelector("dialog")?.close());
+    await waitFor(() => expect(document.querySelector(".is-pseudo-fullscreen")).toBeNull());
+    expect(document.body.style.overflow).toBe(previousOverflow);
+    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    view.unmount();
+    expect(document.body.style.overflow).toBe(previousOverflow);
+  });
+});
