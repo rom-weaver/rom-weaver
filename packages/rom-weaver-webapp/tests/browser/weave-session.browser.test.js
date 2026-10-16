@@ -4,6 +4,7 @@ import { RomWeaverError } from "../../src/lib/errors.ts";
 import { loadLocalWeaveSession } from "../../src/lib/weave/local-weave-session.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
+import { CreateWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { loadWeaveUrlSession } from "../../src/webapp/url-session/weave-url-session.ts";
@@ -993,6 +994,49 @@ const buildWeaveArchive = async (weave, patchFiles) =>
     ],
     "rom-check-weave.zip",
   );
+
+// A patch's own source checks, of any algorithm, decide its layout even when rom.checks match only
+// the header-stripped ROM: declared inputChecks, or a checksum embedded in the patch (a RUP's MD5).
+const applyOwnEvidenceWeave = async (patchEntry, patchFile, headered) => {
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ name: "Hack", path: patchFile.name, ...patchEntry }],
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  return applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+};
+
+test("a patch's declared inputChecks keep its raw layout when rom.checks match only the headerless body", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const records = [
+    [0xa8, 0x12],
+    [0xa9, 0x0f],
+    [0xaa, 0x0d],
+  ];
+  const patchFile = new File([createIps(records)], "hack.ips");
+  const { output } = await applyOwnEvidenceWeave({ inputChecks: await fileChecks(headered) }, patchFile, headered);
+  expect(hex(output)).toBe(hex(applyRecords(headered, records)));
+});
+
+test("a RUP's embedded MD5 keeps its raw layout when rom.checks match only the headerless body", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const modified = withBytes(headered, 0xa8, [0x12, 0x0f, 0x0d]);
+  const workflow = new CreateWorkflow({
+    settings: { format: "rup", output: { compression: "none", outputName: "hack.rup" }, workers: { threads: 1 } },
+  });
+  await workflow.setOriginal(new File([headered], "original.nes"));
+  await workflow.setModified(new File([modified], "modified.nes"));
+  const created = await workflow.run();
+  const rupBytes = await (await created.output.getBlob()).arrayBuffer();
+  await created.output.dispose();
+  // Renamed so no filename checksum token adds evidence: only the RUP's embedded MD5 remains.
+  const { output } = await applyOwnEvidenceWeave({}, new File([rupBytes], "hack.rup"), headered);
+  expect(hex(output)).toBe(hex(modified));
+});
 
 // Apply under strict validation: a matching ROM applies with no override; a wrong one shows the
 // override and reaches the engine only once it is checked.

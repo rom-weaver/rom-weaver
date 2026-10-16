@@ -128,11 +128,16 @@ const createApplyPatchChecksumPreflight = <TSource>(
   };
   const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
   // A patch with no checksum evidence of its own applies to the layout the weave's ROM check
-  // matched. That CRC32 only steers the decision; it never joins the preflight requirement.
-  const layoutWanted =
-    wanted.sourceCrc32 === undefined && wanted.filenameCrc32 === undefined && weaveLayoutCrc32
-      ? { sourceCrc32: weaveLayoutCrc32 }
-      : wanted;
+  // matched. Any declared or embedded source check, in any algorithm, is the patch's own evidence
+  // and leaves the decision to it (and the engine). The weave CRC32 only steers the decision; it
+  // never joins the preflight requirement.
+  const ownLayoutEvidence =
+    wanted.sourceCrc32 !== undefined ||
+    wanted.filenameCrc32 !== undefined ||
+    !!requirements?.hasSourceChecksums ||
+    !!stage.state.inputChecks?.trim() ||
+    !!stage.state.validateInputChecksum?.trim();
+  const layoutWanted = !ownLayoutEvidence && weaveLayoutCrc32 ? { sourceCrc32: weaveLayoutCrc32 } : wanted;
   const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
   stage.state.headerResolution = headerResolution;
   const n64Resolution = resolveApplyN64ByteOrder(layoutWanted, available);
