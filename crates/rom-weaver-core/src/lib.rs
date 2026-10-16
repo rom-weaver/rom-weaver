@@ -24,7 +24,8 @@ mod threads;
 pub use access::{access_advice, effective_ids, in_container};
 pub use cancel::{
     CancellationToken, clear_in_progress_outputs, complete_in_progress_output,
-    process_cancellation_token, register_in_progress_output, remove_in_progress_outputs,
+    process_cancellation_token, register_in_progress_output, register_live_temp_dir,
+    remove_in_progress_outputs, remove_live_temp_dirs, unregister_live_temp_dir,
 };
 pub use common_files::{
     ArchiveEntryKindFilter, COMMON_CONTAINER_FILE_EXTENSIONS, CONTAINER_FILTER_FILE_EXTENSIONS,
