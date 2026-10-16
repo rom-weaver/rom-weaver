@@ -250,6 +250,15 @@
   background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
   opacity: 0.5;
 }
+.rw-app .release-changelog-subsection + .release-changelog-subsection {
+  margin-block-start: var(--sp-l);
+}
+.rw-app .release-changelog-subheading {
+  margin-block: 0 var(--sp-xs);
+  font-size: 1em;
+  font-weight: 650;
+  color: var(--ink);
+}
 .rw-app .release-all-changes {
   margin-block-start: var(--sp-m);
 }

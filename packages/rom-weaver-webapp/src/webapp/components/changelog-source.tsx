@@ -183,8 +183,8 @@ const EntryGroups = ({
         {group.title ? <h3 className="release-changelog-group">{group.title}</h3> : null}
         {group.sections?.length ? (
           group.sections.map((section) => (
-            <div key={section.title}>
-              {section.title ? <h4 className="release-changelog-group">{section.title}</h4> : null}
+            <div className="release-changelog-subsection" key={section.title}>
+              {section.title ? <h4 className="release-changelog-subheading">{section.title}</h4> : null}
               <EntryList entries={section.entries} repositoryUrl={repositoryUrl} />
             </div>
           ))
