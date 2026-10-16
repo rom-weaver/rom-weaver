@@ -231,6 +231,7 @@ const IdentifyForm = ({
     if (!(pageDrop && pageDrop.id !== handledDropRef.current)) return;
     handledDropRef.current = pageDrop.id;
     selectFiles(pageDrop.files);
+    pageDrop.onConsumed?.();
   }, [pageDrop, selectFiles]);
 
   const busy = entries.some((entry) => entry.busy);

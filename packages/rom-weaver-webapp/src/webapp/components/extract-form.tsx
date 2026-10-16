@@ -215,6 +215,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     if (!pageDrop || pageDrop.id === handledDropRef.current) return;
     handledDropRef.current = pageDrop.id;
     stageFiles(pageDrop.files);
+    pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
   useEffect(

@@ -192,6 +192,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
     if (!(pageDrop && pageDrop.id !== handledDropRef.current)) return;
     handledDropRef.current = pageDrop.id;
     stageFiles(pageDrop.files);
+    pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
   const canRun = !!(rom && patch && outputName.trim()) && !busy && !opening && !error && !output;

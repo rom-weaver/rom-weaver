@@ -12,6 +12,7 @@ type ApplyPatchFormSettings = ApplySettings;
 type ApplyPatchFormMode = "apply" | "weave" | "bundle" | "create";
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
+  onConsumed?: () => void;
   files: File[];
   id: number;
 };

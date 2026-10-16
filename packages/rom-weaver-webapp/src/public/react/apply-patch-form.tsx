@@ -1816,7 +1816,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
   const handledPageDropIdRef = useRef<number | null>(null);
-  usePageDropForwarder(props.active === false ? null : props.pageDrop, handleUnifiedDropFiles, handledPageDropIdRef);
+  usePageDropForwarder(
+    props.active === false ? null : props.pageDrop,
+    (files) => new Promise<void>((resolve) => handleUnifiedDropFiles(files, resolve)),
+    handledPageDropIdRef,
+  );
 
   handleSelectionCancelledRef.current = (request) => {
     const normalizedSourceName = request.sourceName.trim().toLowerCase();

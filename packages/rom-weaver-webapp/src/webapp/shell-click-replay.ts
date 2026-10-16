@@ -1,3 +1,4 @@
+import { dispatchSelectionDelivery } from "../lib/input/selection-delivery.ts";
 import {
   createFileDataTransfer,
   type DroppedFilesTransfer,
@@ -126,20 +127,25 @@ const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection, con
   if (retained && consumed) return;
   input.files = createFileDataTransfer(selection.files).files;
   logger.debug("Delivering a file pick that landed before the first mount", { count: selection.files.length });
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return dispatchSelectionDelivery(input, new Event("change", { bubbles: true }));
 };
 
 const deliverDrop = (appRootElement: HTMLElement, selection: ShellSelection) => {
   const original = selection.target instanceof Element ? selection.target : null;
   const target = original && appRootElement.contains(original) ? original : appRootElement;
   logger.debug("Delivering a file drop that landed before the first mount", { count: selection.files.length });
-  target.dispatchEvent(
+  return dispatchSelectionDelivery(
+    target,
     new DragEvent("drop", {
       bubbles: true,
       cancelable: true,
       dataTransfer: createFileDataTransfer(selection.files),
     }),
   );
+};
+
+const discardShellSelections = () => {
+  readShellBuffer()?.selections?.splice(0);
 };
 
 /**
@@ -161,32 +167,36 @@ const replayShellSelections = (appRootElement: HTMLElement) => {
         for (const [target, selection] of lastPickByInput) {
           if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
         }
-        while (queue.length) {
-          const selection = queue.shift();
-          if (!selection) break;
-          if (selection.kind === "drop" && selection.transfer) {
-            try {
-              selection.files = await readDataTransferFiles(selection.transfer);
-            } catch (error) {
-              logger.warn("Failed to read a buffered file drop", { error });
-              continue;
+        try {
+          while (queue.length) {
+            const selection = queue.shift();
+            if (!selection) break;
+            if (selection.kind === "drop" && selection.transfer) {
+              try {
+                selection.files = await readDataTransferFiles(selection.transfer);
+              } catch (error) {
+                logger.warn("Failed to read a buffered file drop", { error });
+                continue;
+              }
             }
+            let delivery: Promise<void> | undefined;
+            buffer.replaying = true;
+            try {
+              if (selection.kind === "pick")
+                delivery = deliverPick(appRootElement, selection, consumedPicks.has(selection));
+              else delivery = deliverDrop(appRootElement, selection);
+            } finally {
+              buffer.replaying = false;
+            }
+            await delivery;
           }
-          buffer.replaying = true;
-          try {
-            if (selection.kind === "pick") deliverPick(appRootElement, selection, consumedPicks.has(selection));
-            else deliverDrop(appRootElement, selection);
-          } finally {
-            buffer.replaying = false;
-          }
-          // Resolved drop readers MUST reach their consumers before the next selection.
-          await Promise.resolve();
+        } finally {
+          buffer.stopSelections?.();
+          buffer.deferSelections = false;
         }
-        buffer.stopSelections?.();
-        buffer.deferSelections = false;
       })();
     }, 0);
   });
 };
 
-export { captureShellClicks, replayShellClicks, replayShellSelections };
+export { captureShellClicks, discardShellSelections, replayShellClicks, replayShellSelections };
