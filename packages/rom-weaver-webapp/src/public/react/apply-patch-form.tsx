@@ -547,10 +547,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     currentPatchNames,
     disabledPatchIds,
   });
-  // The weave's expected ROM follows the chain like its expected output: once the bench diverges
-  // from the weave's patch list, its rom.checks no longer describe this apply and stand down; they
-  // apply again when the bench matches the weave.
-  const weaveRomEnforced = weaveChainStatus !== "diverged";
+  // The weave's expected ROM follows the chain like its expected output: only while the bench holds
+  // the weave's patch list (names in order; toggles aside) do its rom.checks and ROM attribution
+  // describe this apply. Otherwise they stand down, and they apply again when the bench matches.
+  // weaveChainStatus cannot decide this: it stays null until the weave's metadata is seeded, which
+  // happens only once the list first matches.
+  const weaveRomEnforced = weaveSessionMatches;
   const weaveRomEnforcedRef = useRef(weaveRomEnforced);
   weaveRomEnforcedRef.current = weaveRomEnforced;
 
@@ -2067,7 +2069,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         {...(weaveRomEnforced && activeWeaveSession?.chainEndpointChecks.input
           ? { weaveExpectedRomChecks: activeWeaveSession.chainEndpointChecks.input }
           : {})}
-        {...(activeWeaveSession?.romExpectation ? { weaveRomExpectation: activeWeaveSession.romExpectation } : {})}
+        {...(weaveRomEnforced && activeWeaveSession?.romExpectation
+          ? { weaveRomExpectation: activeWeaveSession.romExpectation }
+          : {})}
         weaveTools={{
           hasOptionalEntries:
             !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,

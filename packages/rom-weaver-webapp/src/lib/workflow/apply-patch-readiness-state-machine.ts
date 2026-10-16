@@ -6,6 +6,10 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
+  /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
+   * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
+   * evidence of its own takes its header and byte-order decision from it. */
+  getWeaveLayoutCrc32?: (target: InputAsset) => string | undefined;
   /** Invoked when the patch is staged and parsed but has no ROM to verify against yet (the input is
    * still being prepared). Lets the row replace its lingering staging label with a "waiting on the
    * ROM" status instead of the misleading "checking nested archives in extracted outputs". */
@@ -105,6 +109,7 @@ const createChecksumPreflightVerdict = ({
 const createApplyPatchChecksumPreflight = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
+  weaveLayoutCrc32?: string,
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
@@ -122,9 +127,15 @@ const createApplyPatchChecksumPreflight = <TSource>(
     filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
   };
   const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
-  const headerResolution = resolveApplyHeaderMode(wanted, available);
+  // A patch with no checksum evidence of its own applies to the layout the weave's ROM check
+  // matched. That CRC32 only steers the decision; it never joins the preflight requirement.
+  const layoutWanted =
+    wanted.sourceCrc32 === undefined && wanted.filenameCrc32 === undefined && weaveLayoutCrc32
+      ? { sourceCrc32: weaveLayoutCrc32 }
+      : wanted;
+  const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
   stage.state.headerResolution = headerResolution;
-  const n64Resolution = resolveApplyN64ByteOrder(wanted, available);
+  const n64Resolution = resolveApplyN64ByteOrder(layoutWanted, available);
   stage.state.n64Resolution = n64Resolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -278,7 +289,9 @@ const settleApplyPatchTarget = async <TSource>(
   try {
     const target = await resolveApplyPatchTargetForStage(stage, assets);
     stage.state.status = target ? "ready" : "needsSelection";
-    const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
+    const preflight = target
+      ? createApplyPatchChecksumPreflight(stage, target, adapters.getWeaveLayoutCrc32?.(target))
+      : undefined;
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;

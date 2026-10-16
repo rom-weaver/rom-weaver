@@ -152,6 +152,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private weaveRom: WeaveRomExpectation | undefined;
   /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
   private readonly weaveRomChecksums = new WeakMap<object, Record<string, string>>();
+  /** The variant the weave's `rom.checks` matched when the raw file did not: its asset and CRC32.
+   * Patches without layout evidence of their own take their header/byte-order decision from it. */
+  private weaveRomLayout: { assetId: string; crc32: string } | undefined;
   /** Cancels the in-flight on-demand weave-ROM hash when the ROM is replaced or cleared. */
   private weaveRomHashAbort: AbortController | undefined;
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
@@ -211,7 +214,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
   setWeaveRom(expectation: WeaveRomExpectation | undefined): void {
-    this.weaveRom = expectation?.checks ? { ...expectation } : undefined;
+    const next = expectation?.checks ? { ...expectation } : undefined;
+    if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member)
+      this.weaveRomLayout = undefined;
+    this.weaveRom = next;
   }
 
   /** Export the exact leaves staging prepared, so a weave export right after apply needs no
@@ -311,6 +317,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   ): Promise<void> {
     this.cancelWeaveRomHash();
     return this.mutate("setInput", async () => {
+      this.weaveRomLayout = undefined;
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
       });
@@ -399,6 +406,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async clearInput(): Promise<void> {
     this.cancelWeaveRomHash();
     return this.mutate("clearInput", async () => {
+      this.weaveRomLayout = undefined;
       await this.releaseInputSession();
       this.inputs = [];
       this.inputSession = undefined;
@@ -1646,6 +1654,27 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     }
   }
 
+  /** Record the layout variant a weave-ROM verdict matched; true when it changed. A transient
+   * `unavailable` verdict keeps the previous layout. */
+  private updateWeaveRomLayout(verdict: WeaveRomRunCheck | undefined): boolean {
+    if (verdict?.status === "unavailable") return false;
+    const asset =
+      verdict?.status === "match" && verdict.variant
+        ? this.getPatchableInputAssets().find((candidate) => candidate.id === verdict.assetId)
+        : undefined;
+    const crc32 = asset?.checksumVariants?.find((variant) => variant.id === verdict?.variant)?.checksums?.crc32;
+    const next = asset && crc32 ? { assetId: asset.id, crc32 } : undefined;
+    const previous = this.weaveRomLayout;
+    if (previous?.assetId === next?.assetId && previous?.crc32 === next?.crc32) return false;
+    this.weaveRomLayout = next;
+    this.trace("weave.rom.layout", {
+      assetId: next?.assetId ?? "",
+      crc32: next?.crc32 ?? "",
+      variant: verdict?.variant ?? "",
+    });
+    return true;
+  }
+
   /** Cancel an in-flight weave-ROM hash: its file is about to be replaced. Callers that queue an
    * input change behind other work (the apply form) SHOULD call this before queueing it. */
   cancelWeaveRomHash(): void {
@@ -1712,6 +1741,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private async evaluatePatchReadiness(stage: StagedSource<TSource>): Promise<boolean> {
     return evaluateApplyPatchReadiness(stage, {
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
+      getWeaveLayoutCrc32: (target) =>
+        this.weaveRomLayout?.assetId === target.id ? this.weaveRomLayout.crc32 : undefined,
       notifyAwaitingInputTarget: (patchStage) => this.emitPatchAwaitingInputProgress(patchStage),
       parsePatch: (patchStage) => this.parsePatch(patchStage),
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
@@ -1761,6 +1792,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.mutate("validatePatches", async () => {
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
       const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
+      if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
       const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
       const pending: Array<{

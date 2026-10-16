@@ -639,6 +639,53 @@ test("a bench that diverges from the weave drops the weave's ROM checks", async 
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 });
 
+// Mount a strict form, then drop `files` onto the bench it already holds.
+const dropOntoBench = (root, files) =>
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 2 },
+      }),
+    ),
+  );
+
+test("a weave dropped onto a bench that already holds a patch does not enforce its ROM checks", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const ownPatch = ipsFile("own-hack.ips", [...IPS_HEADER, 0, 0x30, 0, 0, 1, 0x42, ...IPS_EOF]);
+  const root = mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files: [ownPatch], id: 1 },
+    }),
+  );
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["own-hack.ips"]);
+  dropOntoBench(root, [weaveArchive, wrongRom]);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["own-hack.ips", "hello-to-rom.ips", "world-to-weaver.ips"]);
+  // Every patch, the user's own included, validates on its own terms.
+  await expect
+    .poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack .file.ok").length, { timeout: 60000 })
+    .toBe(3);
+  expect(getChecksumOverride()).toBeNull();
+  expect(document.querySelector("#rom-weaver-list-patch-stack .pfault-detail")).toBeNull();
+});
+
+test("a diverged bench does not attribute the expected ROM to the weave", async () => {
+  const [weaveArchive, ownBps] = await Promise.all([buildSampleWeave(), loadFixtureFile(WRONG_INPUT_BPS)]);
+  const root = mount(createElement(ApplyPatchForm, { pageDrop: { files: [ownBps], id: 1 } }));
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toHaveLength(1);
+  dropOntoBench(root, [weaveArchive]);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toHaveLength(3);
+  // The card still shows the first patch's input checks, attributed to that patch.
+  const card = await waitForState(() => document.getElementById("rom-weaver-weave-rom-expectation"), 30000);
+  await expect.poll(() => card.textContent, { timeout: 30000 }).not.toContain("provide it yourself");
+  expect(card.textContent).not.toContain("hello-world.nes");
+});
+
 test("the weave's ROM checks apply again when the bench matches the weave", async () => {
   const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
   mountStrict([weaveArchive, wrongRom]);
@@ -878,6 +925,61 @@ test("weave rom.checks of a byte-swapped N64 ROM accept it for a big-endian BPS"
   expect(hex(normalized)).toBe(hex(modified));
   // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
   expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+// A patch with no layout evidence of its own (an IPS) applies to the layout the weave's ROM check
+// matched: the headerless body, or the big-endian byte order.
+test("an IPS applies to the headerless body when rom.checks match only the header-stripped NES ROM", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const body = headered.subarray(16);
+  const records = [
+    [0x98, 0x12],
+    [0x99, 0x0f],
+    [0x9a, 0x0d],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(body),
+    "hack.ips",
+    createIps(records),
+    "hello-world.nes",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  const modified = applyRecords(body, records);
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+});
+
+test("an IPS applies in big-endian order when rom.checks match only the .z64 layout of a .v64 dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const records = [
+    [0x1000, 0xde],
+    [0x1001, 0xad],
+    [0x1002, 0xbe],
+    [0x1003, 0xef],
+    [0x8001, 0x11],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(bigEndian),
+    "hack.ips",
+    createIps(records),
+    "game.z64",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(applyRecords(bigEndian, records)));
+});
+
+test("a patch's own layout evidence still wins over the layout rom.checks matched", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  // A BPS made for the headered file: its source CRC32 says keep the header.
+  const modified = withBytes(headered, 0x98, [0x12, 0x0f, 0x0d]);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(headered.subarray(16)),
+    "hack.bps",
+    createBps(headered, modified),
+    "hello-world.nes",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  expect(hex(output)).toBe(hex(modified));
 });
 
 const buildWeaveArchive = async (weave, patchFiles) =>
