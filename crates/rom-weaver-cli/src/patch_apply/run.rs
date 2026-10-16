@@ -440,6 +440,51 @@ impl CliApp {
         Ok(())
     }
 
+    /// Compare the weave's `rom.checks` with the ROM file it resolved to,
+    /// before any header strip or byte-order conversion; weave create hashes
+    /// those same raw bytes. `--ignore-checksum-validation` skips the check.
+    fn verify_weave_rom_checks(run: &PatchApplyRun) -> Result<()> {
+        let Some((source_label, requirements)) = run
+            .weave_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.rom_checks.as_ref())
+        else {
+            return Ok(());
+        };
+        if run.args.ignore_checksum_validation {
+            debug!(source = %source_label, "weave ROM checks skipped by --ignore-checksum-validation");
+            return Ok(());
+        }
+        trace!(
+            source = %source_label,
+            input = %run.resolved_input.display(),
+            algorithms = ?requirements.checksums.keys().collect::<Vec<_>>(),
+            size = ?requirements.size,
+            "verifying weave ROM checks against the resolved ROM"
+        );
+        if requirements.size.is_some() {
+            Self::validate_patch_size(&run.resolved_input, "input", requirements.size, None)?;
+        }
+        // Disc cached checksums describe the whole disc, not the track.
+        let no_hints = BTreeMap::new();
+        let hints = if run.disc_context.is_none() {
+            &run.cached_input_checksums
+        } else {
+            &no_hints
+        };
+        Self::validate_patch_apply_expected_checksums(
+            &run.resolved_input,
+            &requirements.checksums,
+            hints,
+            "input",
+            &run.context,
+        )?;
+        // The verified values are the resolved file's own checksums.
+        run.context
+            .seed_checksums(&run.resolved_input, &requirements.checksums);
+        Ok(())
+    }
+
     /// Resolve the ROM the chain starts from and the output it writes, then
     /// check that the output is free and every path is accessible.
     fn resolve_patch_apply_target(
@@ -494,6 +539,7 @@ impl CliApp {
                 .and_then(|resolution| resolution.expected_rom_name.as_deref()),
             &run.resolved_input,
         );
+        Self::verify_weave_rom_checks(run).map_err(|error| run.fail_error("validate", error))?;
         let (output, output_was_inferred) = self
             .resolve_patch_apply_output_path(
                 run.args.output.take(),

@@ -2064,6 +2064,208 @@ fn weave_apply_verifies_a_declared_base_first_patch_against_its_rom_member() {
     assert_eq!(bytes, None);
 }
 
+/// Runs `patch-apply` on a weave whose `rom.checks` are `rom_checks` and
+/// returns the terminal event plus the output bytes, if any were written.
+fn apply_weave_with_rom_checks(
+    temp: &TempDir,
+    rom_name: &str,
+    patch_name: &str,
+    rom_checks: serde_json::Value,
+    output_name: &str,
+    extra_args: &[&str],
+    expected_code: i32,
+) -> (serde_json::Value, Option<Vec<u8>>) {
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        json!({
+            "version": 1,
+            "rom": { "path": rom_name, "checks": rom_checks },
+            "patches": [{ "path": patch_name }],
+        })
+        .to_string(),
+    )
+    .expect("weave fixture");
+    let output = temp.child(output_name);
+    let mut args = vec![
+        "patch-apply",
+        "--input",
+        weave.path().to_str().expect("path"),
+        "--output",
+        output.path().to_str().expect("path"),
+        "--no-compress",
+        "--jsonl",
+    ];
+    args.extend_from_slice(extra_args);
+    let events = run_json_events(&args, expected_code);
+    (
+        events.last().expect("terminal").clone(),
+        fs::read(output.path()).ok(),
+    )
+}
+
+#[test]
+fn weave_rom_checks_match_a_headered_nes_rom_for_a_headerless_bps() {
+    let temp = setup_temp_dir();
+    let body: Vec<u8> = (0..64_u8).collect();
+    let mut modified = body.clone();
+    modified[0x20] = 0xAA;
+    fs::write(temp.child("body.nes").path(), &body).expect("body fixture");
+    fs::write(temp.child("modified.nes").path(), &modified).expect("modified fixture");
+    create_patch_file(
+        temp.child("body.nes").path(),
+        temp.child("modified.nes").path(),
+        "bps",
+        temp.child("update.bps").path(),
+    );
+    let rom = with_nes_header(&body);
+    fs::write(temp.child("game.nes").path(), &rom).expect("rom fixture");
+
+    // `rom.checks` describe the headered file as supplied; the BPS was made
+    // for the headerless bytes and its own source checksum decides the strip.
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "update.bps",
+        json!({ "checksums": { "crc32": crc32_hex(&rom), "md5": md5_hex(&rom) }, "size": rom.len() }),
+        "out.nes",
+        &[],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "matching ROM: {terminal}");
+    assert_eq!(bytes, Some(with_nes_header(&modified)));
+
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "update.bps",
+        json!({ "checksums": { "crc32": "00000000" }, "size": rom.len() }),
+        "wrong.nes",
+        &[],
+        1,
+    );
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum mismatch for crc32"),
+        "wrong ROM: {terminal}"
+    );
+    assert_eq!(bytes, None);
+
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.nes",
+        "update.bps",
+        json!({ "checksums": { "crc32": "00000000" }, "size": rom.len() + 1 }),
+        "override.nes",
+        &["--ignore-checksum-validation"],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "override: {terminal}");
+    assert_eq!(bytes, Some(with_nes_header(&modified)));
+
+    // A `rom.member` is checked as the member file it resolves to.
+    let archive = temp.child("roms.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (temp.child("game.nes").path(), "game.nes"),
+            (temp.child("body.nes").path(), "other.nes"),
+        ],
+        archive.path(),
+    );
+    let weave = temp.child("member-weave.json");
+    for (crc32, output_name, expected_code) in [
+        (crc32_hex(&rom), "member.nes", 0),
+        ("00000000".to_string(), "member-wrong.nes", 1),
+    ] {
+        fs::write(
+            weave.path(),
+            json!({
+                "version": 1,
+                "rom": {
+                    "path": "roms.tar.gz",
+                    "member": "game.nes",
+                    "checks": { "checksums": { "crc32": crc32 }, "size": rom.len() },
+                },
+                "patches": [{ "path": "update.bps" }],
+            })
+            .to_string(),
+        )
+        .expect("weave fixture");
+        let output = temp.child(output_name);
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                weave.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        let terminal = events.last().expect("terminal");
+        if expected_code == 0 {
+            assert_eq!(
+                fs::read(output.path()).ok(),
+                Some(with_nes_header(&modified))
+            );
+        } else {
+            assert!(
+                terminal["label"]
+                    .as_str()
+                    .expect("label")
+                    .contains("input checksum mismatch for crc32"),
+                "wrong member ROM: {terminal}"
+            );
+            assert!(!output.path().exists());
+        }
+    }
+}
+
+#[test]
+fn weave_rom_checks_leave_the_snes_header_decision_to_the_patch() {
+    let temp = setup_temp_dir();
+    // 512-byte copier header + 32 KiB payload (len % 1024 == 512). The IPS
+    // record at offset 0 lands inside the copier header on the raw basis,
+    // which proves the patch was made for the headerless bytes.
+    let body = vec![0xA5_u8; 32768];
+    let mut modified = body.clone();
+    modified[0] = b'Z';
+    fs::write(temp.child("body.sfc").path(), &body).expect("body fixture");
+    fs::write(temp.child("modified.sfc").path(), &modified).expect("modified fixture");
+    create_patch_file(
+        temp.child("body.sfc").path(),
+        temp.child("modified.sfc").path(),
+        "ips",
+        temp.child("update.ips").path(),
+    );
+    let rom = with_header(&body);
+    fs::write(temp.child("game.smc").path(), &rom).expect("rom fixture");
+
+    // A CRC-only `rom.checks` of the headered file MUST NOT pin the header.
+    let (terminal, bytes) = apply_weave_with_rom_checks(
+        &temp,
+        "game.smc",
+        "update.ips",
+        json!({ "checksums": { "crc32": crc32_hex(&rom) } }),
+        "out.sfc",
+        &["--output-header", "strip"],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "matching ROM: {terminal}");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("input header stripped (512 bytes"),
+        "header decision: {terminal}"
+    );
+    assert_eq!(bytes, Some(modified));
+}
+
 #[test]
 fn weave_apply_rejects_disabled_named_patch_input_producer() {
     let temp = setup_temp_dir();

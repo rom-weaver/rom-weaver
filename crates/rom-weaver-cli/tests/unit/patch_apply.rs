@@ -1628,6 +1628,7 @@ fn weave_resolution(
         patch_basis: PatchBasisMode::Auto,
         cheats: Vec::new(),
         checks,
+        rom_checks: None,
         expected_rom_name: None,
         output_checks,
         steps: Vec::new(),
@@ -1676,7 +1677,7 @@ fn a_weave_output_check_fills_in_what_expect_out_left_open() {
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]);
     let resolution = weave_resolution(
         vec![(
-            "weave rom.checks".to_string(),
+            "weave patches[0].inputChecks".to_string(),
             requirements(&[("md5", &"ab".repeat(16))], Some(64)),
         )],
         Some((

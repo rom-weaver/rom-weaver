@@ -23,6 +23,12 @@ pub(super) struct WeaveApplyResolution {
     pub patch_basis: PatchBasisMode,
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<NamedCheck>,
+    /// `rom.checks`: the supplied ROM file as resolved (root or `rom.member`),
+    /// before any header strip or byte-order conversion. They MUST be
+    /// compared against those raw bytes and never steer the header or N64
+    /// byte-order decision, which a patch's own input checks may describe
+    /// differently.
+    pub rom_checks: Option<NamedCheck>,
     /// Advisory file-name expectation for a ROM supplied separately from the
     /// weave. Compared after auto-extraction resolves the logical ROM leaf.
     pub expected_rom_name: Option<String>,
@@ -138,14 +144,8 @@ impl CliApp {
         let mut extract_root: Option<PathBuf> = None;
         let mut checks: Vec<NamedCheck> = Vec::new();
 
-        self.merge_weave_apply_rom(
-            args,
-            &weave,
-            &source,
-            &mut extract_root,
-            context,
-            &mut checks,
-        )?;
+        let rom_checks =
+            self.merge_weave_apply_rom(args, &weave, &source, &mut extract_root, context)?;
 
         // Explicit --patch flags replace the weave patch list wholesale;
         // the weave still contributes rom checks and output defaults.
@@ -195,6 +195,7 @@ impl CliApp {
             warnings,
             patch_basis,
             checks,
+            rom_checks,
             expected_rom_name,
             output_checks,
             steps,
@@ -248,10 +249,13 @@ impl CliApp {
                     entry_label: &entry_label,
                 })?
                 .expect("patch entries always carry a source");
-            // Only the FIRST applied patch's input state describes the
-            // supplied ROM; without its own inputChecks it relies on
-            // rom.checks (already merged). Later patches' inputChecks are
-            // mid-chain states, validated by construction of the chain.
+            // Only the FIRST applied patch's inputChecks describe the bytes
+            // the chain starts from, so they join the expected input checks,
+            // which the header and byte-order decision may use. They describe
+            // the patch's input, which can be headerless; rom.checks describe
+            // the file as supplied and are verified separately. Later
+            // patches' inputChecks are mid-chain states, validated by
+            // construction of the chain.
             let input_checks = resolve_weave_checks(
                 weave,
                 entry.input_checks.as_ref(),
@@ -329,8 +333,7 @@ impl CliApp {
         source: &WeaveApplySourceContext,
         extract_root: &mut Option<PathBuf>,
         context: &OperationContext,
-        checks: &mut Vec<NamedCheck>,
-    ) -> Result<()> {
+    ) -> Result<Option<NamedCheck>> {
         let Some(rom) = &weave.rom else {
             if matches!(source.mode, WeaveApplySourceKind::InputIsWeave) {
                 return Err(RomWeaverError::ValidationCode(
@@ -339,22 +342,23 @@ impl CliApp {
                     ),
                 ));
             }
-            return Ok(());
+            return Ok(None);
         };
-        if let Some(rom_checks) =
-            resolve_weave_checks(weave, rom.checks.as_ref(), rom.checks_ref.as_deref())?
-        {
-            checks.push((
-                "weave rom.checks".to_string(),
-                FilenameRequirements {
-                    checksums: rom_checks.checksums.clone(),
-                    size: rom_checks.size,
+        let rom_checks =
+            resolve_weave_checks(weave, rom.checks.as_ref(), rom.checks_ref.as_deref())?.map(
+                |rom_checks| {
+                    (
+                        "weave rom.checks".to_string(),
+                        FilenameRequirements {
+                            checksums: rom_checks.checksums.clone(),
+                            size: rom_checks.size,
+                        },
+                    )
                 },
-            ));
-        }
+            );
         if matches!(source.mode, WeaveApplySourceKind::Explicit) {
             trace!("weave rom source ignored: the apply input supplies the ROM directly");
-            return Ok(());
+            return Ok(rom_checks);
         }
         if rom.url.is_some() || rom.path.is_some() {
             if let Some(resolved) =
@@ -372,7 +376,7 @@ impl CliApp {
             {
                 args.input = resolved;
             }
-            return Ok(());
+            return Ok(rom_checks);
         }
 
         let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(
