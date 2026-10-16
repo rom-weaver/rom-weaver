@@ -1738,9 +1738,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
-  private async evaluatePatchReadiness(stage: StagedSource<TSource>, declaredInputChecks?: string): Promise<boolean> {
+  private async evaluatePatchReadiness(
+    stage: StagedSource<TSource>,
+    declaredInputChecks?: string,
+    previousLayout?: StagedSource<TSource>["state"],
+  ): Promise<boolean> {
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
+      previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
         this.weaveRomLayout?.assetId === target.id ? this.weaveRomLayout.crc32 : undefined,
@@ -1803,6 +1808,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         stage: StagedSource<TSource>;
         target: InputAsset;
       }> = [];
+      const previousByTarget = new Map<string, StagedSource<TSource>>();
       let skippedDisabled = 0;
       for (const [index, stage] of this.patches.entries()) {
         if (disabledIndexes?.has(index)) {
@@ -1819,10 +1825,17 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
         );
         if (!target) continue;
-        await this.evaluatePatchReadiness(stage, options?.chainMeta?.get(index)?.inputChecks);
+        const chain = options?.chainMeta?.get(index);
+        const basis = chain?.basis ?? stage.state.basisChoice ?? options?.defaultPatchBasis ?? this.defaultPatchBasis;
+        await this.evaluatePatchReadiness(
+          stage,
+          chain?.inputChecks,
+          basis === "previous" ? previousByTarget.get(target.id)?.state : undefined,
+        );
         const preflight = stage.state.checksumPreflight;
         if (!preflight) continue;
-        pending.push({ chain: options?.chainMeta?.get(index), preflight, stage, target });
+        pending.push({ chain, preflight, stage, target });
+        previousByTarget.set(target.id, stage);
       }
       // Plan-mode verdicts depend on chain position, so each target chain gets a fingerprint of
       // its ordered enabled members + declarations; any order/enablement/declaration change

@@ -1671,3 +1671,46 @@ test("a rom extracted from the weave archive shows the weave -> rom extract chai
     .poll(extractTreeNames("rom-weaver-list-patch-stack"), { timeout: 30000 })
     .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("change.ips")]));
 });
+
+test.each(["snes", "n64"])("previous-basis IPS chains preserve the %s weave layout", async (platform) => {
+  const body =
+    platform === "snes"
+      ? withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER)
+      : withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const supplied = platform === "snes" ? new Uint8Array(512 + body.length) : byteSwap16(body);
+  if (platform === "snes") supplied.set(body, 512);
+  const romName = platform === "snes" ? "game.smc" : "game.v64";
+  const firstRecords = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+    [0x9001, 0x7e],
+    [0xffff0, 0x78],
+  ];
+  const secondRecords = [[0x8001, 0x0f]];
+  const afterFirst = applyRecords(body, firstRecords);
+  const afterSecond = applyRecords(afterFirst, secondRecords);
+  const patches = [
+    new File([createIps(firstRecords)], "first.ips"),
+    new File([createIps(secondRecords)], "second.ips"),
+  ];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [
+        { path: patches[0].name, outputChecks: await fileChecks(afterFirst) },
+        {
+          path: patches[1].name,
+          basis: "previous",
+          inputChecks: await fileChecks(afterFirst),
+          outputChecks: await fileChecks(afterSecond),
+        },
+      ],
+      rom: { checks: await fileChecks(body), name: romName },
+      version: 1,
+    },
+    patches,
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([supplied], romName)]);
+  const normalized = platform === "n64" && output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(afterSecond));
+});

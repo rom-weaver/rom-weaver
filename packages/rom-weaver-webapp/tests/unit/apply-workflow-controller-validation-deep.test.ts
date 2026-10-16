@@ -127,6 +127,25 @@ describe("ApplyWorkflowController.validatePatches", () => {
     expect(second.state.requirements).toBeUndefined();
     await controller.validatePatches({ weaveRom });
     expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    const previousChecks = new Map([[1, { basis: "previous", inputChecks: "sha1=previous-output" }]]);
+    await controller.validatePatches({ weaveRom, chainMeta: previousChecks });
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "strip" });
+    first.state.headerChoice = "keep";
+    await controller.validatePatches({ weaveRom, chainMeta: previousChecks });
+    expect(second.state.headerResolution).toMatchObject({ decided: true, mode: "keep" });
+    second.state.headerChoice = "strip";
+    await controller.validatePatches({ weaveRom, chainMeta: previousChecks });
+    expect(second.state.headerChoice).toBe("strip");
+    delete first.state.headerChoice;
+    delete second.state.headerChoice;
+    await controller.validatePatches({ weaveRom, chainMeta: previousChecks, disabledIndexes: new Set([0]) });
+    expect(second.state.headerResolution).toMatchObject({ decided: false, mode: "keep" });
+    controller.patches = [second, first];
+    await controller.validatePatches({
+      weaveRom,
+      chainMeta: new Map([[0, { basis: "previous", inputChecks: "sha1=previous-output" }]]),
+    });
+    expect(second.state.headerResolution).toMatchObject({ decided: false, mode: "keep" });
   });
 
   it("batches live patches by target, records plans, and passes chain declarations", async () => {

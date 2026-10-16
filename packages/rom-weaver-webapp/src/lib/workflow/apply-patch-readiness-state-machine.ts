@@ -7,6 +7,7 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
+  previousLayout?: StagedSource<TSource>["state"];
   /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
    * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
    * evidence of its own takes its header and byte-order decision from it. */
@@ -112,6 +113,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
   target: InputAsset,
   weaveLayoutCrc32?: string,
   declaredInputChecks?: string,
+  previousLayout?: StagedSource<TSource>["state"],
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
@@ -142,8 +144,18 @@ const createApplyPatchChecksumPreflight = <TSource>(
     !!stage.state.validateInputChecksum?.trim();
   const layoutWanted = !ownLayoutEvidence && weaveLayoutCrc32 ? { sourceCrc32: weaveLayoutCrc32 } : wanted;
   const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
+  // Previous-output checks MUST keep the preceding layout; they describe patched bytes,
+  // not a separate layout of the original ROM. Explicit drawer choices still win below.
+  if (headerResolution && previousLayout?.headerResolution) {
+    headerResolution.mode = previousLayout.headerChoice ?? previousLayout.headerResolution.mode;
+    headerResolution.decided = previousLayout.headerChoice !== undefined || previousLayout.headerResolution.decided;
+  }
   stage.state.headerResolution = headerResolution;
   const n64Resolution = resolveApplyN64ByteOrder(layoutWanted, available);
+  if (n64Resolution && previousLayout?.n64Resolution) {
+    n64Resolution.mode = previousLayout.n64ByteOrderChoice ?? previousLayout.n64Resolution.mode;
+    n64Resolution.decided = previousLayout.n64ByteOrderChoice !== undefined || previousLayout.n64Resolution.decided;
+  }
   stage.state.n64Resolution = n64Resolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -303,6 +315,7 @@ const settleApplyPatchTarget = async <TSource>(
           target,
           adapters.getWeaveLayoutCrc32?.(target),
           adapters.declaredInputChecks,
+          adapters.previousLayout,
         )
       : undefined;
     stage.state.checksumPreflight = preflight;
