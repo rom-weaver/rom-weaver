@@ -6,11 +6,11 @@
 
 use super::*;
 
-fn scratch_dir(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
+fn scratch_dir(label: &str) -> crate::test_support::TempPath {
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-create-pipeline-{}-{label}",
         std::process::id()
-    ));
+    )));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create scratch dir");
     dir

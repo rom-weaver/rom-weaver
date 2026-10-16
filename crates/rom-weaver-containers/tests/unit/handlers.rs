@@ -19,6 +19,7 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
+    use crate::test_support::TempPath;
     use crate::{
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
@@ -81,48 +82,23 @@ mod tests {
         }
     }
 
-    fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
+    fn temp_file_path_with_extension(label: &str, extension: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-probe-{label}-{}-{timestamp}.{extension}",
             test_process_id(),
-        ))
+        )))
     }
 
-    /// A unique scratch directory path that is removed when the guard drops, so
-    /// it is cleaned up after a passing test, a failed assertion, and a panic.
-    /// The directory is not created here; tests create what they need.
-    struct TempDirGuard(PathBuf);
-
-    impl std::ops::Deref for TempDirGuard {
-        type Target = Path;
-
-        fn deref(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl AsRef<Path> for TempDirGuard {
-        fn as_ref(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempDirGuard {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn temp_dir_path(label: &str) -> TempDirGuard {
+    fn temp_dir_path(label: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        TempDirGuard(test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-tests-{label}-{}-{timestamp}",
             test_process_id(),
         )))

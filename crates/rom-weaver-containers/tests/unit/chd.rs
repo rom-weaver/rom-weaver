@@ -451,10 +451,10 @@ fn msf_parsing_rejects_minute_overflow() {
 #[test]
 fn parse_wave_file_rejects_oversized_fmt_chunk() {
     let handler = ChdContainerHandler;
-    let path = std::env::temp_dir().join(format!(
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-unit-{}-oversized-fmt.wav",
         std::process::id()
-    ));
+    )));
 
     // A valid RIFF/WAVE header followed by a fmt chunk that declares a ~4 GiB
     // length. The parser must reject it before allocating a read buffer.
@@ -873,10 +873,10 @@ fn compute_overall_sha1_hashes_and_orders_metadata() {
 #[test]
 fn patch_chd_header_writes_big_endian_and_restores_cursor() {
     let handler = ChdContainerHandler;
-    let path = std::env::temp_dir().join(format!(
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-unit-{}-patch-header.bin",
         std::process::id()
-    ));
+    )));
     let mut file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -1780,8 +1780,9 @@ fn encode_avhuff_chav_hunk_validates_and_emits_header() {
 /// so success output stays byte-identical.
 #[test]
 fn chd_output_cleanup_removes_partials_only_when_uncommitted() {
-    let dir =
-        std::env::temp_dir().join(format!("rw-chd-unit-{}-cleanup-guard", std::process::id()));
+    let dir = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-cleanup-guard", std::process::id())),
+    );
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let dropped = dir.join("dropped.bin");
@@ -1815,10 +1816,10 @@ fn chd_output_cleanup_removes_partials_only_when_uncommitted() {
 /// path before the (failing) create would have destroyed protected data.
 #[test]
 fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
-    let dir = std::env::temp_dir().join(format!(
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-unit-{}-cleanup-no-overwrite",
         std::process::id()
-    ));
+    )));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let existing = dir.join("existing.bin");
@@ -1964,7 +1965,9 @@ fn chd_raw_extract_sizes_output_before_streaming() {
             }
         }
     }
-    let dir = std::env::temp_dir().join(format!("rw-chd-unit-{}-sized-output", std::process::id()));
+    let dir = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-sized-output", std::process::id())),
+    );
     fs::create_dir_all(&dir).unwrap();
     let source = vec![0x5a; 1024 * 1024 + 123];
     let input = dir.join("input.bin");

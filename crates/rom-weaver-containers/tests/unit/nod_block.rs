@@ -5,7 +5,6 @@
 use std::{
     fs,
     io::Cursor,
-    path::PathBuf,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -22,15 +21,15 @@ use crate::nod::{
 
 const TEST_KEY: KeyBytes = [0x42; 16];
 
-fn temp_dir(label: &str) -> PathBuf {
+fn temp_dir(label: &str) -> crate::test_support::TempPath {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time")
         .as_nanos();
-    let path = std::env::temp_dir().join(format!(
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rom-weaver-nod-block-{label}-{}-{stamp}",
         std::process::id()
-    ));
+    )));
     fs::create_dir_all(&path).expect("create temp dir");
     path
 }
