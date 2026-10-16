@@ -62,6 +62,7 @@ import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
+import { runAppearanceTransition } from "./appearance-transition.ts";
 import { ABOUT_URL, DONATE_URL, GITHUB_URL, PRIVACY_URL } from "./project-links.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
 import { shouldWarnBeforeUnload } from "./unload-guard.ts";
@@ -1151,7 +1152,12 @@ function WebappRoot({
                 <Suspense fallback={null}>
                   <SettingsPanel
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-                    onDraftChange={actions.onDraftChange}
+                    onDraftChange={(field, value) =>
+                      // The accent previews and persists at once, like the theme; the rest wait for Save.
+                      field === "accent" && typeof value === "string"
+                        ? runAppearanceTransition(() => actions.onAccentChange(value), "accent")
+                        : actions.onDraftChange(field, value)
+                    }
                     uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
                     validation={state.validation}
                   />

@@ -748,6 +748,29 @@ describe("the settings draft flow", () => {
     expect(called("onSaveClose")).toHaveBeenCalledTimes(1);
   });
 
+  it("applies an accent chosen in the dialog at once while other fields stay drafts", async () => {
+    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+    await openSettings(container);
+    const chip = await waitFor(() => {
+      const input = container.querySelector<HTMLInputElement>('.accent-picker input[type="radio"]:not(:checked)');
+      if (!input) throw new Error("The settings tab rendered no accent chip");
+      return input;
+    });
+
+    fireEvent.click(chip);
+
+    expect(called("onAccentChange")).toHaveBeenCalledWith(chip.value);
+    expect(called("onDraftChange")).not.toHaveBeenCalled();
+
+    const checkbox = container.querySelector<HTMLInputElement>("#settings-beta-tools-enabled");
+    if (!checkbox) throw new Error("The settings tab rendered no beta tools field");
+    fireEvent.click(checkbox);
+
+    expect(called("onDraftChange")).toHaveBeenCalledTimes(1);
+    expect(called("onDraftChange").mock.calls[0]?.[0]).toBe("betaToolsEnabled");
+    expect(called("onAccentChange")).toHaveBeenCalledTimes(1);
+  });
+
   it("deep links the page thread count into the Threads setting", async () => {
     const { called, container } = await renderRoot();
 

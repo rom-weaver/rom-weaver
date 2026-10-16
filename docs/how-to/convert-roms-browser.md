@@ -33,7 +33,7 @@ To decompress images, use [CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md),
   <figcaption>Select the files inside an archive that you want to compress.</figcaption>
 </figure>
 
-ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
+ZIP and 7z accept arbitrary file sets. CHD accepts CD, GD-ROM, and DVD disc images (hard-disk and raw CHDs need the CLI). RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
 ## Choose an output
 

@@ -101,6 +101,8 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 
+The browser's Compress page creates only CD, GD-ROM, and DVD CHDs, and it never inspects file contents to choose among them. It offers **CHD** for exactly one `.cue` or `.gdi` sheet whose referenced tracks are all supplied, with no unreferenced extra file and no duplicate track base names, or for a single `.bin` or `.iso` whose size is a whole number of 2048- or 2352-byte sectors. A second sheet, a missing or extra file, or duplicate track names leaves only ZIP and 7z. RVZ has no size check: it is offered for any single input with a GameCube or Wii extension such as `.iso`, including one whose size is not sector-aligned. A `.cue` or `.bin` input becomes a CD CHD, a `.gdi` a GD-ROM CHD, and an `.iso` a CD CHD up to 450,000 sectors of 2048 bytes (about 921 MB) or a DVD CHD above that. A hard-disk or raw image is not recognized: a `.bin` of that shape still gets the CD layout, and one with another extension or an unaligned size is offered only ZIP and 7z. Hard-disk, raw, and A/V CHD creation needs the native CLI.
+
 ### Z3DS filename variants
 
 The browser's Z3DS output option selects the compressed extension from the source filename. Each subtype stores one Nintendo 3DS file.
