@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
+
+import { makeTempDir } from "./test-temp-dirs.mjs";
 
 import {
   GOODTOOLS_DAT_PATH,
@@ -117,7 +118,7 @@ const REDUMP_DAT = `clrmamepro ( name "Sony - PlayStation" )
 game ( name "Disc" rom ( name "Disc (Track 1).bin" size 16 crc AABBCCDD ) )`;
 
 function tempDir(prefix) {
-  return mkdtempSync(join(os.tmpdir(), `rw-identify-${prefix}-`));
+  return makeTempDir(`rw-identify-${prefix}-`);
 }
 
 function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
@@ -1032,7 +1033,7 @@ const buildArchive = async (dir, entries) => {
 };
 
 test("extractArchiveMembers writes the requested members with the top level stripped", async () => {
-  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-"));
+  const dir = makeTempDir("rw-tar-");
   const archive = await buildArchive(dir, { "dats/a.dat": "alpha", "dats/b.dat": "beta" });
   const sourceRoot = join(dir, "out");
   mkdirSync(sourceRoot, { recursive: true });
@@ -1051,7 +1052,7 @@ test("extractArchiveMembers writes the requested members with the top level stri
 });
 
 test("extractArchiveMembers resolves a PAX long name", async () => {
-  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-pax-"));
+  const dir = makeTempDir("rw-tar-pax-");
   const archive = await buildArchive(dir, { [LONG_MEMBER]: "long" });
   const sourceRoot = join(dir, "out");
   mkdirSync(sourceRoot, { recursive: true });
@@ -1067,7 +1068,7 @@ test("extractArchiveMembers resolves a PAX long name", async () => {
 });
 
 test("extractArchiveMembers reports a member the archive does not hold", async () => {
-  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-missing-"));
+  const dir = makeTempDir("rw-tar-missing-");
   const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
   const sourceRoot = join(dir, "out");
   mkdirSync(sourceRoot, { recursive: true });
@@ -1081,7 +1082,7 @@ test("extractArchiveMembers reports a member the archive does not hold", async (
 test("extract targets are joined with the platform separator", async () => {
   // The member name stays `/`-separated because that is what a tar holds, while
   // the path written to disk MUST use the platform's separator.
-  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-sep-"));
+  const dir = makeTempDir("rw-tar-sep-");
   const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
   const sourceRoot = join(dir, "out");
   mkdirSync(sourceRoot, { recursive: true });
@@ -1126,7 +1127,7 @@ test("no npm package is imported at module scope", () => {
 });
 
 test("extractArchiveDirectory writes every .cht file below one archive directory", async () => {
-  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-dir-"));
+  const dir = makeTempDir("rw-tar-dir-");
   const archive = await buildArchive(dir, {
     "cht/Nintendo - Game Boy/Zelda (USA).cht": 'cheat0_desc = "Lives"\n',
     "cht/Nintendo - Game Boy/Sub/Nested.CHT": "cheat0_code = 0100\n",

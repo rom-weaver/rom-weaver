@@ -2,7 +2,7 @@ use super::*;
 use std::{
     fs,
     io::Cursor,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     sync::Arc,
     sync::atomic::{AtomicU64, Ordering},
@@ -1833,7 +1833,24 @@ fn apply_fails_for_trailing_secondary_payload_bytes() {
     }
 }
 
-fn create_temp_dir() -> PathBuf {
+/// A scratch directory removed when it drops, including while a failed assertion unwinds.
+struct TempGuard(PathBuf);
+
+impl std::ops::Deref for TempGuard {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn create_temp_dir() -> TempGuard {
     let unique = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1844,7 +1861,7 @@ fn create_temp_dir() -> PathBuf {
         process::id()
     ));
     fs::create_dir_all(&path).expect("create temp dir");
-    path
+    TempGuard(path)
 }
 
 fn test_context() -> OperationContext {
@@ -1852,9 +1869,10 @@ fn test_context() -> OperationContext {
 }
 
 fn test_context_with_threads(threads: usize) -> OperationContext {
-    OperationContext::new(
+    OperationContext::new_with_private_temp_root(
         ThreadBudget::Fixed(threads),
-        create_temp_dir().join("context"),
+        &std::env::temp_dir(),
+        "rom-weaver-vcdiff-tests-context",
         Arc::new(NoopProgressSink),
         CancellationToken::new(),
     )
