@@ -403,7 +403,7 @@ pub trait ContainerHandlerOperations: Send + Sync {
     }
     /// True when `source` carries this format's signature but holds no payload to extract, so
     /// it is itself the ROM (for example a PSP homebrew `EBOOT.PBP` with an empty `DATA.PSAR`).
-    /// Ingest then handles it as a bare ROM instead of an archive.
+    /// Automatic payload resolution and recursive extraction MUST retain it as a ROM leaf.
     fn is_self_contained_rom(&self, source: &Path) -> bool {
         let _ = source;
         false

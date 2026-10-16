@@ -1772,12 +1772,7 @@ fn ingest_missing_input_uses_the_shared_wording() {
 #[test]
 fn ingest_treats_a_pbp_with_an_empty_psar_as_a_bare_psp_rom() {
     let temp = setup_temp_dir();
-    let mut pbp = vec![0x5a_u8; 0x100];
-    pbp[..8].copy_from_slice(&[0x00, b'P', b'B', b'P', 0, 0, 1, 0]);
-    for section in 0..8 {
-        let offset = if section < 7 { 0x28_u32 } else { 0x100 };
-        pbp[8 + section * 4..12 + section * 4].copy_from_slice(&offset.to_le_bytes());
-    }
+    let pbp = build_test_empty_psar_pbp();
     let source = temp.child("EBOOT.PBP");
     fs::write(source.path(), &pbp).expect("pbp fixture");
     let out_dir = temp.child("ingest-out");
@@ -1798,4 +1793,70 @@ fn ingest_treats_a_pbp_with_an_empty_psar_as_a_bare_psp_rom() {
     assert_eq!(assets[0]["file_name"], "EBOOT.PBP");
     assert_eq!(assets[0]["platform"], "Sony Playstation Portable");
     assert_eq!(assets[0]["copied_in_place"], true);
+}
+
+#[test]
+fn ingest_nested_empty_psar_pbp_is_a_rom_leaf() {
+    let temp = setup_temp_dir();
+    let pbp = build_test_empty_psar_pbp();
+    let source = temp.child("EBOOT.PBP");
+    fs::write(source.path(), &pbp).expect("pbp fixture");
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    let inner = temp.child("homebrew.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(inner.path(), "homebrew.zip")], outer.path());
+    for (depth, archive) in [inner.path(), outer.path()].into_iter().enumerate() {
+        let output = temp.child(format!("ingest-{depth}"));
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "ingest",
+                "--input",
+                archive.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+        let ingest = &terminal["details"]["ingest"];
+        assert_eq!(ingest["kind"], "rom");
+        let assets = ingest["assets"].as_array().expect("assets");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0]["file_name"], "EBOOT.PBP");
+        assert_eq!(assets[0]["platform"], "Sony Playstation Portable");
+        assert_eq!(assets[0]["copied_in_place"], false);
+        assert_eq!(
+            assets[0]["checksums"]["sha1"],
+            checksum["details"]["checksums"]["sha1"]
+        );
+        let extracted = assets[0]["path"].as_str().expect("asset path");
+        assert_eq!(fs::read(extracted).expect("extracted PBP"), pbp);
+    }
 }

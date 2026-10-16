@@ -410,6 +410,34 @@ pub(crate) fn write_xiso_fixture_from_directory(
     output.flush().expect("flush xiso");
 }
 
+pub(crate) fn isolated_json_event(temp: &TempDir, args: &[&str], expected_code: i32) -> Value {
+    let home = temp.child("cli-home");
+    fs::create_dir_all(home.path()).expect("isolated CLI home");
+    let home = home.path().to_str().expect("home path");
+    parse_single_json_line(&command_stdout_with_env(
+        args,
+        &[
+            ("HOME", home),
+            ("XDG_CACHE_HOME", home),
+            ("XDG_CONFIG_HOME", home),
+            ("XDG_STATE_HOME", home),
+            ("XDG_DATA_HOME", home),
+            ("TMPDIR", home),
+        ],
+        expected_code,
+    ))
+}
+
+pub(crate) fn build_test_empty_psar_pbp() -> Vec<u8> {
+    let mut pbp = vec![0x5a_u8; 0x100];
+    pbp[..8].copy_from_slice(&[0x00, b'P', b'B', b'P', 0, 0, 1, 0]);
+    for section in 0..8 {
+        let offset = if section < 7 { 0x28_u32 } else { 0x100 };
+        pbp[8 + section * 4..12 + section * 4].copy_from_slice(&offset.to_le_bytes());
+    }
+    pbp
+}
+
 pub(crate) const TEST_PBP_SECTOR_BYTES: usize = 0x930;
 pub(crate) const TEST_PBP_BLOCK_BYTES: usize = TEST_PBP_SECTOR_BYTES * 16;
 pub(crate) const TEST_PBP_PSAR_INDEX_OFFSET: usize = 0x4000;

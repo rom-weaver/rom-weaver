@@ -321,10 +321,14 @@ impl CliApp {
                 extracted_archives,
                 "auto-extract iteration"
             );
-            let Some(handler) = self.containers.probe(&current_source) else {
+            let Some(handler) = self
+                .containers
+                .probe(&current_source)
+                .filter(|handler| !handler.is_self_contained_rom(&current_source))
+            else {
                 trace!(
                     current_source = %current_source.display(),
-                    "auto-extract stopped: no container handler matched source"
+                    "auto-extract stopped: no extractable container handler matched source"
                 );
                 break;
             };
