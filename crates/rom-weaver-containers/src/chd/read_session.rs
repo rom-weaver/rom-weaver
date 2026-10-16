@@ -364,43 +364,19 @@ impl ChdReadSession {
         Ok(())
     }
 
-    /// Browser wasi-threads guard: pre-grow the heap once on the main thread to cover a full
-    /// batch's concurrent working set (per-thread stacks + decoded output + in-flight compressed
-    /// bytes), so the parallel decode reuses committed memory and performs no `memory.grow` while
-    /// sibling threads run. dlmalloc only grows above the initial `memory.size`, so without this the
-    /// first batch's allocations grow the heap mid-decode and V8 can race that into an OOB trap that
-    /// wedges the join. No-op off wasm.
-    #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+    /// Reserves a full batch's concurrent working set (worker stacks plus decoded output and
+    /// in-flight compressed bytes) before the batch threads spawn, so the parallel decode never
+    /// grows the heap while siblings run; see [`reserve_parallel_heap`].
     fn pregrow_decode_heap(batch_hunks: usize, hunk_bytes_usize: usize, effective_threads: usize) {
-        const STACK_RESERVE_PER_THREAD: usize = 4 * 1024 * 1024;
-        const HEAP_RESERVE_MARGIN: usize = 32 * 1024 * 1024;
-        const HEAP_RESERVE_MAX: usize = 768 * 1024 * 1024;
         let batch_bytes = batch_hunks.saturating_mul(hunk_bytes_usize);
         let reserve = batch_bytes
             .saturating_mul(2)
-            .saturating_add(effective_threads.saturating_mul(STACK_RESERVE_PER_THREAD))
-            .saturating_add(HEAP_RESERVE_MARGIN)
-            .min(HEAP_RESERVE_MAX);
+            .saturating_add(parallel_heap_reserve(effective_threads));
         trace!(
             reserve,
-            batch_bytes,
-            effective_threads,
-            "chd wasm decode pregrow heap to avoid memory.grow race"
+            batch_bytes, effective_threads, "chd decode reserve parallel heap"
         );
-        // Touch the allocation so the grow cannot be elided, then drop it; wasm memory never
-        // shrinks, so the committed pages stay in dlmalloc's free list for the decode threads.
-        let mut heap_warm: Vec<u8> = Vec::with_capacity(reserve);
-        heap_warm.push(0);
-        std::hint::black_box(heap_warm.as_ptr());
-        drop(heap_warm);
-    }
-
-    #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
-    fn pregrow_decode_heap(
-        _batch_hunks: usize,
-        _hunk_bytes_usize: usize,
-        _effective_threads: usize,
-    ) {
+        reserve_parallel_heap(reserve);
     }
 
     fn stream_with_rust<F>(

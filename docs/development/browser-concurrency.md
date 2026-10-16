@@ -24,6 +24,8 @@ The wire constants and small `Atomics` helpers live in `packages/rom-weaver-weba
 
 The barrier serializes thread startup. Each new thread may grow shared WASM memory while allocating its stack. Starting several threads at once can race the browser's shared-memory update and cause an out-of-bounds hang. The caller therefore waits until one thread has started before it starts the next one.
 
+The barrier does not stop growth after startup: worker stacks and buffers allocated while siblings run hit the same race. `ordered_streaming_compress` and CHD decode therefore reserve their heap on the coordinating thread before spawning, and any new threaded section that allocates while siblings run needs the same; see the threading model in [ARCHITECTURE.md](ARCHITECTURE.md#threading-model).
+
 Each worker has a four-word control buffer:
 
 | Index | Value | Direction |

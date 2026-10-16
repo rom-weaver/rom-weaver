@@ -11,6 +11,7 @@ mod error;
 mod formatting;
 mod io;
 mod media_topology;
+mod parallel_heap;
 mod patch_support;
 mod progress;
 mod prompt;
@@ -62,6 +63,7 @@ pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,
     MediaTopology, PlatformCandidate,
 };
+pub use parallel_heap::{parallel_heap_reserve, reserve_parallel_heap};
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
 pub use progress::{
     ContainerByteProgress, NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent,

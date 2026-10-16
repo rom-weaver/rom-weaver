@@ -22,7 +22,8 @@ use rom_weaver_core::{
     SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, attach_emitted_file_paths,
     attach_extraction_details, build_emitted_file_detail, create_extract_output_file,
     file_starts_with, insert_thread_execution_details, maybe_emit_container_byte_progress,
-    operation_report_details, ordered_streaming_compress,
+    operation_report_details, ordered_streaming_compress, parallel_heap_reserve,
+    reserve_parallel_heap,
 };
 use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};
