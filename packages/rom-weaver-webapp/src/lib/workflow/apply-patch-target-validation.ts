@@ -13,6 +13,7 @@ import {
   createApplyPatchValidationKey,
 } from "./apply-patch-readiness-state-machine.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
+import { compareWeaveRomChecks } from "../weave/weave-targets.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 // An aborted or transient worker failure is not a verdict on the patch. Caching one as a terminal
@@ -48,8 +49,8 @@ type PatchChainDeclaration = {
   inputChecks?: string;
   /** Declared output checks as comma-separable `algo=hex` tokens. */
   outputChecks?: string;
-  /** The run's expected-ROM checks (`algo=hex` / `size=N` tokens), verified once against the ROM
-   * this chain starts from (`--expect-in`), never as this patch's own input declaration. */
+  /** The weave's expected-ROM checks (`algo=hex` / `size=N` tokens), compared with the supplied
+   * ROM file's own checksums before the plan call; never this patch's own input declaration. */
   expectedRomChecks?: string;
 };
 
@@ -345,15 +346,27 @@ const validatePreparedGroup = async <TSource>(
       });
     }
   };
+  // The weave's expected ROM describes the file as supplied, so it is compared with the staged
+  // file's own checksums, not sent to the engine (which checks after header/byte-order handling).
+  // A mismatch fails every grouped patch as a checksum mismatch, so the strict-validation override
+  // applies as it does for a patch's own source checksum.
+  const expectedRomChecks = prepared.map(({ entry }) => entry.chain?.expectedRomChecks).find(Boolean);
+  const romVerdict = expectedRomChecks
+    ? compareWeaveRomChecks(expectedRomChecks, {
+        checksums: getInputAssetChecksums(first.entry.target),
+        size: first.entry.target.size,
+      })
+    : undefined;
+  if (romVerdict?.status === "mismatch") {
+    for (const { entry, startedAt, validationKey } of prepared) {
+      applyPatchVerdict(entry.stage, entry.target, validationKey, startedAt, {
+        message: romVerdict.message || "Input checksum mismatch",
+        status: "invalid",
+      });
+    }
+    return;
+  }
   emitToAll("Validating patch against selected target", null);
-  // A mismatch fails the whole call, so every grouped patch reads as a checksum mismatch and
-  // the strict-validation override applies, as it does for a patch's own source checksum.
-  const expectedRomChecks = prepared
-    .map(({ entry }) => entry.chain?.expectedRomChecks)
-    .find(Boolean)
-    ?.split(",")
-    .map((token) => token.trim())
-    .filter(Boolean);
 
   try {
     const result = await validatePatch({
@@ -391,7 +404,6 @@ const validatePreparedGroup = async <TSource>(
           : {}),
         plan: true,
         removeHeader: first.headerRemoved,
-        ...(expectedRomChecks?.length ? { validateWithChecksums: expectedRomChecks } : {}),
         threads: adapters.settings.workers?.threads,
       },
       patches: prepared.map(({ entry, patchFile, patchSource }) => ({

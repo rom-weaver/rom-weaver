@@ -2,7 +2,7 @@ import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 
 import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
 import { fillMemberLaneChecks } from "../../lib/weave/weave-member-checks.ts";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
-import { weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
+import { readsWeaveRootRom, weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
@@ -277,7 +277,12 @@ const useWeaveApplySession = ({
           // because it applies only while the full weave chain remains intact.
           for (const [index, entry] of session.entries.entries()) {
             if (!isCurrent()) return;
-            const inputChecks = index === 0 ? session.chainEndpointChecks.input?.checksums : undefined;
+            // Only a first patch's own declared input state seeds its input checksum. The weave's
+            // rom.checks describe the file as supplied: a seeded CRC32 would join the preflight and
+            // steer the header decision for a patch made for headerless bytes. The apply form
+            // compares rom.checks with the supplied file instead.
+            const inputChecks =
+              index === 0 && readsWeaveRootRom(entry, session.romMember) ? entry.inputChecks?.checksums : undefined;
             const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
             await Promise.resolve(
               controllersRef.current.patchStack?.setPatchOption?.(index, {

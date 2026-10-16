@@ -67,40 +67,47 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     );
   });
 
-  it("forwards the weave's expected ROM as the run's expected input, not a patch input check", async () => {
+  // The target's own checksums are those of the file as supplied (game.rom, 4096 bytes).
+  const createCheckedTarget = () =>
+    ({ ...createTarget(), checksums: { crc32: "3e30b9b3", sha1: "22f5" } }) as InputAsset;
+
+  it("compares the weave's expected ROM with the supplied file and never sends it to the engine", async () => {
+    const stage = createStage();
     const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
     await validateApplyPatchTargets(
       [
         {
-          chain: { basis: "base", expectedRomChecks: "crc32=3e30b9b3,size=24592" },
+          chain: { basis: "base", expectedRomChecks: "crc32=3e30b9b3,size=4096" },
           preflight,
-          stage: createStage(),
-          target: createTarget(),
+          stage,
+          target: createCheckedTarget(),
         },
       ],
       createAdapters(validatePatch),
     );
     const options = validatePatch.mock.calls[0]?.[0]?.options;
-    expect(options).toMatchObject({ validateWithChecksums: ["crc32=3e30b9b3", "size=24592"] });
+    expect(options).not.toHaveProperty("validateWithChecksums");
     expect(options).not.toHaveProperty("patchInputChecks");
+    expect(stage.state.patchValidation?.status).toBe("valid");
   });
 
-  it("records a checksum mismatch on every grouped patch when the expected ROM does not match", async () => {
+  it("fails every grouped patch as a checksum mismatch without a worker call when the ROM differs", async () => {
     const stages = [createStage(), createStage()];
-    const validatePatch = vi
-      .fn()
-      .mockRejectedValue(new RomWeaverError("CHECKSUM_MISMATCH", "input checksum mismatch for crc32"));
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
     await validateApplyPatchTargets(
       stages.map((stage, index) => ({
-        chain: index === 0 ? { expectedRomChecks: "crc32=3e30b9b3" } : {},
+        chain: index === 0 ? { expectedRomChecks: "crc32=a1cecd74,size=4096" } : {},
         preflight,
         stage,
-        target: createTarget(),
+        target: createCheckedTarget(),
       })),
       createAdapters(validatePatch),
     );
-    expect(validatePatch).toHaveBeenCalledOnce();
+    expect(validatePatch).not.toHaveBeenCalled();
     expect(stages.map((stage) => stage.state.patchValidation?.status)).toEqual(["invalid", "invalid"]);
+    expect(stages[0]?.state.patchValidation?.message).toBe(
+      "Input checksum mismatch for crc32; expected a1cecd74, actual 3e30b9b3",
+    );
   });
 
   it("records a non-terminal 'unknown' verdict when validation is cancelled", async () => {

@@ -495,12 +495,9 @@ test("sample weave applies on its matching ROM under strict validation", async (
     await clickApplyButton();
     expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
     const options = applySpy.mock.calls.at(-1)?.[0]?.options;
-    // The weave's ROM checks are the run's expected input, never patch 0's own input declaration.
-    expect(options?.validateWithChecksums).toEqual([
-      "crc32=3e30b9b3",
-      "md5=df0e55e0f744b2d9734ef90e4454aa8f",
-      "sha1=22f56591eb4dbb85fbb6398cd0c4554558f70603",
-    ]);
+    // The weave's ROM checks are compared with the supplied file in the browser; they are neither
+    // the engine's --expect-in nor patch 0's own input declaration.
+    expect(options?.validateWithChecksums).toBeUndefined();
     expect(options?.patchInputChecks).toBeUndefined();
   } finally {
     applySpy.mockRestore();
@@ -559,7 +556,7 @@ for (const romKind of ["matching", "wrong"]) {
       expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
       const options = applySpy.mock.calls.at(-1)?.[0]?.options;
       expect(options?.patchInputChecks).toBeUndefined();
-      if (romKind === "matching") expect(options?.validateWithChecksums).toContain("crc32=3e30b9b3");
+      expect(options?.validateWithChecksums).toBeUndefined();
     } finally {
       applySpy.mockRestore();
     }
@@ -590,11 +587,234 @@ test("expected-ROM checks follow a reordered sample weave", async () => {
     await clickApplyButton();
     expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
     const options = applySpy.mock.calls.at(-1)?.[0]?.options;
-    expect(options?.validateWithChecksums).toContain("crc32=3e30b9b3");
+    expect(options?.validateWithChecksums).toBeUndefined();
     expect(options?.patchInputChecks).toBeUndefined();
   } finally {
     applySpy.mockRestore();
   }
+});
+
+// Header and N64 byte-order cases: rom.checks describe the file as supplied (as weave export and
+// `weave create` write them), while the patch targets headerless or big-endian bytes. The checks
+// must neither block the matching ROM nor change the engine's automatic header decision.
+const CRC32_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+const crc32 = (bytes) => {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = CRC32_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+};
+const hex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const fileChecks = async (bytes) => ({
+  checksums: {
+    crc32: crc32(bytes).toString(16).padStart(8, "0"),
+    sha1: hex(new Uint8Array(await crypto.subtle.digest("SHA-1", bytes))),
+  },
+  size: bytes.length,
+});
+// Deterministic pseudo-random bytes (xorshift32), so the ROM has no accidental structure.
+const noiseBytes = (length, seed) => {
+  const bytes = new Uint8Array(length);
+  let state = seed >>> 0;
+  for (let index = 0; index < length; index += 1) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    bytes[index] = state & 0xff;
+  }
+  return bytes;
+};
+const withBytes = (source, offset, replacement) => {
+  const bytes = new Uint8Array(source);
+  bytes.set(replacement, offset);
+  return bytes;
+};
+const vlq = (value) => {
+  const out = [];
+  let rest = value;
+  for (;;) {
+    const low = rest & 0x7f;
+    rest = Math.floor(rest / 128);
+    if (rest === 0) {
+      out.push(0x80 | low);
+      return out;
+    }
+    out.push(low);
+    rest -= 1;
+  }
+};
+const u32le = (value) => [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+// A same-size BPS: SourceRead the unchanged prefix, TargetRead the changed span, SourceRead the rest.
+const createBps = (source, target) => {
+  let start = 0;
+  while (start < source.length && source[start] === target[start]) start += 1;
+  let end = source.length;
+  while (end > start && source[end - 1] === target[end - 1]) end -= 1;
+  const bytes = [0x42, 0x50, 0x53, 0x31, ...vlq(source.length), ...vlq(target.length), ...vlq(0)];
+  if (start > 0) bytes.push(...vlq((start - 1) * 4));
+  bytes.push(...vlq((end - start - 1) * 4 + 1), ...target.subarray(start, end));
+  if (end < source.length) bytes.push(...vlq((source.length - end - 1) * 4));
+  bytes.push(...u32le(crc32(source)), ...u32le(crc32(target)));
+  bytes.push(...u32le(crc32(bytes)));
+  return new Uint8Array(bytes);
+};
+// One-byte IPS records: [offset, value].
+const createIps = (records) =>
+  new Uint8Array([
+    ...IPS_HEADER,
+    ...records.flatMap(([offset, value]) => [
+      (offset >>> 16) & 0xff,
+      (offset >>> 8) & 0xff,
+      offset & 0xff,
+      0,
+      1,
+      value,
+    ]),
+    ...IPS_EOF,
+  ]);
+const applyRecords = (source, records) => {
+  const bytes = new Uint8Array(source);
+  for (const [offset, value] of records) bytes[offset] = value;
+  return bytes;
+};
+// A LoROM internal header ("TEST GAME", map mode 0x20, 1 MiB) at 0x7fc0 of the headerless image.
+const SNES_INTERNAL_HEADER = [
+  0x54,
+  0x45,
+  0x53,
+  0x54,
+  0x20,
+  0x47,
+  0x41,
+  0x4d,
+  0x45,
+  ...Array.from({ length: 13 }, () => 0x20),
+  0x00,
+  0x0a,
+  0x00,
+  0x01,
+  0x33,
+  0x00,
+  0x12,
+  0x4b,
+  0xfb,
+  0x9f,
+];
+const byteSwap16 = (source) => {
+  const bytes = new Uint8Array(source.length);
+  for (let index = 0; index + 1 < source.length; index += 2) {
+    bytes[index] = source[index + 1];
+    bytes[index + 1] = source[index];
+  }
+  return bytes;
+};
+
+const buildTransformWeave = async (romChecks, patchName, patchBytes, romName) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "transform-output" },
+        patches: [{ name: "Hack", path: patchName }],
+        rom: { checks: romChecks, name: romName },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: new File([patchBytes], patchName), fileName: patchName },
+    ],
+    "transform-weave.zip",
+  );
+};
+
+// Apply under strict validation and return the bytes the engine produced.
+const applyWeaveAndReadOutput = async (files) => {
+  const original = browserRuntime.patch.applyPatch;
+  let outputBytes = null;
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch").mockImplementation(async (input) => {
+    const output = await original.call(browserRuntime.patch, input);
+    outputBytes = new Uint8Array(await (await browserRuntime.publicOutput.getBlob(output)).arrayBuffer());
+    return output;
+  });
+  try {
+    mountStrict(files);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("transform-output");
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    if (!outputBytes) throw new Error("apply produced no output");
+    return { options: applySpy.mock.calls.at(-1)?.[0]?.options, output: outputBytes };
+  } finally {
+    applySpy.mockRestore();
+  }
+};
+
+test("weave rom.checks of a headered ROM accept it for a headerless BPS", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const headerless = headered.subarray(16);
+  const modified = withBytes(headerless, 0x98, [0x12, 0x0f, 0x0d, 0x00, 0x00]);
+  const weaveArchive = await buildTransformWeave(
+    SAMPLE_ROM_CHECKS,
+    "hack.bps",
+    createBps(headerless, modified),
+    "hello-world.nes",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, await loadFixtureFile(SAMPLE_ROM)]);
+  // The patched headerless bytes, with or without the copier header put back.
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+test("weave rom.checks of a headered SNES ROM keep the automatic headerless IPS basis", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+    [0x9001, 0x7e],
+    [0xffff0, 0x78],
+  ];
+  const modified = applyRecords(headerless, records);
+  // A hand-written weave may carry only a CRC32 and size for its ROM.
+  const { checksums, size } = await fileChecks(headered);
+  const weaveArchive = await buildTransformWeave(
+    { checksums: { crc32: checksums.crc32 }, size },
+    "hack.ips",
+    createIps(records),
+    "game.smc",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]);
+  // With the header wrongly kept, every IPS record would land 512 bytes early.
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+test("weave rom.checks of a byte-swapped N64 ROM accept it for a big-endian BPS", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const byteSwapped = byteSwap16(bigEndian);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(byteSwapped),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.v64",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwapped], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
 });
 
 test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {

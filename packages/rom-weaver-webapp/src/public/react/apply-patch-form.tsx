@@ -426,22 +426,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [updateWeaveMetaForIds],
   );
-  // The weave's expected ROM for the current order and enablement, verified as the run's expected
-  // input the way the CLI weave apply does. Recomputed on every plan pass and run.
+  // The weave's expected ROM (`rom.checks`) for the current order and enablement: the run that
+  // starts from the supplied ROM compares it with that file. Recomputed on every plan pass and run.
   const getWeaveRootRomChecks = useCallback(
     (entries: ReadonlyArray<{ input?: ParsedWeavePatchInput; target?: ParsedWeavePatchInput; enabled: boolean }>) => {
       const session = activeWeaveSessionRef.current;
       if (!session) return undefined;
-      const ids = getPatchIds();
-      return resolveWeaveRootRomChecks(
-        entries.map((entry, index) => ({
-          ...entry,
-          inputChecks: weaveCheckTokens(weaveMetaRef.current.get(ids[index] || "")?.inputChecks),
-        })),
-        { checks: session.romChecks, member: session.romMember },
-      );
+      return resolveWeaveRootRomChecks(entries, { checks: session.romChecks, member: session.romMember });
     },
-    [getPatchIds],
+    [],
   );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {

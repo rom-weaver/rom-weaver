@@ -134,31 +134,65 @@ type WeaveRootRomEntry = {
   input?: ParsedWeavePatchInput;
   target?: ParsedWeavePatchInput;
   enabled: boolean;
-  /** The entry's own authored input checks as `algo=hex` tokens. */
-  inputChecks?: string;
 };
 
 /**
- * The run's expected-ROM checks, as the CLI weave apply folds them into its expected input
- * (`--expect-in`): the weave's `rom.checks`, plus the first selected entry's own input checks when
- * that entry reads the supplied ROM. They are verified once against the ROM the chain starts from,
- * never as a per-patch declaration. `index` is the first enabled entry that reads the supplied ROM
- * (the entry whose run carries the check); undefined when no entry reads it or nothing is declared.
+ * The weave's expected-ROM checks (`rom.checks`) and the entry whose run carries them: the first
+ * enabled entry that reads the supplied ROM. They describe the supplied file, so they are compared
+ * once with that file and never become a per-patch declaration. A first patch's own `inputChecks`
+ * stay with the engine's per-patch verification, which also covers a headerless or byte-swapped
+ * basis. Undefined when no entry reads the ROM or the weave declares no ROM checks.
  */
 const resolveWeaveRootRomChecks = (
   entries: readonly WeaveRootRomEntry[],
   rom: { checks?: ParsedWeaveChecks; member?: string },
 ): { index: number; tokens: string } | undefined => {
-  const firstEnabled = entries.findIndex((entry) => entry.enabled);
+  const tokens = weaveCheckTokens(rom.checks);
+  if (!tokens) return undefined;
   const index = entries.findIndex((entry) => entry.enabled && readsWeaveRootRom(entry, rom.member));
-  if (index < 0) return undefined;
-  const tokens = [weaveCheckTokens(rom.checks), index === firstEnabled ? entries[index]?.inputChecks : undefined]
-    .filter(Boolean)
-    .join(",");
-  return tokens ? { index, tokens } : undefined;
+  return index < 0 ? undefined : { index, tokens };
+};
+
+/**
+ * Compare a weave's expected-ROM tokens (`algo=hex`, `size=N`) with the supplied ROM file's own
+ * checksums and size. The weave's checks describe the file as supplied (weave export and
+ * `weave create` hash the source bytes), so they are compared with the untransformed file rather
+ * than handed to the engine, which would verify them after a header strip or N64 byte-order
+ * conversion and would let them steer its automatic header decision. `unknown` means no token
+ * could be compared (for example a weave that declares only an algorithm the browser does not
+ * compute while staging).
+ */
+const compareWeaveRomChecks = (
+  tokens: string,
+  actual: { checksums?: Readonly<Record<string, string | undefined>>; size?: number },
+): { status: "match" | "mismatch" | "unknown"; message?: string } => {
+  let compared = 0;
+  for (const token of tokens.split(",")) {
+    const [rawKey = "", rawValue = ""] = token.split("=");
+    const key = rawKey.trim().toLowerCase();
+    const expected = rawValue.trim().toLowerCase();
+    if (!(key && expected)) continue;
+    if (key === "size") {
+      if (actual.size === undefined) continue;
+      compared += 1;
+      if (String(actual.size) !== expected)
+        return { message: `Input size mismatch; expected ${expected}, actual ${actual.size}`, status: "mismatch" };
+      continue;
+    }
+    const value = actual.checksums?.[key]?.trim().toLowerCase().replace(/^0x/, "");
+    if (!value) continue;
+    compared += 1;
+    if (value !== expected)
+      return {
+        message: `Input checksum mismatch for ${key}; expected ${expected}, actual ${value}`,
+        status: "mismatch",
+      };
+  }
+  return { status: compared ? "match" : "unknown" };
 };
 
 export {
+  compareWeaveRomChecks,
   gateWeaveChainChecks,
   readsWeaveRootRom,
   resolveWeaveRootRomChecks,
