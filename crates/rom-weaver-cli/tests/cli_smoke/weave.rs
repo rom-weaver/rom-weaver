@@ -2271,6 +2271,88 @@ fn weave_apply_base_basis_verifies_declared_checks_against_the_rom() {
 }
 
 #[test]
+fn weave_first_patch_declared_base_checksum_and_size_match_a_headered_rom() {
+    let temp = setup_temp_dir();
+    let body: Vec<u8> = (0..64_u8).collect();
+    let rom = with_nes_header(&body);
+    fs::write(temp.child("game.nes").path(), &rom).expect("rom fixture");
+    write_offset_ips(&temp, "main.ips", 0x20, 0xAA);
+    let weave = temp.child("rom-weaver-weave.json");
+
+    // The first patch's checks MUST verify against a hashed base variant;
+    // a size alone matches one variant while the other variant's size
+    // conflicts, so the checksum is what decides the verdict.
+    let apply = |input_checks: serde_json::Value, output: &str, expected_code: i32| {
+        let entry = json!({ "path": "main.ips", "basis": "base", "inputChecks": input_checks });
+        fs::write(
+            weave.path(),
+            json!({
+                "version": 1,
+                "rom": { "path": "game.nes" },
+                "patches": [entry],
+                "output": { "name": "out.nes" }
+            })
+            .to_string(),
+        )
+        .expect("weave fixture");
+        let output = temp.child(output);
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                weave.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        let terminal = events.last().expect("terminal").clone();
+        (terminal, fs::read(output.path()).ok())
+    };
+
+    let mut headered_expected = rom.clone();
+    headered_expected[0x20] = 0xAA;
+    let (headered, headered_bytes) = apply(
+        json!({ "checksums": { "crc32": crc32_hex(&rom) }, "size": rom.len() }),
+        "headered.nes",
+        0,
+    );
+    assert_eq!(headered["status"], "succeeded", "headered: {headered}");
+    assert_eq!(headered_bytes, Some(headered_expected));
+
+    // Headerless checks select the stripped base, so the patch offset lands
+    // inside the body and the header is kept on output.
+    let mut patched_body = body.clone();
+    patched_body[0x20] = 0xAA;
+    let (headerless, headerless_bytes) = apply(
+        json!({ "checksums": { "crc32": crc32_hex(&body) }, "size": body.len() }),
+        "headerless.nes",
+        0,
+    );
+    assert_eq!(
+        headerless["status"], "succeeded",
+        "headerless: {headerless}"
+    );
+    assert_eq!(headerless_bytes, Some(with_nes_header(&patched_body)));
+
+    let (mismatch, mismatch_bytes) = apply(
+        json!({ "checksums": { "crc32": "00000000" }, "size": rom.len() }),
+        "mismatch.nes",
+        1,
+    );
+    assert!(
+        mismatch["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum mismatch for crc32"),
+        "mismatch: {mismatch}"
+    );
+    assert_eq!(mismatch_bytes, None);
+}
+
+#[test]
 fn weave_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "game.bin");
