@@ -326,6 +326,10 @@ const writeOpenSslConfig = (configPath, lanAddresses) => {
 const ensureCertificate = (lanAddresses) => {
   const paths = getCertificatePaths();
   fs.mkdirSync(paths.directory, { recursive: true });
+  // The directory name embeds this process id, so nothing reuses it after exit.
+  // The exit event also fires for process.exit() in the signal handler and for
+  // uncaught errors; only SIGKILL skips it.
+  process.once("exit", () => fs.rmSync(paths.directory, { recursive: true, force: true }));
   writeOpenSslConfig(paths.config, lanAddresses);
 
   if (!(fs.existsSync(paths.key) && fs.existsSync(paths.cert))) {
