@@ -77,6 +77,14 @@ const createEmulatorGameIdentity = ({ checksum, core, fileName }: EmulatorGameId
 };
 
 /**
+ * Systems whose single-threaded core is vendored instead of the threaded one.
+ * The threaded yabause build starts 13 pthreads from a 4-worker pool, then its
+ * renderer spins on the main thread for layer threads whose workers can only
+ * start once that thread yields, so the page hangs.
+ */
+const SINGLE_THREADED_CORES: ReadonlySet<string> = new Set(["segaSaturn"]);
+
+/**
  * Drop a previously saved "Disabled" choice for either hidden setting.
  * EmulatorJS stores per game settings under `ejs-<id>-settings` and a stored
  * value beats `EJS_defaultOptions`, so hiding a row does not undo a choice
@@ -269,7 +277,9 @@ const createEmulatorDocument = (
   gameName: string,
   core: string,
   options: EmulatorDocumentOptions = {},
-) => `<!doctype html>
+) => {
+  const threads = !SINGLE_THREADED_CORES.has(core);
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -284,12 +294,12 @@ const createEmulatorDocument = (
         console.warn('Could not configure the EmulatorJS audio session', error);
       }
       EJS_DEBUG_XX = false;
-      EJS_threads = true;
-      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
-      // Only the threaded WebGL 2 cores are vendored, so both in-emulator
-      // toggles that rename the core have to go: switching either off asks for
-      // a <core>-wasm.data or <core>-legacy-wasm.data that does not exist and
-      // the game dies on a 404.
+      EJS_threads = ${threads};
+      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: '${threads ? "enabled" : "disabled"}' };
+      // Only one WebGL 2 build of each core is vendored, so both in-emulator
+      // toggles that rename the core have to go: flipping either asks for a
+      // <core>-wasm.data, <core>-thread-wasm.data, or <core>-legacy-wasm.data
+      // that does not exist and the game dies on a 404.
       EJS_hideSettings = ['ejs_threads', 'webgl2Enabled'];
       // The core's context menu opens on the contextmenu event, which a touch
       // long-press fires. Holding the d-pad therefore covers the game with the
@@ -318,5 +328,6 @@ const createEmulatorDocument = (
     <script src="${dataUrl}loader.js"></script>
   </body>
 </html>`;
+};
 
 export { createEmulatorDocument, createEmulatorGameIdentity };

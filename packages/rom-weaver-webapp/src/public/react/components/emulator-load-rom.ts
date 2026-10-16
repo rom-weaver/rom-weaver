@@ -44,6 +44,32 @@ const renameRomToOutput = (outputFileName: string, romFileName: string) => {
 
 const isChdFileName = (fileName: string) => /\.chd$/i.test(fileName.trim());
 
+const baseName = (fileName: string) => fileName.replace(/^.*[\\/]/, "").toLowerCase();
+
+/**
+ * EmulatorJS pairs a lone `.bin` with an invented `MODE1/2352` cue sheet, so a
+ * disc whose extracted cue holds a single 2048-byte data track MUST reach the
+ * core as an `.iso`, or the core misreads every sector. Returns the `.iso` name
+ * for such a `.bin`, otherwise `undefined`.
+ */
+const cookedBinIsoName = async (
+  chosen: ArchiveOutput,
+  outputs: readonly ArchiveOutput[],
+  readOutput: (output: ArchiveOutput) => Promise<Blob>,
+): Promise<string | undefined> => {
+  if (!/\.bin$/i.test(chosen.fileName)) return undefined;
+  const cue = outputs.find((output) => /\.cue$/i.test(output.fileName));
+  if (!cue) return undefined;
+  const lines = (await (await readOutput(cue)).text()).split(/\r?\n/).map((line) => line.trim());
+  const files = lines.flatMap((line) => line.match(/^FILE\s+"?(.+?)"?\s+\S+$/i)?.[1] ?? []);
+  const tracks = lines.flatMap((line) => line.match(/^TRACK\s+\d+\s+(\S+)$/i)?.[1] ?? []);
+  const [file] = files;
+  const [track] = tracks;
+  if (files.length !== 1 || tracks.length !== 1 || !file || !track) return undefined;
+  if (baseName(file) !== baseName(chosen.fileName) || !/^MODE[12]\/2048$/i.test(track)) return undefined;
+  return chosen.fileName.replace(/\.bin$/i, ".iso");
+};
+
 /**
  * A CHD goes to EmulatorJS as-is when its core reads CHD: a decompressed
  * multi-track disc would be several files the player cannot take as one blob.
@@ -107,7 +133,8 @@ const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulat
     const checksum = normalizedSha1(chosen.checksums?.sha1);
     if (!checksum) throw new Error("rom-weaver did not return the extracted ROM SHA-1 checksum.");
     const platform = chosen.romType?.platform;
-    return { blob: extracted, checksum, fileName: chosen.fileName, ...(platform ? { platform } : {}) };
+    const romFileName = (await cookedBinIsoName(chosen, outputs, getIngestOutputBlob)) ?? chosen.fileName;
+    return { blob: extracted, checksum, fileName: romFileName, ...(platform ? { platform } : {}) };
   } finally {
     await Promise.all(outputs.map((output) => output.dispose().catch(() => undefined)));
   }

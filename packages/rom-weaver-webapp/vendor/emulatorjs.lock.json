@@ -33,7 +33,7 @@
     "cores/reports/yabause.json": "8d32a3a96f0bcb1c6a1e82cfb48fabf11e3d817f9c4a6628a800fe1b0e31844e",
     "cores/smsplus-thread-wasm.data": "5963db32e75f485c5c6913918ef7b057fe50fea7cff00993e1e4eaf35403b56d",
     "cores/snes9x-thread-wasm.data": "a42f3e39f4608ef65edaf7f803f1245bab9103c19417dbc3e4d00c5b09861bb4",
-    "cores/yabause-thread-wasm.data": "555fef07c65b1e9bbc1bfefd258af1a6afee163180a0ba8484ede73e01c0ae89",
+    "cores/yabause-wasm.data": "ab253ac263bd98e3124e2ca45ff581e97673426ed06ecec0025333060cd8127c",
     "emulator.min.css": "16406c60b2dc3b04ae9b115e308613e6f567a0cc7068e21d9d0c1e5030fb395e",
     "emulator.min.js": "6aec3fd7bb2721255801b0a6af02e47e78b05e28a1822b1f213aacbd348abaee",
     "loader.js": "69e0903bf1e2f62ced78895e7e511fa26e11316f7eb734925c35e919ba1287b2",

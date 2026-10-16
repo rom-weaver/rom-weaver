@@ -7,7 +7,7 @@ import {
 } from "../../src/public/react/components/emulator-load-rom.ts";
 
 const workflowMocks = vi.hoisted(() => ({
-  getIngestOutputBlob: vi.fn(async () => new Blob(["game"])),
+  getIngestOutputBlob: vi.fn(async (_output: { fileName: string }) => new Blob(["game"])),
   ingestRom: vi.fn(),
   outputDispose: vi.fn(async () => undefined),
   probeRom: vi.fn(),
@@ -157,6 +157,48 @@ describe("CHD disc images", () => {
 
     await loadEmulatorRom(new Blob(["chd"]), "game.chd");
     expect(workflowMocks.ingestRom).toHaveBeenCalled();
+  });
+
+  const extractDisc = (cueSheet: string) => {
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { rawSha1: "c".repeat(40) },
+      entries: [],
+      platform: "Sega Saturn",
+    });
+    const disc = { checksums: { sha1: "e".repeat(40) }, dispose: workflowMocks.outputDispose };
+    workflowMocks.ingestRom.mockResolvedValueOnce({
+      outputs: [
+        { ...disc, fileName: "Game.bin", romType: { platform: "Sega Saturn" } },
+        { ...disc, fileName: "Game.cue" },
+      ],
+      result: { assets: [{ copiedInPlace: false }] },
+    });
+    workflowMocks.getIngestOutputBlob.mockImplementation(
+      async (extracted) => new Blob([extracted.fileName === "Game.cue" ? cueSheet : "disc"]),
+    );
+  };
+
+  it("names an extracted 2048-byte-sector disc an ISO", async () => {
+    extractDisc('FILE "Game.bin" BINARY\r\n  TRACK 01 MODE1/2048\r\n    INDEX 01 00:00:00\r\n');
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({
+      checksum: "e".repeat(40),
+      fileName: "Game.iso",
+      platform: "Sega Saturn",
+    });
+  });
+
+  it.each([
+    ["a raw-sector track", 'FILE "Game.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n'],
+    [
+      "several tracks",
+      'FILE "Game.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:02:00\n',
+    ],
+    ["a track in another file", 'FILE "Other.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n'],
+  ])("keeps the BIN name for a cue with %s", async (_label, cueSheet) => {
+    extractDisc(cueSheet);
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({ fileName: "Game.bin" });
   });
 
   it("extracts a CHD the probe could not name a platform for", async () => {
