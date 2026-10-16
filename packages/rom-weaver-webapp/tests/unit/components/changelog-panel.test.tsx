@@ -109,6 +109,7 @@ describe("ChangelogPanel pending update", () => {
     expect(allChanges.open).toBe(false);
     expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
     expect(allChanges.contains(update.getByText("Headline change"))).toBe(false);
+    expect(update.queryByRole("heading", { name: "Highlights" })).toBeNull();
   });
 
   it("renders highlight subsections above collapsed generated changes", async () => {
@@ -143,12 +144,12 @@ describe("ChangelogPanel pending update", () => {
     ]);
     const update = await renderUpdate();
     const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
-    expect(update.getByRole("heading", { level: 3, name: "Highlights" })).toBeTruthy();
-    expect(update.getByRole("heading", { level: 4, name: "New features" })).toBeTruthy();
-    expect(update.getByRole("heading", { level: 4, name: "Fixes" })).toBeTruthy();
+    expect(update.queryByRole("heading", { name: "Highlights" })).toBeNull();
+    expect(update.getByRole("heading", { level: 3, name: "New features" })).toBeTruthy();
+    expect(update.getByRole("heading", { level: 3, name: "Fixes" })).toBeTruthy();
     expect(update.getByRole("link", { name: "#7" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/pull/7`);
     expect(allChanges.open).toBe(false);
-    expect(update.getAllByRole("heading", { level: 4 })).toHaveLength(2);
+    expect(update.queryAllByRole("heading", { level: 4 })).toHaveLength(0);
     for (const text of ["Legacy headline", "New workflow", "Fixed workflow", "Rename the flag"]) {
       expect(allChanges.contains(update.getByText(text))).toBe(false);
     }

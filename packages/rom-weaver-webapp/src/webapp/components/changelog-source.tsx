@@ -180,14 +180,19 @@ const EntryGroups = ({
   <>
     {groups.map((group) => (
       <div className="release-changelog" key={`${keyPrefix}:${group.title}`}>
-        {group.title ? <h3 className="release-changelog-group">{group.title}</h3> : null}
+        {group.title && group.title !== HIGHLIGHTS_TITLE ? (
+          <h3 className="release-changelog-group">{group.title}</h3>
+        ) : null}
         {group.sections?.length ? (
-          group.sections.map((section) => (
-            <div className="release-changelog-subsection" key={section.title}>
-              {section.title ? <h4 className="release-changelog-subheading">{section.title}</h4> : null}
-              <EntryList entries={section.entries} repositoryUrl={repositoryUrl} />
-            </div>
-          ))
+          group.sections.map((section) => {
+            const Heading = group.title === HIGHLIGHTS_TITLE ? "h3" : "h4";
+            return (
+              <div className="release-changelog-subsection" key={section.title}>
+                {section.title ? <Heading className="release-changelog-subheading">{section.title}</Heading> : null}
+                <EntryList entries={section.entries} repositoryUrl={repositoryUrl} />
+              </div>
+            );
+          })
         ) : (
           <EntryList entries={group.entries} repositoryUrl={repositoryUrl} />
         )}
