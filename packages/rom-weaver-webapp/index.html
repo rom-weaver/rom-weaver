@@ -146,6 +146,7 @@
           if (buffer.clicks.length < 4) buffer.clicks.push({ target: event.target, time: Date.now() });
         }
         function recordPick(event) {
+          if (buffer.replaying) return;
           var input = event.target;
           if (!input || input.type !== "file" || !input.files || !input.files.length) return;
           if (buffer.selections.length < 8 || buffer.deferSelections) {
@@ -161,11 +162,33 @@
           event.dataTransfer.dropEffect = "copy";
         }
         function recordDrop(event) {
+          if (buffer.replaying) return;
           if (!hasFiles(event)) return;
           event.preventDefault();
           var files = Array.prototype.slice.call(event.dataTransfer.files);
           if (files.length && (buffer.selections.length < 8 || buffer.deferSelections)) {
-            buffer.selections.push({ files: files, kind: "drop", target: event.target });
+            var items = Array.prototype.map.call(event.dataTransfer.items || [], function (item) {
+              var entry = typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+              var file = item.getAsFile ? item.getAsFile() : null;
+              return {
+                kind: item.kind,
+                webkitGetAsEntry:
+                  typeof item.webkitGetAsEntry === "function"
+                    ? function () {
+                        return entry;
+                      }
+                    : undefined,
+                getAsFile: function () {
+                  return file;
+                },
+              };
+            });
+            buffer.selections.push({
+              files: files,
+              transfer: { files: files, items: items },
+              kind: "drop",
+              target: event.target,
+            });
           }
           if (files.length && buffer.deferSelections) event.stopImmediatePropagation();
         }

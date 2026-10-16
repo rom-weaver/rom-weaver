@@ -1,3 +1,8 @@
+import {
+  createFileDataTransfer,
+  type DroppedFilesTransfer,
+  readDataTransferFiles,
+} from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
 
 /**
@@ -29,11 +34,17 @@ const INTERACTIVE_SELECTOR = [
 // Replayed clicks have no trusted user activation, so omit file pickers, new windows, and downloads.
 const GESTURE_GATED_SELECTOR = 'input[type="file"], a[download], a[target="_blank"]';
 
-type ShellSelection = { files: File[]; kind: "drop" | "pick"; target: EventTarget | null };
+type ShellSelection = {
+  files: File[];
+  transfer?: DroppedFilesTransfer;
+  kind: "drop" | "pick";
+  target: EventTarget | null;
+};
 type ShellClickBuffer = {
   clicks: { target: EventTarget | null; time: number }[];
   selections?: ShellSelection[];
   deferSelections?: boolean;
+  replaying?: boolean;
   stop: () => void;
   stopSelections?: () => void;
 };
@@ -98,12 +109,6 @@ const replayShellClicks = (appRootElement: HTMLElement) => {
   }
 };
 
-const toFileList = (files: File[]) => {
-  const transfer = new DataTransfer();
-  for (const file of files) transfer.items.add(file);
-  return transfer;
-};
-
 const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection, consumed: boolean) => {
   const original = selection.target instanceof HTMLInputElement ? selection.target : null;
   if (!original) return;
@@ -119,7 +124,7 @@ const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection, con
   }
   // The mounted tree's change handler already took this input's latest pick and reset the value.
   if (retained && consumed) return;
-  input.files = toFileList(selection.files).files;
+  input.files = createFileDataTransfer(selection.files).files;
   logger.debug("Delivering a file pick that landed before the first mount", { count: selection.files.length });
   input.dispatchEvent(new Event("change", { bubbles: true }));
 };
@@ -132,7 +137,7 @@ const deliverDrop = (appRootElement: HTMLElement, selection: ShellSelection) => 
     new DragEvent("drop", {
       bubbles: true,
       cancelable: true,
-      dataTransfer: toFileList(selection.files),
+      dataTransfer: createFileDataTransfer(selection.files),
     }),
   );
 };
@@ -147,22 +152,39 @@ const replayShellSelections = (appRootElement: HTMLElement) => {
   const queue = buffer.selections;
   requestAnimationFrame(() => {
     setTimeout(() => {
-      buffer.stopSelections?.();
-      buffer.deferSelections = false;
-      const selections = queue.splice(0);
-      logger.debug("Captured file selections that landed before the first mount", { count: selections.length });
-      // Only each input's latest pick is still on it; a reset input means React took that one.
-      const lastPickByInput = new Map<EventTarget | null, ShellSelection>();
-      for (const selection of selections)
-        if (selection.kind === "pick") lastPickByInput.set(selection.target, selection);
-      const consumedPicks = new Set<ShellSelection>();
-      for (const [target, selection] of lastPickByInput) {
-        if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
-      }
-      for (const selection of selections) {
-        if (selection.kind === "pick") deliverPick(appRootElement, selection, consumedPicks.has(selection));
-        else deliverDrop(appRootElement, selection);
-      }
+      void (async () => {
+        logger.debug("Captured file selections that landed before the first mount", { count: queue.length });
+        // Only each input's latest pick is still on it; a reset input means React took that one.
+        const lastPickByInput = new Map<EventTarget | null, ShellSelection>();
+        for (const selection of queue) if (selection.kind === "pick") lastPickByInput.set(selection.target, selection);
+        const consumedPicks = new Set<ShellSelection>();
+        for (const [target, selection] of lastPickByInput) {
+          if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
+        }
+        while (queue.length) {
+          const selection = queue.shift();
+          if (!selection) break;
+          if (selection.kind === "drop" && selection.transfer) {
+            try {
+              selection.files = await readDataTransferFiles(selection.transfer);
+            } catch (error) {
+              logger.warn("Failed to read a buffered file drop", { error });
+              continue;
+            }
+          }
+          buffer.replaying = true;
+          try {
+            if (selection.kind === "pick") deliverPick(appRootElement, selection, consumedPicks.has(selection));
+            else deliverDrop(appRootElement, selection);
+          } finally {
+            buffer.replaying = false;
+          }
+          // Resolved drop readers MUST reach their consumers before the next selection.
+          await Promise.resolve();
+        }
+        buffer.stopSelections?.();
+        buffer.deferSelections = false;
+      })();
     }, 0);
   });
 };

@@ -2,6 +2,7 @@ import { createElement, useLayoutEffect, useRef, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import indexHtml from "../../index.html?raw";
+import { readDataTransferFiles } from "../../src/lib/input/dropped-files.ts";
 import { useInputUiController } from "../../src/public/react/use-patcher-controllers.ts";
 import { useUnifiedApplyDrop } from "../../src/public/react/use-unified-apply-drop.ts";
 import { captureShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
@@ -14,6 +15,7 @@ let reactRoot;
 let frame;
 let replayTask;
 let received;
+let receivedFiles;
 
 const dispatchSelection = (kind, name) => {
   const input = appRoot.querySelector("input");
@@ -86,6 +88,7 @@ const App = () => {
   const { onDrop } = useUnifiedApplyDrop(controller);
   const deliver = (files) => {
     received.push(files.map((file) => file.name));
+    receivedFiles.push(files);
     onDrop(files);
   };
   useLayoutEffect(() => {
@@ -105,7 +108,7 @@ const App = () => {
       "aria-label": "Apply files",
       onDrop: (event) => {
         event.preventDefault();
-        deliver(Array.from(event.dataTransfer.files));
+        void readDataTransferFiles(event.dataTransfer).then(deliver);
       },
     },
     createElement(
@@ -133,6 +136,7 @@ const App = () => {
 
 beforeEach(() => {
   received = [];
+  receivedFiles = [];
   frame = undefined;
   replayTask = undefined;
   appRoot = document.createElement("div");
@@ -196,7 +200,7 @@ for (const kind of ["pick", "drop"]) {
     for (const name of names.slice(1)) dispatchSelection(kind, name);
     runFrame();
     runReplayTask();
-    expect(received).toEqual(names.map((name) => [name]));
+    await expect.poll(() => received).toEqual(names.map((name) => [name]));
     await expect.poll(() => Array.from(appRoot.querySelectorAll("li"), (item) => item.textContent)).toEqual(names);
   });
   test(`${kind} retains early-only selections through real React and Apply routing`, async () => {
@@ -210,4 +214,109 @@ for (const kind of ["pick", "drop"]) {
     await expect.poll(() => appRoot.querySelector("#selected-rom").textContent).toBe("old.sfc");
     await expect.poll(() => appRoot.querySelector("li")?.textContent).toBe("old.ips");
   });
+}
+
+const entryFile = (name, bytes) => ({
+  name,
+  isFile: true,
+  isDirectory: false,
+  file: (resolve) => resolve(new File([new Uint8Array(bytes)], name)),
+});
+
+const dropFolder = (extension) => {
+  let release;
+  let readStarted = false;
+  let available = true;
+  const first = entryFile(`folder-first.${extension}`, [1, 2, 3]);
+  const second = entryFile(`folder-second.${extension}`, [4, 5, 6]);
+  const nested = {
+    name: "nested",
+    isFile: false,
+    isDirectory: true,
+    createReader: () => {
+      let batch = 0;
+      return { readEntries: (resolve) => resolve(batch++ === 0 ? [second] : []) };
+    },
+  };
+  const directory = {
+    name: "folder",
+    isFile: false,
+    isDirectory: true,
+    createReader: () => {
+      let batch = 0;
+      return {
+        readEntries: (resolve) => {
+          if (batch++ === 0) {
+            readStarted = true;
+            release = () => resolve([first]);
+          } else resolve(batch === 2 ? [nested] : []);
+        },
+      };
+    },
+  };
+  const direct = new File([new Uint8Array([7, 8])], `direct.${extension}`);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([], "folder"));
+  transfer.items.add(direct);
+  Object.defineProperty(transfer, "items", {
+    value: [
+      { kind: "file", webkitGetAsEntry: () => (available ? directory : null), getAsFile: () => null },
+      { kind: "file", webkitGetAsEntry: () => null, getAsFile: () => (available ? direct : null) },
+    ],
+  });
+  appRoot
+    .querySelector("input")
+    .dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  available = false;
+  return {
+    get readStarted() {
+      return readStarted;
+    },
+    release: () => release(),
+  };
+};
+
+for (const timing of ["before-commit", "before-frame", "before-task"]) {
+  for (const kind of ["pick", "drop"]) {
+    for (const extension of ["sfc", "ips"]) {
+      test(`folder ${extension} stays before a newer ${kind} during async traversal ${timing}`, async () => {
+        let folder;
+        if (timing === "before-commit") folder = dropFolder(extension);
+        hydrate();
+        await expect.poll(() => typeof frame).toBe("function");
+        if (timing === "before-frame") folder = dropFolder(extension);
+        runFrame();
+        if (timing === "before-task") folder = dropFolder(extension);
+        runReplayTask();
+        await expect.poll(() => folder.readStarted).toBe(true);
+        dispatchSelection(kind, `new.${extension}`);
+        dispatchSelection("drop", "tail.ips");
+        expect(received).toEqual([]);
+        folder.release();
+        await expect.poll(() => received.length).toBe(3);
+        expect(received).toEqual([
+          [`folder-first.${extension}`, `folder-second.${extension}`, `direct.${extension}`],
+          [`new.${extension}`],
+          ["tail.ips"],
+        ]);
+        expect(
+          await Promise.all(receivedFiles[0].map(async (file) => Array.from(new Uint8Array(await file.arrayBuffer())))),
+        ).toEqual([
+          [1, 2, 3],
+          [4, 5, 6],
+          [7, 8],
+        ]);
+        if (extension === "sfc") {
+          await expect.poll(() => appRoot.querySelector("#selected-rom").textContent).toBe("new.sfc");
+        } else {
+          await expect
+            .poll(() => Array.from(appRoot.querySelectorAll("li"), (item) => item.textContent))
+            .toEqual(["folder-first.ips", "folder-second.ips", "direct.ips", "new.ips", "tail.ips"]);
+        }
+        dispatchSelection("pick", "live.ips");
+        await expect.poll(() => received.length).toBe(4);
+        expect(received.at(-1)).toEqual(["live.ips"]);
+      });
+    }
+  }
 }
