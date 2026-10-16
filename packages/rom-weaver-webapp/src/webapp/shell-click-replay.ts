@@ -2,7 +2,7 @@ import { createLogger } from "../lib/logging.ts";
 
 /**
  * Buffer clicks on the prerendered shell until hydration attaches React handlers.
- * Capture stops before hydration, and replay excludes actions that require trusted user activation.
+ * Click capture stops before hydration; file selections stay deferred until replay.
  */
 
 const logger = createLogger("shell-click-replay");
@@ -33,6 +33,7 @@ type ShellSelection = { files: File[]; kind: "drop" | "pick"; target: EventTarge
 type ShellClickBuffer = {
   clicks: { target: EventTarget | null; time: number }[];
   selections?: ShellSelection[];
+  deferSelections?: boolean;
   stop: () => void;
   stopSelections?: () => void;
 };
@@ -41,8 +42,6 @@ const readShellBuffer = () =>
   (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
 
 let pending: HTMLElement[] = [];
-// Selections buffered before this index predate hydrateRoot. Later ones reached React's live root listeners.
-let selectionsBeforeHydration = 0;
 
 const isGestureGated = (element: Element) => {
   if (element.matches(GESTURE_GATED_SELECTOR) || element.querySelector(GESTURE_GATED_SELECTOR)) return true;
@@ -65,14 +64,15 @@ const interactiveTarget = (target: EventTarget | null): HTMLElement | null => {
 };
 
 /**
- * Drains the inline buffer into retained shell nodes and stops capturing.
+ * Retains buffered clicks and defers file selections before hydration attaches handlers.
  * Call once, immediately before hydration begins.
  */
 const captureShellClicks = () => {
   const buffer = readShellBuffer();
   if (!buffer) return;
   buffer.stop();
-  selectionsBeforeHydration = buffer.selections?.length ?? 0;
+  // File selections MUST stay ordered until replay drains them, including events during hydration.
+  buffer.deferSelections = true;
   const now = Date.now();
   pending = buffer.clicks
     .filter((click) => now - click.time <= MAX_REPLAY_AGE_MS)
@@ -138,21 +138,19 @@ const deliverDrop = (appRootElement: HTMLElement, selection: ShellSelection) => 
 };
 
 /**
- * Re-delivers files picked or dropped on the prerendered shell before the first mount.
- * Call after the first render commits; delivery waits one task so effect-installed
- * page handlers exist by the time a drop is dispatched.
+ * Re-delivers buffered files in order after the first render commits.
+ * Capture MUST stay active through the delayed frame and task so new selections cannot overtake replay.
  */
 const replayShellSelections = (appRootElement: HTMLElement) => {
   const buffer = readShellBuffer();
   if (!buffer?.selections) return;
-  buffer.stopSelections?.();
-  const selections = buffer.selections.splice(0);
-  if (!selections.length) return;
-  logger.debug("Captured file selections that landed before the first mount", { count: selections.length });
-  const boundary = selectionsBeforeHydration;
-  selectionsBeforeHydration = 0;
+  const queue = buffer.selections;
   requestAnimationFrame(() => {
     setTimeout(() => {
+      buffer.stopSelections?.();
+      buffer.deferSelections = false;
+      const selections = queue.splice(0);
+      logger.debug("Captured file selections that landed before the first mount", { count: selections.length });
       // Only each input's latest pick is still on it; a reset input means React took that one.
       const lastPickByInput = new Map<EventTarget | null, ShellSelection>();
       for (const selection of selections)
@@ -161,11 +159,10 @@ const replayShellSelections = (appRootElement: HTMLElement) => {
       for (const [target, selection] of lastPickByInput) {
         if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
       }
-      selections.forEach((selection, index) => {
+      for (const selection of selections) {
         if (selection.kind === "pick") deliverPick(appRootElement, selection, consumedPicks.has(selection));
-        else if (index < boundary) deliverDrop(appRootElement, selection);
-        else logger.debug("Skipped a file drop that React already received during hydration");
-      });
+        else deliverDrop(appRootElement, selection);
+      }
     }, 0);
   });
 };

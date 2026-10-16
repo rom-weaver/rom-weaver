@@ -148,9 +148,10 @@
         function recordPick(event) {
           var input = event.target;
           if (!input || input.type !== "file" || !input.files || !input.files.length) return;
-          if (buffer.selections.length < 8) {
+          if (buffer.selections.length < 8 || buffer.deferSelections) {
             buffer.selections.push({ files: Array.prototype.slice.call(input.files), kind: "pick", target: input });
           }
+          if (buffer.deferSelections) event.stopImmediatePropagation();
         }
         // Without a dragover handler the browser refuses the drop and then
         // navigates to the file, so claim file drags the shell cannot take yet.
@@ -163,13 +164,15 @@
           if (!hasFiles(event)) return;
           event.preventDefault();
           var files = Array.prototype.slice.call(event.dataTransfer.files);
-          if (files.length && buffer.selections.length < 8) {
+          if (files.length && (buffer.selections.length < 8 || buffer.deferSelections)) {
             buffer.selections.push({ files: files, kind: "drop", target: event.target });
           }
+          if (files.length && buffer.deferSelections) event.stopImmediatePropagation();
         }
         var buffer = {
           clicks: [],
           selections: [],
+          deferSelections: false,
           stop: function () {
             document.removeEventListener("click", record, true);
           },

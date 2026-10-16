@@ -255,7 +255,7 @@ test("claims and re-delivers a multi-file drop made before the mount", async () 
   expect(received).toEqual([["drop", ["a.bin", "b.ips"]]]);
 });
 
-test("leaves non-file drags alone and stops buffering at the mount", async () => {
+test("leaves non-file drags alone and delivers once while the handoff settles", async () => {
   installRealCaptureScript();
   const textDrop = new DragEvent("drop", { bubbles: true, cancelable: true });
   appRoot.dispatchEvent(textDrop);
@@ -296,7 +296,7 @@ test("delivers every pick made on the same input before the mount", async () => 
   ]);
 });
 
-test("does not re-deliver a drop React received after hydration began", async () => {
+test("delivers drops in order when a new drop lands after hydration begins", async () => {
   installRealCaptureScript();
   const zone = appRoot.querySelector(".drop.hero");
   const dropFiles = (...names) =>
@@ -308,13 +308,13 @@ test("does not re-deliver a drop React received after hydration began", async ()
   const received = [];
   captureShellClicks();
   hydrateZone(received);
-  // The real onDrop runs for a drop between hydrateRoot and the mount.
+  // Selections during hydration MUST wait behind the buffered earlier drop.
   dropFiles("racing.bin");
   replayShellSelections(appRoot);
   await settle();
 
   expect(received).toEqual([
-    ["drop", ["racing.bin"]],
     ["drop", ["early.bin"]],
+    ["drop", ["racing.bin"]],
   ]);
 });
