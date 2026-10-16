@@ -72,6 +72,64 @@ describe("readReleaseNotes", () => {
     expect(notesFor("2.0.0")?.notes[0]?.groups.map((group) => group.title)).toEqual(["⚠ BREAKING CHANGES", "Features"]);
   });
 
+  it("keeps populated highlight subsections separate from generated groups and legacy entries", () => {
+    const source = path.join(fixtureDir, "HIGHLIGHTS.md");
+    fs.writeFileSync(
+      source,
+      `## [3.0.0](https://example.com)
+### Highlights
+* Legacy headline
+#### New features
+* **webapp:** New workflow ${issue(9)}
+#### Improvements
+* Faster workflow
+#### Fixes
+* Fixed workflow
+#### Security
+* Safer workflow
+#### Empty
+### Bug Fixes
+#### Generated subheading
+* Generated fix
+### Highlights
+* Older flat headline
+`,
+    );
+    expect(notesFor("3.0.0", source)?.notes[0]?.groups).toEqual([
+      {
+        entries: [
+          { summary: "Legacy headline" },
+          { pr: "9", scope: "webapp", summary: "New workflow" },
+          { summary: "Faster workflow" },
+          { summary: "Fixed workflow" },
+          { summary: "Safer workflow" },
+        ],
+        sections: [
+          { entries: [{ summary: "Legacy headline" }], title: "" },
+          { entries: [{ pr: "9", scope: "webapp", summary: "New workflow" }], title: "New features" },
+          { entries: [{ summary: "Faster workflow" }], title: "Improvements" },
+          { entries: [{ summary: "Fixed workflow" }], title: "Fixes" },
+          { entries: [{ summary: "Safer workflow" }], title: "Security" },
+        ],
+        title: "Highlights",
+      },
+      { entries: [{ summary: "Generated fix" }], title: "Bug Fixes" },
+      { entries: [{ summary: "Older flat headline" }], title: "Highlights" },
+    ]);
+  });
+
+  it("keeps subsection entries readable by deployed clients that only use group entries", () => {
+    const source = path.join(fixtureDir, "SECTIONED.md");
+    fs.writeFileSync(source, "## [3.0.0](https://example.com)\n### Highlights\n#### Fixes\n* Fixed workflow\n");
+    expect(notesFor("3.0.0", source)?.notes[0]?.groups).toEqual([
+      {
+        entries: [{ summary: "Fixed workflow" }],
+        sections: [{ entries: [{ summary: "Fixed workflow" }], title: "Fixes" }],
+        title: "Highlights",
+      },
+    ]);
+  });
+
   it("splits an entry into scope, summary and its pull request", () => {
     const features = notesFor("2.0.0")?.notes[0]?.groups[1];
     expect(features?.entries[0]).toEqual({ pr: "3", scope: "webapp", summary: "newest thing" });

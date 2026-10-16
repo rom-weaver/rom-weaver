@@ -217,11 +217,23 @@ const parseEntry = (line) => {
 const parseEntryGroups = (body) => {
   const groups = [];
   let current = null;
+  let section = null;
   for (const line of body.split(LINE_BREAK_REGEX)) {
     const heading = GROUP_HEADING_REGEX.exec(line);
     if (heading) {
       current = { entries: [], title: heading[1] };
       groups.push(current);
+      section = null;
+      continue;
+    }
+    const subsection = /^#### +(.+?) *$/.exec(line);
+    if (subsection && current?.title === "Highlights") {
+      if (!current.sections && current.entries.length) {
+        current.sections = [{ entries: [...current.entries], title: "" }];
+      }
+      section = { entries: [], title: subsection[1] };
+      current.sections ??= [];
+      current.sections.push(section);
       continue;
     }
     const entry = line.startsWith("*") ? parseEntry(line) : undefined;
@@ -231,9 +243,14 @@ const parseEntryGroups = (body) => {
       current = { entries: [], title: "" };
       groups.push(current);
     }
+    // Open tabs running older clients still read only the flat entries array.
     current.entries.push(entry);
+    if (section) section.entries.push(entry);
   }
-  return groups.filter((group) => group.entries.length);
+  for (const group of groups) {
+    if (group.sections) group.sections = group.sections.filter((item) => item.entries.length);
+  }
+  return groups.filter((group) => group.entries.length || group.sections?.length);
 };
 
 // The requested version's section plus the ones below it, so a client several

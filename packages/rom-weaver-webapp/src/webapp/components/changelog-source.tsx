@@ -8,7 +8,8 @@ import { GITHUB_URL } from "../project-links.ts";
 const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
 
 type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
-type ReleaseGroup = { entries: ReleaseEntry[]; title: string };
+type ReleaseSection = { entries: ReleaseEntry[]; title: string };
+type ReleaseGroup = ReleaseSection & { sections?: ReleaseSection[] };
 type ReleaseNote = { groups: ReleaseGroup[]; version: string };
 type ReleaseChangelog = {
   changelogUrl: string;
@@ -25,11 +26,17 @@ const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryU
 type CompareRange = { from: string; to: string };
 const compareUrl = (repositoryUrl: string, { from, to }: CompareRange) => `${repositoryUrl}/compare/v${from}...v${to}`;
 
-const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
+const isReleaseSection = (value: unknown): value is ReleaseSection => {
   if (!value || typeof value !== "object") return false;
-  const group = value as ReleaseGroup;
+  const group = value as ReleaseSection;
   if (typeof group.title !== "string" || !Array.isArray(group.entries)) return false;
   return group.entries.every((entry) => entry && typeof entry.summary === "string");
+};
+
+const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
+  if (!isReleaseSection(value)) return false;
+  const group = value as ReleaseGroup;
+  return group.sections === undefined || (Array.isArray(group.sections) && group.sections.every(isReleaseSection));
 };
 
 const isReleaseNote = (value: unknown): value is ReleaseNote => {
@@ -146,6 +153,19 @@ const EntryRef = ({ entry, repositoryUrl }: { entry: ReleaseEntry; repositoryUrl
   );
 };
 
+const EntryList = ({ entries, repositoryUrl }: { entries: ReleaseEntry[]; repositoryUrl: string }) => (
+  <ul className="release-changelog-entries">
+    {entries.map((entry) => (
+      <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>
+        {entry.scope ? <strong>{entry.scope}: </strong> : null}
+        {entry.summary}
+        {/* Fall back to the commit when an entry has no pull request. */}
+        <EntryRef entry={entry} repositoryUrl={repositoryUrl} />
+      </li>
+    ))}
+  </ul>
+);
+
 // The shared body of every view: `### type` group headings over
 // `**scope:** summary #ref` lines, mirroring CHANGELOG.md.
 const EntryGroups = ({
@@ -160,18 +180,22 @@ const EntryGroups = ({
   <>
     {groups.map((group) => (
       <div className="release-changelog" key={`${keyPrefix}:${group.title}`}>
-        {group.title ? <h3 className="release-changelog-group">{group.title}</h3> : null}
-        <ul className="release-changelog-entries">
-          {group.entries.map((entry) => (
-            <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>
-              {entry.scope ? <strong>{entry.scope}: </strong> : null}
-              {entry.summary}
-              {/* The PR is the readable reference; fall back to the commit so an
-                  entry recorded without a PR still links somewhere. */}
-              <EntryRef entry={entry} repositoryUrl={repositoryUrl} />
-            </li>
-          ))}
-        </ul>
+        {group.title && group.title !== HIGHLIGHTS_TITLE ? (
+          <h3 className="release-changelog-group">{group.title}</h3>
+        ) : null}
+        {group.sections?.length ? (
+          group.sections.map((section) => {
+            const Heading = group.title === HIGHLIGHTS_TITLE ? "h3" : "h4";
+            return (
+              <div className="release-changelog-subsection" key={section.title}>
+                {section.title ? <Heading className="release-changelog-subheading">{section.title}</Heading> : null}
+                <EntryList entries={section.entries} repositoryUrl={repositoryUrl} />
+              </div>
+            );
+          })
+        ) : (
+          <EntryList entries={group.entries} repositoryUrl={repositoryUrl} />
+        )}
       </div>
     ))}
   </>

@@ -222,6 +222,72 @@ test("normalizes highlight text into linked bullets", () => {
   assert.deepEqual(normalizeHighlights("- same\n* same\n"), ["* same"]);
 });
 
+test("keeps highlight subsections through dispatch, storage, and redispatch", () => {
+  const input =
+    "#### New features\n\n* Combine patches (#12)\n\n#### Fixes\n\n* Keep outputs (#13)";
+  const first = aggregatePrereleaseChangelog(release, "0.7.3", input);
+  const highlights = parseReleaseBody(first.section).highlights;
+  assert.deepEqual(highlights, [
+    "#### New features",
+    "* Combine patches ([#12](https://github.com/example/project/issues/12))",
+    "#### Fixes",
+    "* Keep outputs ([#13](https://github.com/example/project/issues/13))",
+  ]);
+  assert.match(first.section, /### Highlights\n\n#### New features\n\n\* Combine patches/);
+  assert.match(first.section, /\n\n#### Fixes\n\n\* Keep outputs/);
+  assert.equal(aggregatePrereleaseChangelog(first.changelog, "0.7.3").changed, false);
+  const stored = highlightsFromComment(highlightsComment(highlights));
+  assert.deepEqual(stored, highlights);
+  assert.equal(
+    aggregatePrereleaseChangelog(release, "0.7.3", stored.join("\n")).section,
+    first.section,
+  );
+});
+
+test("merges matching highlight subsections from prereleases without moving their bullets", () => {
+  const input = changelog
+    .replace(
+      "* alpha two shipped a second feature",
+      "#### New features\n\n* second feature\n\n#### Fixes\n\n* second repair",
+    )
+    .replace(
+      "### Features\n\n* first feature",
+      "### Highlights\n\n#### New features\n\n* first feature\n\n#### Fixes\n\n* first repair\n\n### Features\n\n* first feature",
+    );
+  const result = aggregatePrereleaseChangelog(input, "0.6.0");
+  assert.deepEqual(parseReleaseBody(result.section).highlights, [
+    "#### New features",
+    "* second feature",
+    "* first feature",
+    "#### Fixes",
+    "* second repair",
+    "* first repair",
+  ]);
+  assert.equal(aggregatePrereleaseChangelog(result.changelog, "0.6.0").changed, false);
+});
+
+test("keeps one copy when newer sections replace flat or differently grouped prerelease highlights", () => {
+  const input = `## [0.6.0](https://github.com/example/project/compare/v0.6.0-beta.2...v0.6.0)
+### Features
+* Generated change
+## 0.6.0-beta.2
+### Highlights
+#### New features
+* New workflow
+## 0.6.0-beta.1
+### Highlights
+* New workflow
+#### Improvements
+* New workflow
+## 0.5.0
+### Features
+* Earlier change
+`;
+  const result = aggregatePrereleaseChangelog(input, "0.6.0");
+  assert.deepEqual(parseReleaseBody(result.section).highlights, ["#### New features", "* New workflow"]);
+  assert.equal(aggregatePrereleaseChangelog(result.changelog, "0.6.0").changed, false);
+});
+
 test("round-trips a rendered body through the parser", () => {
   const parsed = parseReleaseBody(`loose line
 
