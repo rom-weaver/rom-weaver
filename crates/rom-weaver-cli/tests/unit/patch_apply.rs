@@ -923,7 +923,8 @@ fn an_n64_input_is_rewritten_into_the_order_the_patch_asked_for() {
             n64_byte_order: PatchN64ByteOrderMode::LittleEndian,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: false,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -961,7 +962,8 @@ fn keeping_the_n64_order_leaves_the_input_where_it_is() {
             n64_byte_order: PatchN64ByteOrderMode::Keep,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: false,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -1000,7 +1002,8 @@ fn checksum_repair_normalizes_a_byte_swapped_input_to_big_endian() {
             n64_byte_order: PatchN64ByteOrderMode::Keep,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: true,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -1035,7 +1038,8 @@ fn a_non_n64_input_with_an_explicit_order_is_rejected() {
         N64TargetRequest {
             input: &input,
             patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_order: None,
             mode: PatchN64ByteOrderMode::BigEndian,
             inference: N64AutoInference::ChecksumOnly,
         },
@@ -1055,7 +1059,8 @@ fn a_non_n64_input_with_an_explicit_order_is_rejected() {
         N64TargetRequest {
             input: &input,
             patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_order: None,
             mode: PatchN64ByteOrderMode::Auto,
             inference: N64AutoInference::ChecksumOnly,
         },
@@ -1080,7 +1085,8 @@ fn an_auto_n64_target_without_evidence_keeps_the_current_order() {
             N64TargetRequest {
                 input: &input,
                 patch: Some(&patch),
-                expected_crc32: None,
+                expected_input_checksums: &BTreeMap::new(),
+                weave_rom_order: None,
                 mode: PatchN64ByteOrderMode::Auto,
                 inference: N64AutoInference::ChecksumOnly,
             },
@@ -1628,6 +1634,7 @@ fn weave_resolution(
         patch_basis: PatchBasisMode::Auto,
         cheats: Vec::new(),
         checks,
+        rom_checks: None,
         expected_rom_name: None,
         output_checks,
         steps: Vec::new(),
@@ -1676,7 +1683,7 @@ fn a_weave_output_check_fills_in_what_expect_out_left_open() {
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]);
     let resolution = weave_resolution(
         vec![(
-            "weave rom.checks".to_string(),
+            "weave patches[0].inputChecks".to_string(),
             requirements(&[("md5", &"ab".repeat(16))], Some(64)),
         )],
         Some((
@@ -2086,8 +2093,11 @@ fn auto_header_stripping_keeps_an_input_that_carries_no_header() {
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &BTreeMap::new(),
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &BTreeMap::new(),
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );
@@ -2117,8 +2127,11 @@ fn auto_header_stripping_keeps_a_header_no_checksum_argues_against() {
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &expected,
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &expected,
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );
@@ -2148,8 +2161,11 @@ fn auto_header_stripping_strips_when_the_headerless_bytes_are_the_proven_basis()
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &expected,
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &expected,
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );

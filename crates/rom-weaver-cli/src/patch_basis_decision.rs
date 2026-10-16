@@ -21,8 +21,9 @@
 //!    console ROM the input was. A wrongly based patch scatters records across
 //!    the internal ROM header and the platform stops recognising its own ROM.
 //!
-//! When the evidence does not distinguish the candidates, the caller keeps
-//! the existing header state and reports any inferred decision.
+//! When the evidence does not distinguish the candidates, the caller strips the
+//! header if a weave's `rom.checks` matched only the headerless bytes, and
+//! otherwise keeps the existing header state. It reports any inferred decision.
 
 use super::*;
 
@@ -132,7 +133,7 @@ impl CliApp {
     /// Every whole-file input expectation the patch itself carries, one entry
     /// per endpoint variant (RUP carries one per file variant per direction).
     /// An unreadable or unclaimed patch contributes nothing, with a reason.
-    fn embedded_input_states(
+    pub(super) fn embedded_input_states(
         &self,
         patch: Option<&Path>,
         context: &OperationContext,
@@ -622,7 +623,7 @@ struct BasisOutputScore<'a> {
 /// The checksum algorithms worth hashing for `required`: every algorithm some
 /// candidate pins, minus any the engine cannot compute. Order is stable so the
 /// trace output reads the same across runs.
-fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
+pub(super) fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
     let mut algorithms: Vec<String> = Vec::new();
     for state in required {
         for algorithm in state.checksums.keys() {

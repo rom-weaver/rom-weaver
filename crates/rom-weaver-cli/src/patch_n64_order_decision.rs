@@ -14,8 +14,9 @@
 //!    correct. A unique passing candidate selects the order; zero or multiple
 //!    passing candidates leave it unresolved.
 //!
-//! When neither fallback distinguishes an order, the caller keeps the input's
-//! order. An inferred decision is reported in the operation label.
+//! When neither fallback distinguishes an order, the caller uses the order a
+//! weave's `rom.checks` matched, if any, and otherwise keeps the input's order.
+//! An inferred decision is reported in the operation label.
 
 use super::*;
 

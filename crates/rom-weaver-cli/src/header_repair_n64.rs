@@ -116,18 +116,21 @@ impl CliApp {
         Ok(Some(order))
     }
 
-    /// Match a required source CRC32 against the three N64 byte-order variants.
+    /// Match required source checks against the three N64 byte-order variants.
     /// The shared checksum engine hashes them in one read of the input.
-    pub(super) fn resolve_n64_byte_order_for_crc32(
+    pub(super) fn resolve_n64_byte_order_for_checks(
         input: &Path,
-        required_crc32: &str,
+        required: &[patch_plan::PlanState],
         context: &OperationContext,
     ) -> Result<Option<N64ByteOrder>> {
         if Self::detect_n64_byte_order_path(input)?.is_none() {
             return Ok(None);
         }
         let file_len = fs::metadata(input)?.len();
-        let algorithms = vec!["crc32".to_string()];
+        let algorithms = super::patch_basis_decision::hashable_algorithms(required);
+        if algorithms.is_empty() {
+            return Ok(None);
+        }
         let name_hint = input.file_name().and_then(|name| name.to_str());
         let mut engine = StreamingVariantChecksums::new(
             &algorithms,
@@ -146,17 +149,21 @@ impl CliApp {
             engine.update(&buffer[..read])?;
         }
 
-        let required_crc32 = required_crc32.trim().to_ascii_lowercase();
         let matches = engine
             .finalize()?
             .rows
             .into_iter()
             .filter(|row| {
                 row.id.starts_with("n64-byte-order:")
-                    && row
-                        .checksums
-                        .get("crc32")
-                        .is_some_and(|crc32| crc32.eq_ignore_ascii_case(&required_crc32))
+                    && required.iter().any(|state| {
+                        patch_plan::compare_states(
+                            state,
+                            &patch_plan::PlanState {
+                                checksums: row.checksums.clone(),
+                                size: Some(file_len),
+                            },
+                        ) == patch_plan::EvidenceMatch::Match
+                    })
             })
             .filter_map(|row| match row.id.as_str() {
                 "n64-byte-order:big-endian" => Some(N64ByteOrder::BigEndian),
