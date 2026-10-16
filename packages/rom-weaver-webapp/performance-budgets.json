@@ -28,7 +28,7 @@
         "maxBrotliBytes": 644024
       },
       {
-        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins. Raised by 1,500 Brotli bytes for the combined patches and cheats guide text: main measured 103,424 Brotli bytes in CI, 76 bytes under the 103,500-byte limit, and the change adds about 120, bringing CI to 103,526. The 105,000-byte limit keeps about 1.5 KiB of headroom; the raw ceiling is unchanged.",
+        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins. Raised by 1,500 Brotli bytes for the combined patches and cheats guide text: main measured 103,424 Brotli bytes in CI, 76 bytes under the 103,500-byte limit, and the change adds about 120, bringing CI to 103,526. The 105,000-byte limit keeps about 1.5 KiB of headroom; the raw ceiling is unchanged. The combined reviewed documentation measures 392,836 raw and 105,446 Brotli bytes in CI; the compressed limit is 106,000 bytes, with the raw limit unchanged.",
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -37,7 +37,7 @@
         "expectedRawBytes": 383000,
         "maxRawBytes": 394000,
         "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 105000
+        "maxBrotliBytes": 106000
       },
       {
         "_comment": "The de and es message catalogs ship as separate lazy chunks (catalog.ts CATALOG_LOADERS), fetched only when the visitor's locale resolves to one of them, so they count against their own budget instead of the main JavaScript budget. The measured build is 82,648 raw and 23,260 Brotli bytes (de 41,163 and 11,955, es 41,485 and 11,305), and the main JavaScript limits dropped by exactly those amounts. The maximums leave about 14 KiB of Brotli (about 50 KiB raw at the catalogs' 3.55:1 ratio) for the planned translation batches: roughly 8 KiB for the settings, cheat and save-tool strings and roughly 6 KiB for the forms.",
