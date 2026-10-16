@@ -1023,6 +1023,21 @@ impl CliApp {
             .iter()
             .any(|step| step.metadata.target.is_some());
         if !target_lanes_present {
+            // Mirrors the chain loop's source selection: an explicit ROM
+            // member reads the root input only when it names the weave ROM's
+            // own member.
+            let first_step_reads_base =
+                patch_steps
+                    .first()
+                    .is_some_and(|step| match step.metadata.input.as_ref() {
+                        None | Some(WeavePatchInput::Rom { member: None, .. }) => true,
+                        Some(WeavePatchInput::Rom {
+                            member: Some(member),
+                            ..
+                        }) => run.rom_member_inputs.get(member) == Some(&run.resolved_input),
+                        Some(WeavePatchInput::Patch { .. }) => false,
+                    });
+            trace!(first_step_reads_base, "planning apply step verifications");
             self.plan_apply_step_verifications(
                 &mut patch_steps,
                 cheat_patch_count,
@@ -1034,6 +1049,7 @@ impl CliApp {
                     prepared_headerless: header_state.headerless.then_some(true),
                     prepared_n64_byte_order: n64_order.map(|order| order.from),
                     original_n64_byte_order: n64_order.map(|order| order.to),
+                    first_step_reads_base,
                 },
                 &run.context,
             )

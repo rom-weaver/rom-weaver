@@ -1933,6 +1933,138 @@ fn weave_apply_verifies_checks_for_the_explicit_rom_member() {
 }
 
 #[test]
+fn weave_apply_verifies_a_declared_base_first_patch_against_its_rom_member() {
+    let temp = setup_temp_dir();
+    let root = temp.child("root.bin");
+    fs::write(root.path(), WEAVE_ROM_BYTES).expect("root ROM fixture");
+    let selected = temp.child("selected.bin");
+    let selected_bytes = patched_rom_bytes(&[(1, 0x11)]);
+    fs::write(selected.path(), &selected_bytes).expect("selected ROM fixture");
+    let larger = temp.child("larger.bin");
+    let larger_bytes = [WEAVE_ROM_BYTES, b"tail"].concat();
+    fs::write(larger.path(), &larger_bytes).expect("larger ROM fixture");
+    let archive = temp.child("roms.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (root.path(), "root.bin"),
+            (selected.path(), "selected.bin"),
+            (larger.path(), "larger.bin"),
+        ],
+        archive.path(),
+    );
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let weave = temp.child("rom-weaver-weave.json");
+
+    // The first patch's base checks MUST be verified against the member it
+    // reads, not against the weave's root ROM member.
+    let apply = |weave_json: serde_json::Value, output: &str, expected_code: i32| {
+        fs::write(weave.path(), weave_json.to_string()).expect("weave fixture");
+        let output = temp.child(output);
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--weave",
+                weave.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        let terminal = events.last().expect("terminal").clone();
+        (terminal, fs::read(output.path()).ok())
+    };
+    let entry = |member: &str, checks: serde_json::Value| {
+        json!({
+            "id": "main",
+            "path": "main.ips",
+            "input": { "rom": true, "member": member },
+            "inputChecks": checks,
+        })
+    };
+    let checks_for =
+        |bytes: &[u8]| json!({ "checksums": { "crc32": crc32_hex(bytes) }, "size": bytes.len() });
+
+    let mut per_entry = entry("selected.bin", checks_for(&selected_bytes));
+    per_entry["basis"] = json!("base");
+    let (terminal, bytes) = apply(
+        json!({ "version": 1, "rom": { "member": "root.bin" }, "patches": [per_entry] }),
+        "per-entry.bin",
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "per-entry: {terminal}");
+    assert_eq!(bytes, Some(patched_rom_bytes(&[(0, 0xAA), (1, 0x11)])));
+
+    let (terminal, bytes) = apply(
+        json!({
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "member": "root.bin" },
+            "patches": [entry("selected.bin", checks_for(&selected_bytes))],
+        }),
+        "shared.bin",
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "shared: {terminal}");
+    assert_eq!(bytes, Some(patched_rom_bytes(&[(0, 0xAA), (1, 0x11)])));
+
+    // Naming the root ROM's own member still reads the base.
+    let (terminal, bytes) = apply(
+        json!({
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "member": "root.bin" },
+            "patches": [entry("root.bin", checks_for(WEAVE_ROM_BYTES))],
+        }),
+        "root-member.bin",
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "root member: {terminal}");
+    assert_eq!(bytes, Some(patched_rom_bytes(&[(0, 0xAA)])));
+
+    // A pinned size that differs from the root ROM's is still the member's.
+    let (terminal, bytes) = apply(
+        json!({
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "member": "root.bin" },
+            "patches": [entry("larger.bin", checks_for(&larger_bytes))],
+        }),
+        "larger-member.bin",
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "larger member: {terminal}");
+    let mut larger_expected = larger_bytes.clone();
+    larger_expected[0] = 0xAA;
+    assert_eq!(bytes, Some(larger_expected));
+
+    let (terminal, bytes) = apply(
+        json!({
+            "version": 2,
+            "patchBasis": "base",
+            "rom": { "member": "root.bin" },
+            "patches": [entry(
+                "selected.bin",
+                json!({ "checksums": { "crc32": "00000000" }, "size": selected_bytes.len() }),
+            )],
+        }),
+        "wrong.bin",
+        1,
+    );
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch.chain.input_mismatch"),
+        "wrong member checks: {terminal}"
+    );
+    assert_eq!(bytes, None);
+}
+
+#[test]
 fn weave_apply_rejects_disabled_named_patch_input_producer() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "game.bin");
@@ -2268,6 +2400,88 @@ fn weave_apply_base_basis_verifies_declared_checks_against_the_rom() {
             .expect("label")
             .contains("patch.base.input_mismatch")
     );
+}
+
+#[test]
+fn weave_first_patch_declared_base_checksum_and_size_match_a_headered_rom() {
+    let temp = setup_temp_dir();
+    let body: Vec<u8> = (0..64_u8).collect();
+    let rom = with_nes_header(&body);
+    fs::write(temp.child("game.nes").path(), &rom).expect("rom fixture");
+    write_offset_ips(&temp, "main.ips", 0x20, 0xAA);
+    let weave = temp.child("rom-weaver-weave.json");
+
+    // The first patch's checks MUST verify against a hashed base variant;
+    // a size alone matches one variant while the other variant's size
+    // conflicts, so the checksum is what decides the verdict.
+    let apply = |input_checks: serde_json::Value, output: &str, expected_code: i32| {
+        let entry = json!({ "path": "main.ips", "basis": "base", "inputChecks": input_checks });
+        fs::write(
+            weave.path(),
+            json!({
+                "version": 1,
+                "rom": { "path": "game.nes" },
+                "patches": [entry],
+                "output": { "name": "out.nes" }
+            })
+            .to_string(),
+        )
+        .expect("weave fixture");
+        let output = temp.child(output);
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                weave.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        let terminal = events.last().expect("terminal").clone();
+        (terminal, fs::read(output.path()).ok())
+    };
+
+    let mut headered_expected = rom.clone();
+    headered_expected[0x20] = 0xAA;
+    let (headered, headered_bytes) = apply(
+        json!({ "checksums": { "crc32": crc32_hex(&rom) }, "size": rom.len() }),
+        "headered.nes",
+        0,
+    );
+    assert_eq!(headered["status"], "succeeded", "headered: {headered}");
+    assert_eq!(headered_bytes, Some(headered_expected));
+
+    // Headerless checks select the stripped base, so the patch offset lands
+    // inside the body and the header is kept on output.
+    let mut patched_body = body.clone();
+    patched_body[0x20] = 0xAA;
+    let (headerless, headerless_bytes) = apply(
+        json!({ "checksums": { "crc32": crc32_hex(&body) }, "size": body.len() }),
+        "headerless.nes",
+        0,
+    );
+    assert_eq!(
+        headerless["status"], "succeeded",
+        "headerless: {headerless}"
+    );
+    assert_eq!(headerless_bytes, Some(with_nes_header(&patched_body)));
+
+    let (mismatch, mismatch_bytes) = apply(
+        json!({ "checksums": { "crc32": "00000000" }, "size": rom.len() }),
+        "mismatch.nes",
+        1,
+    );
+    assert!(
+        mismatch["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum mismatch for crc32"),
+        "mismatch: {mismatch}"
+    );
+    assert_eq!(mismatch_bytes, None);
 }
 
 #[test]

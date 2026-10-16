@@ -1806,6 +1806,14 @@ impl CliApp {
                     context.single_thread_execution(),
                 ))
             })?;
+            // The values just verified equal the input's real checksums, so
+            // base planning can reuse them instead of hashing the input again.
+            trace!(
+                input = %apply_input.display(),
+                algorithms = ?expected_input_checksums.keys().collect::<Vec<_>>(),
+                "seeding verified input checksums"
+            );
+            context.seed_checksums(&apply_input, expected_input_checksums);
             checksum_verification_labels.push(label);
         }
 
@@ -2866,6 +2874,9 @@ struct PatchApplyBaseInputs<'a> {
     prepared_headerless: Option<bool>,
     prepared_n64_byte_order: Option<N64ByteOrder>,
     original_n64_byte_order: Option<N64ByteOrder>,
+    /// Whether the first step reads these base bytes. A step that reads
+    /// another ROM member or patch output MUST NOT be verified against them.
+    first_step_reads_base: bool,
 }
 
 /// Merge JSON-wire per-step checks into weave declarations. These values are
@@ -3293,6 +3304,10 @@ impl CliApp {
                 .filter(|step| step.metadata.cli_basis.is_some())
                 .count();
             let lane_seed = lane_seeds.get(lane_key).expect("lane seed initialized");
+            // An explicit input replaces the lane seed at run time.
+            let first_step_reads_base = lane_steps
+                .first()
+                .is_some_and(|step| step.metadata.input.is_none());
             self.plan_apply_step_verifications(
                 &mut lane_steps,
                 lane_cheat_steps,
@@ -3304,6 +3319,7 @@ impl CliApp {
                     prepared_headerless: lane_seed.header_state.headerless.then_some(true),
                     prepared_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
                     original_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
+                    first_step_reads_base,
                 },
                 context,
             )?;

@@ -1067,6 +1067,7 @@ fn apply_base_planning_only_hashes_what_a_later_step_can_use() {
         &input,
         representation,
         &previous_only,
+        true,
         &context,
     )
     .expect("base variants");
@@ -1091,11 +1092,99 @@ fn apply_base_planning_only_hashes_what_a_later_step_can_use() {
         &input,
         representation,
         &declared_base,
+        true,
         &context,
     )
     .expect("base variants");
     assert_eq!(variants.len(), 1);
     assert!(variants[0].state.checksums.contains_key("crc32"));
+}
+
+#[test]
+fn apply_base_planning_hashes_a_declared_first_base_check_only() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let input = temp.path().join("game.bin");
+    fs::write(&input, BPS_SOURCE).expect("rom fixture");
+    let context = test_context(temp.path().join("first-base-temp"));
+    let representation = patch_plan::BaseRepresentation::default();
+    let first_step = |declared_basis| {
+        [patch_plan::PlanPatchInput {
+            declared_basis,
+            declared_input: patch_plan::PlanState {
+                checksums: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
+                size: Some(BPS_SOURCE.len() as u64),
+            },
+            embedded: vec![patch_plan::PlanEndpointVariant {
+                input: patch_plan::PlanState {
+                    checksums: BTreeMap::from([("md5".to_string(), "0".repeat(32))]),
+                    size: None,
+                },
+                ..patch_plan::PlanEndpointVariant::default()
+            }],
+            ..patch_plan::PlanPatchInput::default()
+        }]
+    };
+
+    // An undeclared first step already runs on the base; nothing to hash.
+    let variants = CliApp::plan_apply_base_variants(
+        &input,
+        representation,
+        &input,
+        representation,
+        &first_step(None),
+        true,
+        &context,
+    )
+    .expect("base variants");
+    assert_eq!(variants.len(), 1);
+    assert!(variants[0].state.checksums.is_empty());
+
+    // A declared base check needs its algorithm next to the pinned size;
+    // the first step's embedded endpoints still use handler matching.
+    let variants = CliApp::plan_apply_base_variants(
+        &input,
+        representation,
+        &input,
+        representation,
+        &first_step(Some(PatchInputBasis::Base)),
+        true,
+        &context,
+    )
+    .expect("base variants");
+    assert_eq!(variants.len(), 1);
+    assert_eq!(
+        variants[0].state.checksums.keys().collect::<Vec<_>>(),
+        vec!["crc32"]
+    );
+    assert_eq!(variants[0].state.size, Some(BPS_SOURCE.len() as u64));
+
+    let missing = temp.path().join("absent.bin");
+    let error = CliApp::plan_apply_base_variants(
+        &missing,
+        representation,
+        &missing,
+        representation,
+        &first_step(Some(PatchInputBasis::Base)),
+        true,
+        &context,
+    )
+    .expect_err("a declared first base check is a strict request");
+    assert!(matches!(error, RomWeaverError::Io(_)));
+
+    // A declared base step that reads another source is checked against
+    // that source at run time, so the base stays unhashed and best-effort.
+    let variants = CliApp::plan_apply_base_variants(
+        &missing,
+        representation,
+        &missing,
+        representation,
+        &first_step(Some(PatchInputBasis::Base)),
+        false,
+        &context,
+    )
+    .expect("an unreadable base is not required for another source");
+    assert_eq!(variants.len(), 1);
+    assert!(variants[0].state.checksums.is_empty());
 }
 
 #[test]
@@ -1132,6 +1221,7 @@ fn apply_base_planning_adds_the_prepared_input_as_its_own_variant() {
             n64_byte_order: None,
         },
         &plan_inputs,
+        true,
         &context,
     )
     .expect("base variants");
@@ -1170,6 +1260,7 @@ fn apply_base_planning_propagates_a_read_error_a_declared_base_step_needs() {
         &missing,
         representation,
         &plan_inputs,
+        true,
         &context,
     )
     .expect_err("a declared base check is a strict request");

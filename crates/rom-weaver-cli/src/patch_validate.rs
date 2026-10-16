@@ -1815,12 +1815,22 @@ impl CliApp {
         prepared_input: &Path,
         prepared_representation: patch_plan::BaseRepresentation,
         plan_inputs: &[patch_plan::PlanPatchInput],
+        first_step_reads_base: bool,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::BaseVariant>> {
         let mut algorithms = Vec::new();
         let mut has_required_base_state = false;
-        for input in plan_inputs.iter().skip(1) {
-            if input.declared_basis == Some(PatchInputBasis::Previous) {
+        for (index, input) in plan_inputs.iter().enumerate() {
+            let declared_base = input.declared_basis == Some(PatchInputBasis::Base);
+            // A first step that reads the base needs hashed variants only for
+            // a declared base check: without them a pinned size alone decides
+            // the verdict and can conflict with the headerless variant. Its
+            // embedded endpoints are matched by the handler-normalized
+            // endpoint selection instead. A first step reading another source
+            // is verified against that source at run time.
+            if (index == 0 && !(declared_base && first_step_reads_base))
+                || input.declared_basis == Some(PatchInputBasis::Previous)
+            {
                 continue;
             }
             for algorithm in input.declared_input.checksums.keys() {
@@ -1828,8 +1838,11 @@ impl CliApp {
                     algorithms.push(algorithm.clone());
                 }
             }
-            if input.declared_basis == Some(PatchInputBasis::Base) {
+            if declared_base {
                 has_required_base_state |= !input.declared_input.is_empty();
+            }
+            if index == 0 {
+                continue;
             }
             for variant in &input.embedded {
                 for algorithm in variant.input.checksums.keys() {
@@ -1839,6 +1852,10 @@ impl CliApp {
                 }
             }
         }
+        debug!(
+            ?algorithms,
+            has_required_base_state, first_step_reads_base, "planning apply base variants"
+        );
         let build_variants = || -> Result<Vec<patch_plan::BaseVariant>> {
             let mut variants = Self::base_variants_for_algorithms(
                 original_input,
@@ -2470,6 +2487,7 @@ mod tests {
             &input,
             representation,
             &plan_inputs,
+            true,
             &context,
         )
         .expect_err("apply inference cancellation must propagate");

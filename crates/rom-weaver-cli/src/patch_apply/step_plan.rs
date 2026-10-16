@@ -49,10 +49,18 @@ impl CliApp {
             base_inputs.prepared,
             prepared_representation,
             &plan_inputs,
+            base_inputs.first_step_reads_base,
             context,
         )?;
         let resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
-        Self::check_apply_step_bases(steps, &plan_inputs, &resolved, &base_variants, context)?;
+        Self::check_apply_step_bases(
+            steps,
+            &plan_inputs,
+            &resolved,
+            &base_variants,
+            base_inputs.first_step_reads_base,
+            context,
+        )?;
 
         let verifications = steps
             .iter_mut()
@@ -227,6 +235,7 @@ impl CliApp {
         plan_inputs: &[patch_plan::PlanPatchInput],
         resolved: &patch_plan::ResolvedPlan,
         base_variants: &[patch_plan::BaseVariant],
+        first_step_reads_base: bool,
         context: &OperationContext,
     ) -> Result<()> {
         for (index, verdict) in resolved.per_patch.iter().enumerate() {
@@ -253,6 +262,15 @@ impl CliApp {
 
         for index in 0..steps.len() {
             let patch_path = &steps[index].patch.source;
+            if index == 0 && !first_step_reads_base {
+                // The chain loop verifies these checks against the source the
+                // step actually reads; the base ROM is not that input.
+                trace!(
+                    patch = %patch_path.display(),
+                    "first step reads another source; skipping its base check"
+                );
+                continue;
+            }
             let required_base_failed = resolved.per_patch[index].input_verdict
                 == patch_plan::PatchInputVerdict::Failed
                 || (!plan_inputs[index].declared_input.is_empty()
