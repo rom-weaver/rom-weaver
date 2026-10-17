@@ -35,7 +35,7 @@ Files stay on your device. No uploads, accounts, or telemetry. Works offline aft
 <!-- apply-video:start -->
 Apply two sample patches and download the result as 7z.
 
-<https://github.com/user-attachments/assets/4f7d08fb-203d-4d36-a7bb-35245b6c36e3>
+<https://github.com/user-attachments/assets/c98dc44a-c188-4ef4-b660-febe9999f5a9>
 <!-- apply-video:end -->
 
 <details>
