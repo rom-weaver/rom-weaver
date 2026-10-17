@@ -1,7 +1,43 @@
 # Changelog
 
-## [0.22.0](https://github.com/rom-weaver/rom-weaver/compare/v0.21.0...v0.22.0) (2026-10-17)
+## [0.22.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.0) (2026-10-17)
 
+### Highlights
+
+#### New features
+
+* Combine patches and ROM cheat codes into a single patch in Create, and download the combined patch from Apply and Weave ([#1213](https://github.com/rom-weaver/rom-weaver/issues/1213))
+* Drop files on any page to open the workflow that fits them, such as Apply for a ROM with patches or Test for a ROM with its save (#1125, #1196)
+* Checksum and Identify now handle several files at once, with a result card for each ([#1104](https://github.com/rom-weaver/rom-weaver/issues/1104))
+* More of the app is translated into German and Spanish, including Settings, the cheat code tools, and Save Editor (still in beta) (#1112, #1113)
+
+#### Improvements
+
+* Apply and Create now download the plain ROM or patch file by default instead of a ZIP ([#1105](https://github.com/rom-weaver/rom-weaver/issues/1105))
+* Apply and Create now warn when a patch changes nothing or when the Create inputs look swapped or identical (#1088, #1092, #1093)
+* Complete GDI disc sets can now be compressed to CHD on the Compress page ([#1202](https://github.com/rom-weaver/rom-weaver/issues/1202))
+* PSP homebrew EBOOT.PBP files can now be identified and played on the Test page ([#1238](https://github.com/rom-weaver/rom-weaver/issues/1238))
+
+#### Fixes
+
+* Opening rom-weaver in another tab no longer deletes files still in use in the first tab ([#1207](https://github.com/rom-weaver/rom-weaver/issues/1207))
+* Files picked or dropped while the page is still loading are no longer lost ([#1234](https://github.com/rom-weaver/rom-weaver/issues/1234))
+* CHD and Z3DS compression in the browser no longer hangs, and large CHD extractions no longer fail (#1200, #1241)
+* Saturn discs now boot on the Test page, and Famicom Disk System games show a BIOS notice instead of crashing the tab (#1233, #1239, #1243)
+* Weaves now apply in the browser when an optional patch is switched off, and check that the ROM is the one the weave expects (#1143, #1144, #1235)
+* Game Genie codes containing the letter X can now be baked into the ROM ([#1236](https://github.com/rom-weaver/rom-weaver/issues/1236))
+* Patching on the command line no longer overwrites the source ROM, patches, or disc tracks, and PPF undo no longer overwrites existing files (#1069, #1072, #1073)
+* The command line now cleans up its temporary files, even when interrupted (#1106, #1256)
+
+#### Security
+
+* Weave extraction and disc track output on the command line now stay inside the output folder, and weave extraction no longer overwrites existing files (#1068, #1076)
+* Emulator saves on the Test page now accept data only from the game that is running ([#1065](https://github.com/rom-weaver/rom-weaver/issues/1065))
+
+<details>
+<summary>All changes</summary>
+
+[Compare v0.21.0...v0.22.0](https://github.com/rom-weaver/rom-weaver/compare/v0.21.0...v0.22.0)
 
 ### Features
 
@@ -14,7 +50,6 @@
 * **webapp:** translate cheat database, Save Editor, and emulator saves ([#1113](https://github.com/rom-weaver/rom-weaver/issues/1113)) ([bc55be9](https://github.com/rom-weaver/rom-weaver/commit/bc55be90e95f9a66a7cabedcdf82ba5067ff477b))
 * **webapp:** translate settings groups, option labels, and the 404 page ([#1112](https://github.com/rom-weaver/rom-weaver/issues/1112)) ([b919f5a](https://github.com/rom-weaver/rom-weaver/commit/b919f5aaa53920b34b04755b97fb840a1a683201))
 
-
 ### User Experience
 
 * **docs:** add guide tool shortcuts ([#1197](https://github.com/rom-weaver/rom-weaver/issues/1197)) ([a1535ca](https://github.com/rom-weaver/rom-weaver/commit/a1535cab3800ef1c634ef80abcfb79bc8c1bd4a9))
@@ -25,7 +60,6 @@
 * **webapp:** move Create to /create-rom-patch ([#1220](https://github.com/rom-weaver/rom-weaver/issues/1220)) ([1617946](https://github.com/rom-weaver/rom-weaver/commit/16179468d7358de44c492a8dbd2c36d182307e72))
 * **webapp:** route drops from any page ([#1196](https://github.com/rom-weaver/rom-weaver/issues/1196)) ([b5704d4](https://github.com/rom-weaver/rom-weaver/commit/b5704d4d2db6561e1028c7a2caaeadb99ad3b1be))
 * **workflows:** clarify recipient paths and recovery guidance ([#1067](https://github.com/rom-weaver/rom-weaver/issues/1067)) ([8bfd185](https://github.com/rom-weaver/rom-weaver/commit/8bfd185dcd88562d39e583c99e0b0f5ef6ad9dce))
-
 
 ### Bug Fixes
 
@@ -131,7 +165,6 @@
 * **webapp:** unload the old game and tolerate a denied wake lock ([#1148](https://github.com/rom-weaver/rom-weaver/issues/1148)) ([398c838](https://github.com/rom-weaver/rom-weaver/commit/398c838497a4aa3729b0a4b8fdca164de886819c))
 * **webapp:** use the X | rom-weaver page title everywhere ([#1107](https://github.com/rom-weaver/rom-weaver/issues/1107)) ([6ce140a](https://github.com/rom-weaver/rom-weaver/commit/6ce140afa478ce5510c714c4a138d81663ac354a))
 
-
 ### Security
 
 * address repository scan findings ([#1192](https://github.com/rom-weaver/rom-weaver/issues/1192)) ([297a683](https://github.com/rom-weaver/rom-weaver/commit/297a6839a9385a697be001b5ddff3d3d3d2fa762))
@@ -140,16 +173,13 @@
 * **core:** bound codec allocation before validating decoded data ([#1075](https://github.com/rom-weaver/rom-weaver/issues/1075)) ([b3a15f5](https://github.com/rom-weaver/rom-weaver/commit/b3a15f5f8111265b633f2b2eb793df1c618f4680))
 * **webapp:** bind emulator saves to the active player ([#1065](https://github.com/rom-weaver/rom-weaver/issues/1065)) ([72be8da](https://github.com/rom-weaver/rom-weaver/commit/72be8da3a2d6f25cd74e2a8e2d1729186cf54373))
 
-
 ### Accessibility
 
 * **webapp:** match control names to visible text for axe 4.14 ([#1122](https://github.com/rom-weaver/rom-weaver/issues/1122)) ([b963389](https://github.com/rom-weaver/rom-weaver/commit/b963389b27af42fa585a5753ab4a693f86081221))
 
-
 ### Performance Improvements
 
 * **webapp:** coalesce runtime import shims ([#1211](https://github.com/rom-weaver/rom-weaver/issues/1211)) ([4a48f2b](https://github.com/rom-weaver/rom-weaver/commit/4a48f2bfdd8e04fced65cdb404111ef64086d23c))
-
 
 ### Documentation
 
@@ -172,14 +202,12 @@
 * state when the CLI picks the CD layout for CHD ([#1181](https://github.com/rom-weaver/rom-weaver/issues/1181)) ([3bd34b2](https://github.com/rom-weaver/rom-weaver/commit/3bd34b2ad9a3ec6618d1b0278067c58d72aa1a09))
 * surface compression format choices and converter links ([#1078](https://github.com/rom-weaver/rom-weaver/issues/1078)) ([c326491](https://github.com/rom-weaver/rom-weaver/commit/c32649137076f752d2a6635b2f8613854e435436))
 
-
 ### Developer Experience
 
 * allow automatic size budget increases ([#1216](https://github.com/rom-weaver/rom-weaver/issues/1216)) ([107c41c](https://github.com/rom-weaver/rom-weaver/commit/107c41ce272403d71172065ad362f6145cef15cf))
 * drop agent rules duplicated by global instructions ([#1217](https://github.com/rom-weaver/rom-weaver/issues/1217)) ([1e86013](https://github.com/rom-weaver/rom-weaver/commit/1e860139600e775d5363ccbf447b459951da71bc))
 * **release:** group highlights into sections ([#1244](https://github.com/rom-weaver/rom-weaver/issues/1244)) ([148978c](https://github.com/rom-weaver/rom-weaver/commit/148978c31c638685fa4cc9873ea0139204da1b5e))
 * trim AGENTS.md to rules no other page owns ([#1229](https://github.com/rom-weaver/rom-weaver/issues/1229)) ([ef54b6c](https://github.com/rom-weaver/rom-weaver/commit/ef54b6c084d1328217ba2549214548f6b6fb1f83))
-
 
 ### Dependencies
 
@@ -191,8 +219,8 @@
 * bump the rust-dependencies group with 3 updates ([#1190](https://github.com/rom-weaver/rom-weaver/issues/1190)) ([400a4bb](https://github.com/rom-weaver/rom-weaver/commit/400a4bb8f0c705276bac089890e3b751b773511b))
 * bump vite from 8.3.3 to 8.3.4 in /packages/rom-weaver-webapp in the build-toolchain group ([#1131](https://github.com/rom-weaver/rom-weaver/issues/1131)) ([9ba3a66](https://github.com/rom-weaver/rom-weaver/commit/9ba3a66f3cdea89ad90ba462e05a172227aba757))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * address remaining code scanning alerts ([#1209](https://github.com/rom-weaver/rom-weaver/issues/1209)) ([8bf4e15](https://github.com/rom-weaver/rom-weaver/commit/8bf4e152aeb7ceb7e0be23975fb19a56200bce26))
 * **agents:** open the Apply route in the webapp smoke driver ([#1136](https://github.com/rom-weaver/rom-weaver/issues/1136)) ([5d19cc8](https://github.com/rom-weaver/rom-weaver/commit/5d19cc8a1d1a46058b35581835f10f832be3c6c4))
@@ -213,6 +241,8 @@
 * **webapp:** drop unused second hero line copy ([#1096](https://github.com/rom-weaver/rom-weaver/issues/1096)) ([672079e](https://github.com/rom-weaver/rom-weaver/commit/672079e1ae5cb1248d2ebb0dd44f7a08e44ff5e0))
 * **webapp:** raise the WASM Brotli maximum by 10 KB ([#1129](https://github.com/rom-weaver/rom-weaver/issues/1129)) ([b394897](https://github.com/rom-weaver/rom-weaver/commit/b394897aa04405dc175817a4b5cabe37cb55447d))
 * **webapp:** refresh measured JavaScript and CSS baselines ([#1115](https://github.com/rom-weaver/rom-weaver/issues/1115)) ([7939a2f](https://github.com/rom-weaver/rom-weaver/commit/7939a2fbcfcb7810d2c57e6ef4d1de9a80a49d0c))
+</details>
+</details>
 
 ## [0.21.0](https://github.com/rom-weaver/rom-weaver/compare/v0.20.1...v0.21.0) (2026-10-10)
 
