@@ -429,9 +429,7 @@ Fixture description.
   it("publishes the browser weave guide as one topic with self-linked sections", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Create and share a patch weave in the browser" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Share multiple ROM patches as one weave" })).toBeTruthy();
     expect(document.querySelectorAll(".docs-article h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );

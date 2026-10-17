@@ -147,7 +147,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### How do I make one?
 
-[Create and share a patch weave](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
+[Share multiple ROM patches as one weave](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
 
 <a id="can-a-link-open-my-hosted-bundle"></a>
 

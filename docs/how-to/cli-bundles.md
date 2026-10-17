@@ -15,7 +15,7 @@ Create, inspect, and apply repeatable patch recipes from the terminal.
 <!-- END doctoc -->
 
 
-[What a weave is](../explanation/bundles.md) explains the format. The [weave reference](../reference/cli.md#bundles) lists metadata flags and schema behavior. For browser controls, use [Create and share a patch weave](create-bundles.md).
+[What a weave is](../explanation/bundles.md) explains the format. The [weave reference](../reference/cli.md#bundles) lists metadata flags and schema behavior. For browser controls, use [Share multiple ROM patches as one weave](create-bundles.md).
 
 <a id="create-a-bundle-from-local-files"></a>
 
