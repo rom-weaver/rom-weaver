@@ -399,7 +399,7 @@ const guideTopLimit = () =>
 /** `.dock-pad` is the in-flow spacer that carries the fixed dock's height. */
 const dockHeight = () => document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
 
-/** The lowest the card may reach: the dock covers the band below it. */
+/** The lowest a reveal may leave the row or card: the fixed dock owns the band below it. */
 const guideBottomLimit = () => window.innerHeight - dockHeight() - GUIDE_MARGIN;
 
 /**
@@ -424,7 +424,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide)
   const above = rect.top - GUIDE_GAP - height;
   const below = rect.bottom + GUIDE_GAP;
   const fitsAbove = above >= GUIDE_MARGIN;
-  const fitsBelow = below + height <= guideBottomLimit();
+  const fitsBelow = below + height <= window.innerHeight - GUIDE_MARGIN;
   // The reveal scroll parks the row so the preferred side fits, but the user
   // can scroll it anywhere afterwards - take the other side rather than clamp
   // the card back over the row.
@@ -433,7 +433,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide)
   const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
-    top: clampBetween(top, guideTopLimit(), guideBottomLimit() - height),
+    top: clampBetween(top, guideTopLimit(), window.innerHeight - height - GUIDE_MARGIN),
   };
 };
 

@@ -1397,8 +1397,8 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     top: 50%;
     bottom: auto;
   }
-  /* An anchored phone card hangs below its row, often past the end of the page,
-     where the dock covers it. This tail lengthens the page so the guide can
+  /* An anchored phone card hangs below its row, often past the end of the page
+     and over the dock's tabs. This tail lengthens the page so the guide can
      scroll the card clear of the dock; its height MUST match the page end
      sample-tutorial.tsx reveals against (dock + GUIDE_MARGIN). */
   .rw-app .sample-tutorial-dialog[data-anchored="true"]::after {
