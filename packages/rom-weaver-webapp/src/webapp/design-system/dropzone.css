@@ -1397,6 +1397,18 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     top: 50%;
     bottom: auto;
   }
+  /* An anchored phone card hangs below its row, often past the end of the page
+     and over the dock's tabs. This tail lengthens the page so the guide can
+     scroll the card clear of the dock; its height MUST match the page end
+     sample-tutorial.tsx reveals against (dock + GUIDE_MARGIN). */
+  .rw-app .sample-tutorial-dialog[data-anchored="true"]::after {
+    position: absolute;
+    top: 100%;
+    width: 1px;
+    height: calc(var(--dock-h, 0px) + 12px);
+    pointer-events: none;
+    content: "";
+  }
   /* The phone bar shares the screen with the row it explains, so it keeps
      only what the step needs: the kicker already numbers the step, the
      highlighted row shows its own controls, and the ✕ says how to leave. The

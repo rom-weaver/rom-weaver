@@ -852,6 +852,29 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip")).toBeNull();
 });
 
+test("guided Apply scrolls its first card clear of the dock on a phone", async () => {
+  // The phone drop zone is taller than the screen, and the first card hangs
+  // below it rather than covering its Add files button.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  expect(dock.height).toBeGreaterThan(0);
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(guide.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  await page.viewport(1280, 900);
+});
+
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
   const hardwareConcurrency = Object.getOwnPropertyDescriptor(Navigator.prototype, "hardwareConcurrency");
   Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 2 });
