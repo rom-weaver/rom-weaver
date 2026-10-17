@@ -197,4 +197,58 @@ describe("useCombinedPatch", () => {
     unmount();
     expect(patch.result.output.dispose).toHaveBeenCalledOnce();
   });
+
+  it("offers only formats that fit the ROM and patch output sizes", async () => {
+    const patch = createdPatch();
+    const run = vi.fn<Options["run"]>().mockResolvedValue(patch.result);
+    const formatValues = (current: ReturnType<typeof useCombinedPatch>) =>
+      current.outputProps.formatOptions?.map((option) => option.value);
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: { patchType: "ips" },
+    });
+    expect(formatValues(result.current)).toContain("ips");
+    expect(result.current.outputProps.format).toBe("ips");
+
+    // IPS stops at 16 MiB, so a larger declared patch output drops it and the choice falls back to BPS.
+    rerender({ patchType: "ips", romSize: 1024, patchTargetSize: 20 * 1024 * 1024 });
+    expect(formatValues(result.current)).not.toContain("ips");
+    expect(result.current.outputProps.format).toBe("bps");
+    await act(async () => result.current.run());
+    expect(run.mock.calls[0][0].settings).toMatchObject({
+      format: "bps",
+      output: { outputName: "game-combined.bps" },
+    });
+
+    rerender({ patchType: "bps", romSize: 300 * 1024 * 1024 });
+    expect(formatValues(result.current)).toEqual(["xdelta", "ppf"]);
+    expect(result.current.outputProps.format).toBe("xdelta");
+  });
+
+  it("keeps a running job's sizes while preparing the run clears them", async () => {
+    const pending = deferred<BrowserCreateResult>();
+    const patch = createdPatch();
+    const run = vi.fn<Options["run"]>(() => pending.promise);
+    const onError = vi.fn();
+    const large = { patchType: "ips", romSize: 8 * 1024 * 1024, patchTargetSize: 64 * 1024 * 1024 };
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: large,
+    });
+    expect(result.current.outputProps.format).toBe("bps");
+    let running!: Promise<void>;
+    await act(async () => {
+      running = result.current.run();
+    });
+    // Re-staging the enabled patches drops their declared sizes until they parse again.
+    rerender({ ...large, patchTargetSize: 0 });
+    expect(run.mock.calls[0][0].signal.aborted).toBe(false);
+    expect(result.current.outputProps.format).toBe("bps");
+    rerender(large);
+    await act(async () => {
+      pending.resolve(patch.result);
+      await running;
+    });
+    expect(patch.result.output.saveAs).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(patch.result.output.dispose).not.toHaveBeenCalled();
+  });
 });

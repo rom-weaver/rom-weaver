@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileDiff } from "lucide-react";
 import type { BrowserCreateResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { CreateSettings } from "../../types/settings.ts";
+import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { Notice } from "./components/ds/feedback.tsx";
@@ -28,6 +29,8 @@ const useCombinedPatch = ({
   patchType,
   defaultPatchType,
   onPatchTypeChange,
+  romSize,
+  patchTargetSize,
   settings,
   onComplete,
   onError,
@@ -40,6 +43,8 @@ const useCombinedPatch = ({
   patchType?: string;
   defaultPatchType?: string;
   onPatchTypeChange?: (value: string) => void;
+  romSize?: number;
+  patchTargetSize?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
@@ -47,7 +52,16 @@ const useCombinedPatch = ({
   const localizer = useUiLocalizer();
   const [fileName, setFileName] = useState("");
   const [internalFormat, setInternalFormat] = useState(defaultPatchType || "bps");
-  const format = patchType || internalFormat;
+  // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
+  const [runSizes, setRunSizes] = useState<{ patchTargetSize?: number; romSize?: number } | null>(null);
+  const formatSizes = runSizes ?? { patchTargetSize, romSize };
+  // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
+  const format = getPreferredCreatePatchFormat({
+    automaticFormatSelection: false,
+    modifiedSize: formatSizes.patchTargetSize,
+    originalSize: formatSizes.romSize,
+    requestedFormat: patchType || internalFormat,
+  });
   const setFormat = (value: string) => {
     setInternalFormat(value);
     onPatchTypeChange?.(value);
@@ -87,6 +101,7 @@ const useCombinedPatch = ({
     setCompleted(null);
     setError("");
     setRunName(null);
+    setRunSizes(null);
     setBusy(false);
     setProgress(null);
     return () => {
@@ -102,6 +117,7 @@ const useCombinedPatch = ({
     const abortController = new AbortController();
     controller.current = abortController;
     setRunName(name);
+    setRunSizes(formatSizes);
     setBusy(true);
     setError("");
     const isCurrent = () => !abortController.signal.aborted && currentGeneration === generation.current;
@@ -139,6 +155,7 @@ const useCombinedPatch = ({
       if (controller.current === abortController) {
         controller.current = null;
         setRunName(null);
+        setRunSizes(null);
         setBusy(false);
         setProgress(null);
       }
@@ -152,7 +169,10 @@ const useCombinedPatch = ({
     format,
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
-    formatOptions: createCreatePatchFormatOptions(),
+    formatOptions: createCreatePatchFormatOptions({
+      modifiedSize: formatSizes.patchTargetSize,
+      originalSize: formatSizes.romSize,
+    }),
     onFormatChange: setFormat,
     disabled: disabled || busy,
     action: (

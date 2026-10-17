@@ -11,7 +11,11 @@ type ApplyWorkflowFormSnapshot = {
   outputNameRevision: number;
   outputSourceKey: string;
   patchCount: number;
+  /** Output size each staged patch declares, or 0 for one that declares none. */
+  patchTargetSizes: readonly number[];
   ready: boolean;
+  /** Staged ROM size, or 0 before the input is ready. */
+  romSize: number;
 };
 
 const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
@@ -22,7 +26,9 @@ const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
   outputNameRevision: 0,
   outputSourceKey: "",
   patchCount: 0,
+  patchTargetSizes: [],
   ready: false,
+  romSize: 0,
 };
 
 const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: ApplyWorkflowFormSnapshot) =>
@@ -33,7 +39,27 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.outputNameRevision === right.outputNameRevision &&
   left.outputSourceKey === right.outputSourceKey &&
   left.patchCount === right.patchCount &&
-  left.ready === right.ready;
+  left.patchTargetSizes.length === right.patchTargetSizes.length &&
+  left.patchTargetSizes.every((size, index) => size === right.patchTargetSizes[index]) &&
+  left.ready === right.ready &&
+  left.romSize === right.romSize;
+
+/**
+ * The largest output size an enabled patch declares. Outside a run the workflow
+ * stages disabled patches too, lined up with the slots; a filtered run stages
+ * only enabled ones, so a list of another length has nothing to skip.
+ */
+const getEnabledPatchTargetSize = (
+  sizes: readonly number[],
+  slotIds: readonly string[],
+  disabled: ReadonlySet<string>,
+) => {
+  const aligned = sizes.length === slotIds.length;
+  return sizes.reduce(
+    (max, size, index) => (aligned && disabled.has(slotIds[index] || "") ? max : Math.max(max, size)),
+    0,
+  );
+};
 
 const createApplyWorkflowSnapshotStore = () => {
   let workflow: ApplyWorkflowSnapshotSource | null = null;
@@ -48,15 +74,19 @@ const createApplyWorkflowSnapshotStore = () => {
     if (!workflow) return EMPTY_APPLY_WORKFLOW_SNAPSHOT;
 
     const current = workflow.getSnapshot();
+    const inputReady = current.input?.status === "ready" && !!current.input.selectedCandidateId;
     const next: ApplyWorkflowFormSnapshot = {
       chainPlans: current.chainPlans.size ? current.chainPlans : EMPTY_APPLY_WORKFLOW_SNAPSHOT.chainPlans,
-      inputReady: current.input?.status === "ready" && !!current.input.selectedCandidateId,
+      inputReady,
       outputCompression: current.output.outputFormat,
       outputName: invalidatedOutputSourceKey === outputSourceKey ? "" : current.output.outputName,
       outputNameRevision,
       outputSourceKey,
       patchCount: current.patches.length,
+      patchTargetSizes: current.patches.map((patch) => patch.requirements?.targetSize || 0),
       ready: current.ready,
+      // A loading input still reports the dropped file's size, such as a ZIP's.
+      romSize: inputReady ? current.input?.size || 0 : 0,
     };
     if (sameApplyWorkflowFormSnapshot(snapshot, next)) return snapshot;
     snapshot = next;
@@ -98,4 +128,4 @@ const createApplyWorkflowSnapshotStore = () => {
   };
 };
 
-export { createApplyWorkflowSnapshotStore };
+export { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize };
