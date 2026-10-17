@@ -25,11 +25,15 @@ Convert a ROM patch to another format, such as BPS to IPS or IPS to BPS, with [C
 4. Choose the new format in **Patch format**.
 5. Choose **Create patch & download**.
 
-The format list offers only formats rom-weaver can make for that ROM. To merge several patches or add cheats, see [Build from patches and cheats](create-rom-patches.md#build-from-patches-and-cheats).
+The format list here does not check file sizes. IPS stops at 16 MiB, and disc images need xdelta or PPF. If Create reports a size limit, choose BPS for a cartridge ROM or xdelta for a disc.
+
+To merge several patches or add cheats, see [Build from patches and cheats](create-rom-patches.md#build-from-patches-and-cheats).
 
 ## Check the converted patch
 
-Apply the new patch to a fresh copy of the clean ROM in [Apply](https://rom-weaver.com/apply-patches). The result's checksum should match the output checksum in the original patch card's **Checks**. [Test the downloaded patch](create-rom-patches.md#test-the-downloaded-patch) covers the full test.
+1. In [Apply](https://rom-weaver.com/apply-patches), apply the original patch to a fresh copy of the clean ROM.
+2. Apply the new patch to another fresh copy.
+3. Compare both results in [Checksum file](https://rom-weaver.com/checksum). The checksums should match.
 
 ## Which format should you pick?
 
