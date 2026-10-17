@@ -14,14 +14,14 @@ type PostApplyBehaviorSettings = {
 
 const DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: true,
-  label: "Auto + button",
+  label: "Automatically",
   value: "auto-show",
   visible: true,
 };
 
 const DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION: PostApplyActionBehaviorOption = {
   automatic: false,
-  label: "Button only",
+  label: "With a button",
   value: "show",
   visible: true,
 };
@@ -34,7 +34,7 @@ const POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOpti
   DEFAULT_POST_APPLY_DOWNLOAD_BEHAVIOR_OPTION,
   {
     automatic: false,
-    label: "Button only",
+    label: "With a button",
     value: "show",
     visible: true,
   },
@@ -44,13 +44,13 @@ const POST_APPLY_TEST_BEHAVIOR_OPTIONS: readonly PostApplyActionBehaviorOption[]
   DEFAULT_POST_APPLY_TEST_BEHAVIOR_OPTION,
   {
     automatic: true,
-    label: "Auto + button",
+    label: "Automatically",
     value: "auto-show",
     visible: true,
   },
   {
     automatic: false,
-    label: "Hide Button",
+    label: "Never",
     value: "hide",
     visible: false,
   },

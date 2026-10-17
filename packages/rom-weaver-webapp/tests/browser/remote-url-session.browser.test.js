@@ -269,7 +269,7 @@ test("sample action applies with one patch disabled", async () => {
     .poll(() => getPatchStackFileNames(), { timeout: 30000 })
     .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
   await expect
-    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length, {
       timeout: 30000,
     })
     .toBe(2);
@@ -298,7 +298,7 @@ test("sample base patches apply after their order changes", async () => {
     .poll(() => getPatchStackFileNames(), { timeout: 30000 })
     .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
   await expect
-    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length, {
       timeout: 30000,
     })
     .toBe(2);

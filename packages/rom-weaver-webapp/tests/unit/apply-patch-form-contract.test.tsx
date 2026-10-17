@@ -714,7 +714,7 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     fireEvent.change(replacementInput, { target: { files: [replacement] } });
     expect(replacementInput.value).toBe("");
 
-    const clear = container.querySelector('#rom-weaver-list-input-stack button.rm[title="Clear ROM input"]');
+    const clear = container.querySelector('#rom-weaver-list-input-stack button.rm[title="Remove ROM"]');
     expect(clear).toBeTruthy();
     fireEvent.click(clear as HTMLButtonElement);
     await vi.waitFor(() => expect(latestFakeWorkflow?.clearInput).toHaveBeenCalled());

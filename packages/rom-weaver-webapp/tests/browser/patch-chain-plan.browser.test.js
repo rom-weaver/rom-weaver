@@ -68,20 +68,20 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   // One "runs on" select per patch; patch 2's automatic choice names the chain head's output.
   const runsOn0 = await getPatchInputSelect(0);
-  expect(runsOn0.options[0]?.textContent).toBe("auto (Original ROM)");
+  expect(runsOn0.options[0]?.textContent).toBe("Original ROM (detected)");
   const runsOn1 = await getPatchInputSelect(1);
-  expect(runsOn1.options[0]?.textContent).toBe("auto (Previous patch output)");
+  expect(runsOn1.options[0]?.textContent).toBe("Previous patch's result (detected)");
   expect(runsOn1.value).toBe("auto");
   // A single target lane has nothing to choose between, so the track select is hidden.
   expect(document.getElementById("rom-weaver-patch-track-0")).toBeNull();
   expect(patchCheckHeadings(0)).toEqual([
-    "Input: Original ROM (automatic)",
+    "Input: Original ROM (detected)",
     "Patch result",
     "Combined result",
     "Shared input: Original ROM",
   ]);
   expect(patchCheckHeadings(1)).toEqual([
-    "Input: Previous patch output (automatic)",
+    "Input: Previous patch's result (detected)",
     "Patch result",
     "Combined result",
   ]);
@@ -124,7 +124,7 @@ test("checksumless patches distinguish a successful preflight from a verified id
 
   // A successful preflight is a verified check even when its patch carries no source checksum.
   const passedChecks = () =>
-    document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
+    document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
   // No checksum was compared, so the chip claims only that the patch was checked.
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checked");
@@ -138,20 +138,20 @@ test("a patch input selector re-plans that patch", async () => {
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (Original ROM)");
+  expect(basisSelect.options[0]?.textContent).toBe("Original ROM (detected)");
 
-  // Pinning "previous output" overrides the inference: the re-plan stops
+  // Pinning "previous patch's result" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
   // real intermediate decides).
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Checks during apply: game.bin");
-  expect(patchCheckHeadings(1)).toEqual(["Input: Previous patch output", "Patch result", "Combined result"]);
+  expect(patchCheckHeadings(1)).toEqual(["Input: Previous patch's result", "Patch result", "Combined result"]);
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
   expect(patchCheckHeadings(1)).toEqual([
-    "Input: Original ROM (automatic)",
+    "Input: Original ROM (detected)",
     "Patch result",
     "Combined result",
     "Shared input: Original ROM",

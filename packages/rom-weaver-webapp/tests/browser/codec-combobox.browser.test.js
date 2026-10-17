@@ -114,11 +114,11 @@ test("chd codec combobox lists zstd and lzma presets before individual codecs", 
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
     initialValue: "cdlz,",
-    label: "CD Codecs",
+    label: "CD codecs",
     multiple: true,
   });
 
-  const cdInput = page.getByRole("combobox", { name: "CD Codecs" });
+  const cdInput = page.getByRole("combobox", { name: "CD codecs" });
   await cdInput.click();
 
   expect(optionTexts()).toEqual([
@@ -138,11 +138,11 @@ test("chd codec combobox lists zstd and lzma presets before individual codecs", 
 
   mountCombobox({
     fieldKey: "chdCreateDvdCodecs",
-    label: "DVD Codecs",
+    label: "DVD codecs",
     multiple: true,
   });
 
-  const dvdInput = page.getByRole("combobox", { name: "DVD Codecs" });
+  const dvdInput = page.getByRole("combobox", { name: "DVD codecs" });
   await dvdInput.click();
 
   expect(optionTexts()).toEqual([
@@ -160,21 +160,21 @@ test("chd codec combobox shows matching presets as selected", async () => {
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
     initialValue: "cdlz,cdzl,cdfl",
-    label: "CD Codecs",
+    label: "CD codecs",
     multiple: true,
   });
 
-  await page.getByRole("combobox", { name: "CD Codecs" }).click();
+  await page.getByRole("combobox", { name: "CD codecs" }).click();
   await expect.poll(selectedOptionTexts).toEqual(["lzma preset: cdlz,cdzl,cdfl"]);
 
   mountCombobox({
     fieldKey: "chdCreateDvdCodecs",
     initialValue: "zstd,zlib,huff,flac",
-    label: "DVD Codecs",
+    label: "DVD codecs",
     multiple: true,
   });
 
-  await page.getByRole("combobox", { name: "DVD Codecs" }).click();
+  await page.getByRole("combobox", { name: "DVD codecs" }).click();
   await expect.poll(selectedOptionTexts).toEqual(["zstd preset: zstd,zlib,huff,flac"]);
 });
 
@@ -182,11 +182,11 @@ test("codec combobox replaces the active token in multi-codec lists", async () =
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
     initialValue: "cdlz,",
-    label: "CD Codecs",
+    label: "CD codecs",
     multiple: true,
   });
 
-  const input = page.getByRole("combobox", { name: "CD Codecs" });
+  const input = page.getByRole("combobox", { name: "CD codecs" });
   await input.click();
   await page.getByRole("option", { exact: true, name: "cdfl" }).click();
 
@@ -361,8 +361,8 @@ test("compress panel shows codec level overrides and clears them when level chan
     }),
   );
 
-  await expect.poll(() => document.querySelector('select[aria-label="Level"]')).not.toBeNull();
-  const levelSelect = document.querySelector('select[aria-label="Level"]');
+  await expect.poll(() => document.querySelector('select[aria-label="Compression level"]')).not.toBeNull();
+  const levelSelect = document.querySelector('select[aria-label="Compression level"]');
   expect(levelSelect).not.toBeNull();
   // The descriptor setter is called with the selected element as its receiver.
   // oxlint-disable-next-line typescript/unbound-method
@@ -411,8 +411,8 @@ test("chd accepts a level override for one codec and clears it when level change
     }),
   );
 
-  await expect.poll(() => document.querySelector('select[aria-label="Level"]')).not.toBeNull();
-  const levelSelect = document.querySelector('select[aria-label="Level"]');
+  await expect.poll(() => document.querySelector('select[aria-label="Compression level"]')).not.toBeNull();
+  const levelSelect = document.querySelector('select[aria-label="Compression level"]');
   expect(levelSelect).not.toBeNull();
   // The descriptor setter is called with the selected element as its receiver.
   // oxlint-disable-next-line typescript/unbound-method

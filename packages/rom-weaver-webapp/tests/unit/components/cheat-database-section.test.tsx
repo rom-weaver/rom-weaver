@@ -165,7 +165,7 @@ describe("CheatDatabaseSection", () => {
     expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
     expect(view.queryByText("Cheats as a Patch")).toBeNull();
     const addCheats = view.getByRole("button", { name: /Add cheats to the patch order/u });
-    expect(addCheats.textContent).toContain("bake into the ROM");
+    expect(addCheats.textContent).toContain("write into the ROM");
     expect(addCheats.textContent).not.toContain("Super Mario World");
     expect(view.container.querySelector(".cheat-add-note")).toBeNull();
     expect(view.container.textContent).not.toContain("Exact checksum match");
@@ -189,7 +189,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     await waitFor(() => expect(view.getByText(/Cheat conflict at ROM offset 0x2871/u).closest(".notice")).toBeTruthy());
-    expect(view.getByText(/Contains patches and 1 baked ROM cheat/u)).toBeTruthy();
+    expect(view.getByText(/includes patches and 1 cheat written into the ROM/u)).toBeTruthy();
   });
 
   it("waits for a ROM before it offers anything", () => {
@@ -338,7 +338,7 @@ describe("CheatDatabaseSection", () => {
       expect.objectContaining({ record: expect.objectContaining({ id: "cheat-1" }) }),
     ]);
 
-    fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives from the cheat stack" }));
+    fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives from the cheat list" }));
     expect(view.queryByText("Infinite lives")).toBeNull();
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
   });
@@ -417,7 +417,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
     fireEvent.change(view.getByLabelText("Code type"), { target: { value: "pro-action-replay" } });
     fireEvent.click(view.getByRole("button", { name: "Check code" }));
-    await view.findByText(/Detected Nintendo - Super Nintendo Entertainment System · Action Replay/u);
+    await view.findByText(/Detected Nintendo - Super Nintendo Entertainment System, Action Replay/u);
     fireEvent.click(view.getByRole("button", { name: "Add this cheat" }));
 
     expect(onSelectionChange).toHaveBeenLastCalledWith([
@@ -477,7 +477,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
     fireEvent.click(view.getByRole("button", { name: "Check code" }));
-    await view.findByText("Cannot be baked into the ROM");
+    await view.findByText("Can't be written into the ROM");
     expect((view.getByRole("button", { name: "Add this cheat" }) as HTMLButtonElement).disabled).toBe(true);
     expect(onSelectionChange).not.toHaveBeenCalledWith([
       expect.objectContaining({ record: expect.objectContaining({ id: "manual-2" }) }),
@@ -493,12 +493,12 @@ describe("CheatDatabaseSection", () => {
     const view = render(<CheatDatabaseSection {...props} classifyDatabaseCheats={classifier} />);
     await waitFor(() => expect(finishClassification).toBeDefined());
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    expect(view.getByRole("status").textContent).toContain("Checking cheat delivery types");
+    expect(view.getByRole("status").textContent).toContain("Checking which cheats can be written");
     expect(view.queryByText(/No cheats match this search/u)).toBeNull();
 
     finishClassification?.(records);
     await view.findByText("Infinite lives");
-    expect(view.queryByText(/Checking cheat delivery types/u)).toBeNull();
+    expect(view.queryByText(/Checking which cheats can be written/u)).toBeNull();
   });
 
   it("shows manual browsing as unverified and keeps controls within their container", async () => {
@@ -728,7 +728,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    await view.findByText(/no cheats that can be written into the ROM for Super Mario World/u);
     expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
   });
 
@@ -743,7 +743,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    await view.findByText(/no cheats that can be written into the ROM for Super Mario World/u);
     expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
   });
 

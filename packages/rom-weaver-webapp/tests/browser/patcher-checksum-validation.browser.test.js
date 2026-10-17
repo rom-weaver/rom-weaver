@@ -155,7 +155,7 @@ test("removing the ROM clears patch validation errors", async () => {
   mount(createElement(Harness));
   await expect.poll(() => document.body.textContent || "").toContain("Patch validation failed");
 
-  const removeButton = document.querySelector("button[aria-label='Clear ROM input']");
+  const removeButton = document.querySelector("button[aria-label='Remove ROM']");
   expect(removeButton).toBeInstanceOf(HTMLButtonElement);
   removeButton.click();
 

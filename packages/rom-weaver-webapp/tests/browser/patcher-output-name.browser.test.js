@@ -135,7 +135,7 @@ test("clearing the ROM clears the generated output name", async () => {
     .toBe(2);
   await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 
-  const clearInputButton = document.querySelector("button[aria-label='Clear ROM input']");
+  const clearInputButton = document.querySelector("button[aria-label='Remove ROM']");
   if (!(clearInputButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
   clearInputButton.click();
 
