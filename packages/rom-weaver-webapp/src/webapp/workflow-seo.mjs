@@ -4,9 +4,9 @@ const SITE_ALTERNATE_NAMES = Object.freeze(["RomWeaver", "Rom Weaver", "rom weav
 const WORKFLOW_SEO_ROUTES = Object.freeze({
   weave: Object.freeze({
     description:
-      "Weave ordered ROM patch workflows locally in your browser, then optionally apply the weave with checksum validation. No uploads or account required.",
+      "Package multiple ROM patches, their order, and expected checksums into one weave locally in your browser, then optionally apply it with checksum validation. No uploads or account required.",
     slug: "weave-patches",
-    title: `Weave ROM patches online | ${SITE_NAME}`,
+    title: `Package multiple ROM patches into one weave | ${SITE_NAME}`,
   }),
   creator: Object.freeze({
     description:
@@ -41,15 +41,15 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   identify: Object.freeze({
     description:
-      "Identify ROMs or search CRC32, MD5, and SHA-1 hashes. Find known games, regions, and revisions, then inspect known cheat codes. No uploads.",
+      "Identify ROMs or check CRC32, MD5, and SHA-1 hashes against known dumps. Find games, regions, and revisions, then inspect known cheat codes. No uploads.",
     slug: "identify-rom",
-    title: `ROM identification & checksum lookup online | ${SITE_NAME}`,
+    title: `ROM identifier & checksum checker online | ${SITE_NAME}`,
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, UPS, xdelta, and other ROM patches online, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. Process files locally with no uploads.",
+      "Apply one or multiple BPS, IPS, UPS, xdelta, and other ROM patches online, in order, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. No uploads.",
     slug: "apply-patches",
-    title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
+    title: `ROM Patcher Online: BPS, IPS, xdelta & multiple patches | ${SITE_NAME}`,
   }),
   "ppf-undo": Object.freeze({
     description:

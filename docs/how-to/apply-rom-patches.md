@@ -22,7 +22,7 @@ Apply a BPS, IPS, UPS, or xdelta patch to your own ROM with the [online ROM patc
 - [Apply an HDiffPatch or HPatchZ patch](#apply-an-hdiffpatch-or-hpatchz-patch)
 - [Dreamcast DCP patches need the CLI](#dreamcast-dcp-patches-need-the-cli)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
-- [Put several patches in order](#put-several-patches-in-order)
+- [Apply multiple patches in order](#apply-multiple-patches-in-order)
 - [Add cheats to the patch order](#add-cheats-to-the-patch-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
 - [Download one combined patch](#download-one-combined-patch)
@@ -57,7 +57,7 @@ New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew file
 3. In **Apply**, choose the output name and format, then select **APPLY & DOWNLOAD**.
 4. Save the new ROM and [test it](test-roms-in-browser.md#test-an-apply-result). Your Original stays untouched.
 
-A `.bps` file is a patch, not a playable ROM. For multiple patches, check [order and inputs](#put-several-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
+A `.bps` file is a patch, not a playable ROM. For multiple patches, check [order and inputs](#apply-multiple-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
 
 ## Apply an IPS or IPS32 patch
 
@@ -109,7 +109,9 @@ Patch cards show format, position, and input/output checks. The three-dot **Patc
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
 
-## Put several patches in order
+<a id="put-several-patches-in-order"></a>
+
+## Apply multiple patches in order
 
 Patches run top to bottom. Each input selector chooses the state it modifies: keep **auto** for checksum inference, **Original ROM** for the clean source, or **Previous patch output** for the preceding result.
 

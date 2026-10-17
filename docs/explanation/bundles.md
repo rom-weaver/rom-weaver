@@ -82,6 +82,6 @@ A link can preload a remotely hosted recipe. The browser downloads the recipe an
 
 ## Related
 
-- [Create and share a patch weave](../how-to/create-bundles.md) in the browser.
+- [Share multiple ROM patches as one weave](../how-to/create-bundles.md) in the browser.
 - [Create weaves from the CLI](../how-to/cli-bundles.md) for scripted releases.
 - [Choosing a patch format](patch-formats.md) for what goes inside one.

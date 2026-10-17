@@ -32,8 +32,8 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Compress ISO or BIN/CUE to CHD](https://rom-weaver.com/docs/convert-to-chd): Create a CHD from a supported disc image without applying a patch.
 - [CHD to ISO converter](https://rom-weaver.com/docs/extract-chd): Convert DVD CHDs to ISO, CD CHDs to BIN/CUE, and Dreamcast GD-ROM CHDs to GDI and tracks.
 - [Compress ISO to RVZ](https://rom-weaver.com/docs/convert-to-rvz): Create an RVZ from a GameCube or Wii disc image with the Compress tool.
-- [Compress 3DS, CCI, CXI, CIA, and 3DSX files to Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX online](https://rom-weaver.com/docs/convert-to-z3ds): Compress `.3ds`, `.cci`, `.cxi`, `.app`, `.cia`, or `.3dsx` files to `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx`.
-- [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files to 3DS, CCI, CXI, CIA, or 3DSX online](https://rom-weaver.com/docs/extract-z3ds): Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files to `.cci`, `.cxi`, `.cia`, or `.3dsx`.
+- [3DS to Z3DS and ZCCI: compress 3DS ROMs online](https://rom-weaver.com/docs/convert-to-z3ds): Compress `.3ds`, `.cci`, `.cxi`, `.app`, `.cia`, or `.3dsx` files to `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx`.
+- [Z3DS and ZCCI to CCI: decompress 3DS ROMs online](https://rom-weaver.com/docs/extract-z3ds): Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files to `.cci`, `.cxi`, `.cia`, or `.3dsx`.
 - [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove supported padding and download a separate copy.
 - [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
 - [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
@@ -45,7 +45,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.
 - [Convert BPS to IPS and other ROM patch formats](https://rom-weaver.com/docs/convert-patch-format): Rebuild a BPS, IPS, UPS, or xdelta patch in another format from the clean ROM it was made for.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
-- [Create weaves guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only weave in the browser's Apply workflow.
+- [Share multiple ROM patches as one weave](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only weave in the browser's Apply workflow.
 - [ROM tester guide](https://rom-weaver.com/docs/test-roms): Test a local ROM or an Apply result in the browser, check platform support, and manage local saves.
 - [Fix a source ROM checksum mismatch](https://rom-weaver.com/docs/fix-checksum-errors): What a checksum mismatch means, and what to check when Apply or another patcher reports that a file is not the expected ROM.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.

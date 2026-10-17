@@ -1,6 +1,8 @@
-# Create and share a patch weave in the browser
+# Share multiple ROM patches as one weave
 
-Package an ordered patch recipe with expected ROM checksums into one download.
+Package multiple patches, their order, and expected ROM checksums into one download.
+
+<a id="create-and-share-a-patch-weave-in-the-browser"></a>
 
 <a id="create-and-share-a-patch-bundle-in-the-browser"></a>
 

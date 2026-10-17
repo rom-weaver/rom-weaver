@@ -140,7 +140,7 @@ Tell users:
 - which additions are optional and which combinations work;
 - what changed, who contributed, and where to report a problem.
 
-Several patches are easier to use as one [weave](../explanation/bundles.md), which carries the order, choices, checksums, patch files, and output settings so users do not have to copy them by hand. Continue with [Create and share a patch weave](create-bundles.md).
+Several patches are easier to use as one [weave](../explanation/bundles.md), which carries the order, choices, checksums, patch files, and output settings so users do not have to copy them by hand. Continue with [Share multiple ROM patches as one weave](create-bundles.md).
 
 ## Release an update
 

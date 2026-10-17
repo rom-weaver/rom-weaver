@@ -20,7 +20,7 @@ The browser needs no account or installation. The CLI is the terminal version, u
 | --- | --- | --- | --- |
 | Apply patches | Combine your game with someone else's changes, such as a translation. | [Apply](../how-to/apply-rom-patches.md) | [Apply](../how-to/cli-apply.md) |
 | Create patches | Compare an original file with your edited file to make a patch. | [Create](../how-to/create-rom-patches.md) | [Create](../how-to/cli-create.md) |
-| Ordered patches | Run several changes in order, with input and output checks when available. | [Patch order](../how-to/apply-rom-patches.md#put-several-patches-in-order) | [Patch chains](../how-to/cli-apply.md) |
+| Ordered patches | Run several changes in order, with input and output checks when available. | [Patch order](../how-to/apply-rom-patches.md#apply-multiple-patches-in-order) | [Patch chains](../how-to/cli-apply.md) |
 | Cheat codes | Bake supported codes into a ROM, or turn them into a patch. | [Cheats](../how-to/use-browser-cheats.md) | [Cheats](../how-to/bake-cheat-codes.md) |
 | Patch weaves | Package patches with their order, names, choices, and expected ROM checks. | [Weaves](../how-to/create-bundles.md) | [Weaves](../how-to/cli-bundles.md) |
 
