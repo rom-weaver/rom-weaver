@@ -95,7 +95,7 @@ Procedures for specific tasks.
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
 - [Use the online ROM tester](how-to/test-roms-in-browser.md)
-- [Fix a checksum error](how-to/fix-checksum-errors.md)
+- [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md)
 - [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
 - [Settings, beta tools, and offline use](how-to/browser-settings.md)
