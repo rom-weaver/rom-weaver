@@ -135,7 +135,7 @@ describe("messageCount", () => {
     const en = createLocalizer("en");
     const es = createLocalizer("es");
     const de = createLocalizer("de");
-    expect(en.messageCount("ui.drop.unusedInputs", 0, { names: "a.sfc" })).toBe("Unused inputs: a.sfc.");
+    expect(en.messageCount("ui.drop.unusedInputs", 0, { names: "a.sfc" })).toBe("Not used: a.sfc.");
     expect(es.messageCount("ui.drop.unusedInputs", 2, { names: "a.sfc, b.sfc, c.sfc" })).toBe(
       "Entradas sin usar: a.sfc, b.sfc, c.sfc y 2 más.",
     );

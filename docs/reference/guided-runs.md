@@ -34,9 +34,9 @@ A step that needs a control the page does not show, such as the **Simple/Detaile
 ## Where a run starts
 
 - A link with `?guide=`, as in the table above. It works even when the sample link is hidden.
-- The sample link below an empty drop zone, named for its page: **Patch a sample ROM** offers Apply and Apply cheats, **Create a sample** offers Create and Create cheats, and **Weave a sample** and **Play a sample** offer their own run.
+- The sample link below an empty drop zone, named for its page: **Patch a practice ROM** offers Apply and Apply cheats, **Make a patch from practice ROMs** offers Create and Create cheats, and **Share practice patches as a weave** and **Play a practice ROM** offer their own run.
 
-**Hide this button** in that menu removes the sample link; the **Show the sample quick-start links** [setting](../how-to/browser-settings.md) brings it back.
+**Hide practice-run links** in that menu removes the sample link; the **Show practice-run links** [setting](../how-to/browser-settings.md) brings it back.
 
 ## Ways files get into Apply
 

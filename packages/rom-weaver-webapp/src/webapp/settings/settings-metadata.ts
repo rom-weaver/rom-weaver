@@ -295,9 +295,9 @@ const ADVANCED_SETTINGS_FIELDS: ReadonlySet<SettingsFieldKey> = new Set<Settings
 ]);
 
 const POST_APPLY_LABEL_IDS: Readonly<Record<string, MessageId>> = {
-  "Auto + button": "ui.settings.option.postApply.autoShow",
-  "Button only": "ui.settings.option.postApply.show",
-  "Hide Button": "ui.settings.option.postApply.hide",
+  Automatically: "ui.settings.option.postApply.autoShow",
+  "With a button": "ui.settings.option.postApply.show",
+  Never: "ui.settings.option.postApply.hide",
 };
 const withPostApplyLabelId = (option: { label: string; value: string }): SettingsChoiceOption => ({
   ...option,
@@ -341,7 +341,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       { labelId: "ui.settings.option.weavePackage.patches", value: "patches" },
       { labelId: "ui.settings.option.weavePackage.rom", value: "rom" },
     ],
-    validationLabel: "Weave",
+    validationLabel: "What a shared weave includes",
     validValues: ["patches", "rom"],
   },
   emulatorSaveStorageEnabled: {
@@ -363,7 +363,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("postApplyDownloadBehavior"),
     labelId: "settings.postApplyDownloadBehavior",
     options: POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS.map(withPostApplyLabelId),
-    validationLabel: "Post Apply Download",
+    validationLabel: "Download after patching",
     validValues: POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS.map((option) => option.value),
   },
   postApplyTestBehavior: {
@@ -375,7 +375,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("postApplyTestBehavior"),
     labelId: "settings.postApplyTestBehavior",
     options: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map(withPostApplyLabelId),
-    validationLabel: "Post Apply Test",
+    validationLabel: "Open Test after patching",
     validValues: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map((option) => option.value),
   },
   chdCreateCdCodecs: {
@@ -394,7 +394,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getUiSettingsLabel("chdCd"),
     labelId: "ui.settings.chdCd",
     placeholder: codecDefaultPlaceholderText("chdCreateCdCodecs"),
-    validationLabel: "CD Codecs",
+    validationLabel: "CD codecs",
   },
   chdCreateDvdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateDvdCodecs"),
@@ -412,7 +412,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getUiSettingsLabel("chdDvd"),
     labelId: "ui.settings.chdDvd",
     placeholder: codecDefaultPlaceholderText("chdCreateDvdCodecs"),
-    validationLabel: "DVD Codecs",
+    validationLabel: "DVD codecs",
   },
   compressionProfile: {
     defaultValue: "max",
@@ -430,7 +430,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     min: 0,
     scaleLabels: [...COMPRESSION_PROFILE_LABELS],
     step: 1,
-    validationLabel: "Level",
+    validationLabel: "Compression level",
     validValues: [...COMPRESSION_PROFILES],
   },
   defaultCompression: {
@@ -443,17 +443,17 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelId: "settings.defaultCompression",
     options: [
       {
-        label: ".7z or ROM specific",
+        label: "ROM-specific format, else .7z",
         labelId: "ui.settings.option.defaultCompression.sevenZipSpecial",
         value: "7z/special",
       },
       {
-        label: "Default: ROM specific, else bare file or .zip",
+        label: "Default: ROM-specific format, else plain file or .zip",
         labelId: "ui.settings.option.defaultCompression.zipSpecial",
         value: "zip/special",
       },
       {
-        label: "ROM specific only",
+        label: "ROM-specific format only",
         labelId: "ui.settings.option.defaultCompression.specialOnly",
         value: "special only",
       },

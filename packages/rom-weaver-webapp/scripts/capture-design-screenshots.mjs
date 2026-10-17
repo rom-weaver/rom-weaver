@@ -125,7 +125,7 @@ const prepareScreenshot = async (page, name) => {
     await page.getByRole("searchbox", { name: "Find a property" }).fill("player name");
     await page.getByRole("textbox", { name: "File 1 player name" }).fill("HERO");
     await page.getByRole("button", { name: "Preview changes", exact: true }).click();
-    await page.getByText(/1 field change · integrity valid/).waitFor();
+    await page.getByText(/1 field change, integrity valid/).waitFor();
     return;
   }
   if (name === "test-player") {

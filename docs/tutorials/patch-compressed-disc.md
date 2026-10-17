@@ -39,7 +39,7 @@ The patch runs on the extracted BIN, not on the CHD's compressed bytes. The CHD 
 1. Put `01-first.bps` above `02-second.bps` in **Patches & Cheats**. Drag a numbered handle if necessary.
 2. Keep both patches switched on.
 3. Set the first patch's input to **Original ROM**.
-4. Set the second patch's input to **Previous patch output**.
+4. Set the second patch's input to **Previous patch's result**.
 5. Leave checksum validation enabled.
 
 The first patch produces a BIN with SHA-1 `b94e0943f9d487bb1a8961dfdce4494bf83d2160`. The second patch expects that intermediate result. Applying it directly to the original fails its source checksum.

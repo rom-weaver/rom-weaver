@@ -118,7 +118,7 @@ describe("Masthead", () => {
       "Patches",
       "ROMs",
       "Files",
-      "Controls",
+      "App",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
@@ -201,7 +201,7 @@ describe("Masthead", () => {
       "ROMs",
       "Files",
       "Project",
-      "Controls",
+      "App",
     ]);
     // Menu opens for browsing: the cursor stays out of its Find box, so the keyboard stays down.
     const find = sheet.querySelector(".find-palette.is-embedded .find-input");
@@ -439,7 +439,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const device = Array.from(container.querySelectorAll(".side-nav .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
     );
     expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
       "Settings",
@@ -463,7 +463,7 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenAbout={onOpenAbout} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const app = Array.from(container.querySelectorAll("#menu-sheet .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
     );
     expect(rowsOf(app ?? null)).toEqual(["Settings", "Offline app", "Saves & storage", "Logs", "About"]);
     fireEvent.click(Array.from(app?.querySelectorAll<HTMLElement>(".nav-row") ?? []).at(-1) as HTMLElement);

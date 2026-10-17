@@ -256,10 +256,10 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toContain("Patch a sample ROM");
+    expect(chip.textContent).toContain("Patch a practice ROM");
     fireEvent.click(chip);
-    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided weave");
+    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start a practice run");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start a practice weave");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
@@ -268,12 +268,12 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it.each([
-    ["apply", "/apply-patches?guide=apply", "Start guided Apply", "/docs/apply-rom-patches", "Read the Apply guide"],
-    ["weave", "/weave-patches?guide=weave", "Start guided weave", "/docs/create-bundles", "Read the Weave guide"],
+    ["apply", "/apply-patches?guide=apply", "Start a practice run", "/docs/apply-rom-patches", "Read the Apply guide"],
+    ["weave", "/weave-patches?guide=weave", "Start a practice weave", "/docs/create-bundles", "Read the Weave guide"],
   ] as const)("offers the %s guide and the test weave download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toBe(mode === "apply" ? "Patch a sample ROM" : "Weave a sample");
+    expect(chip.textContent).toBe(mode === "apply" ? "Patch a practice ROM" : "Share practice patches as a weave");
     fireEvent.click(chip);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
@@ -519,7 +519,9 @@ describe("apply workflow view - empty bench", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
     await vi.waitFor(() =>
-      expect(within(dialog).getByRole("status").textContent).toBe("Could not load the sample. Try again."),
+      expect(within(dialog).getByRole("status").textContent).toBe(
+        "Couldn't load the practice files. Check your connection and try again.",
+      ),
     );
     expect(document.querySelector(".sample-tutorial-dialog")).toBe(dialog);
     expect(dialog.dataset.step).toBe("1");
@@ -616,7 +618,7 @@ describe("apply workflow view - empty bench", () => {
     );
 
     expect(setWeavePackage).toHaveBeenCalledWith("patches");
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading practice files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 
@@ -668,7 +670,7 @@ describe("apply workflow view - staged bench", () => {
     // The second patch's only enabled predecessor is disabled, so its automatic
     // target is the ROM input rather than a patch output.
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
   });
 
   it("labels the first patch in each target lane as the original ROM", () => {
@@ -696,7 +698,7 @@ describe("apply workflow view - staged bench", () => {
     // Each patch targets a different ROM, so neither has an enabled predecessor
     // in its own lane and both automatic targets read the original ROM.
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
   });
 
   it("preserves a member when the patch input source changes", () => {
@@ -964,7 +966,7 @@ describe("apply workflow view - staged bench", () => {
 
     // The target select writes the explicit choice; the automatic value stays unset.
     const target = addOnCard?.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Previous patch output)");
+    expect(target.options[0]?.textContent).toBe("Previous patch's result (detected)");
     expect(target.value).toBe("patch:patch-a");
     fireEvent.change(target, { target: { value: "rom" } });
     expect(onWeaveMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
@@ -1110,7 +1112,7 @@ describe("apply workflow view - staged bench", () => {
 
     // The automatic option names the resolved source; picking it clears the pin.
     const target = container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
     expect(target.options[1]?.textContent).toBe("Original ROM");
     expect(target.value).toBe("rom");
     fireEvent.change(target, { target: { value: "auto" } });
@@ -1383,12 +1385,12 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
     expect(download.value).toBe("auto-show");
-    expect(Array.from(download.options, (option) => option.textContent)).toEqual(["Auto + button", "Button only"]);
+    expect(Array.from(download.options, (option) => option.textContent)).toEqual(["Automatically", "With a button"]);
     expect(test.value).toBe("show");
     expect(Array.from(test.options, (option) => option.textContent)).toEqual([
-      "Button only",
-      "Auto + button",
-      "Hide Button",
+      "With a button",
+      "Automatically",
+      "Never",
     ]);
   });
 
@@ -1673,7 +1675,7 @@ describe("apply workflow view - patch enable toggles", () => {
     const run = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
     expect(run.disabled).toBe(true);
     // the step header reports the enabled/disabled split
-    expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta")?.textContent).toContain("1 disabled");
+    expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta")?.textContent).toContain("1 off");
   });
 });
 
@@ -2163,10 +2165,10 @@ describe("apply workflow view - staging checks reservation", () => {
     const compress = {
       fields: [
         {
-          chip: { label: "Level", value: "Fast" },
+          chip: { label: "Compression level", value: "Fast" },
           key: "level",
           kind: "select",
-          label: "Level",
+          label: "Compression level",
           options: [{ label: "Fast", value: "fast" }],
           value: "fast",
         },
@@ -2185,7 +2187,7 @@ describe("apply workflow view - staging checks reservation", () => {
       },
       ui: { ...createEmptyPatcherUiState(), clearRomInput, romInputs: [track] },
     });
-    fireEvent.click(container.querySelector('button[aria-label="Clear ROM input"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('button[aria-label="Remove ROM"]') as HTMLButtonElement);
     expect(clearRomInput).toHaveBeenCalledOnce();
     fireEvent.change(container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement, {
       target: { value: "renamed" },
@@ -2193,7 +2195,7 @@ describe("apply workflow view - staging checks reservation", () => {
     fireEvent.change(container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement, {
       target: { value: "none" },
     });
-    fireEvent.change(container.querySelector('[aria-label="Level"]') as HTMLSelectElement, {
+    fireEvent.change(container.querySelector('[aria-label="Compression level"]') as HTMLSelectElement, {
       target: { value: "fast" },
     });
     expect(setDisplayFileName).toHaveBeenCalledWith("renamed");

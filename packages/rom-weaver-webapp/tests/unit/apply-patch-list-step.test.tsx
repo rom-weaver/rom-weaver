@@ -147,10 +147,10 @@ describe("ApplyPatchListStep", () => {
     });
 
     expect(container.textContent).toContain("1 file");
-    expect(container.textContent).toContain("1 disabled");
+    expect(container.textContent).toContain("1 off");
     expect(container.textContent).toContain("First update");
     expect(container.textContent).toContain("Tester");
-    expect(container.textContent).toContain("Validation failed");
+    expect(container.textContent).toContain("Checks failed");
     expect(container.textContent).toContain("Patch does not match");
     expect(container.textContent).toContain("CRC32");
     expect(container.textContent).toContain("SHA-1");

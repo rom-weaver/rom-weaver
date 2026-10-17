@@ -400,7 +400,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   // The output section (and its apply button) renders once the workflow has files.
   await expect.element(page.getByRole("button", { name: "Apply & download" })).toBeInTheDocument();
 
-  await page.getByRole("button", { name: "Clear ROM input" }).click();
+  await page.getByRole("button", { name: "Remove ROM" }).click();
   await expect
     .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
     .not.toContain("game.bin");

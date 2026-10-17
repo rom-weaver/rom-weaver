@@ -108,9 +108,9 @@ test("a structured condition never gets the no-match notice, and says why instea
     input: "game.bin",
     status: "unknown",
   });
-  await waitForText("Media profile not supported");
+  await waitForText("Disc layout can't be matched");
   const notice = host.querySelector(".notice.info");
-  expect(notice.textContent).toContain("Media profile not supported");
+  expect(notice.textContent).toContain("Disc layout can't be matched");
   expect(notice.textContent).toContain("This disc layout is not supported yet.");
   expect(host.textContent).not.toContain("homebrew");
   expect(host.textContent).not.toContain("does not mean corrupt");

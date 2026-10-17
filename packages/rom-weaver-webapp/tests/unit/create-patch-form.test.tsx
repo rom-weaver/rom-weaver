@@ -212,19 +212,21 @@ describe("CreatePatchForm", () => {
     expect(container.querySelectorAll(".step-num")).toHaveLength(1);
 
     const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toBe("Create a sample");
+    expect(chip.textContent).toBe("Make a patch from practice ROMs");
     await act(async () => {
       fireEvent.click(chip);
     });
     const start = Array.from(container.querySelectorAll("a")).find((link) =>
-      link.textContent?.includes("Start guided Create"),
+      link.textContent?.includes("Start a practice run"),
     );
     expect(start).toBeTruthy();
     await act(async () => {
       fireEvent.click(start as HTMLAnchorElement);
     });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    await vi.waitFor(() => expect(container.textContent).toContain("Could not load the sample. Try again."));
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Couldn't load the practice files. Check your connection and try again."),
+    );
   });
 
   it("stages both ROMs, exposes output controls, swaps sources, and creates a patch", async () => {

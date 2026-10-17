@@ -122,11 +122,11 @@ describe("sample tutorial start", () => {
         downloadName="first-weave.zip"
         error=""
         guideHref="/apply-patch?guide=apply"
-        label="Start guided Apply"
+        label="Start a practice run"
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
-        secondaryLabel="Start guided weave"
+        secondaryLabel="Start a practice weave"
         secondaryHref="/weave?guide=weave"
       />,
     );
@@ -136,37 +136,37 @@ describe("sample tutorial start", () => {
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
 
-    const guidedApply = screen.getByRole("link", { name: /Start guided Apply/ });
+    const guidedApply = screen.getByRole("link", { name: /Start a practice run/ });
     expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("link", { name: /Start guided Apply/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Start a practice run/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
-    const guidedWeave = screen.getByRole("link", { name: /Start guided weave/ });
+    const guidedWeave = screen.getByRole("link", { name: /Start a practice weave/ });
     expect(guidedWeave.getAttribute("href")).toBe("/weave?guide=weave");
     fireEvent.click(guidedWeave);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("link", { name: /Start guided weave/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Start a practice weave/ })).toBeNull();
   });
   it("reopens the sample menu when loading fails", async () => {
     const props = {
-      chipLabel: "Weave a sample",
+      chipLabel: "Share practice patches as a weave",
       downloadHref: "/first-weave.zip",
       downloadLabel: "Download a test weave",
       downloadName: "first-weave.zip",
       error: "",
       guideHref: "/weave?guide=weave",
-      label: "Start guided weave",
+      label: "Start a practice weave",
       loading: false,
       onStart: vi.fn(),
     };
     const { rerender } = render(<SampleTutorialStart {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /Weave a sample/ }));
-    fireEvent.click(screen.getByRole("link", { name: /Start guided weave/ }));
-    expect(screen.queryByRole("link", { name: /Start guided weave/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Share practice patches as a weave/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Start a practice weave/ }));
+    expect(screen.queryByRole("link", { name: /Start a practice weave/ })).toBeNull();
     rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Could not load practice files"));
-    expect(screen.getByRole("link", { name: /Start guided weave/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Start a practice weave/ })).toBeTruthy();
   });
 });
 
@@ -202,13 +202,13 @@ describe("sample tutorial", () => {
       </div>,
     );
 
-    const guide = screen.getByRole("dialog", { name: "Loading the sample files" });
+    const guide = screen.getByRole("dialog", { name: "Loading practice files" });
     expect(guide.getAttribute("aria-busy")).toBe("true");
     expect(guide.getAttribute("data-loading")).toBe("true");
     expect(guide.hasAttribute("data-step")).toBe(false);
     expect(guide.hasAttribute("data-step-count")).toBe(false);
-    expect(screen.getByRole("progressbar", { name: "Loading sample files" }).getAttribute("aria-valuetext")).toBe(
-      "Getting the sample ready",
+    expect(screen.getByRole("progressbar", { name: "Loading practice files" }).getAttribute("aria-valuetext")).toBe(
+      "Preparing practice files",
     );
   });
 
@@ -596,7 +596,7 @@ describe("sample tutorial step card", () => {
     );
 
     expect(document.querySelector(".sample-tutorial-beacon")?.textContent).toBe("0x01");
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(document.querySelectorAll(".sample-tutorial-pips i")).toHaveLength(2);
     expect(document.querySelector(".sample-tutorial-pips [data-state='current']")).toBe(
       document.querySelector(".sample-tutorial-pips i"),
@@ -706,14 +706,14 @@ describe("sample tutorial step card", () => {
 
     expect(screen.queryByRole("heading", { name: "Choose how much to see" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 1");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 1");
   });
 
   it("folds the view explanation into a card's own step", async () => {
     render(viewWorkbench(false, true, mergedViewSteps));
 
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(screen.getByText(/^Check the first section\. You're in Simple view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare")).toBeTruthy();
     expect(screen.getByText(/Switch to Detailed/)).toBeTruthy();
@@ -725,7 +725,7 @@ describe("sample tutorial step card", () => {
     render(viewWorkbench(false, false, mergedViewSteps));
 
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(screen.getByText("Check the first section.")).toBeTruthy();
     expect(screen.queryByText(/You're in Simple view/)).toBeNull();
     expect(document.querySelector(".sample-tutorial-compare")).toBeNull();
@@ -785,7 +785,7 @@ describe("sample tutorial step card", () => {
     expect(onContinue).toHaveBeenCalledOnce();
     rerender(workbench({ busy: true }));
     expect(next.getAttribute("aria-busy")).toBe("true");
-    expect(next.textContent).toBe("Loading sample files…");
+    expect(next.textContent).toBe("Loading practice files…");
     // A second press while the files load starts nothing new.
     fireEvent.click(next);
     expect(onContinue).toHaveBeenCalledOnce();
@@ -812,8 +812,10 @@ describe("sample tutorial step card", () => {
     );
     const { rerender } = render(workbench());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    rerender(workbench({ error: "Could not load the sample. Try again." }));
-    expect(screen.getByRole("status").textContent).toBe("Could not load the sample. Try again.");
+    rerender(workbench({ error: "Couldn't load the practice files. Check your connection and try again." }));
+    expect(screen.getByRole("status").textContent).toBe(
+      "Couldn't load the practice files. Check your connection and try again.",
+    );
 
     // Files the reader adds afterwards unlock the step without carrying it on.
     rerender(workbench({ locked: false }));
