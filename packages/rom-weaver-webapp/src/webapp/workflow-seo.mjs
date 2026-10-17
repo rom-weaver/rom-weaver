@@ -47,9 +47,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, UPS, xdelta, and other ROM patches online, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. Process files locally with no uploads.",
+      "Apply one or multiple BPS, IPS, UPS, xdelta, and other ROM patches online, in order, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. No uploads.",
     slug: "apply-patches",
-    title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
+    title: `ROM Patcher Online: BPS, IPS, xdelta & multiple patches | ${SITE_NAME}`,
   }),
   "ppf-undo": Object.freeze({
     description:
