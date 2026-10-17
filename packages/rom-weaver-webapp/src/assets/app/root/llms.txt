@@ -46,7 +46,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create weaves guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only weave in the browser's Apply workflow.
 - [ROM tester guide](https://rom-weaver.com/docs/test-roms): Test a local ROM or an Apply result in the browser, check platform support, and manage local saves.
-- [Fix checksum errors](https://rom-weaver.com/docs/fix-checksum-errors): What to check when Apply reports that a file is not the expected ROM.
+- [Fix a source ROM checksum mismatch](https://rom-weaver.com/docs/fix-checksum-errors): What a checksum mismatch means, and what to check when Apply or another patcher reports that a file is not the expected ROM.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
 - [ROM cheats](https://rom-weaver.com/docs/rom-cheats): Why rom-weaver bakes cheats into the ROM instead of running them at emulation time.

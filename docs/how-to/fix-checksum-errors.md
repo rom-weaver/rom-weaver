@@ -1,6 +1,8 @@
-# Fix a ROM checksum mismatch in the browser
+# How to fix a source ROM checksum mismatch
 
-When Apply reports **Not the expected ROM**, check the source and patch order. An override bypasses verification; it does not repair the input.
+A source ROM checksum mismatch means your ROM differs from the file the patch expects. Find the cause, then fix the input. An override skips the check; it does not repair the ROM.
+
+<a id="fix-a-rom-checksum-mismatch-in-the-browser"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,6 +20,8 @@ When Apply reports **Not the expected ROM**, check the source and patch order. A
 <!-- END doctoc -->
 
 ## What does the warning mean?
+
+Apply reports it as **Not the expected ROM**. Other patchers word it differently: RomPatcher.js shows `Source ROM checksum mismatch`, and xdelta3 shows `target window checksum mismatch`. Each usually means the wrong starting file.
 
 The checked bytes differ from the expected file. Compare the same algorithm in [Checksum file](https://rom-weaver.com/checksum). BPS/UPS carry checks; for IPS, use the author's notes. [Checksums versus filenames](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the evidence.
 

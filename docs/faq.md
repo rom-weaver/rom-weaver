@@ -19,7 +19,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
   - [Which patch format should I choose?](#which-patch-format-should-i-choose)
   - [Can I drop a ZIP or 7z without extracting it?](#can-i-drop-a-zip-or-7z-without-extracting-it)
   - [Why does the expected filename not match?](#why-does-the-expected-filename-not-match)
-  - [Why does the checksum not match?](#why-does-the-checksum-not-match)
+  - [What does a source ROM checksum mismatch mean?](#what-does-a-source-rom-checksum-mismatch-mean)
   - [Does patch order matter?](#does-patch-order-matter)
   - [Why is Apply and Download disabled?](#why-is-apply-and-download-disabled)
 - [Creating a patch](#creating-a-patch)
@@ -103,9 +103,11 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 
 [Checksums and filenames](explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not).
 
-### Why does the checksum not match?
+<a id="why-does-the-checksum-not-match"></a>
 
-Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
+### What does a source ROM checksum mismatch mean?
+
+Work through [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md).
 
 ### Does patch order matter?
 
