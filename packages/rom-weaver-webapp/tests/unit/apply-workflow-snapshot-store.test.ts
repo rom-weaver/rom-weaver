@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import type { PatchValidationPlan } from "../../src/wasm/index.ts";
-import { createApplyWorkflowSnapshotStore } from "../../src/public/react/apply-workflow-snapshot-store.ts";
+import {
+  createApplyWorkflowSnapshotStore,
+  getEnabledPatchTargetSize,
+} from "../../src/public/react/apply-workflow-snapshot-store.ts";
 
 type Snapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
 
@@ -184,11 +187,15 @@ describe("Apply workflow snapshot store", () => {
     expect(store.getSnapshot().outputName).toBe("new.chd");
   });
 
-  it("publishes the ROM size and the largest declared patch output size", () => {
+  it("publishes the ready ROM size and each declared patch output size", () => {
     const store = createApplyWorkflowSnapshotStore();
     const workflow = createWorkflow();
     store.setWorkflow(workflow);
-    expect(store.getSnapshot()).toMatchObject({ patchTargetSize: 0, romSize: 0 });
+    expect(store.getSnapshot()).toMatchObject({ patchTargetSizes: [], romSize: 0 });
+
+    // A loading input reports the dropped file's size, such as a ZIP's, not the ROM's.
+    workflow.change({ input: { size: 9_000_000, status: "loading" } as Snapshot["input"] });
+    expect(store.getSnapshot().romSize).toBe(0);
 
     workflow.change({
       input: { selectedCandidateId: "input-1", size: 20_000_000, status: "ready" } as Snapshot["input"],
@@ -199,8 +206,17 @@ describe("Apply workflow snapshot store", () => {
       ] as Snapshot["patches"],
     });
     const sized = store.getSnapshot();
-    expect(sized).toMatchObject({ patchTargetSize: 24_000_000, romSize: 20_000_000 });
-    workflow.change({ busy: true });
+    expect(sized).toMatchObject({ patchTargetSizes: [24_000_000, 0, 22_000_000], romSize: 20_000_000 });
+    workflow.change({ busy: true, patches: [...workflow.getSnapshot().patches] });
     expect(store.getSnapshot()).toBe(sized);
+  });
+
+  it("skips disabled patches only while the staged patches line up with the slots", () => {
+    const sizes = [64_000_000, 8_000_000];
+    expect(getEnabledPatchTargetSize(sizes, ["slot-1", "slot-2"], new Set())).toBe(64_000_000);
+    expect(getEnabledPatchTargetSize(sizes, ["slot-1", "slot-2"], new Set(["slot-1"]))).toBe(8_000_000);
+    // A filtered run stages only the enabled patches, so none of them is skipped.
+    expect(getEnabledPatchTargetSize([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"]))).toBe(64_000_000);
+    expect(getEnabledPatchTargetSize([], [], new Set())).toBe(0);
   });
 });

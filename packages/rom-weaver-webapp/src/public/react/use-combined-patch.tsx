@@ -52,11 +52,14 @@ const useCombinedPatch = ({
   const localizer = useUiLocalizer();
   const [fileName, setFileName] = useState("");
   const [internalFormat, setInternalFormat] = useState(defaultPatchType || "bps");
+  // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
+  const [runSizes, setRunSizes] = useState<{ patchTargetSize?: number; romSize?: number } | null>(null);
+  const formatSizes = runSizes ?? { patchTargetSize, romSize };
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
-    modifiedSize: patchTargetSize,
-    originalSize: romSize,
+    modifiedSize: formatSizes.patchTargetSize,
+    originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
   });
   const setFormat = (value: string) => {
@@ -98,6 +101,7 @@ const useCombinedPatch = ({
     setCompleted(null);
     setError("");
     setRunName(null);
+    setRunSizes(null);
     setBusy(false);
     setProgress(null);
     return () => {
@@ -113,6 +117,7 @@ const useCombinedPatch = ({
     const abortController = new AbortController();
     controller.current = abortController;
     setRunName(name);
+    setRunSizes(formatSizes);
     setBusy(true);
     setError("");
     const isCurrent = () => !abortController.signal.aborted && currentGeneration === generation.current;
@@ -150,6 +155,7 @@ const useCombinedPatch = ({
       if (controller.current === abortController) {
         controller.current = null;
         setRunName(null);
+        setRunSizes(null);
         setBusy(false);
         setProgress(null);
       }
@@ -163,7 +169,10 @@ const useCombinedPatch = ({
     format,
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
-    formatOptions: createCreatePatchFormatOptions({ modifiedSize: patchTargetSize, originalSize: romSize }),
+    formatOptions: createCreatePatchFormatOptions({
+      modifiedSize: formatSizes.patchTargetSize,
+      originalSize: formatSizes.romSize,
+    }),
     onFormatChange: setFormat,
     disabled: disabled || busy,
     action: (

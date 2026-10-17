@@ -223,4 +223,32 @@ describe("useCombinedPatch", () => {
     expect(formatValues(result.current)).toEqual(["xdelta", "ppf"]);
     expect(result.current.outputProps.format).toBe("xdelta");
   });
+
+  it("keeps a running job's sizes while preparing the run clears them", async () => {
+    const pending = deferred<BrowserCreateResult>();
+    const patch = createdPatch();
+    const run = vi.fn<Options["run"]>(() => pending.promise);
+    const onError = vi.fn();
+    const large = { patchType: "ips", romSize: 8 * 1024 * 1024, patchTargetSize: 64 * 1024 * 1024 };
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: large,
+    });
+    expect(result.current.outputProps.format).toBe("bps");
+    let running!: Promise<void>;
+    await act(async () => {
+      running = result.current.run();
+    });
+    // Re-staging the enabled patches drops their declared sizes until they parse again.
+    rerender({ ...large, patchTargetSize: 0 });
+    expect(run.mock.calls[0][0].signal.aborted).toBe(false);
+    expect(result.current.outputProps.format).toBe("bps");
+    rerender(large);
+    await act(async () => {
+      pending.resolve(patch.result);
+      await running;
+    });
+    expect(patch.result.output.saveAs).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+    expect(patch.result.output.dispose).not.toHaveBeenCalled();
+  });
 });

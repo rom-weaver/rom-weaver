@@ -96,7 +96,7 @@ import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressE
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
-import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
+import { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize } from "./apply-workflow-snapshot-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
 
@@ -1817,7 +1817,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     defaultPatchType: props.defaultPatchType,
     onPatchTypeChange: props.onPatchTypeChange,
     romSize: workflowSnapshot.romSize,
-    patchTargetSize: workflowSnapshot.patchTargetSize,
+    patchTargetSize: getEnabledPatchTargetSize(workflowSnapshot.patchTargetSizes, getPatchIds(), disabledPatchIds),
     settings: props.createSettings,
     onComplete: props.onCreateComplete,
     onError: props.onError,
