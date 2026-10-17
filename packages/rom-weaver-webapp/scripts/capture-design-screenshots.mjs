@@ -46,11 +46,14 @@ const assertNoDevBadge = async (page) => {
 
 // Practice files start checking after their cards render, so a quiet moment
 // before the checks begin is not a settled page; wait for the patch verdicts.
+// A patch without a checksum to compare settles on "Checked" rather than "Verified".
 const waitForStableContent = (page, { practiceFiles = false } = {}) =>
   page.waitForFunction(
     (waitForPatchChecks) => {
       const text = document.body.innerText;
-      const patchChecksPending = waitForPatchChecks && (!/Verified/.test(text) || /Not checked yet:/.test(text));
+      const patchChecksPending =
+        waitForPatchChecks &&
+        (!/\b(Verified|Checked)\b/.test(text) || /Not checked yet|Checking(?:…|\.\.\.)/.test(text));
       if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(text) || patchChecksPending) {
         globalThis.__romWeaverScreenshotStableAt = undefined;
         return false;
@@ -122,7 +125,7 @@ const prepareScreenshot = async (page, name) => {
     await page.getByRole("searchbox", { name: "Find a property" }).fill("player name");
     await page.getByRole("textbox", { name: "File 1 player name" }).fill("HERO");
     await page.getByRole("button", { name: "Preview changes", exact: true }).click();
-    await page.getByText(/1 field changes · integrity valid/).waitFor();
+    await page.getByText(/1 field change · integrity valid/).waitFor();
     return;
   }
   if (name === "test-player") {
