@@ -143,24 +143,21 @@ jobs:
             --prerelease
 
       # Refresh an existing release pull request even when Release Please made no new one.
-      # The label filter goes through GitHub search, which can miss a pull request
-      # created seconds earlier, so retry while Release Please reports one exists.
+      # Prefer the pull request Release Please reports, because the label filter goes through
+      # GitHub search, which can miss one created seconds earlier; pass only its number and branch.
       - name: Find release pull request
         id: release-pr
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          PRS_CREATED: ${{ steps.release.outputs.prs_created }}
+          REPORTED_NUMBER: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number || '' }}
+          REPORTED_BRANCH: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
         shell: bash
         run: |
           set -euo pipefail
-          attempts=1
-          if [ "$PRS_CREATED" = true ]; then
-            attempts=12
-          fi
-          for attempt in $(seq "$attempts"); do
-            number=
-            branch=
+          number="$REPORTED_NUMBER"
+          branch="$REPORTED_BRANCH"
+          if [ -z "$number" ]; then
             read -r number branch < <(
               gh pr list \
                 --repo "$GITHUB_REPOSITORY" \
@@ -170,19 +167,8 @@ jobs:
                 --json number,headRefName \
                 --jq '.[0] | [.number, .headRefName] | @tsv'
             ) || true
-            if [ -n "$number" ] && [ -n "$branch" ]; then
-              break
-            fi
-            if [ "$attempt" -lt "$attempts" ]; then
-              echo "Release pull request not listed yet (attempt $attempt of $attempts)"
-              sleep 5
-            fi
-          done
-          if [ -z "$number" ] || [ -z "$branch" ]; then
-            if [ "$PRS_CREATED" = true ]; then
-              echo "::error::Release Please reported a release pull request, but search did not list it"
-              exit 1
-            fi
+          fi
+          if [ -z "${number:-}" ] || [ -z "${branch:-}" ]; then
             echo "No open release pull request - nothing to sync"
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
