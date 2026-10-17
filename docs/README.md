@@ -79,6 +79,7 @@ Procedures for specific tasks.
 - [Add an Apply button to a release](hosting/webapp-integration.md#add-an-apply-button)
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
+- [Convert BPS to IPS and other patch formats](how-to/convert-patch-format-browser.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch weave](how-to/create-bundles.md)
 - [Identify a ROM by checksum](how-to/identify-roms-browser.md)
