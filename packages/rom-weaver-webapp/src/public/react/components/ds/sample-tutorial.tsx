@@ -396,6 +396,12 @@ const guideTopLimit = () =>
     return Math.max(limit, rect.bottom + GUIDE_MARGIN);
   }, GUIDE_MARGIN);
 
+/** `.dock-pad` is the in-flow spacer that carries the fixed dock's height. */
+const dockHeight = () => document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
+
+/** The lowest the card may reach: the dock covers the band below it. */
+const guideBottomLimit = () => window.innerHeight - dockHeight() - GUIDE_MARGIN;
+
 /**
  * Which side of the row the card sits on. A row taller than a chunk of the
  * viewport anchors from its top, so the card lands beside the header the step
@@ -418,7 +424,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide)
   const above = rect.top - GUIDE_GAP - height;
   const below = rect.bottom + GUIDE_GAP;
   const fitsAbove = above >= GUIDE_MARGIN;
-  const fitsBelow = below + height <= window.innerHeight - GUIDE_MARGIN;
+  const fitsBelow = below + height <= guideBottomLimit();
   // The reveal scroll parks the row so the preferred side fits, but the user
   // can scroll it anywhere afterwards - take the other side rather than clamp
   // the card back over the row.
@@ -427,7 +433,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide)
   const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
-    top: clampBetween(top, guideTopLimit(), window.innerHeight - height - GUIDE_MARGIN),
+    top: clampBetween(top, guideTopLimit(), guideBottomLimit() - height),
   };
 };
 
@@ -455,11 +461,9 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, placeAb
  */
 const scrollDeltaForPinned = (rect: GuideRect, dialog: HTMLElement) => {
   const card = dialog.getBoundingClientRect();
-  // `.dock-pad` is the in-flow spacer that carries the dock's height.
-  const dock = document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
   const pinnedTop = card.top + card.height / 2 < window.innerHeight / 2;
   const bandTop = pinnedTop ? card.bottom + GUIDE_GAP : GUIDE_MARGIN;
-  const bandBottom = pinnedTop ? window.innerHeight - dock - GUIDE_MARGIN : card.top - GUIDE_GAP;
+  const bandBottom = pinnedTop ? guideBottomLimit() : card.top - GUIDE_GAP;
   const room = bandBottom - bandTop;
   if (rect.height <= room && rect.top >= bandTop && rect.bottom <= bandBottom) return 0;
   const desiredTop = rect.height <= room ? bandTop + (room - rect.height) / 2 : bandTop;
@@ -474,7 +478,7 @@ const pairInView = (rect: GuideRect, dialog: HTMLElement, placeAbove: boolean) =
   const cardHeight = dialog.getBoundingClientRect().height;
   const top = placeAbove ? rect.top - GUIDE_GAP - cardHeight : rect.top;
   const bottom = placeAbove ? rect.bottom : rect.bottom + GUIDE_GAP + cardHeight;
-  return top >= guideTopLimit() && bottom <= window.innerHeight - GUIDE_MARGIN;
+  return top >= guideTopLimit() && bottom <= guideBottomLimit();
 };
 
 /** The row and the control lifted with it, as one box to keep on screen. */
@@ -1026,6 +1030,9 @@ const SampleTutorial = ({
       const lifted = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
       const reveal = unionRect(rect, lifted);
       const placeAbove = desktop.matches && shouldPlaceAbove(rect.height, prefer);
+      const cardTop = rect.bottom + GUIDE_GAP;
+      const cardBottom = cardTop + dialog.getBoundingClientRect().height;
+      const hangs = anchorCard() && !desktop.matches;
       let top = 0;
       if (!anchorCard()) top = scrollDeltaForPinned(reveal, dialog);
       else if (!pairInView(reveal, dialog, placeAbove)) {
@@ -1034,17 +1041,22 @@ const SampleTutorial = ({
         // card below gets as much room as scrolling can give it without
         // pushing the lifted control - the one the step asks the reader to
         // use - or the row's top off the screen. Whatever is still short is
-        // the card overlapping the row's tail, never the control.
+        // the card overlapping the row's tail, never the control. A phone card
+        // never overlaps its row, so there the card itself has to come into
+        // view: only its own top is kept on screen.
         if (!placeAbove) {
-          const floor = window.innerHeight - GUIDE_MARGIN;
-          const cardBottom = rect.bottom + GUIDE_GAP + dialog.getBoundingClientRect().height;
-          top = Math.max(top, Math.min(cardBottom - floor, reveal.top - guideTopLimit()));
+          const keep = hangs ? cardTop : reveal.top;
+          top = Math.max(top, Math.min(cardBottom - guideBottomLimit(), keep - guideTopLimit()));
         }
       }
       // The page cannot scroll past either end, and a card placed for a scroll
       // that falls short would miss its row by the difference. A page that
-      // reports no scrollable height is left to the start check below.
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      // reports no scrollable height is left to the start check below. A phone
+      // card hangs below its row, so placing it lengthens the page down to its
+      // spacer (see dropzone.css): the scroll that clears the dock is reachable
+      // even when the page as measured now ends above it.
+      const pageEnd = hangs ? window.scrollY + cardBottom + dockHeight() + GUIDE_MARGIN : 0;
+      const maxScroll = Math.max(document.documentElement.scrollHeight, pageEnd) - window.innerHeight;
       const reachable = maxScroll > 0 ? Math.min(Math.max(top, -window.scrollY), maxScroll - window.scrollY) : top;
       const shift = Math.abs(reachable) > 1 ? reachable : 0;
       const from = window.scrollY;
