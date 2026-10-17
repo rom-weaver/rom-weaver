@@ -36,9 +36,9 @@ Choose ZIP for broad compatibility, or 7z. This selects the recipe archive forma
 
 Set each patch's input selector to the state its checks describe:
 
-1. Keep **auto** to let the checks select the state.
+1. Keep **Automatic** to let the checks select the state. It then shows the detected state, such as **Original ROM (detected)**.
 2. Choose **Original ROM** when the patch was made from the clean ROM.
-3. Choose **Previous patch output** when the patch was made from the result above it.
+3. Choose **Previous patch's result** when the patch was made from the result above it.
 4. Choose **Output of** a named patch for a dependency. Keep that patch enabled and ordered before its dependent patch.
 
 For discs, select the required track. Keep accumulated execution to continue that track's chain. Test optional switches after reopening the exported weave.
@@ -63,7 +63,7 @@ Enabled ROM cheats make the weave contain one combined patch, preserving the ena
 2. Choose **.zip** or **.7z** in its format selector.
 3. Open **Options** and leave **Include ROM in weave** clear for a patch-only release.
 4. Select **Share weave** and wait for the checks and download.
-5. Save the archive. The control becomes **Download ZIP Weave** or **Download 7z Weave** for another copy.
+5. Save the archive. The control becomes **Download ZIP weave** or **Download 7z weave** for another copy.
 
 Expand the secondary **Download this ROM** step to test the recipe. Its name and compression settings are shared with Weave: 7z selects a 7z weave; other Apply formats select ZIP. Recheck the Weave format before sharing.
 

@@ -777,7 +777,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     } catch {
       if (generation !== sampleLoadGenerationRef.current) return;
       closeSampleTutorial();
-      setSampleError("Could not load the sample. Try again.");
+      setSampleError("Couldn't load the practice files. Check your connection and try again.");
     } finally {
       if (generation === sampleLoadGenerationRef.current) setSampleLoading(false);
     }
@@ -1252,7 +1252,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
           downloadLabel="Download samples"
           error={sampleError}
           guideHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create")}
-          label="Start guided Create"
+          label="Start a practice run"
           startAction="create"
           loading={sampleLoading}
           onStart={() => {

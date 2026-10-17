@@ -48,7 +48,7 @@ describe("output options header chips", () => {
     expect(chips(container)).toEqual([
       // An unset codec reads as the default the run will actually use.
       { label: "Codec", value: "deflate" },
-      { label: "Level", value: "Max" },
+      { label: "Compression level", value: "Max" },
     ]);
   });
 

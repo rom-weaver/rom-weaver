@@ -70,8 +70,8 @@ describe("EmulatorSavesPanel listing", () => {
     const { container } = render(<EmulatorSavesPanel />);
 
     await screen.findByText("Sample Game");
-    expect(screen.getByText(`ROM fingerprint · SHA-1 ${SAVE.gameId}`)).toBeTruthy();
-    expect(container.querySelector(".emulator-save-sizes")?.textContent).toBe("State: 4.0 KB · SRAM: 2.0 KB");
+    expect(screen.getByText(`ROM SHA-1 ${SAVE.gameId}`)).toBeTruthy();
+    expect(container.querySelector(".emulator-save-sizes")?.textContent).toBe("Save state 4.0 KB, in-game save 2.0 KB");
   });
 
   it("reports 'none' for a save that is missing a part", async () => {
@@ -79,7 +79,7 @@ describe("EmulatorSavesPanel listing", () => {
     const { container } = render(<EmulatorSavesPanel />);
 
     await screen.findByText("Sample Game");
-    expect(container.querySelector(".emulator-save-sizes")?.textContent).toBe("State: 4.0 KB · SRAM: none");
+    expect(container.querySelector(".emulator-save-sizes")?.textContent).toBe("Save state 4.0 KB, in-game save none");
   });
 
   it("does not load anything while the panel is inactive", () => {

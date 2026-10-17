@@ -191,11 +191,11 @@ describe("HomePage", () => {
     expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
     expect(container.querySelector(".home-main-actions .sample-tutorial-start-chip")?.textContent).toContain(
-      "Walk through a sample",
+      "Patch a practice ROM, step by step",
     );
     expect(container.querySelector(".home-main-actions .needs-input .btn")?.textContent).toContain("Choose files");
     expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(
-      "See the full tables",
+      "See every format",
     );
     expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
     expect(container.querySelector("a[href='/tools/docs/faq']")).not.toBeNull();
@@ -203,7 +203,7 @@ describe("HomePage", () => {
     expect(formatHeadings).toEqual(["20 patch formats", "23 archive and disc formats", "8 checksum types"]);
     expect(container.querySelector(".home-format-group p")?.textContent).toContain(".bps");
     expect(container.querySelectorAll(".home-faq details")).toHaveLength(4);
-    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
+    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("Patches apply in the order shown");
     expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain("game.chdextractgame.iso");
     expect(container.textContent).toContain("translation.bps.rarunpacktranslation.bps");
     expect(container.textContent).toContain("bugfix.ips.zipunpackbugfix.ips");

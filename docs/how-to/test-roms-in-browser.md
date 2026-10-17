@@ -64,14 +64,14 @@ A CHD that rom-weaver identifies as Sony PlayStation or Sega Mega Drive or Genes
 To test a patched ROM online, send the Apply result directly to the browser player:
 
 1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-patches).
-2. Check **Post Apply Test** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
+2. Set **Open Test after patching** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
 3. Select **Open in the Test tab** after Apply finishes.
 4. Play far enough to exercise the patched content.
 5. Return to Apply and download the result if you have not downloaded it.
 
-The **Post Apply Test** option can open Test automatically or hide the Test button. Apply skips automatic testing for unsupported platforms. Its disabled Test button names the unsupported platform.
+The **Open Test after patching** option can open Test automatically or hide the Test button. Apply skips automatic testing for unsupported platforms. Its disabled Test button names the unsupported platform.
 
-Use **Post Apply Download** to choose whether Apply downloads the result automatically.
+Use **Download after patching** to choose whether Apply downloads the result automatically.
 
 An emulator test does not prove that every part of a patch works. Keep the clean original and test important paths on the target hardware when possible.
 

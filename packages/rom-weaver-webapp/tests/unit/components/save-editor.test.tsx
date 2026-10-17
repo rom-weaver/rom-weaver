@@ -461,7 +461,7 @@ describe("SaveEditor", () => {
     expect(screen.getByText("ASH → MAY")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Preview changes" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
-    await waitFor(() => expect(screen.getByText(/1 field change ·/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/1 field change,/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Reset Name" }));
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
@@ -583,7 +583,9 @@ describe("SaveEditor", () => {
     ]);
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await waitFor(() =>
-      expect(screen.getByText("No emulator saves yet. Save a game in Test to open its SRAM here.")).toBeTruthy(),
+      expect(
+        screen.getByText("No emulator saves yet. Save a game in Test to open its in-game save here."),
+      ).toBeTruthy(),
     );
     expect(screen.queryByRole("button", { name: /State only/ })).toBeNull();
   });
@@ -616,8 +618,8 @@ describe("SaveEditor", () => {
     await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
     fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Replace selected SRAM" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Replace selected SRAM" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Replace the selected in-game save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Replace the selected in-game save" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(replaceEmulatorSaveSram).toHaveBeenCalledWith(

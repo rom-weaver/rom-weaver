@@ -47,7 +47,7 @@ describe("CandidateSelectionDialog", () => {
         state={{ request: singleRequest({ role: "input" }), resolve: vi.fn(), reject: vi.fn() }}
       />,
     );
-    expect(screen.getByText("Multiple candidates found, select one")).toBeTruthy();
+    expect(screen.getByText("More than one file matches. Choose one.")).toBeTruthy();
     expect(screen.queryByText("Select the ROM to use")).toBeNull();
   });
 

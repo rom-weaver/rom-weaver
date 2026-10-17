@@ -513,7 +513,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       } catch {
         if (abortController.signal.aborted) return;
         setSampleTutorialActive(false);
-        setSampleError("Could not load the sample. Try again.");
+        setSampleError("Couldn't load the practice files. Check your connection and try again.");
       } finally {
         if (sampleAbortControllerRef.current === abortController) {
           sampleAbortControllerRef.current = null;
@@ -798,7 +798,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
               downloadName={TEST_SAMPLE_ASSET}
               error={sampleError}
               guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
-              label="Start guided Test"
+              label="Start a practice run"
               loading={sampleLoading}
               onStart={startTestSample}
               startAction="play"

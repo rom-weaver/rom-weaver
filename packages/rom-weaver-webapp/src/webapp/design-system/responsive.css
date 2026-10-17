@@ -291,10 +291,10 @@
   flex-wrap: wrap;
   gap: 1px;
 }
-/* Wide enough for "Post Apply Download", so a narrow card stacks the pair
+/* Wide enough for "Download after patching", so a narrow card stacks the pair
    instead of clipping the label. */
 .post-apply-fields > .ofld {
-  flex-basis: 136px;
+  flex-basis: 156px;
 }
 /* The identified title gets its own line under the label so it wraps whole. */
 .apply-output .outname-source {

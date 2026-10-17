@@ -21,7 +21,7 @@ describe("presentation errors", () => {
 
   it("localizes known codes and keeps the original detail", () => {
     expect(formatCodedErrorForDisplay(codedError("bad selection", "INVALID_INPUT"))).toBe(
-      "INVALID_INPUT: The selected input is not valid. Details: bad selection",
+      "INVALID_INPUT: rom-weaver couldn't use the files you added. Details: bad selection",
     );
   });
 
@@ -36,15 +36,17 @@ describe("presentation errors", () => {
   });
 
   it("uses a distinct cause before structured worker details", () => {
-    const error = codedError("Worker execution failed.", "WORKER_FAILED", {
+    const error = codedError("The task stopped unexpectedly. Reload the page and try again.", "WORKER_FAILED", {
       cause: new Error("worker crashed"),
       details: { phase: "run", workerName: "patch-worker" },
     });
-    expect(formatCodedErrorForDisplay(error)).toBe("WORKER_FAILED: Worker execution failed. Details: worker crashed");
+    expect(formatCodedErrorForDisplay(error)).toBe(
+      "WORKER_FAILED: The task stopped unexpectedly. Reload the page and try again. Details: worker crashed",
+    );
   });
 
   it("formats finite script coordinates and request identifiers", () => {
-    const error = codedError("Worker execution failed.", "WORKER_FAILED", {
+    const error = codedError("The task stopped unexpectedly. Reload the page and try again.", "WORKER_FAILED", {
       details: {
         columnNumber: 9,
         fileName: "runner.js",
@@ -55,12 +57,12 @@ describe("presentation errors", () => {
       },
     });
     expect(formatCodedErrorForDisplay(error)).toBe(
-      "WORKER_FAILED: Worker execution failed. Details: phase=start, worker=runner, script=runner.js, line=14, column=9, requestId=request-7",
+      "WORKER_FAILED: The task stopped unexpectedly. Reload the page and try again. Details: phase=start, worker=runner, script=runner.js, line=14, column=9, requestId=request-7",
     );
   });
 
   it("falls back to a worker URL and omits invalid coordinates", () => {
-    const error = codedError("Worker execution failed.", "WORKER_FAILED", {
+    const error = codedError("The task stopped unexpectedly. Reload the page and try again.", "WORKER_FAILED", {
       details: {
         columnNumber: Number.NaN,
         lineNumber: Number.POSITIVE_INFINITY,
@@ -68,7 +70,7 @@ describe("presentation errors", () => {
       },
     });
     expect(formatCodedErrorForDisplay(error)).toBe(
-      "WORKER_FAILED: Worker execution failed. Details: script=/workers/runner.js",
+      "WORKER_FAILED: The task stopped unexpectedly. Reload the page and try again. Details: script=/workers/runner.js",
     );
   });
 

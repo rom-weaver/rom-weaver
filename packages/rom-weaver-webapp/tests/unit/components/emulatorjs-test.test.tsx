@@ -243,8 +243,10 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Play")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
-    expect(screen.getByRole("link", { name: "Start guided Test" }).getAttribute("href")).toBe("/test-rom?guide=test");
+    fireEvent.click(screen.getByRole("button", { name: /Play a practice ROM/ }));
+    expect(screen.getByRole("link", { name: "Start a practice run" }).getAttribute("href")).toBe(
+      "/test-rom?guide=test",
+    );
     const download = screen.getByRole("link", { name: "Download the sample ROM" });
     expect(download.getAttribute("href")).toBe("/hello-world.nes");
     expect(download.hasAttribute("download")).toBe(true);
@@ -263,8 +265,8 @@ describe("EmulatorTestView", () => {
     vi.stubGlobal("fetch", fetchSample);
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
-    fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
+    fireEvent.click(screen.getByRole("button", { name: /Play a practice ROM/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start a practice run" }));
 
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith();
     await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
@@ -326,8 +328,8 @@ describe("EmulatorTestView", () => {
     );
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
-    fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
+    fireEvent.click(screen.getByRole("button", { name: /Play a practice ROM/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start a practice run" }));
     fireEvent.click(screen.getByRole("button", { name: "Leave the guide" }));
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["local"], "local.nes")] },

@@ -572,7 +572,7 @@ test("an overflow ROM is reported without replacing the prepared sources", async
 
   await expect.poll(() => document.body.textContent || "").toContain("original.bin");
   await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
-  await expect.poll(() => document.body.textContent || "").toContain("Unused inputs: modified-v2.bin.");
+  await expect.poll(() => document.body.textContent || "").toContain("Not used: modified-v2.bin.");
   expect(document.getElementById("patch-builder-input-notice")?.classList.contains("error")).toBe(true);
   expect(workflowMockState.originalSetCalls).toBe(1);
   expect(workflowMockState.modifiedSetCalls).toBe(1);
