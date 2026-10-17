@@ -36,7 +36,7 @@ Choose ZIP for broad compatibility, or 7z. This selects the recipe archive forma
 
 Set each patch's input selector to the state its checks describe:
 
-1. Keep **auto** to let the checks select the state.
+1. Keep **Automatic** to let the checks select the state. It then shows the detected state, such as **Original ROM (detected)**.
 2. Choose **Original ROM** when the patch was made from the clean ROM.
 3. Choose **Previous patch's result** when the patch was made from the result above it.
 4. Choose **Output of** a named patch for a dependency. Keep that patch enabled and ordered before its dependent patch.

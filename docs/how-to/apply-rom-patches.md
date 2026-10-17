@@ -111,7 +111,7 @@ Patch cards show format, position, and input/output checks. The three-dot **Patc
 
 ## Put several patches in order
 
-Patches run top to bottom. Each input selector chooses the state it modifies: keep **auto** for checksum inference, **Original ROM** for the clean source, or **Previous patch's result** for the preceding result.
+Patches run top to bottom. Each input selector chooses the state it modifies: keep **Automatic** for checksum inference, **Original ROM** for the clean source, or **Previous patch's result** for the preceding result. Once checks run, **Automatic** shows what they detected, such as **Original ROM (detected)**.
 
 Drag a numbered handle to reorder; keyboard users can focus it and follow its announced controls. Switch optional patches **On** or **Off** only in tested combinations. Skipping a required base can break dependent patches.
 
