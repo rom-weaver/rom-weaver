@@ -82,6 +82,8 @@ BPS is a strong default unless your community expects otherwise; [Choosing a pat
 
 The format list in Create only offers formats rom-weaver can make for the files you selected.
 
+To change an existing patch's format, [convert it](convert-patch-format-browser.md).
+
 ## Create and download the patch
 
 1. Enter a patch filename without an extension.

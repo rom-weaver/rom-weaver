@@ -26,6 +26,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
   - [What belongs in release notes?](#what-belongs-in-release-notes)
+  - [Can I convert a BPS patch to IPS?](#can-i-convert-a-bps-patch-to-ips)
 - [Weaves](#weaves)
   - [What is a weave?](#what-is-a-weave)
   - [Does a weave contain the ROM?](#does-a-weave-contain-the-rom)
@@ -128,6 +129,10 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 ### What belongs in release notes?
 
 [Write useful release notes](how-to/create-rom-patches.md#write-useful-release-notes).
+
+### Can I convert a BPS patch to IPS?
+
+[Convert BPS to IPS and other patch formats](how-to/convert-patch-format-browser.md).
 
 <a id="bundles"></a>
 

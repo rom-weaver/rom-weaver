@@ -42,6 +42,9 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   "docs/create-bundles": {
     tools: [{ labelId: "ui.docs.toolWeave", view: "weave" }],
   },
+  "docs/convert-patch-format": {
+    tools: [{ labelId: "ui.docs.toolCreate", view: "creator" }],
+  },
   "docs/create-rom-patches": {
     tools: [{ labelId: "ui.docs.toolCreate", mode: "rom", view: "creator" }],
   },

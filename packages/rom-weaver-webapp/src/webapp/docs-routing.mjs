@@ -80,6 +80,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/convert-patch-format-browser.md",
+    label: "Convert patch formats (browser)",
+    slug: "docs/convert-patch-format",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/create-bundles.md",
     label: "Create weaves (browser)",
     slug: "docs/create-bundles",
@@ -386,6 +392,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/cli-create": "Patching & weaves",
   "docs/cli-save": "Saves",
   "docs/cli-trim": "ROM checks",
+  "docs/convert-patch-format": "Patching & weaves",
   "docs/convert-roms-browser": "Conversion & files",
   "docs/convert-rvz-to-iso": "Conversion & files",
   "docs/convert-to-chd": "Conversion & files",
