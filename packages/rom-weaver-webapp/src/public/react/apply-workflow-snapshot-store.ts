@@ -11,7 +11,11 @@ type ApplyWorkflowFormSnapshot = {
   outputNameRevision: number;
   outputSourceKey: string;
   patchCount: number;
+  /** Largest output size the patches declare, or 0 when none does. */
+  patchTargetSize: number;
   ready: boolean;
+  /** Staged ROM size, or 0 before the input resolves. */
+  romSize: number;
 };
 
 const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
@@ -22,7 +26,9 @@ const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
   outputNameRevision: 0,
   outputSourceKey: "",
   patchCount: 0,
+  patchTargetSize: 0,
   ready: false,
+  romSize: 0,
 };
 
 const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: ApplyWorkflowFormSnapshot) =>
@@ -33,7 +39,12 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.outputNameRevision === right.outputNameRevision &&
   left.outputSourceKey === right.outputSourceKey &&
   left.patchCount === right.patchCount &&
-  left.ready === right.ready;
+  left.patchTargetSize === right.patchTargetSize &&
+  left.ready === right.ready &&
+  left.romSize === right.romSize;
+
+const getPatchTargetSize = (patches: ApplyWorkflowSnapshot["patches"]) =>
+  patches.reduce((max, patch) => Math.max(max, patch.requirements?.targetSize || 0), 0);
 
 const createApplyWorkflowSnapshotStore = () => {
   let workflow: ApplyWorkflowSnapshotSource | null = null;
@@ -56,7 +67,9 @@ const createApplyWorkflowSnapshotStore = () => {
       outputNameRevision,
       outputSourceKey,
       patchCount: current.patches.length,
+      patchTargetSize: getPatchTargetSize(current.patches),
       ready: current.ready,
+      romSize: current.input?.size || 0,
     };
     if (sameApplyWorkflowFormSnapshot(snapshot, next)) return snapshot;
     snapshot = next;

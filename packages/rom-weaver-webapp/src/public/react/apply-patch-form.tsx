@@ -1816,6 +1816,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     patchType: props.patchType,
     defaultPatchType: props.defaultPatchType,
     onPatchTypeChange: props.onPatchTypeChange,
+    romSize: workflowSnapshot.romSize,
+    patchTargetSize: workflowSnapshot.patchTargetSize,
     settings: props.createSettings,
     onComplete: props.onCreateComplete,
     onError: props.onError,

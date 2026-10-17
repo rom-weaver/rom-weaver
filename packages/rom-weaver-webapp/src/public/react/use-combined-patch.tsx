@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileDiff } from "lucide-react";
 import type { BrowserCreateResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { CreateSettings } from "../../types/settings.ts";
+import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { Notice } from "./components/ds/feedback.tsx";
@@ -28,6 +29,8 @@ const useCombinedPatch = ({
   patchType,
   defaultPatchType,
   onPatchTypeChange,
+  romSize,
+  patchTargetSize,
   settings,
   onComplete,
   onError,
@@ -40,6 +43,8 @@ const useCombinedPatch = ({
   patchType?: string;
   defaultPatchType?: string;
   onPatchTypeChange?: (value: string) => void;
+  romSize?: number;
+  patchTargetSize?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
@@ -47,7 +52,13 @@ const useCombinedPatch = ({
   const localizer = useUiLocalizer();
   const [fileName, setFileName] = useState("");
   const [internalFormat, setInternalFormat] = useState(defaultPatchType || "bps");
-  const format = patchType || internalFormat;
+  // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
+  const format = getPreferredCreatePatchFormat({
+    automaticFormatSelection: false,
+    modifiedSize: patchTargetSize,
+    originalSize: romSize,
+    requestedFormat: patchType || internalFormat,
+  });
   const setFormat = (value: string) => {
     setInternalFormat(value);
     onPatchTypeChange?.(value);
@@ -152,7 +163,7 @@ const useCombinedPatch = ({
     format,
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
-    formatOptions: createCreatePatchFormatOptions(),
+    formatOptions: createCreatePatchFormatOptions({ modifiedSize: patchTargetSize, originalSize: romSize }),
     onFormatChange: setFormat,
     disabled: disabled || busy,
     action: (

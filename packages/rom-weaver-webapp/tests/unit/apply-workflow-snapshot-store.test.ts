@@ -183,4 +183,24 @@ describe("Apply workflow snapshot store", () => {
     store.setOutputSourceKey("replacement-source-key");
     expect(store.getSnapshot().outputName).toBe("new.chd");
   });
+
+  it("publishes the ROM size and the largest declared patch output size", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow();
+    store.setWorkflow(workflow);
+    expect(store.getSnapshot()).toMatchObject({ patchTargetSize: 0, romSize: 0 });
+
+    workflow.change({
+      input: { selectedCandidateId: "input-1", size: 20_000_000, status: "ready" } as Snapshot["input"],
+      patches: [
+        { requirements: { targetSize: 24_000_000 } },
+        {},
+        { requirements: { targetSize: 22_000_000 } },
+      ] as Snapshot["patches"],
+    });
+    const sized = store.getSnapshot();
+    expect(sized).toMatchObject({ patchTargetSize: 24_000_000, romSize: 20_000_000 });
+    workflow.change({ busy: true });
+    expect(store.getSnapshot()).toBe(sized);
+  });
 });

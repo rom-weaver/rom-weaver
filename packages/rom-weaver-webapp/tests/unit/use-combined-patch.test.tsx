@@ -197,4 +197,30 @@ describe("useCombinedPatch", () => {
     unmount();
     expect(patch.result.output.dispose).toHaveBeenCalledOnce();
   });
+
+  it("offers only formats that fit the ROM and patch output sizes", async () => {
+    const patch = createdPatch();
+    const run = vi.fn<Options["run"]>().mockResolvedValue(patch.result);
+    const formatValues = (current: ReturnType<typeof useCombinedPatch>) =>
+      current.outputProps.formatOptions?.map((option) => option.value);
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: { patchType: "ips" },
+    });
+    expect(formatValues(result.current)).toContain("ips");
+    expect(result.current.outputProps.format).toBe("ips");
+
+    // IPS stops at 16 MiB, so a larger declared patch output drops it and the choice falls back to BPS.
+    rerender({ patchType: "ips", romSize: 1024, patchTargetSize: 20 * 1024 * 1024 });
+    expect(formatValues(result.current)).not.toContain("ips");
+    expect(result.current.outputProps.format).toBe("bps");
+    await act(async () => result.current.run());
+    expect(run.mock.calls[0][0].settings).toMatchObject({
+      format: "bps",
+      output: { outputName: "game-combined.bps" },
+    });
+
+    rerender({ patchType: "bps", romSize: 300 * 1024 * 1024 });
+    expect(formatValues(result.current)).toEqual(["xdelta", "ppf"]);
+    expect(result.current.outputProps.format).toBe("xdelta");
+  });
 });
