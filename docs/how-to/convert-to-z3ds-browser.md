@@ -1,6 +1,6 @@
 # 3DS to Z3DS and ZCCI: compress 3DS ROMs online
 
-Compress `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` files locally in your browser. Each type keeps its own extension, such as `.cci` to `.zcci`. Files stay on your device.
+Compress `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` files locally in your browser. Most types keep a matching extension, such as `.cci` to `.zcci`; `.app` becomes `.zcxi`. Files stay on your device.
 
 <a id="compress-nintendo-3ds-roms-to-z3ds-in-the-browser"></a>
 

@@ -91,7 +91,7 @@ Procedures for specific tasks.
 - [Compress ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
 - [Compress GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
 - [Compress 3DS ROMs to Z3DS or ZCCI](how-to/convert-to-z3ds-browser.md)
-- [Decompress Z3DS or ZCCI to 3DS](how-to/extract-z3ds-browser.md)
+- [Decompress Z3DS or ZCCI to CCI](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
 - [Use the online ROM tester](how-to/test-roms-in-browser.md)

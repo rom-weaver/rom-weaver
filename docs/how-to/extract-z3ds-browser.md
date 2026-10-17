@@ -1,4 +1,4 @@
-# Z3DS and ZCCI to 3DS: decompress 3DS ROMs online
+# Z3DS and ZCCI to CCI: decompress 3DS ROMs online
 
 Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files locally in your browser, without uploads. Each type keeps its own extension, such as `.zcci` to `.cci`.
 

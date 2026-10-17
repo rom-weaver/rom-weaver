@@ -33,7 +33,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [CHD to ISO converter](https://rom-weaver.com/docs/extract-chd): Convert DVD CHDs to ISO, CD CHDs to BIN/CUE, and Dreamcast GD-ROM CHDs to GDI and tracks.
 - [Compress ISO to RVZ](https://rom-weaver.com/docs/convert-to-rvz): Create an RVZ from a GameCube or Wii disc image with the Compress tool.
 - [3DS to Z3DS and ZCCI: compress 3DS ROMs online](https://rom-weaver.com/docs/convert-to-z3ds): Compress `.3ds`, `.cci`, `.cxi`, `.app`, `.cia`, or `.3dsx` files to `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx`.
-- [Z3DS and ZCCI to 3DS: decompress 3DS ROMs online](https://rom-weaver.com/docs/extract-z3ds): Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files to `.cci`, `.cxi`, `.cia`, or `.3dsx`.
+- [Z3DS and ZCCI to CCI: decompress 3DS ROMs online](https://rom-weaver.com/docs/extract-z3ds): Decompress `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, or `.z3dsx` files to `.cci`, `.cxi`, `.cia`, or `.3dsx`.
 - [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove supported padding and download a separate copy.
 - [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
 - [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
