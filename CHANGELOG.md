@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.22.1](https://github.com/rom-weaver/rom-weaver/compare/v0.22.0...v0.22.1) (2026-10-17)
+
+
+### User Experience
+
+* retitle apply, weave, identify, and 3DS pages ([#1264](https://github.com/rom-weaver/rom-weaver/issues/1264)) ([7b9783e](https://github.com/rom-weaver/rom-weaver/commit/7b9783e670723e4e9e0f9376e2f8034b32994d52))
+* **webapp:** use plain wording for labels, errors, and practice runs ([#1261](https://github.com/rom-weaver/rom-weaver/issues/1261)) ([3206887](https://github.com/rom-weaver/rom-weaver/commit/3206887039fd5d8ea7120b5f2d42d41b3c7e83ed))
+
+
+### Bug Fixes
+
+* **webapp:** limit combined patch formats by size ([#1265](https://github.com/rom-weaver/rom-weaver/issues/1265)) ([fcdc395](https://github.com/rom-weaver/rom-weaver/commit/fcdc3952411a85b9f70633edf546bf3a4676114f))
+* **webapp:** show the first guide card on phones ([#1260](https://github.com/rom-weaver/rom-weaver/issues/1260)) ([08e46c4](https://github.com/rom-weaver/rom-weaver/commit/08e46c455e7aea78a8b4e29348a3cdadbea3ef0b))
+
+
+### Documentation
+
+* add a guide to convert patch formats ([#1263](https://github.com/rom-weaver/rom-weaver/issues/1263)) ([e4c3707](https://github.com/rom-weaver/rom-weaver/commit/e4c37071a4e0d4db4a2787b286ca144ad5bd4bb9))
+* name the source ROM checksum mismatch error ([#1262](https://github.com/rom-weaver/rom-weaver/issues/1262)) ([d51a98f](https://github.com/rom-weaver/rom-weaver/commit/d51a98f69200f0fdab89cd90d725873932e75853))
+
+
+### Internal
+
+* **release:** skip search lag in release PR lookup ([#1258](https://github.com/rom-weaver/rom-weaver/issues/1258)) ([5ceae66](https://github.com/rom-weaver/rom-weaver/commit/5ceae664097c5d263ff0b48c045f550939f1779f))
+
 ## [0.22.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.0) (2026-10-17)
 
 ### Highlights
