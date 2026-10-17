@@ -143,23 +143,31 @@ jobs:
             --prerelease
 
       # Refresh an existing release pull request even when Release Please made no new one.
+      # Prefer the pull request Release Please reports, because the label filter goes through
+      # GitHub search, which can miss one created seconds earlier; pass only its number and branch.
       - name: Find release pull request
         id: release-pr
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          REPORTED_NUMBER: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number || '' }}
+          REPORTED_BRANCH: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
         shell: bash
         run: |
           set -euo pipefail
-          read -r number branch < <(
-            gh pr list \
-              --repo "$GITHUB_REPOSITORY" \
-              --base main \
-              --state open \
-              --label 'autorelease: pending' \
-              --json number,headRefName \
-              --jq '.[0] | [.number, .headRefName] | @tsv'
-          ) || true
+          number="$REPORTED_NUMBER"
+          branch="$REPORTED_BRANCH"
+          if [ -z "$number" ]; then
+            read -r number branch < <(
+              gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --base main \
+                --state open \
+                --label 'autorelease: pending' \
+                --json number,headRefName \
+                --jq '.[0] | [.number, .headRefName] | @tsv'
+            ) || true
+          fi
           if [ -z "${number:-}" ] || [ -z "${branch:-}" ]; then
             echo "No open release pull request - nothing to sync"
             echo "found=false" >> "$GITHUB_OUTPUT"
