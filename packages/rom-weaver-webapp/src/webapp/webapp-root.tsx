@@ -1267,27 +1267,28 @@ function WebappRoot({
               />
             </Suspense>
           ) : null}
-          <ConfirmDialog
-            body={confirmationDialog.message}
-            cancelLabel={confirmationDialog.cancelLabel}
-            confirmLabel={confirmationDialog.confirmLabel}
-            onCancel={actions.onCancelConfirmation}
-            onConfirm={actions.onConfirmConfirmation}
-            open={confirmationDialog.open}
-            title={confirmationDialog.title}
-          />
-          {agentApprovalDialog ? (
-            <ConfirmDialog
-              body={agentApprovalDialog.state.message}
-              cancelLabel={agentApprovalDialog.state.cancelLabel}
-              confirmLabel={agentApprovalDialog.state.confirmLabel}
-              onCancel={agentApprovalDialog.onCancel}
-              onConfirm={agentApprovalDialog.onConfirm}
-              open={agentApprovalDialog.state.open}
-              title={agentApprovalDialog.state.title}
-            />
-          ) : null}
         </LoadErrorBoundary>
+        {/* Outside the boundary: the notice's Reload asks here before it drops staged work. */}
+        <ConfirmDialog
+          body={confirmationDialog.message}
+          cancelLabel={confirmationDialog.cancelLabel}
+          confirmLabel={confirmationDialog.confirmLabel}
+          onCancel={actions.onCancelConfirmation}
+          onConfirm={actions.onConfirmConfirmation}
+          open={confirmationDialog.open}
+          title={confirmationDialog.title}
+        />
+        {agentApprovalDialog ? (
+          <ConfirmDialog
+            body={agentApprovalDialog.state.message}
+            cancelLabel={agentApprovalDialog.state.cancelLabel}
+            confirmLabel={agentApprovalDialog.state.confirmLabel}
+            onCancel={agentApprovalDialog.onCancel}
+            onConfirm={agentApprovalDialog.onConfirm}
+            open={agentApprovalDialog.state.open}
+            title={agentApprovalDialog.state.title}
+          />
+        ) : null}
       </div>
     </RomWeaverSettingsProvider>
   );

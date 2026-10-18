@@ -14,6 +14,7 @@ import { resolveThreads, selectViewWithTransition, WebappRoot } from "../../src/
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 
 const mocks = vi.hoisted(() => ({
+  mastheadFails: false,
   queryOfflineReadyState: vi.fn(async () => null),
   requestEmulatorStartFromUserAction: vi.fn(),
   scheduleOfflineWarmup: vi.fn(() => () => undefined),
@@ -30,6 +31,18 @@ vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", async (importOriginal) 
     ...actual,
     queryOfflineReadyState: mocks.queryOfflineReadyState,
     scheduleOfflineWarmup: mocks.scheduleOfflineWarmup,
+  };
+});
+
+// Lets a test fail a part of the page outside the panels, which only the root boundary covers.
+vi.mock("../../src/webapp/components/shell.tsx", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/webapp/components/shell.tsx")>();
+  return {
+    ...actual,
+    Masthead: (props: Parameters<typeof actual.Masthead>[0]) => {
+      if (mocks.mastheadFails) throw new TypeError("Failed to fetch dynamically imported module");
+      return <actual.Masthead {...props} />;
+    },
   };
 });
 
@@ -101,12 +114,12 @@ const renderRoot = async ({
   const state = baseState();
   state.settings.detailedViewEnabled = detailedViewEnabled;
   if (language) state.settings.language = language;
-  const view = render(
+  const root = (confirmationDialog = createEmptyConfirmationDialogState()) => (
     <WebappRoot
       actions={actions}
       assetBaseUrl={assetBaseUrl}
       workflowEntry={workflowEntry}
-      confirmationDialog={createEmptyConfirmationDialogState()}
+      confirmationDialog={confirmationDialog}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
         serviceWorkerCache: { updateReady },
@@ -115,9 +128,13 @@ const renderRoot = async ({
       serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus, updateReady }}
       state={{ ...state, currentView, settingsDialogOpen }}
       urlSession={null}
-    />,
+    />
   );
-  return { ...view, called };
+  const view = render(root());
+  /** Re-renders as the controller does after `requestConfirmation`. */
+  const rerenderWithConfirmation = (confirmationDialog: WebappRootProps["confirmationDialog"]) =>
+    view.rerender(root(confirmationDialog));
+  return { ...view, called, rerenderWithConfirmation };
 };
 
 const fileDragEvent = (type: string, target: EventTarget = document, files: File[] = []) => {
@@ -408,6 +425,36 @@ describe("the unified dialog", () => {
     fireEvent.click(container.querySelector(".workflow-panel-head .reset-btn") as HTMLButtonElement);
 
     expect(called("onReset")).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the full-page load notice", () => {
+  afterEach(() => {
+    mocks.mastheadFails = false;
+  });
+
+  it("still shows the reload confirmation the full-page notice asks for", async () => {
+    // React reports the caught error to the console; the assertion is on what stays rendered.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.mastheadFails = true;
+    const { called, container, rerenderWithConfirmation } = await renderRoot({ updateReady: true });
+
+    await waitFor(() => expect(container.querySelector("main.workbench.is-not-found [role=alert]")).not.toBeNull());
+    fireEvent.click(within(container).getByRole("button", { name: "Reload" }));
+    expect(called("onReloadUpdate")).toHaveBeenCalledTimes(1);
+    // With staged work, applying the update asks first (webapp.ts `confirmReloadUpdate`).
+    rerenderWithConfirmation({
+      ...createEmptyConfirmationDialogState(),
+      cancelLabel: "Stay here",
+      confirmLabel: "Reload now",
+      message: "Staged files will be lost.",
+      open: true,
+      title: "Reload and lose changes?",
+    });
+
+    // The dialog may portal out of the root container.
+    expect(within(document.body).getByRole("button", { name: "Reload now" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Reload and lose changes?");
   });
 });
 
