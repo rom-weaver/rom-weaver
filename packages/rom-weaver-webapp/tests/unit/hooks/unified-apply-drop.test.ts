@@ -388,6 +388,48 @@ describe("useUnifiedApplyDrop", () => {
     await waitFor(() => expect(delivered).toEqual(["patch:first-patches.zip", "rom:game.nes"]));
   });
 
+  it("stages a directly dropped CUE and its track as the companion ROM of a checks-only weave", async () => {
+    mockedLoadWeave.mockResolvedValue({
+      cleanup: vi.fn(async () => undefined),
+      patchFiles: [file("weave.ips")],
+      romFile: null,
+      session: { key: "weave-session" },
+    } as never);
+    const controller = makeController();
+    const onWeaveSession = vi.fn();
+    const selectFile = vi.fn();
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, onWeaveSession, undefined, selectFile));
+    const cue = new File(['FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352'], "disc.cue");
+    const track = file("disc.bin");
+
+    act(() => result.current.onDrop([file("rom-weaver-weave.json"), cue, track]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([cue, track]));
+    expect(onWeaveSession).toHaveBeenCalledOnce();
+    expect(selectFile).not.toHaveBeenCalled();
+  });
+
+  it("asks which companion ROM to use when a checks-only weave arrives with several", async () => {
+    mockedList.mockResolvedValue(["game.nes"]);
+    mockedLoadWeave.mockResolvedValue({
+      cleanup: vi.fn(async () => undefined),
+      patchFiles: [file("weave.ips")],
+      romFile: null,
+      session: { key: "weave-session" },
+    } as never);
+    const controller = makeController();
+    const selectFile = vi.fn(async () => ({ id: "dropped-rom-1" }));
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const archivedRom = file("rom.zip");
+
+    act(() => result.current.onDrop([file("rom-weaver-weave.json"), file("other.nes"), archivedRom]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([archivedRom]));
+    expect(
+      selectFile.mock.calls[0]?.[0].candidates.map((candidate: { fileName: string }) => candidate.fileName),
+    ).toEqual(["other.nes", "rom.zip"]);
+  });
+
   it("aborts an in-flight weave load when the drop router unmounts", async () => {
     let weaveSignal: AbortSignal | undefined;
     mockedLoadWeave.mockImplementation((_weave, _files, options) => {
