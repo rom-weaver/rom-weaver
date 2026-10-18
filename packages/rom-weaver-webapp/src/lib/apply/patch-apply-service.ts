@@ -13,6 +13,7 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
+import { parseFilenameCrc32 } from "./patch-filename-requirements.ts";
 
 type PatchSourceValidator = {
   validateSourceAsync?: (file: PatchFileInstance) => boolean | Promise<boolean>;
@@ -191,11 +192,22 @@ const patchProbeRequirementsFromDescriptor = (
   };
 };
 
+// Staging mounts the patch under a sanitized name, so ingest never sees a `[crc32:..]` token; read it
+// from the original file name unless the descriptor already carried one.
+const withFilenameCrc32 = (
+  requirements: PatchProbeRequirements | undefined,
+  fileName: string | undefined,
+): PatchProbeRequirements | undefined => {
+  if (requirements?.filenameCrc32) return requirements;
+  const filenameCrc32 = parseFilenameCrc32(fileName);
+  return filenameCrc32 ? { ...requirements, filenameCrc32 } : requirements;
+};
+
 // Resolve a staged patch's apply-preflight requirements from the consolidated `ingest` command
 // (classify + parse in one call), which describes the embedded source/target metadata. Archive leaves
 // already carry the descriptor's requirements (stashed by the patch enumeration); a bare patch runs
 // ingest here once over its own bytes.
-const resolvePatchRequirementsForApply = async (
+const resolveIngestPatchRequirements = async (
   patchFile: PatchFileInstance,
   runtime?: WorkflowRuntime,
 ): Promise<PatchProbeRequirements | undefined> => {
@@ -216,6 +228,12 @@ const resolvePatchRequirementsForApply = async (
     return undefined;
   }
 };
+
+const resolvePatchRequirementsForApply = async (
+  patchFile: PatchFileInstance,
+  runtime?: WorkflowRuntime,
+): Promise<PatchProbeRequirements | undefined> =>
+  withFilenameCrc32(await resolveIngestPatchRequirements(patchFile, runtime), patchFile.fileName);
 
 const parsePatchForApply = async (
   patchFile: PatchFileInstance,

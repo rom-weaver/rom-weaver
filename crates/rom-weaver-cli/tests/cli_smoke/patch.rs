@@ -12875,3 +12875,72 @@ fn zero_window_vcdiff_applies_and_validates_with_an_empty_rom_warning() {
     }
     assert_eq!(fs::metadata(output.path()).expect("output").len(), 0);
 }
+
+/// Apply a structurally neutral IPS patch (one record deep inside the payload) whose file name
+/// declares `[crc32:<token>]`, and report whether `--patch-header auto` stripped the input header.
+fn apply_auto_header_with_filename_crc32(declare_headerless: bool) -> bool {
+    let temp = setup_temp_dir();
+    let payload = vec![0xA5_u8; 32768];
+    let headered = with_header(&payload);
+    let mut modified = headered.clone();
+    modified[1000] = b'Z';
+    fs::write(temp.child("base.smc").path(), &headered).expect("fixture");
+    fs::write(temp.child("modified.smc").path(), &modified).expect("fixture");
+    fs::write(temp.child("input.smc").path(), &headered).expect("fixture");
+    fs::write(temp.child("payload.sfc").path(), &payload).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.smc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.smc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let declared_source = temp.child(if declare_headerless {
+        "payload.sfc"
+    } else {
+        "input.smc"
+    });
+    let declared = checksum_value(declared_source.path(), "crc32");
+    let patch = temp.child(format!("hack [crc32:{declared}].ips"));
+    fs::copy(temp.child("update.ips").path(), patch.path()).expect("rename patch");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input header stripped")
+}
+
+#[test]
+fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
+    assert!(apply_auto_header_with_filename_crc32(true));
+}
+
+#[test]
+fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
+    assert!(!apply_auto_header_with_filename_crc32(false));
+}

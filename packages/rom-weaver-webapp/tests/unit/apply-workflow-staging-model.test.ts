@@ -93,6 +93,38 @@ describe("apply workflow staging model", () => {
     expect(info?.validationState).toBe("unknown");
   });
 
+  it("lets a preflight mismatch outrank a passing dry run (file-name crc32 token)", () => {
+    const patch = {
+      candidates: [],
+      checksumPreflight: { actualCrc32: "c6fb1252", requiredCrc32: "4af1a4bb", status: "invalid" as const },
+      id: "patch",
+      parentCompressions: [],
+      patchValidation: { status: "valid" as const },
+      status: "ready" as const,
+      warnings: [],
+    };
+    const info = toPatchStageInfo(patch, "hack [crc32:4af1a4bb].ips", 0, "Input 1");
+    expect(info?.validationState).toBe("invalid");
+    expect(info?.checksumPreflightMismatch).toBe(true);
+    expect(info?.validationMessage).toBe("Source requirements mismatch");
+    // A failing dry run keeps its own message, and a matching preflight leaves the dry run in charge.
+    const deepInvalid = toPatchStageInfo(
+      { ...patch, patchValidation: { message: "Engine says no", status: "invalid" as const } },
+      "hack.ips",
+      0,
+      "Input 1",
+    );
+    expect(deepInvalid?.validationMessage).toBe("Engine says no");
+    const matching = toPatchStageInfo(
+      { ...patch, checksumPreflight: { requiredCrc32: "c6fb1252", status: "valid" as const } },
+      "hack.ips",
+      0,
+      "Input 1",
+    );
+    expect(matching?.validationState).toBe("valid");
+    expect(matching?.checksumPreflightMismatch).toBe(false);
+  });
+
   it("does not count a pasted SHA-1 as a compared checksum before apply", () => {
     const patch = {
       candidates: [],
