@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/rom-weaver/rom-weaver/compare/v0.22.1...v0.22.2) (2026-10-18)
+
+
+### User Experience
+
+* **webapp:** redesign the home page ([#1267](https://github.com/rom-weaver/rom-weaver/issues/1267)) ([796893a](https://github.com/rom-weaver/rom-weaver/commit/796893aa717bb1d57e8d7d52172226a24aed8d7e))
+
 ## [0.22.1](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.1) (2026-10-17)
 
 ### Highlights
