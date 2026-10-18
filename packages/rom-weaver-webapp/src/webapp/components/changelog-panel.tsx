@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION } from "../build-version.ts";
+import { isNewRelease, type UpdatedSince } from "../last-seen-version.ts";
 import {
   type ChangelogEntry,
   type CompareRange,
@@ -44,6 +45,7 @@ const ReleaseSection = ({
   compare,
   defaultOpen,
   groups,
+  isNew = false,
   note,
   repositoryUrl,
   title,
@@ -52,15 +54,18 @@ const ReleaseSection = ({
   compare?: CompareRange;
   defaultOpen: boolean;
   groups: ReturnType<typeof commitGroups>;
+  /** Arrived with the update this page load brought a returning visitor. */
+  isNew?: boolean;
   /** Trails the title where it says something the title does not. */
   note?: string;
   repositoryUrl: string;
   title: string;
   versionHref?: string;
 }) => (
-  <details className="rel" open={defaultOpen}>
+  <details className={isNew ? "rel is-new" : "rel"} open={defaultOpen}>
     <summary className="rel-summary">
       <h2 className="mono">{title}</h2>
+      {isNew ? <span className="rel-new">New</span> : null}
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
     <div className="rel-body">
@@ -78,12 +83,15 @@ const ChangelogPanel = ({
   active,
   localizer,
   onReload,
+  since = null,
   updateReady = false,
 }: {
   active: boolean;
   localizer: Localizer;
   /** Reloads into the waiting deploy; only offered while one is waiting. */
   onReload?: () => void;
+  /** The update this page load brought; its releases stand open and are marked new. */
+  since?: UpdatedSince | null;
   updateReady?: boolean;
 }) => {
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -147,18 +155,22 @@ const ChangelogPanel = ({
           title={`Unreleased · +${AHEAD_COUNT}`}
         />
       ) : null}
-      {notes.map((note, index) => (
-        <ReleaseSection
-          compare={previousNoteRange(notes, index)}
-          defaultOpen={!unreleased.length && index === 0}
-          groups={note.groups}
-          key={note.version}
-          note={note.version === APP_VERSION ? "running" : undefined}
-          repositoryUrl={repositoryUrl}
-          title={`v${note.version}`}
-          versionHref={releaseTagUrl(repositoryUrl, note.version)}
-        />
-      ))}
+      {notes.map((note, index) => {
+        const isNew = since !== null && isNewRelease(note.version, since);
+        return (
+          <ReleaseSection
+            compare={previousNoteRange(notes, index)}
+            defaultOpen={isNew || (!unreleased.length && index === 0)}
+            groups={note.groups}
+            isNew={isNew}
+            key={note.version}
+            note={note.version === APP_VERSION ? "running" : undefined}
+            repositoryUrl={repositoryUrl}
+            title={`v${note.version}`}
+            versionHref={releaseTagUrl(repositoryUrl, note.version)}
+          />
+        );
+      })}
       {earlier.length ? (
         <ReleaseSection
           defaultOpen={false}

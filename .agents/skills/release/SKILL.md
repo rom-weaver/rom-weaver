@@ -40,6 +40,7 @@ Group changes to the same workflow when their concrete outcomes remain clear. Do
 Rules:
 
 - Select the strongest benefits before grouping them under `#### New features`, `#### Improvements`, `#### Fixes`, and `#### Security`, in that order. Omit unused sections even when matching commits exist. Choose the section by the user-visible outcome, not just the commit type; put each bullet in one section only.
+- Lead each section with its strongest bullet. The webapp's update banner shows returning visitors only the first highlight of the newest release since their last visit; What's new has the rest.
 - Use no fixed count or section quotas. Include distinct new capabilities, meaningful workflow improvements, and notable fixes. A capability can matter to a specific audience without defining the whole release; do not discard it just to shorten the list. Leave routine polish and maintenance in `All changes`.
 - Each bullet is one concise sentence in plain words. Name the affected task, tool, or format and the concrete result. Keep necessary scope and conditions, even when that needs more words. Avoid vague summaries such as "more tools", "better handling", or "more reliable" without saying what changed. Leave out flags, crate names, and internals.
 - Add `(still in beta)` after a feature that lives in a tool that is still in beta: "in Save Editor (still in beta)". A bare `(beta)` tag is not enough. Check the pull request and the app's beta settings; when unsure, say so when showing the notes.

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
+import { APP_VERSION } from "../../src/webapp/build-version.ts";
 import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -467,6 +468,81 @@ describe("the What's new route", () => {
     fireEvent.click(navRow(container, "What’s new"));
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+});
+
+describe("the updated notice", () => {
+  const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
+  const openNotice = (container: HTMLElement) => container.querySelector(".reveal.is-open .updated-notice");
+
+  beforeEach(() => {
+    window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: () =>
+          Promise.resolve([
+            {
+              date: "2026-07-29T00:00:00Z",
+              hash: "release",
+              release: {
+                changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+                notes: [
+                  {
+                    groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
+                    version: APP_VERSION,
+                  },
+                ],
+                repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+                truncated: false,
+                version: APP_VERSION,
+              },
+              subject: "release",
+            },
+          ]),
+        ok: true,
+      }),
+    );
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("tells a returning visitor what changed and opens What's new", async () => {
+    const { called, container } = await renderRoot();
+
+    await waitFor(() => expect(openNotice(container)?.textContent).toContain("Shiny highlight"));
+    fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+
+  it("records the running version once dismissed", async () => {
+    const { container } = await renderRoot();
+    await waitFor(() => expect(openNotice(container)).not.toBeNull());
+
+    fireEvent.click(openNotice(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+    expect(openNotice(container)).toBeNull();
+    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+  });
+
+  it("counts reading What's new as seeing the update", async () => {
+    const { container } = await renderRoot({ currentView: "whats-new" });
+
+    await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
+    expect(openNotice(container)).toBeNull();
+  });
+
+  it("waits behind a deploy that is ready to load", async () => {
+    const { container } = await renderRoot({ updateReady: true });
+    await waitFor(() => expect(container.querySelector(".updated-notice")).not.toBeNull());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector(".reveal.is-open .updates.update-ready")).not.toBeNull();
+    expect(openNotice(container)).toBeNull();
+    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
   });
 });
 

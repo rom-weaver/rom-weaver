@@ -148,6 +148,74 @@
 .rw-app .updates-ver:active {
   color: var(--thread-text);
 }
+/* ── the update a returning visitor just received ──
+   A selvedge - the woven edge new cloth comes off the loom with - runs down its
+   leading side. The same edge marks the releases it brought on What's new, so
+   the banner and the page read as one piece. */
+.rw-app .updates.updated-notice {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding-inline-start: calc(var(--sp-m) + 8px);
+}
+.rw-app .updated-notice::before,
+.rw-app .rel.is-new::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 8px;
+  content: "";
+  background: var(--thread);
+  border-start-start-radius: calc(var(--r-m) - 1px);
+  border-end-start-radius: calc(var(--r-m) - 1px);
+  mask-image: var(--weave-mask);
+  mask-size: 8px 8px;
+}
+/* The one moment of motion: the edge weaves down once the banner has opened. */
+.rw-app .reveal.is-open .updated-notice::before {
+  animation: selvedge-weave 0.6s var(--ease) 0.3s both;
+}
+@keyframes selvedge-weave {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .reveal.is-open .updated-notice::before {
+    animation: none;
+  }
+}
+.rw-app .updated-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rw-app .updated-title {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+/* Two lines of the lead highlight; What's new has the rest. */
+.rw-app .updated-highlight {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  max-inline-size: 72ch;
+  margin: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+@media (max-width: 560px) {
+  .rw-app .updates.updated-notice {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .rw-app .updated-notice > .btn {
+    grid-row: 2;
+    justify-self: start;
+  }
+}
 .rw-app .changelog-note {
   padding: var(--sp-s) 0;
   color: var(--ink-3);
@@ -402,6 +470,15 @@
 }
 .rw-app .rel-summary h2 {
   margin: 0;
+  color: var(--thread-text);
+}
+.rw-app .rel.is-new {
+  position: relative;
+  padding-inline-start: 8px;
+}
+.rw-app .rel-new {
+  font-size: 0.74rem;
+  font-weight: 650;
   color: var(--thread-text);
 }
 .rw-app .rel-summary-count {

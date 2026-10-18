@@ -84,6 +84,7 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
 
 export type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab };
 export {
+  BannerDismissButton,
   describeWarmupUnit,
   installingRuntimeLabel,
   Masthead,

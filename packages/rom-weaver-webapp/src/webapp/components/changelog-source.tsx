@@ -249,5 +249,13 @@ const ReleaseGroups = ({
   );
 };
 
-export { COMMIT_SECTIONS, commitGroups, fetchChangelog, ReleaseGroups, releaseTagUrl, REPOSITORY_URL };
+export {
+  COMMIT_SECTIONS,
+  commitGroups,
+  fetchChangelog,
+  HIGHLIGHTS_TITLE,
+  ReleaseGroups,
+  releaseTagUrl,
+  REPOSITORY_URL,
+};
 export type { ChangelogEntry, CompareRange, ReleaseChangelog, ReleaseNote };

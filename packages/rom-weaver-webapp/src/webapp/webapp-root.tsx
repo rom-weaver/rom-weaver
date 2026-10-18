@@ -74,6 +74,7 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import { readUpdateDismissed, writeUpdateDismissed } from "./update-dismissal.ts";
 import { useOfflineStatus } from "./use-offline-status.ts";
+import { useWhatsNewNotice } from "./use-whats-new-notice.ts";
 import { isFileDragTransfer, isInsideLocalDropZone, usePageDragging } from "./use-page-drag.ts";
 import { loadLogDialog, loadSettingsPanel, useUnifiedDialog } from "./use-unified-dialog.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
@@ -215,6 +216,10 @@ const SettingsPanel = lazy(loadSettingsPanel);
 // Only a drop that could go to more than one place opens it, so it stays out of the entry chunk.
 const DropRouteDialog = lazy(() =>
   import("./components/drop-route-dialog.tsx").then((module) => ({ default: module.DropRouteDialog })),
+);
+// Only the first load of a newer release for a returning visitor shows it, so it stays out of the entry chunk.
+const WhatsNewNotice = lazy(() =>
+  import("./components/whats-new-notice.tsx").then((module) => ({ default: module.WhatsNewNotice })),
 );
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
@@ -508,6 +513,11 @@ function WebappRoot({
     );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
+  const updateBannerOpen =
+    previewRuntimeState === null
+      ? pageUpdate.ready && !updateDismissed
+      : previewRuntimeState === "update" && !previewUpdateDismissed;
+  const whatsNewNotice = useWhatsNewNotice(state.currentView);
   const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -1033,12 +1043,19 @@ function WebappRoot({
             }}
             onOpenWhatsNew={openWhatsNew}
             onReload={actions.onReloadUpdate}
-            open={
-              previewRuntimeState === null
-                ? pageUpdate.ready && !updateDismissed
-                : previewRuntimeState === "update" && !previewUpdateDismissed
-            }
+            open={updateBannerOpen}
           />
+          {whatsNewNotice.since ? (
+            <Suspense fallback={null}>
+              {/* A waiting deploy takes the slot first; reloading into it announces both updates at once. */}
+              <WhatsNewNotice
+                onDismiss={whatsNewNotice.acknowledge}
+                onOpenWhatsNew={openWhatsNew}
+                open={whatsNewNotice.open && !updateBannerOpen}
+                since={whatsNewNotice.since}
+              />
+            </Suspense>
+          ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
@@ -1108,6 +1125,7 @@ function WebappRoot({
                   <WhatsNewPageRoute
                     active={state.currentView === "whats-new"}
                     onReload={actions.onReloadUpdate}
+                    since={whatsNewNotice.since}
                     updateReady={pageUpdate.ready}
                   />,
                 )}

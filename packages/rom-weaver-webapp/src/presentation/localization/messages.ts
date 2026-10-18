@@ -1937,6 +1937,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.update.ready": msg({ id: "ui.update.ready", message: "Update ready" }),
   "ui.update.reload": msg({ id: "ui.update.reload", message: "Reload" }),
   "ui.update.reloadNow": msg({ id: "ui.update.reloadNow", message: "Reload now" }),
+  "ui.update.seeWhatsNew": msg({ id: "ui.update.seeWhatsNew", message: "See what’s new" }),
+  "ui.update.updatedFrom": msg({ id: "ui.update.updatedFrom", message: "Updated from v{from} to v{to}" }),
+  "ui.update.updatedTo": msg({ id: "ui.update.updatedTo", message: "Updated to v{version}" }),
   "ui.update.whatsNew": msg({ id: "ui.update.whatsNew", message: "What’s new" }),
   "ui.urlSession.corsHint": msg({
     id: "ui.urlSession.corsHint",

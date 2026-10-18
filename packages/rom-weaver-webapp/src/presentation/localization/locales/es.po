@@ -4530,6 +4530,11 @@ msgstr "Ver las tablas completas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.update.seeWhatsNew"
+msgstr "Ver novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.formatsEyebrow"
 msgstr "Ver formatos compatibles"
 
@@ -5477,6 +5482,16 @@ msgstr "Actualización disponible"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.ready"
 msgstr "Actualización lista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.updatedFrom"
+msgstr "Actualizado de v{from} a v{to}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.updatedTo"
+msgstr "Actualizado a v{version}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

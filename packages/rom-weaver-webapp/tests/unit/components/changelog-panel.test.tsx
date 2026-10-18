@@ -465,3 +465,58 @@ describe("ChangelogPanel pending update", () => {
     expect(document.querySelector(`a[href="${REPOSITORY_URL}/commit/v9.9.9"]`)).toBeNull();
   });
 });
+
+describe("ChangelogPanel after an update", () => {
+  const mockReleases = () =>
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf(APP_VERSION, [
+          noteOf(APP_VERSION, [{ summary: "running release" }], "Highlights"),
+          noteOf("0.0.2", [{ summary: "skipped release" }], "Highlights"),
+          noteOf("0.0.1", [{ summary: "last seen release" }], "Highlights"),
+        ]),
+        subject: "release",
+      },
+    ]);
+  const releaseSections = async (since?: { from?: string }) => {
+    const Panel = () => <ChangelogPanel active localizer={useUiLocalizer()} since={since} />;
+    const { container } = render(withSettings(<Panel />));
+    await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+    return [...container.querySelectorAll<HTMLDetailsElement>(".rel")].map((section) => ({
+      marked: section.classList.contains("is-new") && within(section).queryByText("New") !== null,
+      open: section.open,
+    }));
+  };
+
+  it("marks and opens every release since the one last seen", async () => {
+    mockReleases();
+
+    expect(await releaseSections({ from: "0.0.1" })).toEqual([
+      { marked: true, open: true },
+      { marked: true, open: true },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("marks only the running release when no earlier version was recorded", async () => {
+    mockReleases();
+
+    expect(await releaseSections({})).toEqual([
+      { marked: true, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("marks nothing without an update", async () => {
+    mockReleases();
+
+    expect(await releaseSections()).toEqual([
+      { marked: false, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
+  });
+});
