@@ -191,8 +191,12 @@ const copyRuntimeOutputToPath = async (
   source: Pick<PublicOutput, "fileName" | "mediaType" | "path" | "size" | "vfs">,
   fileName = source.fileName,
   pathPrefix = "runtime-output/emulator",
+  /** Keep `fileName` (with its folders) under this folder instead of a unique-id name prefix. */
+  keepNameInFolder?: string,
 ): Promise<RetainedRuntimeOutput> => {
-  const outputPath = createRuntimeOutputPath(source.vfs.rootPath, fileName, pathPrefix);
+  const outputPath = keepNameInFolder
+    ? joinVfsPath(source.vfs.rootPath, pathPrefix, keepNameInFolder, fileName)
+    : createRuntimeOutputPath(source.vfs.rootPath, fileName, pathPrefix);
   const cleanup = createOutputPathCleanup(source.vfs, outputPath);
   const size = Math.max(0, Math.floor(source.size || 0));
   try {

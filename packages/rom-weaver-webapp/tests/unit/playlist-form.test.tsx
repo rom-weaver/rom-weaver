@@ -174,4 +174,75 @@ describe("Playlist form", () => {
     view.unmount();
     expect(created[0]?.dispose).toHaveBeenCalled();
   });
+
+  it("copies one handoff into one folder and shows a status while it copies", async () => {
+    const folders: string[] = [];
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.copy.mockImplementation(async (source: { fileName: string }, _name: string, _prefix: string, id: string) => {
+      folders.push(id);
+      await gate;
+      return { dispose: vi.fn(async () => undefined), fileName: source.fileName, path: "/copy", size: 4, vfs: {} };
+    });
+    mocks.wrap.mockImplementation(async (_vfs: unknown, _path: string, fileName: string) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName,
+      saveAs: vi.fn(),
+      size: 4,
+    }));
+    mocks.build.mockImplementation(async ({ files }) => ({
+      discIndexes: [0, 2],
+      entries: files.map((file: { fileName: string }) => file.fileName),
+      output: output("order.m3u"),
+    }));
+    const view = render(<PlaylistForm />);
+    const extracted = (fileName: string) => ({ ...output(fileName), path: `/out/${fileName}` });
+    setPlaylistHandoff(
+      ["Game (Disc 1).cue", "Game (Disc 1).bin", "Game (Disc 2).cue"].map((name) => ({
+        name,
+        size: 4,
+        source: extracted(name) as never,
+      })),
+    );
+    await waitFor(() => expect(view.container.querySelector("[role='status']")?.textContent).toContain("Copying"));
+    release();
+    await waitFor(() => expect(cardNames(view.container)).toHaveLength(2));
+    expect(folders).toHaveLength(3);
+    expect(new Set(folders).size).toBe(1);
+    expect(view.container.querySelector("[role='status']")).toBeNull();
+    view.unmount();
+  });
+
+  it("waits for the ordering pass before removing, and blocks Build until the removal ends", async () => {
+    let probeRelease: () => void = () => undefined;
+    const probeGate = new Promise<void>((resolve) => {
+      probeRelease = resolve;
+    });
+    mocks.build.mockImplementation(async ({ files, sort }) => {
+      const names = files.map((file: File) => file.name);
+      if (sort === false && names.length > 1) await probeGate;
+      const discIndexes = names.flatMap((name: string, index: number) => (name.endsWith(".cue") ? [index] : []));
+      return { discIndexes, entries: discIndexes.map((i: number) => names[i]), output: output("x.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    pick(view.container, [
+      new File(["1"], "Game (Disc 1).cue"),
+      new File(["b"], "Game (Disc 1).bin"),
+      new File(["2"], "Game (Disc 2).cue"),
+    ]);
+    await waitFor(() => expect(cardNames(view.container)).toHaveLength(2));
+    fireEvent.click(view.getByLabelText("Remove Game (Disc 2).cue"));
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: /Build playlist/ }).hasAttribute("disabled")).toBe(true),
+    );
+    expect(view.queryByLabelText("Remove Game (Disc 1).cue")).toBeNull();
+    probeRelease();
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Game (Disc 1).cue"]));
+    await waitFor(() =>
+      expect(view.getByRole("button", { name: /Build playlist/ }).hasAttribute("disabled")).toBe(false),
+    );
+    view.unmount();
+  });
 });

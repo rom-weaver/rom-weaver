@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Download, ListMusic } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
+  createPlaylistHandoffId,
   isSamePlaylistFile,
   type PlaylistDisc,
   releasePlaylistDisc,
@@ -57,9 +58,15 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const [error, setError] = useState("");
   const [ordering, setOrdering] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Copying handed-over discs, or removing one (it probes the remaining files first).
+  const [adopting, setAdopting] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const outputRef = useRef<PublicOutput | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const orderRunRef = useRef(0);
+  const orderPromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const orderedRef = useRef<PlaylistDisc[]>([]);
+  const removingRef = useRef(false);
   const filesRef = useRef<PlaylistDisc[]>([]);
   const handledDropRef = useRef(0);
   const mountedRef = useRef(true);
@@ -84,15 +91,17 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     [],
   );
   useEffect(() => {
-    if (busy || ordering) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: "Build playlist", state: "running" });
+    if (busy || ordering || adopting || removing)
+      setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: "Build playlist", state: "running" });
     else if (error) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "failed" });
     else if (output) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { stage: "Playlist ready", state: "done" });
     else if (files.length) setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "ready" });
     else setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" });
-  }, [busy, error, files.length, ordering, output]);
+  }, [adopting, busy, error, files.length, ordering, output, removing]);
 
   const extras = files.filter((file) => !ordered.includes(file));
-  const canRun = files.length > 0 && ordered.length > 0 && !!outputName.trim() && !busy && !ordering && !error;
+  const idle = !(busy || ordering || adopting || removing);
+  const canRun = files.length > 0 && ordered.length > 0 && !!outputName.trim() && idle && !error;
 
   const clearOutput = useCallback(() => {
     const previous = outputRef.current;
@@ -106,6 +115,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const orderFiles = useCallback(async (next: PlaylistDisc[]) => {
     const run = ++orderRunRef.current;
     if (next.length === 0) {
+      orderedRef.current = [];
       setOrdered([]);
       setOrdering(false);
       return;
@@ -121,10 +131,12 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
       });
       void result.output.dispose();
       if (run === orderRunRef.current) {
-        setOrdered(result.discIndexes.flatMap((index) => next[index] ?? []));
+        orderedRef.current = result.discIndexes.flatMap((index) => next[index] ?? []);
+        setOrdered(orderedRef.current);
       }
     } catch (cause) {
       if (run === orderRunRef.current) {
+        orderedRef.current = [];
         setOrdered([]);
         setError(cause instanceof Error ? cause.message : String(cause));
       }
@@ -137,7 +149,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     (next: PlaylistDisc[]) => {
       filesRef.current = next;
       setFiles(next);
-      void orderFiles(next);
+      orderPromiseRef.current = orderFiles(next);
     },
     [orderFiles],
   );
@@ -175,15 +187,19 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const adoptFiles = useCallback(
     async (handed: PlaylistDisc[]) => {
       const retained: PlaylistDisc[] = [];
+      const handoffId = createPlaylistHandoffId();
+      setAdopting(true);
       try {
         for (const disc of handed) {
           if (filesRef.current.some((held) => isSamePlaylistFile(held, disc))) continue;
-          retained.push(await retainPlaylistDisc(disc));
+          retained.push(await retainPlaylistDisc(disc, handoffId));
         }
       } catch (cause) {
         for (const disc of retained) releasePlaylistDisc(disc);
         if (mountedRef.current) setError(cause instanceof Error ? cause.message : String(cause));
         return;
+      } finally {
+        if (mountedRef.current) setAdopting(false);
       }
       if (!mountedRef.current) {
         for (const disc of retained) releasePlaylistDisc(disc);
@@ -195,28 +211,38 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   );
   /** Remove a disc and, if it is a sheet, the track files only it names. */
   const removeDisc = async (disc: PlaylistDisc) => {
-    clearOutput();
-    const candidates = extras;
-    let gone = [disc];
-    if (candidates.length) {
-      try {
-        const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
-        const probe = await buildPlaylist({
-          archive: false,
-          files: [disc.source, ...candidates.map((file) => file.source)],
-          outputName: "order.m3u",
-          sort: false,
-        });
-        void probe.output.dispose();
-        // The command lists a track file as a disc only when no sheet in the input names it.
-        const listed = new Set(probe.discIndexes);
-        gone = [disc, ...candidates.filter((_, index) => !listed.has(index + 1))];
-      } catch {
-        // Fall back to removing just the chosen disc.
+    if (removingRef.current) return;
+    removingRef.current = true;
+    setRemoving(true);
+    try {
+      clearOutput();
+      // Let an ordering pass in flight finish, so the extras below are the ones the list really has.
+      await orderPromiseRef.current;
+      const candidates = filesRef.current.filter((file) => file !== disc && !orderedRef.current.includes(file));
+      let gone = [disc];
+      if (candidates.length) {
+        try {
+          const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
+          const probe = await buildPlaylist({
+            archive: false,
+            files: [disc.source, ...candidates.map((file) => file.source)],
+            outputName: "order.m3u",
+            sort: false,
+          });
+          void probe.output.dispose();
+          // The command lists a track file as a disc only when no sheet in the input names it.
+          const listed = new Set(probe.discIndexes);
+          gone = [disc, ...candidates.filter((_, index) => !listed.has(index + 1))];
+        } catch {
+          // Fall back to removing just the chosen disc.
+        }
       }
+      for (const file of gone) releasePlaylistDisc(file);
+      updateFiles(filesRef.current.filter((file) => !gone.includes(file)));
+    } finally {
+      removingRef.current = false;
+      if (mountedRef.current) setRemoving(false);
     }
-    for (const file of gone) releasePlaylistDisc(file);
-    updateFiles(filesRef.current.filter((file) => !gone.includes(file)));
   };
   const moveEntry = (index: number, delta: -1 | 1) => {
     clearOutput();
@@ -318,7 +344,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
       <UnifiedDropZone
         addLabel="Add more discs"
         big={workflowEmpty}
-        disabled={busy}
+        disabled={busy || adopting || removing}
         guide={WORKFLOW_GUIDES.playlist}
         heroLabel="Drop the discs of a multi-disc game"
         heroLabelCoarse="Tap to add the discs of a multi-disc game"
@@ -330,6 +356,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
         onFiles={(dropped) => addFiles(dropped.map(toDisc))}
         supported={[{ extensions: DISC_EXTENSIONS, label: "Disc files" }]}
       />
+      {adopting ? <p role="status">Copying discs…</p> : null}
       {workflowEmpty && error ? (
         <Notice level="error" onDismiss={() => setError("")}>
           {error}
@@ -357,7 +384,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                           <button
                             aria-label={`Move ${name} up`}
                             className="rm"
-                            disabled={index === 0 || busy}
+                            disabled={index === 0 || !idle}
                             onClick={() => moveEntry(index, -1)}
                             type="button"
                           >
@@ -366,7 +393,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                           <button
                             aria-label={`Move ${name} down`}
                             className="rm"
-                            disabled={index === ordered.length - 1 || busy}
+                            disabled={index === ordered.length - 1 || !idle}
                             onClick={() => moveEntry(index, 1)}
                             type="button"
                           >
@@ -382,7 +409,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                         </>
                       }
                       name={<span className="nm mono">{name}</span>}
-                      onRemove={busy ? undefined : () => void removeDisc(file)}
+                      onRemove={busy || adopting || removing ? undefined : () => void removeDisc(file)}
                       removeLabel={`Remove ${name}`}
                     />
                   </li>

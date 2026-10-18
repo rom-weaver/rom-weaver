@@ -79,6 +79,41 @@ test("a cue sheet and its track file are not split into two discs", async () => 
   }
 });
 
+test("a non-ASCII cue sheet and its track file stay one disc", async () => {
+  // Staging rewrites `é` in the file names, but the cue text still names the real track file.
+  const game = `Pokémon ${uniqueGame()}`;
+  const files = [
+    new File([sheet(`${game} (Disc 1).bin`)], `${game} (Disc 1).cue`),
+    new File(["b"], `${game} (Disc 1).bin`),
+    new File([sheet(`${game} (Disc 2).bin`)], `${game} (Disc 2).cue`),
+    new File(["b"], `${game} (Disc 2).bin`),
+  ];
+  const built = await buildPlaylist({ archive: false, files, outputName: "list.m3u", sort: true });
+  try {
+    expect(built.entries).toEqual([`${game} (Disc 1).cue`, `${game} (Disc 2).cue`]);
+    expect(built.discIndexes).toEqual([0, 2]);
+  } finally {
+    await built.output.dispose();
+  }
+});
+
+test("a ZIP of a non-ASCII cue sheet holds its track file", async () => {
+  const game = `Pokémon ${uniqueGame()}`;
+  const files = [
+    new File([sheet(`${game} (Disc 1).bin`)], `${game} (Disc 1).cue`),
+    new File(["b"], `${game} (Disc 1).bin`),
+    new File([sheet(`${game} (Disc 2).bin`)], `${game} (Disc 2).cue`),
+    new File(["b"], `${game} (Disc 2).bin`),
+  ];
+  const built = await buildPlaylist({ archive: true, files, outputName: "list.zip", sort: true });
+  try {
+    expect(built.discIndexes).toEqual([0, 2]);
+    expect(built.output.size).toBeGreaterThan(0);
+  } finally {
+    await built.output.dispose();
+  }
+});
+
 test("the form shows, orders and removes discs whose names staging rewrites", async () => {
   await mount();
   pick([new File(["2"], DISC_2), new File(["1"], DISC_1)]);

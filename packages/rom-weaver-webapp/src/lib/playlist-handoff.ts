@@ -5,6 +5,7 @@
  */
 
 import { copyRuntimeOutputToPath, createRuntimeOutputFromVfs } from "../storage/vfs/runtime-output.ts";
+import { createVfsPathId } from "../storage/vfs/path-id.ts";
 import type { PublicOutput } from "../types/workflow-runtime-types.ts";
 
 /**
@@ -33,14 +34,19 @@ const isSamePlaylistFile = (left: PlaylistDisc, right: PlaylistDisc): boolean =>
   );
 };
 
+/** Where the Playlist tool keeps its copies; the boot cleanup sweeps this folder. */
+const PLAYLIST_COPY_FOLDER = "runtime-output/playlist";
+
 /**
  * Give the Playlist tool its own copy of an output another tool keeps alive, so the playlist still
- * has the file after that tool disposes it (Extract does when it starts its next run).
+ * has the file after that tool disposes it (Extract does when it starts its next run). Every copy
+ * of one handoff goes into a shared folder under its real name and relative path, so a sheet still
+ * finds the track files it names.
  */
-const retainPlaylistDisc = async (disc: PlaylistDisc): Promise<PlaylistDisc> => {
+const retainPlaylistDisc = async (disc: PlaylistDisc, handoffId: string): Promise<PlaylistDisc> => {
   const { source } = disc;
   if (source instanceof Blob) return disc;
-  const copy = await copyRuntimeOutputToPath(source, source.fileName, "runtime-output/playlist");
+  const copy = await copyRuntimeOutputToPath(source, source.fileName, PLAYLIST_COPY_FOLDER, handoffId);
   const owned = await createRuntimeOutputFromVfs(copy.vfs, copy.path, copy.fileName, {
     cleanup: copy.dispose,
     mediaType: copy.mediaType,
@@ -48,6 +54,9 @@ const retainPlaylistDisc = async (disc: PlaylistDisc): Promise<PlaylistDisc> => 
   });
   return { name: disc.name, origin: source, owned: true, size: disc.size, source: owned };
 };
+
+/** A fresh folder name for one handoff's copies. */
+const createPlaylistHandoffId = (): string => createVfsPathId();
 
 /** Delete the copy {@link retainPlaylistDisc} made; a dropped file is left alone. */
 const releasePlaylistDisc = (disc: PlaylistDisc) => {
@@ -93,6 +102,7 @@ const hasSeveralDiscs = (fileNames: readonly string[]): boolean =>
   fileNames.filter((name) => DISC_FILE_PATTERN.test(name)).length > 1;
 
 export {
+  createPlaylistHandoffId,
   hasSeveralDiscs,
   isPlaylistFile,
   isSamePlaylistFile,
