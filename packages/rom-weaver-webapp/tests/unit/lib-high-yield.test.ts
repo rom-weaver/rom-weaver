@@ -233,6 +233,10 @@ describe("create patch format policy", () => {
     expect(getCreatePatchFormatsForSizes(16_777_216)).not.toContain("ips32");
     expect(getCreatePatchFormatsForSizes(268_435_456)).toEqual(expect.arrayContaining(extended));
     expect(getCreatePatchFormatsForSizes(268_435_457)).toEqual(["xdelta", "ppf"]);
+    // PAT create needs equal input lengths, so it is hidden when the sizes differ.
+    expect(getCreatePatchFormatsForSizes(1024, 1024)).toContain("pat");
+    expect(getCreatePatchFormatsForSizes(1024, 2048)).not.toContain("pat");
+    expect(getCreatePatchFormatsForSizes(1024, 2048)).toContain("dps");
     // Rust candidates keep their order and default; extended formats trail and stay selectable.
     expect(
       getPreferredCreatePatchFormat({

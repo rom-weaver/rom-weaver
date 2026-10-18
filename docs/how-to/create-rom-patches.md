@@ -80,7 +80,7 @@ In **Modified ROM** mode, use **0x04 Patch** to name the download and choose its
 
 BPS is a strong default unless your community expects otherwise; [Choosing a patch format](../explanation/patch-formats.md) compares the choices and their trade-offs. If you do publish IPS, put the Original's checksum prominently in the release notes - the format cannot carry it.
 
-The format list in Create only offers formats rom-weaver can make for the files you selected.
+The format list in Create is filtered by file size, and PAT is hidden when the two files differ in length. Some formats also need specific content, such as a DLDI section in a Nintendo DS ROM for DLDI, and creating one from other files reports an error.
 
 To change an existing patch's format, [convert it](convert-patch-format-browser.md).
 

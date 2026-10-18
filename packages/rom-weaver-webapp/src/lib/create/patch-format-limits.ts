@@ -28,6 +28,9 @@ const EXTENDED_SMALL_CREATE_PATCH_FORMATS: readonly string[] =
 const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: readonly string[] =
   ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.extendedFormats.legacy;
 
+// PAT create requires equal input lengths, so it is only offered when the known sizes match.
+const CREATE_EQUAL_LENGTH_ONLY_FORMAT = "pat";
+
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")
     .trim()
@@ -63,7 +66,13 @@ const withExtendedCreatePatchFormats = (
   ...sizes: Array<number | null | undefined>
 ): string[] => {
   const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes));
-  return [...formats, ...extended.filter((format) => !formats.includes(format))];
+  const knownSizes = sizes.filter((size): size is number => typeof size === "number" && size > 0);
+  const lengthsDiffer = knownSizes.some((size) => size !== knownSizes[0]);
+  const isOffered = (format: string) => {
+    if (formats.includes(format)) return false;
+    return !(lengthsDiffer && format === CREATE_EQUAL_LENGTH_ONLY_FORMAT);
+  };
+  return [...formats, ...extended.filter(isOffered)];
 };
 
 const getCreatePatchFormatsForSizes = (...sizes: Array<number | null | undefined>): string[] =>

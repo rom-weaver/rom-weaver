@@ -256,6 +256,11 @@ test("create output options expose patch format and archive choices", () => {
   expect(createCreatePatchFormatOptions({ candidateFormats: ["xdelta", "bps"] }).map((option) => option.value)).toEqual(
     ["xdelta", "bps", "ips32", "solid", "gdiff", "apsgba", "pat", "dldi", "dps"],
   );
+  expect(
+    createCreatePatchFormatOptions({ candidateFormats: ["xdelta", "bps"], modifiedSize: 2048, originalSize: 1024 }).map(
+      (option) => option.value,
+    ),
+  ).toEqual(["xdelta", "bps", "ips32", "solid", "gdiff", "apsgba", "dldi", "dps"]);
 });
 
 test("create format policy steers defaults by size", () => {
