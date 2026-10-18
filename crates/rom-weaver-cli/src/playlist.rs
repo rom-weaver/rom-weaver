@@ -90,6 +90,45 @@ fn natural_cmp(left: &str, right: &str) -> Ordering {
     }
 }
 
+/// The name the browser stages a file under: runs of characters outside
+/// printable ASCII, and of `: * ? " < > |`, become one `_`; leading dots and
+/// edge whitespace or `_` go. A sheet that names `Pokémon.bin` still finds the
+/// staged `Pok_mon.bin`.
+pub(crate) fn staged_file_name(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut in_run = false;
+    for ch in name.chars() {
+        let unsafe_char =
+            !(' '..='~').contains(&ch) || matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|');
+        if unsafe_char {
+            if !in_run {
+                out.push('_');
+            }
+            in_run = true;
+        } else {
+            out.push(ch);
+            in_run = false;
+        }
+    }
+    out.trim_start_matches('.')
+        .trim_matches(|ch: char| ch == '_' || ch.is_whitespace())
+        .to_string()
+}
+
+/// A track file a sheet names, as it sits next to the sheet: under the exact
+/// name, or else under its [`staged_file_name`] form.
+fn sheet_track_path(sheet_dir: &Path, archive_name: &str) -> PathBuf {
+    let exact = sheet_dir.join(archive_name);
+    if exact.is_file() {
+        return exact;
+    }
+    let (folder, name) = archive_name
+        .rsplit_once('/')
+        .map_or(("", archive_name), |(folder, name)| (folder, name));
+    let staged = sheet_dir.join(folder).join(staged_file_name(name));
+    if staged.is_file() { staged } else { exact }
+}
+
 fn file_name_of(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -254,9 +293,11 @@ fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPl
                     input.display()
                 )));
             }
-            named.insert(file_name_of(Path::new(&archive_name)).to_ascii_lowercase());
+            let track_name = file_name_of(Path::new(&archive_name));
+            named.insert(track_name.to_ascii_lowercase());
+            named.insert(staged_file_name(&track_name).to_ascii_lowercase());
             if zip {
-                companions.push((sheet_dir.join(&archive_name), archive_name));
+                companions.push((sheet_track_path(sheet_dir, &archive_name), archive_name));
             }
         }
     }

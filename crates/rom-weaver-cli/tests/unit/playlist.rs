@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{disc_number, order_discs, relative_playlist_path, render_m3u};
+use super::{disc_number, order_discs, relative_playlist_path, render_m3u, staged_file_name};
 
 fn names(paths: Vec<PathBuf>) -> Vec<String> {
     paths
@@ -97,4 +97,17 @@ fn relative_paths_use_forward_slashes_and_climb_with_dotdot() {
         relative_playlist_path(&base, &PathBuf::from("/games/out/./x/../Game.cue")).unwrap(),
         "Game.cue"
     );
+}
+
+#[test]
+fn staged_file_name_matches_the_browser_staging_rules() {
+    for (name, expected) in [
+        ("Game (Disc 1).bin", "Game (Disc 1).bin"),
+        ("Pokémon (Disc 1).bin", "Pok_mon (Disc 1).bin"),
+        ("日本語 (Disc 1).bin", "(Disc 1).bin"),
+        ("A:B*C.bin", "A_B_C.bin"),
+        (".hidden.bin", "hidden.bin"),
+    ] {
+        assert_eq!(staged_file_name(name), expected, "{name}");
+    }
 }

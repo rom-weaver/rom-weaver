@@ -258,3 +258,58 @@ fn playlist_lists_a_ccd_image_once_without_its_data_files() {
         "Game (Disc 1).ccd\nGame (Disc 2).ccd\n"
     );
 }
+
+#[test]
+fn playlist_zip_finds_track_files_staged_under_ascii_names() {
+    // The browser stages `Pokémon (Disc N).bin` as `Pok_mon (Disc N).bin` but the cue text keeps the
+    // real name; the tracks must still be taken as the cue's, not listed as discs.
+    let temp = setup_temp_dir();
+    for number in [1, 2] {
+        let staged = format!("Pok_mon (Disc {number})");
+        fs::write(temp.path().join(format!("{staged}.bin")), staged.as_bytes()).expect("write bin");
+        fs::write(
+            temp.path().join(format!("{staged}.cue")),
+            format!(
+                "FILE \"Pok\u{e9}mon (Disc {number}).bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n"
+            ),
+        )
+        .expect("write cue");
+    }
+    let mut inputs = Vec::new();
+    for name in [
+        "Pok_mon (Disc 1).cue",
+        "Pok_mon (Disc 1).bin",
+        "Pok_mon (Disc 2).cue",
+        "Pok_mon (Disc 2).bin",
+    ] {
+        inputs.push(temp.path().join(name).to_str().expect("p").to_string());
+    }
+    let input_refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
+    let out = temp.child("Game.zip");
+    run_single_json_event(
+        &playlist_args(&input_refs, out.path().to_str().expect("p"), &[]),
+        0,
+    );
+    let extracted = temp.child("unzipped");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            out.path().to_str().expect("p"),
+            "--output",
+            extracted.path().to_str().expect("p"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read_to_string(extracted.child("Game.m3u").path()).expect("m3u"),
+        "Pok_mon (Disc 1).cue\nPok_mon (Disc 2).cue\n"
+    );
+    assert!(
+        extracted
+            .child("Pok\u{e9}mon (Disc 1).bin")
+            .path()
+            .is_file()
+    );
+}
