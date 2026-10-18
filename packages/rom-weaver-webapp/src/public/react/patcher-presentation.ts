@@ -25,6 +25,8 @@ type OutputApplyButtonState = {
   label: string;
   title: string;
   disabled: boolean;
+  /** Validation blocks Apply: shown aria-disabled with a reason, cleared by the "Apply anyway" override. */
+  blocked: boolean;
   loading: boolean;
   progress: ProgressViewModel | null;
 };
@@ -151,6 +153,7 @@ const createEmptyPatcherOutputState = ({
   options?: OutputOption[];
 } = {}): PatcherOutputState => ({
   applyButton: {
+    blocked: false,
     disabled: true,
     label: applyButtonLabel,
     loading: false,

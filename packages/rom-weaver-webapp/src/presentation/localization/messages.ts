@@ -1026,6 +1026,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.trustOriginalsBody": msg({ id: "ui.home.trustOriginalsBody", message: "Every result is a new file." }),
   "ui.home.trustTitle": msg({ id: "ui.home.trustTitle", message: "There is no server to send your files to" }),
   "ui.output.applyDownload": msg({ id: "ui.output.applyDownload", message: "Apply & download" }),
+  "ui.output.applyBlocked": msg({
+    id: "ui.output.applyBlocked",
+    message:
+      "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered.",
+  }),
   "ui.output.cancelApply": msg({ id: "ui.output.cancelApply", message: "Cancel applying" }),
   "ui.output.downloadFile": msg({ id: "ui.output.downloadFile", message: "Download {name}" }),
   "ui.output.patchedFormat": msg({ id: "ui.output.patchedFormat", message: "Patched {format}" }),

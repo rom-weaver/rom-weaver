@@ -1,5 +1,7 @@
 import { createElement } from "react";
-import { expect, test, vi } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
+// Real design system, so the disabled look is asserted from computed style.
+import "../../src/webapp/design-system/index.css";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
@@ -285,6 +287,44 @@ test("checksum override dispatch uses one-shot validation relax", async () => {
   await expect.poll(() => checksumOverrideCheckbox.checked, { timeout: 30000 }).toBe(false);
   const callInput = applyPatchesSpy.mock.calls[0]?.[0];
   expect(callInput?.options?.validation?.requireInputChecksumMatch).toBe(false);
+});
+
+test("a validation-blocked Apply reports aria-disabled with a reason until Apply anyway is ticked", async () => {
+  const applyPatchesSpy = vi.fn(async () => undefined);
+  // The design-system selectors hang off .rw-app; the harness mounts bare.
+  document.body.classList.add("rw-app");
+  onTestFinished(() => document.body.classList.remove("rw-app"));
+  mount(createChecksumOverrideHarnessElement(applyPatchesSpy));
+
+  const applyButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-apply");
+    return button instanceof HTMLButtonElement && button.getAttribute("aria-disabled") === "true" ? button : null;
+  }, 30000);
+  // Blocked: programmatically disabled, still focusable, with the reason one reference away.
+  expect(applyButton.getAttribute("aria-disabled")).toBe("true");
+  const reasonId = applyButton.getAttribute("aria-describedby");
+  expect(reasonId).toBeTruthy();
+  const reason = document.getElementById(reasonId);
+  expect(reason?.textContent).toMatch(/blocked/i);
+  expect(getComputedStyle(applyButton).opacity).not.toBe("1");
+  expect(getComputedStyle(applyButton).cursor).toBe("not-allowed");
+  applyButton.click();
+  expect(applyPatchesSpy).not.toHaveBeenCalled();
+
+  const checkbox = await waitForState(() => {
+    const element = document.getElementById("rom-weaver-checkbox-checksum-override");
+    return element instanceof HTMLInputElement ? element : null;
+  }, 30000);
+  checkbox.click();
+
+  // Ticking Apply anyway re-enables it: no aria-disabled, no reason.
+  await expect
+    .poll(() => document.getElementById("rom-weaver-button-apply")?.hasAttribute("aria-disabled"), { timeout: 30000 })
+    .toBe(false);
+  const enabled = document.getElementById("rom-weaver-button-apply");
+  expect(enabled.hasAttribute("aria-describedby")).toBe(false);
+  expect(document.getElementById(reasonId)).toBeNull();
+  expect(getComputedStyle(enabled).opacity).toBe("1");
 });
 
 test("expected validation sizes and file cards retain raw byte metadata", async () => {

@@ -212,6 +212,7 @@ interface OutputViewStateInput {
   applyQueued: boolean;
   applyTimingText: string;
   busy: boolean;
+  applyBlocked: boolean;
   canQueueApply: boolean;
   completedSizeSummary: OutputSizeSummary;
   compressTimingText: string;
@@ -235,6 +236,7 @@ interface OutputViewStateInput {
 const buildOutputViewState = ({
   activeSettings,
   applyQueued,
+  applyBlocked,
   applyTimingText,
   busy,
   canQueueApply,
@@ -255,6 +257,7 @@ const buildOutputViewState = ({
   z3dsLabelSource,
 }: OutputViewStateInput) => ({
   applyButton: {
+    blocked: applyBlocked && !hasPendingDownload,
     disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
     label: hasPendingDownload ? `Download ${pendingDownloadFileName || "output"}` : "Apply & download",
     loading: busy || applyQueued,

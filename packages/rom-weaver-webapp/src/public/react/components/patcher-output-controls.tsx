@@ -1,9 +1,11 @@
-import { Download, Stamp } from "lucide-react";
+import { Download, Stamp, TriangleAlert } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useUiLocalizer } from "../settings-context.tsx";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { ProgressActionButton } from "./progress-action-button.tsx";
+
+const BLOCKED_REASON_ID = "rom-weaver-apply-blocked-reason";
 
 type OutputController = {
   subscribe: (listener: () => void) => () => void;
@@ -67,23 +69,34 @@ function PatcherPrimaryAction({
     );
   }
 
+  const blocked = state.applyButton.blocked && !state.applyButton.loading && !state.applyButton.disabled;
   return (
-    <ProgressActionButton
-      cancelLabel={localizer.message("ui.output.cancelApply")}
-      disabled={state.applyButton.disabled || !!disableRun}
-      icon={<Stamp aria-hidden="true" />}
-      id="rom-weaver-button-apply"
-      label={
-        state.pendingDownloadFileName
-          ? localizer.message("ui.output.downloadFile", { name: state.pendingDownloadFileName })
-          : localizer.message("ui.output.applyDownload")
-      }
-      loading={state.applyButton.loading}
-      onCancel={controller.cancelPrimaryAction}
-      onClick={() => controller.runPrimaryAction()}
-      progress={state.applyButton.progress}
-      progressId="rom-weaver-progress-apply"
-    />
+    <>
+      <ProgressActionButton
+        ariaDisabled={blocked}
+        cancelLabel={localizer.message("ui.output.cancelApply")}
+        describedBy={blocked ? BLOCKED_REASON_ID : undefined}
+        disabled={state.applyButton.disabled || !!disableRun}
+        icon={<Stamp aria-hidden="true" />}
+        id="rom-weaver-button-apply"
+        label={
+          state.pendingDownloadFileName
+            ? localizer.message("ui.output.downloadFile", { name: state.pendingDownloadFileName })
+            : localizer.message("ui.output.applyDownload")
+        }
+        loading={state.applyButton.loading}
+        onCancel={controller.cancelPrimaryAction}
+        onClick={() => controller.runPrimaryAction()}
+        progress={state.applyButton.progress}
+        progressId="rom-weaver-progress-apply"
+      />
+      {blocked ? (
+        <p className="patch-off-note apply-blocked-reason" id={BLOCKED_REASON_ID}>
+          <TriangleAlert aria-hidden="true" />
+          <span>{localizer.message("ui.output.applyBlocked")}</span>
+        </p>
+      ) : null}
+    </>
   );
 }
 

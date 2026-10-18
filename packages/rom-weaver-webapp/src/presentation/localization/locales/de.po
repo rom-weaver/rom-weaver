@@ -550,6 +550,11 @@ msgstr "Anwenden und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Anwenden ist durch eine fehlgeschlagene Patch-Prüfung blockiert. Korrigiere Patch oder ROM oder aktiviere „Trotzdem anwenden“, wo angeboten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Anwenden und herunterladen"
 
