@@ -1201,4 +1201,38 @@ mod reader_regressions {
         assert!(decode_lz4_prefix(&[0x11, 1, 1, 0], 5).is_none());
         assert!(decode_lz4_prefix(&[0xf0, 255], 270).is_none());
     }
+
+    #[test]
+    fn cso_deflate_span_beyond_the_padding_bound_is_rejected() {
+        let data = vec![9_u8; 2048];
+        let bytes = v1_image(&data, 2048, 12);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("geometry");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
+    }
+
+    #[test]
+    fn cso_bare_lz4_span_is_bounded_by_block_size_plus_one_alignment_unit() {
+        let compressed = lz4_flex::block::compress(&[3_u8; 2048]);
+        for (alignment, span, ok) in [(0_u8, 2073_usize, true), (0, 2074, false), (5, 2080, true)] {
+            let mut payload = compressed.clone();
+            payload.resize(span, 0);
+            let end = (32 + span) >> alignment;
+            let first = 32_u32 >> alignment;
+            assert_eq!((32 + span) % (1 << alignment), 0);
+            let bytes = image_with_spans(
+                2048,
+                2048,
+                alignment,
+                &[first | 0x8000_0000, end as u32],
+                &payload,
+            );
+            let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("geometry");
+            let mut output = [0; 2048];
+            let result = reader.read_offset(0, &mut output);
+            assert_eq!(result.is_ok(), ok, "alignment {alignment} span {span}");
+            if ok {
+                assert_eq!(output, [3; 2048]);
+            }
+        }
+    }
 }
