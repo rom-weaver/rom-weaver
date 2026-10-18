@@ -206,7 +206,21 @@ impl CliApp {
         let mut planned = BTreeMap::new();
         // A sourceless (checks-only) rom entry resolves to no source at all:
         // the applying user supplies the ROM.
+        // A `path` the archive does not bundle (a hand-zipped `weave create`
+        // JSON) is treated like a `name`: the applying user supplies the ROM,
+        // as `patch apply --weave` does.
+        let rom_unbundled = |rom: &WeaveRom| {
+            loaded.kind == WeaveSourceKind::Archive
+                && rom.url.is_none()
+                && rom.path.as_deref().is_some_and(|path| {
+                    Self::find_weave_archive_entry(&loaded.archive_entries, path.trim()).is_none()
+                })
+        };
         let rom_source = match &weave.rom {
+            Some(rom) if rom_unbundled(rom) => {
+                trace!("weave rom.path is not bundled in the archive; the ROM is user-supplied");
+                None
+            }
             Some(rom) if rom.url.is_some() || rom.path.is_some() => {
                 let name = entry_basename(rom.path.as_deref(), rom.url.as_deref());
                 let entry_extract_dir = (rom_extractable && selector.matches(&name))

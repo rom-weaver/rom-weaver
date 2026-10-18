@@ -1140,6 +1140,42 @@ for (const romMatches of [true, false]) {
   });
 }
 
+// `weave create --output weave.json` records the input ROM as `rom.path`; zipping that JSON by hand leaves the
+// path unbundled. Like `rom.name`, it means the user supplies the ROM (the CLI accepts it too).
+for (const romMatches of [true, false]) {
+  test(`weave zip with an unbundled rom.path verifies rom.checks (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const checks = romMatches
+      ? RAW_ROM_CHECKS
+      : { checksums: { crc32: "a1cecd74", sha1: "96ff406466d366276a84a48947ae14cac4065e1c" }, size: 14 };
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "unbundled-path-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+        rom: { checks, path: "not-in-the-zip/game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "unbundled-path-output", romMatches });
+  });
+}
+
+test("weave zip whose patch path matches no member still fails to load", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "missing-patch-output" },
+      patches: [{ name: "Core", path: "missing.ips" }],
+      rom: { checks: RAW_ROM_CHECKS, name: "game.bin" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  await expect(loadLocalWeaveSession(weaveArchive, [romFile])).rejects.toThrow(/matches no archive member/);
+});
+
 // `weave create --checksum sha256` writes algorithms staging does not compute; they are hashed on demand.
 for (const romMatches of [true, false]) {
   test(`sha256-only rom.checks are computed and verified (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
