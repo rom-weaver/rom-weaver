@@ -75,3 +75,5 @@ mod report_output;
 
 #[path = "cli_smoke/wbfs_split.rs"]
 mod wbfs_split;
+#[path = "cli_smoke/pbp.rs"]
+mod pbp;
