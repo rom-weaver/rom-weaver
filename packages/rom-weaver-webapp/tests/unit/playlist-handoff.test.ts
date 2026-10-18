@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   hasSeveralDiscs,
+  isPlaylistFile,
+  isSamePlaylistFile,
   type PlaylistDisc,
   setPlaylistHandoff,
   subscribePlaylistHandoff,
@@ -28,5 +30,29 @@ describe("playlist handoff", () => {
     expect(hasSeveralDiscs(["Game.cue", "Game.bin"])).toBe(false);
     expect(hasSeveralDiscs(["readme.txt"])).toBe(false);
     expect(hasSeveralDiscs(["a.CHD", "b.chd"])).toBe(true);
+  });
+
+  it("lists only disc and track files, not readmes or covers", () => {
+    for (const name of ["a.cue", "a.BIN", "a.ccd", "a.img", "a.sub", "a.mdf", "a.chd"]) {
+      expect(isPlaylistFile(name)).toBe(true);
+    }
+    for (const name of ["readme.txt", "cover.png", "notes"]) expect(isPlaylistFile(name)).toBe(false);
+  });
+
+  it("tells the same file from a different one with the same name", () => {
+    const a = new File(["x"], "a.bin", { lastModified: 1 });
+    expect(
+      isSamePlaylistFile(
+        { name: "a.bin", size: 1, source: a },
+        { name: "a.bin", size: 1, source: new File(["x"], "a.bin", { lastModified: 2 }) },
+      ),
+    ).toBe(false);
+    expect(isSamePlaylistFile({ name: "a.bin", size: 1, source: a }, { name: "a.bin", size: 1, source: a })).toBe(true);
+    expect(
+      isSamePlaylistFile(
+        { name: "a.bin", size: 1, source: a },
+        { name: "a.bin", size: 1, source: new File(["x"], "a.bin", { lastModified: 1 }) },
+      ),
+    ).toBe(true);
   });
 });

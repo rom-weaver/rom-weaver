@@ -1,6 +1,6 @@
 import { ListMusic, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hasSeveralDiscs, setPlaylistHandoff } from "../../lib/playlist-handoff.ts";
+import { hasSeveralDiscs, isPlaylistFile, setPlaylistHandoff } from "../../lib/playlist-handoff.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { InlineProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -423,7 +423,9 @@ const ExtractForm = ({ onSelectTab, pageDrop }: ExtractFormProps) => {
               icon={<ListMusic aria-hidden="true" />}
               onClick={() => {
                 setPlaylistHandoff(
-                  outputs.map((output) => ({ name: output.fileName, size: output.size, source: output })),
+                  outputs
+                    .filter((output) => isPlaylistFile(output.fileName))
+                    .map((output) => ({ name: output.fileName, size: output.size, source: output })),
                 );
                 onSelectTab("playlist");
               }}

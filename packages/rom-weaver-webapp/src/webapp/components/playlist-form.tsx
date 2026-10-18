@@ -1,7 +1,14 @@
 import { ArrowDown, ArrowUp, Download, ListMusic } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import { type PlaylistDisc, subscribePlaylistHandoff, takePlaylistHandoff } from "../../lib/playlist-handoff.ts";
+import {
+  isSamePlaylistFile,
+  type PlaylistDisc,
+  releasePlaylistDisc,
+  retainPlaylistDisc,
+  subscribePlaylistHandoff,
+  takePlaylistHandoff,
+} from "../../lib/playlist-handoff.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
@@ -41,9 +48,9 @@ type PlaylistFormProps = {
 
 const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const [files, setFiles] = useState<PlaylistDisc[]>([]);
-  // The playlist lines in playlist order. The shared `playlist` command orders them from the file
-  // names; the up/down buttons then edit this list.
-  const [entries, setEntries] = useState<string[]>([]);
+  // The discs in playlist order. The shared `playlist` command orders them from the file names and
+  // says which files are discs; the up/down buttons then edit this list.
+  const [ordered, setOrdered] = useState<PlaylistDisc[]>([]);
   const [format, setFormat] = useState("m3u");
   const [outputName, setOutputName] = useState("playlist");
   const [output, setOutput] = useState<PublicOutput | null>(null);
@@ -55,14 +62,22 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const orderRunRef = useRef(0);
   const filesRef = useRef<PlaylistDisc[]>([]);
   const handledDropRef = useRef(0);
+  const mountedRef = useRef(true);
   const workflowEmpty = useFlatTransitionFlag(files.length === 0);
 
   useEffect(() => {
     outputRef.current = output;
   }, [output]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(
     () => () => {
       abortRef.current?.abort();
+      for (const disc of filesRef.current) releasePlaylistDisc(disc);
       void outputRef.current?.dispose();
       setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" });
     },
@@ -76,6 +91,9 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     else setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" });
   }, [busy, error, files.length, ordering, output]);
 
+  const extras = files.filter((file) => !ordered.includes(file));
+  const canRun = files.length > 0 && ordered.length > 0 && !!outputName.trim() && !busy && !ordering && !error;
+
   const clearOutput = useCallback(() => {
     const previous = outputRef.current;
     outputRef.current = null;
@@ -88,24 +106,26 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const orderFiles = useCallback(async (next: PlaylistDisc[]) => {
     const run = ++orderRunRef.current;
     if (next.length === 0) {
-      setEntries([]);
+      setOrdered([]);
       setOrdering(false);
       return;
     }
     setOrdering(true);
     try {
       const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
-      const ordered = await buildPlaylist({
+      const result = await buildPlaylist({
         archive: false,
         files: next.map((disc) => disc.source),
         outputName: "order.m3u",
         sort: true,
       });
-      void ordered.output.dispose();
-      if (run === orderRunRef.current) setEntries(ordered.entries);
+      void result.output.dispose();
+      if (run === orderRunRef.current) {
+        setOrdered(result.discIndexes.flatMap((index) => next[index] ?? []));
+      }
     } catch (cause) {
       if (run === orderRunRef.current) {
-        setEntries([]);
+        setOrdered([]);
         setError(cause instanceof Error ? cause.message : String(cause));
       }
     } finally {
@@ -125,13 +145,25 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     (incoming: PlaylistDisc[]) => {
       clearOutput();
       const previous = filesRef.current;
-      const known = new Set(previous.map((file) => file.name.toLowerCase()));
-      const fresh = incoming.filter((file) => {
-        const key = file.name.toLowerCase();
-        if (known.has(key)) return false;
-        known.add(key);
-        return true;
-      });
+      const fresh: PlaylistDisc[] = [];
+      let clash: PlaylistDisc | undefined;
+      for (const file of incoming) {
+        const held = [...previous, ...fresh];
+        if (held.some((other) => isSamePlaylistFile(other, file))) continue;
+        // Every file is staged into one folder, so two different files cannot share a name: a sheet
+        // would silently read the other disc's track.
+        clash ??= held.some((other) => other.name.toLowerCase() === file.name.toLowerCase()) ? file : undefined;
+        fresh.push(file);
+      }
+      const discard = () => {
+        for (const file of incoming) if (!previous.includes(file)) releasePlaylistDisc(file);
+      };
+      if (clash) {
+        discard();
+        setError(`A different file named ${clash.name} is already in the list. Remove it or rename one of them first.`);
+        return;
+      }
+      for (const file of incoming) if (!(fresh.includes(file) || previous.includes(file))) releasePlaylistDisc(file);
       if (fresh.length === 0) return;
       const next = [...previous, ...fresh];
       if (previous.length === 0 && next[0]) setOutputName(gameNameOf(next[0].name));
@@ -139,13 +171,56 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     },
     [clearOutput, updateFiles],
   );
-  const removeEntry = (name: string) => {
+  // Copy outputs another tool keeps alive, then add them; the copies are the playlist's to delete.
+  const adoptFiles = useCallback(
+    async (handed: PlaylistDisc[]) => {
+      const retained: PlaylistDisc[] = [];
+      try {
+        for (const disc of handed) {
+          if (filesRef.current.some((held) => isSamePlaylistFile(held, disc))) continue;
+          retained.push(await retainPlaylistDisc(disc));
+        }
+      } catch (cause) {
+        for (const disc of retained) releasePlaylistDisc(disc);
+        if (mountedRef.current) setError(cause instanceof Error ? cause.message : String(cause));
+        return;
+      }
+      if (!mountedRef.current) {
+        for (const disc of retained) releasePlaylistDisc(disc);
+        return;
+      }
+      addFiles(retained);
+    },
+    [addFiles],
+  );
+  /** Remove a disc and, if it is a sheet, the track files only it names. */
+  const removeDisc = async (disc: PlaylistDisc) => {
     clearOutput();
-    updateFiles(filesRef.current.filter((file) => file.name !== name));
+    const candidates = extras;
+    let gone = [disc];
+    if (candidates.length) {
+      try {
+        const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
+        const probe = await buildPlaylist({
+          archive: false,
+          files: [disc.source, ...candidates.map((file) => file.source)],
+          outputName: "order.m3u",
+          sort: false,
+        });
+        void probe.output.dispose();
+        // The command lists a track file as a disc only when no sheet in the input names it.
+        const listed = new Set(probe.discIndexes);
+        gone = [disc, ...candidates.filter((_, index) => !listed.has(index + 1))];
+      } catch {
+        // Fall back to removing just the chosen disc.
+      }
+    }
+    for (const file of gone) releasePlaylistDisc(file);
+    updateFiles(filesRef.current.filter((file) => !gone.includes(file)));
   };
   const moveEntry = (index: number, delta: -1 | 1) => {
     clearOutput();
-    setEntries((previous) => {
+    setOrdered((previous) => {
       const target = index + delta;
       if (target < 0 || target >= previous.length) return previous;
       const next = [...previous];
@@ -168,15 +243,11 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   useEffect(() => {
     const take = () => {
       const handed = takePlaylistHandoff();
-      if (handed.length) addFiles(handed);
+      if (handed.length) void adoptFiles(handed);
     };
     take();
     return subscribePlaylistHandoff(take);
-  }, [addFiles]);
-
-  const byName = new Map(files.map((file) => [file.name, file]));
-  const extras = files.filter((file) => !entries.includes(file.name));
-  const canRun = files.length > 0 && entries.length > 0 && !!outputName.trim() && !busy && !ordering && !error;
+  }, [adoptFiles]);
 
   const run = async () => {
     if (!canRun) return;
@@ -186,11 +257,10 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     setBusy(true);
     try {
       const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
-      const discs = entries.flatMap((name) => byName.get(name) ?? []);
       const archive = format === "zip";
       const built = await buildPlaylist({
         archive,
-        files: [...discs, ...extras].map((disc) => disc.source),
+        files: [...ordered, ...extras].map((disc) => disc.source),
         outputName: `${outputName.trim()}.${archive ? "zip" : "m3u"}`,
         signal: abort.signal,
         sort: false,
@@ -217,7 +287,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   useAgentWorkflow("playlist", {
     getState: () => ({
       busy,
-      discs: entries,
+      discs: ordered.map((disc) => disc.name),
       error: error || null,
       files: files.map((disc) => ({ name: disc.name, size: disc.size })),
       options: { format, outputName },
@@ -260,6 +330,11 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
         onFiles={(dropped) => addFiles(dropped.map(toDisc))}
         supported={[{ extensions: DISC_EXTENSIONS, label: "Disc files" }]}
       />
+      {workflowEmpty && error ? (
+        <Notice level="error" onDismiss={() => setError("")}>
+          {error}
+        </Notice>
+      ) : null}
       {workflowEmpty ? (
         <GhostSteps
           steps={[
@@ -272,8 +347,8 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
           <StepSection num="0x02" title="Disc order">
             {ordering ? <p role="status">Ordering discs…</p> : null}
             <ol aria-label="Discs in playlist order" className="cards">
-              {entries.map((name, index) => {
-                const file = byName.get(name);
+              {ordered.map((file, index) => {
+                const name = file.name;
                 return (
                   <li key={name}>
                     <FileCard
@@ -291,7 +366,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                           <button
                             aria-label={`Move ${name} down`}
                             className="rm"
-                            disabled={index === entries.length - 1 || busy}
+                            disabled={index === ordered.length - 1 || busy}
                             onClick={() => moveEntry(index, 1)}
                             type="button"
                           >
@@ -302,12 +377,12 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                       index={index + 1}
                       meta={
                         <>
-                          <span className="fsize mono">{file ? formatByteSize(file.size) : ""}</span>
+                          <span className="fsize mono">{formatByteSize(file.size)}</span>
                           <span className="meta-fmt mono">{`Disc ${index + 1}`}</span>
                         </>
                       }
                       name={<span className="nm mono">{name}</span>}
-                      onRemove={busy ? undefined : () => removeEntry(name)}
+                      onRemove={busy ? undefined : () => void removeDisc(file)}
                       removeLabel={`Remove ${name}`}
                     />
                   </li>

@@ -4,10 +4,55 @@
  * them when it mounts or, if it is already mounted, as they arrive.
  */
 
+import { copyRuntimeOutputToPath, createRuntimeOutputFromVfs } from "../storage/vfs/runtime-output.ts";
 import type { PublicOutput } from "../types/workflow-runtime-types.ts";
 
-/** One file of a game: a dropped file, or an output another tool keeps alive. */
-type PlaylistDisc = { name: string; size: number; source: File | PublicOutput };
+/**
+ * One file of a game: a dropped file, or an output another tool keeps alive.
+ * `origin` and `owned` are set once the Playlist tool holds its own copy of such an output.
+ */
+type PlaylistDisc = {
+  name: string;
+  size: number;
+  source: File | PublicOutput;
+  origin?: File | PublicOutput;
+  owned?: boolean;
+};
+
+/** Whether two entries are the same file: the same source, or the same dropped file picked twice. */
+const isSamePlaylistFile = (left: PlaylistDisc, right: PlaylistDisc): boolean => {
+  const a = left.origin ?? left.source;
+  const b = right.origin ?? right.source;
+  if (a === b) return true;
+  return (
+    a instanceof File &&
+    b instanceof File &&
+    a.name === b.name &&
+    a.size === b.size &&
+    a.lastModified === b.lastModified
+  );
+};
+
+/**
+ * Give the Playlist tool its own copy of an output another tool keeps alive, so the playlist still
+ * has the file after that tool disposes it (Extract does when it starts its next run).
+ */
+const retainPlaylistDisc = async (disc: PlaylistDisc): Promise<PlaylistDisc> => {
+  const { source } = disc;
+  if (source instanceof Blob) return disc;
+  const copy = await copyRuntimeOutputToPath(source, source.fileName, "runtime-output/playlist");
+  const owned = await createRuntimeOutputFromVfs(copy.vfs, copy.path, copy.fileName, {
+    cleanup: copy.dispose,
+    mediaType: copy.mediaType,
+    size: copy.size,
+  });
+  return { name: disc.name, origin: source, owned: true, size: disc.size, source: owned };
+};
+
+/** Delete the copy {@link retainPlaylistDisc} made; a dropped file is left alone. */
+const releasePlaylistDisc = (disc: PlaylistDisc) => {
+  if (disc.owned && !(disc.source instanceof Blob)) void disc.source.dispose();
+};
 
 type Listener = () => void;
 
@@ -33,6 +78,11 @@ const subscribePlaylistHandoff = (listener: Listener) => {
   };
 };
 
+/** The files worth listing in a playlist: disc images and sheets plus the data files they use. */
+const PLAYLIST_FILE_PATTERN =
+  /\.(cue|gdi|chd|iso|pbp|ccd|mds|cso|rvz|wbfs|gcz|ciso|bin|img|sub|mdf|raw|wav|mp3|ogg|flac|ape)$/i;
+const isPlaylistFile = (fileName: string): boolean => PLAYLIST_FILE_PATTERN.test(fileName);
+
 /**
  * Whether `fileNames` hold several discs of one game, so a playlist is worth
  * offering: two or more disc-sheet or disc-image files (not the track files a
@@ -42,4 +92,14 @@ const DISC_FILE_PATTERN = /\.(cue|gdi|chd|iso|pbp|ccd|mds|cso|rvz|wbfs|gcz|ciso)
 const hasSeveralDiscs = (fileNames: readonly string[]): boolean =>
   fileNames.filter((name) => DISC_FILE_PATTERN.test(name)).length > 1;
 
-export { hasSeveralDiscs, type PlaylistDisc, setPlaylistHandoff, subscribePlaylistHandoff, takePlaylistHandoff };
+export {
+  hasSeveralDiscs,
+  isPlaylistFile,
+  isSamePlaylistFile,
+  type PlaylistDisc,
+  releasePlaylistDisc,
+  retainPlaylistDisc,
+  setPlaylistHandoff,
+  subscribePlaylistHandoff,
+  takePlaylistHandoff,
+};

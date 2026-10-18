@@ -24,10 +24,12 @@ let saved;
 
 const fakeBuild = async ({ archive, files, sort }) => {
   const names = files.map((file) => file.name);
-  const discs = names.filter((name) => DISC_SHEET.test(name));
-  const entries = sort ? [...discs].sort((a, b) => discNumber(a) - discNumber(b)) : discs;
+  const discIndexes = names.flatMap((name, index) => (DISC_SHEET.test(name) ? [index] : []));
+  if (sort) discIndexes.sort((a, b) => discNumber(names[a]) - discNumber(names[b]));
+  const entries = discIndexes.map((index) => names[index]);
   const body = `${entries.join("\n")}\n`;
   return {
+    discIndexes,
     entries,
     output: {
       dispose: vi.fn(),
