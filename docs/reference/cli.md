@@ -374,7 +374,7 @@ Weave version 2 requires `patchBasis`. Weave version 1 remains readable and uses
 
 ### Weave execution targets
 
-A version 2 patch entry accepts `target` and `input`. Both use either a ROM reference (`rom: true`) or a generated-output reference (`patch: "producer-id"`), with an optional `member` selector. The selector names an archive member or disc track exactly; when the input is a single bare file, that file stands in for the member if its file name equals the member's, or if it satisfies the checks declared for that member (a patch's input checks, or the ROM checks when the weave sets no `rom.member`). One bare file never stands in for more than one distinct member; the command fails and asks for the archive or disc instead.
+A version 2 patch entry accepts `target` and `input`. Both use either a ROM reference (`rom: true`) or a generated-output reference (`patch: "producer-id"`), with an optional `member` selector. The selector names an archive member or disc track exactly. When the input is a single bare file (not an archive or disc), that file always stands in for the weave's `rom.member`; any other member is matched only if its file name equals the member's, or the file satisfies the checks declared for that member (a patch's input checks, or the ROM checks when the weave sets no `rom.member`). One bare file never stands in for more than one distinct member; the command fails and asks for the archive or disc instead.
 
 | Field | Execution behavior |
 | --- | --- |
