@@ -31,6 +31,9 @@ const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: readonly string[] =
 // PAT create requires equal input lengths, so it is only offered when the known sizes match.
 const CREATE_EQUAL_LENGTH_ONLY_FORMAT = "pat";
 
+// IPS32 cannot encode a truncate footer, so a smaller Modified ROM would apply at the Original length.
+const CREATE_NO_SHRINK_FORMAT = "ips32";
+
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")
     .trim()
@@ -68,8 +71,16 @@ const withExtendedCreatePatchFormats = (
   const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes));
   const knownSizes = sizes.filter((size): size is number => typeof size === "number" && size > 0);
   const lengthsDiffer = knownSizes.some((size) => size !== knownSizes[0]);
+  // Sizes are passed as (original, modified); only a known pair can shrink.
+  const [originalSize, modifiedSize] = sizes;
+  const shrinks =
+    typeof originalSize === "number" &&
+    typeof modifiedSize === "number" &&
+    modifiedSize > 0 &&
+    modifiedSize < originalSize;
   const isOffered = (format: string) => {
     if (formats.includes(format)) return false;
+    if (shrinks && format === CREATE_NO_SHRINK_FORMAT) return false;
     return !(lengthsDiffer && format === CREATE_EQUAL_LENGTH_ONLY_FORMAT);
   };
   return [...formats, ...extended.filter(isOffered)];

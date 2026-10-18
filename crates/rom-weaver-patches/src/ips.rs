@@ -885,7 +885,7 @@ fn validate_ips_create_flips_limits(
     if modified_len == max_ips_len && original_len > modified_len {
         let limit = format_human_bytes(max_ips_len);
         return Err(RomWeaverError::Validation(format!(
-            "IPS create cannot encode a truncate footer for exact {limit} output; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+            "IPS create cannot encode a truncate footer for exact {limit} output; use --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
         )));
     }
 

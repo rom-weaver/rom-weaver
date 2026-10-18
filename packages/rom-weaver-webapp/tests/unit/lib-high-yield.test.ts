@@ -237,6 +237,11 @@ describe("create patch format policy", () => {
     expect(getCreatePatchFormatsForSizes(1024, 1024)).toContain("pat");
     expect(getCreatePatchFormatsForSizes(1024, 2048)).not.toContain("pat");
     expect(getCreatePatchFormatsForSizes(1024, 2048)).toContain("dps");
+    // IPS32 cannot truncate, so it is hidden when the Modified ROM is smaller than the Original.
+    expect(getCreatePatchFormatsForSizes(2048, 1024)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(2048, 1024)).toContain("dps");
+    expect(getCreatePatchFormatsForSizes(1024, 2048)).toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(1024, 1024)).toContain("ips32");
     // Rust candidates keep their order and default; extended formats trail and stay selectable.
     expect(
       getPreferredCreatePatchFormat({
