@@ -472,11 +472,16 @@ fn create_patch_format_policy_value() -> Value {
             "midLarge": metadata.mid_large_formats,
             "large": metadata.large_formats,
         },
+        "extendedFormats": {
+            "small": metadata.extended_small_formats,
+            "legacy": metadata.extended_legacy_formats,
+        },
         "supportedCreateFormats": unique_formats(&[
             metadata.small_formats,
             metadata.medium_formats,
             metadata.mid_large_formats,
             metadata.large_formats,
+            metadata.extended_small_formats,
         ]),
     })
 }

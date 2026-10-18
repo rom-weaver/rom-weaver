@@ -16,6 +16,15 @@ pub(super) const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
 pub(super) const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
     &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
 pub(super) const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
+/// Formats `patch create --format` accepts that the recommendation tiers above never list.
+/// They are not recommended by `--plan`; browser Create appends them to its picker, below the
+/// recommended entries, so the CLI recommendation and every default stay unchanged. IPS32 shares
+/// the 16 MiB IPS limit (`create_patch_format_size_error_message`); the rest follow the legacy
+/// limit. VCDIFF is not listed: `--format vcdiff` is an alias of xdelta.
+pub(super) const EXTENDED_SMALL_CREATE_PATCH_FORMATS: &[&str] =
+    &["ips32", "solid", "gdiff", "apsgba", "pat", "dldi", "dps"];
+pub(super) const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: &[&str] =
+    &["solid", "gdiff", "apsgba", "pat", "dldi", "dps"];
 pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
     ".7z",
     ".apk",
@@ -97,6 +106,8 @@ pub struct PatchCreateFormatPolicyMetadata {
     pub medium_formats: &'static [&'static str],
     pub mid_large_formats: &'static [&'static str],
     pub large_formats: &'static [&'static str],
+    pub extended_small_formats: &'static [&'static str],
+    pub extended_legacy_formats: &'static [&'static str],
 }
 
 pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata {
@@ -112,6 +123,8 @@ pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata 
         medium_formats: MEDIUM_CREATE_PATCH_FORMATS,
         mid_large_formats: MID_LARGE_CREATE_PATCH_FORMATS,
         large_formats: LARGE_CREATE_PATCH_FORMATS,
+        extended_small_formats: EXTENDED_SMALL_CREATE_PATCH_FORMATS,
+        extended_legacy_formats: EXTENDED_LEGACY_CREATE_PATCH_FORMATS,
     }
 }
 

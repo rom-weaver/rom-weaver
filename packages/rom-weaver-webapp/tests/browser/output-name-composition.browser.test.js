@@ -204,20 +204,57 @@ test("create output options expose patch format and archive choices", () => {
     "ppf",
     "rup",
     "ups",
+    "ips32",
+    "solid",
+    "gdiff",
+    "apsgba",
+    "pat",
+    "dldi",
+    "dps",
   ]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_IPS_SIZE_LIMIT_BYTES }).map((option) => option.value),
-  ).toEqual(["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  ).toEqual([
+    "bps",
+    "xdelta",
+    "aps",
+    "bdf",
+    "pmsr",
+    "ppf",
+    "rup",
+    "ups",
+    "solid",
+    "gdiff",
+    "apsgba",
+    "pat",
+    "dldi",
+    "dps",
+  ]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_BPS_DEFAULT_LIMIT_BYTES }).map((option) => option.value),
-  ).toEqual(["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  ).toEqual([
+    "xdelta",
+    "bps",
+    "aps",
+    "bdf",
+    "pmsr",
+    "ppf",
+    "rup",
+    "ups",
+    "solid",
+    "gdiff",
+    "apsgba",
+    "pat",
+    "dldi",
+    "dps",
+  ]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES + 1 }).map(
       (option) => option.value,
     ),
   ).toEqual(["xdelta", "ppf"]);
   expect(createCreatePatchFormatOptions({ candidateFormats: ["xdelta", "bps"] }).map((option) => option.value)).toEqual(
-    ["xdelta", "bps"],
+    ["xdelta", "bps", "ips32", "solid", "gdiff", "apsgba", "pat", "dldi", "dps"],
   );
 });
 

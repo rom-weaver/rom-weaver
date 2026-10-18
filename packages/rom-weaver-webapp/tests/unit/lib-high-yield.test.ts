@@ -224,6 +224,28 @@ describe("create patch format policy", () => {
     expect(getCreatePatchFormatsForSizes(Number.NaN)).toEqual(expect.arrayContaining(["bps", "ips"]));
   });
 
+  it("appends the CLI-only formats after the recommended ones within their size limits", () => {
+    const extended = ["solid", "gdiff", "apsgba", "pat", "dldi", "dps"];
+    expect(getCreatePatchFormatsForSizes(0)).toEqual(expect.arrayContaining(["ips32", ...extended]));
+    expect(getCreatePatchFormatsForSizes(0)[0]).toBe("bps");
+    // IPS32 shares the 16 MiB IPS limit; the others run up to the legacy limit.
+    expect(getCreatePatchFormatsForSizes(16_777_216)).toEqual(expect.arrayContaining(extended));
+    expect(getCreatePatchFormatsForSizes(16_777_216)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(268_435_456)).toEqual(expect.arrayContaining(extended));
+    expect(getCreatePatchFormatsForSizes(268_435_457)).toEqual(["xdelta", "ppf"]);
+    // Rust candidates keep their order and default; extended formats trail and stay selectable.
+    expect(
+      getPreferredCreatePatchFormat({
+        candidateDefaultFormat: "bps",
+        candidateFormats: ["bps", "xdelta"],
+        requestedFormat: "dps",
+      }),
+    ).toBe("dps");
+    expect(getPreferredCreatePatchFormat({ candidateDefaultFormat: "bps", candidateFormats: ["bps", "xdelta"] })).toBe(
+      "bps",
+    );
+  });
+
   it("honors candidate defaults, automatic selection, and safe fallbacks", () => {
     expect(
       getPreferredCreatePatchFormat({ candidateFormats: ["vcdiff", "vcdiff", " BPS "], candidateDefaultFormat: "bps" }),

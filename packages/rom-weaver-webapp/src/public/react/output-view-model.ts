@@ -3,7 +3,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
-import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
+import { getCreatePatchFormatsForSizes, withExtendedCreatePatchFormats } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import type { ApplySettings } from "../../types/settings.ts";
@@ -208,7 +208,7 @@ const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}):
         .filter((value) => !!value)
     : [];
   const formats = candidateFormats.length
-    ? Array.from(new Set(candidateFormats))
+    ? withExtendedCreatePatchFormats(Array.from(new Set(candidateFormats)), options.originalSize, options.modifiedSize)
     : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize);
   return formats.map((value) => ({ label: `.${value}`, value }));
 };

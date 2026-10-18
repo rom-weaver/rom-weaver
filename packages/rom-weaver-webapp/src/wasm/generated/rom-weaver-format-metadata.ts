@@ -11,6 +11,25 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
     "xdelta3": "xdelta"
   },
   "defaultFormat": "bps",
+  "extendedFormats": {
+    "legacy": [
+      "solid",
+      "gdiff",
+      "apsgba",
+      "pat",
+      "dldi",
+      "dps"
+    ],
+    "small": [
+      "ips32",
+      "solid",
+      "gdiff",
+      "apsgba",
+      "pat",
+      "dldi",
+      "dps"
+    ]
+  },
   "formats": {
     "large": [
       "xdelta",
@@ -66,7 +85,14 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
     "pmsr",
     "ppf",
     "rup",
-    "ups"
+    "ups",
+    "ips32",
+    "solid",
+    "gdiff",
+    "apsgba",
+    "pat",
+    "dldi",
+    "dps"
   ]
 } as const;
 

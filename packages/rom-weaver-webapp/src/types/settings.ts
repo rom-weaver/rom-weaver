@@ -4,7 +4,25 @@ import type {
 } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { LogLevel, LogSink } from "./logging.ts";
 
-type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup" | "ups" | "vcdiff" | "xdelta";
+type PatchFormat =
+  | "aps"
+  | "apsgba"
+  | "bdf"
+  | "bps"
+  | "dldi"
+  | "dps"
+  | "ebp"
+  | "gdiff"
+  | "ips"
+  | "ips32"
+  | "pat"
+  | "pmsr"
+  | "ppf"
+  | "rup"
+  | "solid"
+  | "ups"
+  | "vcdiff"
+  | "xdelta";
 
 type CompressionFormat = (typeof ROM_WEAVER_CREATE_CONTAINER_FORMATS)[number] | "none";
 

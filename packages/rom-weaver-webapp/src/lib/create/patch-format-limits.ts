@@ -21,6 +21,13 @@ const MEDIUM_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PAT
 const MID_LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.midLarge;
 const LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.large;
 
+// Formats the CLI accepts but never recommends (see EXTENDED_*_CREATE_PATCH_FORMATS in
+// patch_commands.rs). They trail the recommended entries so defaults never change.
+const EXTENDED_SMALL_CREATE_PATCH_FORMATS: readonly string[] =
+  ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.extendedFormats.small;
+const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: readonly string[] =
+  ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.extendedFormats.legacy;
+
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")
     .trim()
@@ -37,13 +44,30 @@ const getMaxCreateRomSize = (...sizes: Array<number | null | undefined>) => {
   return maxSize;
 };
 
-const getCreatePatchFormatsForSizes = (...sizes: Array<number | null | undefined>) => {
-  const maxSize = getMaxCreateRomSize(...sizes);
+const getRecommendedCreatePatchFormatsForSizes = (maxSize: number): CreatePatchFormatList => {
   if (maxSize > CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES) return LARGE_CREATE_PATCH_FORMATS;
   if (maxSize >= CREATE_BPS_DEFAULT_LIMIT_BYTES) return MID_LARGE_CREATE_PATCH_FORMATS;
   if (maxSize >= CREATE_IPS_SIZE_LIMIT_BYTES) return MEDIUM_CREATE_PATCH_FORMATS;
   return SMALL_CREATE_PATCH_FORMATS;
 };
+
+const getExtendedCreatePatchFormatsForSizes = (maxSize: number): readonly string[] => {
+  if (maxSize > CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES) return [];
+  if (maxSize >= CREATE_IPS_SIZE_LIMIT_BYTES) return EXTENDED_LEGACY_CREATE_PATCH_FORMATS;
+  return EXTENDED_SMALL_CREATE_PATCH_FORMATS;
+};
+
+// Appends the extended formats allowed for these sizes after the recommended `formats`.
+const withExtendedCreatePatchFormats = (
+  formats: readonly string[],
+  ...sizes: Array<number | null | undefined>
+): string[] => {
+  const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes));
+  return [...formats, ...extended.filter((format) => !formats.includes(format))];
+};
+
+const getCreatePatchFormatsForSizes = (...sizes: Array<number | null | undefined>): string[] =>
+  withExtendedCreatePatchFormats(getRecommendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes)), ...sizes);
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -67,7 +91,7 @@ const getPreferredCreatePatchFormat = ({
 }: CreatePatchFormatPreferenceInput) => {
   const candidateFormatList = normalizeCandidateCreatePatchFormats(candidateFormats);
   const formats = candidateFormatList.length
-    ? candidateFormatList
+    ? withExtendedCreatePatchFormats(candidateFormatList, originalSize, modifiedSize)
     : getCreatePatchFormatsForSizes(originalSize, modifiedSize);
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
@@ -78,7 +102,7 @@ const getPreferredCreatePatchFormat = ({
   const supportedDefaultFormat =
     normalizedCandidateDefaultFormat && formats.includes(normalizedCandidateDefaultFormat)
       ? normalizedCandidateDefaultFormat
-      : formats[0];
+      : (formats[0] ?? CREATE_PATCH_DEFAULT_FORMAT);
   if (!normalizedRequestedFormat) return supportedDefaultFormat;
   if (
     automaticFormatSelection &&
@@ -95,5 +119,6 @@ export {
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
   getCreatePatchFormatsForSizes,
   getPreferredCreatePatchFormat,
+  withExtendedCreatePatchFormats,
   normalizeCreatePatchFormat,
 };

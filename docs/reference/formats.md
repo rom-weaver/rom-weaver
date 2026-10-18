@@ -36,25 +36,25 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 | Format | Aliases | Extensions | Apply | Create |
 | --- | --- | --- | :---: | :---: |
 | IPS | none | `.ips` | ✅ | ✅ |
-| IPS32 | none | `.ips32` | ✅ | ⚠️ ⁴ |
-| SOLID | `solidpatch`, `solid-patch` | `.solid` | ✅ | ⚠️ ⁴ |
+| IPS32 | none | `.ips32` | ✅ | ✅ |
+| SOLID | `solidpatch`, `solid-patch` | `.solid` | ✅ | ✅ |
 | BPS | none | `.bps` | ✅ | ✅ |
 | UPS | none | `.ups` | ✅ | ✅ |
-| VCDIFF | `vcdiff` | `.vcdiff` | ✅ | ⚠️ ⁴ |
+| VCDIFF | `vcdiff` | `.vcdiff` | ✅ | ✅ ⁴ |
 | xdelta | `xdelta3` | `.xdelta`, `.delta`, `.dat` | ✅ | ✅ |
-| GDIFF | `gdiff` | `.gdiff`, `.gdf` | ✅ | ⚠️ ⁴ |
+| GDIFF | `gdiff` | `.gdiff`, `.gdf` | ✅ | ✅ |
 | HDiffPatch/HPatchZ | `hdiffpatch`, `hdiff`, `hpatch`, `hpatchz` | `.hdiff`, `.hpatchz` | ⚠️ ¹ | ❌ |
 | APS (N64) | none | `.aps` | ✅ | ✅ |
-| APSGBA | `aps-gba` | `.apsgba` | ✅ | ⚠️ ⁴ |
+| APSGBA | `aps-gba` | `.apsgba` | ✅ | ✅ |
 | RUP | none | `.rup` | ✅ | ✅ |
 | PPF | none | `.ppf` | ✅ | ✅ |
-| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | ✅ | ⚠️ ⁴ |
+| PAT | `ffp`, `fireflower` | `.pat`, `.ffp` | ✅ | ✅ |
 | EBP | none | `.ebp` | ✅ | ✅ |
 | BDF/BSDIFF40 | `bdf`, `bsdiff`, `bsdiff40` | `.bdf`, `.bsdiff`, `.bsdiff40` | ✅ | ✅ |
 | BSP | `bspatch` | `.bsp`, `.bspatch` | ✅ | ❌ |
 | MOD | `pmsr` | `.mod`, `.pmsr` | ✅ | ⚠️ ³ |
-| DLDI | none | `.dldi` | ✅ | ⚠️ ⁴ |
-| DPS | none | `.dps` | ✅ | ⚠️ ⁴ |
+| DLDI | none | `.dldi` | ✅ | ✅ |
+| DPS | none | `.dps` | ✅ | ✅ |
 | DCP | none | `.dcp` | ⚠️ ² | ❌ |
 
 > ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
@@ -63,7 +63,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 >
 > ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** list MOD for any Original. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
 >
-> ⁴ The native CLI creates this format. Browser Create does not offer it. Browser Apply supports it.
+> ⁴ Create treats `vcdiff` as an alias of xdelta in the CLI and the browser, so the output is an xdelta patch (the same VCDIFF container). Browser Create lists IPS32, SOLID, GDIFF, APSGBA, PAT, DLDI, and DPS after the recommended formats. IPS32 follows the IPS limit of 16 MiB, and the others stop above 256 MiB. DLDI, APSGBA, and PAT need inputs they can encode, such as Nintendo DS ROMs with a DLDI section for DLDI, and fail otherwise.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
