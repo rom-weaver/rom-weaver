@@ -5,6 +5,7 @@ import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import {
   buildDcpFile,
+  clickCandidateSelectionOption,
   clickApplyButton,
   getInputStackRows,
   getPatchStackRows,
@@ -14,6 +15,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
+  selectFileInputs,
   setFormControlValue,
   VALID_BPS,
   VALID_UPS,
@@ -503,9 +505,7 @@ const expectDcpCardAndBlockedApply = async (dcpName = "real.dcp") => {
   expect(dcpRow()).toBeDefined();
 };
 
-const addFiles = (files) => {
-  for (const file of files) selectFileInput(document.getElementById("rom-weaver-input-file-unified"), file);
-};
+const addFiles = (files) => selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), files);
 
 test("a real ZIP DCP with no ROM loaded names DCP and the CLI and blocks apply", async () => {
   mount(createElement(ApplyPatchForm));
@@ -550,6 +550,8 @@ test("a real ZIP DCP beside a GDI disc names DCP instead of asking for a target"
     new File([new Uint8Array(2352 * 16).fill(2)], "track02.bin"),
     await buildDcpFile(),
   ]);
+  // The dropped disc files are all ROMs, so the app asks which one to use before the DCP can be judged.
+  await clickCandidateSelectionOption("disc.gdi");
   await expectDcpCardAndBlockedApply();
 });
 
@@ -566,5 +568,7 @@ test("a real ZIP DCP beside a headered ROM and another patch still names DCP and
     await buildDcpFile(),
   ]);
   await expectDcpCardAndBlockedApply();
-  expect(getPatchStackRows()).toHaveLength(2);
+  await expect.poll(() => getPatchStackRows().length, { timeout: 60000 }).toBe(2);
+  await expectDcpCardAndBlockedApply();
+  await expectDcpCardAndBlockedApply();
 });
