@@ -88,6 +88,19 @@ fn block_reader_rejects_a_bad_magic() {
 }
 
 #[test]
+fn block_reader_rejects_invalid_block_sizes() {
+    // A PSP CSO shares the magic and stores its header size (0 or 24) here.
+    for block_size in [0, 24, SECTOR_SIZE as u32 - 1, SECTOR_SIZE as u32 + 2048] {
+        let data = hand_built_ciso(block_size, &[true], &vec![0u8; SECTOR_SIZE * 2]);
+        let error = expect_error(BlockReaderCISO::new(Box::new(data)));
+        assert!(
+            error.to_string().contains("Invalid block size for CISO"),
+            "block size {block_size}: unexpected message: {error}"
+        );
+    }
+}
+
+#[test]
 fn block_reader_rejects_a_file_shorter_than_its_block_map_claims() {
     let block_size = SECTOR_SIZE as u32;
     // Two present blocks, but only one block of payload follows the header.

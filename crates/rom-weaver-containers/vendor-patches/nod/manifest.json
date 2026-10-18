@@ -251,6 +251,18 @@
         "cargo test -p rom-weaver-containers --lib",
         "cargo test -p rom-weaver-cli --test cli_smoke"
       ]
+    },
+    {
+      "file": "0020-ciso-block-size-validation.patch",
+      "stage": "source",
+      "reason": "Reject CISO block sizes that are zero, smaller than a sector, or not sector-aligned; a PSP CSO shares the magic and otherwise reaches a divide by zero in read_block.",
+      "upstream": {
+        "status": "unverified",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::ciso::tests::block_reader_rejects_invalid_block_sizes -- --exact"
+      ]
     }
   ],
   "materialized": true,

@@ -3415,6 +3415,34 @@ mod tests {
     }
 
     #[test]
+    fn recommend_compress_format_survives_cso_v1_with_zero_header_size() {
+        // The original v1 `ciso` tool writes header size 0, which GameCube CISO reads as its
+        // block size; the nod fallback must reject it instead of dividing by zero.
+        let block = 2048_usize;
+        let blocks = 64;
+        let table_len = 24 + (blocks + 1) * 4;
+        let mut image = b"CISO".to_vec();
+        image.extend_from_slice(&0_u32.to_le_bytes());
+        image.extend_from_slice(&((block * blocks) as u64).to_le_bytes());
+        image.extend_from_slice(&(block as u32).to_le_bytes());
+        image.extend_from_slice(&[1, 0, 0, 0]);
+        for number in 0..=blocks {
+            let entry = (table_len + number * block) as u32;
+            let flag = if number < blocks { 0x8000_0000 } else { 0 };
+            image.extend_from_slice(&(entry | flag).to_le_bytes());
+        }
+        image.resize(table_len + block * blocks, 0x5a);
+        let path = temp_file_path_with_extension("recommend-cso-v1", "cso");
+        fs::write(&path, &image).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "7z");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn recommend_container_for_identity_maps_platform_and_disc_format() {
         use rom_weaver_checksum::platform_detection::platform as plat;
 
