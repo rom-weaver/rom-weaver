@@ -1,3 +1,4 @@
+import { readAppBaseUrl } from "../app-routes.ts";
 import { GITHUB_URL } from "../project-links.ts";
 
 /**
@@ -56,7 +57,10 @@ const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
 };
 
 const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: ReleaseChangelog }> => {
-  const response = await fetch(`./changelog.json?t=${Date.now()}`, { cache: "no-store" });
+  // The update banner fetches from any route, and soft navigation moves the
+  // document's base into it (`/docs/about` has no changelog), so resolve
+  // against the app base.
+  const response = await fetch(new URL(`changelog.json?t=${Date.now()}`, readAppBaseUrl()), { cache: "no-store" });
   if (!response.ok) throw new Error(`changelog fetch failed: ${response.status}`);
   const data: unknown = await response.json();
   if (!Array.isArray(data)) throw new Error("changelog is not an array");

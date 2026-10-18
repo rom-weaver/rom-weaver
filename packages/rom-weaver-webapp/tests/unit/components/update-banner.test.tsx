@@ -198,6 +198,21 @@ describe("UpdateBanner loading", () => {
     expect(container.querySelector(".update-banner-highlight")).toBeNull();
   });
 
+  it("fetches the changelog from the app base after soft navigation into a nested route", async () => {
+    mockReleaseNotes([highlights(APP_VERSION, ["Running release highlight"])]);
+    window.history.pushState({}, "", "/docs/about");
+    try {
+      const { openBanner } = renderBanner("updated", { from: "0.0.1" });
+      await waitFor(() => expect(openBanner()).not.toBeNull());
+
+      const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+      expect(new URL(String(request), document.baseURI).pathname).toBe("/changelog.json");
+      expect(screen.getByText("Running release highlight")).toBeTruthy();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+
   it("stays closed until the changelog settles", () => {
     vi.stubGlobal(
       "fetch",
