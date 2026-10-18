@@ -138,3 +138,34 @@ test("a later patch whose filename crc32 token names the previous patch's output
   expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
   await waitForApplyButtonEnabled();
 });
+
+test("turning off the first patch makes the next patch's filename crc32 token apply to the ROM", async () => {
+  mount(createElement(ApplyPatchForm, strict));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const input = () => document.getElementById("rom-weaver-input-file-unified");
+  selectFileInput(input(), await loadFixtureFile(RAW_ROM));
+  selectFileInput(input(), await loadFixtureFile(CHAIN_PATCH_A));
+  const second = await loadFixtureFile(CHAIN_PATCH_B);
+  selectFileInput(
+    input(),
+    new File([await second.arrayBuffer()], `b [crc32:${CHAIN_A_OUTPUT_CRC32}].ips`, { type: second.type }),
+  );
+  const toggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
+  await expect.poll(() => toggles().length, { timeout: 60000 }).toBe(2);
+  await expect
+    .poll(() => document.getElementById("rom-weaver-list-patch-stack")?.textContent ?? "", { timeout: 60000 })
+    .not.toContain("Checking patch against the ROM");
+  expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
+  // Now b runs first, on the original ROM, which its token does not name.
+  toggles()[0].click();
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad"), { timeout: 60000 })
+    .not.toBeNull();
+  expect(document.getElementById("rom-weaver-checkbox-checksum-override")).not.toBeNull();
+  // Turning it back on restores the chain, where the token names change.ips's output.
+  toggles()[0].click();
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad"), { timeout: 60000 })
+    .toBeNull();
+  await waitForApplyButtonEnabled();
+});

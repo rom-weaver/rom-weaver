@@ -151,6 +151,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
+  /** Toggled-off patch indexes from the latest validation pass; they are excluded from the run. */
+  private disabledPatchIndexes: ReadonlySet<number> = new Set();
   private inputs: TSource[] = [];
   // Object identities MUST remain weak so replaced archives can be collected while restaging stays deduplicated.
   private discoveredSidecarSources = new WeakSet<object>();
@@ -1758,9 +1760,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
+    // The first enabled patch runs first: a toggled-off patch before it is excluded from the run.
+    const firstEnabled = this.patches.find((_, index) => !this.disabledPatchIndexes.has(index));
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
-      filenameCrc32Applies: this.patches[0] === stage && !(inputRef && "patch" in inputRef),
+      filenameCrc32Applies: firstEnabled === stage && !(inputRef && "patch" in inputRef),
       previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
@@ -1815,8 +1819,17 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
       const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
       if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
-      const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
+      // A toggle can change which patch runs first, and only that patch's file-name crc32 applies:
+      // the patches gaining or losing that role re-run their preflight below.
+      const firstEnabled = () => this.patches.find((_, index) => !this.disabledPatchIndexes.has(index));
+      const firstEnabledBefore = firstEnabled();
+      this.disabledPatchIndexes = disabledIndexes ?? new Set();
+      const firstEnabledAfter = firstEnabled();
+      const firstEnabledMoved = new Set(
+        firstEnabledBefore === firstEnabledAfter ? [] : [firstEnabledBefore, firstEnabledAfter],
+      );
+      const assets = this.getPatchableInputAssets();
       const pending: Array<{
         chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
         chainFingerprint?: string;
@@ -1846,7 +1859,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (
           basis !== "auto" ||
           !previousByTarget.has(target.id) ||
-          !target.checksumVariants?.some(isTransformVariant)
+          !target.checksumVariants?.some(isTransformVariant) ||
+          firstEnabledMoved.has(stage)
         ) {
           await this.evaluatePatchReadiness(
             stage,
