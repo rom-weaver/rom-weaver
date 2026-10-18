@@ -19,6 +19,7 @@ impl OutputSelection {
         let mut selection = Self::default();
         selection.explicit_output = match command {
             Commands::Compress(args) => Some(args.output.clone()),
+            Commands::Playlist(args) => Some(args.output.clone()),
             Commands::Patch(PatchCommands::Apply(args)) => args.output.clone(),
             Commands::Patch(PatchCommands::Create(args)) => args.output.clone(),
             Commands::Bundle(WeaveCommands::Create(args)) => Some(args.output.clone()),
@@ -74,7 +75,8 @@ pub(super) fn render_success(
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
         // A successful trim stays quiet; `-v` lists the written files through `render_verbose`.
         "trim" => {}
-        "extract" | "compress" | "patch-apply" | "bundle-create" | "tools-ppf-undo" => {
+        "extract" | "compress" | "playlist" | "patch-apply" | "bundle-create"
+        | "tools-ppf-undo" => {
             render_emitted_files(surface, event, selection);
         }
         "patch-create" => {

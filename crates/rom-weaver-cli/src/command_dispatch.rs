@@ -55,6 +55,7 @@ impl CliApp {
             Commands::Identify(args) => self.run_identify(*args),
             Commands::Setup(args) => self.run_setup(args),
             Commands::Ingest(args) => self.run_ingest(args),
+            Commands::Playlist(args) => self.run_playlist(args),
             Commands::Cheat(args) => self.run_cheat(*args),
             Commands::Compress(mut args) => {
                 args.dry_run |= self.dry_run;
@@ -99,6 +100,7 @@ impl CliApp {
             Commands::Identify(_) => "identify",
             Commands::Setup(_) => "setup",
             Commands::Ingest(_) => "ingest",
+            Commands::Playlist(_) => "playlist",
             Commands::Cheat(_) => "cheat",
             Commands::Compress(_) => "compress",
             Commands::Trim(_) => "trim",

@@ -32,6 +32,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Weaves](#weaves)
   - [Weave cheats](#weave-cheats)
 - [Tools](#tools)
+- [Playlist](#playlist)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -65,6 +66,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `save export-schema` | Report the generic field schema for a checked save. |
 | `save list-games` | List supported games, stable game IDs, and fresh-generation support. |
 | `save create` | Write a fresh supported save or a checked copy of an existing template. |
+| `playlist` | Write an `.m3u` disc-change playlist for a multi-disc game. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `setup` | Install the offline identify and cheat databases. |
 | `completions` | Print a tab-completion script for your shell. |
@@ -521,6 +523,23 @@ For disc sheets, `--target` selects a track when ambiguous. Raw `.cue`/`.gdi` ou
 Compression flags and aliases follow [Apply's output policy](#output-and-compression). `.bin` requires `--no-compress` or an explicit format; extension/format disagreement warns. `--threads` controls extraction and compression.
 
 Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo PPF from the CLI](../how-to/cli-apply.md#undo-a-ppf-patch).
+
+## Playlist
+
+`playlist` writes an `.m3u` for a multi-disc game, or a ZIP holding the playlist and its discs. Required flags: `--input` (repeat for each disc) and `--output`. The output extension picks the form: `.m3u` or `.m3u8` for the playlist alone, `.zip` for the bundle. An existing output is never overwritten, and the output cannot be one of the inputs.
+
+| Flag | Meaning |
+| --- | --- |
+| `-i`, `--input DISC` | A disc file (`.cue`, `.gdi`, `.chd`, `.iso`, `.pbp`, and so on). Repeat for each disc. |
+| `-o`, `--output PATH` | The `.m3u` or `.zip` to write. |
+| `--no-sort` | List the discs in the order given instead of by disc number. |
+| `--flat` | Write each disc as its bare file name instead of a path relative to the playlist. |
+
+Disc numbers come from `Disc 1`, `(Disc 2)`, `[Disk 3]`, `CD1`, and `.disc02` in the file name, compared as numbers (`Disc 2` before `Disc 10`). Files without a number follow the numbered ones, in name order. Files that a given `.cue` or `.gdi` names are track files, not discs, and are not listed. The playlist uses UTF-8, one `/`-separated path per line, LF line endings, and no `#EXTM3U` header.
+
+A ZIP stores the playlist as `<output name>.m3u` and each disc by its file name, plus the files its sheet names, all at the sheet's relative paths. Two files that would share a name in the ZIP are rejected.
+
+Procedures: [Make an M3U playlist in the browser](../how-to/make-m3u-playlist-browser.md) and [from the CLI](../how-to/cli-playlist.md).
 
 ## Supported formats
 
