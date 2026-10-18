@@ -2,7 +2,19 @@ import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 
-const CHECKSUM_HEX_LENGTHS: Record<string, number> = { crc32: 8, md5: 32, sha1: 40 };
+/** Hex digest length per algorithm the weave format and the checksum crate support. */
+const CHECKSUM_HEX_LENGTHS: Record<string, number> = {
+  adler32: 8,
+  blake3: 64,
+  crc16: 4,
+  crc32: 8,
+  crc32c: 8,
+  md5: 32,
+  sha1: 40,
+  sha256: 64,
+};
+
+const normalizeAlgorithm = (algorithm: string) => algorithm.toLowerCase().replace(/^sha-(\d+)$/, "sha$1");
 
 /** The patch's own "in <algo>=" / "out <algo>=" row for this side, if it has one. */
 const readEmbeddedCheck = (
@@ -13,7 +25,13 @@ const readEmbeddedCheck = (
   const prefix = side === "input" ? "in " : "out ";
   return patch?.validationValues
     .map((entry) => entry.split("=", 2))
-    .find(([label]) => label?.trim().toLowerCase().replace("sha-1", "sha1") === `${prefix}${normalizedAlgorithm}`)?.[1]
+    .find(
+      ([label]) =>
+        label
+          ?.trim()
+          .toLowerCase()
+          .replace(/sha-(\d+)/, "sha$1") === `${prefix}${normalizedAlgorithm}`,
+    )?.[1]
     ?.trim()
     .toLowerCase();
 };
@@ -31,7 +49,7 @@ const checkDeclaredChecksum = (input: {
   side: "input" | "output";
 }): string => {
   const { algorithm, index, localizer, side } = input;
-  const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
+  const normalizedAlgorithm = normalizeAlgorithm(algorithm);
   const value = input.rawValue.trim().toLowerCase();
   if (!value) return "";
   const length = CHECKSUM_HEX_LENGTHS[normalizedAlgorithm];
