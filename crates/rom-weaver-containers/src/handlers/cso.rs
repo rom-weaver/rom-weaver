@@ -435,7 +435,9 @@ impl ContainerHandlerOperations for CsoContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        if file_starts_with(source, &CSO_SIGNATURE) {
+        if file_starts_with(source, &CSO_SIGNATURE)
+            && !super::gc_ciso::is_gamecube_ciso_file(source)
+        {
             ProbeConfidence::Signature
         } else {
             ProbeConfidence::Extension

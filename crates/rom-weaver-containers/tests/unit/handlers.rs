@@ -370,6 +370,33 @@ mod tests {
         destination.flush().expect("flush wbfs fixture");
     }
 
+    fn write_test_gc_ciso(input: &Path, output: &Path) {
+        let disc = NodDiscReader::new(input, &NodDiscOptions::default())
+            .expect("open ciso source fixture");
+        let options = NodFormatOptions {
+            format: NodFormat::Ciso,
+            compression: NodCompression::None,
+            block_size: NodFormat::Ciso.default_block_size(),
+        };
+        let writer = NodDiscWriter::new(disc, &options).expect("create ciso writer");
+        let mut destination = fs::File::create(output).expect("create ciso fixture");
+        let finalization = writer
+            .process(
+                |data, _processed, _total| destination.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .expect("write ciso fixture");
+        if !finalization.header.is_empty() {
+            destination
+                .seek(SeekFrom::Start(0))
+                .expect("seek ciso header");
+            destination
+                .write_all(finalization.header.as_ref())
+                .expect("write ciso header");
+        }
+        destination.flush().expect("flush ciso fixture");
+    }
+
     fn write_test_wia(input: &Path, output: &Path) {
         let disc =
             NodDiscReader::new(input, &NodDiscOptions::default()).expect("open wia source fixture");
@@ -605,8 +632,8 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "pbp", "chd", "gcz", "wia", "tgc", "nfs", "wbfs", "rvz",
-                "z3ds", "xiso"
+                "xz", "zst", "cso", "pbp", "chd", "gc-ciso", "gcz", "wia", "tgc", "nfs", "wbfs",
+                "rvz", "z3ds", "xiso"
             ]
         );
     }
@@ -1621,6 +1648,7 @@ mod tests {
             ("wia", "wia"),
             ("tgc", "tgc"),
             ("wbfs", "wbfs"),
+            ("gc-ciso", "gc-ciso"),
         ] {
             assert_extract_only_create_rejected(format, output_extension);
         }
@@ -1925,6 +1953,76 @@ mod tests {
         let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
         assert_eq!(extracted, source);
 
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn gamecube_ciso_routes_to_nod_and_extracts_byte_exact_iso() {
+        let temp_dir = temp_dir_path("gc-ciso-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let source = build_test_gamecube_iso(0x8000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        // Both the shared `.ciso` extension and a misnamed `.cso` must route to the nod handler.
+        for name in ["disc.ciso", "disc.cso"] {
+            let image = temp_dir.join(name);
+            write_test_gc_ciso(&input_iso, &image);
+            let handler = registry.probe(&image).expect("handler for gamecube ciso");
+            assert_eq!(handler.descriptor().name, "gc-ciso", "for {name}");
+
+            let output_dir = temp_dir.join(format!("out-{name}"));
+            let report = handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: image,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract gamecube ciso");
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+            let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+            assert_eq!(extracted, source, "for {name}");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn psp_cso_headers_are_not_routed_to_gamecube_ciso() {
+        use super::super::gc_ciso::is_gamecube_ciso_header;
+        let header = |size_field: u32| {
+            let mut bytes = b"CISO".to_vec();
+            bytes.extend_from_slice(&size_field.to_le_bytes());
+            bytes
+        };
+        // v2 (24) and v1 (0) header sizes stay PSP CSO; sector-aligned block sizes are GameCube.
+        assert!(!is_gamecube_ciso_header(&header(24)));
+        assert!(!is_gamecube_ciso_header(&header(0)));
+        assert!(!is_gamecube_ciso_header(&header(0x8001)));
+        assert!(!is_gamecube_ciso_header(b"CISO"));
+        assert!(!is_gamecube_ciso_header(b"WBFS\0\x80\0\0"));
+        assert!(is_gamecube_ciso_header(&header(0x8000)));
+        assert!(is_gamecube_ciso_header(&header(0x20_0000)));
+
+        let temp_dir = temp_dir_path("psp-cso-probe");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, vec![0x5a_u8; 4096]).expect("source");
+        let cso = temp_dir.join("disc.ciso");
+        write_test_cso(&input, &cso);
+        let registry = ContainerRegistry::new();
+        let handler = registry.probe(&cso).expect("handler for psp cso");
+        assert_eq!(handler.descriptor().name, "cso");
         let _ = fs::remove_dir_all(temp_dir);
     }
 

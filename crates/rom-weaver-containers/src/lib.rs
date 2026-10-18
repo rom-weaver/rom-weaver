@@ -90,7 +90,7 @@ pub use formats::{
     recommend_container_for_identity, supported_create_format_names, supported_create_formats_text,
     unregistered_output_format_message,
 };
-use formats::{GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
+use formats::{GC_CISO, GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
 use libarchive_support::{
     LibarchiveCreateConfig, extract_regular_archive_with_libarchive, libarchive_close_read_stream,
     libarchive_open_read_stream, list_regular_archive_entries_with_libarchive,
@@ -218,6 +218,9 @@ pub(crate) use xiso::XisoContainerHandler;
 mod nod_shared;
 pub(crate) use nod_shared::NodHandlerCore;
 
+#[path = "handlers/gc_ciso.rs"]
+mod gc_ciso;
+pub(crate) use gc_ciso::GcCisoContainerHandler;
 #[path = "handlers/gcz.rs"]
 mod gcz;
 pub(crate) use gcz::GczContainerHandler;

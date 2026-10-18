@@ -8,11 +8,11 @@ use rom_weaver_core::{
 };
 
 use crate::{
-    CsoContainerHandler, GczContainerHandler, NfsContainerHandler, PbpContainerHandler,
-    RarContainerHandler, RvzContainerHandler, SevenZContainerHandler, StreamCompression,
-    StreamContainerHandler, TarContainerHandler, TgcContainerHandler, WbfsContainerHandler,
-    WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler, ZipContainerFlavor,
-    ZipContainerHandler,
+    CsoContainerHandler, GcCisoContainerHandler, GczContainerHandler, NfsContainerHandler,
+    PbpContainerHandler, RarContainerHandler, RvzContainerHandler, SevenZContainerHandler,
+    StreamCompression, StreamContainerHandler, TarContainerHandler, TgcContainerHandler,
+    WbfsContainerHandler, WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler,
+    ZipContainerFlavor, ZipContainerHandler,
 };
 
 pub(crate) const ZIP: FormatDescriptor = FormatDescriptor {
@@ -98,6 +98,14 @@ pub(crate) const PBP: FormatDescriptor = FormatDescriptor {
     name: "pbp",
     aliases: &[],
     extensions: &[".pbp"],
+};
+/// GameCube CISO shares the `CISO` magic and `.ciso` extension with PSP CSO; registry probe
+/// separates them by header (see `handlers/gc_ciso.rs`).
+pub(crate) const GC_CISO: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "gc-ciso",
+    aliases: &[],
+    extensions: &[".ciso"],
 };
 pub(crate) const GCZ: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -321,6 +329,7 @@ enum ContainerHandlerKind {
     Cso,
     Pbp,
     Chd,
+    GcCiso,
     Gcz,
     Wia,
     Tgc,
@@ -343,6 +352,7 @@ impl ContainerHandlerKind {
             Self::Cso
                 | Self::Pbp
                 | Self::Chd
+                | Self::GcCiso
                 | Self::Gcz
                 | Self::Wia
                 | Self::Tgc
@@ -378,6 +388,7 @@ impl ContainerHandlerKind {
             Self::Cso => Arc::new(CsoContainerHandler::new(descriptor)),
             Self::Pbp => Arc::new(PbpContainerHandler),
             Self::Chd => Arc::new(crate::chd::ChdContainerHandler),
+            Self::GcCiso => Arc::new(GcCisoContainerHandler),
             Self::Gcz => Arc::new(GczContainerHandler),
             Self::Wia => Arc::new(WiaContainerHandler),
             Self::Tgc => Arc::new(TgcContainerHandler),
@@ -542,6 +553,12 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
         capabilities: CREATE_AND_EXTRACT_PARALLEL,
         default_output: Some(CHD_DEFAULT_OUTPUT),
         handler: ContainerHandlerKind::Chd,
+    },
+    ContainerFormatRegistration {
+        descriptor: &GC_CISO,
+        capabilities: EXTRACT_ONLY_PARALLEL,
+        default_output: None,
+        handler: ContainerHandlerKind::GcCiso,
     },
     ContainerFormatRegistration {
         descriptor: &GCZ,

@@ -186,6 +186,80 @@ fn compress_wbfs_rejects_create_but_extract_round_trips() {
 }
 
 #[test]
+fn gamecube_ciso_extracts_and_converts_byte_exact() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x20000);
+    let iso_path = temp.child("disc.iso");
+    fs::write(iso_path.path(), &iso_bytes).expect("iso fixture");
+    let ciso_path = temp.child("disc.ciso");
+    write_ciso_fixture_from_iso(iso_path.path(), ciso_path.path());
+    assert_compress_extract_only_rejection("gc-ciso", "out.ciso");
+
+    let extract_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            ciso_path.path().to_str().expect("path"),
+            "--output",
+            extract_dir.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(extract_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+
+    for target in ["rvz", "zip", "7z"] {
+        let output_path = temp.child(format!("out.{target}"));
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                ciso_path.path().to_str().expect("path"),
+                "--output",
+                output_path.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+        let round_trip = temp.child(format!("round-{target}"));
+        command_stdout(
+            &[
+                "extract",
+                "--input",
+                output_path.path().to_str().expect("path"),
+                "--output",
+                round_trip.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+        // ZIP/7z keep the `.ciso` as a member; extraction recurses into it and yields the ISO.
+        let mut isos = Vec::new();
+        let mut pending = vec![round_trip.path().to_path_buf()];
+        while let Some(dir) = pending.pop() {
+            for entry in fs::read_dir(&dir).expect("round-trip dir") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.extension().is_some_and(|ext| ext == "iso") {
+                    isos.push(path);
+                }
+            }
+        }
+        assert_eq!(isos.len(), 1, "{target} yields one iso: {isos:?}");
+        assert_eq!(
+            fs::read(&isos[0]).expect("round-trip iso"),
+            iso_bytes,
+            "{target} round trip"
+        );
+    }
+}
+
+#[test]
 fn compress_cso_rejects_extract_only_output() {
     assert_compress_extract_only_rejection("cso", "out.cso");
 }
