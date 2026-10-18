@@ -132,19 +132,32 @@ const routeUnifiedDrop = async (
     loaded: NonNullable<Awaited<ReturnType<typeof loadLocalWeaveSession>>>,
     weaveFile: File,
   ) => {
-    const companionRoms = inputs.filter((file) => file !== weaveFile);
-    if (!loaded.romFile && companionRoms.length > 1) {
+    // Companion ROMs route like a second drop: bare files plus ROM-bucket archives, with a
+    // directly dropped CUE kept together with its tracks.
+    const companionRoms = loaded.romFile
+      ? []
+      : [...inputs, ...archives.filter((_archive, index) => archiveBuckets[index] === "rom")].filter(
+          (file) => file !== weaveFile,
+        );
+    let companionRom: File[] | undefined;
+    try {
+      companionRom = await chooseSingleRom(companionRoms, selectFile);
+    } catch (error) {
       await loaded.cleanup();
-      throw new Error("A checks-only weave drop contains more than one possible ROM");
+      throw error;
+    }
+    if (signal?.aborted || isCancelled?.()) {
+      await loaded.cleanup();
+      return;
     }
     try {
       onWeaveSession?.(loaded.session);
-      const romFile = loaded.romFile || companionRoms[0];
-      if (romFile) controller.provideRomInputFiles?.([romFile]);
+      const romFiles = loaded.romFile ? [loaded.romFile] : companionRom;
+      if (romFiles?.length) controller.provideRomInputFiles?.(romFiles);
       controller.providePatchInputFiles?.(loaded.patchFiles);
       lifecycle?.rememberWeaveSourceCleanup?.(loaded.cleanup);
       logger.debug("weave source cleanup registered with form owner", {
-        hasRom: !!romFile,
+        hasRom: !!romFiles?.length,
         patchCount: loaded.patchFiles.length,
       });
     } catch (error) {

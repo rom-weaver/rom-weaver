@@ -1233,6 +1233,59 @@ for (const romMatches of [true, false]) {
   });
 }
 
+// A checks-only weave and the user's ROM archive arrive in ONE drop: the archive is a ROM candidate
+// and the weave's rom.member is extracted from it, exactly as when it is dropped second.
+test("single drop of a checks-only weave and a cartridge ROM zip stages the ROM", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const romZip = await buildZip([{ file: romFile, fileName: "game.bin" }], "rom.zip");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "single-drop-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+      rom: { checks: RAW_ROM_CHECKS, member: "game.bin", name: "rom.zip" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  await expectStrictApply([weaveArchive, romZip], { outputName: "single-drop-output", romMatches: true });
+});
+
+test("single drop of a checks-only weave and a cue/bin ROM zip stages the disc", async () => {
+  const trackOneName = "single-drop-track01.bin";
+  const trackTwoName = "single-drop-track02.bin";
+  const trackOne = noiseBytes(2352 * 40, 0x01);
+  const trackTwo = noiseBytes(2352 * 40, 0x02);
+  const cue = new File(
+    [
+      `FILE "${trackOneName}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n` +
+        `FILE "${trackTwoName}" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n`,
+    ],
+    "single-drop.cue",
+    { type: "application/x-cue" },
+  );
+  const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+  const discZip = await buildZip(
+    [
+      { file: cue, fileName: cue.name },
+      { file: new File([trackOne], trackOneName), fileName: trackOneName },
+      { file: new File([trackTwo], trackTwoName), fileName: trackTwoName },
+    ],
+    "disc.zip",
+  );
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "single-drop-disc-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Track", path: patchFile.name, target: { member: trackTwoName, rom: true } }],
+      rom: { checks: await fileChecks(trackTwo), member: trackTwoName, name: "disc.zip" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  await expectStrictApply([weaveArchive, discZip], { outputName: "single-drop-disc-output", romMatches: true });
+});
+
 // rom.checks recorded from the headerless or big-endian ROM still accept the user's headered or
 // byte-swapped dump, and the patch still lands on the bytes it targets.
 test("weave rom.checks of a headerless SNES ROM accept the headered dump", async () => {
