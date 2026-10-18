@@ -178,6 +178,79 @@ fn weave_parse_archive_extracts_referenced_members() {
 }
 
 #[test]
+fn weave_parse_archive_treats_unbundled_rom_path_as_user_supplied() {
+    let temp = setup_temp_dir();
+    let patch_path = write_min_ips(&temp, "main.ips");
+    let weave_json = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave_json.path(),
+        r#"{
+            "version": 1,
+            "rom": { "path": "game.nes" },
+            "patches": [ { "path": "patches/main.ips" } ]
+        }"#,
+    )
+    .expect("weave fixture");
+    let archive = temp.child("weave.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (weave_json.path(), "rom-weaver-weave.json"),
+            (&patch_path, "patches/main.ips"),
+        ],
+        archive.path(),
+    );
+    let extract_dir = temp.child("weave-out");
+
+    let events = run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--output",
+            extract_dir.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "succeeded");
+    let result = &terminal["details"]["weave"];
+    assert!(result["rom_source"].is_null(), "rom source: {result}");
+    assert!(result["patch_sources"][0]["source"]["extracted_path"].is_string());
+}
+
+#[test]
+fn weave_parse_archive_still_rejects_unbundled_patch_path() {
+    let temp = setup_temp_dir();
+    let weave_json = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave_json.path(),
+        r#"{ "version": 1, "rom": { "path": "game.nes" }, "patches": [ { "path": "missing.ips" } ] }"#,
+    )
+    .expect("weave fixture");
+    let archive = temp.child("weave.tar.gz");
+    write_tar_gz_fixture(
+        &[(weave_json.path(), "rom-weaver-weave.json")],
+        archive.path(),
+    );
+    let events = run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("failure label");
+    assert!(label.contains("bundle.path.unresolved"), "{label}");
+}
+
+#[test]
 fn weave_parse_archive_content_probes_noncanonical_member() {
     // A pre-rename archive whose index is named `rw.json`, not the canonical
     // `rom-weaver-weave.json`, must still be found by content probing. A decoy
