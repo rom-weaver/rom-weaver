@@ -4390,6 +4390,11 @@ msgstr "rom-weaver ist in diesem Browser für die Offline-Nutzung zwischengespei
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.copy"
+msgstr "rom-weaver wurde vielleicht aktualisiert, seit du diesen Tab geöffnet hast. Lade neu, um die neueste Version zu bekommen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.roms"
 msgstr "ROMs"
 
@@ -5252,6 +5257,11 @@ msgstr "Die bereitgestellte ROM entspricht den Erwartungen dieses Durchlaufs"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.original.body"
 msgstr "Das ist das unveränderte Spiel. Der Patch, den du erstellst, hält jedes Byte fest, das davon abweicht."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.title"
+msgstr "Diese Seite wurde nicht geladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

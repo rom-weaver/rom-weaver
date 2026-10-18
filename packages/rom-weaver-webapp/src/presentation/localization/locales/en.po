@@ -4390,6 +4390,11 @@ msgstr "rom-weaver is cached in this browser for offline use. When you are onlin
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.copy"
+msgstr "rom-weaver may have been updated since you opened this tab. Reload to get the latest version."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.roms"
 msgstr "ROMs"
 
@@ -5252,6 +5257,11 @@ msgstr "This is the expected ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.original.body"
 msgstr "This is the unchanged game. The patch you make records every byte that differs from it."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.title"
+msgstr "This page didn’t load"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

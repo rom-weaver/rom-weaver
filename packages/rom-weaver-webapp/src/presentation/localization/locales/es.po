@@ -4390,6 +4390,11 @@ msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexió
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.copy"
+msgstr "Puede que rom-weaver se haya actualizado desde que abriste esta pestaña. Recarga para obtener la versión más reciente."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.roms"
 msgstr "ROM"
 
@@ -5252,6 +5257,11 @@ msgstr "La ROM preparada coincide con lo que espera esta ejecución"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.original.body"
 msgstr "Este es el juego sin cambios. El parche que crees registrará cada byte que difiera de él."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.title"
+msgstr "Esta página no se cargó"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

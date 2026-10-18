@@ -2073,6 +2073,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Check the address, or choose where you want to go next.",
   }),
   "ui.notFound.browseDocs": msg({ id: "ui.notFound.browseDocs", message: "Browse docs" }),
+  "ui.loadFailed.title": msg({ id: "ui.loadFailed.title", message: "This page didn’t load" }),
+  "ui.loadFailed.copy": msg({
+    id: "ui.loadFailed.copy",
+    message: "rom-weaver may have been updated since you opened this tab. Reload to get the latest version.",
+  }),
   "ui.cheats.badge.rom": msg({ id: "ui.cheats.badge.rom", message: "ROM cheat" }),
   "ui.cheats.short.unsupported": msg({ id: "ui.cheats.short.unsupported", message: "N/A" }),
   "ui.cheats.delivery.rom": msg({ id: "ui.cheats.delivery.rom", message: "Written into the ROM" }),
