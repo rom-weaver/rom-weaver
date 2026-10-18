@@ -152,7 +152,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
   /** Toggled-off patches from the latest validation pass; they are excluded from the run. Tracked by
-   * stage, not index, so a reorder keeps them and the run's re-staged (enabled-only) list drops them. */
+   * stage, not index: re-staging (the run's enabled-only list) creates new stages, which none match. */
   private disabledPatches: ReadonlySet<StagedSource<TSource>> = new Set();
   private inputs: TSource[] = [];
   // Object identities MUST remain weak so replaced archives can be collected while restaging stays deduplicated.
