@@ -29,7 +29,9 @@
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
-        "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
+        "includePatterns": [
+          "assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"
+        ],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 383000,
         "maxRawBytes": 408000,
@@ -40,7 +42,9 @@
         "name": "Locale catalogs (de, es)",
         "directory": "assets",
         "extension": ".js",
-        "includePatterns": ["assets/(?:de|es)-[^/]+\\.js$"],
+        "includePatterns": [
+          "assets/(?:de|es)-[^/]+\\.js$"
+        ],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 82648,
         "maxRawBytes": 134000,
@@ -51,7 +55,9 @@
         "name": "Save Editor JavaScript",
         "directory": "assets",
         "extension": ".js",
-        "includePatterns": ["assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"],
+        "includePatterns": [
+          "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
+        ],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 35000,
         "maxRawBytes": 42000,
