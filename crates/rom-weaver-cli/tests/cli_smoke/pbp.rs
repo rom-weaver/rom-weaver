@@ -1,10 +1,9 @@
 //! Multi-disc PS1 PBP end to end through the CLI: extract, per-disc checksum/identify, and
 //! converting the extracted discs to CHD, ZIP, and 7z.
 //!
-//! Output layout for converting a multi-disc PBP (the CLI and the webapp Compress page both open a
-//! PBP like an archive of `<name>.discNN.cue` + `<name>.discNN.bin` pairs, then compress what is
-//! selected):
-//! - CHD holds exactly one disc, so each disc's cue becomes its own `<name>.discNN.chd`.
+//! CLI `compress` does not open a PBP, so these tests extract it to `<name>.discNN.cue` +
+//! `<name>.discNN.bin` pairs first:
+//! - CHD holds exactly one disc, so each run converts one disc's cue.
 //! - ZIP and 7z hold every selected cue/bin file in one archive.
 
 use super::shared::*;

@@ -9,12 +9,12 @@ import {
 } from "./test-helpers.mjs";
 
 // Multi-disc PS1 PBP through the real wasm app. Fixtures are synthetic (see pbp-fixture.mjs).
-// Layout for converting a multi-disc PBP: CHD holds one disc, so each disc's cue becomes its own
-// `<name>.discNN.chd`; ZIP and 7z keep every disc's cue/bin pair in one archive.
+// CHD holds one disc, so each CHD run converts one disc's cue; ZIP and 7z keep every disc's
+// cue/bin pair in one archive.
 //
-// Each conversion runs in a fresh fixture whose inputs are written before its first command: the
-// wasm mount does not see files a JS-side write adds after a command has already run (observed
-// as ENOENT when compressing files written between two runs).
+// Each conversion runs in a fresh fixture whose inputs are written before its first command:
+// compressing files written from JS between two runs in one fixture failed with ENOENT. The exact
+// trigger is not narrowed down.
 const DISCS = [
   { discId: "SLUS00001", iso: buildPbpDiscBytes(72, 7) },
   { discId: "SLUS00002", iso: buildPbpDiscBytes(80, 23) },
