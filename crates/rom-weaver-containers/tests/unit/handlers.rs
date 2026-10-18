@@ -1925,17 +1925,26 @@ mod tests {
         for only_lz4 in [false, true] {
             let temp_dir = temp_dir_path(if only_lz4 { "cso-v2-lz4" } else { "cso-v2-mix" });
             fs::create_dir_all(&temp_dir).expect("temp dir");
-            // Blocks cycle through repetitive, pseudo-random (stored raw), and zero data. maxcso
+            // Blocks cycle through repetitive, incompressible (stored raw), and zero data. maxcso
             // sizes are whole 2048-byte sectors, and the final block here is a half-size
-            // pseudo-random one that maxcso pads to `block` and then deflates or LZ4-compresses
-            // to fewer than `block` but more than its logical `block / 2` bytes.
+            // incompressible one that maxcso pads to `block` and then deflates or LZ4-compresses
+            // to more than its logical `block / 2` bytes but fewer than `block`.
+            let mut seed = 0x1287_u32;
+            let mut random = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            };
             let source = (0..block * 6 + 2048)
                 .map(|index| match (index / block + 1) % 3 {
                     0 => (index % 13) as u8,
-                    1 => ((index * 2654435761_usize) >> 13) as u8,
+                    1 => random(),
                     _ => 0,
                 })
                 .collect::<Vec<_>>();
+            let mut raw_blocks = 0;
+            let mut padded_tail_stored = 0;
             let table_len = 24 + (source.len().div_ceil(block) + 1) * 4;
             let mut body = vec![0xaa_u8; table_len.next_multiple_of(8) - table_len];
             let mut index = Vec::new();
@@ -1952,14 +1961,23 @@ mod tests {
                     (encoder.finish().expect("finish block"), 0)
                 };
                 if stored.len().next_multiple_of(8) >= block {
+                    raw_blocks += 1;
                     index.push(position);
                     body.extend_from_slice(chunk);
                 } else {
+                    if number == 6 {
+                        padded_tail_stored = stored.len().next_multiple_of(8);
+                    }
                     index.push(position | flag);
                     body.extend_from_slice(&stored);
                 }
                 body.resize(body.len().next_multiple_of(8), 0xaa);
             }
+            assert!(raw_blocks >= 2, "raw blocks occur: {raw_blocks}");
+            assert!(
+                (block / 2..block).contains(&padded_tail_stored),
+                "final block stored size {padded_tail_stored} lies between its logical size and block"
+            );
             index.push(((table_len + body.len()) >> alignment) as u32);
             let mut image = b"CISO".to_vec();
             image.extend_from_slice(&24_u32.to_le_bytes());

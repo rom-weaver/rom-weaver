@@ -238,9 +238,20 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
         let mut stored = vec![0; stored_len];
         self.source.read(start, &mut stored)?;
         let mut decoded = vec![0; block_len];
-        flate2::read::DeflateDecoder::new(stored.as_slice())
+        if flate2::read::DeflateDecoder::new(stored.as_slice())
             .read_exact(&mut decoded)
-            .map_err(|_| Self::invalid("invalid CSO deflate block"))?;
+            .is_err()
+        {
+            // Hand back the stored bytes only when the block is exactly its logical length.
+            if !is_deflate_version(self.version) && stored_len == block_len {
+                trace!(
+                    block_len,
+                    "cso v2 final block is not deflate, reading it raw"
+                );
+                return Ok(stored);
+            }
+            return Err(Self::invalid("invalid CSO deflate block"));
+        }
         trace!(stored_len, block_len, "cso deflate block");
         Ok(decoded)
     }
@@ -336,19 +347,10 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
                 let decoded = self.read_lz4_block(start, end, block_len)?;
                 output[..count].copy_from_slice(&decoded[within..within + count]);
             } else {
-                // A final block shorter than `block_size` can still be deflated: maxcso pads it
-                // and deflates the padded block. Writers that store that tail raw (`ciso`) leave
-                // exactly the logical bytes, which is not a valid deflate stream of that length.
-                let decoded = match self.read_deflate_block(start, end, block_len) {
-                    Ok(decoded) => decoded,
-                    Err(error) if !is_deflate_version(self.version) && span >= block_len as u64 => {
-                        trace!(%error, block_len, "cso v2 short final block is raw");
-                        let mut raw = vec![0; block_len];
-                        self.source.read(start, &mut raw)?;
-                        raw
-                    }
-                    Err(error) => return Err(error),
-                };
+                // A final block shorter than `block_size` is normally deflated after maxcso pads
+                // it. A v2 block whose stored length is exactly its logical length and does not
+                // decode as deflate is read as raw bytes; any other damage is an error.
+                let decoded = self.read_deflate_block(start, end, block_len)?;
                 output[..count].copy_from_slice(&decoded[within..within + count]);
             }
             pos += count as u64;
@@ -1402,7 +1404,7 @@ mod reader_regressions {
     }
 
     #[test]
-    fn cso_v2_short_final_block_stored_raw_by_ciso_is_still_read() {
+    fn cso_v2_final_block_stored_at_exactly_its_logical_length_is_read_raw() {
         // 3000 bytes in 2048-byte blocks; both blocks raw, the last one only 952 bytes long.
         let mut seed = 99_u32;
         let data = (0..3000)
@@ -1418,5 +1420,39 @@ mod reader_regressions {
         let mut output = vec![0; 3000];
         reader.read_offset(0, &mut output).expect("raw tail");
         assert_eq!(output, data);
+    }
+
+    #[test]
+    fn cso_v2_damaged_deflated_final_block_longer_than_its_logical_length_errors() {
+        let data = maxcso_tail_payload(false);
+        for alignment in [0_u8, 2] {
+            let image = maxcso_image(&data, 16384, alignment, false);
+            let (span, lz4) = block_span(&image, 2);
+            assert!(!lz4, "final block is deflate");
+            assert!((4096..16384).contains(&(span << alignment)));
+            let start = ((u32::from_le_bytes(image[32..36].try_into().unwrap()) & 0x7fff_ffff)
+                as usize)
+                << alignment;
+            let end = start + (span << alignment) as usize;
+            for damage in ["reserved block type", "zero filled"] {
+                let mut damaged = image.clone();
+                if damage == "zero filled" {
+                    damaged[start..end].fill(0);
+                } else {
+                    damaged[start] |= 0x06;
+                }
+                let mut reader =
+                    CsoReader::new(std::io::Cursor::new(damaged)).expect("maxcso image");
+                let mut tail = vec![0; 4096];
+                let error = reader
+                    .read_offset(2 * 16384, &mut tail)
+                    .expect_err("damaged final block must not be copied as raw data");
+                assert_eq!(
+                    error.kind(),
+                    io::ErrorKind::InvalidData,
+                    "{damage} alignment {alignment}"
+                );
+            }
+        }
     }
 }
