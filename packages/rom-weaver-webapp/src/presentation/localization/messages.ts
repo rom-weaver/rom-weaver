@@ -1929,12 +1929,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tools.project": msg({ id: "ui.tools.project", message: "Project" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.tools.tools": msg({ id: "ui.tools.tools", message: "Menu" }),
-  "ui.update.later": msg({ id: "ui.update.later", message: "Later" }),
-  "ui.update.note": msg({
-    id: "ui.update.note",
-    message: "Reloading swaps the cached app. Running jobs are finished first.",
-  }),
   "ui.update.ready": msg({ id: "ui.update.ready", message: "Update ready" }),
+  "ui.update.readyVersion": msg({ id: "ui.update.readyVersion", message: "v{version} is ready" }),
   "ui.update.reload": msg({ id: "ui.update.reload", message: "Reload" }),
   "ui.update.reloadNow": msg({ id: "ui.update.reloadNow", message: "Reload now" }),
   "ui.update.seeWhatsNew": msg({ id: "ui.update.seeWhatsNew", message: "See what’s new" }),

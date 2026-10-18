@@ -3,8 +3,8 @@ import { APP_VERSION } from "./build-version.ts";
 
 const logger = createLogger("last-seen-version");
 
-// The release a visitor last acknowledged, so the first load of a newer one can
-// tell them it changed. Only acknowledging the notice moves it forward.
+// The newest release a visitor has been told about, so the first load of a newer
+// one can tell them it changed.
 const LAST_SEEN_VERSION_STORAGE_KEY = "rom-weaver-last-seen-version";
 
 /** What this load updated a returning visitor from; `from` is absent when no earlier version was recorded. */
@@ -52,14 +52,20 @@ const resolveUpdatedSince = (): UpdatedSince | null => {
   return null;
 };
 
-const writeLastSeenVersion = () => {
+/**
+ * Records a release as seen. The record only moves forward, so acknowledging the running release
+ * never undoes a newer one the visitor already read about before reloading into it.
+ */
+const writeLastSeenVersion = (version = APP_VERSION) => {
   try {
-    localStorage.setItem(LAST_SEEN_VERSION_STORAGE_KEY, APP_VERSION);
-    logger.debug("Update notice acknowledged", { version: APP_VERSION });
+    const lastSeen = localStorage.getItem(LAST_SEEN_VERSION_STORAGE_KEY);
+    if (lastSeen !== null && !isNewerVersion(version, lastSeen)) return;
+    localStorage.setItem(LAST_SEEN_VERSION_STORAGE_KEY, version);
+    logger.debug("Recorded last seen version", { version });
   } catch (error) {
     logger.trace("Unable to persist last seen version", { message: describeError(error) });
   }
 };
 
-export { isNewRelease, resolveUpdatedSince, writeLastSeenVersion };
+export { isNewerVersion, isNewRelease, resolveUpdatedSince, writeLastSeenVersion };
 export type { UpdatedSince };

@@ -144,6 +144,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 /** A nav row by its visible label, from whichever layout the test names. */
@@ -411,72 +412,18 @@ describe("the unified dialog", () => {
 });
 
 describe("the update banner", () => {
-  it("remembers a dismissal for this build", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-    const banner = container.querySelector(".reveal.is-open .updates.update-ready");
-    expect(banner).not.toBeNull();
-
-    fireEvent.click(container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-
-    expect(container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
-    expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
-  });
-
-  it("stays dismissed on the next mount of the same build", async () => {
-    const first = await renderRoot({ updateReady: true });
-    fireEvent.click(first.container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-    cleanup();
-
-    const second = await renderRoot({ updateReady: true });
-
-    expect(second.container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
-  });
-
-  it("sends its What's new link to the whats-new route", async () => {
-    const { called, container } = await renderRoot({ updateReady: true });
-
-    fireEvent.click(container.querySelector(".updates.update-ready .updates-ver") as HTMLButtonElement);
-
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
-  });
-});
-
-describe("the What's new route", () => {
-  it("mounts the changelog panel with no panel-head gear", async () => {
-    const { container } = await renderRoot({ currentView: "whats-new" });
-
-    const panel = container.querySelector("#panel-whats-new");
-    expect(panel).not.toBeNull();
-    expect(panel?.hasAttribute("hidden")).toBe(false);
-    expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
-    expect(document.title).toBe(withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE));
-  });
-
-  it("reaches the route from the version chip", async () => {
-    const { called, container } = await renderRoot();
-
-    // A dev/nightly checkout wears the channel badge instead of the plain
-    // version chip; either button opens What's new.
-    fireEvent.click(container.querySelector(".build-tag button") as HTMLButtonElement);
-
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
-  });
-
-  it("reaches the route from the nav's Project group", async () => {
-    const { called, container } = await renderRoot();
-
-    fireEvent.click(navRow(container, "What’s new"));
-
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
-  });
-});
-
-describe("the updated notice", () => {
   const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
-  const openNotice = (container: HTMLElement) => container.querySelector(".reveal.is-open .updated-notice");
+  const readyBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner.update-ready");
+  const updatedBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner:not(.update-ready)");
+  // Lets the lazy banner and its changelog fetch settle before asserting it stayed shut.
+  const settleBanner = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
   beforeEach(() => {
-    window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -507,42 +454,113 @@ describe("the updated notice", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("tells a returning visitor what changed and opens What's new", async () => {
+  describe("with a deploy waiting", () => {
+    it("remembers a dismissal for this build", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(readyBanner(container)).toBeNull();
+      expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
+    });
+
+    it("stays dismissed on the next mount of the same build", async () => {
+      const first = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(first.container)).not.toBeNull());
+      fireEvent.click(readyBanner(first.container)?.querySelector(".banner-x") as HTMLButtonElement);
+      cleanup();
+
+      const second = await renderRoot({ updateReady: true });
+      await settleBanner();
+
+      expect(readyBanner(second.container)).toBeNull();
+    });
+
+    it("sends See what's new to the whats-new route", async () => {
+      const { called, container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
+  });
+
+  describe("after an update", () => {
+    beforeEach(() => {
+      window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    });
+
+    it("tells a returning visitor what changed and opens What's new", async () => {
+      const { called, container } = await renderRoot();
+
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Shiny highlight"));
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
+
+    it("records the running version once dismissed", async () => {
+      const { container } = await renderRoot();
+      await waitFor(() => expect(updatedBanner(container)).not.toBeNull());
+
+      fireEvent.click(updatedBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+    });
+
+    it("counts reading What's new as seeing the update", async () => {
+      const { container } = await renderRoot({ currentView: "whats-new" });
+
+      await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
+      await settleBanner();
+      expect(updatedBanner(container)).toBeNull();
+    });
+
+    it("waits behind a deploy that is ready to load, then takes the banner once it is dismissed", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Updated from v0.0.1"));
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+    });
+  });
+});
+
+describe("the What's new route", () => {
+  it("mounts the changelog panel with no panel-head gear", async () => {
+    const { container } = await renderRoot({ currentView: "whats-new" });
+
+    const panel = container.querySelector("#panel-whats-new");
+    expect(panel).not.toBeNull();
+    expect(panel?.hasAttribute("hidden")).toBe(false);
+    expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
+    expect(document.title).toBe(withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE));
+  });
+
+  it("reaches the route from the version chip", async () => {
     const { called, container } = await renderRoot();
 
-    await waitFor(() => expect(openNotice(container)?.textContent).toContain("Shiny highlight"));
-    fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+    // A dev/nightly checkout wears the channel badge instead of the plain
+    // version chip; either button opens What's new.
+    fireEvent.click(container.querySelector(".build-tag button") as HTMLButtonElement);
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
   });
 
-  it("records the running version once dismissed", async () => {
-    const { container } = await renderRoot();
-    await waitFor(() => expect(openNotice(container)).not.toBeNull());
+  it("reaches the route from the nav's Project group", async () => {
+    const { called, container } = await renderRoot();
 
-    fireEvent.click(openNotice(container)?.querySelector(".banner-x") as HTMLButtonElement);
+    fireEvent.click(navRow(container, "What’s new"));
 
-    expect(openNotice(container)).toBeNull();
-    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
-  });
-
-  it("counts reading What's new as seeing the update", async () => {
-    const { container } = await renderRoot({ currentView: "whats-new" });
-
-    await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
-    expect(openNotice(container)).toBeNull();
-  });
-
-  it("waits behind a deploy that is ready to load", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-    await waitFor(() => expect(container.querySelector(".updated-notice")).not.toBeNull());
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector(".reveal.is-open .updates.update-ready")).not.toBeNull();
-    expect(openNotice(container)).toBeNull();
-    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
   });
 });
 
@@ -955,6 +973,7 @@ describe("the phone dock", () => {
 
 describe("development offline status", () => {
   it("forces every display state and restores the actual status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     vi.stubEnv("DEV", true);
     vi.stubEnv("MODE", "development");
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
@@ -969,11 +988,13 @@ describe("development offline status", () => {
     for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
       fireEvent.change(select, { target: { value } });
       expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
-      expect(container.querySelector(".reveal.is-open .update-ready") !== null).toBe(value === "update");
       if (value === "update") {
-        fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+        await waitFor(() => expect(container.querySelector(".reveal.is-open .update-ready")).not.toBeNull());
+        fireEvent.click(container.querySelector(".update-banner .banner-x") as HTMLButtonElement);
         expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
         expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeNull();
+      } else {
+        expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
       }
     }
     fireEvent.change(select, { target: { value: "actual" } });

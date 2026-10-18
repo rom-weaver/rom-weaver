@@ -15,6 +15,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.update.later"
+#~ msgstr "Später"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.update.note"
+#~ msgstr "Neuladen tauscht die zwischengespeicherte App aus. Laufende Jobs werden zuerst beendet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -2650,11 +2660,6 @@ msgstr "Vorheriges"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.later"
-msgstr "Später"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.layoutDiffers"
 msgstr "Layout weicht ab"
 
@@ -4100,11 +4105,6 @@ msgstr "Jetzt neu laden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.note"
-msgstr "Neuladen tauscht die zwischengespeicherte App aus. Laufende Jobs werden zuerst beendet."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.remove"
 msgstr "Entfernen"
 
@@ -5532,6 +5532,11 @@ msgstr "Dieses ROM in Anwenden verwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyMixed"
 msgstr "Verwendet ein ROM und fragt, welches du behalten willst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.readyVersion"
+msgstr "v{version} ist bereit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

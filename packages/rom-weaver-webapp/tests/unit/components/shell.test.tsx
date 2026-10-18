@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal } from "../../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
@@ -668,25 +668,5 @@ describe("Reveal", () => {
     rerender(<Reveal open>banner</Reveal>);
     expect(reveal.hidden).toBe(false);
     expect(reveal.classList.contains("is-open")).toBe(true);
-  });
-});
-
-describe("UpdateBanner", () => {
-  it("offers reload, release notes, and dismissal", () => {
-    const onDismiss = vi.fn();
-    const onOpenWhatsNew = vi.fn();
-    const onReload = vi.fn();
-    const { container } = render(
-      withSettings(<UpdateBanner onDismiss={onDismiss} onOpenWhatsNew={onOpenWhatsNew} onReload={onReload} open />),
-    );
-    const whatsNewButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
-    expect(whatsNewButton.textContent).toBe("What’s new");
-    expect(whatsNewButton.getAttribute("aria-label")).toBe("What’s new: Update available");
-    fireEvent.click(whatsNewButton);
-    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
-    expect(onReload).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

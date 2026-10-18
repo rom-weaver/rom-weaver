@@ -61,8 +61,9 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { Masthead } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
+import type { UpdateBannerKind } from "./components/update-banner.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
@@ -74,7 +75,7 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import { readUpdateDismissed, writeUpdateDismissed } from "./update-dismissal.ts";
 import { useOfflineStatus } from "./use-offline-status.ts";
-import { useWhatsNewNotice } from "./use-whats-new-notice.ts";
+import { useUpdatedSince } from "./use-updated-since.ts";
 import { isFileDragTransfer, isInsideLocalDropZone, usePageDragging } from "./use-page-drag.ts";
 import { loadLogDialog, loadSettingsPanel, useUnifiedDialog } from "./use-unified-dialog.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
@@ -217,9 +218,9 @@ const SettingsPanel = lazy(loadSettingsPanel);
 const DropRouteDialog = lazy(() =>
   import("./components/drop-route-dialog.tsx").then((module) => ({ default: module.DropRouteDialog })),
 );
-// Only the first load of a newer release for a returning visitor shows it, so it stays out of the entry chunk.
-const WhatsNewNotice = lazy(() =>
-  import("./components/whats-new-notice.tsx").then((module) => ({ default: module.WhatsNewNotice })),
+// Only a waiting deploy or a returning visitor's first load of a newer release shows it, so it stays out of the entry chunk.
+const UpdateBanner = lazy(() =>
+  import("./components/update-banner.tsx").then((module) => ({ default: module.UpdateBanner })),
 );
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
@@ -513,11 +514,26 @@ function WebappRoot({
     );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
-  const updateBannerOpen =
+  const updateReadyOpen =
     previewRuntimeState === null
       ? pageUpdate.ready && !updateDismissed
       : previewRuntimeState === "update" && !previewUpdateDismissed;
-  const whatsNewNotice = useWhatsNewNotice(state.currentView);
+  const updatedSince = useUpdatedSince(state.currentView);
+  // A waiting deploy takes the banner first; reloading into it announces both updates at once.
+  let updateBannerKind: UpdateBannerKind | null = updatedSince.announce ? "updated" : null;
+  if (updateReadyOpen) updateBannerKind = "ready";
+  const dismissUpdateBanner = () => {
+    if (updateBannerKind === "updated") {
+      updatedSince.acknowledge();
+      return;
+    }
+    if (previewRuntimeState !== null) {
+      setPreviewUpdateDismissed(true);
+      return;
+    }
+    setUpdateDismissed(true);
+    writeUpdateDismissed();
+  };
   const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -1032,27 +1048,15 @@ function WebappRoot({
             onSelectTab={handleSelectTab}
             tabs={mastheadTabs}
           />
-          <UpdateBanner
-            onDismiss={() => {
-              if (previewRuntimeState !== null) {
-                setPreviewUpdateDismissed(true);
-                return;
-              }
-              setUpdateDismissed(true);
-              writeUpdateDismissed();
-            }}
-            onOpenWhatsNew={openWhatsNew}
-            onReload={actions.onReloadUpdate}
-            open={updateBannerOpen}
-          />
-          {whatsNewNotice.since ? (
+          {/* Mounted from the first reason to announce anything, so a closing banner can still slide away. */}
+          {pageUpdate.ready || previewRuntimeState === "update" || updatedSince.since ? (
             <Suspense fallback={null}>
-              {/* A waiting deploy takes the slot first; reloading into it announces both updates at once. */}
-              <WhatsNewNotice
-                onDismiss={whatsNewNotice.acknowledge}
+              <UpdateBanner
+                kind={updateBannerKind}
+                onDismiss={dismissUpdateBanner}
                 onOpenWhatsNew={openWhatsNew}
-                open={whatsNewNotice.open && !updateBannerOpen}
-                since={whatsNewNotice.since}
+                onReload={actions.onReloadUpdate}
+                since={updatedSince.announce ? updatedSince.since : null}
               />
             </Suspense>
           ) : null}
@@ -1125,7 +1129,7 @@ function WebappRoot({
                   <WhatsNewPageRoute
                     active={state.currentView === "whats-new"}
                     onReload={actions.onReloadUpdate}
-                    since={whatsNewNotice.since}
+                    since={updatedSince.since}
                     updateReady={pageUpdate.ready}
                   />,
                 )}

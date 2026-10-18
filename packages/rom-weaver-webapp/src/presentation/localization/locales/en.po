@@ -15,6 +15,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.update.later"
+#~ msgstr "Later"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.update.note"
+#~ msgstr "Reloading swaps the cached app. Running jobs are finished first."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -2650,11 +2660,6 @@ msgstr "Last visit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.later"
-msgstr "Later"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.layoutDiffers"
 msgstr "layout differs"
 
@@ -4100,11 +4105,6 @@ msgstr "Reload now"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.note"
-msgstr "Reloading swaps the cached app. Running jobs are finished first."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.remove"
 msgstr "Remove"
 
@@ -5532,6 +5532,11 @@ msgstr "Use this ROM in Apply"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyMixed"
 msgstr "Uses one ROM and asks which to keep."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.readyVersion"
+msgstr "v{version} is ready"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

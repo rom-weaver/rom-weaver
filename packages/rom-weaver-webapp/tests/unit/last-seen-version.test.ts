@@ -78,6 +78,20 @@ describe("writeLastSeenVersion", () => {
 
     expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
   });
+
+  it("records a newer release read about before reloading into it", () => {
+    writeLastSeenVersion(NEWER);
+
+    expect(window.localStorage.getItem(KEY)).toBe(NEWER);
+  });
+
+  it("never moves the record backwards", () => {
+    window.localStorage.setItem(KEY, NEWER);
+
+    writeLastSeenVersion();
+
+    expect(window.localStorage.getItem(KEY)).toBe(NEWER);
+  });
 });
 
 describe("isNewRelease", () => {

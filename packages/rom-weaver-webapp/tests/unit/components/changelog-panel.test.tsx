@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider, useUiLocalizer } from "../../../src/public/react/settings-context.tsx";
@@ -225,6 +225,23 @@ describe("ChangelogPanel pending update", () => {
     const update = await renderUpdate();
 
     expect(await update.findByRole("button", { name: "Reload now" })).toBeTruthy();
+  });
+
+  it("records the incoming release on reload, since the notes above already describe it", async () => {
+    window.localStorage.clear();
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ summary: "Shiny release feature" }])]),
+        subject: "release",
+      },
+    ]);
+    const update = await renderUpdate();
+
+    fireEvent.click(await update.findByRole("button", { name: "Reload now" }));
+
+    expect(window.localStorage.getItem("rom-weaver-last-seen-version")).toBe("9.9.9");
   });
 
   it("stays out of the way when no update is waiting", async () => {
