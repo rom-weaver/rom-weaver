@@ -504,6 +504,30 @@ describe("pending update reload", () => {
     expect(harness.reload).toHaveBeenCalledTimes(1);
   });
 
+  it("reloads on the controller change when the registrar never reports it", async () => {
+    // workbox-window reports no update to a page first loaded without a controller.
+    const harness = createHarness({ controller: createController() });
+    harness.client.initialize();
+    harness.registerOptions().onNeedRefresh?.();
+
+    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
+    harness.fireDocument("controllerchange");
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads once when both the controller change and the registrar report it", async () => {
+    const harness = createHarness({ controller: createController() });
+    harness.client.initialize();
+    harness.registerOptions().onNeedRefresh?.();
+
+    await expect(harness.client.reloadPendingUpdate()).resolves.toBe(true);
+    harness.fireDocument("controllerchange");
+    harness.registerOptions().onNeedReload?.();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
   it("cannot reload a page whose location has no reload", async () => {
     const harness = createHarness({ controller: createController(), hasLocationReload: false });
     harness.client.initialize();
@@ -520,6 +544,7 @@ describe("pending update reload", () => {
     harness.client.initialize();
 
     harness.registerOptions().onNeedReload?.();
+    harness.fireDocument("controllerchange");
 
     expect(harness.reload).not.toHaveBeenCalled();
   });

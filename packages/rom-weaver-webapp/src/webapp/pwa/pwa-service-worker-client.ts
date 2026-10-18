@@ -137,6 +137,15 @@ const createPwaServiceWorkerClient = ({
   // the registrar reloads unconditionally unless we supply that callback, so this flag is the only
   // thing standing between a silent activation and a surprise reload.
   let reloadOnIncomingControl = false;
+  // Applies a reload the incoming worker's control was asked for, once. Both controllerchange and
+  // onNeedReload call it: the registrar's callback alone misses pages first loaded without a
+  // controller, because workbox-window decides whether a change is an update when it registers.
+  const reloadForIncomingControl = (source: string) => {
+    const reload = reloadOnIncomingControl;
+    reloadOnIncomingControl = false;
+    logServiceWorkerClient("incoming service worker took control", { reload, source });
+    return reload && reloadPage("reloading page to apply service worker update", "swupdate");
+  };
 
   const setSessionStorageItem = (key: string, value: string) => {
     try {
@@ -551,6 +560,7 @@ const createPwaServiceWorkerClient = ({
     serviceWorker.addEventListener("controllerchange", () => {
       logServiceWorkerClient("controllerchange event received");
       clearUpdateReady();
+      if (reloadForIncomingControl("controllerchange")) return;
       syncCrossOriginIsolationMode({ allowReload: true });
       refreshCacheVersion();
     });
@@ -569,10 +579,7 @@ const createPwaServiceWorkerClient = ({
       // takes control, and the reloadPage argument to updateServiceWorker() is ignored outright -
       // so a silent activation would still reload. Supplying it moves that decision here.
       onNeedReload: () => {
-        const reload = reloadOnIncomingControl;
-        reloadOnIncomingControl = false;
-        logServiceWorkerClient("incoming service worker took control", { reload });
-        if (reload) reloadPage("reloading page to apply service worker update", "swupdate");
+        reloadForIncomingControl("registrar");
       },
       onNeedRefresh: () => {
         logServiceWorkerClient("service worker update ready");
