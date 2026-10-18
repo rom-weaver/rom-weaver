@@ -92,7 +92,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 | WIA | none | `.wia` | ✅ | ✅ | ❌ |
 | TGC | none | `.tgc` | ✅ | ✅ | ❌ |
 | NFS | none | `.nfs` | ✅ | ✅ | ❌ |
-| WBFS | none | `.wbfs` | ✅ | ✅ | ❌ |
+| WBFS | none | `.wbfs` | ✅ | ✅ ⁴ | ❌ |
 | RVZ | none | `.rvz` | ✅ | ✅ | ✅ |
 | Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | ✅ | ✅ | ✅ |
 | XISO | none | `.xiso`, `.xiso.iso` | ❌ | ⚠️ ¹ | ❌ |
@@ -102,6 +102,8 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 >
 > ³ CSO v1 (raw-deflate blocks) images extract. v2 images extract only in the `ciso` crate's layout (length-prefixed LZ4 blocks); `maxcso --format=cso2` output is not read. GameCube `.ciso` files share the extension but use a different layout and are not read as CSO.
+>
+> ⁴ WBFS holds one disc per file. The native CLI reads split sets written for FAT32 (`.wbfs` plus `.wbf1`, `.wbf2`, ...) when every part sits beside the first, and rejects a set with a missing part as an invalid file size. Whole WBFS drive images that hold several games are not supported and fail with "Only single WBFS discs are supported". Discs over 4 GiB are read with 64-bit offsets. Browser extract takes a single `.wbfs` file; split sets are not staged there yet. `probe` reports the platform, disc format, and container entry, not the game ID, title, or partitions.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 
