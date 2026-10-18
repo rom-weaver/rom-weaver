@@ -259,12 +259,14 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
                 let mut stored = vec![0; stored_len];
                 self.source.read(start + 4, &mut stored)?;
                 let decoded = if length & 0x8000_0000 != 0 {
-                    (stored_len == block_len).then_some(stored)
+                    (stored_len == block_len || stored_len == self.block_size).then_some(stored)
                 } else {
                     let mut decoded = vec![0; self.block_size];
                     lz4_flex::block::decompress_into(&stored, &mut decoded)
                         .ok()
-                        .filter(|decoded_len| *decoded_len == block_len)
+                        .filter(|decoded_len| {
+                            *decoded_len == block_len || *decoded_len == self.block_size
+                        })
                         .map(|_| decoded)
                 };
                 if let Some(mut decoded) = decoded {
@@ -274,14 +276,22 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
                 }
             }
         }
-        let max_span = (max_stored as u64).saturating_add(1_u64 << self.alignment);
-        if span == 0 || span > max_span {
+        // maxcso stores a block raw once its aligned compressed length reaches `block_size`,
+        // so a bare LZ4 span is always shorter than that.
+        if span == 0 || span >= self.block_size as u64 {
             return Err(Self::invalid("invalid CSO LZ4 block length"));
         }
         let mut stored = vec![0; span as usize];
         self.source.read(start, &mut stored)?;
-        let decoded = decode_lz4_prefix(&stored, block_len)
-            .ok_or_else(|| Self::invalid("invalid CSO LZ4 compressed block"))?;
+        // maxcso zero-pads the last block to `block_size` before compressing, so the LZ4 data
+        // normally encodes a full block; other writers may encode only the logical bytes.
+        let mut decoded = decode_lz4_prefix(&stored, self.block_size);
+        if decoded.is_none() && block_len != self.block_size {
+            decoded = decode_lz4_prefix(&stored, block_len);
+        }
+        let mut decoded =
+            decoded.ok_or_else(|| Self::invalid("invalid CSO LZ4 compressed block"))?;
+        decoded.truncate(block_len);
         trace!(span, block_len, "cso maxcso lz4 block");
         Ok(decoded)
     }
@@ -306,24 +316,38 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
             let block_len = (self.logical_bytes - block as u64 * self.block_size as u64)
                 .min(self.block_size as u64) as usize;
             let count = output.len().min(block_len - within);
+            let span = end - start;
+            let v2_lz4 = !is_deflate_version(self.version) && entry & 0x8000_0000 != 0;
             let raw = if is_deflate_version(self.version) {
                 // In v0/v1 the high index bit marks a block stored without compression.
                 entry & 0x8000_0000 != 0
             } else {
-                // maxcso v2 stores a block raw when it is not smaller than its logical size.
-                entry & 0x8000_0000 == 0 && end - start >= block_len as u64
+                // maxcso v2 stores a block raw when its compressed length (padding included)
+                // reaches the header block size, even for a shorter final block.
+                !v2_lz4 && span >= self.block_size as u64
             };
             if raw {
-                if end - start < block_len as u64 {
+                if span < block_len as u64 {
                     return Err(Self::invalid("CSO raw block is truncated"));
                 }
                 self.source
                     .read(start + within as u64, &mut output[..count])?;
+            } else if v2_lz4 {
+                let decoded = self.read_lz4_block(start, end, block_len)?;
+                output[..count].copy_from_slice(&decoded[within..within + count]);
             } else {
-                let decoded = if !is_deflate_version(self.version) && entry & 0x8000_0000 != 0 {
-                    self.read_lz4_block(start, end, block_len)?
-                } else {
-                    self.read_deflate_block(start, end, block_len)?
+                // A final block shorter than `block_size` can still be deflated: maxcso pads it
+                // and deflates the padded block. Writers that store that tail raw (`ciso`) leave
+                // exactly the logical bytes, which is not a valid deflate stream of that length.
+                let decoded = match self.read_deflate_block(start, end, block_len) {
+                    Ok(decoded) => decoded,
+                    Err(error) if !is_deflate_version(self.version) && span >= block_len as u64 => {
+                        trace!(%error, block_len, "cso v2 short final block is raw");
+                        let mut raw = vec![0; block_len];
+                        self.source.read(start, &mut raw)?;
+                        raw
+                    }
+                    Err(error) => return Err(error),
                 };
                 output[..count].copy_from_slice(&decoded[within..within + count]);
             }
@@ -1040,16 +1064,22 @@ mod reader_regressions {
         assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
     }
 
-    /// Builds a CSO v2 image the way maxcso documents it: bit 31 selects LZ4 (bare block) over
-    /// deflate, a block whose stored length is not below its logical size is raw, and padding
+    /// Builds a CSO v2 image the way maxcso writes it: the final block is zero-padded to
+    /// `block_size` before compression, bit 31 selects LZ4 (bare block) over deflate, a block
+    /// whose aligned stored length reaches `block_size` is stored raw (padded), and padding
     /// (here 0xAA, since any byte is allowed) fills each block to the alignment boundary.
+    /// `data.len()` must be a multiple of 2048, as maxcso requires.
     fn maxcso_image(data: &[u8], block_size: usize, alignment: u8, only_lz4: bool) -> Vec<u8> {
         let unit = 1_usize << alignment;
         let blocks = data.len().div_ceil(block_size);
         let table_len = 24 + (blocks + 1) * 4;
         let mut body = vec![0xaa; table_len.next_multiple_of(unit) - table_len];
         let mut index = Vec::new();
+        assert_eq!(data.len() % 2048, 0, "maxcso sizes are whole sectors");
         for (number, chunk) in data.chunks(block_size).enumerate() {
+            let mut padded = chunk.to_vec();
+            padded.resize(block_size, 0);
+            let chunk = padded.as_slice();
             let position = ((table_len + body.len()) >> alignment) as u32;
             let (stored, flag) = if only_lz4 || number % 3 == 0 {
                 (lz4_flex::block::compress(chunk), 0x8000_0000_u32)
@@ -1059,7 +1089,7 @@ mod reader_regressions {
                 encoder.write_all(chunk).expect("deflate chunk");
                 (encoder.finish().expect("finish deflate"), 0)
             };
-            let (stored, flag) = if stored.len().next_multiple_of(unit) >= chunk.len() {
+            let (stored, flag) = if stored.len().next_multiple_of(unit) >= block_size {
                 (chunk.to_vec(), 0)
             } else {
                 (stored, flag)
@@ -1105,9 +1135,9 @@ mod reader_regressions {
     fn cso_maxcso_v2_reads_deflate_lz4_and_raw_blocks() {
         for only_lz4 in [false, true] {
             for alignment in [0_u8, 2, 5] {
-                for len in [2048 * 9, 2048 * 9 + 100, 700] {
+                for len in [4096 * 5, 4096 * 5 + 2048, 2048] {
                     let data = maxcso_payload(len);
-                    let bytes = maxcso_image(&data, 2048, alignment, only_lz4);
+                    let bytes = maxcso_image(&data, 4096, alignment, only_lz4);
                     let mut reader =
                         CsoReader::new(std::io::Cursor::new(bytes)).expect("maxcso v2 image");
                     let mut output = vec![0; len];
@@ -1211,9 +1241,15 @@ mod reader_regressions {
     }
 
     #[test]
-    fn cso_bare_lz4_span_is_bounded_by_block_size_plus_one_alignment_unit() {
+    fn cso_bare_lz4_span_is_bounded_by_block_size() {
         let compressed = lz4_flex::block::compress(&[3_u8; 2048]);
-        for (alignment, span, ok) in [(0_u8, 2073_usize, true), (0, 2074, false), (5, 2080, true)] {
+        for (alignment, span, ok) in [
+            (0_u8, 2047_usize, true),
+            (0, 2048, false),
+            (0, 2073, false),
+            (5, 2016, true),
+            (5, 2048, false),
+        ] {
             let mut payload = compressed.clone();
             payload.resize(span, 0);
             let end = (32 + span) >> alignment;
@@ -1234,5 +1270,153 @@ mod reader_regressions {
                 assert_eq!(output, [3; 2048]);
             }
         }
+    }
+
+    #[test]
+    fn cso_crafted_alignment_31_header_does_not_allocate_a_huge_lz4_span() {
+        struct Observed {
+            largest_read: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+            header: Vec<u8>,
+        }
+        impl ciso::read::Read for Observed {
+            type ReadError = io::Error;
+            fn size(&mut self) -> io::Result<u64> {
+                Ok((1 << 32) + 1000)
+            }
+            fn read(&mut self, pos: u64, output: &mut [u8]) -> io::Result<()> {
+                self.largest_read
+                    .fetch_max(output.len(), std::sync::atomic::Ordering::Relaxed);
+                output.fill(0);
+                if let Some(head) = self.header.get(pos as usize..) {
+                    let count = head.len().min(output.len());
+                    output[..count].copy_from_slice(&head[..count]);
+                }
+                Ok(())
+            }
+        }
+        // One block whose LZ4 span is just over 2 GiB: the final sentinel is rounded to the source
+        // size, as the ciso writer does, so the span is 2^31 + 1000 bytes.
+        let header = image_with_spans(2048, 2048, 31, &[1 | 0x8000_0000, 2], &[]);
+        let largest_read = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut reader = CsoReader::new(Observed {
+            largest_read: largest_read.clone(),
+            header,
+        })
+        .expect("geometry is accepted");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
+        assert!(
+            largest_read.load(std::sync::atomic::Ordering::Relaxed) <= 2 * 2048,
+            "a crafted span must not drive a block-sized-or-larger read"
+        );
+    }
+
+    /// Two compressible blocks of 16384 bytes followed by a 4096-byte incompressible tail, the
+    /// layout maxcso writes for a 40 KiB ISO with its default large-image block size.
+    fn maxcso_tail_payload(compressible_tail: bool) -> Vec<u8> {
+        let mut seed = 1287_u32;
+        let mut data = (0..2 * 16384).map(|i| (i % 11) as u8).collect::<Vec<_>>();
+        data.extend((0..4096).map(|i| {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            if compressible_tail {
+                (i % 7) as u8
+            } else {
+                seed as u8
+            }
+        }));
+        data
+    }
+
+    fn block_span(image: &[u8], block: usize) -> (u64, bool) {
+        let entry =
+            |n: usize| u32::from_le_bytes(image[24 + n * 4..28 + n * 4].try_into().unwrap());
+        (
+            u64::from((entry(block + 1) & 0x7fff_ffff) - (entry(block) & 0x7fff_ffff)),
+            entry(block) & 0x8000_0000 != 0,
+        )
+    }
+
+    #[test]
+    fn cso_maxcso_v2_deflated_final_block_between_logical_and_block_size() {
+        let data = maxcso_tail_payload(false);
+        for alignment in [0_u8, 2] {
+            let image = maxcso_image(&data, 16384, alignment, false);
+            let (span, lz4) = block_span(&image, 2);
+            assert!(!lz4, "final block is deflate");
+            assert!(
+                (4096..16384).contains(&(span << alignment)),
+                "final span {span} lies between its logical length and block_size"
+            );
+            let mut reader = CsoReader::new(std::io::Cursor::new(image)).expect("maxcso image");
+            let mut output = vec![0; data.len()];
+            reader.read_offset(0, &mut output).expect("full read");
+            assert!(output == data, "alignment {alignment}");
+            let mut tail = [0; 100];
+            reader
+                .read_offset(data.len() as u64 - 100, &mut tail)
+                .expect("tail read");
+            assert_eq!(tail.as_slice(), &data[data.len() - 100..]);
+        }
+    }
+
+    #[test]
+    fn cso_maxcso_v2_lz4_final_block_encodes_the_padded_block() {
+        for compressible_tail in [false, true] {
+            let data = maxcso_tail_payload(compressible_tail);
+            for alignment in [0_u8, 3] {
+                let image = maxcso_image(&data, 16384, alignment, true);
+                let (_, lz4) = block_span(&image, 2);
+                assert!(lz4, "final block is LZ4");
+                let mut reader = CsoReader::new(std::io::Cursor::new(image)).expect("maxcso image");
+                let mut output = vec![0; data.len()];
+                reader.read_offset(0, &mut output).expect("full read");
+                assert!(
+                    output == data,
+                    "compressible {compressible_tail} alignment {alignment}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cso_v2_ciso_layout_final_block_may_encode_the_padded_block() {
+        let data = maxcso_tail_payload(true);
+        let mut padded = data[2 * 16384..].to_vec();
+        padded.resize(16384, 0);
+        // Four index entries precede the data: 24-byte header plus 16 bytes of table.
+        let mut payload = Vec::new();
+        let mut index = Vec::new();
+        for chunk in [&data[..16384], &data[16384..2 * 16384], padded.as_slice()] {
+            index.push((40 + payload.len()) as u32 | 0x8000_0000);
+            let compressed = lz4_flex::block::compress(chunk);
+            payload.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
+            payload.extend_from_slice(&compressed);
+        }
+        index.push((40 + payload.len()) as u32);
+        let image = image_with_spans(16384, data.len() as u64, 0, &index, &payload);
+        let mut reader = CsoReader::new(std::io::Cursor::new(image)).expect("ciso-layout image");
+        let mut output = vec![0; data.len()];
+        reader.read_offset(0, &mut output).expect("full read");
+        assert!(output == data);
+    }
+
+    #[test]
+    fn cso_v2_short_final_block_stored_raw_by_ciso_is_still_read() {
+        // 3000 bytes in 2048-byte blocks; both blocks raw, the last one only 952 bytes long.
+        let mut seed = 99_u32;
+        let data = (0..3000)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            })
+            .collect::<Vec<_>>();
+        let bytes = image_with_spans(2048, 3000, 0, &[36, 36 + 2048, 36 + 3000], &data);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("geometry");
+        let mut output = vec![0; 3000];
+        reader.read_offset(0, &mut output).expect("raw tail");
+        assert_eq!(output, data);
     }
 }

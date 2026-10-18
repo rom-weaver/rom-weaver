@@ -1920,14 +1920,17 @@ mod tests {
 
     #[test]
     fn cso_maxcso_v2_extract_round_trips_deflate_lz4_and_raw_blocks() {
-        let block = TEST_CSO_BLOCK_BYTES;
+        let block = TEST_CSO_BLOCK_BYTES * 2;
         let alignment = 3_u32;
         for only_lz4 in [false, true] {
             let temp_dir = temp_dir_path(if only_lz4 { "cso-v2-lz4" } else { "cso-v2-mix" });
             fs::create_dir_all(&temp_dir).expect("temp dir");
-            // Blocks cycle through repetitive, pseudo-random (stored raw), and zero data.
-            let source = (0..block * 6 + 77)
-                .map(|index| match (index / block) % 3 {
+            // Blocks cycle through repetitive, pseudo-random (stored raw), and zero data. maxcso
+            // sizes are whole 2048-byte sectors, and the final block here is a half-size
+            // pseudo-random one that maxcso pads to `block` and then deflates or LZ4-compresses
+            // to fewer than `block` but more than its logical `block / 2` bytes.
+            let source = (0..block * 6 + 2048)
+                .map(|index| match (index / block + 1) % 3 {
                     0 => (index % 13) as u8,
                     1 => ((index * 2654435761_usize) >> 13) as u8,
                     _ => 0,
@@ -1937,6 +1940,9 @@ mod tests {
             let mut body = vec![0xaa_u8; table_len.next_multiple_of(8) - table_len];
             let mut index = Vec::new();
             for (number, chunk) in source.chunks(block).enumerate() {
+                let mut padded = chunk.to_vec();
+                padded.resize(block, 0);
+                let chunk = padded.as_slice();
                 let position = ((table_len + body.len()) >> alignment) as u32;
                 let (stored, flag) = if only_lz4 || number % 3 == 2 {
                     (lz4_flex::block::compress(chunk), 0x8000_0000)
@@ -1945,7 +1951,7 @@ mod tests {
                     encoder.write_all(chunk).expect("deflate block");
                     (encoder.finish().expect("finish block"), 0)
                 };
-                if stored.len().next_multiple_of(8) >= chunk.len() {
+                if stored.len().next_multiple_of(8) >= block {
                     index.push(position);
                     body.extend_from_slice(chunk);
                 } else {
