@@ -99,6 +99,7 @@ import {
   getInputAssetChecksums,
 } from "./staged-source-checksums.ts";
 import {
+  type ComputedChecksums,
   isTransformVariant,
   type WeaveRomCheck,
   type WeaveRomExpectation,
@@ -160,7 +161,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** The active weave's `rom.checks`, verified against the supplied ROM file. */
   private weaveRom: WeaveRomExpectation | undefined;
   /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
-  private readonly weaveRomChecksums = new WeakMap<object, Record<string, string>>();
+  private readonly weaveRomChecksums = new WeakMap<object, ComputedChecksums>();
   /** The variant the weave's `rom.checks` matched when the raw file did not: its asset and CRC32.
    * Patches without layout evidence of their own take their header/byte-order decision from it. */
   private weaveRomLayout: { assetId: string; crc32: string } | undefined;
@@ -1636,12 +1637,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
               state: { fileName: asset.fileName, id: asset.id, size: asset.size },
               workflow: "apply",
             });
-            return result.checksums;
+            return { checksums: result.checksums, variants: result.variants };
           } catch (error) {
             if (hashAbort.signal.aborted || isTransientValidationError(error)) throw error;
             // Not transient: the algorithm cannot be computed here, which fails verification.
             this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
-            return {};
+            return { checksums: {} };
           }
         },
       );
