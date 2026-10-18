@@ -155,9 +155,17 @@ const formatRomIdentification = (identification: ParsedIdentifyResolution | unde
   return `Possible titles: ${names.join("; ")}`;
 };
 
+// The engine's dry run only knows the checksums embedded in the patch; the cheap preflight also knows
+// the file-name `[crc32:..]` token (the engine never sees it), so a preflight mismatch outranks a
+// passing dry run (only the first patch's token reaches the preflight). Other deep verdicts (invalid, deferred, unknown, pending) keep winning.
+const isPreflightMismatchOverridingDeep = (patch: ApplyWorkflowPatchState): boolean =>
+  patch.checksumPreflight?.status === "invalid" &&
+  !!patch.checksumPreflight.requiredCrc32FromFilename &&
+  patch.patchValidation?.status === "valid";
+
 const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementValues: string[]): string => {
   const deep = patch.patchValidation;
-  if (deep) return deep.status;
+  if (deep && !isPreflightMismatchOverridingDeep(patch)) return deep.status;
   if (patch.checksumPreflight?.status === "invalid") return "invalid";
   if (patch.checksumPreflight) return "verifying";
   return requirementValues.length ? "pending" : "unknown";
@@ -192,7 +200,7 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   // The deep preflight validation is deferred and runs silently after staging. Until its verdict
   // lands, a targeted patch (its cheap preflight computed) reads as "verifying"; a preflight checksum
   // mismatch fails immediately without waiting for preflight. Once the verdict lands it wins.
-  const deep = patch.patchValidation;
+  const deep = isPreflightMismatchOverridingDeep(patch) ? undefined : patch.patchValidation;
   const status = getPatchValidationStatus(patch, enforceableRequirementValues);
   const validationValues = requirementValues.length
     ? requirementValues

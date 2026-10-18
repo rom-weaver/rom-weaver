@@ -7,6 +7,11 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
+  /** True for the first patch on `target` (each target is its own engine run) when it reads the
+   * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
+   * enforces the same); a later patch's input is usually the previous patch's output, which the
+   * token describes. */
+  filenameCrc32AppliesTo?: (target: InputAsset) => boolean;
   previousLayout?: StagedSource<TSource>["state"];
   /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
    * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
@@ -114,8 +119,10 @@ const createApplyPatchChecksumPreflight = <TSource>(
   weaveLayoutCrc32?: string,
   declaredInputChecks?: string,
   previousLayout?: StagedSource<TSource>["state"],
+  filenameCrc32Applies = false,
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
+  const filenameCrc32 = filenameCrc32Applies ? requirements?.filenameCrc32 : undefined;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
   // the engine at apply time) joins the patch's own requirements: it feeds the
   // header auto-resolution and the preflight verdict exactly like a filename token.
@@ -128,7 +135,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
   // headerless bytes - so the preflight must compare those, not the raw file.
   const wanted = {
     ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
-    filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
+    filenameCrc32: filenameCrc32 ?? userInputCrc32,
   };
   const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
   // A patch with no checksum evidence of its own applies to the layout the weave's ROM check
@@ -179,15 +186,18 @@ const createApplyPatchChecksumPreflight = <TSource>(
   const minimumSourceSize = toFiniteSize(requirements?.minimumSourceSize);
   const requiredCrc32 =
     toNormalizedCrc32(requirements?.sourceCrc32) ??
-    toNormalizedCrc32(requirements?.filenameCrc32) ??
+    toNormalizedCrc32(filenameCrc32) ??
     toNormalizedCrc32(userInputCrc32);
-  return createChecksumPreflightVerdict({
+  const verdict = createChecksumPreflightVerdict({
     actualCrc32,
     actualSize,
     minimumSourceSize,
     requiredCrc32,
     requiredSize,
   });
+  // Only a file-name token (never the engine's view) may outrank a passing dry run in the staging model.
+  const requiredFromFilename = !toNormalizedCrc32(requirements?.sourceCrc32) && !!toNormalizedCrc32(filenameCrc32);
+  return requiredFromFilename ? { ...verdict, requiredCrc32FromFilename: true } : verdict;
 };
 
 /** Separates the target/preflight key from the chain fingerprint the validation pass appends. */
@@ -316,6 +326,7 @@ const settleApplyPatchTarget = async <TSource>(
           adapters.getWeaveLayoutCrc32?.(target),
           adapters.declaredInputChecks,
           adapters.previousLayout,
+          adapters.filenameCrc32AppliesTo?.(target) ?? false,
         )
       : undefined;
     stage.state.checksumPreflight = preflight;

@@ -138,6 +138,8 @@ type ApplyWorkflowPatchState = {
     mismatchReason?: "crc32" | "size" | "size+crc32";
     minimumSourceSize?: number;
     requiredCrc32?: string;
+    /** The required crc32 came from the patch file name's `[crc32:..]` token. */
+    requiredCrc32FromFilename?: boolean;
     requiredSize?: number;
     status: "invalid" | "pending" | "unknown" | "valid";
   };

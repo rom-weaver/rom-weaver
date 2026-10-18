@@ -152,6 +152,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
+  /** Toggled-off patches from the latest validation pass; they are excluded from the run. Tracked by
+   * stage, not index: re-staging (the run's enabled-only list) creates new stages, which none match. */
+  private disabledPatches: ReadonlySet<StagedSource<TSource>> = new Set();
   private inputs: TSource[] = [];
   // Object identities MUST remain weak so replaced archives can be collected while restaging stays deduplicated.
   private discoveredSidecarSources = new WeakSet<object>();
@@ -1753,13 +1756,30 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
+  /** Whether `stage` runs first on `targetId`: each target is its own engine run, and a toggled-off
+   * patch is excluded from the run. */
+  private isFirstEnabledPatchOn(stage: StagedSource<TSource>, targetId: string | undefined): boolean {
+    const first = this.patches.find(
+      (patch) => !this.disabledPatches.has(patch) && (patch === stage || patch.state.targetInputId === targetId),
+    );
+    return first === stage && !this.disabledPatches.has(stage);
+  }
+
+  /** The patches that currently run first on their target. */
+  private getFirstEnabledPatches(): Set<StagedSource<TSource>> {
+    return new Set(this.patches.filter((patch) => this.isFirstEnabledPatchOn(patch, patch.state.targetInputId)));
+  }
+
   private async evaluatePatchReadiness(
     stage: StagedSource<TSource>,
     declaredInputChecks?: string,
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
+    const inputRef = stage.state.patchTarget || stage.state.patchInput;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
+      filenameCrc32AppliesTo: (target) =>
+        this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
@@ -1814,8 +1834,18 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
       const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
       if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
-      const assets = this.getPatchableInputAssets();
       const disabledIndexes = options?.disabledIndexes;
+      // A toggle can change which patch runs first, and only that patch's file-name crc32 applies:
+      // the patches gaining or losing that role re-run their preflight below.
+      const firstEnabledBefore = this.getFirstEnabledPatches();
+      this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
+      const firstEnabledAfter = this.getFirstEnabledPatches();
+      const firstEnabledMoved = new Set(
+        [...firstEnabledBefore, ...firstEnabledAfter].filter(
+          (patch) => firstEnabledBefore.has(patch) !== firstEnabledAfter.has(patch),
+        ),
+      );
+      const assets = this.getPatchableInputAssets();
       const pending: Array<{
         chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
         chainFingerprint?: string;
@@ -1845,7 +1875,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (
           basis !== "auto" ||
           !previousByTarget.has(target.id) ||
-          !target.checksumVariants?.some(isTransformVariant)
+          !target.checksumVariants?.some(isTransformVariant) ||
+          firstEnabledMoved.has(stage)
         ) {
           await this.evaluatePatchReadiness(
             stage,
