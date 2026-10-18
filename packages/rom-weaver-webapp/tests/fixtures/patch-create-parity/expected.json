@@ -1,0 +1,30 @@
+{
+  "apsgba": {
+    "bytes": 65556,
+    "sha256": "0c3d9add983bf8804fd2c553a3c41a97f1e2e0905294410983fe9e220b70871f"
+  },
+  "dldi": {
+    "bytes": 256,
+    "sha256": "c6f208f881b24ebd3916134d6a4015cbdf914541e389c3d76c5facebb8f65788"
+  },
+  "dps": {
+    "bytes": 251,
+    "sha256": "b6af4c56f2736277cab656bd413470118d145d7492ea0b44c1295e9b482cf439"
+  },
+  "gdiff": {
+    "bytes": 19,
+    "sha256": "148e9d293fda6569eb17d26daa8145c14fe8dfc77e3b8d34cb08f594a4883bc2"
+  },
+  "ips32": {
+    "bytes": 23,
+    "sha256": "6bb287a8c82d9aecac751ca6547915bc0eddb8dde235c5378c83fe93fa43de7b"
+  },
+  "pat": {
+    "bytes": 60,
+    "sha256": "c70e74563f2a3071044048c94f849a5c7bff2db255ebce513821d320671817d3"
+  },
+  "solid": {
+    "bytes": 65,
+    "sha256": "c46247a0adb5428970c03e212b92657975202d0ea9c670bcd932f0d25cb5f624"
+  }
+}

@@ -87,6 +87,7 @@
     "test:browser": "npm run accents:generate && npm run brand:check && node scripts/run-browser-tests.mjs",
     "test:browser:chromium": "npm run brand:check && cross-env ROM_WEAVER_BROWSER=chromium node scripts/run-browser-tests.mjs",
     "test:browser:coverage": "npm run brand:check && cross-env ROM_WEAVER_COVERAGE=1 node scripts/run-browser-tests.mjs",
+    "generate:patch-create-parity": "node scripts/generate-patch-create-parity.mjs",
     "test:browser:wasm": "vitest --config ./vitest.wasm.browser.config.mjs run",
     "test:browser:wasm:bench": "cross-env ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.wasm.browser.config.mjs bench",
     "test:browser:wasm:bench:checksum-threading": "cross-env ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.wasm.browser.config.mjs bench tests/wasm/browser-checksum-threading.bench.mjs",
