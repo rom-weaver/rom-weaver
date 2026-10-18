@@ -1268,6 +1268,104 @@ test("weave rom.checks of a big-endian N64 ROM accept the byte-swapped dump", as
   expect(hex(normalized)).toBe(hex(modified));
 });
 
+// `weave create --checksum sha256` from the headerless or big-endian ROM: staging hashes no SHA-256,
+// so the header-stripped and byte-swapped variants are hashed on demand, once per file.
+const sha256Checks = async (bytes) => ({
+  checksums: { sha256: hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) },
+  size: bytes.length,
+});
+const withSha256HashCount = async (run) => {
+  const original = browserRuntime.ingest.run;
+  const ingestSpy = vi
+    .spyOn(browserRuntime.ingest, "run")
+    .mockImplementation((input) => original.call(browserRuntime.ingest, input));
+  try {
+    const result = await run();
+    return {
+      result,
+      sha256Hashes: ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length,
+    };
+  } finally {
+    ingestSpy.mockRestore();
+  }
+};
+
+test("sha256-only rom.checks of a headerless NES ROM accept the headered dump", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const body = headered.subarray(16);
+  const records = [
+    [0x98, 0x12],
+    [0x99, 0x0f],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(body),
+    "hack.ips",
+    createIps(records),
+    "hello-world.nes",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]),
+  );
+  const modified = applyRecords(body, records);
+  expect(hex(result.output.subarray(result.output.length - modified.length))).toBe(hex(modified));
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks of a headerless SNES ROM accept the headered dump", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(headerless),
+    "hack.ips",
+    createIps(records),
+    "game.sfc",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]),
+  );
+  const modified = applyRecords(headerless, records);
+  expect(hex(result.output.subarray(result.output.length - modified.length))).toBe(hex(modified));
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks of a big-endian N64 ROM accept the byte-swapped dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(bigEndian),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.z64",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]),
+  );
+  const normalized = result.output[0] === 0x37 && result.output[1] === 0x80 ? byteSwap16(result.output) : result.output;
+  expect(hex(normalized)).toBe(hex(modified));
+  // The same-size raw file is hashed on demand first; that pass already hashes its variants.
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks still reject the headered dump of a different ROM", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const otherBody = withBytes(headered.subarray(16), 0x98, [0xff]);
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(otherBody),
+    "hack.ips",
+    createIps([[0x99, 0x0f]]),
+    "hello-world.nes",
+  );
+  await expectStrictApply([weaveArchive, new File([headered], "hello-world.nes")], {
+    outputName: "transform-output",
+    romMatches: false,
+  });
+});
+
 // A transient failure hashing a declared algorithm leaves the patches retryable: Apply hashes again
 // and, once that works, applies the matching ROM without the override.
 test("a transient weave-ROM hash failure recovers on Apply", async () => {

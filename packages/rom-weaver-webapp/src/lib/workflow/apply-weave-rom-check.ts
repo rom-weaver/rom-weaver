@@ -6,9 +6,41 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 /** A weave's `rom.checks` as `algo=hex` / `size=N` tokens, plus the ROM member they describe. */
 type WeaveRomExpectation = { checks: string; member?: string };
 
-/** Hash `algorithms` for one asset; an algorithm that cannot be computed maps to "" (or is absent).
- * A transient failure throws, and the caller retries on its next pass. */
-type ComputeAssetChecksums = (asset: InputAsset, algorithms: readonly string[]) => Promise<Record<string, string>>;
+/** Hash `algorithms` for one asset, raw bytes and checksum variants in one pass; an algorithm that
+ * cannot be computed maps to "" (or is absent). A transient failure throws, and the caller retries
+ * on its next pass. */
+type ComputeAssetChecksums = (
+  asset: InputAsset,
+  algorithms: readonly string[],
+) => Promise<{ checksums: Record<string, string>; variants?: readonly ChecksumVariant[] }>;
+
+/** On-demand hashes remembered per file: raw checksums, checksums per variant id, and the
+ * algorithms already requested for the variants (so each is hashed once, even when it fails). */
+type ComputedChecksums = {
+  checksums: Record<string, string>;
+  variantAlgorithms: string[];
+  variants: Record<string, Record<string, string>>;
+};
+
+const nonEmpty = (values: Readonly<Record<string, string | undefined>> | undefined): Record<string, string> =>
+  Object.fromEntries(Object.entries(values || {}).filter((entry): entry is [string, string] => !!entry[1]));
+
+const rememberComputed = (
+  computed: WeakMap<object, ComputedChecksums>,
+  key: object,
+  algorithms: readonly string[],
+  result: Awaited<ReturnType<ComputeAssetChecksums>>,
+): void => {
+  const previous = computed.get(key) || { checksums: {}, variantAlgorithms: [], variants: {} };
+  const variants = { ...previous.variants };
+  for (const variant of result.variants || [])
+    variants[variant.id] = { ...variants[variant.id], ...nonEmpty(variant.checksums) };
+  computed.set(key, {
+    checksums: { ...previous.checksums, ...nonEmpty(result.checksums) },
+    variantAlgorithms: [...new Set([...previous.variantAlgorithms, ...algorithms])],
+    variants,
+  });
+};
 
 /**
  * The file a weave's ROM resolves to, mirroring weave export: the asset on `rom.member` when the
@@ -57,14 +89,15 @@ const variantSize = (variant: ChecksumVariant, rawSize: number): number | undefi
  *
  * The raw bytes are compared first. When they do not match, the staged header-stripped and N64
  * byte-order variants are tried, so a headered SMC or a .v64 dump passes a weave recorded from the
- * headerless .sfc or the .z64. A variant counts only when it answers every declared algorithm.
+ * headerless .sfc or the .z64. A variant counts only when it answers every declared algorithm;
+ * declared algorithms staging did not compute are hashed for the variants on demand, once per file.
  * The checks never reach the engine's `--expect-in`; a variant match only supplies the layout for
  * patches without source checks of their own (see the controller's `weaveRomLayout`).
  */
 const verifyWeaveRom = async (
   expectation: WeaveRomExpectation,
   assets: readonly InputAsset[],
-  computed: WeakMap<object, Record<string, string>>,
+  computed: WeakMap<object, ComputedChecksums>,
   computeChecksums: ComputeAssetChecksums,
 ): Promise<WeaveRomCheck> => {
   const asset = resolveWeaveRomAsset(assets, expectation.member);
@@ -79,14 +112,13 @@ const verifyWeaveRom = async (
   }
   const key = asset.file as object;
   const actual = () => ({
-    checksums: { ...getInputAssetChecksums(asset), ...computed.get(key) },
+    checksums: { ...getInputAssetChecksums(asset), ...computed.get(key)?.checksums },
     size: asset.size,
   });
   let verdict = compareWeaveRomChecks(expectation.checks, actual());
   if (verdict.status !== "mismatch" && verdict.missing.length) {
-    const values = await computeChecksums(asset, verdict.missing);
-    const filled = Object.fromEntries(Object.entries(values).filter(([, value]) => !!value));
-    computed.set(key, { ...computed.get(key), ...filled });
+    const algorithms = verdict.missing;
+    rememberComputed(computed, key, algorithms, await computeChecksums(asset, algorithms));
     verdict = compareWeaveRomChecks(expectation.checks, actual());
     if (verdict.status !== "mismatch" && verdict.missing.length) {
       verdict = {
@@ -97,18 +129,33 @@ const verifyWeaveRom = async (
     }
   }
   if (verdict.status === "mismatch") {
-    for (const variant of (asset.checksumVariants || []).filter(isTransformVariant)) {
-      const size = variantSize(variant, asset.size);
-      const variantVerdict = compareWeaveRomChecks(expectation.checks, {
-        checksums: variant.checksums,
-        ...(size === undefined ? {} : { size }),
-      });
-      if (variantVerdict.status === "match" && !variantVerdict.missing.length)
-        return { assetId: asset.id, missing: [], status: "match", variant: variant.id };
+    const variants = (asset.checksumVariants || []).filter(isTransformVariant);
+    const compareVariants = () => {
+      const missing = new Set<string>();
+      for (const variant of variants) {
+        const size = variantSize(variant, asset.size);
+        const variantVerdict = compareWeaveRomChecks(expectation.checks, {
+          checksums: { ...variant.checksums, ...computed.get(key)?.variants[variant.id] },
+          ...(size === undefined ? {} : { size }),
+        });
+        if (variantVerdict.status === "mismatch") continue;
+        if (!variantVerdict.missing.length) return { matched: variant.id, missing: [] };
+        for (const algorithm of variantVerdict.missing) missing.add(algorithm);
+      }
+      return { matched: undefined, missing: [...missing] };
+    };
+    let variantCheck = compareVariants();
+    const unhashed = variantCheck.missing.filter(
+      (algorithm) => !computed.get(key)?.variantAlgorithms.includes(algorithm),
+    );
+    if (!variantCheck.matched && unhashed.length) {
+      rememberComputed(computed, key, unhashed, await computeChecksums(asset, unhashed));
+      variantCheck = compareVariants();
     }
+    if (variantCheck.matched) return { assetId: asset.id, missing: [], status: "match", variant: variantCheck.matched };
   }
   return { ...verdict, assetId: asset.id };
 };
 
-export type { WeaveRomCheck, WeaveRomExpectation };
+export type { ComputedChecksums, WeaveRomCheck, WeaveRomExpectation };
 export { isTransformVariant, resolveWeaveRomAsset, verifyWeaveRom };
