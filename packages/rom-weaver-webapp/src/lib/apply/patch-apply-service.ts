@@ -313,7 +313,15 @@ const resolveMemberTarget = (
   inputChecks?: string,
 ): InputAsset => {
   const match = findMemberTarget(index, member, patchableAssets, inputChecks);
-  if (!match) throw new Error(`Patch ${index + 1} ROM member was not found: ${member}`);
+  if (!match) {
+    const [only] = patchableAssets;
+    const bare = patchableAssets.length === 1 && only?.member === undefined && !only?.discGroupId;
+    throw new Error(
+      bare
+        ? `Patch ${index + 1} ROM member was not found: ${member}; the input ${only?.fileName} is not an archive and neither its file name nor its checks match the member`
+        : `Patch ${index + 1} ROM member was not found: ${member}`,
+    );
+  }
   return match;
 };
 

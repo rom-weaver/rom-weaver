@@ -91,7 +91,7 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
         [{ rom: true, member: "romA.bin" }],
         ["crc32=deadbeef"],
       ),
-    ).rejects.toThrow("ROM member was not found: romA.bin");
+    ).rejects.toThrow("neither its file name nor its checks match the member");
   });
 
   it("does not guess a duplicate basename for a nested member", async () => {
