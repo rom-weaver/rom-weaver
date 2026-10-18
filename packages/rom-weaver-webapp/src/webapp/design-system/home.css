@@ -391,10 +391,10 @@
   font-size: 0.84rem;
   color: var(--thread-text);
 }
+/* The extension says which card fits a visitor's file, so a name too long
+   beside a wide translated button wraps rather than losing its end. */
 .rw-app .home-route-file code {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .rw-app .home-route h3 {
   grid-area: title;

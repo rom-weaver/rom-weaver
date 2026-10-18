@@ -109,8 +109,8 @@
 }
 
 /**
- * Register canvas palette properties as colors so getComputedStyle resolves their color expressions.
- * They also follow the interpolated accent colors during a theme transition.
+ * Register the accent-derived dyes as colors, so each resolves once where it is declared
+ * and follows the interpolated accent colors during a theme transition.
  */
 @property --shuttle {
   syntax: "<color>";

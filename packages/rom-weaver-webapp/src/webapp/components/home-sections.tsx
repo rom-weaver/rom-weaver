@@ -124,7 +124,11 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
           <li className={item.secondary ? "home-route home-route-split" : "home-route"} key={item.file}>
             <p className="home-route-file">
               <i className={`home-swatch home-swatch-${item.swatch}`} />
-              <code>{item.file}</code>
+              <code>
+                {item.file.slice(0, item.file.lastIndexOf("."))}
+                <wbr />
+                {item.file.slice(item.file.lastIndexOf("."))}
+              </code>
             </p>
             <h3>{localizer.message(item.title)}</h3>
             <p className="home-route-body">{localizer.message(item.body)}</p>
