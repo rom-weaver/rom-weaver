@@ -102,7 +102,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 >
-> ³ CSO v1 (raw-deflate blocks) images extract. v2 images extract only in the `ciso` crate's layout (length-prefixed LZ4 blocks); `maxcso --format=cso2` output is not read. GameCube `.ciso` files share the extension but use a different layout; they are detected from the header and read as GameCube CISO (see ⁵), not as CSO.
+> ³ CSO v1 (raw-deflate blocks) and v2 images extract, including `maxcso --format=cso2` output (deflate, bare LZ4 from `--only-lz4`, and raw blocks) and the `ciso` crate's length-prefixed LZ4 layout. GameCube `.ciso` files share the extension but use a different layout; they are detected from the header and read as GameCube CISO (see ⁵), not as CSO.
 >
 > ⁴ WBFS holds one disc per file. The native CLI reads split sets written for FAT32 (`.wbfs` plus `.wbf1`, `.wbf2`, ...) when every part sits beside the first, and rejects a set with a missing part as an invalid file size. Whole WBFS drive images that hold several games are not supported and fail with "Only single WBFS discs are supported". Discs over 4 GiB are read with 64-bit offsets. Compressing a split set to ZIP or 7z archives only the parts passed as `--input`, so pass every part (`.wbfs`, `.wbf1`, ...); passing only the first part silently produces a truncated archive. Browser extract takes a single `.wbfs` file; split sets are not staged there yet. `probe` reports the platform, disc format, and container entry, not the game ID, title, or partitions.
 >
