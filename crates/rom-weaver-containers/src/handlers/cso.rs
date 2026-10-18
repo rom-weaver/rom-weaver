@@ -93,14 +93,18 @@ impl CsoHeader {
     fn parse(bytes: &[u8; 24]) -> io::Result<Self> {
         let invalid =
             |message: &str| io::Error::new(io::ErrorKind::InvalidData, message.to_owned());
-        if bytes[0..4] != CSO_SIGNATURE
-            || u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) != 24
-        {
+        if bytes[0..4] != CSO_SIGNATURE {
             return Err(invalid("Invalid CSO header"));
         }
         let version = bytes[20];
         if version > 2 {
             return Err(invalid("Unsupported CSO version"));
+        }
+        // The original v1 `ciso` tool leaves the header size at 0; v2 requires 24.
+        // GameCube CISO stores its block size here, so it is still rejected.
+        let header_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        if header_size != 24 && !(header_size == 0 && is_deflate_version(version)) {
+            return Err(invalid("Invalid CSO header"));
         }
         let mut size = [0; 8];
         size.copy_from_slice(&bytes[8..16]);
@@ -667,6 +671,23 @@ mod reader_regressions {
         assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
         let mut bytes = v1_image(&data, 2048, 0);
         bytes[20] = 3;
+        assert!(CsoReader::new(std::io::Cursor::new(bytes)).is_err());
+    }
+
+    #[test]
+    fn cso_header_size_zero_is_accepted_only_for_v1() {
+        let data = v1_payload(2048 * 3);
+        let mut bytes = v1_image(&data, 2048, 0);
+        bytes[4..8].copy_from_slice(&0_u32.to_le_bytes());
+        let mut reader =
+            CsoReader::new(std::io::Cursor::new(bytes.clone())).expect("v1 header size 0");
+        let mut output = vec![0; data.len()];
+        reader.read_offset(0, &mut output).expect("full v1 read");
+        assert_eq!(output, data);
+        bytes[20] = 2;
+        assert!(CsoReader::new(std::io::Cursor::new(bytes.clone())).is_err());
+        bytes[20] = 1;
+        bytes[4..8].copy_from_slice(&0x0020_0000_u32.to_le_bytes());
         assert!(CsoReader::new(std::io::Cursor::new(bytes)).is_err());
     }
 

@@ -101,7 +101,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 >
-> ³ CSO v1 (raw-deflate blocks) and v2 (LZ4 blocks) images extract. GameCube `.ciso` files share the extension but use a different layout and are not read as CSO.
+> ³ CSO v1 (raw-deflate blocks) and v2 images with LZ4 blocks extract. v2 images that contain deflate blocks, such as `maxcso --format=cso2` output, are not read. GameCube `.ciso` files share the extension but use a different layout and are not read as CSO.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 
