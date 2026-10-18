@@ -160,11 +160,6 @@ msgstr "{file} passt nicht zu diesem Spielstand. Du wählst als Nächstes eine a
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainOpenBody"
-msgstr "{file} wird direkt gelesen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.test.fdsBios.summary"
 msgstr "{fileName} benötigt das BIOS des Famicom Disk System."
 
@@ -205,11 +200,6 @@ msgstr "{visible} von {count, plural, one {# Cheat} other {# Cheats}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomTag"
-msgstr "Apply · 3 Patches · der Reihe nach"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.notFound.heading"
 msgstr "404: Seite nicht gefunden"
 
@@ -232,11 +222,6 @@ msgstr "A"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDisc"
 msgstr "Ein komprimiertes Disc-Image"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainDescription"
-msgstr "Eine Disc-Übersetzung hieß früher fünf Werkzeuge und ein Ordner voller temporärer Dateien. Hier ist es ein Durchlauf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -612,11 +597,6 @@ msgstr "Zuerst den Patch anwenden?"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyWeave"
 msgstr "Die Patches des Weaves auf ein ROM anwenden."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainApply"
-msgstr "Wende sie der Reihe nach an"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1010,11 +990,6 @@ msgstr "Prüfung fehlgeschlagen: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainCheck"
-msgstr "Prüfe es"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.notFound.copy"
 msgstr "Prüfe die Adresse oder wähle, wohin du als Nächstes möchtest."
 
@@ -1365,11 +1340,6 @@ msgstr "Bestandteile"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomCompress"
-msgstr "komprimieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.compress.run"
 msgstr "Komprimieren"
 
@@ -1397,11 +1367,6 @@ msgstr "Erstelle ZIP- oder 7z-Archive aus deinen Dateien. Komprimiere kompatible
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.compressThesis"
 msgstr "Komprimiere deine Dateien."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainCompress"
-msgstr "Komprimiere das Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2170,11 +2135,6 @@ msgstr "Exportiert diese Sitzung als portables rom-weaver-Weave, das durch rom-w
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomExtract"
-msgstr "extrahieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.docs.toolExtract"
 msgstr "ROMs extrahieren und konvertieren"
 
@@ -2267,16 +2227,6 @@ msgstr "Dateien"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.groupFiles"
 msgstr "Dateien"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.webappItem3"
-msgstr "Dateien werden auf deinem Gerät gelesen und geschrieben. Es gibt nie einen Upload."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.filesStay"
-msgstr "Dateien bleiben auf dem Gerät"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3090,6 +3040,11 @@ msgstr "Noch keine Emulator-Spielstände. Speichere ein Spiel im Test, um dessen
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.practicePrompt"
+msgstr "Noch keine Dateien?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.warn.noMatch"
 msgstr "Kein Spiel in der Cheat-Datenbank für {platform} passt zu dieser ROM. Identifiziere das Spiel oben. Ein von Hand gewähltes Spiel passt möglicherweise nicht zur Revision dieser ROM."
 
@@ -3315,11 +3270,6 @@ msgstr "Eine Datei, die Patch-Reihenfolge, erwartete Prüfsummen und Ausgabename
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainTitle"
-msgstr "Ein Durchlauf, kein Entpacken von Hand"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.cheats.codesPlaceholder"
 msgstr "Einer pro Zeile oder mit + verbunden"
 
@@ -3400,11 +3350,6 @@ msgstr "Test nach Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainOpen"
-msgstr "Öffne die Disc"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyFiles"
 msgstr "Diese Dateien in Anwenden öffnen."
 
@@ -3445,6 +3390,11 @@ msgstr "oder ROMs und Patches hier ablegen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomOriginal"
+msgstr "Original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.original"
 msgstr "Original"
 
@@ -3457,11 +3407,6 @@ msgstr "Original und Modifiziert haben identischen Inhalt, der Patch würde also
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "Basis-ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomOriginalRom"
-msgstr "Ursprüngliche ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3492,11 +3437,6 @@ msgstr "Andere Spiele"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullInstallGuide"
 msgstr "Weitere Installationsmethoden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomOutput"
-msgstr "Ausgabe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3605,11 +3545,6 @@ msgstr "Patch {index}, {side} {algorithm}, ist fehlerhaft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomPatch"
-msgstr "Patch {n}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Patch {n}"
 
@@ -3697,6 +3632,11 @@ msgstr "Patch-Ergebnis"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyRom"
 msgstr "Dieses ROM patchen. Die Patches fügst du danach hinzu."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomPatched"
+msgstr "Gepatcht"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3997,11 +3937,6 @@ msgstr "Pull-Request-Vorschau"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.faqTitle"
 msgstr "Fragen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainUnpackBody"
-msgstr "RAR, ZIP und 7z, auch verschachtelt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4340,11 +4275,6 @@ msgstr "Stelle die Original-ROM mit einem PPF3-Patch wieder her, der Undo-Daten 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomResult"
-msgstr "Ergebnis"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identify.searchAsYouType"
 msgstr "Die Ergebnisse erscheinen, während Sie tippen - Suchen müssen Sie nicht drücken."
 
@@ -4515,11 +4445,6 @@ msgstr "Spielstand-Dateien"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainCompressBody"
-msgstr "Speichere es als {file}."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.saveSize"
 msgstr "Spielstandgröße"
 
@@ -4665,6 +4590,11 @@ msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomChecked"
+msgstr "SHA-1 geprüft"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.weaveThesis"
 msgstr "Patches bündeln."
 
@@ -4747,11 +4677,6 @@ msgstr ", die dir jemand geschickt hat."
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesSortBy"
 msgstr "Nach {column} sortieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomSource"
-msgstr "Quelle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5160,11 +5085,6 @@ msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange d
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.chainApplyBody"
-msgstr "Die Reihenfolge, die du festlegst, ist die Reihenfolge der Anwendung."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.extensionInfo"
 msgstr "Die Ausgabe-Endung folgt der Auswahl: {headeredExtension} mit Header, {headerlessExtension} ohne."
 
@@ -5182,11 +5102,6 @@ msgstr "Die Patch-Prüfungen passen nicht zu dieser ROM."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "Das Anwenden des Patches ist fehlgeschlagen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomAriaLabel"
-msgstr "Das gepatchte Ergebnis ist als senkrechte Fäden dargestellt. Drei Patches sind der Reihe nach darüber gewebt, mit einem Farbstreifen pro Patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5232,11 +5147,6 @@ msgstr "Die Suche ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateBody"
 msgstr "Die ausgewählten Eingaben scheinen dieselbe ROM zu sein. Als Original-ROM und modifizierte ROM verwenden?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainCheckBody"
-msgstr "Der SHA-1 stimmt mit dem überein, den der Patch erwartet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5542,16 +5452,6 @@ msgstr "ROM ohne Header"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknownPatchOutput"
 msgstr "Unbekannte Patch-Ausgabe ({patch})"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomUnpack"
-msgstr "entpacken"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.chainUnpack"
-msgstr "Entpacke die Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5922,11 +5822,6 @@ msgstr "Deine Dateien bleiben in diesem Browser. Archive und komprimierte Disc-I
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeEdited"
 msgstr "Dein eigenes bearbeitetes ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.eyebrow"
-msgstr "Dein Werkzeugkasten für ROMs und Disc-Images"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

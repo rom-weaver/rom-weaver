@@ -92,6 +92,13 @@
   opacity: 0.45;
   transform: none;
 }
+/* A home route card's button stretches its ::after over the card (home.css).
+   Any transform would make the button that overlay's containing block and
+   shrink it back to the button mid-hover or mid-press, so a click on the card
+   text would miss the link. The card's own press colour is the feedback. */
+.rw-app .btn.home-route-go {
+  transform: none;
+}
 /* The finished run scrolls this button into view (see `RunButton`); the margin is
    what keeps it off the phone dock, which is fixed over the end of the column.
    `--dock-h` is 0 above the dock threshold, so desktop just gets the breathing

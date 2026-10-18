@@ -12,7 +12,7 @@
      fill it rides, where the cream this replaces held 2.4-3.2:1. The mix
      restores that range for every dye lot. */
   --shuttle: color-mix(in srgb, var(--thread-hi) 50%, #fff);
-  /* The hero loom's three patch bands (home-loom-runtime.ts). The bands must stay
+  /* The hero loom's three patch bands (home.css). The bands must stay
      apart at a glance, so they are the accent at three weights against the warp
      rather than three hues. */
   --loom-weft-1: var(--thread);
@@ -109,8 +109,8 @@
 }
 
 /**
- * Register canvas palette properties as colors so getComputedStyle resolves their color expressions.
- * They also follow the interpolated accent colors during a theme transition.
+ * Register the accent-derived dyes as colors, so each resolves once where it is declared
+ * and follows the interpolated accent colors during a theme transition.
  */
 @property --shuttle {
   syntax: "<color>";
