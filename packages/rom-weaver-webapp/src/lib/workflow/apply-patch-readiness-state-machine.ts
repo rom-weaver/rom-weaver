@@ -7,10 +7,11 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
-  /** True for the first patch in the stack when it reads the original ROM. Only that patch's file name
-   * `[crc32:..]` token is an input requirement (the CLI enforces the same); a later patch's input is
-   * usually the previous patch's output, which the token describes. */
-  filenameCrc32Applies?: boolean;
+  /** True for the first patch on `target` (each target is its own engine run) when it reads the
+   * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
+   * enforces the same); a later patch's input is usually the previous patch's output, which the
+   * token describes. */
+  filenameCrc32AppliesTo?: (target: InputAsset) => boolean;
   previousLayout?: StagedSource<TSource>["state"];
   /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
    * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
@@ -325,7 +326,7 @@ const settleApplyPatchTarget = async <TSource>(
           adapters.getWeaveLayoutCrc32?.(target),
           adapters.declaredInputChecks,
           adapters.previousLayout,
-          adapters.filenameCrc32Applies,
+          adapters.filenameCrc32AppliesTo?.(target) ?? false,
         )
       : undefined;
     stage.state.checksumPreflight = preflight;

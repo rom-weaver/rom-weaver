@@ -1755,9 +1755,18 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
-  /** The patch that runs first: a toggled-off patch before it is excluded from the run. */
-  private getFirstEnabledPatch(): StagedSource<TSource> | undefined {
-    return this.patches.find((patch) => !this.disabledPatches.has(patch));
+  /** Whether `stage` runs first on `targetId`: each target is its own engine run, and a toggled-off
+   * patch is excluded from the run. */
+  private isFirstEnabledPatchOn(stage: StagedSource<TSource>, targetId: string | undefined): boolean {
+    const first = this.patches.find(
+      (patch) => !this.disabledPatches.has(patch) && (patch === stage || patch.state.targetInputId === targetId),
+    );
+    return first === stage && !this.disabledPatches.has(stage);
+  }
+
+  /** The patches that currently run first on their target. */
+  private getFirstEnabledPatches(): Set<StagedSource<TSource>> {
+    return new Set(this.patches.filter((patch) => this.isFirstEnabledPatchOn(patch, patch.state.targetInputId)));
   }
 
   private async evaluatePatchReadiness(
@@ -1768,7 +1777,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
-      filenameCrc32Applies: this.getFirstEnabledPatch() === stage && !(inputRef && "patch" in inputRef),
+      filenameCrc32AppliesTo: (target) =>
+        this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>
@@ -1826,11 +1836,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const disabledIndexes = options?.disabledIndexes;
       // A toggle can change which patch runs first, and only that patch's file-name crc32 applies:
       // the patches gaining or losing that role re-run their preflight below.
-      const firstEnabledBefore = this.getFirstEnabledPatch();
+      const firstEnabledBefore = this.getFirstEnabledPatches();
       this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
-      const firstEnabledAfter = this.getFirstEnabledPatch();
+      const firstEnabledAfter = this.getFirstEnabledPatches();
       const firstEnabledMoved = new Set(
-        firstEnabledBefore === firstEnabledAfter ? [] : [firstEnabledBefore, firstEnabledAfter],
+        [...firstEnabledBefore, ...firstEnabledAfter].filter(
+          (patch) => firstEnabledBefore.has(patch) !== firstEnabledAfter.has(patch),
+        ),
       );
       const assets = this.getPatchableInputAssets();
       const pending: Array<{

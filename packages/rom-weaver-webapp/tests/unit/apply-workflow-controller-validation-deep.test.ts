@@ -412,4 +412,36 @@ describe("ApplyWorkflowController.validatePatches", () => {
     expect(run).not.toHaveBeenCalled();
     expect(weaveRomCalls()[0]?.weaveRom).toMatchObject({ status: "unavailable" });
   });
+
+  it("checks the file-name crc32 of the first enabled patch on each target", async () => {
+    const controller = makeController();
+    const input = controller.inputSession?.view as unknown as { preparedInputAssets: Record<string, unknown>[] };
+    const rom = (id: string, crc32: string) => ({
+      checksums: { crc32 },
+      file: { ...patchFile(`${id}.sfc`), filePath: `/work/${id}.sfc` },
+      fileName: `${id}.sfc`,
+      id,
+      kind: "rom",
+      patchable: true,
+      size: 8,
+    });
+    input.preparedInputAssets = [rom("rom-1", "11111111"), rom("rom-2", "22222222")];
+    const tokened = (id: string, target: string) => {
+      const stage = patchStage(id, target);
+      stage.state.requirements = { filenameCrc32: "99999999" };
+      return stage;
+    };
+    // Each target is its own engine run, so b runs first on rom-2 and c second on rom-1.
+    const [a, b, c] = [tokened("a", "rom-1"), tokened("b", "rom-2"), tokened("c", "rom-1")];
+    controller.patches = [a, b, c];
+    mocks.validateApplyPatchTargets.mockResolvedValue(undefined);
+    const status = (stage: Stage) => (stage.state.checksumPreflight as { status?: string } | undefined)?.status;
+
+    await controller.validatePatches();
+    expect([status(a), status(b)]).toEqual(["invalid", "invalid"]);
+    expect(status(c)).not.toBe("invalid");
+
+    await controller.validatePatches({ disabledIndexes: new Set([0]) });
+    expect([status(b), status(c)]).toEqual(["invalid", "invalid"]);
+  });
 });
