@@ -27,6 +27,7 @@ const workflowPages = {
   checksum: "checksum",
   identify: "identify-rom",
   trim: "trim-rom",
+  playlist: "m3u-playlist",
   "ppf-undo": "ppf-undo",
   "save-editor": "save-editor",
   test: "test-rom",

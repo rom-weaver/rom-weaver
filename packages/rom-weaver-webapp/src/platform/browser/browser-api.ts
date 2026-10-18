@@ -14,7 +14,7 @@ import { createSingleFileRomSpecificOutput } from "../../lib/output/output-build
 import { toPublicOutput } from "../../lib/apply/patch-apply-service.ts";
 import type { RomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { createArchiveOutput, createPatchFileFromRuntimeOutput } from "../../lib/output/archive-output-service.ts";
-import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
+import { invokeRomWeaverPlaylistWorker, invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { CheatDatabaseRecord, CheatRecord, ClassifiedCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
@@ -65,6 +65,18 @@ type BrowserPpfUndoInput = {
   outputName: string;
   patch: BrowserSourceRef;
   rom: BrowserSourceRef;
+  signal?: AbortSignal;
+};
+
+type BrowserPlaylistInput = {
+  /** Every file of the game: the discs plus any track files their sheets name. */
+  files: Array<BrowserSourceRef | PublicOutput>;
+  /** Order the discs by the numbers in their names; false keeps `files` order. */
+  sort: boolean;
+  /** A ZIP holding the playlist and its discs; otherwise just the `.m3u`. */
+  archive: boolean;
+  logLevel?: LogLevel;
+  outputName: string;
   signal?: AbortSignal;
 };
 
@@ -574,6 +586,42 @@ const undoPpf = async ({
   }
 };
 
+/**
+ * Build a disc-change playlist (`.m3u`, or a ZIP with the playlist and its discs) with the shared
+ * `playlist` command. Returns the output and the playlist lines in playlist order.
+ */
+const buildPlaylist = async ({ archive, files, logLevel, outputName, signal, sort }: BrowserPlaylistInput) => {
+  // Outputs another tool keeps alive are already runtime-owned; only caller-supplied files need validating.
+  assertPublicSources(files.filter((source): source is BrowserSourceRef => source instanceof Blob));
+  const staged = await browserRuntime.workerIo.stageSources(
+    files.map((source) => ({
+      fallbackFileName: "disc.bin",
+      pathPrefix: "playlist-disc",
+      scope: "apply" as const,
+      source,
+      trace: { logLevel },
+    })),
+  );
+  try {
+    const result = await invokeRomWeaverPlaylistWorker({
+      archive,
+      discFilePaths: staged.map((source) => source.filePath),
+      logLevel,
+      outputName,
+      signal,
+      sort,
+    });
+    const output = await browserRuntime.workerIo.createWorkerOutput(
+      result,
+      outputName,
+      "Playlist did not return a file",
+    );
+    return { entries: result.entries, output };
+  } finally {
+    await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
+  }
+};
+
 // The public browser workflows ARE their UI-agnostic controllers - a thin subclass adds only the
 // browser binding (asset-base config + runtime pre-warm + browserRuntime/source-validation wiring).
 // All staging/run/progress/`subscribe`/`getSnapshot` methods are inherited directly from the
@@ -617,6 +665,7 @@ class ChecksumWorkflow extends ChecksumWorkflowController<BrowserSourceRef> {
 
 export {
   ApplyWorkflow,
+  buildPlaylist,
   ChecksumWorkflow,
   CreateWorkflow,
   getCreatePatchFormatCandidates,

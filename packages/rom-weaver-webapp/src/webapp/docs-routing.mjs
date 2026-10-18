@@ -170,6 +170,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/make-m3u-playlist-browser.md",
+    label: "Make an M3U playlist (browser)",
+    slug: "docs/make-m3u-playlist-browser",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/undo-ppf-browser.md",
     label: "Undo PPF (browser)",
     slug: "docs/undo-ppf-browser",
@@ -225,6 +231,12 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/cli-create",
   }),
   Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Weaves (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({
+    audience: "cli",
+    file: "how-to/cli-playlist.md",
+    label: "Make an M3U playlist (CLI)",
+    slug: "docs/cli-playlist",
+  }),
   Object.freeze({ audience: "cli", file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
   Object.freeze({
     audience: "cli",
@@ -388,6 +400,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/use-mcp": "Setup & offline",
   "docs/checksum-roms-browser": "ROM checks",
   "docs/cli-apply": "Patching & weaves",
+  "docs/cli-playlist": "Conversion & files",
   "docs/cli-bundles": "Patching & weaves",
   "docs/cli-create": "Patching & weaves",
   "docs/cli-save": "Saves",
@@ -411,6 +424,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/identify-and-hash-files": "ROM checks",
   "docs/identify-roms-browser": "ROM checks",
   "docs/install": "Setup & offline",
+  "docs/make-m3u-playlist-browser": "Conversion & files",
   "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",

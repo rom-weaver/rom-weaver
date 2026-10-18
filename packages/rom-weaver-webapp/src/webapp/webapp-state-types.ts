@@ -7,6 +7,7 @@ type WorkflowView =
   | "identify"
   | "trim"
   | "ppf-undo"
+  | "playlist"
   | "save-editor"
   | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
