@@ -154,7 +154,19 @@
       ]
     },
     {
-      "file": "0012-rust-codec-backends.patch",
+      "file": "0012-ciso-block-size-validation.patch",
+      "stage": "source",
+      "reason": "Reject CISO block sizes that are zero, smaller than a sector, or not sector-aligned; a PSP CSO shares the magic and otherwise reaches a divide by zero in read_block.",
+      "upstream": {
+        "status": "unverified",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::ciso::tests::block_reader_rejects_invalid_block_sizes -- --exact"
+      ]
+    },
+    {
+      "file": "0013-rust-codec-backends.patch",
       "stage": "integration",
       "reason": "Select Rust AES/digest backends and flate2 zlib compression/decompression for the workspace WASM build; preserve bounded-output raw-block fallback and validate zlib levels.",
       "upstream": {
@@ -167,7 +179,7 @@
       ]
     },
     {
-      "file": "0013-wasi-path-resolution.patch",
+      "file": "0014-wasi-path-resolution.patch",
       "stage": "integration",
       "reason": "Avoid unavailable WASI canonicalize while retaining native canonicalization and NFS key existence checks.",
       "upstream": {
@@ -180,7 +192,7 @@
       ]
     },
     {
-      "file": "0014-remove-python-bindings.patch",
+      "file": "0015-remove-python-bindings.patch",
       "stage": "integration",
       "reason": "Remove the PyO3 bindings and their feature-gated module, which this workspace never enables.",
       "upstream": {
@@ -192,7 +204,7 @@
       ]
     },
     {
-      "file": "0015-module-paths.patch",
+      "file": "0016-module-paths.patch",
       "stage": "integration",
       "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest paths to crate::nod:: and rom_weaver_containers::nod::. Mechanical; mod.rs appears as a delete and add because patch renames are unsupported.",
       "upstream": {
@@ -204,7 +216,7 @@
       ]
     },
     {
-      "file": "0016-workspace-formatting.patch",
+      "file": "0017-workspace-formatting.patch",
       "stage": "integration",
       "reason": "Apply workspace rustfmt defaults in place of upstream's rustfmt.toml. Formatting only; reproduce with `rustfmt --edition 2024 mod.rs`.",
       "upstream": {
@@ -216,7 +228,7 @@
       ]
     },
     {
-      "file": "0017-workspace-lints.patch",
+      "file": "0018-workspace-lints.patch",
       "stage": "integration",
       "reason": "Allow upstream's collapsible-if and manual multiple-of style under the workspace clippy policy.",
       "upstream": {
@@ -228,7 +240,7 @@
       ]
     },
     {
-      "file": "0018-dead-code-cleanup.patch",
+      "file": "0019-dead-code-cleanup.patch",
       "stage": "integration",
       "reason": "Remove unused preloader fields, shutdown and commented-out thread tuning, unused NKit flags and a stale WIP comment; document the read-ahead floor and cache sizing.",
       "upstream": {
@@ -240,7 +252,7 @@
       ]
     },
     {
-      "file": "0019-test-hooks.patch",
+      "file": "0020-test-hooks.patch",
       "stage": "integration",
       "reason": "Attach the project's nod unit-test modules and add inline WIA/RVZ header, disc and block-reader validation tests.",
       "upstream": {

@@ -65,6 +65,10 @@ impl BlockReaderCISO {
         if header.magic != CISO_MAGIC {
             return Err(Error::DiscFormat("Invalid CISO magic".to_string()));
         }
+        let block_size = header.block_size.get();
+        if block_size < SECTOR_SIZE as u32 || block_size % SECTOR_SIZE as u32 != 0 {
+            return Err(Error::DiscFormat("Invalid block size for CISO".to_string()));
+        }
 
         // Build block map
         let mut block_map = <[u16; CISO_MAP_SIZE]>::new_box_zeroed()?;

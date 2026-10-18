@@ -1825,6 +1825,72 @@ mod tests {
     }
 
     #[test]
+    fn cso_v1_extract_round_trips_deflate_raw_and_aligned_blocks() {
+        let temp_dir = temp_dir_path("cso-v1-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let block = TEST_CSO_BLOCK_BYTES;
+        let alignment = 2_u32;
+        // Even blocks are deflated, odd blocks are stored raw (high index bit set).
+        let source = (0..block * 5 + 77)
+            .map(|index| ((index * 2654435761_usize) >> 13) as u8)
+            .collect::<Vec<_>>();
+        let table_len = 24 + (source.len().div_ceil(block) + 1) * 4;
+        let mut body = vec![0_u8; table_len.next_multiple_of(4) - table_len];
+        let mut index = Vec::new();
+        for (number, chunk) in source.chunks(block).enumerate() {
+            let position = ((table_len + body.len()) >> alignment) as u32;
+            if number % 2 == 1 {
+                index.push(position | 0x8000_0000);
+                body.extend_from_slice(chunk);
+            } else {
+                let mut encoder = DeflateEncoder::new(Vec::new(), DeflateCompression::default());
+                encoder.write_all(chunk).expect("deflate block");
+                index.push(position);
+                body.extend_from_slice(&encoder.finish().expect("finish block"));
+            }
+            body.resize(body.len().next_multiple_of(4), 0);
+        }
+        index.push(((table_len + body.len()) >> alignment) as u32);
+        let mut image = b"CISO".to_vec();
+        image.extend_from_slice(&24_u32.to_le_bytes());
+        image.extend_from_slice(&(source.len() as u64).to_le_bytes());
+        image.extend_from_slice(&(block as u32).to_le_bytes());
+        image.extend_from_slice(&[1, alignment as u8, 0, 0]);
+        for entry in index {
+            image.extend_from_slice(&entry.to_le_bytes());
+        }
+        image.extend_from_slice(&body);
+        let cso = temp_dir.join("disc.cso");
+        fs::write(&cso, &image).expect("write v1 cso");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let output_dir = temp_dir.join("out");
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: cso,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("extract v1 cso");
+        assert_eq!(
+            fs::read(output_dir.join("disc.iso")).expect("read extracted output"),
+            source
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn wbfs_extract_round_trips_to_iso_output() {
         let temp_dir = temp_dir_path("wbfs-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -3344,6 +3410,34 @@ mod tests {
         let recommendation = registry.recommend_compress_format(&path);
         assert_eq!(recommendation.format_name, "7z");
         assert_eq!(recommendation.reason, "fallback-7z-lzma2");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn recommend_compress_format_survives_cso_v1_with_zero_header_size() {
+        // The original v1 `ciso` tool writes header size 0, which GameCube CISO reads as its
+        // block size; the nod fallback must reject it instead of dividing by zero.
+        let block = 2048_usize;
+        let blocks = 64;
+        let table_len = 24 + (blocks + 1) * 4;
+        let mut image = b"CISO".to_vec();
+        image.extend_from_slice(&0_u32.to_le_bytes());
+        image.extend_from_slice(&((block * blocks) as u64).to_le_bytes());
+        image.extend_from_slice(&(block as u32).to_le_bytes());
+        image.extend_from_slice(&[1, 0, 0, 0]);
+        for number in 0..=blocks {
+            let entry = (table_len + number * block) as u32;
+            let flag = if number < blocks { 0x8000_0000 } else { 0 };
+            image.extend_from_slice(&(entry | flag).to_le_bytes());
+        }
+        image.resize(table_len + block * blocks, 0x5a);
+        let path = temp_file_path_with_extension("recommend-cso-v1", "cso");
+        fs::write(&path, &image).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "7z");
 
         let _ = fs::remove_file(path);
     }

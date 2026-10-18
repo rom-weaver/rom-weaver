@@ -70,11 +70,52 @@ struct CsoReader<R> {
     logical_bytes: u64,
     block_size: usize,
     alignment: u8,
+    version: u8,
     source_size: u64,
     index: Vec<u32>,
 }
 
+/// CSO v0/v1 images store raw-deflate blocks; v2 images use the length-prefixed LZ4 layout.
+fn is_deflate_version(version: u8) -> bool {
+    version <= 1
+}
+
 type CsoImageReader = CsoReader<CsoSourceReader>;
+
+struct CsoHeader {
+    uncompressed_size: u64,
+    block_size: u32,
+    version: u8,
+    alignment: u8,
+}
+
+impl CsoHeader {
+    fn parse(bytes: &[u8; 24]) -> io::Result<Self> {
+        let invalid =
+            |message: &str| io::Error::new(io::ErrorKind::InvalidData, message.to_owned());
+        if bytes[0..4] != CSO_SIGNATURE {
+            return Err(invalid("Invalid CSO header"));
+        }
+        let version = bytes[20];
+        if version > 2 {
+            return Err(invalid("Unsupported CSO version"));
+        }
+        // The original v1 `ciso` tool leaves the header size at 0; v2 requires 24.
+        // GameCube CISO stores its block size here, so it is still rejected.
+        let header_size = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        if header_size != 24 && !(header_size == 0 && is_deflate_version(version)) {
+            return Err(invalid("Invalid CSO header"));
+        }
+        let mut size = [0; 8];
+        size.copy_from_slice(&bytes[8..16]);
+        Ok(Self {
+            uncompressed_size: u64::from_le_bytes(size),
+            block_size: u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]),
+            version,
+            alignment: bytes[21],
+        })
+    }
+}
 
 impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
     fn invalid(message: &str) -> io::Error {
@@ -84,8 +125,8 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
     fn new(mut source: R) -> io::Result<Self> {
         let mut bytes = [0; 24];
         source.read(0, &mut bytes)?;
-        let header = ciso::layout::CSOHeader::deserialize::<io::Error>(&bytes)
-            .map_err(|error| Self::invalid(&error.to_string()))?;
+        // The `ciso` header parser rejects every version except 2, so the header is read here.
+        let header = CsoHeader::parse(&bytes)?;
         let block_size = header.block_size as usize;
         if block_size == 0 || block_size > 16 * 1024 * 1024 || header.alignment > 31 {
             return Err(Self::invalid("invalid CSO block size or alignment"));
@@ -125,6 +166,7 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
             logical_bytes: header.uncompressed_size,
             block_size,
             alignment: header.alignment,
+            version: header.version,
             source_size,
             index,
         })
@@ -154,7 +196,31 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
             let block_len = (self.logical_bytes - block as u64 * self.block_size as u64)
                 .min(self.block_size as u64) as usize;
             let count = output.len().min(block_len - within);
-            if entry & 0x8000_0000 == 0 {
+            if is_deflate_version(self.version) {
+                // In v0/v1 the high index bit marks a block stored without compression.
+                if entry & 0x8000_0000 != 0 {
+                    if end - start < block_len as u64 {
+                        return Err(Self::invalid("CSO raw block is truncated"));
+                    }
+                    self.source
+                        .read(start + within as u64, &mut output[..count])?;
+                } else {
+                    let stored_len = usize::try_from(end - start)
+                        .ok()
+                        .filter(|len| {
+                            *len != 0 && *len <= self.block_size + self.block_size / 255 + 64
+                        })
+                        .ok_or_else(|| Self::invalid("invalid CSO deflate block length"))?;
+                    let mut stored = vec![0; stored_len];
+                    self.source.read(start, &mut stored)?;
+                    let mut decoded = vec![0; block_len];
+                    flate2::read::DeflateDecoder::new(stored.as_slice())
+                        .read_exact(&mut decoded)
+                        .map_err(|_| Self::invalid("invalid CSO deflate block"))?;
+                    trace!(block, stored_len, block_len, "cso v1 deflate block");
+                    output[..count].copy_from_slice(&decoded[within..within + count]);
+                }
+            } else if entry & 0x8000_0000 == 0 {
                 if end - start < block_len as u64 {
                     return Err(Self::invalid("CSO raw block is truncated"));
                 }
@@ -530,6 +596,99 @@ mod reader_regressions {
         }
         bytes.extend_from_slice(payload);
         bytes
+    }
+
+    /// Encodes `data` as a CSO v1 image: odd blocks are stored raw (high index bit), even
+    /// blocks are raw deflate, and every block starts on a `1 << alignment` boundary.
+    fn v1_image(data: &[u8], block_size: usize, alignment: u8) -> Vec<u8> {
+        let unit = 1_usize << alignment;
+        let blocks = data.len().div_ceil(block_size);
+        let table_len = 24 + (blocks + 1) * 4;
+        let mut body = vec![0; table_len.next_multiple_of(unit) - table_len];
+        let mut index = Vec::new();
+        for (number, chunk) in data.chunks(block_size).enumerate() {
+            let position = (table_len + body.len()) >> alignment;
+            let (stored, flag) = if number % 2 == 1 {
+                (chunk.to_vec(), 0x8000_0000_u32)
+            } else {
+                let mut encoder =
+                    flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(chunk).expect("deflate chunk");
+                (encoder.finish().expect("finish deflate"), 0)
+            };
+            index.push(position as u32 | flag);
+            body.extend_from_slice(&stored);
+            body.resize(
+                (table_len + body.len()).next_multiple_of(unit) - table_len,
+                0,
+            );
+        }
+        index.push(((table_len + body.len()) >> alignment) as u32);
+        let mut bytes = Vec::from(*b"CISO");
+        bytes.extend_from_slice(&24_u32.to_le_bytes());
+        bytes.extend_from_slice(&(data.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&(block_size as u32).to_le_bytes());
+        bytes.extend_from_slice(&[1, alignment, 0, 0]);
+        for entry in index {
+            bytes.extend_from_slice(&entry.to_le_bytes());
+        }
+        bytes.extend_from_slice(&body);
+        bytes
+    }
+
+    fn v1_payload(len: usize) -> Vec<u8> {
+        (0..len).map(|i| ((i / 7) ^ (i % 5)) as u8).collect()
+    }
+
+    #[test]
+    fn cso_v1_reads_deflate_and_raw_blocks_with_alignment() {
+        for alignment in [0_u8, 2, 5] {
+            for len in [2048 * 4, 2048 * 4 + 100] {
+                let data = v1_payload(len);
+                let bytes = v1_image(&data, 2048, alignment);
+                let mut reader =
+                    CsoReader::new(std::io::Cursor::new(bytes)).expect("valid v1 image");
+                assert_eq!(reader.file_size(), len as u64);
+                let mut output = vec![0; len];
+                reader.read_offset(0, &mut output).expect("full v1 read");
+                assert_eq!(output, data, "alignment {alignment} len {len}");
+                let mut window = [0; 3000];
+                reader
+                    .read_offset(1000, &mut window)
+                    .expect("cross-block read");
+                assert_eq!(window, data[1000..4000]);
+            }
+        }
+    }
+
+    #[test]
+    fn cso_v1_rejects_corrupt_deflate_and_unknown_versions() {
+        let data = v1_payload(2048);
+        let mut bytes = v1_image(&data, 2048, 0);
+        let start = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
+        bytes[start..start + 4].copy_from_slice(&[0xff; 4]);
+        let mut reader = CsoReader::new(std::io::Cursor::new(bytes)).expect("geometry is valid");
+        assert!(reader.read_offset(0, &mut [0; 2048]).is_err());
+        let mut bytes = v1_image(&data, 2048, 0);
+        bytes[20] = 3;
+        assert!(CsoReader::new(std::io::Cursor::new(bytes)).is_err());
+    }
+
+    #[test]
+    fn cso_header_size_zero_is_accepted_only_for_v1() {
+        let data = v1_payload(2048 * 3);
+        let mut bytes = v1_image(&data, 2048, 0);
+        bytes[4..8].copy_from_slice(&0_u32.to_le_bytes());
+        let mut reader =
+            CsoReader::new(std::io::Cursor::new(bytes.clone())).expect("v1 header size 0");
+        let mut output = vec![0; data.len()];
+        reader.read_offset(0, &mut output).expect("full v1 read");
+        assert_eq!(output, data);
+        bytes[20] = 2;
+        assert!(CsoReader::new(std::io::Cursor::new(bytes.clone())).is_err());
+        bytes[20] = 1;
+        bytes[4..8].copy_from_slice(&0x0020_0000_u32.to_le_bytes());
+        assert!(CsoReader::new(std::io::Cursor::new(bytes)).is_err());
     }
 
     #[test]

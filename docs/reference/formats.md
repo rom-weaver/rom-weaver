@@ -85,7 +85,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 | Bzip2 | `bzip2` | `.bz2` | ✅ | ✅ | ❌ |
 | XZ | `lzma`, `lzma2` | `.xz` | ✅ | ✅ | ❌ |
 | Zstandard | `zstd`, `zstandard` | `.zst` | ✅ | ✅ | ❌ |
-| CSO | `ciso` | `.cso`, `.ciso` | ✅ | ✅ | ❌ |
+| CSO | `ciso` | `.cso`, `.ciso` | ✅ | ✅ ³ | ❌ |
 | PBP | none | `.pbp` | ✅ | ✅ | ❌ |
 | CHD | `chd-cd`, `chd-gd`, `chd-dvd`, `chd-raw`, `chd-hd`, `chd-av`, `chd-ld` | `.chd` | ✅ | ✅ ² | ✅ ² |
 | GCZ | none | `.gcz` | ✅ | ✅ | ❌ |
@@ -100,6 +100,8 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 > ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO. Detailed `probe` reports and XISO creation are not supported.
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
+>
+> ³ CSO v1 (raw-deflate blocks) images extract. v2 images extract only in the `ciso` crate's layout (length-prefixed LZ4 blocks); `maxcso --format=cso2` output is not read. GameCube `.ciso` files share the extension but use a different layout and are not read as CSO.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 
