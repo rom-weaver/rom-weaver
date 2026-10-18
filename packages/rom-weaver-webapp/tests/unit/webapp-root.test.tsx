@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
+import { APP_VERSION } from "../../src/webapp/build-version.ts";
 import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +14,7 @@ import { resolveThreads, selectViewWithTransition, WebappRoot } from "../../src/
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 
 const mocks = vi.hoisted(() => ({
+  mastheadFails: false,
   queryOfflineReadyState: vi.fn(async () => null),
   requestEmulatorStartFromUserAction: vi.fn(),
   scheduleOfflineWarmup: vi.fn(() => () => undefined),
@@ -29,6 +31,18 @@ vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", async (importOriginal) 
     ...actual,
     queryOfflineReadyState: mocks.queryOfflineReadyState,
     scheduleOfflineWarmup: mocks.scheduleOfflineWarmup,
+  };
+});
+
+// Lets a test fail a part of the page outside the panels, which only the root boundary covers.
+vi.mock("../../src/webapp/components/shell.tsx", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/webapp/components/shell.tsx")>();
+  return {
+    ...actual,
+    Masthead: (props: Parameters<typeof actual.Masthead>[0]) => {
+      if (mocks.mastheadFails) throw new TypeError("Failed to fetch dynamically imported module");
+      return <actual.Masthead {...props} />;
+    },
   };
 });
 
@@ -100,12 +114,12 @@ const renderRoot = async ({
   const state = baseState();
   state.settings.detailedViewEnabled = detailedViewEnabled;
   if (language) state.settings.language = language;
-  const view = render(
+  const root = (confirmationDialog = createEmptyConfirmationDialogState()) => (
     <WebappRoot
       actions={actions}
       assetBaseUrl={assetBaseUrl}
       workflowEntry={workflowEntry}
-      confirmationDialog={createEmptyConfirmationDialogState()}
+      confirmationDialog={confirmationDialog}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
         serviceWorkerCache: { updateReady },
@@ -114,9 +128,13 @@ const renderRoot = async ({
       serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus, updateReady }}
       state={{ ...state, currentView, settingsDialogOpen }}
       urlSession={null}
-    />,
+    />
   );
-  return { ...view, called };
+  const view = render(root());
+  /** Re-renders as the controller does after `requestConfirmation`. */
+  const rerenderWithConfirmation = (confirmationDialog: WebappRootProps["confirmationDialog"]) =>
+    view.rerender(root(confirmationDialog));
+  return { ...view, called, rerenderWithConfirmation };
 };
 
 const fileDragEvent = (type: string, target: EventTarget = document, files: File[] = []) => {
@@ -143,6 +161,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 /** A nav row by its visible label, from whichever layout the test names. */
@@ -409,34 +428,156 @@ describe("the unified dialog", () => {
   });
 });
 
+describe("the full-page load notice", () => {
+  afterEach(() => {
+    mocks.mastheadFails = false;
+  });
+
+  it("still shows the reload confirmation the full-page notice asks for", async () => {
+    // React reports the caught error to the console; the assertion is on what stays rendered.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.mastheadFails = true;
+    const { called, container, rerenderWithConfirmation } = await renderRoot({ updateReady: true });
+
+    await waitFor(() => expect(container.querySelector("main.workbench.is-not-found [role=alert]")).not.toBeNull());
+    fireEvent.click(within(container).getByRole("button", { name: "Reload" }));
+    expect(called("onReloadUpdate")).toHaveBeenCalledTimes(1);
+    // With staged work, applying the update asks first (webapp.ts `confirmReloadUpdate`).
+    rerenderWithConfirmation({
+      ...createEmptyConfirmationDialogState(),
+      cancelLabel: "Stay here",
+      confirmLabel: "Reload now",
+      message: "Staged files will be lost.",
+      open: true,
+      title: "Reload and lose changes?",
+    });
+
+    // The dialog may portal out of the root container.
+    expect(within(document.body).getByRole("button", { name: "Reload now" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Reload and lose changes?");
+  });
+});
+
 describe("the update banner", () => {
-  it("remembers a dismissal for this build", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-    const banner = container.querySelector(".reveal.is-open .updates.update-ready");
-    expect(banner).not.toBeNull();
+  const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
+  const readyBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner.update-ready");
+  const updatedBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner:not(.update-ready)");
+  // Lets the lazy banner and its changelog fetch settle before asserting it stayed shut.
+  const settleBanner = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
-    fireEvent.click(container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-
-    expect(container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
-    expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: () =>
+          Promise.resolve([
+            {
+              date: "2026-07-29T00:00:00Z",
+              hash: "release",
+              release: {
+                changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+                notes: [
+                  {
+                    groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
+                    version: APP_VERSION,
+                  },
+                ],
+                repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+                truncated: false,
+                version: APP_VERSION,
+              },
+              subject: "release",
+            },
+          ]),
+        ok: true,
+      }),
+    );
   });
 
-  it("stays dismissed on the next mount of the same build", async () => {
-    const first = await renderRoot({ updateReady: true });
-    fireEvent.click(first.container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-    cleanup();
+  afterEach(() => vi.unstubAllGlobals());
 
-    const second = await renderRoot({ updateReady: true });
+  describe("with a deploy waiting", () => {
+    it("remembers a dismissal for this build", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
 
-    expect(second.container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(readyBanner(container)).toBeNull();
+      expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
+    });
+
+    it("stays dismissed on the next mount of the same build", async () => {
+      const first = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(first.container)).not.toBeNull());
+      fireEvent.click(readyBanner(first.container)?.querySelector(".banner-x") as HTMLButtonElement);
+      cleanup();
+
+      const second = await renderRoot({ updateReady: true });
+      await settleBanner();
+
+      expect(readyBanner(second.container)).toBeNull();
+    });
+
+    it("sends See what's new to the whats-new route", async () => {
+      const { called, container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
   });
 
-  it("sends its What's new link to the whats-new route", async () => {
-    const { called, container } = await renderRoot({ updateReady: true });
+  describe("after an update", () => {
+    beforeEach(() => {
+      window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    });
 
-    fireEvent.click(container.querySelector(".updates.update-ready .updates-ver") as HTMLButtonElement);
+    it("tells a returning visitor what changed and opens What's new", async () => {
+      const { called, container } = await renderRoot();
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Shiny highlight"));
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
+
+    it("records the running version once dismissed", async () => {
+      const { container } = await renderRoot();
+      await waitFor(() => expect(updatedBanner(container)).not.toBeNull());
+
+      fireEvent.click(updatedBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+    });
+
+    it("counts reading What's new as seeing the update", async () => {
+      const { container } = await renderRoot({ currentView: "whats-new" });
+
+      await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
+      await settleBanner();
+      expect(updatedBanner(container)).toBeNull();
+    });
+
+    it("waits behind a deploy that is ready to load, then takes the banner once it is dismissed", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Updated from v0.0.1"));
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+    });
   });
 });
 
@@ -879,6 +1020,7 @@ describe("the phone dock", () => {
 
 describe("development offline status", () => {
   it("forces every display state and restores the actual status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     vi.stubEnv("DEV", true);
     vi.stubEnv("MODE", "development");
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
@@ -893,11 +1035,13 @@ describe("development offline status", () => {
     for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
       fireEvent.change(select, { target: { value } });
       expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
-      expect(container.querySelector(".reveal.is-open .update-ready") !== null).toBe(value === "update");
       if (value === "update") {
-        fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+        await waitFor(() => expect(container.querySelector(".reveal.is-open .update-ready")).not.toBeNull());
+        fireEvent.click(container.querySelector(".update-banner .banner-x") as HTMLButtonElement);
         expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
         expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeNull();
+      } else {
+        expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
       }
     }
     fireEvent.change(select, { target: { value: "actual" } });

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider, useUiLocalizer } from "../../../src/public/react/settings-context.tsx";
@@ -225,6 +225,24 @@ describe("ChangelogPanel pending update", () => {
     const update = await renderUpdate();
 
     expect(await update.findByRole("button", { name: "Reload now" })).toBeTruthy();
+  });
+
+  it("records the incoming release on reload, since the notes above describe it", async () => {
+    window.localStorage.clear();
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ summary: "Shiny release feature" }])]),
+        subject: "release",
+      },
+    ]);
+    const update = await renderUpdate();
+
+    fireEvent.click(await update.findByRole("button", { name: "Reload now" }));
+
+    expect(window.localStorage.getItem("rom-weaver-reloading-into-version")).toBe("9.9.9");
+    expect(window.localStorage.getItem("rom-weaver-last-seen-version")).toBeNull();
   });
 
   it("stays out of the way when no update is waiting", async () => {
@@ -463,5 +481,60 @@ describe("ChangelogPanel pending update", () => {
       `${REPOSITORY_URL}/releases/tag/v9.9.9`,
     );
     expect(document.querySelector(`a[href="${REPOSITORY_URL}/commit/v9.9.9"]`)).toBeNull();
+  });
+});
+
+describe("ChangelogPanel after an update", () => {
+  const mockReleases = () =>
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf(APP_VERSION, [
+          noteOf(APP_VERSION, [{ summary: "running release" }], "Highlights"),
+          noteOf("0.0.2", [{ summary: "skipped release" }], "Highlights"),
+          noteOf("0.0.1", [{ summary: "last seen release" }], "Highlights"),
+        ]),
+        subject: "release",
+      },
+    ]);
+  const releaseSections = async (since?: { from?: string }) => {
+    const Panel = () => <ChangelogPanel active localizer={useUiLocalizer()} since={since} />;
+    const { container } = render(withSettings(<Panel />));
+    await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+    return [...container.querySelectorAll<HTMLDetailsElement>(".rel")].map((section) => ({
+      marked: section.classList.contains("is-new") && within(section).queryByText("New") !== null,
+      open: section.open,
+    }));
+  };
+
+  it("marks and opens every release since the one last seen", async () => {
+    mockReleases();
+
+    expect(await releaseSections({ from: "0.0.1" })).toEqual([
+      { marked: true, open: true },
+      { marked: true, open: true },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("marks only the running release when no earlier version was recorded", async () => {
+    mockReleases();
+
+    expect(await releaseSections({})).toEqual([
+      { marked: true, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("marks nothing without an update", async () => {
+    mockReleases();
+
+    expect(await releaseSections()).toEqual([
+      { marked: false, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
   });
 });

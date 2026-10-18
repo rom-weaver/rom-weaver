@@ -24,7 +24,8 @@ import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
 import { loadGuideRoutes } from "../../src/webapp/find-index.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
-import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
+import { Masthead } from "../../src/webapp/components/shell.tsx";
+import { UpdateBannerView } from "../../src/webapp/components/update-banner.tsx";
 import {
   getDefaultSettings,
   getSettingsUiState,
@@ -774,11 +775,32 @@ const openAllDrawers = async (root) => {
 };
 
 // ── Banners ──────────────────────────────────────────────────────────────────
+// Both kinds of the update banner, with a highlight long enough to clamp.
+const BANNER_HIGHLIGHT =
+  "The home page's first screen now has a single Choose files button, a link to patch a practice ROM step by step, and a labeled diagram showing how patches are woven into a game";
 const Banners = () =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenWhatsNew: noop, open: true })),
+    createElement(
+      "div",
+      { className: "rw-app" },
+      createElement(UpdateBannerView, {
+        highlight: BANNER_HIGHLIGHT,
+        onDismiss: noop,
+        onOpenWhatsNew: noop,
+        onReload: noop,
+        open: true,
+        title: "v0.23.0 is ready",
+      }),
+      createElement(UpdateBannerView, {
+        highlight: BANNER_HIGHLIGHT,
+        onDismiss: noop,
+        onOpenWhatsNew: noop,
+        open: true,
+        title: "Updated from v0.21.0 to v0.22.2",
+      }),
+    ),
   );
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────

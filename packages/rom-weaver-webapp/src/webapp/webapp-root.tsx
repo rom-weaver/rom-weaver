@@ -60,9 +60,13 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
+import { LoadErrorBoundary } from "./components/load-error-boundary.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
+import { Masthead } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
+// Static, unlike the routes: a deploy that is waiting has already replaced
+// the old hashed chunks on the host, so a lazy banner could no longer load.
+import { UpdateBanner, type UpdateBannerKind } from "./components/update-banner.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
@@ -74,6 +78,7 @@ import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import { readUpdateDismissed, writeUpdateDismissed } from "./update-dismissal.ts";
 import { useOfflineStatus } from "./use-offline-status.ts";
+import { useUpdatedSince } from "./use-updated-since.ts";
 import { isFileDragTransfer, isInsideLocalDropZone, usePageDragging } from "./use-page-drag.ts";
 import { loadLogDialog, loadSettingsPanel, useUnifiedDialog } from "./use-unified-dialog.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
@@ -508,6 +513,26 @@ function WebappRoot({
     );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
+  const updateReadyOpen =
+    previewRuntimeState === null
+      ? pageUpdate.ready && !updateDismissed
+      : previewRuntimeState === "update" && !previewUpdateDismissed;
+  const updatedSince = useUpdatedSince(state.currentView);
+  // A waiting deploy takes the banner first; reloading into it announces both updates at once.
+  let updateBannerKind: UpdateBannerKind | null = updatedSince.announce ? "updated" : null;
+  if (updateReadyOpen) updateBannerKind = "ready";
+  const dismissUpdateBanner = () => {
+    if (updateBannerKind === "updated") {
+      updatedSince.acknowledge();
+      return;
+    }
+    if (previewRuntimeState !== null) {
+      setPreviewUpdateDismissed(true);
+      return;
+    }
+    setUpdateDismissed(true);
+    writeUpdateDismissed();
+  };
   const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -924,6 +949,8 @@ function WebappRoot({
     state.settingsDialogOpen,
   ]);
 
+  // A chunk usually fails to load because a deploy replaced it, so apply the waiting update when there is one.
+  const reloadAfterLoadFailure = () => (pageUpdate.ready ? actions.onReloadUpdate() : window.location.reload());
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
       /* A named section is already a region; it takes its name from the nav
@@ -958,16 +985,19 @@ function WebappRoot({
           </div>
         )}
         <div className="workflow-body">
-          {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
-          <Suspense
-            fallback={
-              <h1 className="sr-only">
-                {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
-              </h1>
-            }
-          >
-            {form}
-          </Suspense>
+          {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}
+          <LoadErrorBoundary area={view} onReload={reloadAfterLoadFailure}>
+            {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
+            <Suspense
+              fallback={
+                <h1 className="sr-only">
+                  {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
+                </h1>
+              }
+            >
+              {form}
+            </Suspense>
+          </LoadErrorBoundary>
         </div>
       </section>
     ) : null;
@@ -992,249 +1022,253 @@ function WebappRoot({
         className={`rw-app${pageDragging ? " rw-page-dragging" : ""}${dropRouting ? " rw-drop-routing" : ""}`}
         id="column"
       >
-        <div className="app">
-          <Masthead
-            homeHref={resolvedAssetBaseUrl}
-            channelBadge={CHANNEL_BADGE}
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            currentTab={notFound ? "" : state.currentView}
-            docsSlug={docsSlug}
-            donateHref={DONATE_URL}
-            githubHref={GITHUB_URL}
-            onAccentChange={actions.onAccentChange}
-            commitsSinceVersion={COMMITS_SINCE_VERSION}
-            dirty={Boolean(DIRTY_HASH)}
-            onOpenWhatsNew={openWhatsNew}
-            onOpenAbout={openAboutTab}
-            onOpenLog={openLogsTab}
-            onOpenStatus={openStatusTab}
-            onOpenStorage={openStorageTab}
-            onPreloadLog={preloadLogDialog}
-            onOpenSettings={() => openSettingsTab()}
-            onOpenSettingsField={openSettingsTab}
-            onIdentifyQuery={openIdentifyLookup}
-            serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            offlineProgress={previewOfflineProgress}
-            previewRuntimeState={previewRuntimeState}
-            updateReady={pageUpdate.ready}
-            version={APP_VERSION}
-            versionTitle={`v${APP_BUILD_VERSION}`}
-            onSelectTab={handleSelectTab}
-            tabs={mastheadTabs}
-          />
-          <UpdateBanner
-            onDismiss={() => {
-              if (previewRuntimeState !== null) {
-                setPreviewUpdateDismissed(true);
-                return;
-              }
-              setUpdateDismissed(true);
-              writeUpdateDismissed();
-            }}
-            onOpenWhatsNew={openWhatsNew}
-            onReload={actions.onReloadUpdate}
-            open={
-              previewRuntimeState === null
-                ? pageUpdate.ready && !updateDismissed
-                : previewRuntimeState === "update" && !previewUpdateDismissed
-            }
-          />
-          <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
-          <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
-          <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
-            {notFound ? (
-              <NotFoundPage assetBaseUrl={resolvedAssetBaseUrl} onSelectTab={handleSelectTab} />
-            ) : (
-              <>
-                {isViewMounted("home") ? (
-                  // `panel` is what puts this in the workbench's shared grid cell
-                  // (banners.css); without it the drop veil takes row 1 and the
-                  // landing page starts a veil's height down the page.
-                  <div className="panel" hidden={state.currentView !== "home"}>
-                    <Suspense fallback={null}>
-                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeFiles} />
-                    </Suspense>
-                  </div>
-                ) : null}
-                {workflowPanel(
-                  "patcher",
-                  <ApplyPatchRoute
-                    cheatsPage={workflowEntry === "apply-cheats"}
-                    weaveSession={weaveSession}
-                    onWeavePackageChange={actions.onPatcherWeavePackageChange}
-                    onInputsChange={actions.onPatcherInputsChange}
-                    onPatchesChange={actions.onPatcherPatchesChange}
-                    onSelectTab={handleSelectTab}
-                    onSelectView={() => handleSelectTab("test")}
-                    onSettingsChange={actions.onPatcherSettingsChange}
-                    pageDrop={pageDropFor("patcher")}
-                    romLookupRequest={applyRomLookupRequest}
-                    startup={state.startup}
-                  />,
-                )}
-                {workflowPanel(
-                  "weave",
-                  <WeaveRoute
-                    mode="weave"
-                    weaveSession={weaveSession}
-                    onWeavePackageChange={actions.onPatcherWeavePackageChange}
-                    onInputsChange={actions.onPatcherInputsChange}
-                    onPatchesChange={actions.onPatcherPatchesChange}
-                    onSelectTab={handleSelectTab}
-                    onSelectView={() => handleSelectTab("test")}
-                    onSettingsChange={actions.onPatcherSettingsChange}
-                    pageDrop={pageDropFor("weave")}
-                    startup={state.startup}
-                  />,
-                )}
-                {workflowPanel(
-                  "creator",
-                  <CreatePatchRoute
-                    entry={creatorEntry}
-                    onModifiedChange={actions.onCreatorModifiedChange}
-                    onOriginalChange={actions.onCreatorOriginalChange}
-                    onPatchTypeChange={actions.onCreatorPatchTypeChange}
-                    onSelectTab={handleSelectTab}
-                    onSettingsChange={actions.onCreatorSettingsChange}
-                    pageDrop={pageDropFor("creator")}
-                  />,
-                )}
-                {workflowPanel(
-                  "docs",
-                  <DocsPageRoute active={state.currentView === "docs"} onSelectTab={handleSelectTab} slug={docsSlug} />,
-                )}
-                {workflowPanel(
-                  "whats-new",
-                  <WhatsNewPageRoute
-                    active={state.currentView === "whats-new"}
-                    onReload={actions.onReloadUpdate}
-                    updateReady={pageUpdate.ready}
-                  />,
-                )}
-                {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
-                {workflowPanel(
-                  "compress",
-                  <CompressRouteForm
-                    onSessionChange={actions.onCompressSessionChange}
-                    pageDrop={pageDropFor("compress")}
-                  />,
-                )}
-                {workflowPanel(
-                  "identify",
-                  <IdentifyRouteForm
-                    lookupRequest={identifyLookupRequest}
-                    onLookupResultChange={carryIdentifyResultToApply}
-                    onUseFilesInApply={(files) => deliverDrop("patcher", files)}
-                    onSelectTab={handleSelectTab}
-                    pageDrop={pageDropFor("identify")}
-                  />,
-                )}
-                {workflowPanel("checksum", <ChecksumRouteForm pageDrop={pageDropFor("checksum")} />)}
-                {workflowPanel(
-                  "test",
-                  <EmulatorTestRoute active={state.currentView === "test"} pageDrop={pageDropFor("test")} />,
-                )}
-                {workflowPanel(
-                  "trim",
-                  <TrimPatchRoute
-                    onOutputFormatChange={actions.onTrimOutputFormatChange}
-                    onSelectTab={handleSelectTab}
-                    onSettingsChange={actions.onTrimSettingsChange}
-                    onSourceChange={actions.onTrimSourceChange}
-                    pageDrop={pageDropFor("trim")}
-                  />,
-                )}
-                {workflowPanel(
-                  "ppf-undo",
-                  <PpfUndoRouteForm
-                    onSessionChange={actions.onPpfUndoSessionChange}
-                    pageDrop={pageDropFor("ppf-undo")}
-                  />,
-                )}
-                {workflowPanel(
-                  "save-editor",
-                  <SaveEditorRouteForm
-                    onSessionChange={actions.onSaveEditorSessionChange}
-                    onSelectTab={handleSelectTab}
-                    pageDrop={pageDropFor("save-editor")}
-                  />,
-                )}
-              </>
-            )}
-            <DropVeil dragging={pageDragging} routing={dropRouting} />
-          </main>
-          <PageFooter />
-          <span className="shell-threads-identity" hidden />
-          {/* the dock is fixed, so the column reserves its height through the one
-              variable masthead.css raises below the dock threshold */}
-          <div aria-hidden="true" className="dock-pad" />
-        </div>
-        <ActivityFinishMarker />
-        {logOpen ? (
-          <Suspense fallback={null}>
-            <LogDialog
-              currentView={state.currentView}
-              dockTabs={dockTabs}
-              initialTab={logTab}
-              licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
-              onOpenWhatsNew={() => {
-                closeDialogForNavigation();
-                openWhatsNew();
-              }}
-              level={state.settings.logLevel}
-              onClose={closeDialog}
-              onLevelChange={actions.onLogLevelChange}
-              onSelectDockTab={(id) => {
-                // Like About's What's new: the console's entries stay, so Back returns to it.
-                closeDialogForNavigation();
-                handleSelectTab(id);
-              }}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveSettings={saveSettings}
-              onTabChange={handleDialogTabChange}
-              open={logOpen}
+        {/* The last resort for what the panels' own boundaries do not cover, such as the lazy dialogs. */}
+        <LoadErrorBoundary area="app" fullPage onReload={reloadAfterLoadFailure}>
+          <div className="app">
+            <Masthead
+              homeHref={resolvedAssetBaseUrl}
+              channelBadge={CHANNEL_BADGE}
+              confirmExternalNavigation={actions.onConfirmExternalNavigation}
+              currentTab={notFound ? "" : state.currentView}
+              docsSlug={docsSlug}
+              donateHref={DONATE_URL}
+              githubHref={GITHUB_URL}
+              onAccentChange={actions.onAccentChange}
+              commitsSinceVersion={COMMITS_SINCE_VERSION}
+              dirty={Boolean(DIRTY_HASH)}
+              onOpenWhatsNew={openWhatsNew}
+              onOpenAbout={openAboutTab}
+              onOpenLog={openLogsTab}
+              onOpenStatus={openStatusTab}
+              onOpenStorage={openStorageTab}
+              onPreloadLog={preloadLogDialog}
+              onOpenSettings={() => openSettingsTab()}
+              onOpenSettingsField={openSettingsTab}
+              onIdentifyQuery={openIdentifyLookup}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={previewOfflineProgress}
               previewRuntimeState={previewRuntimeState}
-              onPreviewRuntimeStateChange={changePreviewRuntimeState}
-              onReloadUpdate={actions.onReloadUpdate}
-              offlineCopyEnabled={state.settings.offlineCopyEnabled}
-              onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
-              settingsFocusHint={settingsFocusHint}
-              settingsPanel={
-                <Suspense fallback={null}>
-                  <SettingsPanel
-                    draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-                    onDraftChange={(field, value) =>
-                      // The accent previews and persists at once, like the theme; the rest wait for Save.
-                      field === "accent" && typeof value === "string"
-                        ? runAppearanceTransition(() => actions.onAccentChange(value), "accent")
-                        : actions.onDraftChange(field, value)
-                    }
-                    uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-                    validation={state.validation}
-                  />
-                </Suspense>
-              }
               updateReady={pageUpdate.ready}
+              version={APP_VERSION}
+              versionTitle={`v${APP_BUILD_VERSION}`}
+              onSelectTab={handleSelectTab}
+              tabs={mastheadTabs}
             />
-          </Suspense>
-        ) : null}
-        {dropRoute ? (
-          <Suspense fallback={null}>
-            <DropRouteDialog
-              key={dropRoute.id}
-              labelFor={(view) => WORKFLOW_TABS.find((tab) => tab.id === view)?.label ?? view}
-              onCancel={() => {
-                setDropRoute(null);
-                routeChoiceRef.current?.();
-                routeChoiceRef.current = null;
-              }}
-              onDeliver={deliverDrop}
-              request={dropRoute}
-            />
-          </Suspense>
-        ) : null}
+            {/* Mounted from the first reason to announce anything, so a closing banner can still slide away. */}
+            {pageUpdate.ready || previewRuntimeState === "update" || updatedSince.since ? (
+              <UpdateBanner
+                kind={updateBannerKind}
+                onDismiss={dismissUpdateBanner}
+                onOpenWhatsNew={openWhatsNew}
+                onReload={actions.onReloadUpdate}
+                since={updatedSince.announce ? updatedSince.since : null}
+              />
+            ) : null}
+            <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
+            <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
+            <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
+              {notFound ? (
+                <NotFoundPage assetBaseUrl={resolvedAssetBaseUrl} onSelectTab={handleSelectTab} />
+              ) : (
+                <>
+                  {isViewMounted("home") ? (
+                    // `panel` is what puts this in the workbench's shared grid cell
+                    // (banners.css); without it the drop veil takes row 1 and the
+                    // landing page starts a veil's height down the page.
+                    <div className="panel" hidden={state.currentView !== "home"}>
+                      <LoadErrorBoundary area="home" onReload={reloadAfterLoadFailure}>
+                        <Suspense fallback={null}>
+                          <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeFiles} />
+                        </Suspense>
+                      </LoadErrorBoundary>
+                    </div>
+                  ) : null}
+                  {workflowPanel(
+                    "patcher",
+                    <ApplyPatchRoute
+                      cheatsPage={workflowEntry === "apply-cheats"}
+                      weaveSession={weaveSession}
+                      onWeavePackageChange={actions.onPatcherWeavePackageChange}
+                      onInputsChange={actions.onPatcherInputsChange}
+                      onPatchesChange={actions.onPatcherPatchesChange}
+                      onSelectTab={handleSelectTab}
+                      onSelectView={() => handleSelectTab("test")}
+                      onSettingsChange={actions.onPatcherSettingsChange}
+                      pageDrop={pageDropFor("patcher")}
+                      romLookupRequest={applyRomLookupRequest}
+                      startup={state.startup}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "weave",
+                    <WeaveRoute
+                      mode="weave"
+                      weaveSession={weaveSession}
+                      onWeavePackageChange={actions.onPatcherWeavePackageChange}
+                      onInputsChange={actions.onPatcherInputsChange}
+                      onPatchesChange={actions.onPatcherPatchesChange}
+                      onSelectTab={handleSelectTab}
+                      onSelectView={() => handleSelectTab("test")}
+                      onSettingsChange={actions.onPatcherSettingsChange}
+                      pageDrop={pageDropFor("weave")}
+                      startup={state.startup}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "creator",
+                    <CreatePatchRoute
+                      entry={creatorEntry}
+                      onModifiedChange={actions.onCreatorModifiedChange}
+                      onOriginalChange={actions.onCreatorOriginalChange}
+                      onPatchTypeChange={actions.onCreatorPatchTypeChange}
+                      onSelectTab={handleSelectTab}
+                      onSettingsChange={actions.onCreatorSettingsChange}
+                      pageDrop={pageDropFor("creator")}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "docs",
+                    <DocsPageRoute
+                      active={state.currentView === "docs"}
+                      onSelectTab={handleSelectTab}
+                      slug={docsSlug}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "whats-new",
+                    <WhatsNewPageRoute
+                      active={state.currentView === "whats-new"}
+                      onReload={actions.onReloadUpdate}
+                      since={updatedSince.since}
+                      updateReady={pageUpdate.ready}
+                    />,
+                  )}
+                  {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
+                  {workflowPanel(
+                    "compress",
+                    <CompressRouteForm
+                      onSessionChange={actions.onCompressSessionChange}
+                      pageDrop={pageDropFor("compress")}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "identify",
+                    <IdentifyRouteForm
+                      lookupRequest={identifyLookupRequest}
+                      onLookupResultChange={carryIdentifyResultToApply}
+                      onUseFilesInApply={(files) => deliverDrop("patcher", files)}
+                      onSelectTab={handleSelectTab}
+                      pageDrop={pageDropFor("identify")}
+                    />,
+                  )}
+                  {workflowPanel("checksum", <ChecksumRouteForm pageDrop={pageDropFor("checksum")} />)}
+                  {workflowPanel(
+                    "test",
+                    <EmulatorTestRoute active={state.currentView === "test"} pageDrop={pageDropFor("test")} />,
+                  )}
+                  {workflowPanel(
+                    "trim",
+                    <TrimPatchRoute
+                      onOutputFormatChange={actions.onTrimOutputFormatChange}
+                      onSelectTab={handleSelectTab}
+                      onSettingsChange={actions.onTrimSettingsChange}
+                      onSourceChange={actions.onTrimSourceChange}
+                      pageDrop={pageDropFor("trim")}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "ppf-undo",
+                    <PpfUndoRouteForm
+                      onSessionChange={actions.onPpfUndoSessionChange}
+                      pageDrop={pageDropFor("ppf-undo")}
+                    />,
+                  )}
+                  {workflowPanel(
+                    "save-editor",
+                    <SaveEditorRouteForm
+                      onSessionChange={actions.onSaveEditorSessionChange}
+                      onSelectTab={handleSelectTab}
+                      pageDrop={pageDropFor("save-editor")}
+                    />,
+                  )}
+                </>
+              )}
+              <DropVeil dragging={pageDragging} routing={dropRouting} />
+            </main>
+            <PageFooter />
+            <span className="shell-threads-identity" hidden />
+            {/* the dock is fixed, so the column reserves its height through the one
+              variable masthead.css raises below the dock threshold */}
+            <div aria-hidden="true" className="dock-pad" />
+          </div>
+          <ActivityFinishMarker />
+          {logOpen ? (
+            <Suspense fallback={null}>
+              <LogDialog
+                currentView={state.currentView}
+                dockTabs={dockTabs}
+                initialTab={logTab}
+                licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
+                onOpenWhatsNew={() => {
+                  closeDialogForNavigation();
+                  openWhatsNew();
+                }}
+                level={state.settings.logLevel}
+                onClose={closeDialog}
+                onLevelChange={actions.onLogLevelChange}
+                onSelectDockTab={(id) => {
+                  // Like About's What's new: the console's entries stay, so Back returns to it.
+                  closeDialogForNavigation();
+                  handleSelectTab(id);
+                }}
+                onRestoreDefaults={actions.onRestoreDefaults}
+                onSaveSettings={saveSettings}
+                onTabChange={handleDialogTabChange}
+                open={logOpen}
+                serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+                offlineProgress={previewOfflineProgress}
+                previewRuntimeState={previewRuntimeState}
+                onPreviewRuntimeStateChange={changePreviewRuntimeState}
+                onReloadUpdate={actions.onReloadUpdate}
+                offlineCopyEnabled={state.settings.offlineCopyEnabled}
+                onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
+                settingsFocusHint={settingsFocusHint}
+                settingsPanel={
+                  <Suspense fallback={null}>
+                    <SettingsPanel
+                      draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+                      onDraftChange={(field, value) =>
+                        // The accent previews and persists at once, like the theme; the rest wait for Save.
+                        field === "accent" && typeof value === "string"
+                          ? runAppearanceTransition(() => actions.onAccentChange(value), "accent")
+                          : actions.onDraftChange(field, value)
+                      }
+                      uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+                      validation={state.validation}
+                    />
+                  </Suspense>
+                }
+                updateReady={pageUpdate.ready}
+              />
+            </Suspense>
+          ) : null}
+          {dropRoute ? (
+            <Suspense fallback={null}>
+              <DropRouteDialog
+                key={dropRoute.id}
+                labelFor={(view) => WORKFLOW_TABS.find((tab) => tab.id === view)?.label ?? view}
+                onCancel={() => {
+                  setDropRoute(null);
+                  routeChoiceRef.current?.();
+                  routeChoiceRef.current = null;
+                }}
+                onDeliver={deliverDrop}
+                request={dropRoute}
+              />
+            </Suspense>
+          ) : null}
+        </LoadErrorBoundary>
+        {/* Outside the boundary: the notice's Reload asks here before it drops staged work. */}
         <ConfirmDialog
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}

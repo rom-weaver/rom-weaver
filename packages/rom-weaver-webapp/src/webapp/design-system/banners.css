@@ -54,13 +54,6 @@
   border: 1px solid color-mix(in oklab, var(--thread) 36%, var(--seam));
   border-radius: var(--r-m);
 }
-.rw-app .updates.update-ready {
-  width: 100%;
-  border-color: color-mix(in oklab, var(--care) 45%, var(--seam));
-}
-.rw-app .updates.update-ready .updates-pulse {
-  background: var(--care);
-}
 .rw-app .updates-pulse {
   flex: none;
   width: 8px;
@@ -121,32 +114,85 @@
   width: 18px;
   height: 18px;
 }
-/* the version IS the "what's new" affordance - a quiet dotted-underline link
-   that opens the changelog, instead of a second button crowding the banner */
-.rw-app .updates-ver {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding-inline: 12px;
-  margin-inline-start: 6px;
-  font-size: 0.8rem;
-  color: var(--ink-2);
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-  appearance: none;
-  cursor: pointer;
-  background: none;
-  border: 0;
+/* ── the update banner ──
+   One banner for both ends of an update: a deploy waiting to load and the first
+   load of a newer release. A selvedge - the woven edge new cloth comes off the
+   loom with - runs down its leading side, dyed in the care colour while a reload
+   waits. The same edge marks the releases an update brought on What's new, so
+   the banner and the page read as one piece. */
+.rw-app .update-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding-inline-start: calc(var(--sp-m) + 8px);
 }
-@media (hover: hover) {
-  .rw-app .updates-ver:hover {
-    color: var(--thread-text);
+.rw-app .update-banner.update-ready {
+  border-color: color-mix(in oklab, var(--care) 45%, var(--seam));
+}
+.rw-app .update-banner::before,
+.rw-app .rel.is-new::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 8px;
+  content: "";
+  background: var(--thread);
+  border-start-start-radius: calc(var(--r-m) - 1px);
+  border-end-start-radius: calc(var(--r-m) - 1px);
+  mask-image: var(--weave-mask);
+  mask-size: 8px 8px;
+}
+.rw-app .update-banner.update-ready::before {
+  background: var(--care);
+}
+/* The one moment of motion: the edge weaves down once the banner has opened. */
+.rw-app .reveal.is-open .update-banner::before {
+  animation: selvedge-weave 0.6s var(--ease) 0.3s both;
+}
+@keyframes selvedge-weave {
+  from {
+    clip-path: inset(0 0 100% 0);
   }
 }
-/* Touch devices need active feedback because they lack hover. */
-.rw-app .updates-ver:active {
-  color: var(--thread-text);
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .reveal.is-open .update-banner::before {
+    animation: none;
+  }
+}
+.rw-app .update-banner-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rw-app .update-banner-title {
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+/* Two lines of the lead highlight; What's new has the rest. */
+.rw-app .update-banner-highlight {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  max-inline-size: 72ch;
+  margin: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.rw-app .update-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+}
+@media (max-width: 560px) {
+  .rw-app .update-banner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .rw-app .update-banner-actions {
+    grid-row: 2;
+  }
 }
 .rw-app .changelog-note {
   padding: var(--sp-s) 0;
@@ -402,6 +448,15 @@
 }
 .rw-app .rel-summary h2 {
   margin: 0;
+  color: var(--thread-text);
+}
+.rw-app .rel.is-new {
+  position: relative;
+  padding-inline-start: 8px;
+}
+.rw-app .rel-new {
+  font-size: 0.74rem;
+  font-weight: 650;
   color: var(--thread-text);
 }
 .rw-app .rel-summary-count {

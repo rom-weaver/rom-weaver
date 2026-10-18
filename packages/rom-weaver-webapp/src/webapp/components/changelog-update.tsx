@@ -1,5 +1,6 @@
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts";
+import { isNewerVersion, recordReloadingInto } from "../last-seen-version.ts";
 import {
   type ChangelogEntry,
   commitGroups,
@@ -193,6 +194,11 @@ const ChangelogUpdate = ({
   // A version bump renders the release notes and ignores the commits; the slice
   // only matters for the same-version commit view.
   const { entries, truncated } = commitsSinceCurrent(all);
+  const reload = () => {
+    // The notes above are everything the reload brings, so the load needs no announcement afterwards.
+    if (release && isNewerVersion(release.version, APP_VERSION)) recordReloadingInto(release.version);
+    onReload?.();
+  };
   return (
     <section className="changelog-update">
       <UpdateHeader meta={meta} title={localizer.message("ui.update.whatsNew")} />
@@ -210,7 +216,7 @@ const ChangelogUpdate = ({
       )}
       {onReload ? (
         <div className="changelog-actions">
-          <button className="btn primary" onClick={onReload} type="button">
+          <button className="btn primary" onClick={reload} type="button">
             {localizer.message("ui.update.reloadNow")}
           </button>
         </div>

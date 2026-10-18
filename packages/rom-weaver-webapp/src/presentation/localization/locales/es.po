@@ -15,6 +15,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.update.later"
+#~ msgstr "Más tarde"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.update.note"
+#~ msgstr "Recargar reemplaza la app en caché. Los trabajos en curso terminan primero."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -2650,11 +2660,6 @@ msgstr "Anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.later"
-msgstr "Más tarde"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.layoutDiffers"
 msgstr "la estructura difiere"
 
@@ -4100,11 +4105,6 @@ msgstr "Recargar ahora"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.update.note"
-msgstr "Recargar reemplaza la app en caché. Los trabajos en curso terminan primero."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.remove"
 msgstr "Eliminar"
 
@@ -4390,6 +4390,11 @@ msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexió
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.copy"
+msgstr "Puede que rom-weaver se haya actualizado desde que abriste esta pestaña. Recarga para obtener la versión más reciente."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.roms"
 msgstr "ROM"
 
@@ -4527,6 +4532,11 @@ msgstr "secciones {sections}"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.formatsLink"
 msgstr "Ver las tablas completas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.seeWhatsNew"
+msgstr "Ver novedades"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5250,6 +5260,11 @@ msgstr "Este es el juego sin cambios. El parche que crees registrará cada byte 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.loadFailed.title"
+msgstr "Esta página no se cargó"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_PARSE_FAILED"
 msgstr "El análisis del parche falló."
 
@@ -5480,6 +5495,16 @@ msgstr "Actualización lista"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.update.updatedFrom"
+msgstr "Actualizado de v{from} a v{to}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.updatedTo"
+msgstr "Actualizado a v{version}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.combinedPatch.romChoice.modified"
 msgstr "Usar como ROM modificada"
 
@@ -5517,6 +5542,11 @@ msgstr "Usar esta ROM en Aplicar"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.noteApplyMixed"
 msgstr "Usa una ROM y pregunta cuál conservar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.update.readyVersion"
+msgstr "v{version} está lista"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
