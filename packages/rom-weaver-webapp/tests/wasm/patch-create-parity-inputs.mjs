@@ -58,14 +58,30 @@ function apsgbaPair() {
   return { modified: target, original: source };
 }
 
+// Unequal sizes: records start past the source end (grow by more than one
+// block) or past the target end (shrink).
+function apsgbaResizedPair(sourceLength, targetLength) {
+  const source = new Uint8Array(sourceLength);
+  for (let index = 0; index < source.length; index += 1) {
+    source[index] = (index * 17 + (index >> 5)) & 0xff;
+  }
+  const target = new Uint8Array(targetLength);
+  for (let index = 0; index < target.length; index += 1) {
+    target[index] = (index * 13 + (index >> 4)) & 0xff;
+  }
+  return { modified: target, original: source };
+}
+
 const textPair = (original, modified) => ({
   modified: encoder.encode(modified),
   original: encoder.encode(original),
 });
 
-/** Per-format inputs; `dldiSeed` is applied to `original` (via patch apply) to build `modified`. */
+/** Per-case inputs (the key is the format unless `format` is set); `dldiSeed` is applied to `original` (via patch apply) to build `modified`. */
 export const PATCH_CREATE_PARITY_CASES = {
   apsgba: apsgbaPair(),
+  "apsgba-grow": { ...apsgbaResizedPair(APS_GBA_BLOCK_SIZE, 3 * APS_GBA_BLOCK_SIZE + 17), format: "apsgba" },
+  "apsgba-shrink": { ...apsgbaResizedPair(3 * APS_GBA_BLOCK_SIZE + 17, APS_GBA_BLOCK_SIZE), format: "apsgba" },
   dldi: {
     dldiSeed: buildDldiDriver(8, 0xbf80_0000 | 0, "Roundtrip driver"),
     original: buildNdsWithDldiSlot(0x300, 12, 0x0200_0000, "Default driver"),

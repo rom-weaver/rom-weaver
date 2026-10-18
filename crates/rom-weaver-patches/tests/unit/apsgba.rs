@@ -730,3 +730,63 @@ fn apply_in_memory_zero_fills_output_past_the_end_of_the_source() {
         .expect("in-memory apply");
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
+
+/// Created patches must apply with checksum validation on in both the
+/// streaming and in-memory paths, including when the size change spans more
+/// than one block and records start past the source or output end.
+#[test]
+fn created_patches_apply_with_checksums_for_any_size_change() {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let cases = [
+        (block, block),
+        (block + 100, block + 100),
+        (block, 3 * block),
+        (block + 4096, 3 * block + 17),
+        (3 * block, block),
+        (3 * block + 17, block + 4096),
+        (block - 5, 2 * block + 1),
+        (2 * block + 1, block - 5),
+        (0, block + 1),
+        (block + 1, 0),
+    ];
+    for (case_index, (source_len, target_len)) in cases.into_iter().enumerate() {
+        let source = build_source_bytes(source_len);
+        let mut target = build_source_bytes(target_len);
+        for (index, byte) in target.iter_mut().enumerate() {
+            if index % 7919 == case_index {
+                *byte ^= 0x5a;
+            }
+        }
+        let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+
+        for in_memory in [false, true] {
+            let temp = TestDir::new();
+            let source_path = temp.child("source.gba");
+            let patch_path = temp.child("update.apsgba");
+            let output_path = temp.child("output.gba");
+            fs::write(&source_path, &source).expect("source");
+            fs::write(&patch_path, &created.bytes).expect("patch");
+            let mut context = test_context_with_threads(&temp, 2);
+            if in_memory {
+                context = context.with_patch_apply_in_memory_limit(1 << 24);
+            }
+            ApsGbaPatchHandler::new(&APSGBA)
+                .apply(
+                    &PatchApplyRequest {
+                        input: source_path,
+                        patches: vec![patch_path],
+                        output: output_path.clone(),
+                    },
+                    &context,
+                )
+                .unwrap_or_else(|error| {
+                    panic!("{source_len}->{target_len} in_memory={in_memory}: {error}")
+                });
+            assert_eq!(
+                fs::read(output_path).expect("output"),
+                target,
+                "{source_len}->{target_len} in_memory={in_memory}"
+            );
+        }
+    }
+}

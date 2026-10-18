@@ -522,12 +522,7 @@ fn apply_apsgba_patch_in_memory(
         let write_len = output_len.saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
 
         if validate_checksums {
-            let source_slice = source.get(offset..offset + source_len).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "APSGBA record offset {offset} exceeds source length {}",
-                    source.len()
-                ))
-            })?;
+            let source_slice = source.get(offset..offset + source_len).unwrap_or(&[]);
             let actual = crc16_bytes(source_slice);
             if actual != record.source_crc16 {
                 return Err(RomWeaverError::Validation(format!(
@@ -547,11 +542,7 @@ fn apply_apsgba_patch_in_memory(
         }
 
         if validate_checksums {
-            let output_slice = output.get(offset..offset + write_len).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "APSGBA record offset {offset} exceeds output length {output_len}"
-                ))
-            })?;
+            let output_slice = output.get(offset..offset + write_len).unwrap_or(&[]);
             let actual = crc16_bytes(output_slice);
             if actual != record.target_crc16 {
                 return Err(RomWeaverError::Validation(format!(

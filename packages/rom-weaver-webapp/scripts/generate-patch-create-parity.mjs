@@ -15,8 +15,9 @@ const run = (...args) => execFileSync(binary, [...args, "--threads", "1"], { std
 const expected = {};
 const dir = mkdtempSync(join(tmpdir(), "patch-create-parity-"));
 try {
-  for (const [format, inputs] of Object.entries(PATCH_CREATE_PARITY_CASES)) {
-    const work = join(dir, format);
+  for (const [caseName, inputs] of Object.entries(PATCH_CREATE_PARITY_CASES)) {
+    const format = inputs.format ?? caseName;
+    const work = join(dir, caseName);
     mkdirSync(work);
     const original = join(work, "original.bin");
     let modified = join(work, "modified.bin");
@@ -31,7 +32,7 @@ try {
     }
     run("patch", "create", "--original", original, "--modified", modified, "--format", format, "--output", output);
     const bytes = readFileSync(output);
-    expected[format] = { bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+    expected[caseName] = { bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
   }
 } finally {
   rmSync(dir, { force: true, recursive: true });

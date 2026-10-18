@@ -18,10 +18,11 @@ async function sha256Hex(bytes) {
 }
 
 describe("wasm patch create matches the native CLI byte for byte", () => {
-  it.each(PATCH_CREATE_PARITY_FORMATS)("%s", async (format) => {
-    const expected = (await (await fetch(EXPECTED_URL)).json())[format];
-    expect(expected, `no CLI fixture for ${format}`).toBeDefined();
-    const inputs = PATCH_CREATE_PARITY_CASES[format];
+  it.each(PATCH_CREATE_PARITY_FORMATS)("%s", async (caseName) => {
+    const expected = (await (await fetch(EXPECTED_URL)).json())[caseName];
+    expect(expected, `no CLI fixture for ${caseName}`).toBeDefined();
+    const inputs = PATCH_CREATE_PARITY_CASES[caseName];
+    const format = inputs.format ?? caseName;
 
     await withTempFixture(async ({ dir, opfsHandle, worker }) => {
       const original = joinGuestPath(dir, "original.bin");
