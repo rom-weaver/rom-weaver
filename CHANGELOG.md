@@ -1,11 +1,23 @@
 # Changelog
 
-## [0.22.2](https://github.com/rom-weaver/rom-weaver/compare/v0.22.1...v0.22.2) (2026-10-18)
+## [0.22.2](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.2) (2026-10-18)
 
+### Highlights
+
+#### Improvements
+
+* The home page's first screen now has a single Choose files button (a drop area on wider screens), a link to patch a practice ROM step by step, and a labeled diagram showing how patches are woven into a game ([#1267](https://github.com/rom-weaver/rom-weaver/issues/1267))
+* Clicking or tapping anywhere on a home page workflow card now opens that workflow, and long file names on the cards wrap instead of being cut off ([#1267](https://github.com/rom-weaver/rom-weaver/issues/1267))
+
+<details>
+<summary>All changes</summary>
+
+[Compare v0.22.1...v0.22.2](https://github.com/rom-weaver/rom-weaver/compare/v0.22.1...v0.22.2)
 
 ### User Experience
 
 * **webapp:** redesign the home page ([#1267](https://github.com/rom-weaver/rom-weaver/issues/1267)) ([796893a](https://github.com/rom-weaver/rom-weaver/commit/796893aa717bb1d57e8d7d52172226a24aed8d7e))
+</details>
 
 ## [0.22.1](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.22.1) (2026-10-17)
 
