@@ -1,6 +1,6 @@
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts";
-import { isNewerVersion, writeLastSeenVersion } from "../last-seen-version.ts";
+import { isNewerVersion, recordReloadingInto } from "../last-seen-version.ts";
 import {
   type ChangelogEntry,
   commitGroups,
@@ -196,7 +196,7 @@ const ChangelogUpdate = ({
   const { entries, truncated } = commitsSinceCurrent(all);
   const reload = () => {
     // The notes above are everything the reload brings, so the load needs no announcement afterwards.
-    if (release && isNewerVersion(release.version, APP_VERSION)) writeLastSeenVersion(release.version);
+    if (release && isNewerVersion(release.version, APP_VERSION)) recordReloadingInto(release.version);
     onReload?.();
   };
   return (

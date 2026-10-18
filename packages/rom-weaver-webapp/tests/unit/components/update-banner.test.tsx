@@ -7,6 +7,7 @@ import { UpdateBanner, type UpdateBannerKind } from "../../../src/webapp/compone
 
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
+const RELOADING_INTO_KEY = "rom-weaver-reloading-into-version";
 const INCOMING = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
 
 const highlights = (version: string, summaries: string[]) => ({
@@ -151,7 +152,7 @@ describe("UpdateBanner with a deploy waiting", () => {
     expect(container.querySelector(".update-banner-highlight")).toBeNull();
   });
 
-  it("records the incoming release on reload, so the next load stays quiet", async () => {
+  it("records the incoming release on reload, for the next load to confirm", async () => {
     mockReleaseNotes([highlights(INCOMING, ["Incoming highlight"])], INCOMING);
     const { onReload, openBanner } = renderBanner("ready");
     await waitFor(() => expect(openBanner()).not.toBeNull());
@@ -159,7 +160,8 @@ describe("UpdateBanner with a deploy waiting", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
 
     expect(onReload).toHaveBeenCalledTimes(1);
-    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(INCOMING);
+    expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBe(INCOMING);
+    expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBeNull();
   });
 
   it("leaves an unacknowledged update to announce itself after the reload", async () => {

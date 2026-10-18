@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { APP_VERSION } from "../build-version.ts";
-import { isNewerVersion, isNewRelease, type UpdatedSince, writeLastSeenVersion } from "../last-seen-version.ts";
+import { isNewerVersion, isNewRelease, recordReloadingInto, type UpdatedSince } from "../last-seen-version.ts";
 import { fetchChangelog, HIGHLIGHTS_TITLE, type ReleaseChangelog } from "./changelog-source.tsx";
 import { BannerDismissButton, Reveal } from "./shell.tsx";
 
@@ -120,7 +120,7 @@ const UpdateBanner = ({
     const reload = () => {
       // Someone up to date has just read what is coming, so the load it brings
       // needs no second announcement. An unacknowledged update keeps its own.
-      if (incoming && !since) writeLastSeenVersion(incoming);
+      if (incoming && !since) recordReloadingInto(incoming);
       onReload();
     };
     return (

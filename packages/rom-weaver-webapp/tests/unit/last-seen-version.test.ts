@@ -4,11 +4,13 @@ import { APP_VERSION } from "../../src/webapp/build-version.ts";
 import {
   isNewRelease,
   recordFirstVisit,
+  recordReloadingInto,
   resolveUpdatedSince,
   writeLastSeenVersion,
 } from "../../src/webapp/last-seen-version.ts";
 
 const KEY = "rom-weaver-last-seen-version";
+const RELOADING_INTO_KEY = "rom-weaver-reloading-into-version";
 const NEWER = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
 // Both sort below any version the package will carry.
 const OLDER = "0.0.1";
@@ -111,18 +113,55 @@ describe("writeLastSeenVersion", () => {
     expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
   });
 
-  it("records a newer release read about before reloading into it", () => {
-    writeLastSeenVersion(NEWER);
-
-    expect(window.localStorage.getItem(KEY)).toBe(NEWER);
-  });
-
   it("never moves the record backwards", () => {
     window.localStorage.setItem(KEY, NEWER);
 
     writeLastSeenVersion();
 
     expect(window.localStorage.getItem(KEY)).toBe(NEWER);
+  });
+});
+
+describe("recordReloadingInto", () => {
+  it("keeps the load it announced quiet", () => {
+    window.localStorage.setItem(KEY, OLDER);
+    controlPage(true);
+
+    recordReloadingInto(APP_VERSION);
+
+    expect(resolveUpdatedSince()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
+    expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBeNull();
+  });
+
+  it("keeps the load quiet for a returning visitor with no record", () => {
+    controlPage(true);
+
+    recordReloadingInto(APP_VERSION);
+
+    expect(resolveUpdatedSince()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
+  });
+
+  it("announces a newer deploy that replaced the announced one from the version left behind", () => {
+    window.localStorage.setItem(KEY, OLDEST);
+    controlPage(true);
+
+    recordReloadingInto(OLDER);
+
+    expect(resolveUpdatedSince()).toEqual({ from: OLDEST });
+    expect(window.localStorage.getItem(KEY)).toBe(OLDEST);
+    expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBeNull();
+  });
+
+  it("stays quiet when an older release loads than the one announced", () => {
+    window.localStorage.setItem(KEY, APP_VERSION);
+    controlPage(true);
+
+    recordReloadingInto(NEWER);
+
+    expect(resolveUpdatedSince()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
   });
 });
 

@@ -227,7 +227,7 @@ describe("ChangelogPanel pending update", () => {
     expect(await update.findByRole("button", { name: "Reload now" })).toBeTruthy();
   });
 
-  it("records the incoming release on reload, since the notes above already describe it", async () => {
+  it("records the incoming release on reload, since the notes above describe it", async () => {
     window.localStorage.clear();
     mockChangelog([
       {
@@ -241,7 +241,8 @@ describe("ChangelogPanel pending update", () => {
 
     fireEvent.click(await update.findByRole("button", { name: "Reload now" }));
 
-    expect(window.localStorage.getItem("rom-weaver-last-seen-version")).toBe("9.9.9");
+    expect(window.localStorage.getItem("rom-weaver-reloading-into-version")).toBe("9.9.9");
+    expect(window.localStorage.getItem("rom-weaver-last-seen-version")).toBeNull();
   });
 
   it("stays out of the way when no update is waiting", async () => {
