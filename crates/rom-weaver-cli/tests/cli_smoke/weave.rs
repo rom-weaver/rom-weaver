@@ -4520,6 +4520,37 @@ fn weave_bare_file_refuses_to_stand_in_for_several_members() {
 }
 
 #[test]
+fn weave_bare_file_bound_to_the_root_member_refuses_a_second_member() {
+    let crc = crc32_hex(WEAVE_ROM_BYTES);
+    // `rom.member` already claims the bare file; with or without ROM checks a
+    // second same-named member must not bind to it as well.
+    for rom_checks in [
+        String::new(),
+        format!(r#","checks":{{"checksums":{{"crc32":"{crc}"}},"size":16}}"#),
+    ] {
+        let temp = setup_temp_dir();
+        let rom = write_weave_rom(&temp, "track.bin");
+        write_offset_ips(&temp, "a.ips", 0, 0xAA);
+        write_offset_ips(&temp, "b.ips", 1, 0xBB);
+        let weave = format!(
+            r#"{{"version":2,"patchBasis":"auto",
+                "rom":{{"member":"disc-a/track.bin"{rom_checks}}},
+                "patches":[
+                  {{"id":"a","path":"a.ips","target":{{"rom":true,"member":"disc-a/track.bin"}}}},
+                  {{"id":"b","path":"b.ips","target":{{"rom":true,"member":"disc-b/track.bin"}}}}]}}"#
+        );
+        let (_, terminal) = apply_weave_to_bare_input(&temp, &rom, &weave, 1);
+        assert_eq!(terminal["status"], "failed");
+        assert!(
+            terminal
+                .to_string()
+                .contains("matches several weave ROM members"),
+            "unexpected failure: {terminal}"
+        );
+    }
+}
+
+#[test]
 fn weave_bare_file_matches_a_member_named_only_by_a_patch_input() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "renamed.bin");

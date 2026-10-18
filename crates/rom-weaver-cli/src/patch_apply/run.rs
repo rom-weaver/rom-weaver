@@ -753,7 +753,14 @@ impl CliApp {
                 run.probe_threads.clone(),
             ))
         };
-        let mut bare_bound_member: Option<&str> = None;
+        // A bare input already stands in for the weave's root member, so it
+        // cannot also stand in for a second member.
+        let mut bare_bound_member: Option<&str> =
+            weave_rom_member.map(String::as_str).filter(|root| {
+                run.disc_context.is_none()
+                    && explicit_rom_members.contains(root)
+                    && self.input_is_bare_member_file(&run.args.input)
+            });
         for member in explicit_rom_members {
             if let Some(disc) = run.disc_context.as_ref() {
                 let path = self
