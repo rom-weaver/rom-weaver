@@ -94,6 +94,27 @@ export const readStoredZipEntries = (bytes) => {
   return entries;
 };
 
+// A real .dcp is a ZIP holding the files that replace a Dreamcast disc's (IP.BIN, 1ST_READ.BIN, ...),
+// built through the real zip writer so it is a valid archive rather than "PK" placeholder bytes.
+export const buildDcpFile = async (fileName = "real.dcp") => {
+  const create = browserRuntime.compression.create;
+  if (!create) throw new Error("Runtime compression create capability is unavailable");
+  const entries = [
+    ["IP.BIN", new Uint8Array(2048).fill(1)],
+    ["1ST_READ.BIN", new Uint8Array(4096).fill(2)],
+    ["DATA/FONT.PVR", new Uint8Array(1024).fill(3)],
+  ].map(([entryName, bytes]) => ({ file: new File([bytes], entryName.split("/").pop()), fileName: entryName }));
+  const result = await create({ entries, format: "zip", options: { outputName: fileName, threads: 1 } });
+  const output = result?.output;
+  if (!output) throw new Error("Zip compression did not return output");
+  try {
+    const blob = await browserRuntime.publicOutput.getBlob(output);
+    return new File([await blob.arrayBuffer()], fileName, { type: "application/octet-stream" });
+  } finally {
+    await output.dispose().catch(() => undefined);
+  }
+};
+
 export const selectFileInputs = (input, files) => {
   const dataTransfer = new DataTransfer();
   for (const file of files) dataTransfer.items.add(file);

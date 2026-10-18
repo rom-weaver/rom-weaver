@@ -1217,27 +1217,81 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
     );
 }
 
-#[test]
-fn probing_a_dcp_patch_names_dcp_instead_of_a_missing_handler() {
-    let temp = assert_fs::TempDir::new().expect("temp dir");
-    let dcp = temp.path().join("fake.dcp");
-    fs::write(&dcp, b"PK not a real dcp").expect("fixture");
+/// A minimal valid ZIP of stored entries, shaped like a real DCP (IP.BIN, 1ST_READ.BIN, DATA/FONT.PVR).
+fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut archive = Vec::new();
+    let mut directory = Vec::new();
+    for (name, data) in entries {
+        let offset = u32::try_from(archive.len()).expect("offset");
+        let crc = crc32fast::hash(data);
+        let size = u32::try_from(data.len()).expect("size");
+        let name_len = u16::try_from(name.len()).expect("name length");
+        let mut common = Vec::new();
+        common.extend_from_slice(&20_u16.to_le_bytes());
+        common.extend_from_slice(&[0; 4]);
+        common.extend_from_slice(&crc.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&name_len.to_le_bytes());
+        archive.extend_from_slice(b"PK\x03\x04");
+        archive.extend_from_slice(&common);
+        archive.extend_from_slice(&0_u16.to_le_bytes());
+        archive.extend_from_slice(name.as_bytes());
+        archive.extend_from_slice(data);
+        directory.extend_from_slice(b"PK\x01\x02");
+        directory.extend_from_slice(&20_u16.to_le_bytes());
+        directory.extend_from_slice(&common);
+        directory.extend_from_slice(&[0; 12]);
+        directory.extend_from_slice(&offset.to_le_bytes());
+        directory.extend_from_slice(name.as_bytes());
+    }
+    let directory_offset = u32::try_from(archive.len()).expect("directory offset");
+    let count = u16::try_from(entries.len()).expect("entry count");
+    archive.extend_from_slice(&directory);
+    archive.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&u32::try_from(directory.len()).expect("size").to_le_bytes());
+    archive.extend_from_slice(&directory_offset.to_le_bytes());
+    archive.extend_from_slice(&0_u16.to_le_bytes());
+    archive
+}
 
-    let Err(report) = app().probe_patch_handler(&dcp, &dcp, 0, 1, None) else {
-        panic!("a DCP has no per-patch handler");
-    };
-    assert_eq!(report.status, OperationStatus::Failed);
-    assert_eq!(report.format.as_deref(), Some("DCP"));
-    assert!(
-        report.label.contains("Dreamcast DCP patch"),
-        "{}",
-        report.label
-    );
-    assert!(
-        !report.label.contains("no registered patch handler"),
-        "{}",
-        report.label
-    );
+#[test]
+fn probing_a_zip_dcp_patch_names_dcp_instead_of_a_missing_handler() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let dcp = temp.path().join("real.dcp");
+    fs::write(
+        &dcp,
+        stored_zip(&[
+            ("IP.BIN", b"ip"),
+            ("1ST_READ.BIN", b"boot"),
+            ("DATA/FONT.PVR", b"font"),
+        ]),
+    )
+    .expect("fixture");
+    // Patch resolution unpacks a ZIP patch to an inner file, so the probe sees a path with no `.dcp`.
+    let inner = temp.path().join("1ST_READ.BIN");
+    fs::write(&inner, b"boot").expect("inner fixture");
+
+    for (source, resolved) in [(&dcp, &inner), (&dcp, &dcp)] {
+        let Err(report) = app().probe_patch_handler(source, resolved, 0, 1, None) else {
+            panic!("a DCP has no per-patch handler");
+        };
+        assert_eq!(report.status, OperationStatus::Failed);
+        assert_eq!(report.format.as_deref(), Some("DCP"));
+        assert!(
+            report.label.contains("Dreamcast DCP patch"),
+            "{}",
+            report.label
+        );
+        assert!(
+            !report.label.contains("no registered patch handler")
+                && !report.label.contains("ambiguous"),
+            "{}",
+            report.label
+        );
+    }
 }
 
 #[test]

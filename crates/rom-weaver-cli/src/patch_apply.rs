@@ -2886,7 +2886,7 @@ impl CliApp {
                     patch_label
                 ),
             ),
-            None if Self::is_dcp_patch(resolved_patch_path) => (
+            None if Self::is_dcp_patch(patch_path) || Self::is_dcp_patch(resolved_patch_path) => (
                 Some("DCP".to_string()),
                 format!(
                     "patch {}/{}: {} is a Dreamcast DCP patch, which {}",

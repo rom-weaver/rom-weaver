@@ -56,9 +56,6 @@ type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
 };
 
 const ROM_SPECIFIC_DECOMPRESSION_EXTENSIONS = new Set(ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS);
-// Patch formats that are ZIP files by design. Their PK magic must not be mistaken for an extensionless
-// archive, or a real .dcp is rejected before the DCP-specific card message can run.
-const ZIP_BACKED_PATCH_EXTENSIONS = new Set(["dcp"]);
 // Rom-specific codec containers detected by their leading file magic. Sourced from
 // the canonical Rust container metadata (via typegen) so the bytes never drift.
 const ROM_SPECIFIC_MAGIC_PREFIXES = ROM_WEAVER_CONTAINER_FORMATS.filter((entry) => entry.magic.length > 0).map(
@@ -176,10 +173,6 @@ const getLazyBrowserSource = async (
     emitInputPreparationTrace(options, "lazy browser source accepted by extension", {
       fileName,
     });
-    return { blob, fileHandle, fileName };
-  }
-  if (ZIP_BACKED_PATCH_EXTENSIONS.has(getFileExtension(fileName))) {
-    emitInputPreparationTrace(options, "lazy browser source accepted zip-backed patch", { fileName });
     return { blob, fileHandle, fileName };
   }
   const magicExtension = getRomSpecificMagicExtension(romSpecificHeader);
