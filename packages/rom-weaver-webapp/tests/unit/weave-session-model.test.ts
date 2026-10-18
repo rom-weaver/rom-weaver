@@ -250,6 +250,25 @@ describe("buildWeaveApplySessionPlan", () => {
     });
   });
 
+  it("names the expected ROM after an unbundled rom.path like a rom.name weave", () => {
+    const plan = buildWeaveApplySessionPlan(
+      parsedResult({
+        weave: {
+          patches: [{}],
+          rom: { checks: { checksums: { crc32: "aaaaaaaa" }, size: 42 }, path: "dumps/Game (USA).nes" },
+          version: 2,
+        },
+        patchSources: [{ source: { kind: "url", url: "change.ips" } }],
+      }),
+      WEAVE_URL,
+    );
+    expect(plan.romAcquisition).toBeUndefined();
+    expect(plan.romExpectation).toEqual({
+      checks: { checksums: { crc32: "aaaaaaaa" }, size: 42 },
+      name: "Game (USA).nes",
+    });
+  });
+
   it("maps output name and header defaults", () => {
     const withOutput = (output: NonNullable<ParsedWeaveParseResult["weave"]["output"]>) =>
       buildWeaveApplySessionPlan(parsedResult({ weave: { output, patches: [], version: 1 } }), WEAVE_URL)
