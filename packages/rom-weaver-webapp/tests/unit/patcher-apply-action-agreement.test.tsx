@@ -44,4 +44,15 @@ describe("apply action state agreement", () => {
     expect(isApplyButtonActionable(state.applyButton)).toBe(enabled);
     expect(domEnabled(button)).toBe(enabled);
   });
+
+  it("shows the run-gate reason, on a natively disabled button, instead of the override reason", () => {
+    const { controller } = controllerFor({ blocked: true, disabled: false });
+    const { container } = render(
+      <PatcherPrimaryAction controller={controller} disableReason="Cheat header conflict" disableRun />,
+    );
+    const button = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    const reason = container.querySelector(`#${button.getAttribute("aria-describedby")}`);
+    expect(reason?.textContent).toBe("Cheat header conflict");
+  });
 });

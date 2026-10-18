@@ -20,12 +20,15 @@ type OutputController = {
 function PatcherPrimaryAction({
   controller,
   disableRun,
+  disableReason,
   showCompletedDownload = true,
   totalTime,
 }: {
   controller: OutputController;
   /** Extra gate (e.g. every staged patch toggled off). */
   disableRun?: boolean;
+  /** Why `disableRun` applies, shown instead of the checksum-override reason. */
+  disableReason?: string;
   /** Keep the completed output's Download action visible. */
   showCompletedDownload?: boolean;
   /** Total wall time for the finished run (download button right edge). */
@@ -69,14 +72,19 @@ function PatcherPrimaryAction({
     );
   }
 
-  const blocked = state.applyButton.blocked && !state.applyButton.loading && !state.applyButton.disabled;
+  // A natively disabled button is not focusable, so its own reason replaces the
+  // checksum-override one (which would point at a checkbox that cannot unblock it).
+  const runDisabled = state.applyButton.disabled || !!disableRun;
+  const blocked = state.applyButton.blocked && !state.applyButton.loading && !runDisabled;
+  const disabledReason = disableRun && !state.applyButton.loading && !state.applyButton.disabled ? disableReason : "";
+  const reason = blocked ? localizer.message("ui.output.applyBlocked") : disabledReason;
   return (
     <>
       <ProgressActionButton
         ariaDisabled={blocked}
         cancelLabel={localizer.message("ui.output.cancelApply")}
-        describedBy={blocked ? BLOCKED_REASON_ID : undefined}
-        disabled={state.applyButton.disabled || !!disableRun}
+        describedBy={reason ? BLOCKED_REASON_ID : undefined}
+        disabled={runDisabled}
         icon={<Stamp aria-hidden="true" />}
         id="rom-weaver-button-apply"
         label={
@@ -90,10 +98,10 @@ function PatcherPrimaryAction({
         progress={state.applyButton.progress}
         progressId="rom-weaver-progress-apply"
       />
-      {blocked ? (
+      {reason ? (
         <p className="patch-off-note apply-blocked-reason" id={BLOCKED_REASON_ID}>
           <TriangleAlert aria-hidden="true" />
-          <span>{localizer.message("ui.output.applyBlocked")}</span>
+          <span>{reason}</span>
         </p>
       ) : null}
     </>

@@ -302,6 +302,7 @@ test("a validation-blocked Apply reports aria-disabled with a reason until Apply
   }, 30000);
   // Blocked: programmatically disabled, still focusable, with the reason one reference away.
   expect(applyButton.getAttribute("aria-disabled")).toBe("true");
+  expect(applyButton.disabled).toBe(false);
   const reasonId = applyButton.getAttribute("aria-describedby");
   expect(reasonId).toBeTruthy();
   const reason = document.getElementById(reasonId);
