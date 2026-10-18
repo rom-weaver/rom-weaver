@@ -1757,8 +1757,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     declaredInputChecks?: string,
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
+    const inputRef = stage.state.patchTarget || stage.state.patchInput;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
+      filenameCrc32Applies: this.patches[0] === stage && !(inputRef && "patch" in inputRef),
       previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       getWeaveLayoutCrc32: (target) =>

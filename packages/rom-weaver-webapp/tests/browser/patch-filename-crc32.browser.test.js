@@ -105,3 +105,36 @@ test("auto header keeps the header when the filename crc32 names the headered by
   const headerSelect = await stageInes(crc32Hex(buildInesBytes()));
   await expect.poll(() => headerSelect.options[0].textContent, { timeout: 60000 }).toBe("header auto (keep)");
 });
+
+// tests/fixtures/archive_sources/multi-patch: change.ips turns game.bin into crc32 2cccfa33, which
+// alternate.ips (the second patch) then reads.
+const CHAIN_PATCH_A = "tests/fixtures/archive_sources/multi-patch/change.ips";
+const CHAIN_PATCH_B = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
+const CHAIN_A_OUTPUT_CRC32 = "2cccfa33";
+
+test("a later patch whose filename crc32 token names the previous patch's output is not flagged", async () => {
+  mount(createElement(ApplyPatchForm, strict));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const input = () => document.getElementById("rom-weaver-input-file-unified");
+  selectFileInput(input(), await loadFixtureFile(RAW_ROM));
+  selectFileInput(input(), await loadFixtureFile(CHAIN_PATCH_A));
+  const second = await loadFixtureFile(CHAIN_PATCH_B);
+  selectFileInput(
+    input(),
+    new File([await second.arrayBuffer()], `b [crc32:${CHAIN_A_OUTPUT_CRC32}].ips`, { type: second.type }),
+  );
+  await expect
+    .poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack .file").length, { timeout: 60000 })
+    .toBe(2);
+  await expect
+    .poll(() => document.getElementById("rom-weaver-list-patch-stack")?.textContent ?? "", { timeout: 60000 })
+    .not.toContain("Checking patch against the ROM");
+  // Let the engine's dry run land; the file-name token must not turn it into a mismatch.
+  await expect
+    .poll(() => document.getElementById("rom-weaver-patch-chain-chip-1")?.textContent?.trim() ?? "", { timeout: 60000 })
+    .not.toBe("");
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
+  expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
+  expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
+  await waitForApplyButtonEnabled();
+});

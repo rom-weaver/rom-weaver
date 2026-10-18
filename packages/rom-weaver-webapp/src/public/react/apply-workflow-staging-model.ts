@@ -157,9 +157,11 @@ const formatRomIdentification = (identification: ParsedIdentifyResolution | unde
 
 // The engine's dry run only knows the checksums embedded in the patch; the cheap preflight also knows
 // the file-name `[crc32:..]` token (the engine never sees it), so a preflight mismatch outranks a
-// passing dry run. Other deep verdicts (invalid, deferred, unknown, pending) keep winning.
+// passing dry run (only the first patch's token reaches the preflight). Other deep verdicts (invalid, deferred, unknown, pending) keep winning.
 const isPreflightMismatchOverridingDeep = (patch: ApplyWorkflowPatchState): boolean =>
-  patch.checksumPreflight?.status === "invalid" && patch.patchValidation?.status === "valid";
+  patch.checksumPreflight?.status === "invalid" &&
+  !!patch.checksumPreflight.requiredCrc32FromFilename &&
+  patch.patchValidation?.status === "valid";
 
 const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementValues: string[]): string => {
   const deep = patch.patchValidation;

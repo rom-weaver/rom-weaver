@@ -9,6 +9,9 @@ describe("parseFilenameCrc32", () => {
     ["Game [1a2b3c4d].ips", "1a2b3c4d"],
     ["Game {1A2B3C4D}.ips", "1a2b3c4d"],
     ["hack [crc32:11111111] crc32:11111111.ips", "11111111"],
+    // Rust's is_ascii_alphanumeric rejects the Unicode letters that case-fold onto ASCII (U+017F, U+212A).
+    ["hack \u017Fcrc32:1a2b3c4d.ips", "1a2b3c4d"],
+    ["hack \u212Acrc32:1a2b3c4d.ips", "1a2b3c4d"],
   ])("reads %s", (name, expected) => {
     expect(parseFilenameCrc32(name)).toBe(expected);
   });

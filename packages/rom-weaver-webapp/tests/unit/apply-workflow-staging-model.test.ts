@@ -96,7 +96,12 @@ describe("apply workflow staging model", () => {
   it("lets a preflight mismatch outrank a passing dry run (file-name crc32 token)", () => {
     const patch = {
       candidates: [],
-      checksumPreflight: { actualCrc32: "c6fb1252", requiredCrc32: "4af1a4bb", status: "invalid" as const },
+      checksumPreflight: {
+        actualCrc32: "c6fb1252",
+        requiredCrc32: "4af1a4bb",
+        requiredCrc32FromFilename: true,
+        status: "invalid" as const,
+      },
       id: "patch",
       parentCompressions: [],
       patchValidation: { status: "valid" as const },
@@ -123,6 +128,25 @@ describe("apply workflow staging model", () => {
     );
     expect(matching?.validationState).toBe("valid");
     expect(matching?.checksumPreflightMismatch).toBe(false);
+  });
+
+  it("keeps a passing dry run over a preflight mismatch that did not come from the file name", () => {
+    const info = toPatchStageInfo(
+      {
+        candidates: [],
+        checksumPreflight: { actualCrc32: "c6fb1252", requiredCrc32: "4af1a4bb", status: "invalid" as const },
+        id: "patch",
+        parentCompressions: [],
+        patchValidation: { status: "valid" as const },
+        status: "ready" as const,
+        warnings: [],
+      },
+      "hack.ips",
+      1,
+      "Input 1",
+    );
+    expect(info?.validationState).toBe("valid");
+    expect(info?.checksumPreflightMismatch).toBe(false);
   });
 
   it("does not count a pasted SHA-1 as a compared checksum before apply", () => {

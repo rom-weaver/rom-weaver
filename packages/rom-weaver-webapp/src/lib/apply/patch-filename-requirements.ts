@@ -1,5 +1,5 @@
-const HEX_DIGIT_REGEX = /^[0-9a-f]$/iu;
-const ALPHANUMERIC_REGEX = /^[0-9a-z]$/iu;
+const HEX_DIGIT_REGEX = /^[0-9A-Fa-f]$/;
+const ALPHANUMERIC_REGEX = /^[0-9A-Za-z]$/;
 const CRC32_HEX_LENGTH = 8;
 const CLOSING_BRACKET: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
 
