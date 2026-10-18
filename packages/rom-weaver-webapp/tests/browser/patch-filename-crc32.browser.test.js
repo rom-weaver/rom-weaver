@@ -169,3 +169,41 @@ test("turning off the first patch makes the next patch's filename crc32 token ap
     .toBeNull();
   await waitForApplyButtonEnabled();
 });
+
+test("Apply strips the header a filename crc32 names when the patch before it is turned off", async () => {
+  // A 512-byte copier header over 32 KiB of payload; the token names the headerless bytes.
+  const payload = new Uint8Array(32768).fill(0xa5);
+  const headered = new Uint8Array(512 + payload.length);
+  headered.set(payload, 512);
+  // One IPS record: 'Z' at offset 1000.
+  const ips = new Uint8Array([0x50, 0x41, 0x54, 0x43, 0x48, 0x00, 0x03, 0xe8, 0x00, 0x01, 0x5a, 0x45, 0x4f, 0x46]);
+  const results = [];
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { output: { compression: "none" } },
+      onApplyComplete: (result) => results.push(result),
+    }),
+  );
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const input = () => document.getElementById("rom-weaver-input-file-unified");
+  const toggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
+  selectFileInput(input(), new File([headered], "input.smc", { type: "application/octet-stream" }));
+  selectFileInput(input(), new File([ips], "plain.ips", { type: "application/octet-stream" }));
+  // Same-content patches dropped together would race; stage the second once the first is listed.
+  await expect.poll(() => toggles().length, { timeout: 60000 }).toBe(1);
+  selectFileInput(
+    input(),
+    new File([ips], `hack [crc32:${crc32Hex(payload)}].ips`, { type: "application/octet-stream" }),
+  );
+  await expect.poll(() => toggles().length, { timeout: 60000 }).toBe(2);
+  toggles()[0].click();
+  await expect
+    .poll(() => document.getElementById("rom-weaver-patch-header-mode-1")?.options[0]?.textContent, { timeout: 60000 })
+    .toBe("header auto (strip)");
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect((await waitForApplyOutcome())?.kind).toBe("download");
+  await expect.poll(() => results.length, { timeout: 60000 }).toBeGreaterThan(0);
+  // The run re-stages only the enabled patch; the token must still decide the header there.
+  expect(results[0]?.output?.size).toBe(payload.length);
+}, 180000);
