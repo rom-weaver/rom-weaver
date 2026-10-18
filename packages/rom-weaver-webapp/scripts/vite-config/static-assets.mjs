@@ -164,6 +164,15 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         makeBetaRouteNoindex(withShell("trim"), "trim-rom", channel, channelLabel),
         routePreloadLinks.get("trim"),
       );
+      const playlistHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("playlist"), routePreloadLinks.get("playlist")),
+          WORKFLOW_SEO_ROUTES.playlist,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.playlist,
+      );
       const ppfUndoHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(withShell("ppf-undo"), routePreloadLinks.get("ppf-undo")),
@@ -215,6 +224,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],
         ["trim-rom", trimHtml],
+        ["m3u-playlist", playlistHtml],
         ["ppf-undo", ppfUndoHtml],
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its

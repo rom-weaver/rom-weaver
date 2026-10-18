@@ -70,6 +70,7 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "create-rom-patch",
     "extract",
     "identify-rom",
+    "m3u-playlist",
     "ppf-undo",
     "test-rom",
   ]) {
