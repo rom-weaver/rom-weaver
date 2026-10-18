@@ -476,3 +476,28 @@ test("an unreadable patch fails its own card in plain language and blocks apply"
   expect(document.body.textContent || "").not.toContain("INVALID_INPUT");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault")).not.toBeNull();
 });
+
+test("a DCP patch names DCP and the CLI instead of blaming the ROM, and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-unified"),
+    new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0])], "fake.dcp", { type: "application/octet-stream" }),
+  );
+
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault"), { timeout: 60000 })
+    .not.toBeNull();
+  const fault = document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault");
+  expect(fault.textContent).toContain("Dreamcast DCP patches are not supported in browser Apply yet");
+  expect(fault.textContent).toContain("cli-apply#apply-a-dreamcast-dcp-patch");
+  const pageText = document.body.textContent || "";
+  expect(pageText).not.toContain("no registered patch handler");
+  expect(pageText).not.toContain("expected a different ROM");
+  const applyButton = document.getElementById("rom-weaver-button-apply");
+  applyButton?.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 2000));
+  expect(applyButton?.textContent || "").not.toContain("Download");
+});

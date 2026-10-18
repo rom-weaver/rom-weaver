@@ -2886,6 +2886,16 @@ impl CliApp {
                     patch_label
                 ),
             ),
+            None if Self::is_dcp_patch(resolved_patch_path) => (
+                Some("DCP".to_string()),
+                format!(
+                    "patch {}/{}: {} is a Dreamcast DCP patch, which {}",
+                    index + 1,
+                    patch_count,
+                    patch_label,
+                    DCP_UNSUPPORTED_HERE
+                ),
+            ),
             None => (
                 None,
                 format!(
@@ -2905,6 +2915,16 @@ impl CliApp {
         )))
     }
 }
+
+/// Why a `.dcp` has no per-patch handler. A DCP rebuilds a GD-ROM filesystem from a `.cue`/`.gdi`
+/// disc instead of patching one ROM file, so it never goes through the generic preflight or chain.
+#[cfg(target_arch = "wasm32")]
+const DCP_UNSUPPORTED_HERE: &str = "is not supported in browser Apply yet; apply it with the \
+     native CLI (`rom-weaver patch apply`) using a Dreamcast .cue or .gdi input \
+     (https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch)";
+#[cfg(not(target_arch = "wasm32"))]
+const DCP_UNSUPPORTED_HERE: &str = "rebuilds a Dreamcast disc, so it cannot be validated or \
+     chained like a byte patch; apply it alone with a .cue or .gdi input using `patch apply`";
 
 /// Parsed-and-validated patch-apply inputs: the compression options and the
 /// three checksum maps (cache, expected-input, expected-output).

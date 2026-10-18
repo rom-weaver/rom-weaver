@@ -116,6 +116,11 @@ const applyPatchVerdict = <TSource>(
   stage.state.checksumTimeMs = Date.now() - startedAt;
 };
 
+const isDcpPatchName = (fileName: string | undefined) => !!fileName && /\.dcp$/i.test(fileName);
+
+const DCP_BROWSER_UNSUPPORTED_MESSAGE =
+  "Dreamcast DCP patches are not supported in browser Apply yet. Apply this patch with the CLI using a .cue or .gdi disc: https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch";
+
 // A prepared, runnable validation entry: the stage/target plus its resolved sources and the shared
 // per-input options. `null` means the entry resolved to a terminal state (short-circuited cache hit,
 // or an "unavailable" verdict) and needs no worker call.
@@ -175,6 +180,18 @@ const prepareValidation = <TSource>(
   const startedAt = Date.now();
   const validatePatch = adapters.runtime.patch.validatePatch;
   const patchFile = stage.preparedPatchFile;
+  if (isDcpPatchName(patchFile?.fileName || stage.state.fileName)) {
+    // A DCP rebuilds a Dreamcast disc, so no byte-patch preflight can run; say so instead of
+    // letting the engine report a missing handler that reads as a ROM mismatch.
+    stage.state.patchValidation = {
+      message: DCP_BROWSER_UNSUPPORTED_MESSAGE,
+      status: "invalid",
+      unreadable: true,
+      validationKey,
+    };
+    stage.state.checksumTimeMs = Date.now() - startedAt;
+    return null;
+  }
   if (!(validatePatch && patchFile && stage.parsedPatch)) {
     markValidationUnavailable(
       entry,

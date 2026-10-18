@@ -1218,6 +1218,29 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
 }
 
 #[test]
+fn probing_a_dcp_patch_names_dcp_instead_of_a_missing_handler() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let dcp = temp.path().join("fake.dcp");
+    fs::write(&dcp, b"PK not a real dcp").expect("fixture");
+
+    let Err(report) = app().probe_patch_handler(&dcp, &dcp, 0, 1, None) else {
+        panic!("a DCP has no per-patch handler");
+    };
+    assert_eq!(report.status, OperationStatus::Failed);
+    assert_eq!(report.format.as_deref(), Some("DCP"));
+    assert!(
+        report.label.contains("Dreamcast DCP patch"),
+        "{}",
+        report.label
+    );
+    assert!(
+        !report.label.contains("no registered patch handler"),
+        "{}",
+        report.label
+    );
+}
+
+#[test]
 fn probing_an_unhandled_patch_names_both_the_original_and_resolved_paths() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
     let requested = temp.path().join("weave.zip");
