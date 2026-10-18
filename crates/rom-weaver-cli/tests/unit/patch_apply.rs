@@ -1228,7 +1228,10 @@ fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let name_len = u16::try_from(name.len()).expect("name length");
         let mut common = Vec::new();
         common.extend_from_slice(&20_u16.to_le_bytes());
+        // Flags and method (stored), then DOS mod time 00:00:00 and date 1980-01-01.
         common.extend_from_slice(&[0; 4]);
+        common.extend_from_slice(&0_u16.to_le_bytes());
+        common.extend_from_slice(&0x0021_u16.to_le_bytes());
         common.extend_from_slice(&crc.to_le_bytes());
         common.extend_from_slice(&size.to_le_bytes());
         common.extend_from_slice(&size.to_le_bytes());
