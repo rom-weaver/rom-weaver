@@ -38,6 +38,7 @@ impl CliApp {
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(self.plan_ppf_undo_dry_run(args)),
             Commands::Setup(args) => Some(self.plan_setup_dry_run(args)),
             Commands::Identify(args) => Some(self.plan_identify_dry_run(args)),
+            Commands::Playlist(args) => Some(self.plan_playlist_dry_run(args)),
             _ => Some(self.read_only_dry_run(Self::command_name(command))),
         }
     }
@@ -109,6 +110,25 @@ impl CliApp {
             vec![args.output.display().to_string()],
             vec![
                 "archive entries and output-directory access are not validated during dry run"
+                    .to_string(),
+            ],
+        )
+    }
+
+    fn plan_playlist_dry_run(&self, args: &PlaylistCommand) -> AppRunOutcome {
+        let command = "playlist";
+        for input in &args.input {
+            if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, input) {
+                return outcome;
+            }
+        }
+        self.plan_succeeded(
+            command,
+            OperationFamily::Command,
+            "dry run: would write the playlist; nothing written",
+            vec![args.output.display().to_string()],
+            vec![
+                "disc sheets, track files, and the output path are not validated during dry run"
                     .to_string(),
             ],
         )

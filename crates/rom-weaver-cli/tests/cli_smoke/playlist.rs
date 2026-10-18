@@ -166,3 +166,95 @@ fn playlist_flat_writes_bare_file_names() {
         "Game (Disc 1).chd\nGame (Disc 2).chd\n"
     );
 }
+
+#[test]
+fn playlist_dry_run_reports_the_playlist_it_would_write() {
+    let temp = setup_temp_dir();
+    let disc = temp.child("Game (Disc 1).chd");
+    fs::write(disc.path(), b"chd").expect("disc");
+    let out = temp.child("Game.m3u");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[disc.path().to_str().expect("p")],
+            out.path().to_str().expect("p"),
+            &["--dry-run"],
+        ),
+        0,
+    );
+    assert_eq!(json["details"]["dry_run"], true);
+    assert_eq!(json["details"]["read_only"], false);
+    assert_eq!(
+        json["details"]["writes"],
+        serde_json::json!([out.path().to_str().expect("p")])
+    );
+    assert!(!out.path().exists(), "dry run must not write the playlist");
+}
+
+#[test]
+fn playlist_m3u_accepts_track_files_outside_the_sheet_folder() {
+    let temp = setup_temp_dir();
+    let discs = temp.child("discs");
+    let bins = temp.child("bins");
+    fs::create_dir_all(discs.path()).expect("discs dir");
+    fs::create_dir_all(bins.path()).expect("bins dir");
+    fs::write(bins.path().join("Game (Disc 1).bin"), b"bin").expect("bin");
+    fs::write(
+        discs.path().join("Game (Disc 1).cue"),
+        "FILE \"../bins/Game (Disc 1).bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue");
+    let cue = discs.path().join("Game (Disc 1).cue");
+    let out = temp.child("up/Game.m3u");
+    run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p")],
+            out.path().to_str().expect("p"),
+            &[],
+        ),
+        0,
+    );
+    assert_eq!(
+        fs::read_to_string(out.path()).expect("m3u"),
+        "../discs/Game (Disc 1).cue\n"
+    );
+    // A ZIP has to hold the track file, so it still refuses one it cannot store.
+    let zip = temp.child("up/Game.zip");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p")],
+            zip.path().to_str().expect("p"),
+            &[],
+        ),
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+}
+
+#[test]
+fn playlist_lists_a_ccd_image_once_without_its_data_files() {
+    let temp = setup_temp_dir();
+    for disc in [1, 2] {
+        for extension in ["ccd", "img", "sub"] {
+            fs::write(
+                temp.path().join(format!("Game (Disc {disc}).{extension}")),
+                b"x",
+            )
+            .expect("image file");
+        }
+    }
+    let inputs: Vec<_> = ["ccd", "img", "sub"]
+        .iter()
+        .flat_map(|extension| (1..=2).map(move |disc| format!("Game (Disc {disc}).{extension}")))
+        .map(|name| temp.path().join(name).to_str().expect("p").to_string())
+        .collect();
+    let input_refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
+    let out = temp.child("Game.m3u");
+    run_single_json_event(
+        &playlist_args(&input_refs, out.path().to_str().expect("p"), &["--flat"]),
+        0,
+    );
+    assert_eq!(
+        fs::read_to_string(out.path()).expect("m3u"),
+        "Game (Disc 1).ccd\nGame (Disc 2).ccd\n"
+    );
+}

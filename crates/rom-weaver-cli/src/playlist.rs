@@ -199,12 +199,46 @@ struct PlaylistPlan {
     companions: Vec<(PathBuf, String)>,
 }
 
-/// Drop inputs that a `.cue`/`.gdi` among the inputs already names (its track
-/// `.bin` files), and collect those named files as companions.
-fn plan_playlist(inputs: &[PathBuf], sort: bool) -> Result<PlaylistPlan> {
+/// The data files a `.ccd`/`.mds` image descriptor is stored with (`.img` and
+/// `.sub`, or `.mdf`), as they sit next to it. Only files that exist count.
+fn image_companions(input: &Path) -> Vec<(PathBuf, String)> {
+    let extension = input
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    let wanted: &[&str] = match extension.as_deref() {
+        Some("ccd") => &["img", "sub"],
+        Some("mds") => &["mdf"],
+        _ => return Vec::new(),
+    };
+    let Some(stem) = input
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+    else {
+        return Vec::new();
+    };
+    let dir = input.parent().unwrap_or_else(|| Path::new(""));
+    wanted
+        .iter()
+        .flat_map(|extension| [extension.to_string(), extension.to_ascii_uppercase()])
+        .map(|extension| format!("{stem}.{extension}"))
+        .filter(|name| dir.join(name).is_file())
+        .map(|name| (dir.join(&name), name))
+        .collect()
+}
+
+/// Drop inputs that a disc sheet among the inputs already names (a `.cue`/`.gdi`
+/// track file, or the data files stored with a `.ccd`/`.mds`), and collect
+/// those named files as companions. Only a ZIP reads or copies companions, so
+/// only a ZIP refuses names that point outside the sheet's folder.
+fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPlan> {
     let mut named: HashSet<String> = HashSet::new();
     let mut companions = Vec::new();
     for input in inputs {
+        for (path, name) in image_companions(input) {
+            named.insert(name.to_ascii_lowercase());
+            companions.push((path, name));
+        }
         if detect_disc_sheet(input).is_none() {
             continue;
         }
@@ -214,14 +248,16 @@ fn plan_playlist(inputs: &[PathBuf], sort: bool) -> Result<PlaylistPlan> {
             let archive_name = reference.replace('\\', "/");
             let escapes = Path::new(&archive_name).is_absolute()
                 || archive_name.split('/').any(|part| part == "..");
-            if escapes {
+            if escapes && zip {
                 return Err(RomWeaverError::Validation(format!(
                     "`{}` names `{reference}`, which is outside the sheet's folder",
                     input.display()
                 )));
             }
             named.insert(file_name_of(Path::new(&archive_name)).to_ascii_lowercase());
-            companions.push((sheet_dir.join(&archive_name), archive_name));
+            if zip {
+                companions.push((sheet_dir.join(&archive_name), archive_name));
+            }
         }
     }
     let mut discs = Vec::new();
@@ -319,7 +355,11 @@ impl CliApp {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
-        let plan = plan_playlist(&args.input, !args.no_sort)?;
+        let plan = plan_playlist(
+            &args.input,
+            !args.no_sort,
+            output_kind == PlaylistOutput::Zip,
+        )?;
         trace!(
             discs = plan.discs.len(),
             companions = plan.companions.len(),
