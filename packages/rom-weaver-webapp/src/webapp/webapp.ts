@@ -19,6 +19,7 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } f
 import { type CreatorMode, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "./app-routes.ts";
 import { readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { recordFirstVisit } from "./last-seen-version.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -79,6 +80,9 @@ if (typeof window !== "undefined") {
   void startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
   });
+  // Before the gate below can hold rendering for a service worker reload, after
+  // which a first visit would look like a returning one.
+  recordFirstVisit();
 }
 // Suppresses the first render until cross-origin isolation settles so the un-isolated first document
 // never flashes before the service worker reloads the page. Decided synchronously at construction.

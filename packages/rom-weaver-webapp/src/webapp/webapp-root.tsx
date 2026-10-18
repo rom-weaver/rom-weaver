@@ -63,7 +63,9 @@ import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
-import type { UpdateBannerKind } from "./components/update-banner.tsx";
+// Static, unlike the routes: a deploy that is waiting has already replaced
+// the old hashed chunks on the host, so a lazy banner could no longer load.
+import { UpdateBanner, type UpdateBannerKind } from "./components/update-banner.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
@@ -217,10 +219,6 @@ const SettingsPanel = lazy(loadSettingsPanel);
 // Only a drop that could go to more than one place opens it, so it stays out of the entry chunk.
 const DropRouteDialog = lazy(() =>
   import("./components/drop-route-dialog.tsx").then((module) => ({ default: module.DropRouteDialog })),
-);
-// Only a waiting deploy or a returning visitor's first load of a newer release shows it, so it stays out of the entry chunk.
-const UpdateBanner = lazy(() =>
-  import("./components/update-banner.tsx").then((module) => ({ default: module.UpdateBanner })),
 );
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
@@ -1050,15 +1048,13 @@ function WebappRoot({
           />
           {/* Mounted from the first reason to announce anything, so a closing banner can still slide away. */}
           {pageUpdate.ready || previewRuntimeState === "update" || updatedSince.since ? (
-            <Suspense fallback={null}>
-              <UpdateBanner
-                kind={updateBannerKind}
-                onDismiss={dismissUpdateBanner}
-                onOpenWhatsNew={openWhatsNew}
-                onReload={actions.onReloadUpdate}
-                since={updatedSince.announce ? updatedSince.since : null}
-              />
-            </Suspense>
+            <UpdateBanner
+              kind={updateBannerKind}
+              onDismiss={dismissUpdateBanner}
+              onOpenWhatsNew={openWhatsNew}
+              onReload={actions.onReloadUpdate}
+              since={updatedSince.announce ? updatedSince.since : null}
+            />
           ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />

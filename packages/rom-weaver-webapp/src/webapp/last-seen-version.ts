@@ -32,23 +32,38 @@ const isNewRelease = (version: string, since: UpdatedSince): boolean => {
 
 const describeError = (error: unknown) => (error instanceof Error ? error.message : String(error || ""));
 
+// A service worker only controls a page loaded before, so a controlled page
+// without a record is a visitor from a build that predates it, not a first visit.
+const isControlledByServiceWorker = () =>
+  typeof navigator !== "undefined" && Boolean(navigator.serviceWorker?.controller);
+
 /**
- * Reads what this load updated the visitor from, or null when there is nothing to announce.
- * A first visit records the running version, so the next release has something to compare with.
+ * Records the running version on a first visit, so the next release has something to compare with.
+ * Boot calls it before rendering can wait on a service worker: once one controls the page, as it
+ * does after the reload that adds cross-origin isolation headers, a first visit looks like a return.
  */
+const recordFirstVisit = () => {
+  try {
+    if (localStorage.getItem(LAST_SEEN_VERSION_STORAGE_KEY) !== null || isControlledByServiceWorker()) return;
+    localStorage.setItem(LAST_SEEN_VERSION_STORAGE_KEY, APP_VERSION);
+    logger.debug("Recorded first seen version", { version: APP_VERSION });
+  } catch (error) {
+    logger.trace("Unable to record first seen version", { message: describeError(error) });
+  }
+};
+
+/** Reads what this load updated the visitor from, or null when there is nothing to announce. */
 const resolveUpdatedSince = (): UpdatedSince | null => {
   try {
     const lastSeen = localStorage.getItem(LAST_SEEN_VERSION_STORAGE_KEY);
     if (lastSeen !== null) return isNewerVersion(APP_VERSION, lastSeen) ? { from: lastSeen } : null;
-    // A service worker only controls a page loaded before, so this is a visitor
-    // from a build that predates the record rather than a first visit.
-    if (typeof navigator !== "undefined" && navigator.serviceWorker?.controller) return {};
-    localStorage.setItem(LAST_SEEN_VERSION_STORAGE_KEY, APP_VERSION);
-    logger.debug("Recorded first seen version", { version: APP_VERSION });
+    if (isControlledByServiceWorker()) return {};
   } catch (error) {
     // Without storage there is no telling what the visitor saw last, so nothing is announced.
     logger.trace("Unable to read last seen version", { message: describeError(error) });
+    return null;
   }
+  recordFirstVisit();
   return null;
 };
 
@@ -67,5 +82,5 @@ const writeLastSeenVersion = (version = APP_VERSION) => {
   }
 };
 
-export { isNewerVersion, isNewRelease, resolveUpdatedSince, writeLastSeenVersion };
+export { isNewerVersion, isNewRelease, recordFirstVisit, resolveUpdatedSince, writeLastSeenVersion };
 export type { UpdatedSince };

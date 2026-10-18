@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_VERSION } from "../../src/webapp/build-version.ts";
-import { isNewRelease, resolveUpdatedSince, writeLastSeenVersion } from "../../src/webapp/last-seen-version.ts";
+import {
+  isNewRelease,
+  recordFirstVisit,
+  resolveUpdatedSince,
+  writeLastSeenVersion,
+} from "../../src/webapp/last-seen-version.ts";
 
 const KEY = "rom-weaver-last-seen-version";
 const NEWER = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
@@ -67,6 +72,33 @@ describe("resolveUpdatedSince", () => {
     });
 
     expect(resolveUpdatedSince()).toBeNull();
+  });
+});
+
+describe("recordFirstVisit", () => {
+  it("keeps a first visit quiet after a service worker reload takes control", () => {
+    recordFirstVisit();
+    controlPage(true);
+
+    expect(resolveUpdatedSince()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBe(APP_VERSION);
+  });
+
+  it("leaves a returning visitor with no record to be announced", () => {
+    controlPage(true);
+
+    recordFirstVisit();
+
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    expect(resolveUpdatedSince()).toEqual({});
+  });
+
+  it("never overwrites a record", () => {
+    window.localStorage.setItem(KEY, OLDER);
+
+    recordFirstVisit();
+
+    expect(window.localStorage.getItem(KEY)).toBe(OLDER);
   });
 });
 
