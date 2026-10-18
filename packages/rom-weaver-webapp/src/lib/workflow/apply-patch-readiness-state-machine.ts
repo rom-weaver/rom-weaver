@@ -8,6 +8,10 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
+  /** The patch names a ROM member as its input or target. A lone bare file that no member
+   * reference resolved to is then not the target: it stays unassigned instead of being picked as
+   * the only candidate. */
+  hasMemberRef?: boolean;
   /** True for the first patch on `target` (each target is its own engine run) when it reads the
    * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
    * enforces the same); a later patch's input is usually the previous patch's output, which the
@@ -254,6 +258,7 @@ const createApplyPatchValidationKey = <TSource>(
 const resolveApplyPatchTargetForStage = async <TSource>(
   stage: StagedSource<TSource>,
   assets: InputAsset[],
+  hasMemberRef = false,
 ): Promise<InputAsset | null> => {
   if (!assets.length) {
     clearApplyPatchTarget(stage);
@@ -262,6 +267,10 @@ const resolveApplyPatchTargetForStage = async <TSource>(
   if (assets.length === 1) {
     const [target] = assets;
     if (!target) return null;
+    if (hasMemberRef && !stage.state.targetInputId && target.member === undefined && !target.discGroupId) {
+      clearApplyPatchTarget(stage);
+      return null;
+    }
     assignApplyPatchTarget(stage, target);
     return target;
   }
@@ -318,7 +327,7 @@ const settleApplyPatchTarget = async <TSource>(
   assets: InputAsset[],
 ) => {
   try {
-    const target = await resolveApplyPatchTargetForStage(stage, assets);
+    const target = await resolveApplyPatchTargetForStage(stage, assets, adapters.hasMemberRef);
     stage.state.status = target ? "ready" : "needsSelection";
     const preflight = target
       ? createApplyPatchChecksumPreflight(

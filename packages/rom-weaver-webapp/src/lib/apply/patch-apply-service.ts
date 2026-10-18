@@ -13,7 +13,7 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
-import { findMemberAssets } from "./bare-member-target.ts";
+import { bareFileMemberConflicts, collectMemberRefs, findMemberAssets } from "./bare-member-target.ts";
 import { parseFilenameCrc32 } from "./patch-filename-requirements.ts";
 
 type PatchSourceValidator = {
@@ -300,8 +300,9 @@ const findMemberTarget = (
   member: string,
   patchableAssets: InputAsset[],
   inputChecks?: string,
+  memberRefs: readonly string[] = [],
 ): InputAsset | undefined => {
-  const matches = findMemberAssets(member, patchableAssets, inputChecks);
+  const matches = findMemberAssets(member, patchableAssets, inputChecks, memberRefs);
   if (matches.length > 1) throw new Error(`Patch ${index + 1} ROM member is ambiguous: ${member}`);
   return matches[0];
 };
@@ -311,11 +312,17 @@ const resolveMemberTarget = (
   member: string,
   patchableAssets: InputAsset[],
   inputChecks?: string,
+  memberRefs: readonly string[] = [],
 ): InputAsset => {
-  const match = findMemberTarget(index, member, patchableAssets, inputChecks);
+  const match = findMemberTarget(index, member, patchableAssets, inputChecks, memberRefs);
   if (!match) {
     const [only] = patchableAssets;
     const bare = patchableAssets.length === 1 && only?.member === undefined && !only?.discGroupId;
+    const conflicts = bare && only ? bareFileMemberConflicts(member, only, memberRefs) : [];
+    if (conflicts.length)
+      throw new Error(
+        `Patch ${index + 1} ROM member was not found: ${member}; the bare input ${only?.fileName} matches several weave members (${[member, ...conflicts].join(", ")}) and cannot stand in for more than one`,
+      );
     throw new Error(
       bare
         ? `Patch ${index + 1} ROM member was not found: ${member}; the input ${only?.fileName} is not an archive and neither its file name nor its checks match the member`
@@ -337,6 +344,7 @@ const resolvePatchTargets = async (
   const patchableAssets = assets.filter((asset) => asset.patchable);
   if (!patchableAssets.length) throw new Error("No patchable input was provided");
 
+  const memberRefs = collectMemberRefs([...(patchInputs ?? []), ...(patchTargetRefs ?? [])]);
   const targets: InputAsset[] = [];
   const patchIndexById = new Map<string, number>();
   for (let index = 0; index < patches.length; index++) {
@@ -360,7 +368,7 @@ const resolvePatchTargets = async (
       continue;
     }
     if (laneRef && "rom" in laneRef && laneRef.member) {
-      targets.push(resolveMemberTarget(index, laneRef.member, patchableAssets, patchInputChecks?.[index]));
+      targets.push(resolveMemberTarget(index, laneRef.member, patchableAssets, patchInputChecks?.[index], memberRefs));
       continue;
     }
     targets.push(await resolvePatchTarget(index, patches[index], patchableAssets, patchTargets?.[index]));
@@ -383,7 +391,7 @@ const resolvePatchTargets = async (
     } else if (inputRef.member) {
       // An unknown member stays with the worker, which resolves members
       // against the leaf it receives.
-      readTarget = findMemberTarget(index, inputRef.member, patchableAssets, patchInputChecks?.[index]);
+      readTarget = findMemberTarget(index, inputRef.member, patchableAssets, patchInputChecks?.[index], memberRefs);
     }
     if (!readTarget || readTarget.id === writeTarget.id) continue;
     // The worker receives one leaf file per target, so a read from another

@@ -32,7 +32,7 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
-import { findMemberAssets } from "../apply/bare-member-target.ts";
+import { collectMemberRefs, findMemberAssets } from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -895,7 +895,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           else clearApplyPatchTarget(stage);
         } else if (option.input?.member) {
           const member = option.input.member;
-          const matches = findMemberAssets(member, this.getPatchableInputAssets(), stage.state.inputChecks);
+          const matches = findMemberAssets(
+            member,
+            this.getPatchableInputAssets(),
+            stage.state.inputChecks,
+            this.getPatchMemberRefs(),
+          );
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -913,7 +918,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
           else clearApplyPatchTarget(stage);
         } else if (target?.member) {
-          const matches = findMemberAssets(target.member, this.getPatchableInputAssets(), stage.state.inputChecks);
+          const matches = findMemberAssets(
+            target.member,
+            this.getPatchableInputAssets(),
+            stage.state.inputChecks,
+            this.getPatchMemberRefs(),
+          );
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -1792,6 +1802,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
+      hasMemberRef: !!inputRef && !("patch" in inputRef) && !!inputRef.member,
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
@@ -1803,6 +1814,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
     });
+  }
+
+  /** Every distinct ROM member the staged patches name as their input or target. */
+  private getPatchMemberRefs() {
+    return collectMemberRefs(this.patches.flatMap((patch) => [patch.state.patchInput, patch.state.patchTarget]));
   }
 
   private async refreshPatchReadiness() {
@@ -1818,7 +1834,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (target) assignApplyPatchTarget(patch, target);
         else clearApplyPatchTarget(patch);
       } else if (targetRef?.member) {
-        const matches = findMemberAssets(targetRef.member, this.getPatchableInputAssets(), patch.state.inputChecks);
+        const matches = findMemberAssets(
+          targetRef.member,
+          this.getPatchableInputAssets(),
+          patch.state.inputChecks,
+          this.getPatchMemberRefs(),
+        );
         if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);
         else clearApplyPatchTarget(patch);
       }

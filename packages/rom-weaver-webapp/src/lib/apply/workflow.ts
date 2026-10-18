@@ -27,7 +27,7 @@ import { type createPatchFile, getPatchFileExternalSource } from "../input/binar
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
-import { findMemberAssets } from "./bare-member-target.ts";
+import { collectMemberRefs, findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
@@ -458,8 +458,19 @@ const getPatchIds = (patchIndices: number[], patchOptions: PatchInput["patchOpti
 };
 
 // A member reference names this asset when it is the asset's own member or a bare file standing in for it.
-const memberIsAsset = (asset: InputAsset, member: string, inputChecks: string | undefined) =>
-  asset.member === member || findMemberAssets(member, [asset], inputChecks).length > 0;
+const memberIsAsset = (
+  asset: InputAsset,
+  member: string,
+  inputChecks: string | undefined,
+  patchOptions: PatchInput["patchOptions"],
+) =>
+  asset.member === member ||
+  findMemberAssets(
+    member,
+    [asset],
+    inputChecks,
+    collectMemberRefs((patchOptions ?? []).flatMap((option) => [option?.input, option?.target])),
+  ).length > 0;
 
 const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
   const inputs = patchIndices.map((patchIndex) => {
@@ -470,7 +481,7 @@ const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchO
       input &&
       "rom" in input &&
       input.member &&
-      memberIsAsset(asset, input.member, patchOptions?.[patchIndex]?.inputChecks)
+      memberIsAsset(asset, input.member, patchOptions?.[patchIndex]?.inputChecks, patchOptions)
     )
       return { rom: true } as const;
     return input || null;
@@ -487,7 +498,7 @@ const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patch
       target &&
       "rom" in target &&
       target.member &&
-      memberIsAsset(asset, target.member, patchOptions?.[patchIndex]?.inputChecks)
+      memberIsAsset(asset, target.member, patchOptions?.[patchIndex]?.inputChecks, patchOptions)
     )
       return { rom: true } as const;
     return target || null;
