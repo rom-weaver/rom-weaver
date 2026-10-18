@@ -17,7 +17,7 @@ const sorted = (values) => [...values].sort((left, right) => String(left).locale
 describe("generated format metadata parity", () => {
   it("keeps file filters derived from format registries", () => {
     expect(sorted(ROM_WEAVER_FILE_FILTERS.containerExtensions)).toEqual(
-      sorted(ROM_WEAVER_CONTAINER_FORMATS.flatMap((format) => format.extensions)),
+      sorted(unique(ROM_WEAVER_CONTAINER_FORMATS.flatMap((format) => format.extensions))),
     );
     expect(ROM_WEAVER_FILE_FILTERS.patchExtensions).toEqual([
       ...ROM_WEAVER_PATCH_FORMATS.flatMap((format) => format.extensions),
