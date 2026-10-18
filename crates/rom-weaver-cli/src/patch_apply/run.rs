@@ -753,6 +753,7 @@ impl CliApp {
                 run.probe_threads.clone(),
             ))
         };
+        let mut bare_bound_member: Option<&str> = None;
         for member in explicit_rom_members {
             if let Some(disc) = run.disc_context.as_ref() {
                 let path = self
@@ -779,6 +780,16 @@ impl CliApp {
                         )),
                     ));
                 }
+                if let Some(first) = bare_bound_member {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "the bare input file `{}` matches several weave ROM members (`{first}`, `{member}`) and can stand in for only one; provide an archive or disc containing them",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                bare_bound_member = Some(member);
                 debug!(member, input = %run.args.input.display(), "using the bare input file as the weave ROM member");
                 run.rom_member_inputs
                     .insert(member.to_owned(), run.resolved_input.clone());
@@ -831,7 +842,9 @@ impl CliApp {
 
     /// Whether the bare input file stands in for `member`: its file name
     /// matches the member's, or it satisfies the checks the weave declares for
-    /// that member (a step's declared input checks, or `rom.checks`).
+    /// that member (a step's declared input checks, or `rom.checks` when the
+    /// weave names no `rom.member`, since those checks then describe the root
+    /// ROM rather than a member).
     fn bare_input_matches_member(&self, run: &PatchApplyRun, member: &str) -> Result<bool> {
         let name_of = |value: &str| {
             value
@@ -852,16 +865,20 @@ impl CliApp {
             .patch_step_metadata
             .iter()
             .filter(|step| {
-                matches!(&step.target, Some(WeavePatchInput::Rom { member: Some(m), .. }) if m == member)
+                [&step.input, &step.target].into_iter().any(|reference| {
+                    matches!(reference, Some(WeavePatchInput::Rom { member: Some(m), .. }) if m == member)
+                })
             })
             .filter_map(|step| step.verification.as_ref()?.declared_input.as_ref())
             .map(|state| (state.size, state.checksums.clone()))
             .collect();
-        if let Some((_, requirements)) = run
-            .weave_resolution
-            .as_ref()
-            .and_then(|resolution| resolution.rom_checks.as_ref())
-        {
+        if let Some((_, requirements)) = run.weave_resolution.as_ref().and_then(|resolution| {
+            resolution
+                .rom_member
+                .is_none()
+                .then_some(resolution.rom_checks.as_ref())
+                .flatten()
+        }) {
             candidates.push((requirements.size, requirements.checksums.clone()));
         }
         let size = fs::metadata(&run.resolved_input)?.len();

@@ -4445,6 +4445,98 @@ fn weave_patch_target_member_accepts_the_bare_member_file() {
     );
 }
 
+/// Applies `weave_json` to the bare `input` file and returns the terminal event.
+fn apply_weave_to_bare_input(
+    temp: &TempDir,
+    input: &Path,
+    weave_json: &str,
+    expected_code: i32,
+) -> (PathBuf, serde_json::Value) {
+    let weave = temp.child("bare-weave.json");
+    fs::write(weave.path(), weave_json).expect("weave");
+    let output = temp.child("bare-out.bin");
+    let events = run_json_events(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.to_str().expect("path"),
+            "--weave",
+            weave.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        expected_code,
+    );
+    (
+        output.path().to_path_buf(),
+        events.last().expect("terminal").clone(),
+    )
+}
+
+#[test]
+fn weave_rom_checks_do_not_bind_the_bare_file_to_another_member() {
+    let temp = setup_temp_dir();
+    let rom = write_weave_rom(&temp, "romA.bin");
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    write_offset_ips(&temp, "b.ips", 1, 0xBB);
+    let crc = crc32_hex(WEAVE_ROM_BYTES);
+    // `rom.checks` describes `rom.member` (romA.bin); it must not make the same
+    // bare file stand in for the other member romB.bin.
+    let weave = format!(
+        r#"{{"version":2,"patchBasis":"auto",
+            "rom":{{"member":"romA.bin","checks":{{"checksums":{{"crc32":"{crc}"}},"size":16}}}},
+            "patches":[
+              {{"id":"a","path":"a.ips","target":{{"rom":true,"member":"romA.bin"}}}},
+              {{"id":"b","path":"b.ips","target":{{"rom":true,"member":"romB.bin"}}}}]}}"#
+    );
+    let (_, terminal) = apply_weave_to_bare_input(&temp, &rom, &weave, 1);
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal.to_string().contains("romB.bin"),
+        "unexpected failure: {terminal}"
+    );
+}
+
+#[test]
+fn weave_bare_file_refuses_to_stand_in_for_several_members() {
+    let temp = setup_temp_dir();
+    let rom = write_weave_rom(&temp, "track.bin");
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    write_offset_ips(&temp, "b.ips", 1, 0xBB);
+    let weave = r#"{"version":2,"patchBasis":"auto","patches":[
+        {"id":"a","path":"a.ips","target":{"rom":true,"member":"disc-a/track.bin"}},
+        {"id":"b","path":"b.ips","target":{"rom":true,"member":"disc-b/track.bin"}}]}"#;
+    let (_, terminal) = apply_weave_to_bare_input(&temp, &rom, weave, 1);
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal
+            .to_string()
+            .contains("matches several weave ROM members"),
+        "unexpected failure: {terminal}"
+    );
+}
+
+#[test]
+fn weave_bare_file_matches_a_member_named_only_by_a_patch_input() {
+    let temp = setup_temp_dir();
+    let rom = write_weave_rom(&temp, "renamed.bin");
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    let crc = crc32_hex(WEAVE_ROM_BYTES);
+    let weave = format!(
+        r#"{{"version":2,"patchBasis":"auto","patches":[
+            {{"id":"a","path":"a.ips","input":{{"rom":true,"member":"romA.bin"}},
+              "inputChecks":{{"checksums":{{"crc32":"{crc}"}},"size":16}}}}]}}"#
+    );
+    let (output, _) = apply_weave_to_bare_input(&temp, &rom, &weave, 0);
+    assert_eq!(
+        fs::read(output).expect("output"),
+        patched_rom_bytes(&[(0, 0xAA)])
+    );
+}
+
 #[test]
 fn weave_generated_output_members_support_fixed_and_cumulative_inputs() {
     let temp = setup_temp_dir();
