@@ -9,6 +9,8 @@ import {
  * The home page below the hero. Each section points somewhere else: the file
  * router to a workflow, the format lists to the reference tables, the FAQ to
  * the docs. Nothing here is interactive beyond links and native disclosure.
+ * Sections marked `home-rail` put their heading beside the content on wide
+ * screens.
  */
 
 /** One extension per format the Apply route accepts, in registry order. */
@@ -110,72 +112,39 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
   const localizer = useUiLocalizer();
   return (
     <section aria-labelledby="home-routes-title" className="home-wrap home-section home-routes">
-      <h2 id="home-routes-title">{localizer.message("ui.home.routesTitle")}</h2>
-      <p className="home-blurb">
-        {localizer.message("ui.home.routesDescription")}{" "}
-        <a href={featuresHref}>{localizer.message("ui.home.formatsEyebrow")}</a>
-      </p>
+      <div className="home-section-head">
+        <h2 id="home-routes-title">{localizer.message("ui.home.routesTitle")}</h2>
+        <p className="home-blurb">
+          {localizer.message("ui.home.routesDescription")}{" "}
+          <a href={featuresHref}>{localizer.message("ui.home.formatsEyebrow")}</a>
+        </p>
+      </div>
       <ul className="home-route-list">
         {HOME_ROUTES.map((item) => (
-          <li className="home-route" key={item.file}>
-            <div className="home-route-copy">
-              <p className="home-route-file">
-                <i className={`home-swatch home-swatch-${item.swatch}`} />
-                <code>{item.file}</code>
-              </p>
-              <h3>{localizer.message(item.title)}</h3>
-              <p>{localizer.message(item.body)}</p>
-            </div>
-            <div className={item.secondary ? "home-route-actions" : undefined}>
-              <a className="btn ghost slim home-route-go" href={route(item.slug)}>
-                {localizer.message(item.go)}
-              </a>
-              {item.secondary ? (
+          <li className={item.secondary ? "home-route home-route-split" : "home-route"} key={item.file}>
+            <p className="home-route-file">
+              <i className={`home-swatch home-swatch-${item.swatch}`} />
+              <code>{item.file}</code>
+            </p>
+            <h3>{localizer.message(item.title)}</h3>
+            <p className="home-route-body">{localizer.message(item.body)}</p>
+            {item.secondary ? (
+              <div className="home-route-actions">
+                <a className="btn ghost slim home-route-go" href={route(item.slug)}>
+                  {localizer.message(item.go)}
+                </a>
                 <a className="btn ghost slim home-route-go" href={route(item.secondary.slug)}>
                   {localizer.message(item.secondary.go)}
                 </a>
-              ) : null}
-            </div>
+              </div>
+            ) : (
+              <a className="btn ghost slim home-route-go" href={route(item.slug)}>
+                {localizer.message(item.go)}
+              </a>
+            )}
           </li>
         ))}
       </ul>
-    </section>
-  );
-};
-
-const HomeChain = (): React.ReactElement => {
-  const localizer = useUiLocalizer();
-  const steps: readonly { body: React.ReactNode; swatch: string; title: MessageId }[] = [
-    {
-      body: localizer.message("ui.home.chainOpenBody", { file: "game.chd" }),
-      swatch: "source",
-      title: "ui.home.chainOpen",
-    },
-    { body: localizer.message("ui.home.chainUnpackBody"), swatch: "weft-1", title: "ui.home.chainUnpack" },
-    { body: localizer.message("ui.home.chainApplyBody"), swatch: "wefts", title: "ui.home.chainApply" },
-    {
-      body: localizer.message("ui.home.chainCompressBody", { file: "patched-game.chd" }),
-      swatch: "output",
-      title: "ui.home.chainCompress",
-    },
-    { body: localizer.message("ui.home.chainCheckBody"), swatch: "verified", title: "ui.home.chainCheck" },
-  ];
-  return (
-    <section aria-labelledby="home-chain-title" className="home-wrap home-section home-chain">
-      <h2 id="home-chain-title">{localizer.message("ui.home.chainTitle")}</h2>
-      <p className="home-blurb">{localizer.message("ui.home.chainDescription")}</p>
-      <ol className="home-chain-steps">
-        {steps.map((step, index) => (
-          <li key={step.title}>
-            <span className="home-chain-bar">
-              {index + 1}
-              <i className={`home-swatch home-swatch-${step.swatch}`} />
-            </span>
-            <h3>{localizer.message(step.title)}</h3>
-            <p>{step.body}</p>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 };
@@ -192,11 +161,13 @@ const HomeFormats = ({ docsHref }: HomeFormatsProps): React.ReactElement => {
     { items: CHECKSUM_ALGORITHMS, title: "ui.home.checksumTypes" },
   ];
   return (
-    <section aria-labelledby="home-formats-title" className="home-wrap home-section home-formats">
-      <h2 id="home-formats-title">{localizer.message("ui.home.formatsHeading")}</h2>
-      <p className="home-blurb">
-        {localizer.message("ui.home.formatsTitle")} <a href={docsHref}>{localizer.message("ui.home.formatsLink")}</a>
-      </p>
+    <section aria-labelledby="home-formats-title" className="home-wrap home-section home-rail home-formats">
+      <div className="home-section-head">
+        <h2 id="home-formats-title">{localizer.message("ui.home.formatsHeading")}</h2>
+        <p className="home-blurb">
+          {localizer.message("ui.home.formatsTitle")} <a href={docsHref}>{localizer.message("ui.home.formatsLink")}</a>
+        </p>
+      </div>
       <div className="home-format-groups">
         {groups.map((group) => (
           <div className="home-format-group" key={group.title}>
@@ -217,14 +188,12 @@ type HomeTrustProps = {
 const HomeTrust = ({ selfHostingHref, offlineHref }: HomeTrustProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   return (
-    <section aria-labelledby="home-trust-title" className="home-wrap home-section home-trust">
-      <h2 id="home-trust-title">{localizer.message("ui.home.trustTitle")}</h2>
-      <p className="home-blurb">{localizer.message("ui.home.filesStayDescription")}</p>
+    <section aria-labelledby="home-trust-title" className="home-wrap home-section home-rail home-trust">
+      <div className="home-section-head">
+        <h2 id="home-trust-title">{localizer.message("ui.home.trustTitle")}</h2>
+        <p className="home-blurb">{localizer.message("ui.home.filesStayDescription")}</p>
+      </div>
       <ul className="home-trust-list">
-        <li>
-          <h3>{localizer.message("ui.home.filesStay")}</h3>
-          <p>{localizer.message("ui.home.webappItem3")}</p>
-        </li>
         <li>
           <h3>{localizer.message("ui.home.factOffline")}</h3>
           <p>
@@ -262,19 +231,23 @@ type HomeFaqProps = {
 const HomeFaq = ({ faqHref }: HomeFaqProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   return (
-    <section aria-labelledby="home-faq-title" className="home-wrap home-section home-faq">
-      <h2 id="home-faq-title">{localizer.message("ui.home.faqTitle")}</h2>
-      {FAQ.map((item) => (
-        <details key={item.question}>
-          <summary>{localizer.message(item.question)}</summary>
-          <p>{localizer.message(item.answer)}</p>
-        </details>
-      ))}
-      <p className="home-faq-more">
-        <a href={faqHref}>{localizer.message("ui.home.faqMore")}</a>
-      </p>
+    <section aria-labelledby="home-faq-title" className="home-wrap home-section home-rail home-faq">
+      <div className="home-section-head">
+        <h2 id="home-faq-title">{localizer.message("ui.home.faqTitle")}</h2>
+        <a className="home-faq-more" href={faqHref}>
+          {localizer.message("ui.home.faqMore")}
+        </a>
+      </div>
+      <div>
+        {FAQ.map((item) => (
+          <details key={item.question}>
+            <summary>{localizer.message(item.question)}</summary>
+            <p>{localizer.message(item.answer)}</p>
+          </details>
+        ))}
+      </div>
     </section>
   );
 };
 
-export { HomeChain, HomeFaq, HomeFormats, HomeRoutes, HomeTrust };
+export { HomeFaq, HomeFormats, HomeRoutes, HomeTrust };

@@ -359,7 +359,7 @@ assertIncludes(homeHtml, "Online ROM patcher.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="btn ghost" href="/apply-patches"', "home Apply action");
+assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-patches"', "home Apply action");
 assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
 assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
