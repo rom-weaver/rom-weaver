@@ -207,6 +207,10 @@ const buildStackViewState = ({
   }),
 });
 
+/** Whether the apply button can start a run: not disabled, not blocked by a failed validation. */
+const isApplyButtonActionable = (button: { blocked: boolean; disabled: boolean }) =>
+  !(button.disabled || button.blocked);
+
 interface OutputViewStateInput {
   activeSettings: ApplyPatchFormSettings;
   applyQueued: boolean;
@@ -310,4 +314,11 @@ const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewSt
   visible: !!failureMessage && !failurePlacement,
 });
 
-export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, formatHeaderAutoLabel };
+export {
+  buildNoticeViewState,
+  buildOutputViewState,
+  buildStackViewState,
+  buildUiViewState,
+  formatHeaderAutoLabel,
+  isApplyButtonActionable,
+};
