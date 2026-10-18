@@ -877,6 +877,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
       let verificationChanged = false;
+      if ("inputChecks" in option) {
+        const value = option.inputChecks?.trim() || undefined;
+        verificationChanged ||= stage.state.inputChecks !== value;
+        stage.state.inputChecks = value;
+      }
       if ("id" in option) {
         verificationChanged ||= stage.state.patchId !== option.id?.trim();
         stage.state.patchId = option.id?.trim() || undefined;
@@ -898,7 +903,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           const matches = findMemberAssets(
             member,
             this.getPatchableInputAssets(),
-            stage.state.inputChecks,
+            this.memberChecksFor(stage),
             this.getPatchMemberRefs(),
           );
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
@@ -921,17 +926,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           const matches = findMemberAssets(
             target.member,
             this.getPatchableInputAssets(),
-            stage.state.inputChecks,
+            this.memberChecksFor(stage),
             this.getPatchMemberRefs(),
           );
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
-      }
-      if ("inputChecks" in option) {
-        const value = option.inputChecks?.trim() || undefined;
-        verificationChanged ||= stage.state.inputChecks !== value;
-        stage.state.inputChecks = value;
       }
       if ("outputChecks" in option) {
         const value = option.outputChecks?.trim() || undefined;
@@ -1802,7 +1802,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
-      hasMemberRef: !!inputRef && !("patch" in inputRef) && !!inputRef.member,
+      memberRef: inputRef && !("patch" in inputRef) ? inputRef.member : undefined,
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
@@ -1814,6 +1814,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
     });
+  }
+
+  /** The checks a bare file must satisfy to stand in for a patch's member: the patch's own input
+   * checks, else the weave's `rom.checks` when the weave names no `rom.member` (those checks then
+   * describe the root ROM rather than a member). */
+  private memberChecksFor(stage: StagedSource<TSource>): string | undefined {
+    if (stage.state.inputChecks) return stage.state.inputChecks;
+    return this.weaveRom && !this.weaveRom.member ? this.weaveRom.checks : undefined;
   }
 
   /** Every distinct ROM member the staged patches name as their input or target. */
@@ -1837,7 +1845,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         const matches = findMemberAssets(
           targetRef.member,
           this.getPatchableInputAssets(),
-          patch.state.inputChecks,
+          this.memberChecksFor(patch),
           this.getPatchMemberRefs(),
         );
         if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);

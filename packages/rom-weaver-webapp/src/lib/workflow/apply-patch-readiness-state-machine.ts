@@ -8,10 +8,10 @@ import { getInputAssetChecksums } from "./staged-source-checksums.ts";
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
-  /** The patch names a ROM member as its input or target. A lone bare file that no member
+  /** The ROM member the patch names as its input or target. A lone bare file that no member
    * reference resolved to is then not the target: it stays unassigned instead of being picked as
-   * the only candidate. */
-  hasMemberRef?: boolean;
+   * the only candidate, and the row reports that the file does not match the member. */
+  memberRef?: string;
   /** True for the first patch on `target` (each target is its own engine run) when it reads the
    * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
    * enforces the same); a later patch's input is usually the previous patch's output, which the
@@ -327,7 +327,7 @@ const settleApplyPatchTarget = async <TSource>(
   assets: InputAsset[],
 ) => {
   try {
-    const target = await resolveApplyPatchTargetForStage(stage, assets, adapters.hasMemberRef);
+    const target = await resolveApplyPatchTargetForStage(stage, assets, !!adapters.memberRef);
     stage.state.status = target ? "ready" : "needsSelection";
     const preflight = target
       ? createApplyPatchChecksumPreflight(
@@ -342,10 +342,17 @@ const settleApplyPatchTarget = async <TSource>(
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;
-    adapters.pushWarning(
-      stage,
-      new RomWeaverError("AMBIGUOUS_SELECTION", `${stage.state.fileName || "Patch"} target selection is required`),
-    );
+    const [bare] = assets;
+    const bareMismatch = adapters.memberRef && assets.length === 1 && bare?.member === undefined && !bare?.discGroupId;
+    // A bare file whose name equals the member's was left unassigned only because several members
+    // want it; any other bare file simply matches nothing.
+    const baseName = (value: string) => value.split(/[\\/]/).pop()?.toLowerCase();
+    const nameMatches = !!bare && baseName(bare.fileName) === baseName(adapters.memberRef ?? "");
+    const mismatchMessage = nameMatches
+      ? `the bare input file \`${bare?.fileName}\` matches several weave ROM members and can stand in for only one; provide an archive or disc containing them`
+      : `weave ROM member \`${adapters.memberRef}\` was not found in \`${bare?.fileName}\`: the input is not an archive and neither its file name nor its checks match the member`;
+    const message = bareMismatch ? mismatchMessage : `${stage.state.fileName || "Patch"} target selection is required`;
+    adapters.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", message));
   } catch (error) {
     const normalized = toRomWeaverError(error);
     if (normalized.code !== "AMBIGUOUS_SELECTION" && normalized.code !== "PATCH_TARGET_MISMATCH") throw normalized;

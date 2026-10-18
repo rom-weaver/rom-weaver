@@ -184,7 +184,7 @@ test("a patch-level target member accepts the bare member file and rejects an un
   const expected = romBytes.slice();
   expected[0] = 0xa1;
   expect(await run(memberName)).toEqual(expected);
-  await expect(run(`unrelated-${runId}.bin`)).rejects.toThrow(/target selection is required/);
+  await expect(run(`unrelated-${runId}.bin`)).rejects.toThrow(/neither its file name nor its checks match the member/);
 }, 180000);
 
 test("a bare file does not stand in for several same-named members", async () => {
@@ -203,7 +203,7 @@ test("a bare file does not stand in for several same-named members", async () =>
     await workflow.addPatch(createIpsPatch("b.ips", 1, 0xb2));
     await workflow.setPatchOption(0, { id: "a", target: { member: "disc-a/track.bin", rom: true } });
     await workflow.setPatchOption(1, { id: "b", target: { member: "disc-b/track.bin", rom: true } });
-    await expect(workflow.run()).rejects.toThrow(/target selection is required/);
+    await expect(workflow.run()).rejects.toThrow(/matches several weave ROM members/);
   } finally {
     await workflow.dispose();
   }
