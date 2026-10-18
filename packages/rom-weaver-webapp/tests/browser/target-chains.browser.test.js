@@ -154,3 +154,35 @@ test("weave targets preserve a selected track chain when an optional patch is en
     await created.archiveOutput?.dispose();
   }
 }, 180000);
+
+test("a patch-level target member accepts the bare member file and rejects an unrelated one", async () => {
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const romBytes = new Uint8Array(4096);
+  for (let index = 0; index < romBytes.length; index += 1) romBytes[index] = (index * 13) & 0xff;
+  const memberName = `bare-member-${runId}.bin`;
+  const run = async (inputName) => {
+    const workflow = new ApplyWorkflow({
+      settings: {
+        output: { compression: "none", outputName: `bare-member-result-${runId}-${inputName}` },
+        workers: { threads: 1 },
+      },
+    });
+    try {
+      await workflow.setInput([new File([romBytes], inputName, { type: "application/octet-stream" })]);
+      await workflow.addPatch(createIpsPatch("a.ips", 0, 0xa1));
+      await workflow.setPatchOption(0, { id: "a", target: { member: memberName, rom: true } });
+      const result = await workflow.run();
+      try {
+        return new Uint8Array(await (await result.output.getBlob()).arrayBuffer());
+      } finally {
+        await result.output.dispose();
+      }
+    } finally {
+      await workflow.dispose();
+    }
+  };
+  const expected = romBytes.slice();
+  expected[0] = 0xa1;
+  expect(await run(memberName)).toEqual(expected);
+  await expect(run(`unrelated-${runId}.bin`)).rejects.toThrow(/ROM member was not found/);
+}, 180000);

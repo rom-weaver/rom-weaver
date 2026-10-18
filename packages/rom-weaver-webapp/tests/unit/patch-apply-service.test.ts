@@ -57,6 +57,43 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
     ).resolves.toEqual([second]);
   });
 
+  it("accepts a bare file whose name matches the targeted member", async () => {
+    const bare = asset("bare", "romA.bin");
+    await expect(
+      resolvePatchTargets([bare], [patch([])], undefined, undefined, undefined, [{ rom: true, member: "romA.bin" }]),
+    ).resolves.toEqual([bare]);
+  });
+
+  it("accepts a bare file whose checks match the targeted member", async () => {
+    const bare = { ...asset("bare", "renamed.bin"), checksums: { crc32: "deadbeef" }, size: 16 };
+    await expect(
+      resolvePatchTargets(
+        [bare],
+        [patch([])],
+        undefined,
+        undefined,
+        undefined,
+        [{ rom: true, member: "romA.bin" }],
+        ["crc32=deadbeef"],
+      ),
+    ).resolves.toEqual([bare]);
+  });
+
+  it("rejects a bare file matching neither the member name nor its checks", async () => {
+    const bare = { ...asset("bare", "other.bin"), checksums: { crc32: "00000000" } };
+    await expect(
+      resolvePatchTargets(
+        [bare],
+        [patch([])],
+        undefined,
+        undefined,
+        undefined,
+        [{ rom: true, member: "romA.bin" }],
+        ["crc32=deadbeef"],
+      ),
+    ).rejects.toThrow("ROM member was not found: romA.bin");
+  });
+
   it("does not guess a duplicate basename for a nested member", async () => {
     const first = asset("first", "track.bin", "disc-a/track.bin");
     const second = asset("second", "track.bin", "disc-b/track.bin");

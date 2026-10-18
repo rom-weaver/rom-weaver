@@ -4388,6 +4388,64 @@ fn weave_target_chains_follow_optional_selection_after_create() {
 }
 
 #[test]
+fn weave_patch_target_member_accepts_the_bare_member_file() {
+    let temp = setup_temp_dir();
+    let rom = write_weave_rom(&temp, "romA.bin");
+    let archive = temp.child("romA_archive.tar.gz");
+    write_tar_gz_fixture(&[(&rom, "romA.bin")], archive.path());
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    let weave = temp.child("weave.json");
+    fs::write(
+        weave.path(),
+        r#"{"version":2,"patchBasis":"auto","patches":[
+            {"id":"a","path":"a.ips","target":{"rom":true,"member":"romA.bin"}}]}"#,
+    )
+    .expect("weave");
+    let apply = |input: &Path, name: &str, expected_code: i32| {
+        let output = temp.child(name);
+        let events = run_json_events(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.to_str().expect("path"),
+                "--weave",
+                weave.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            expected_code,
+        );
+        (output, events)
+    };
+    let (from_archive, _) = apply(archive.path(), "from-archive.bin", 0);
+    let (from_bare, _) = apply(rom.as_path(), "from-bare.bin", 0);
+    assert_eq!(
+        fs::read(from_bare.path()).expect("bare output"),
+        fs::read(from_archive.path()).expect("archive output"),
+        "the bare member file must produce the archive path's bytes"
+    );
+    assert_eq!(
+        fs::read(from_bare.path()).expect("bare output"),
+        patched_rom_bytes(&[(0, 0xAA)])
+    );
+    // A bare file whose name and checks both differ still fails clearly.
+    let other = temp.child("other.bin");
+    fs::write(other.path(), WEAVE_ROM_BYTES).expect("other");
+    let (_, events) = apply(other.path(), "from-other.bin", 1);
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal
+            .to_string()
+            .contains("neither its file name nor its checks match"),
+        "unexpected failure: {terminal}"
+    );
+}
+
+#[test]
 fn weave_generated_output_members_support_fixed_and_cumulative_inputs() {
     let temp = setup_temp_dir();
     write_weave_rom(&temp, "game.bin");

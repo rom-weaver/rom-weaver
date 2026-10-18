@@ -156,6 +156,7 @@ describe("runApplyWorkflow validation and preparation", () => {
       [undefined],
       ["patch-a"],
       [{ member: "disc/track01.bin", rom: true }],
+      [undefined],
     );
     expect(mocks.buildSessionOutputFiles).toHaveBeenCalledWith(
       [inputAsset],

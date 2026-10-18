@@ -3,6 +3,7 @@
 //! and report the output.
 
 use super::*;
+use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
 use super::super::cheats_apply::CheatApplySummary;
 #[cfg(not(target_arch = "wasm32"))]
@@ -765,6 +766,24 @@ impl CliApp {
                     .insert(member.to_owned(), run.resolved_input.clone());
                 continue;
             }
+            if self.input_is_bare_member_file(&run.args.input) {
+                let matched = self
+                    .bare_input_matches_member(run, member)
+                    .map_err(|error| fail_error("prepare", error))?;
+                if !matched {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "weave ROM member `{member}` was not found in `{}`: the input is not an archive and neither its file name nor its checks match the member",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                debug!(member, input = %run.args.input.display(), "using the bare input file as the weave ROM member");
+                run.rom_member_inputs
+                    .insert(member.to_owned(), run.resolved_input.clone());
+                continue;
+            }
             let resolved = self
                 .resolve_exact_member_source(
                     &run.args.input,
@@ -799,6 +818,74 @@ impl CliApp {
                 .insert(member.to_owned(), resolved.source);
         }
         Ok(())
+    }
+
+    /// Whether the input is a single bare file: no container handler and not
+    /// a tar stream recognizes it, so no member can be extracted from it.
+    fn input_is_bare_member_file(&self, input: &Path) -> bool {
+        input.is_file()
+            && self.containers.probe(input).is_none()
+            && !probe_regular_archive_format(input, "tar", RegularArchiveProbeFormat::Tar)
+                .unwrap_or(false)
+    }
+
+    /// Whether the bare input file stands in for `member`: its file name
+    /// matches the member's, or it satisfies the checks the weave declares for
+    /// that member (a step's declared input checks, or `rom.checks`).
+    fn bare_input_matches_member(&self, run: &PatchApplyRun, member: &str) -> Result<bool> {
+        let name_of = |value: &str| {
+            value
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(value)
+                .to_lowercase()
+        };
+        let input_name = run
+            .resolved_input
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_lowercase);
+        if input_name.is_some_and(|name| name == name_of(member)) {
+            return Ok(true);
+        }
+        let mut candidates: Vec<(Option<u64>, BTreeMap<String, String>)> = run
+            .patch_step_metadata
+            .iter()
+            .filter(|step| {
+                matches!(&step.target, Some(WeavePatchInput::Rom { member: Some(m), .. }) if m == member)
+            })
+            .filter_map(|step| step.verification.as_ref()?.declared_input.as_ref())
+            .map(|state| (state.size, state.checksums.clone()))
+            .collect();
+        if let Some((_, requirements)) = run
+            .weave_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.rom_checks.as_ref())
+        {
+            candidates.push((requirements.size, requirements.checksums.clone()));
+        }
+        let size = fs::metadata(&run.resolved_input)?.len();
+        for (expected_size, checksums) in candidates {
+            if expected_size.is_none() && checksums.is_empty() {
+                continue;
+            }
+            if expected_size.is_some_and(|expected| expected != size) {
+                continue;
+            }
+            if checksums.is_empty() {
+                return Ok(true);
+            }
+            let algorithms = checksums.keys().map(String::as_str).collect::<Vec<_>>();
+            let actual = checksum_file_values(&run.resolved_input, &algorithms, &run.context)?;
+            if checksums.iter().all(|(algorithm, expected)| {
+                actual
+                    .get(algorithm)
+                    .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+            }) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Resolve the patch files, check the step metadata against them, and add

@@ -27,6 +27,7 @@ import { type createPatchFile, getPatchFileExternalSource } from "../input/binar
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
+import { findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
@@ -456,12 +457,22 @@ const getPatchIds = (patchIndices: number[], patchOptions: PatchInput["patchOpti
   return ids.some(Boolean) ? ids : undefined;
 };
 
+// A member reference names this asset when it is the asset's own member or a bare file standing in for it.
+const memberIsAsset = (asset: InputAsset, member: string, inputChecks: string | undefined) =>
+  asset.member === member || findMemberAssets(member, [asset], inputChecks).length > 0;
+
 const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
   const inputs = patchIndices.map((patchIndex) => {
     const input = patchOptions?.[patchIndex]?.input;
     // Member selection already happened against prepared InputAssets. The Rust worker receives
     // that leaf directly, so carrying the member selector into patch-apply would select it twice.
-    if (input && "rom" in input && input.member && asset.member === input.member) return { rom: true } as const;
+    if (
+      input &&
+      "rom" in input &&
+      input.member &&
+      memberIsAsset(asset, input.member, patchOptions?.[patchIndex]?.inputChecks)
+    )
+      return { rom: true } as const;
     return input || null;
   });
   return inputs.some(Boolean) ? inputs : undefined;
@@ -472,7 +483,13 @@ const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patch
     const target = patchOptions?.[patchIndex]?.target;
     // The worker receives the selected leaf, so the member is already resolved.
     // Keep the ROM target slot to distinguish this explicit lane from an unscoped patch.
-    if (target && "rom" in target && target.member && asset.member === target.member) return { rom: true } as const;
+    if (
+      target &&
+      "rom" in target &&
+      target.member &&
+      memberIsAsset(asset, target.member, patchOptions?.[patchIndex]?.inputChecks)
+    )
+      return { rom: true } as const;
     return target || null;
   });
   return targets.some(Boolean) ? targets : undefined;
@@ -636,6 +653,7 @@ const applyPreparedPatches = async ({
             patchOptions?.map((option) => option?.input),
             patchOptions?.map((option) => option?.id),
             patchOptions?.map((option) => option?.target),
+            patchOptions?.map((option) => option?.inputChecks),
           ),
         () => ({
           inputCount: inputAssets.length,
