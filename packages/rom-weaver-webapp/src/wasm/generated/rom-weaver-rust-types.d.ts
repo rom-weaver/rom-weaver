@@ -775,7 +775,8 @@ weave: RomWeaverWeave, source_kind: WeaveSourceKind,
  */
 archive_member?: string | null,
 /**
- * Resolved ROM source; `None` when the weave defines no ROM.
+ * Resolved ROM source; `None` when the user supplies the ROM (no ROM
+ * entry, a name- or checks-only entry, or an unbundled archive `path`).
  */
 rom_source?: WeaveSourceRef | null,
 /**
