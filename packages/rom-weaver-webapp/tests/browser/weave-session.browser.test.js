@@ -1159,6 +1159,33 @@ for (const romMatches of [true, false]) {
   });
 }
 
+// A patch's own SHA-256 inputChecks must not read as malformed, and a wrong ROM keeps the override.
+for (const romMatches of [true, false]) {
+  test(`sha256 patch inputChecks are verified (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "sha256-input-output" },
+        patchBasis: "auto",
+        patches: [
+          {
+            inputChecks: { checksums: { sha256: romMatches ? sha256 : "0".repeat(64) } },
+            name: "Core",
+            path: patchFile.name,
+            target: { rom: true },
+          },
+        ],
+        rom: { name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "sha256-input-output", romMatches });
+    expect(document.body.textContent).not.toContain("is malformed");
+  });
+}
+
 // A member-lane weave: rom.member names the disc track the weave's ROM checks describe.
 for (const romMatches of [true, false]) {
   test(`member-lane weave verifies rom.checks on rom.member (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
