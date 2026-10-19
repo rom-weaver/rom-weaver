@@ -371,6 +371,30 @@ pub(crate) fn write_wbfs_fixture_from_iso(iso_path: &std::path::Path, wbfs_path:
     output.flush().expect("flush wbfs");
 }
 
+pub(crate) fn write_ciso_fixture_from_iso(iso_path: &std::path::Path, ciso_path: &std::path::Path) {
+    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Ciso,
+        compression: NodCompression::None,
+        block_size: NodFormat::Ciso.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create ciso writer");
+    let mut output = File::create(ciso_path).expect("create ciso");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write ciso");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek ciso");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write ciso header");
+    }
+    output.flush().expect("flush ciso");
+}
+
 pub(crate) fn write_wia_fixture_from_iso(iso_path: &std::path::Path, wia_path: &std::path::Path) {
     let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
     let options = NodFormatOptions {
