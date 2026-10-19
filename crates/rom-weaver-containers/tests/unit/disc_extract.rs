@@ -18,6 +18,7 @@ fn track(number: u32, mode: DiscTrackMode, frames: u32, pad_frames: u32) -> Disc
         file_path: PathBuf::from(format!("track{number}.bin")),
         memory_source: None,
         file_offset_bytes: 0,
+        file_base_offset_bytes: 0,
         frames,
         pregap_frames: 0,
         postgap_frames: 0,
@@ -25,7 +26,8 @@ fn track(number: u32, mode: DiscTrackMode, frames: u32, pad_frames: u32) -> Disc
         has_subcode: false,
         pad_frames,
         align_pad_frames: 0,
-        pgtype_mode1: false,
+        pgtype_track_mode: false,
+        tail: None,
         swap_audio_on_read: false,
     }
 }
@@ -567,6 +569,89 @@ fn parse_cue_file_treats_index_00_as_a_pregap_with_data() {
     assert_eq!(second.file_offset_bytes, 8 * 2352);
     assert_eq!(second.pregap_frames, 2);
     assert!(second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_reads_the_first_track_of_each_file_from_the_file_start() {
+    // chdman ignores the INDEX times of a file's first track when placing its
+    // data: the whole file is the track and the pregap is `INDEX 01 - INDEX 00`.
+    let dir = scratch_dir("cue-first-in-file");
+    write_file(&dir, "track01.bin", &raw_frames(8));
+    write_file(&dir, "track02.bin", &raw_frames(10));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"track01.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "FILE \"track02.bin\" BINARY\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 00 00:00:05\n",
+            "    INDEX 01 00:00:07\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    let second = &layout.tracks[1];
+    assert_eq!(second.file_offset_bytes, 0);
+    assert_eq!(second.frames - second.align_pad_frames, 10);
+    assert_eq!(second.pregap_frames, 2);
+    assert!(second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gd_cue_index00_pregap_moves_onto_the_previous_track() {
+    // chdman files a GD cue track's pregap frames under the end of the previous
+    // track: the hunk stream is unchanged, the boundary moves.
+    let dir = scratch_dir("gd-cue-pregap-move");
+    write_file(&dir, "track01.bin", &raw_frames(6));
+    write_file(&dir, "track02.bin", &raw_frames(9));
+    write_file(&dir, "track03.bin", &raw_frames(8));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "REM SINGLE-DENSITY AREA\n",
+            "FILE \"track01.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "FILE \"track02.bin\" BINARY\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 00 00:00:00\n",
+            "    INDEX 01 00:00:03\n",
+            "REM HIGH-DENSITY AREA\n",
+            "FILE \"track03.bin\" BINARY\n",
+            "  TRACK 03 MODE1/2352\n",
+            "    INDEX 00 00:00:00\n",
+            "    INDEX 01 00:00:02\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&cue)
+        .expect("parse gd cue");
+    let [first, second, third] = &layout.tracks[..] else {
+        panic!("expected three tracks");
+    };
+    // Track 2's 3 pregap frames end track 1; track 3's 2 end track 2.
+    assert_eq!(first.frames - first.align_pad_frames, 9);
+    assert_eq!(first.tail.as_ref().map(|tail| tail.frames), Some(3));
+    assert_eq!(second.file_offset_bytes, 3 * 2352);
+    assert_eq!(second.frames - second.align_pad_frames, 45_000 - 9);
+    assert_eq!(second.tail.as_ref().map(|tail| tail.frames), Some(2));
+    assert_eq!(third.file_offset_bytes, 2 * 2352);
+    assert_eq!(third.frames - third.align_pad_frames, 6);
+    for track in &layout.tracks {
+        assert_eq!(track.pregap_frames, 0);
+        assert!(!track.pregap_has_data);
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1559,8 +1644,7 @@ fn read_disc_tracks_keeps_legacy_unaligned_gd_streams() {
     let input = dir.join("frames.raw");
     fs::write(&input, vec![0x5A_u8; 3 * 2448]).expect("write frames");
     let output = dir.join("legacy.chd");
-    let mut legacy = track(1, DiscTrackMode::Mode1Raw, 3, 0);
-    legacy.pgtype_mode1 = true;
+    let legacy = track(1, DiscTrackMode::Mode1Raw, 3, 0);
     let layout = DiscLayout {
         kind: DiscKind::GdRom,
         tracks: vec![legacy],

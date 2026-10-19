@@ -419,11 +419,26 @@ impl ChdContainerHandler {
                 path.display()
             )));
         }
-        let start_frame = track.index00_frames.unwrap_or(index01_frames);
+        // chdman reads the first track of each FILE from the start of that
+        // file whatever its INDEX times say; only a track that follows another
+        // in a shared file starts at its own INDEX 00 (or INDEX 01).
+        let first_in_file = !tracks[..index].iter().any(|earlier| {
+            earlier.file_path == track.file_path
+                && earlier.file_offset_base_bytes == track.file_offset_base_bytes
+        });
+        let start_frame = if first_in_file {
+            0
+        } else {
+            track.index00_frames.unwrap_or(index01_frames)
+        };
         let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
         let start = track.file_offset_base_bytes + u64::from(start_frame) * sector_bytes;
         let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
-        if start > file_end {
+        // A declared index past the end of the file is invalid even for a
+        // first-in-file track, which reads from the file start regardless.
+        let declared_start = track.file_offset_base_bytes
+            + u64::from(track.index00_frames.unwrap_or(index01_frames)) * sector_bytes;
+        if start > file_end || declared_start > file_end {
             return Err(RomWeaverError::Validation(format!(
                 "cue track {} starts past the end of `{}`",
                 track.number,
@@ -433,7 +448,7 @@ impl ChdContainerHandler {
         let next_start =
             Self::next_cue_track_start(path, track, &tracks[index + 1..], sector_bytes)?
                 .unwrap_or(file_end);
-        if next_start < start {
+        if next_start < start.max(declared_start) {
             return Err(RomWeaverError::Validation(format!(
                 "cue track {} has descending frame offsets in `{}`",
                 track.number,
@@ -455,7 +470,8 @@ impl ChdContainerHandler {
                 track.number
             ))
         })?;
-        let pregap_from_index = index01_frames.saturating_sub(start_frame);
+        let pregap_from_index =
+            index01_frames.saturating_sub(track.index00_frames.unwrap_or(index01_frames));
         let pregap_has_data = track.index00_frames.is_some() && pregap_from_index > 0;
         let pregap_frames = if pregap_has_data {
             pregap_from_index
@@ -468,6 +484,7 @@ impl ChdContainerHandler {
             file_path: track.file_path.clone(),
             memory_source: None,
             file_offset_bytes: start,
+            file_base_offset_bytes: track.file_offset_base_bytes,
             frames,
             pregap_frames,
             postgap_frames: track.postgap_frames,
@@ -475,7 +492,8 @@ impl ChdContainerHandler {
             has_subcode: false,
             pad_frames: 0,
             align_pad_frames: 0,
-            pgtype_mode1: false,
+            pgtype_track_mode: false,
+            tail: None,
             swap_audio_on_read: track.swap_audio_on_read,
         })
     }
@@ -557,9 +575,10 @@ impl ChdContainerHandler {
     /// padding frames, mirroring how `parse_gdi_file` frames an explicit `.gdi`.
     fn synthesize_gd_from_cue_tracks(
         &self,
-        tracks: Vec<DiscTrack>,
+        mut tracks: Vec<DiscTrack>,
         high_density_first: u32,
     ) -> Result<DiscLayout> {
+        Self::move_gd_cue_pregaps_to_previous_track(&mut tracks)?;
         let mut phys_ofs = 0_u32;
         let mut phys_starts = Vec::with_capacity(tracks.len());
         for track in &tracks {
@@ -589,15 +608,19 @@ impl ChdContainerHandler {
                     })?,
                 None => 0,
             };
+            // Only the first track keeps its pregap in the metadata (see
+            // `move_gd_cue_pregaps_to_previous_track`). chdman reports the
+            // default `MODE1` pregap type for every other GD track, audio
+            // included, but leaves a first-track `INDEX 00` pregap typed as
+            // the track itself.
+            let keeps_pregap = index == 0 && track.pregap_frames > 0;
             resolved.push(DiscTrack {
                 frames: data_frames.saturating_add(pad_frames),
-                pregap_frames: 0,
+                pregap_frames: if keeps_pregap { track.pregap_frames } else { 0 },
                 postgap_frames: 0,
+                pgtype_track_mode: keeps_pregap && track.pregap_has_data,
                 pregap_has_data: false,
                 pad_frames,
-                // chdman reports the default `MODE1` pregap type for every GD
-                // track, audio included.
-                pgtype_mode1: true,
                 ..track
             });
         }
@@ -608,6 +631,61 @@ impl ChdContainerHandler {
         };
         layout.apply_cd_track_padding();
         Ok(layout)
+    }
+
+    /// chdman treats a pregap on GD cue track 2 and up (an `INDEX 00` gap or a
+    /// `PREGAP` directive) as the first frames of that track's file and files
+    /// them under the end of the previous track instead. The hunk stream is
+    /// unchanged; only the track boundaries, and so the `FRAMES` counts and
+    /// the physical offsets, move.
+    fn move_gd_cue_pregaps_to_previous_track(tracks: &mut [DiscTrack]) -> Result<()> {
+        for index in 1..tracks.len() {
+            let pregap = tracks[index].pregap_frames;
+            if pregap == 0 {
+                continue;
+            }
+            let track = &tracks[index];
+            if pregap > track.frames {
+                return Err(RomWeaverError::Validation(format!(
+                    "gd-rom track {} pregap is longer than the track",
+                    track.number
+                )));
+            }
+            let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
+            debug!(
+                track = track.number,
+                pregap, "moving gd cue pregap onto the previous track"
+            );
+            // The frames are stored as part of the previous track, so they
+            // take its type (an audio pregap after a data track is not
+            // byte-swapped) while the bytes come from this track's file.
+            let tail = TrackTail {
+                mode: tracks[index - 1].mode,
+                file_path: track.file_path.clone(),
+                memory_source: None,
+                file_offset_bytes: track.file_base_offset_bytes,
+                frames: pregap,
+                swap_audio_on_read: tracks[index - 1].swap_audio_on_read,
+            };
+            let previous_frames =
+                tracks[index - 1]
+                    .frames
+                    .checked_add(pregap)
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation(
+                            "gd-rom track layout exceeds addressable frames".to_string(),
+                        )
+                    })?;
+            let track = &mut tracks[index];
+            track.file_offset_bytes += u64::from(pregap) * sector_bytes;
+            track.frames -= pregap;
+            track.pregap_frames = 0;
+            track.pregap_has_data = false;
+            let previous = &mut tracks[index - 1];
+            previous.frames = previous_frames;
+            previous.tail = Some(Box::new(tail));
+        }
+        Ok(())
     }
 
     pub(super) fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
@@ -830,6 +908,7 @@ impl ChdContainerHandler {
                 file_path: track.file_path.clone(),
                 memory_source: None,
                 file_offset_bytes: track.file_offset_bytes,
+                file_base_offset_bytes: 0,
                 frames: track.data_frames.saturating_add(pad_frames),
                 pregap_frames: 0,
                 postgap_frames: 0,
@@ -839,7 +918,8 @@ impl ChdContainerHandler {
                 align_pad_frames: 0,
                 // chdman's gdi parser never sets a pregap type, so every GD
                 // track reports the default `MODE1` (even audio tracks).
-                pgtype_mode1: true,
+                pgtype_track_mode: false,
+                tail: None,
                 swap_audio_on_read: track.swap_audio_on_read,
             });
         }
@@ -908,6 +988,7 @@ impl ChdContainerHandler {
                 file_path: PathBuf::new(),
                 memory_source: None,
                 file_offset_bytes: 0,
+                file_base_offset_bytes: 0,
                 frames,
                 pregap_frames: pregap,
                 postgap_frames: postgap,
@@ -915,7 +996,10 @@ impl ChdContainerHandler {
                 has_subcode: subtype != "NONE",
                 pad_frames,
                 align_pad_frames: 0,
-                pgtype_mode1: kind == DiscKind::GdRom && pgtype == "MODE1",
+                // Keep a pregap type that names the track's own type (chdman's
+                // GD cue first track) so rewriting the metadata preserves it.
+                pgtype_track_mode: pgtype == mode.metadata_label(),
+                tail: None,
                 swap_audio_on_read: false,
             });
         }

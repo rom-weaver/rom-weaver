@@ -52,6 +52,7 @@ impl ChdContainerHandler {
                 file_path: input.to_path_buf(),
                 memory_source: None,
                 file_offset_bytes: 0,
+                file_base_offset_bytes: 0,
                 frames,
                 pregap_frames: 0,
                 postgap_frames: 0,
@@ -59,7 +60,8 @@ impl ChdContainerHandler {
                 has_subcode: false,
                 pad_frames: 0,
                 align_pad_frames: 0,
-                pgtype_mode1: false,
+                pgtype_track_mode: false,
+                tail: None,
                 swap_audio_on_read: false,
             }],
         };

@@ -1471,6 +1471,170 @@ fn chd_gdi_metadata_matches_chdman_track_fields() {
     }
 }
 
+/// Writes one synthetic 2352-byte-sector track per `(name, frames)` entry plus
+/// `disc.cue`, then compresses the cue to `disc.chd`. The bytes are
+/// `(index * 31 + file_number * 17) % 251`, so a reference CHD built by
+/// chdman 0.289 from the same files has the hashes asserted by the callers.
+fn compress_synthetic_cue(
+    tracks: &[(&str, usize)],
+    cue: &str,
+) -> (assert_fs::TempDir, assert_fs::fixture::ChildPath) {
+    let temp = setup_temp_dir();
+    for (file_number, (name, frames)) in tracks.iter().enumerate() {
+        let bytes = (0..(frames * 2352))
+            .map(|index| ((index * 31 + (file_number + 1) * 17) % 251) as u8)
+            .collect::<Vec<_>>();
+        fs::write(temp.child(name).path(), bytes).expect("track");
+    }
+    temp.child("disc.cue").write_str(cue).expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path)
+}
+
+/// The raw (data) SHA-1 and the overall SHA-1 from a v5 CHD header.
+fn chd_header_sha1s(chd_path: &Path) -> (String, String) {
+    let header = fs::read(chd_path).expect("chd");
+    let hex = |bytes: &[u8]| {
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    (hex(&header[64..84]), hex(&header[84..104]))
+}
+
+fn chd_track_metadata_lines(chd_path: &Path) -> Vec<String> {
+    let chd = String::from_utf8_lossy(&fs::read(chd_path).expect("chd")).into_owned();
+    chd.match_indices("TRACK:")
+        .map(|(start, _)| {
+            chd[start..]
+                .split('\0')
+                .next()
+                .expect("metadata entry")
+                .to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn chd_cd_pregap_pgtype_matches_chdman_for_every_pregap_kind() {
+    // chdman 0.289 leaves the pregap type at MODE1 unless the pregap carries
+    // data (`INDEX 00`), whatever the track type: a MODE2/2352 first track and
+    // an AUDIO track with a `PREGAP` directive both report PGTYPE:MODE1, and
+    // an AUDIO `INDEX 00` pregap reports VAUDIO. The hashes are chdman's.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track1.bin", 4), ("track2.bin", 5), ("track3.bin", 6)],
+        "FILE \"track1.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\nFILE \"track2.bin\" BINARY\n  TRACK 02 AUDIO\n    PREGAP 00:00:02\n    INDEX 01 00:00:00\nFILE \"track3.bin\" BINARY\n  TRACK 03 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:02\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:4 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:5 PREGAP:2 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:AUDIO SUBTYPE:NONE FRAMES:6 PREGAP:2 PGTYPE:VAUDIO PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "f4bdecad9e1e216141d64f4466c26b422cb38873".to_string(),
+            "14e4b87c43e96f5952c6d18c8b7228dbdcad235c".to_string()
+        )
+    );
+}
+
+#[test]
+fn chd_gd_cue_index00_pregaps_move_to_previous_track_like_chdman() {
+    // A Redump-style Dreamcast cue gives tracks 2 and up an `INDEX 00` pregap.
+    // chdman files those frames under the end of the previous track (after the
+    // density gap padding when the next track opens the high-density area), so
+    // FRAMES, the physical .gdi offsets and the hashes all differ from keeping
+    // the pregap in its own track. Reference values come from chdman 0.289.
+    let (temp, chd_path) = compress_synthetic_cue(
+        &[
+            ("track01.bin", 6),
+            ("track02.bin", 9),
+            ("track03.bin", 8),
+            ("track04.bin", 5),
+        ],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:03\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:02\nFILE \"track04.bin\" BINARY\n  TRACK 04 AUDIO\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:9 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44991 PAD:44983 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:6 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:4 TYPE:AUDIO SUBTYPE:NONE FRAMES:5 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "03e27c995f4810722daba747415f2ed23f654a4c".to_string(),
+            "0bee7f8d3b7b7b30e9026c16a712041aa690291e".to_string()
+        )
+    );
+
+    // `chdman extractcd` of that CHD writes these offsets and sizes.
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_eq!(
+        fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi"),
+        "4\n1 0 4 2352 \"disc (Track 1).bin\" 0\n2 9 0 2352 \"disc (Track 2).bin\" 0\n3 45000 4 2352 \"disc (Track 3).bin\" 0\n4 45006 0 2352 \"disc (Track 4).bin\" 0\n"
+    );
+    for (track, bytes) in [(1, 21_168), (2, 18_816), (3, 14_112), (4, 11_760)] {
+        assert_eq!(
+            fs::metadata(out_dir.child(format!("disc (Track {track}).bin")).path())
+                .expect("track")
+                .len(),
+            bytes,
+            "track {track} size"
+        );
+    }
+}
+
+#[test]
+fn chd_gd_cue_first_track_pregap_stays_and_keeps_its_own_pgtype_like_chdman() {
+    // chdman only moves pregaps for tracks 2 and up. A first-track `INDEX 00`
+    // pregap stays in the metadata with the track's own type (no `V` prefix),
+    // and a later `PREGAP` directive moves to the end of the first track.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track01.bin", 8), ("track02.bin", 6), ("track03.bin", 5)],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:03\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    PREGAP 00:00:02\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:0 PREGAP:3 PGTYPE:MODE1_RAW PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44986 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:5 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "8ee360722b15f8b8b2fc1e3b76cd6cf74c9729f1".to_string(),
+            "643af5118b1ccba14b6dcc0040d7ec1a7b3090ca".to_string()
+        )
+    );
+}
+
 #[test]
 fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     // A redump-style GD-ROM dump ships a `.cue` next to an authoritative `.gdi`.
