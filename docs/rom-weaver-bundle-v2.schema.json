@@ -71,7 +71,7 @@
           "required": ["rom"],
           "properties": {
             "rom": { "description": "Marks the selector as the bundle's ROM source.", "const": true },
-            "member": { "description": "Exact archive member or disc track.", "type": "string", "minLength": 1 }
+            "member": { "description": "Archive member or disc track. When the input is one bare file rather than an archive or disc, that file always stands in for the weave's rom.member; any other member is matched only when its file name equals the member name or the file satisfies the checks declared for it (a patch's input checks, or rom.checks when the weave sets no rom.member). One bare file never stands in for more than one distinct member.", "type": "string", "minLength": 1 }
           }
         },
         {
@@ -98,7 +98,7 @@
         "name": { "description": "Expected source ROM filename. A mismatch is advisory; checks and size verify the bytes.", "type": "string" },
         "url": { "description": "Download URL for the ROM. Mutually exclusive with path.", "type": "string" },
         "path": { "description": "Bundle-relative ROM path. Mutually exclusive with url.", "type": "string" },
-        "member": { "description": "Exact archive member or disc track to patch.", "type": "string", "minLength": 1 },
+        "member": { "description": "Archive member or disc track to patch. A single bare input file (not an archive or disc) always stands in for it, whatever its file name; rom.checks describe the ROM that is patched and are not matched against other members.", "type": "string", "minLength": 1 },
         "checks": { "description": "Expected checksums and size for the ROM.", "$ref": "#/$defs/checks" },
         "checksRef": { "description": "Named expected ROM state. Cannot be combined with checks.", "type": "string", "minLength": 1 }
       },

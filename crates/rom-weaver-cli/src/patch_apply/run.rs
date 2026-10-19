@@ -3,6 +3,7 @@
 //! and report the output.
 
 use super::*;
+use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
 use super::super::cheats_apply::CheatApplySummary;
 #[cfg(not(target_arch = "wasm32"))]
@@ -752,6 +753,14 @@ impl CliApp {
                 run.probe_threads.clone(),
             ))
         };
+        // A bare input always stands in for the weave's `rom.member`, whether or
+        // not a selected step reads that lane, and it MUST NOT stand in for any
+        // second member: the bound set is `rom.member` plus every member below
+        // that matches the file by name or checks.
+        let mut bare_bound_member: Option<&str> =
+            weave_rom_member.map(String::as_str).filter(|_| {
+                run.disc_context.is_none() && self.input_is_bare_member_file(&run.args.input)
+            });
         for member in explicit_rom_members {
             if let Some(disc) = run.disc_context.as_ref() {
                 let path = self
@@ -765,40 +774,136 @@ impl CliApp {
                     .insert(member.to_owned(), run.resolved_input.clone());
                 continue;
             }
-            let resolved = self
-                .resolve_exact_member_source(
-                    &run.args.input,
-                    member,
-                    &run.context,
-                    AutoExtractResolutionLabels {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: None,
-                        source_label: "weave ROM member",
-                        temp_prefix: "patch-apply-weave-rom-member",
-                    },
-                    AutoExtractResolutionFlags {
-                        no_extract: run.args.no_extract,
-                        no_ignore: run.args.no_ignore,
-                        kind_filter: run.input_kind_filter,
-                        stop_on_single_payload_codec: false,
-                    },
-                )
-                .map_err(|error| fail_error("prepare", error))?;
-            if resolved.extracted_archives == 0 {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    None,
-                    "prepare",
-                    format!("weave ROM input has no extractable member `{member}`"),
-                    run.probe_threads.clone(),
-                )));
+            // A bare file whose name and checks do not match the member may
+            // still be an archive the probe missed (a tar with a non-tar name),
+            // so fall through to the exact-member resolution below.
+            let bare_input = self.input_is_bare_member_file(&run.args.input);
+            if bare_input
+                && self
+                    .bare_input_matches_member(run, member)
+                    .map_err(|error| fail_error("prepare", error))?
+            {
+                if let Some(first) = bare_bound_member {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "the bare input file `{}` matches several weave ROM members (`{first}`, `{member}`) and can stand in for only one; provide an archive or disc containing them",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                bare_bound_member = Some(member);
+                debug!(member, input = %run.args.input.display(), "using the bare input file as the weave ROM member");
+                run.rom_member_inputs
+                    .insert(member.to_owned(), run.resolved_input.clone());
+                continue;
             }
+            trace!(member, input = %run.args.input.display(), "resolving the weave ROM member from the input by format");
+            let resolved = self.resolve_exact_member_source(
+                &run.args.input,
+                member,
+                &run.context,
+                AutoExtractResolutionLabels {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: None,
+                    source_label: "weave ROM member",
+                    temp_prefix: "patch-apply-weave-rom-member",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract: run.args.no_extract,
+                    no_ignore: run.args.no_ignore,
+                    kind_filter: run.input_kind_filter,
+                    stop_on_single_payload_codec: false,
+                },
+            );
+            let resolved = match resolved {
+                Ok(resolved) if resolved.extracted_archives > 0 => resolved,
+                _ if bare_input => {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "weave ROM member `{member}` was not found in `{}`: the input is not an archive and neither its file name nor its checks match the member",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                Ok(_) => {
+                    return Err(Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "prepare",
+                        format!("weave ROM input has no extractable member `{member}`"),
+                        run.probe_threads.clone(),
+                    )));
+                }
+                Err(error) => return Err(fail_error("prepare", error)),
+            };
             run.temp_paths.extend(resolved.cleanup_paths);
             run.rom_member_inputs
                 .insert(member.to_owned(), resolved.source);
         }
         Ok(())
+    }
+
+    /// Whether the input is a single bare file: no container handler and not
+    /// a tar stream recognizes it, so no member can be extracted from it.
+    /// The tar probe runs only for tar-family names, since libarchive reads an
+    /// all-zero first block of any binary file as an empty tar archive.
+    fn input_is_bare_member_file(&self, input: &Path) -> bool {
+        let tar_family_name = self.containers.handlers().iter().any(|handler| {
+            let descriptor = handler.descriptor();
+            descriptor.name.starts_with("tar") && descriptor.matches_path(input)
+        });
+        input.is_file()
+            && self.containers.probe(input).is_none()
+            && !(tar_family_name
+                && probe_regular_archive_format(input, "tar", RegularArchiveProbeFormat::Tar)
+                    .unwrap_or(false))
+    }
+
+    /// Whether the bare input file stands in for `member`: its file name
+    /// matches the member's, or it satisfies the checks the weave declares for
+    /// that member (a step's declared input checks, or `rom.checks` when the
+    /// weave names no `rom.member`, since those checks then describe the root
+    /// ROM rather than a member).
+    fn bare_input_matches_member(&self, run: &PatchApplyRun, member: &str) -> Result<bool> {
+        let name_of = |value: &str| {
+            value
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(value)
+                .to_lowercase()
+        };
+        let input_name = run
+            .resolved_input
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_lowercase);
+        if input_name.is_some_and(|name| name == name_of(member)) {
+            return Ok(true);
+        }
+        let mut candidates: Vec<(Option<u64>, BTreeMap<String, String>)> = run
+            .patch_step_metadata
+            .iter()
+            .filter(|step| {
+                [&step.input, &step.target].into_iter().any(|reference| {
+                    matches!(reference, Some(WeavePatchInput::Rom { member: Some(m), .. }) if m == member)
+                })
+            })
+            .filter_map(|step| step.verification.as_ref()?.declared_input.as_ref())
+            .map(|state| (state.size, state.checksums.clone()))
+            .collect();
+        if let Some((_, requirements)) = run.weave_resolution.as_ref().and_then(|resolution| {
+            resolution
+                .rom_member
+                .is_none()
+                .then_some(resolution.rom_checks.as_ref())
+                .flatten()
+        }) {
+            candidates.push((requirements.size, requirements.checksums.clone()));
+        }
+        bare_input_satisfies_any(&run.resolved_input, &candidates, &run.context)
     }
 
     /// Resolve the patch files, check the step metadata against them, and add
@@ -1522,4 +1627,50 @@ impl CliApp {
         Self::cleanup_temp_paths(&run.temp_paths);
         report
     }
+}
+
+/// Whether `input` satisfies any of the `(size, checksums)` requirements.
+/// Checksums already seeded on `context` (from the weave ROM check or the
+/// host's cached values) are reused; the rest are computed once and seeded so
+/// later candidates and members do not re-read the file.
+pub(super) fn bare_input_satisfies_any(
+    input: &Path,
+    candidates: &[(Option<u64>, BTreeMap<String, String>)],
+    context: &OperationContext,
+) -> Result<bool> {
+    let size = fs::metadata(input)?.len();
+    for (expected_size, checksums) in candidates {
+        if expected_size.is_none() && checksums.is_empty() {
+            continue;
+        }
+        if expected_size.is_some_and(|expected| expected != size) {
+            continue;
+        }
+        if checksums.is_empty() {
+            return Ok(true);
+        }
+        let mut actual = BTreeMap::new();
+        let mut missing = Vec::new();
+        for algorithm in checksums.keys() {
+            match context.seeded_checksum(input, algorithm) {
+                Some(value) => {
+                    actual.insert(algorithm.clone(), value);
+                }
+                None => missing.push(algorithm.as_str()),
+            }
+        }
+        if !missing.is_empty() {
+            let computed = checksum_file_values(input, &missing, context)?;
+            context.seed_checksums(input, &computed);
+            actual.extend(computed);
+        }
+        if checksums.iter().all(|(algorithm, expected)| {
+            actual
+                .get(algorithm)
+                .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+        }) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

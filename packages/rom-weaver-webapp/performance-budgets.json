@@ -25,7 +25,7 @@
         "expectedRawBytes": 2362391,
         "maxRawBytes": 2487352,
         "expectedBrotliBytes": 635991,
-        "maxBrotliBytes": 650000
+        "maxBrotliBytes": 651000
       },
       {
         "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins. Raised by 1,500 Brotli bytes for the combined patches and cheats guide text: main measured 103,424 Brotli bytes in CI, 76 bytes under the 103,500-byte limit, and the change adds about 120, bringing CI to 103,526. The 105,000-byte limit keeps about 1.5 KiB of headroom; the raw ceiling is unchanged. The combined reviewed documentation measures 394,727 raw and 105,948 Brotli bytes in CI; the limits are 396,000 raw and 106,500 Brotli bytes. PR1237's earlier merge measured 393,530 raw and 105,602 Brotli bytes; its latest-main index probe measured 395,423/106,108, within these inherited limits. The search index with the heap-reservation architecture text measures 396,298 raw and 106,348 Brotli bytes; its search-index contribution needs a 397,000-byte raw ceiling, while the 106,500-byte Brotli ceiling is unchanged. Raised by 3,000 raw and 1,000 Brotli bytes for three search-targeted docs pull requests (the source ROM checksum mismatch guide, the new Convert BPS to IPS guide, and the retitled weave, identify, and 3DS pages), which carry identical limits so they merge in any order: main measured 396,517 raw and 106,467 Brotli bytes locally, and all three together measure 398,686 raw (+2,169) and 106,910 Brotli (+443) bytes. The limits are 400,000 raw and 107,500 Brotli bytes. Raised by 3,000 raw and 1,000 Brotli bytes for the multi-disc PBP reference text: CI measured 400,026 to 400,128 raw bytes with it on main cdac8e99, and a local production build on main bbcf74fb7 plus the merged Apply fixes measures 401,033 raw and 107,664 Brotli bytes. The limits are 403,000 raw and 108,500 Brotli bytes.",
@@ -74,7 +74,7 @@
         "maxBrotliBytes": 42800
       },
       {
-        "_comment": "The WASM module MUST include the 70 compiled save profiles. Weave ROM-check validation measures 9,097,538 raw bytes and 2,330,277 Brotli bytes; the maximum leaves 723 Brotli bytes of headroom. At 7fb5ddc41, empty-PSAR PBP handling and PSP identity detection measured 9,104,568 raw and 2,331,188 Brotli bytes. At e9a2cf0a7, retaining self-contained ROM leaves during payload resolution measured 9,104,665 raw and 2,331,245 Brotli bytes. Combined with main 9835dee71 and its Z3DS underlying-magic guards, the production module measures 9,105,327 raw and 2,332,431 Brotli bytes. The Brotli ceiling rises from 2,331,000 to 2,333,000 bytes; the raw ceiling remains 9,300,000 bytes. The integrated heap-reservation CI module measures 9,108,323 raw and 2,333,717 Brotli bytes; its Brotli ceiling is 2,334,000 bytes, while the raw ceiling is unchanged. Main 96d062285 measures 9,109,052 raw and 2,332,702 Brotli bytes; adding the CSO v1 deflate reader measures 9,111,137 raw and 2,334,237 Brotli bytes, so the Brotli ceiling rises from 2,334,000 to 2,336,000 bytes and the raw ceiling is unchanged.",
+        "_comment": "The WASM module MUST include the 70 compiled save profiles. Weave ROM-check validation measures 9,097,538 raw bytes and 2,330,277 Brotli bytes; the maximum leaves 723 Brotli bytes of headroom. At 7fb5ddc41, empty-PSAR PBP handling and PSP identity detection measured 9,104,568 raw and 2,331,188 Brotli bytes. At e9a2cf0a7, retaining self-contained ROM leaves during payload resolution measured 9,104,665 raw and 2,331,245 Brotli bytes. Combined with main 9835dee71 and its Z3DS underlying-magic guards, the production module measures 9,105,327 raw and 2,332,431 Brotli bytes. The Brotli ceiling rises from 2,331,000 to 2,333,000 bytes; the raw ceiling remains 9,300,000 bytes. The integrated heap-reservation CI module measures 9,108,323 raw and 2,333,717 Brotli bytes; its Brotli ceiling is 2,334,000 bytes, while the raw ceiling is unchanged. Main 96d062285 measures 9,109,052 raw and 2,332,702 Brotli bytes; adding the CSO v1 deflate reader measures 9,111,137 raw and 2,334,237 Brotli bytes, so the Brotli ceiling rises from 2,334,000 to 2,336,000 bytes and the raw ceiling is unchanged. Accepting a bare file as the patch-level ROM member, on top of the CSO v1 reader, measures 9,120,605 raw and 2,338,422 Brotli bytes (+4,185 Brotli), so the Brotli ceiling rises from 2,336,000 to 2,339,000 bytes; the raw ceiling is unchanged.",
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
@@ -82,7 +82,7 @@
         "expectedRawBytes": 9010000,
         "maxRawBytes": 9300000,
         "expectedBrotliBytes": 2250000,
-        "maxBrotliBytes": 2336000
+        "maxBrotliBytes": 2339000
       }
     ]
   },

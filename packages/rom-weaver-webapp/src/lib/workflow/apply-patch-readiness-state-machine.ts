@@ -4,10 +4,18 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { resolveApplyHeaderMode, resolveApplyN64ByteOrder, toNormalizedCrc32 } from "./apply-header-resolution.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
+import { loneBareFile } from "../apply/bare-member-target.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
+  /** The ROM member the patch names as its input or target. A lone bare file that no member
+   * reference resolved to is then not the target: it stays unassigned instead of being picked as
+   * the only candidate, and the row reports why (see `describeBareMemberFailure`). */
+  memberRef?: string;
+  /** Why a lone bare file does not stand in for `memberRef`: it matches several members, or it
+   * matches neither by name nor by checks. */
+  describeBareMemberFailure?: (bare: InputAsset) => string | undefined;
   /** True for the first patch on `target` (each target is its own engine run) when it reads the
    * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
    * enforces the same); a later patch's input is usually the previous patch's output, which the
@@ -254,6 +262,7 @@ const createApplyPatchValidationKey = <TSource>(
 const resolveApplyPatchTargetForStage = async <TSource>(
   stage: StagedSource<TSource>,
   assets: InputAsset[],
+  hasMemberRef = false,
 ): Promise<InputAsset | null> => {
   if (!assets.length) {
     clearApplyPatchTarget(stage);
@@ -262,6 +271,13 @@ const resolveApplyPatchTargetForStage = async <TSource>(
   if (assets.length === 1) {
     const [target] = assets;
     if (!target) return null;
+    // A member-targeted patch takes only an asset its member reference resolved to (the caller
+    // assigned it); the lone asset is not a fallback, or the row would show Verified and then fail
+    // at Apply with "ROM member was not found".
+    if (hasMemberRef && !stage.state.targetInputId) {
+      clearApplyPatchTarget(stage);
+      return null;
+    }
     assignApplyPatchTarget(stage, target);
     return target;
   }
@@ -318,7 +334,7 @@ const settleApplyPatchTarget = async <TSource>(
   assets: InputAsset[],
 ) => {
   try {
-    const target = await resolveApplyPatchTargetForStage(stage, assets);
+    const target = await resolveApplyPatchTargetForStage(stage, assets, !!adapters.memberRef);
     stage.state.status = target ? "ready" : "needsSelection";
     const preflight = target
       ? createApplyPatchChecksumPreflight(
@@ -333,10 +349,10 @@ const settleApplyPatchTarget = async <TSource>(
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;
-    adapters.pushWarning(
-      stage,
-      new RomWeaverError("AMBIGUOUS_SELECTION", `${stage.state.fileName || "Patch"} target selection is required`),
-    );
+    const bare = adapters.memberRef ? loneBareFile(assets) : undefined;
+    const bareFailure = bare ? adapters.describeBareMemberFailure?.(bare) : undefined;
+    const message = bareFailure ?? `${stage.state.fileName || "Patch"} target selection is required`;
+    adapters.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", message));
   } catch (error) {
     const normalized = toRomWeaverError(error);
     if (normalized.code !== "AMBIGUOUS_SELECTION" && normalized.code !== "PATCH_TARGET_MISMATCH") throw normalized;

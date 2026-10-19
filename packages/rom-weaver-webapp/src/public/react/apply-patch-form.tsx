@@ -102,11 +102,13 @@ import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workfl
 import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
 
 // The weave's `rom.checks` and `rom.member`, which the workflow verifies against the supplied ROM
-// for every weave, whatever its patches target.
-const weaveRomExpectation = (session: WeaveApplySession | null): WeaveRomExpectation | undefined => {
+// for every weave, whatever its patches target. `rom.member` is passed even without checks: a bare
+// ROM file always stands in for it.
+const weaveRomExpectation = (session: WeaveApplySession | null): Partial<WeaveRomExpectation> | undefined => {
   const checks = weaveCheckTokens(session?.romChecks);
-  if (!checks) return undefined;
-  return session?.romMember ? { checks, member: session.romMember } : { checks };
+  const member = session?.romMember;
+  if (!(checks || member)) return undefined;
+  return { ...(checks ? { checks } : {}), ...(member ? { member } : {}) };
 };
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued

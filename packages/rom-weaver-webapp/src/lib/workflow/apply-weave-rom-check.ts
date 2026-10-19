@@ -158,4 +158,4 @@ const verifyWeaveRom = async (
 };
 
 export type { ComputedChecksums, WeaveRomCheck, WeaveRomExpectation };
-export { isTransformVariant, resolveWeaveRomAsset, verifyWeaveRom };
+export { isTransformVariant, rememberComputed, resolveWeaveRomAsset, verifyWeaveRom };
