@@ -393,12 +393,21 @@ impl CliApp {
             return Ok(rom_checks);
         }
 
-        let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(
-            "weave rom entry provides no source; pass the ROM as the apply input and the weave via --weave",
-        );
+        let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(if rom_unbundled {
+            "weave rom path is not bundled in the archive; pass the ROM as the apply input and the weave via --weave"
+        } else {
+            "weave rom entry provides no source; pass the ROM as the apply input and the weave via --weave"
+        });
+        // An unbundled `rom.path` without a `rom.name` still names the expected file by its basename.
+        let unbundled_name = rom
+            .path
+            .as_deref()
+            .filter(|_| rom_unbundled)
+            .and_then(|path| path.trim().rsplit('/').next());
         if let Some(name) = rom
             .name
             .as_deref()
+            .or(unbundled_name)
             .map(str::trim)
             .filter(|name| !name.is_empty())
         {
