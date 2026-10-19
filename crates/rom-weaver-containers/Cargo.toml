@@ -58,7 +58,7 @@ libc.workspace = true
 liblzma-sys.workspace = true
 libz-sys = { workspace = true, features = ["libc", "static", "stock-zlib"] }
 lz4-sys = "1.9.4"
-lz4_flex = "0.11.6"
+lz4_flex = "0.14.0"
 lru.workspace = true
 md-5.workspace = true
 polonius-the-crab.workspace = true
