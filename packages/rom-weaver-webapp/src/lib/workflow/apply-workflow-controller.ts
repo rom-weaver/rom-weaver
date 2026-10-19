@@ -889,6 +889,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.mutate("setPatchOption", async () => {
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
       let verificationChanged = false;
       if ("inputChecks" in option) {
         const value = option.inputChecks?.trim() || undefined;
@@ -971,6 +972,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // validation key - must be recomputed. The caller reruns the deep
       // validation off the new key. No-op writes skip the recompute entirely.
       if (verificationChanged) await this.evaluatePatchReadiness(stage);
+      // A weave load sets the patches one at a time, so a patch bound earlier saw a rule without
+      // this one. A changed rule re-resolves every member patch against the whole rule.
+      if (loneBareFile(this.getPatchableInputAssets()) && this.getBareMemberRuleKey() !== bareMemberRuleBefore)
+        await this.refreshPatchReadiness();
       this.recomputeOutputState();
     });
   }

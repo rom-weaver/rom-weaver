@@ -185,3 +185,19 @@ it("still assigns a lone archive member that the targeted member resolves to", a
   expect(stage.state.targetInputId).toBe("zip-member");
   expect(stage.state.status).toBe("ready");
 });
+
+it("re-checks a member patch bound earlier once a later patch makes the bare file ambiguous", async () => {
+  const controller = makeController(bareAsset("track.bin"));
+  const first = makeOptionStage();
+  const second = makeOptionStage();
+  controller.patches = [first, second];
+  controller.recomputeOutputState = vi.fn();
+  await controller.setPatchOption(0, { target: { rom: true, member: "disc-a/track.bin" } });
+  expect(first.state.targetInputId).toBe("input-0-track.bin");
+  await controller.setPatchOption(1, { target: { rom: true, member: "disc-b/track.bin" } });
+  for (const stage of [first, second]) {
+    expect(stage.state.targetInputId).toBeUndefined();
+    expect(stage.state.status).toBe("needsSelection");
+    expect(stage.state.warnings.at(-1)?.message).toContain("matches several weave ROM members");
+  }
+});
