@@ -85,7 +85,6 @@ bitstream-io = "4.10"
 byteorder = "1.5"
 num-derive = "0.4"
 num-traits = "0.2"
-parking_lot = "0.12"
 text_io = "0.1"
 arrayvec ={ version = "0.7.2", default-features = false, features = ["std"] }
 async-trait = "0.1"

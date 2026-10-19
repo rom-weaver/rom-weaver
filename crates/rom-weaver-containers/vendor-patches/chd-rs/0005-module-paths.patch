@@ -1541,7 +1541,7 @@ index 2f8f504b44e330d81d3fc53bf9f50ef9971993a2..48cd890e07f48fb594f36eb17cfe77d4
      use rand::{RngExt, SeedableRng};
      use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..35efa59d1b7b681c21da5a2d9b21a6ca569cd6f5 100644
+index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..48a6cddc392e63680869cdfe639e967645e39f00 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -1,10 +1,10 @@
@@ -1559,9 +1559,9 @@ index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..35efa59d1b7b681c21da5a2d9b21a6ca
 +use crate::chd_rs::write::ChdWriteCodecs;
 +use crate::chd_rs::Chd;
  use arrayvec::ArrayVec;
- use parking_lot::RwLock;
  use sha1::{Digest, Sha1};
-@@ -29,7 +29,7 @@ impl HunkHash {
+ use std::borrow::Cow;
+@@ -28,7 +28,7 @@ impl HunkHash {
              } else {
                  [0; 20]
              },
@@ -1570,7 +1570,7 @@ index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..35efa59d1b7b681c21da5a2d9b21a6ca
          }
      }
  }
-@@ -295,9 +295,9 @@ impl HunkCompressor {
+@@ -304,9 +304,9 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
@@ -1583,7 +1583,7 @@ index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..35efa59d1b7b681c21da5a2d9b21a6ca
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
  
-@@ -384,7 +384,7 @@ mod tests {
+@@ -393,7 +393,7 @@ mod tests {
              panic!("not compressed");
          };
          assert_eq!(decompress(&codecs, index, &hunk.data), input);

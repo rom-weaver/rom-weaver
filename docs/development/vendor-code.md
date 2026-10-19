@@ -175,11 +175,12 @@ The libarchive CMake build always gets `-DROM_WEAVER_7Z_SDK_DECODER=1`; native b
 
 CHD reading and writing come from [SnowflakePowered/chd-rs](https://github.com/SnowflakePowered/chd-rs) (BSD-3-Clause). The source lives at `crates/rom-weaver-containers/src/chd_rs/` with upstream's license beside it, and is exposed internally as `rom_weaver_containers::chd_rs`. The CHD handler creates every CHD through its `ChdWriter`; workers compress hunks with `HunkCompressor::compress_owned` and the writer stores them in order.
 
-`src/chd_rs/CHD_RS_VERSION` points to `vendor-patches/chd-rs/manifest.json`, which pins the v0.4.0 archive. Three source patches are meant for upstream:
+`src/chd_rs/CHD_RS_VERSION` points to `vendor-patches/chd-rs/manifest.json`, which pins the v0.4.0 archive. Four source patches are meant for upstream:
 
 - `HunkCompressor::compress_owned`, so a compressed hunk owns its input and can move to the writer thread.
 - Per-codec compression levels through `ChdWriteOptions::compression_levels`, with chdman's levels as the defaults. rom-weaver's `--level` maps onto them, clamped to each codec's range.
 - Skipping the CD FLAC trial on hunks whose every frame starts with the data-sector sync header. Unlike chdman, a data hunk that FLAC would compress best is stored with another codec.
+- `std::sync::RwLock` instead of `parking_lot` for the shared hunk index. On stable Rust, parking_lot cannot park on wasm32, so a contended lock panicked on browser wasi-threads.
 
 The integration patches after them inline the crate, resolve its feature gates to the pinned set (encode with the `zstd` C library, no zrip), take `zstd_safe` from the workspace `zstd` crate, and apply workspace formatting, lints, and test adjustments. The workspace `flate2` keeps the C zlib backend, so Deflate hunks use the same zlib as chdman.
 

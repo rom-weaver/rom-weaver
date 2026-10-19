@@ -1187,10 +1187,10 @@ index 48cd890e07f48fb594f36eb17cfe77d438b8a6a2..7621cec110a95e2809af8080d303e919
      use super::{ChdReader, HunkBufReader};
      use crate::chd_rs::header::CodecType;
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 35efa59d1b7b681c21da5a2d9b21a6ca569cd6f5..e11f16ac7e72e338c9aae554da31083bddd9a3e0 100644
+index 48a6cddc392e63680869cdfe639e967645e39f00..365379524ea070b597de1ae2ff8f466cef650b32 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -473,7 +473,6 @@ mod tests {
+@@ -482,7 +482,6 @@ mod tests {
  
      /// Each codec with levels, the level chdman compresses with, and levels to test.
      fn leveled_codecs() -> Vec<(CodecType, i32, Vec<i32>)> {
@@ -1198,7 +1198,7 @@ index 35efa59d1b7b681c21da5a2d9b21a6ca569cd6f5..e11f16ac7e72e338c9aae554da31083b
          let (zstd_default, zstd_levels) = (
              zstd_safe::max_c_level(),
              vec![
-@@ -486,8 +485,6 @@ mod tests {
+@@ -495,8 +494,6 @@ mod tests {
                  zstd_safe::max_c_level(),
              ],
          );
@@ -1207,7 +1207,7 @@ index 35efa59d1b7b681c21da5a2d9b21a6ca569cd6f5..e11f16ac7e72e338c9aae554da31083b
          let zlib_levels: Vec<i32> = (0..=9).collect();
          let lzma_levels: Vec<i32> = (0..=9).collect();
          let flac_levels: Vec<i32> = (0..=8).collect();
-@@ -576,7 +573,6 @@ mod tests {
+@@ -585,7 +582,6 @@ mod tests {
              (CodecType::HuffV5, 0),
              (CodecType::AVHuffV5, 0),
          ];

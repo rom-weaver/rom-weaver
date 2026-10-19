@@ -11,10 +11,10 @@ index 5a46724e61ecea51c3b63b86e5b516f70c74a221..a4265b232cb0cc57b94ab91629e53470
  
  
 diff --git a/write/compressed.rs b/write/compressed.rs
-index e11f16ac7e72e338c9aae554da31083bddd9a3e0..c3080ca65a0073f0e83054b44e89abee4bff2738 100644
+index 365379524ea070b597de1ae2ff8f466cef650b32..b87aab18638d063b77a25f1146d183f413e4b549 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -300,6 +300,7 @@ mod tests {
+@@ -309,6 +309,7 @@ mod tests {
      use crate::chd_rs::Error;
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
