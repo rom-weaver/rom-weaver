@@ -153,3 +153,29 @@ test("a different file with the same name is refused instead of dropped", async 
   await waitFor(() => host.textContent.includes("A different file named track01.bin"));
   expect(cardNames()).toEqual(["Game (Disc 1).chd", "track01.bin"]);
 });
+
+test("removing or adding a disc keeps the order the user set with up/down", async () => {
+  const game = uniqueGame();
+  const names = ["Alpha", "Bravo", "Charlie"].map((name) => `${game} ${name}.chd`);
+  await mount();
+  pick(names.map((name) => new File([name], name)));
+  await waitFor(() => cardNames().length === 3);
+  expect(cardNames()).toEqual(names);
+
+  host.querySelector(`[aria-label='Move ${names[2]} up']`).click();
+  await waitFor(() => cardNames()[1] === names[2]);
+  host.querySelector(`[aria-label='Move ${names[2]} up']`).click();
+  await waitFor(() => cardNames()[0] === names[2]);
+  expect(cardNames()).toEqual([names[2], names[0], names[1]]);
+
+  host.querySelector(`[aria-label='Remove ${names[1]}']`).click();
+  await waitFor(() => cardNames().length === 2);
+  await waitFor(() => !host.querySelector("[role='status']"));
+  expect(cardNames()).toEqual([names[2], names[0]]);
+
+  const added = `${game} Delta.chd`;
+  pick([new File(["d"], added)]);
+  await waitFor(() => cardNames().length === 3);
+  await waitFor(() => !host.querySelector("[role='status']"));
+  expect(cardNames()).toEqual([names[2], names[0], added]);
+});

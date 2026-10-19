@@ -317,4 +317,117 @@ describe("Playlist form", () => {
     );
     view.unmount();
   });
+
+  it("keeps the removable list when the failure notice is dismissed, the name edited or the format changed", async () => {
+    mocks.build.mockImplementation(async ({ files }) => {
+      if (files.length > 1) throw new Error("two discs share the name `a.chd`");
+      return { discIndexes: [0], entries: ["a.chd"], output: output("order.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    const again = view;
+    pick(again.container, [new File(["1"], "a.chd"), new File(["2"], "b.chd")]);
+    await waitFor(() => expect(again.container.textContent).toContain("two discs share the name"));
+    expect(cardNames(again.container)).toEqual(["a.chd", "b.chd"]);
+    fireEvent.change(again.container.querySelector("textarea.outname") as Element, { target: { value: "Renamed" } });
+    await waitFor(() => expect(again.container.textContent).not.toContain("two discs share the name"));
+    expect(cardNames(again.container)).toEqual(["a.chd", "b.chd"]);
+    expect(again.container.querySelectorAll("button[aria-label^='Remove ']")).toHaveLength(2);
+    again.unmount();
+  });
+
+  it("keeps the user's up/down order when a file is removed or added", async () => {
+    mocks.build.mockImplementation(async ({ files }) => {
+      const names = files.map((file: File) => file.name);
+      const discIndexes = names.map((_: string, index: number) => index);
+      discIndexes.sort((a: number, b: number) => names[a].localeCompare(names[b]));
+      return { discIndexes, entries: discIndexes.map((i: number) => names[i]), output: output("order.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    pick(
+      view.container,
+      ["Alpha.chd", "Bravo.chd", "Charlie.chd"].map((name) => new File([name], name)),
+    );
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Alpha.chd", "Bravo.chd", "Charlie.chd"]));
+    fireEvent.click(view.getByLabelText("Move Charlie.chd up"));
+    fireEvent.click(view.getByLabelText("Move Charlie.chd up"));
+    expect(cardNames(view.container)).toEqual(["Charlie.chd", "Alpha.chd", "Bravo.chd"]);
+    fireEvent.click(view.getByLabelText("Remove Bravo.chd"));
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Charlie.chd", "Alpha.chd"]));
+    pick(view.container, [new File(["d"], "Delta.chd")]);
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Charlie.chd", "Alpha.chd", "Delta.chd"]));
+    view.unmount();
+  });
+
+  it("removes only the track files under the removed sheet's own folder", async () => {
+    mocks.copy.mockImplementation(async (source: { fileName: string }) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName: source.fileName,
+      path: "/copy",
+      size: 4,
+      vfs: {},
+    }));
+    mocks.wrap.mockImplementation(async (_vfs: unknown, path: string, fileName: string) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName,
+      relativePath: path,
+      saveAs: vi.fn(),
+      size: 4,
+    }));
+    mocks.build.mockImplementation(async ({ files }) => {
+      const names = files.map((file: { fileName: string }) => file.fileName);
+      // Names alone decide it, as in the command: a track is claimed when any sheet in the input exists.
+      const discIndexes = names.flatMap((name: string, index: number) =>
+        name.endsWith(".cue") || !names.some((other: string) => other.endsWith(".cue")) ? [index] : [],
+      );
+      return { discIndexes, entries: discIndexes.map((i: number) => names[i]), output: output("x.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    const paths = [
+      "Disc 1/Game (Disc 1).cue",
+      "Disc 1/Track 01.bin",
+      "Disc 2/Game (Disc 2).cue",
+      "Disc 2/Track 01.bin",
+    ];
+    setPlaylistHandoff(
+      paths.map((relativePath) => {
+        const name = relativePath.split("/")[1] as string;
+        return { name, size: 4, source: { ...output(name), path: `/out/${relativePath}`, relativePath } as never };
+      }),
+    );
+    await waitFor(() => expect(cardNames(view.container)).toHaveLength(2));
+    fireEvent.click(view.getByLabelText("Remove Game (Disc 1).cue"));
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Game (Disc 2).cue"]));
+    expect(view.container.querySelector(".playlist-extras")?.textContent).toContain("Track 01.bin");
+    view.unmount();
+  });
+
+  it("does not offer a build that predates a file added while it ran", async () => {
+    let finish: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const built = output("old.m3u");
+    mocks.build.mockImplementation(async ({ files, sort }) => {
+      if (sort === false) await gate;
+      const discIndexes = files.map((_: File, index: number) => index);
+      return {
+        discIndexes,
+        entries: files.map((file: File) => file.name),
+        output: sort === false ? built : output("order.m3u"),
+      };
+    });
+    const view = render(<PlaylistForm />);
+    pick(view.container, [new File(["1"], "Game (Disc 1).iso"), new File(["2"], "Game (Disc 2).iso")]);
+    await waitFor(() => expect(cardNames(view.container)).toHaveLength(2));
+    fireEvent.click(view.getByRole("button", { name: /Build playlist/ }));
+    await waitFor(() => expect(view.getByRole("button", { name: /Building playlist/ })).toBeTruthy());
+    view.rerender(<PlaylistForm pageDrop={{ files: [new File(["3"], "Game (Disc 3).iso")], id: 1 }} />);
+    await waitFor(() => expect(cardNames(view.container)).toHaveLength(3));
+    finish();
+    await waitFor(() => expect(view.queryByRole("button", { name: /Building playlist/ })).toBeNull());
+    expect(view.queryByRole("button", { name: /Download/ })).toBeNull();
+    expect(view.getByRole("button", { name: /Build playlist/ }).hasAttribute("disabled")).toBe(false);
+    expect(built.dispose).toHaveBeenCalled();
+    view.unmount();
+  });
 });

@@ -34,6 +34,13 @@ const FORMAT_OPTIONS = [
 const discKey = (disc: PlaylistDisc) => (disc.relativePath || disc.name).toLowerCase();
 const toDisc = (file: File): PlaylistDisc => ({ name: file.name, size: file.size, source: file });
 
+const folderOf = (disc: PlaylistDisc) => {
+  const path = disc.relativePath || "";
+  return path.slice(0, Math.max(0, path.lastIndexOf("/"))).toLowerCase();
+};
+const isWithinFolder = (folder: string, parent: string) =>
+  parent === "" || folder === parent || folder.startsWith(`${parent}/`);
+
 const stemOf = (name: string) => {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(0, dot) : name;
@@ -59,6 +66,8 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const [output, setOutput] = useState<PublicOutput | null>(null);
   const [error, setError] = useState("");
   const [ordering, setOrdering] = useState(false);
+  // Ordering failed, so nothing is ordered; every added file still lists, removable, until it succeeds.
+  const [orderFailed, setOrderFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   // Copying handed-over discs, or removing one (it probes the remaining files first).
   const [adopting, setAdopting] = useState(false);
@@ -69,6 +78,10 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const orderPromiseRef = useRef<Promise<void>>(Promise.resolve());
   const orderedRef = useRef<PlaylistDisc[]>([]);
   const removingRef = useRef(false);
+  // Set once the user moves a disc; from then on a changed file list keeps their order.
+  const customOrderRef = useRef(false);
+  // Bumped on every change to the file list, so a build that started before it is not offered.
+  const listVersionRef = useRef(0);
   const filesRef = useRef<PlaylistDisc[]>([]);
   const handledDropRef = useRef(0);
   const mountedRef = useRef(true);
@@ -102,7 +115,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   }, [adopting, busy, error, files.length, ordering, output, removing]);
 
   // When ordering fails nothing is ordered; every added file still shows, removable, so the user can fix it.
-  const listed = ordered.length === 0 && error ? files : ordered;
+  const listed = ordered.length === 0 && orderFailed ? files : ordered;
   const extras = files.filter((file) => !listed.includes(file));
   const idle = !(busy || ordering || adopting || removing);
   const canRun = files.length > 0 && ordered.length > 0 && !!outputName.trim() && idle && !error;
@@ -125,6 +138,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
       return;
     }
     setOrdering(true);
+    setOrderFailed(false);
     try {
       const { buildPlaylist } = await import("../../platform/browser/browser-api.ts");
       const result = await buildPlaylist({
@@ -135,13 +149,21 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
       });
       void result.output.dispose();
       if (run === orderRunRef.current) {
-        orderedRef.current = result.discIndexes.flatMap((index) => next[index] ?? []);
+        const sorted = result.discIndexes.flatMap((index) => next[index] ?? []);
+        // Keep the user's order for the discs still listed; discs they have not placed yet follow.
+        orderedRef.current = customOrderRef.current
+          ? [
+              ...orderedRef.current.filter((disc) => sorted.includes(disc)),
+              ...sorted.filter((disc) => !orderedRef.current.includes(disc)),
+            ]
+          : sorted;
         setOrdered(orderedRef.current);
       }
     } catch (cause) {
       if (run === orderRunRef.current) {
         orderedRef.current = [];
         setOrdered([]);
+        setOrderFailed(true);
         setError(cause instanceof Error ? cause.message : String(cause));
       }
     } finally {
@@ -152,6 +174,8 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const updateFiles = useCallback(
     (next: PlaylistDisc[]) => {
       filesRef.current = next;
+      listVersionRef.current += 1;
+      if (next.length === 0) customOrderRef.current = false;
       setFiles(next);
       orderPromiseRef.current = orderFiles(next);
     },
@@ -235,8 +259,14 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
           });
           void probe.output.dispose();
           // The command lists a track file as a disc only when no sheet in the input names it.
+          // Only the sheet's own folder can hold its tracks: a same-named track of another
+          // disc's folder (Disc 2/Track 01.bin) is that disc's.
           const listed = new Set(probe.discIndexes);
-          gone = [disc, ...candidates.filter((_, index) => !listed.has(index + 1))];
+          const folder = folderOf(disc);
+          gone = [
+            disc,
+            ...candidates.filter((file, index) => !listed.has(index + 1) && isWithinFolder(folderOf(file), folder)),
+          ];
         } catch {
           // Fall back to removing just the chosen disc.
         }
@@ -250,17 +280,17 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   };
   const moveEntry = (index: number, delta: -1 | 1) => {
     clearOutput();
-    setOrdered((previous) => {
-      const target = index + delta;
-      if (target < 0 || target >= previous.length) return previous;
-      const next = [...previous];
-      const moved = next[index];
-      const swapped = next[target];
-      if (moved === undefined || swapped === undefined) return previous;
-      next[index] = swapped;
-      next[target] = moved;
-      return next;
-    });
+    customOrderRef.current = true;
+    const previous = orderedRef.current;
+    const target = index + delta;
+    const moved = previous[index];
+    const swapped = previous[target];
+    if (moved === undefined || swapped === undefined) return;
+    const next = [...previous];
+    next[index] = swapped;
+    next[target] = moved;
+    orderedRef.current = next;
+    setOrdered(next);
   };
 
   useEffect(() => {
@@ -282,6 +312,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const run = async () => {
     if (!canRun) return;
     clearOutput();
+    const version = listVersionRef.current;
     const abort = new AbortController();
     abortRef.current = abort;
     setBusy(true);
@@ -295,6 +326,11 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
         signal: abort.signal,
         sort: false,
       });
+      // A file added while this ran makes the build stale: drop it rather than offer it.
+      if (version !== listVersionRef.current || !mountedRef.current) {
+        void built.output.dispose();
+        return;
+      }
       outputRef.current = built.output;
       setOutput(built.output);
       await built.output.saveAs();
