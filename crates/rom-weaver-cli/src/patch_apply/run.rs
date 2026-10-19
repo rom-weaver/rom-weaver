@@ -840,11 +840,18 @@ impl CliApp {
 
     /// Whether the input is a single bare file: no container handler and not
     /// a tar stream recognizes it, so no member can be extracted from it.
+    /// The tar probe runs only for tar-family names, since libarchive reads an
+    /// all-zero first block of any binary file as an empty tar archive.
     fn input_is_bare_member_file(&self, input: &Path) -> bool {
+        let tar_family_name = self.containers.handlers().iter().any(|handler| {
+            let descriptor = handler.descriptor();
+            descriptor.name.starts_with("tar") && descriptor.matches_path(input)
+        });
         input.is_file()
             && self.containers.probe(input).is_none()
-            && !probe_regular_archive_format(input, "tar", RegularArchiveProbeFormat::Tar)
-                .unwrap_or(false)
+            && !(tar_family_name
+                && probe_regular_archive_format(input, "tar", RegularArchiveProbeFormat::Tar)
+                    .unwrap_or(false))
     }
 
     /// Whether the bare input file stands in for `member`: its file name

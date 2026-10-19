@@ -4477,6 +4477,24 @@ fn apply_weave_to_bare_input(
 }
 
 #[test]
+fn weave_bare_file_with_a_zero_first_block_is_not_read_as_an_empty_tar() {
+    let temp = setup_temp_dir();
+    // An all-zero first 512 bytes reads as an empty tar archive to libarchive,
+    // but the file has no tar-family extension, so it is a bare member.
+    let rom = temp.child("track02.bin");
+    let mut bytes = vec![0_u8; 1024];
+    bytes.extend_from_slice(b"payload bytes");
+    fs::write(rom.path(), &bytes).expect("rom");
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    let weave = r#"{"version":2,"patchBasis":"auto","patches":[
+        {"id":"a","path":"a.ips","target":{"rom":true,"member":"disc/track02.bin"}}]}"#;
+    let (output, _) = apply_weave_to_bare_input(&temp, rom.path(), weave, 0);
+    let mut expected = bytes;
+    expected[0] = 0xAA;
+    assert_eq!(fs::read(output).expect("output"), expected);
+}
+
+#[test]
 fn weave_rom_checks_do_not_bind_the_bare_file_to_another_member() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "romA.bin");
