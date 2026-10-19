@@ -21,6 +21,7 @@ jobs:
       contents: read
       actions: read
       packages: write
+      pull-requests: read
       attestations: write
       artifact-metadata: write
       id-token: write

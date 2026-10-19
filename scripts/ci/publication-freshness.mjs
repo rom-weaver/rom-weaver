@@ -4,6 +4,17 @@ import { pathToFileURL } from "node:url";
 import { createGitHubApi } from "./github-api.mjs";
 
 export async function isPublicationFresh(env, api) {
+  // A preview run (preview.yml) has its own concurrency group, so a push does
+  // not cancel it; publishing a head the pull request has moved past would
+  // overwrite the newer preview.
+  if (env.GITHUB_EVENT_NAME === "pull_request") {
+    if (!env.PULL_REQUEST_NUMBER || !env.PULL_REQUEST_HEAD_SHA)
+      throw new Error("publication freshness: missing pull request number or head");
+    const pull = await api(`/repos/${env.GITHUB_REPOSITORY}/pulls/${env.PULL_REQUEST_NUMBER}`);
+    if (typeof pull.head?.sha !== "string")
+      throw new Error("publication freshness: missing pull request head");
+    return pull.head.sha === env.PULL_REQUEST_HEAD_SHA;
+  }
   if (env.GITHUB_EVENT_NAME !== "push" || env.GITHUB_REF !== "refs/heads/main") return true;
   const base = `/repos/${env.GITHUB_REPOSITORY}/actions`;
   const current = await api(`${base}/runs/${env.GITHUB_RUN_ID}`);
@@ -54,6 +65,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   process.stdout.write(
     fresh
       ? "Publication is current or explicitly requested.\n"
-      : "Skipping superseded automatic main publication.\n",
+      : "Skipping superseded automatic publication.\n",
   );
 }

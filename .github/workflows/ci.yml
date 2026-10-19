@@ -1794,6 +1794,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      pull-requests: read
       statuses: write
       deployments: write
     if: needs.changes.outputs.preview_branch != ''
@@ -1818,8 +1819,19 @@ jobs:
           # the key ahead of the `wasm` job that does.
           save: "false"
 
-      - name: Mark preview deployment pending
+      # Skips a head the pull request has moved past; a preview run from
+      # preview.yml is not cancelled by a later push.
+      - name: Check publication freshness
+        id: freshness
         if: steps.wasm-cache.outputs.cache-hit == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/publication-freshness.mjs
+
+      - name: Mark preview deployment pending
+        if: steps.freshness.outputs.fresh == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1832,7 +1844,7 @@ jobs:
 
       - name: Build and deploy preview
         id: pages
-        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        if: steps.freshness.outputs.fresh == 'true'
         uses: ./.github/actions/deploy-webapp-pages
         with:
           channel: preview
@@ -1845,7 +1857,7 @@ jobs:
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Publish preview deployment status
-        if: always() && steps.wasm-cache.outputs.cache-hit == 'true'
+        if: always() && steps.freshness.outputs.fresh == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1860,7 +1872,7 @@ jobs:
         run: node scripts/ci/deployment-status.mjs
 
       - name: Delete superseded deployments for this pull request
-        if: ${{ !cancelled() && steps.wasm-cache.outputs.cache-hit == 'true' }}
+        if: ${{ !cancelled() && steps.freshness.outputs.fresh == 'true' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1892,6 +1904,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
       statuses: write
       deployments: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
@@ -1938,6 +1951,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PUBLICATION_JOB_NAME: Webapp deploy (${{ matrix.target.channel }})
           PUBLICATION_STEP_NAME: Build and deploy
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/ci/publication-freshness.mjs
 
       - name: Mark deployment pending
