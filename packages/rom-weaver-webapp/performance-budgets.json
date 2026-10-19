@@ -76,7 +76,7 @@
         "expectedRawBytes": 9010000,
         "maxRawBytes": 9300000,
         "expectedBrotliBytes": 2250000,
-        "maxBrotliBytes": 2339000
+        "maxBrotliBytes": 2340000
       }
     ]
   },

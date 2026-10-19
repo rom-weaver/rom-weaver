@@ -13,6 +13,7 @@ import { BannerDismissButton, Reveal } from "./shell.tsx";
  */
 
 const logger = createLogger("update-banner");
+const READY_CHANGELOG_REFRESH_INTERVAL_MS = 60_000;
 
 type UpdateBannerKind = "ready" | "updated";
 
@@ -83,10 +84,7 @@ const UpdateBanner = ({
   since: UpdatedSince | null;
 }) => {
   const localizer = useUiLocalizer();
-  // What the banner last loaded for its kind. The changelog is refetched
-  // whenever the kind changes, because a deploy that becomes ready rewrites
-  // changelog.json, and the banner opens only once that copy has settled. The
-  // snapshot keeps the closing banner's words steady while it slides away.
+  // The snapshot keeps the closing banner's words steady while it slides away.
   const [loaded, setLoaded] = useState<{
     kind: UpdateBannerKind;
     release?: ReleaseChangelog;
@@ -97,18 +95,33 @@ const UpdateBanner = ({
   useEffect(() => {
     if (!kind) return undefined;
     let current = true;
-    const settle = (release?: ReleaseChangelog) => {
-      if (current) setLoaded({ kind, release, since: sinceRef.current ?? {} });
+    let hasLoaded = false;
+    let requestId = 0;
+    const refresh = () => {
+      const currentRequest = ++requestId;
+      fetchChangelog()
+        .then(({ release }) => {
+          if (!current || currentRequest !== requestId) return;
+          hasLoaded = true;
+          setLoaded({ kind, release, since: sinceRef.current ?? {} });
+        })
+        .catch((error) => {
+          if (!current || currentRequest !== requestId) return;
+          // The banner still names the update; only the highlight is lost.
+          logger.debug("Update banner changelog unavailable", { kind, message: String(error) });
+          if (!hasLoaded) {
+            hasLoaded = true;
+            setLoaded({ kind, since: sinceRef.current ?? {} });
+          }
+        });
     };
-    fetchChangelog()
-      .then(({ release }) => settle(release))
-      .catch((error) => {
-        // The banner still names the update; only the highlight is lost.
-        logger.debug("Update banner changelog unavailable", { kind, message: String(error) });
-        settle();
-      });
+    refresh();
+    // A later deploy can replace the waiting worker without changing `kind`.
+    // Refresh while ready so the banner follows its new changelog.
+    const interval = kind === "ready" ? window.setInterval(refresh, READY_CHANGELOG_REFRESH_INTERVAL_MS) : undefined;
     return () => {
       current = false;
+      if (interval !== undefined) window.clearInterval(interval);
     };
   }, [kind]);
   if (!loaded) return null;

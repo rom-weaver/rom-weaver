@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { APP_VERSION } from "../../../src/webapp/build-version.ts";
@@ -9,6 +9,7 @@ const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
 const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
 const RELOADING_INTO_KEY = "rom-weaver-reloading-into-version";
 const INCOMING = `${Number.parseInt(APP_VERSION, 10) + 1}.0.0`;
+const NEXT_INCOMING = `${Number.parseInt(INCOMING, 10) + 1}.0.0`;
 
 const highlights = (version: string, summaries: string[]) => ({
   groups: [
@@ -55,7 +56,7 @@ const renderBanner = (kind: UpdateBannerKind | null, since: { from?: string } | 
         <UpdateBanner kind={next} since={nextSince} {...handlers} />
       </RomWeaverSettingsProvider>,
     );
-  return { ...handlers, container: view.container, openBanner, rerender };
+  return { ...handlers, container: view.container, openBanner, rerender, unmount: view.unmount };
 };
 
 beforeEach(() => window.localStorage.clear());
@@ -186,6 +187,36 @@ describe("UpdateBanner with a deploy waiting", () => {
 
     await waitFor(() => expect(screen.queryByText(`v${INCOMING} is ready`)).not.toBeNull());
     expect(openBanner()).not.toBeNull();
+  });
+
+  it("refreshes the incoming version when another deploy arrives while one waits", async () => {
+    vi.useFakeTimers();
+    mockReleaseNotes([highlights(INCOMING, ["First incoming highlight"])], INCOMING);
+    const { onReload, openBanner, unmount } = renderBanner("ready");
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(openBanner()).not.toBeNull();
+      expect(screen.getByText(`v${INCOMING} is ready`)).toBeTruthy();
+      expect(screen.getByText("First incoming highlight")).toBeTruthy();
+
+      mockReleaseNotes([highlights(NEXT_INCOMING, ["Next incoming highlight"])], NEXT_INCOMING);
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+      expect(screen.getByText(`v${NEXT_INCOMING} is ready`)).toBeTruthy();
+      expect(screen.getByText("Next incoming highlight")).toBeTruthy();
+      expect(screen.queryByText("First incoming highlight")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+      expect(onReload).toHaveBeenCalledTimes(1);
+      expect(window.localStorage.getItem(RELOADING_INTO_KEY)).toBe(NEXT_INCOMING);
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
   });
 });
 
