@@ -249,6 +249,12 @@ describe("create patch format policy", () => {
     expect(getCreatePatchFormatsForSizes(1024, 2048, true)).toContain("ips32");
     expect(getCreatePatchFormatsForSizes(1024, 1024, true)).toContain("ips32");
     expect(getCreatePatchFormatsForSizes(2048, 0)).toContain("ips32");
+    // EBP shares the IPS no-truncate limitation (recommended format, so it is filtered from the base list too).
+    expect(getCreatePatchFormatsForSizes(2048, 1024)).not.toContain("ebp");
+    expect(getCreatePatchFormatsForSizes(2048, 0, true)).not.toContain("ebp");
+    expect(getCreatePatchFormatsForSizes(1024, 2048)).toContain("ebp");
+    expect(getCreatePatchFormatsForSizes(1024, 1024, true)).toContain("ebp");
+    expect(getCreatePatchFormatsForSizes(2048, 0)).toContain("ebp");
     expect(
       getPreferredCreatePatchFormat({
         modifiedSize: 0,

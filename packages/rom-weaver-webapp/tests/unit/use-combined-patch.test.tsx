@@ -224,7 +224,7 @@ describe("useCombinedPatch", () => {
     expect(result.current.outputProps.format).toBe("xdelta");
   });
 
-  it("withholds IPS32 unless the combined output is known not to shrink", () => {
+  it("withholds IPS32 and EBP unless the combined output is known not to shrink", () => {
     const run = vi.fn<Options["run"]>();
     const formatValues = (current: ReturnType<typeof useCombinedPatch>) =>
       current.outputProps.formatOptions?.map((option) => option.value);
@@ -233,12 +233,14 @@ describe("useCombinedPatch", () => {
     });
     // IPS reports no target size, so a truncating patch is indistinguishable from a growing one.
     expect(formatValues(result.current)).not.toContain("ips32");
+    expect(formatValues(result.current)).not.toContain("ebp");
     rerender({ patchType: "ips32", romSize: 2048, patchTargetSize: 0 });
     expect(result.current.outputProps.format).not.toBe("ips32");
     rerender({ patchType: "bps", romSize: 2048, patchTargetSize: 1024 });
     expect(formatValues(result.current)).not.toContain("ips32");
+    expect(formatValues(result.current)).not.toContain("ebp");
     rerender({ patchType: "bps", romSize: 2048, patchTargetSize: 4096 });
-    expect(formatValues(result.current)).toEqual(expect.arrayContaining(["ips32"]));
+    expect(formatValues(result.current)).toEqual(expect.arrayContaining(["ips32", "ebp"]));
   });
 
   it("keeps a running job's sizes while preparing the run clears them", async () => {

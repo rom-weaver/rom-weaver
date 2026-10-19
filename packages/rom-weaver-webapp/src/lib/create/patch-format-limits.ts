@@ -32,8 +32,8 @@ const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: readonly string[] =
 // PAT create requires equal input lengths, so it is only offered when the known sizes match.
 const CREATE_EQUAL_LENGTH_ONLY_FORMAT = "pat";
 
-// IPS32 cannot encode a truncate footer, so a smaller Modified ROM would apply at the Original length.
-const CREATE_NO_SHRINK_FORMATS: readonly string[] = ["ips32"];
+// IPS32 and EBP cannot encode a truncate footer, so a smaller Modified ROM would apply at the Original length.
+const CREATE_NO_SHRINK_FORMATS: readonly string[] = ["ips32", "ebp"];
 
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")

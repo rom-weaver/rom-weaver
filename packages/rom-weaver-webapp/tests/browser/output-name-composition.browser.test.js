@@ -266,6 +266,15 @@ test("create output options expose patch format and archive choices", () => {
       (option) => option.value,
     ),
   ).toEqual(["xdelta", "bps", "solid", "gdiff", "apsgba", "dldi", "dps"]);
+  const combinedValues = (options) => createCreatePatchFormatOptions(options).map((option) => option.value);
+  // Smaller Modified ROM and unknown combined size both drop the formats that cannot truncate.
+  expect(combinedValues({ modifiedSize: 1024, originalSize: 2048 })).not.toContain("ebp");
+  expect(combinedValues({ modifiedSize: 1024, originalSize: 2048 })).not.toContain("ips32");
+  expect(combinedValues({ originalSize: 2048, requireKnownModifiedSize: true })).not.toContain("ebp");
+  expect(combinedValues({ originalSize: 2048, requireKnownModifiedSize: true })).not.toContain("ips32");
+  expect(combinedValues({ modifiedSize: 2048, originalSize: 2048, requireKnownModifiedSize: true })).toEqual(
+    expect.arrayContaining(["ebp", "ips32"]),
+  );
 });
 
 test("create format policy steers defaults by size", () => {
