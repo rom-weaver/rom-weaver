@@ -316,7 +316,7 @@ index 7621cec110a95e2809af8080d303e91912366bfb..6f6d98152de3808650ab996297782fa3
      use rand::{RngExt, SeedableRng};
      use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
 diff --git a/write/compressed.rs b/write/compressed.rs
-index b87aab18638d063b77a25f1146d183f413e4b549..28fd5e72a3430346224b5546577ad1f46be48135 100644
+index 1bf051a11af4c84dbc7d1d4aa73f806df946a995..eef1d60fd2be26e6244aaa1677797b769ff27b8f 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -1,10 +1,10 @@
@@ -331,7 +331,7 @@ index b87aab18638d063b77a25f1146d183f413e4b549..28fd5e72a3430346224b5546577ad1f4
  use arrayvec::ArrayVec;
  use sha1::{Digest, Sha1};
  use std::borrow::Cow;
-@@ -304,9 +304,9 @@ impl HunkCompressor {
+@@ -320,9 +320,9 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
@@ -342,7 +342,7 @@ index b87aab18638d063b77a25f1146d183f413e4b549..28fd5e72a3430346224b5546577ad1f4
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
      use zstd::zstd_safe;
-@@ -394,7 +394,10 @@ mod tests {
+@@ -410,7 +410,10 @@ mod tests {
              panic!("not compressed");
          };
          assert_eq!(decompress(&codecs, index, &hunk.data), input);
@@ -369,7 +369,7 @@ index 5b45a931734f64f1bd30dd0328ffdfc5807d82c7..0b8a0f33d822182103d46ee99be07a50
  use std::io::{Read, Seek, SeekFrom, Write};
  use zerocopy::IntoBytes;
 diff --git a/write/mod.rs b/write/mod.rs
-index 11e7e159541bcaae51d256dfe35d434f11468604..2ebc2f8f52d055ac32c59b2c447bda7a648bd71b 100644
+index 288096c1747d314f0323dbe3b5e6bed95baec266..db3e63387b617188d56d72d05f776112f67a2bae 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
 @@ -15,15 +15,15 @@
@@ -390,7 +390,7 @@ index 11e7e159541bcaae51d256dfe35d434f11468604..2ebc2f8f52d055ac32c59b2c447bda7a
  use sha1::{Digest, Sha1};
  use std::io::{self, Read, Seek, SeekFrom, Write};
  
-@@ -828,9 +828,11 @@ mod tests {
+@@ -838,9 +838,11 @@ mod tests {
              // Zero hunks are not stored, and stored hunks are aligned to the hunk size.
              assert_eq!(offsets.len(), 7);
              assert_eq!((offsets[1], offsets[4]), (0, 0));
@@ -405,7 +405,7 @@ index 11e7e159541bcaae51d256dfe35d434f11468604..2ebc2f8f52d055ac32c59b2c447bda7a
              if preallocated {
                  // The map follows the header, so the first hunk is aligned after it.
                  assert_eq!(offsets[0], HUNK_BYTES as u64);
-@@ -1192,8 +1194,8 @@ mod compressed_tests {
+@@ -1210,8 +1212,8 @@ mod compressed_tests {
  #[cfg(test)]
  mod logical_size_tests {
      use super::{ChdWriteOptions, ChdWriter};

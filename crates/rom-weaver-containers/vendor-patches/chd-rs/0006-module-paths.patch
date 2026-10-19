@@ -1541,7 +1541,7 @@ index 2f8f504b44e330d81d3fc53bf9f50ef9971993a2..48cd890e07f48fb594f36eb17cfe77d4
      use rand::{RngExt, SeedableRng};
      use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..48a6cddc392e63680869cdfe639e967645e39f00 100644
+index 01c72fa18ea5e88a7ab2b9a7a0b1f866206fdd78..a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
 @@ -1,10 +1,10 @@
@@ -1570,7 +1570,7 @@ index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..48a6cddc392e63680869cdfe639e9676
          }
      }
  }
-@@ -304,9 +304,9 @@ impl HunkCompressor {
+@@ -320,9 +320,9 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
@@ -1583,7 +1583,7 @@ index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..48a6cddc392e63680869cdfe639e9676
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
  
-@@ -393,7 +393,7 @@ mod tests {
+@@ -409,7 +409,7 @@ mod tests {
              panic!("not compressed");
          };
          assert_eq!(decompress(&codecs, index, &hunk.data), input);
@@ -1626,7 +1626,7 @@ index 704982767637392a2b9bbfd73aa9cd64289c5b04..5b45a931734f64f1bd30dd0328ffdfc5
      fn writer() -> ChdWriter<Cursor<Vec<u8>>> {
          ChdWriter::new(
 diff --git a/write/mod.rs b/write/mod.rs
-index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f11468604 100644
+index 03e9bb315c0c64eda25728e5d093a298341d744b..288096c1747d314f0323dbe3b5e6bed95baec266 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
 @@ -1,11 +1,11 @@
@@ -1680,7 +1680,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
      pub fn cd() -> Self {
          const FRAMES_PER_HUNK: u32 = 8;
          ChdWriteOptions::new(FRAMES_PER_HUNK * CD_FRAME_SIZE, CD_FRAME_SIZE).compression(&[
-@@ -759,8 +759,8 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
+@@ -769,8 +769,8 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
  #[cfg(test)]
  mod tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1691,7 +1691,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
      use std::io::{Cursor, Write};
  
      const HUNK_BYTES: u32 = 4096;
-@@ -912,15 +912,15 @@ mod tests {
+@@ -922,15 +922,15 @@ mod tests {
  #[cfg(test)]
  mod compressed_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1711,7 +1711,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
  
      fn options() -> ChdWriteOptions {
          ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES)
-@@ -963,7 +963,7 @@ mod compressed_tests {
+@@ -973,7 +973,7 @@ mod compressed_tests {
  
      struct ReadChd {
          data: Vec<u8>,
@@ -1720,7 +1720,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
          /// The compression type and offset of each map entry.
          entries: Vec<(u8, u64)>,
      }
-@@ -1192,8 +1192,8 @@ mod compressed_tests {
+@@ -1210,8 +1210,8 @@ mod compressed_tests {
  #[cfg(test)]
  mod logical_size_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1731,7 +1731,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
      use std::io::{Cursor, ErrorKind, Write};
  
      const HUNK_BYTES: u32 = 4096;
-@@ -1227,8 +1227,8 @@ mod logical_size_tests {
+@@ -1245,8 +1245,8 @@ mod logical_size_tests {
  #[cfg(test)]
  mod failure_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1742,7 +1742,7 @@ index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f
      use std::cell::Cell;
      use std::io::{self, Cursor, Seek, SeekFrom, Write};
      use std::rc::Rc;
-@@ -1364,10 +1364,10 @@ mod failure_tests {
+@@ -1382,10 +1382,10 @@ mod failure_tests {
  #[cfg(test)]
  mod parent_tests {
      use super::{ChdWriteOptions, ChdWriter};

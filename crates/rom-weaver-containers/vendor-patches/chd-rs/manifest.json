@@ -71,7 +71,19 @@
       ]
     },
     {
-      "file": "0005-module-paths.patch",
+      "file": "0005-reserve-hunk-tables.patch",
+      "stage": "source",
+      "reason": "Reserve the hunk map and the index of stored hunks from the hunk count when the logical size is set, so they do not reallocate while other threads compress. On browser wasi-threads a heap that grows while sibling threads run can trap their bulk-memory instructions; rom-weaver's previous encoder sized both up front the same way.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/mod.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed_tests::hunk_tables_are_sized_from_the_logical_size -- --exact"
+      ]
+    },
+    {
+      "file": "0006-module-paths.patch",
       "stage": "integration",
       "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest chd:: paths to crate::chd_rs:: and rom_weaver_containers::chd_rs::. mod.rs appears as a delete and add because patch renames are unsupported.",
       "upstream": {
@@ -84,7 +96,7 @@
       ]
     },
     {
-      "file": "0006-pinned-features.patch",
+      "file": "0007-pinned-features.patch",
       "stage": "integration",
       "reason": "Resolve feature gates to the pinned set (std, encode, huff_write, fast_zstd, verify_block_crc, want_subcode, want_raw_data_sector, codec_api on; huffman_api, nonstandard_channel_count and both iterator features off), deleting the zrip zstd backend, the lender-based iter module and docs.rs attributes.",
       "upstream": {
@@ -96,7 +108,7 @@
       ]
     },
     {
-      "file": "0007-workspace-zstd.patch",
+      "file": "0008-workspace-zstd.patch",
       "stage": "integration",
       "reason": "Take zstd_safe from the workspace zstd crate's re-export instead of a separate zstd-safe dependency, in the codec and its compressor tests.",
       "upstream": {
@@ -108,7 +120,7 @@
       ]
     },
     {
-      "file": "0008-workspace-formatting.patch",
+      "file": "0009-workspace-formatting.patch",
       "stage": "integration",
       "reason": "Apply workspace rustfmt (edition 2024 import order and blank lines left by feature resolution); formatting only.",
       "upstream": {
@@ -120,7 +132,7 @@
       ]
     },
     {
-      "file": "0009-workspace-lints.patch",
+      "file": "0010-workspace-lints.patch",
       "stage": "integration",
       "reason": "Workspace clippy and rustc 2024 fixes: elided lifetimes, div_ceil, is_multiple_of, io::Error::other, collapsible ifs, non-overlapping FLAC precision ranges and CompressedHunk::is_empty.",
       "upstream": {
@@ -132,7 +144,7 @@
       ]
     },
     {
-      "file": "0010-test-adaptations.patch",
+      "file": "0011-test-adaptations.patch",
       "stage": "integration",
       "reason": "Drop the upstream read tests that need .testimages fixtures the repository does not ship, and make the module-level doc examples compile as no_run (main wrappers, metadata_refs without ?, collected refs read through Chd::inner).",
       "upstream": {

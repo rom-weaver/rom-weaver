@@ -324,10 +324,10 @@ index 5027a398c4c55328d5406d58442ff17bb1b232cc..921625ee1f2804a9d8685540c8dfabaf
          }
      }
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 28fd5e72a3430346224b5546577ad1f46be48135..981464be105c557d63976b9f82a39f313af11b98 100644
+index eef1d60fd2be26e6244aaa1677797b769ff27b8f..98a4314db9244b6f55e61616921c5ab9adbb7fd0 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -157,6 +157,11 @@ impl CompressedHunk<'_> {
+@@ -173,6 +173,11 @@ impl CompressedHunk<'_> {
              HunkKind::Duplicate => 0,
          }
      }

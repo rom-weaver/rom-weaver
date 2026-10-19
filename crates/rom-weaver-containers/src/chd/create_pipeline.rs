@@ -20,8 +20,8 @@ pub(super) struct CompressedCreateParams<'a> {
     pub(super) on_progress: Option<&'a Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
-/// The CHD file being written: buffered, because small hunks (e.g. the 4 KiB DVD hunk)
-/// make for hundreds of thousands of payload writes on a large image.
+/// The CHD file being written: buffered for the header, metadata, and map writes. chd-rs
+/// seeks before every stored hunk, which flushes the buffer, so hunks are written one by one.
 type ChdOutput = BufWriter<File>;
 
 impl ChdContainerHandler {
