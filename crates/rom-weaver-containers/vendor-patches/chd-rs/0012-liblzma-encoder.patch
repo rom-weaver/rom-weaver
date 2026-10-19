@@ -1,0 +1,113 @@
+diff --git a/compression/lzma.rs b/compression/lzma.rs
+index 1ce079ffcfe7b5aa567e82cb81a353f6e6cb00fd..04411da27dc2d7bd99db0924b7fea49d371f36ab 100644
+--- a/compression/lzma.rs
++++ b/compression/lzma.rs
+@@ -5,8 +5,6 @@ use crate::chd_rs::const_assert;
+ use crate::chd_rs::error::{Error, Result};
+ use crate::chd_rs::header::CodecType;
+ use lzma_rust2::LzmaReader;
+-use lzma_rust2::{EncodeMode, LzmaOptions, LzmaWriter, MfType};
+-use std::io::Write;
+ use std::io::{Cursor, Read};
+ 
+ /// LZMA (lzma) codec.
+@@ -158,45 +156,64 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
+         // MAME compresses with LzmaEncProps level 6, in
+         // https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/chdcodec.cpp#L1312-L1318
+         //
+-        // LzmaEncProps_Normalize
+-        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L74-L78
+-        // normalizes the level to the fast algorithm with a HC4 hash chain match finder below
+-        // level 5, or the normal (optimum) algorithm with a BT4 binary tree otherwise
+-        // (btMode = algo, numHashBytes = 4), fb = 32 below level 7 or 64 otherwise, and
+-        // mc = (16 + fb / 2), halved for hash chains. Level 6 is normal, BT4, fb = 32 and mc = 32.
+-        let (mode, mf) = if self.level < 5 {
+-            (EncodeMode::Fast, MfType::Hc4)
+-        } else {
+-            (EncodeMode::Normal, MfType::Bt4)
+-        };
+-        let nice_len = if self.level < 7 { 32 } else { 64 };
+-        let depth_limit = (16 + nice_len as i32 / 2) >> u32::from(mf == MfType::Hc4);
+-        let options = LzmaOptions {
+-            dict_size: self.encode_dict_size,
+-            lc: LC,
+-            lp: LP,
+-            pb: PB,
+-            mode,
+-            nice_len,
+-            mf,
+-            depth_limit,
+-            preset_dict: None,
+-        };
++        // liblzma's presets pick the same fast/normal mode, HC4/BT4 match finder, nice length and
++        // match depth as LzmaEncProps_Normalize for each level, so only the literal/position
++        // bits and the hunk-bounded dictionary are overridden. rom-weaver already links
++        // liblzma, so this avoids carrying a second LZMA encoder.
++        //
++        // LZMA1EXT with a known size writes a raw stream with no header and no end marker,
++        // which is how CHD stores LZMA hunks.
++        const LZMA_FILTER_LZMA1EXT: liblzma_sys::lzma_vli = 0x4000000000000002;
+ 
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+         let output_len = output.len().min(input.len());
+-        let output = &mut output[..output_len];
+-        let mut writer = LzmaWriter::new(output, &options, false, false, Some(input.len() as u64))
+-            .map_err(|_| Error::CompressionError)?;
+-        writer
+-            .write_all(input)
+-            .map_err(|_| Error::CompressionError)?;
+-        let remaining = writer.finish().map_err(|_| Error::CompressionError)?;
+-
+-        let compressed_len = output_len - remaining.len();
+-        if compressed_len >= input.len() {
++        if output_len == 0 {
+             return Err(Error::CompressionError);
+         }
+-        Ok(compressed_len)
++
++        // SAFETY: `lzma_options_lzma` is a plain C struct that `lzma_lzma_preset` initialises.
++        let mut options = unsafe { std::mem::zeroed::<liblzma_sys::lzma_options_lzma>() };
++        // SAFETY: `options` is a valid, writable `lzma_options_lzma`.
++        if unsafe { liblzma_sys::lzma_lzma_preset(&mut options, self.level) } != 0 {
++            return Err(Error::CompressionError);
++        }
++        options.lc = LC;
++        options.lp = LP;
++        options.pb = PB;
++        options.dict_size = self.encode_dict_size;
++        options.ext_flags = 0;
++        options.ext_size_low = input.len() as u32;
++        options.ext_size_high = ((input.len() as u64) >> 32) as u32;
++
++        let filters = [
++            liblzma_sys::lzma_filter {
++                id: LZMA_FILTER_LZMA1EXT,
++                options: (&raw mut options).cast::<std::ffi::c_void>(),
++            },
++            liblzma_sys::lzma_filter {
++                id: liblzma_sys::LZMA_VLI_UNKNOWN,
++                options: std::ptr::null_mut(),
++            },
++        ];
++
++        let mut output_pos = 0usize;
++        // SAFETY: the filter chain, input and output pointers are valid for the given lengths,
++        // and liblzma writes at most `output_len` bytes into `output`.
++        let status = unsafe {
++            liblzma_sys::lzma_raw_buffer_encode(
++                filters.as_ptr(),
++                std::ptr::null(),
++                input.as_ptr(),
++                input.len(),
++                output.as_mut_ptr(),
++                &mut output_pos,
++                output_len,
++            )
++        };
++        // LZMA_BUF_ERROR means the stream did not fit in the output, so it is not smaller.
++        if status != liblzma_sys::LZMA_OK || output_pos >= input.len() {
++            return Err(Error::CompressionError);
++        }
++        Ok(output_pos)
+     }
+ }

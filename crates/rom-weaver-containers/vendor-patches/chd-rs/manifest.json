@@ -154,6 +154,18 @@
       "tests": [
         "cargo test -p rom-weaver-containers --doc chd_rs"
       ]
+    },
+    {
+      "file": "0012-liblzma-encoder.patch",
+      "stage": "integration",
+      "reason": "Compress CHD LZMA hunks with liblzma (liblzma-sys, already linked for libarchive) as raw LZMA1EXT with chdman's lc/lp/pb and a hunk-bounded dictionary instead of lzma-rust2's encoder, so the WASM module carries one LZMA encoder. Decoding stays on lzma-rust2.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers chd"
+      ]
     }
   ]
 }
