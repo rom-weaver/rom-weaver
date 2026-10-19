@@ -117,8 +117,8 @@
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.9.1",
     "lucide-react": "1.55.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
