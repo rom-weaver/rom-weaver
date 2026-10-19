@@ -94,3 +94,17 @@ export const PATCH_CREATE_PARITY_CASES = {
 };
 
 export const PATCH_CREATE_PARITY_FORMATS = Object.keys(PATCH_CREATE_PARITY_CASES);
+
+// SOLID create stamps today's UTC date into the header (3 bytes after the 2-byte
+// magic, version, address-param, 4-byte primitive count, and 16-byte source MD5),
+// so its raw output changes daily. Both the native generator and the wasm test hash
+// the output with those bytes zeroed; every other byte is compared unchanged.
+const VOLATILE_BYTE_RANGES = { solid: [{ end: 0x1b, start: 0x18 }] };
+
+export function maskVolatileBytes(caseName, bytes) {
+  const ranges = VOLATILE_BYTE_RANGES[caseName];
+  if (!ranges) return bytes;
+  const masked = bytes.slice();
+  for (const { end, start } of ranges) masked.fill(0, start, Math.min(end, masked.length));
+  return masked;
+}

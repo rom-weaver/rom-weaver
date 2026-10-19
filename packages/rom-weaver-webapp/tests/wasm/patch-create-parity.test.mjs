@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PATCH_CREATE_PARITY_CASES, PATCH_CREATE_PARITY_FORMATS } from "./patch-create-parity-inputs.mjs";
+import {
+  maskVolatileBytes,
+  PATCH_CREATE_PARITY_CASES,
+  PATCH_CREATE_PARITY_FORMATS,
+} from "./patch-create-parity-inputs.mjs";
 import {
   assertRunJsonSucceeded,
   joinGuestPath,
@@ -9,7 +13,8 @@ import {
 } from "./test-helpers.mjs";
 
 // Expected size and SHA-256 come from the native CLI (`patch create --format <fmt>`);
-// regenerate with scripts/generate-patch-create-parity.mjs.
+// regenerate with scripts/generate-patch-create-parity.mjs. SOLID embeds the
+// creation date, so its hash is taken with the date bytes zeroed (maskVolatileBytes).
 const EXPECTED_URL = new URL("../fixtures/patch-create-parity/expected.json", import.meta.url);
 
 async function sha256Hex(bytes) {
@@ -70,7 +75,7 @@ describe("wasm patch create matches the native CLI byte for byte", () => {
       );
       const patch = await readGuestFile(opfsHandle, output);
       expect(patch.length).toBe(expected.bytes);
-      expect(await sha256Hex(patch)).toBe(expected.sha256);
+      expect(await sha256Hex(maskVolatileBytes(caseName, patch))).toBe(expected.sha256);
     });
   });
 });

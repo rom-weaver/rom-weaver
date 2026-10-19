@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PATCH_CREATE_PARITY_CASES } from "../tests/wasm/patch-create-parity-inputs.mjs";
+import { maskVolatileBytes, PATCH_CREATE_PARITY_CASES } from "../tests/wasm/patch-create-parity-inputs.mjs";
 
 const binary = process.argv[2];
 if (!binary) {
@@ -32,7 +32,10 @@ try {
     }
     run("patch", "create", "--original", original, "--modified", modified, "--format", format, "--output", output);
     const bytes = readFileSync(output);
-    expected[caseName] = { bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
+    expected[caseName] = {
+      bytes: bytes.length,
+      sha256: createHash("sha256").update(maskVolatileBytes(caseName, bytes)).digest("hex"),
+    };
   }
 } finally {
   rmSync(dir, { force: true, recursive: true });
