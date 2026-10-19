@@ -1224,6 +1224,9 @@ const useTraceWindow = ({
   // Where the reader was when rows were last measured: pinned to the newest
   // line, or the top visible row and how far into it the viewport starts.
   const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
+  // The content height of the last commit and the lines it held. A reader at
+  // its bottom stays pinned when only measured heights changed since.
+  const committedRef = useRef<{ entries: readonly LogStoreEntry[]; height: number } | null>(null);
   const offsets = useMemo(() => {
     if (!wrapped) return null;
     const result = new Float64Array(entries.length + 1);
@@ -1270,12 +1273,16 @@ const useTraceWindow = ({
     if (updates.length === 0) return;
     // Read against the offsets the rows were placed by, not scrollHeight: rows
     // taller than their estimate overflow the content box until they count.
-    // Lines that arrive later extend those offsets, so like the desktop list a
-    // reader at the bottom does not follow them. No trace log here: it would
-    // append a line to this list, which mounts and measures again.
+    // Measuring rows above can grow the content after the dialog scrolled to
+    // the newest line, so the same lines' previous height still counts. Lines
+    // that arrive later extend the offsets, so like the desktop list a reader
+    // at the bottom does not follow them. No trace log here: it would append a
+    // line to this list, which mounts and measures again.
     const style = getComputedStyle(trace);
-    const range =
-      (offsets[entries.length] ?? 0) + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    const committed = committedRef.current;
+    const previous = committed?.entries === entries ? committed.height : Number.POSITIVE_INFINITY;
+    const range = Math.min(previous, offsets[entries.length] ?? 0) + padding;
     const top = trace.scrollTop;
     const index = rowAtOffset(offsets, top);
     anchorRef.current = {
@@ -1287,6 +1294,9 @@ const useTraceWindow = ({
     };
     setHeights((previous) => new Map([...previous, ...updates]));
   }, [entries, heights, offsets, traceRef, virtualEnd, virtualStart, windowRef]);
+  useLayoutEffect(() => {
+    committedRef.current = offsets ? { entries, height: offsets[entries.length] ?? 0 } : null;
+  }, [entries, offsets]);
   return {
     contentHeight: offsets ? (offsets[entries.length] ?? 0) : entries.length * TRACE_ROW_HEIGHT,
     virtualEnd,
