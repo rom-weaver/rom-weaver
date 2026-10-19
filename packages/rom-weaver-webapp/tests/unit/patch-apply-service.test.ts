@@ -7,6 +7,7 @@ import {
   patchProbeRequirementsFromDescriptor,
   resolvePatchTargets,
 } from "../../src/lib/apply/patch-apply-service.ts";
+import { createBareMemberRule } from "../../src/lib/apply/bare-member-target.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
 import { createLazyExternalPatchFile } from "../../src/lib/input/binary-service.ts";
 
@@ -74,7 +75,7 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
         undefined,
         undefined,
         [{ rom: true, member: "romA.bin" }],
-        ["crc32=deadbeef"],
+        createBareMemberRule([{ checks: "crc32=deadbeef", target: { rom: true, member: "romA.bin" } }]),
       ),
     ).resolves.toEqual([bare]);
   });
@@ -89,7 +90,7 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
         undefined,
         undefined,
         [{ rom: true, member: "romA.bin" }],
-        ["crc32=deadbeef"],
+        createBareMemberRule([{ checks: "crc32=deadbeef", target: { rom: true, member: "romA.bin" } }]),
       ),
     ).rejects.toThrow("neither its file name nor its checks match the member");
   });
@@ -101,7 +102,7 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
         { rom: true, member: "disc-a/track.bin" },
         { rom: true, member: "disc-b/track.bin" },
       ]),
-    ).rejects.toThrow("matches several weave members");
+    ).rejects.toThrow("matches several weave ROM members (`disc-a/track.bin`, `disc-b/track.bin`)");
   });
 
   it("refuses a second same-named member when the weave root member is also read by the bare file", async () => {
@@ -114,10 +115,9 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
         undefined,
         undefined,
         [{ rom: true, member: "disc-b/track.bin" }],
-        undefined,
-        ["disc-a/track.bin", "disc-b/track.bin"],
+        createBareMemberRule([{ target: { rom: true, member: "disc-b/track.bin" } }], "disc-a/track.bin"),
       ),
-    ).rejects.toThrow("matches several weave members");
+    ).rejects.toThrow("matches several weave ROM members (`disc-a/track.bin`, `disc-b/track.bin`)");
   });
 
   it("does not guess a duplicate basename for a nested member", async () => {

@@ -4,17 +4,18 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { resolveApplyHeaderMode, resolveApplyN64ByteOrder, toNormalizedCrc32 } from "./apply-header-resolution.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
+import { loneBareFile } from "../apply/bare-member-target.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
   declaredInputChecks?: string;
   /** The ROM member the patch names as its input or target. A lone bare file that no member
    * reference resolved to is then not the target: it stays unassigned instead of being picked as
-   * the only candidate, and the row reports that the file does not match the member. */
+   * the only candidate, and the row reports why (see `describeBareMemberFailure`). */
   memberRef?: string;
-  /** Whether the bare file matches `memberRef` by name or checks, ignoring conflicts with other
-   * members. Decides if an unassigned bare file was cleared by a conflict or matched nothing. */
-  bareMatchesMember?: (bare: InputAsset) => boolean;
+  /** Why a lone bare file does not stand in for `memberRef`: it matches several members, or it
+   * matches neither by name nor by checks. */
+  describeBareMemberFailure?: (bare: InputAsset) => string | undefined;
   /** True for the first patch on `target` (each target is its own engine run) when it reads the
    * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
    * enforces the same); a later patch's input is usually the previous patch's output, which the
@@ -345,15 +346,9 @@ const settleApplyPatchTarget = async <TSource>(
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;
-    const [bare] = assets;
-    const bareMismatch = adapters.memberRef && assets.length === 1 && bare?.member === undefined && !bare?.discGroupId;
-    // A bare file that matches the member (by name or checks) was left unassigned only because
-    // several members want it; any other bare file simply matches nothing.
-    const matchedButConflicted = !!bare && !!adapters.bareMatchesMember?.(bare);
-    const mismatchMessage = matchedButConflicted
-      ? `the bare input file \`${bare?.fileName}\` matches several weave ROM members and can stand in for only one; provide an archive or disc containing them`
-      : `weave ROM member \`${adapters.memberRef}\` was not found in \`${bare?.fileName}\`: the input is not an archive and neither its file name nor its checks match the member`;
-    const message = bareMismatch ? mismatchMessage : `${stage.state.fileName || "Patch"} target selection is required`;
+    const bare = adapters.memberRef ? loneBareFile(assets) : undefined;
+    const bareFailure = bare ? adapters.describeBareMemberFailure?.(bare) : undefined;
+    const message = bareFailure ?? `${stage.state.fileName || "Patch"} target selection is required`;
     adapters.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", message));
   } catch (error) {
     const normalized = toRomWeaverError(error);

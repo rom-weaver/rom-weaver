@@ -32,7 +32,7 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
-import { collectPatchMemberRefs, findMemberAssets } from "../apply/bare-member-target.ts";
+import { createBareMemberRule, describeBareMemberFailure, findMemberAssets } from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -165,6 +165,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private cheatPositions: number[] = [];
   /** The active weave's `rom.checks`, verified against the supplied ROM file. */
   private weaveRom: WeaveRomExpectation | undefined;
+  /** The active weave's `rom.member`, set with or without `rom.checks`: a lone bare ROM file always
+   * stands in for it. */
+  private weaveRomMember: string | undefined;
   /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
   private readonly weaveRomChecksums = new WeakMap<object, ComputedChecksums>();
   /** The variant the weave's `rom.checks` matched when the raw file did not: its asset and CRC32.
@@ -228,8 +231,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
-  setWeaveRom(expectation: WeaveRomExpectation | undefined): void {
-    const next = expectation?.checks ? { ...expectation } : undefined;
+  setWeaveRom(expectation: Partial<WeaveRomExpectation> | undefined): void {
+    this.weaveRomMember = expectation?.member;
+    const next = expectation?.checks ? { ...expectation, checks: expectation.checks } : undefined;
     if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member) {
       this.weaveRomLayout = undefined;
       this.chainLayoutBases.clear();
@@ -900,12 +904,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           else clearApplyPatchTarget(stage);
         } else if (option.input?.member) {
           const member = option.input.member;
-          const matches = findMemberAssets(
-            member,
-            this.getPatchableInputAssets(),
-            this.memberChecksFor(stage),
-            this.getPatchMemberRefs(),
-          );
+          const matches = findMemberAssets(member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -923,12 +922,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
           else clearApplyPatchTarget(stage);
         } else if (target?.member) {
-          const matches = findMemberAssets(
-            target.member,
-            this.getPatchableInputAssets(),
-            this.memberChecksFor(stage),
-            this.getPatchMemberRefs(),
-          );
+          const matches = findMemberAssets(target.member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -1800,11 +1794,12 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
+    const memberRef = inputRef && !("patch" in inputRef) ? inputRef.member : undefined;
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
-      memberRef: inputRef && !("patch" in inputRef) ? inputRef.member : undefined,
-      bareMatchesMember: (bare) =>
-        !!inputRef?.member && findMemberAssets(inputRef.member, [bare], this.memberChecksFor(stage)).length > 0,
+      memberRef,
+      describeBareMemberFailure: (bare) =>
+        memberRef ? describeBareMemberFailure(memberRef, bare, this.getBareMemberRule()) : undefined,
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
@@ -1823,15 +1818,27 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
    * describe the root ROM rather than a member). */
   private memberChecksFor(stage: StagedSource<TSource>): string | undefined {
     if (stage.state.inputChecks) return stage.state.inputChecks;
-    return this.weaveRom && !this.weaveRom.member ? this.weaveRom.checks : undefined;
+    return this.weaveRomMember ? undefined : this.weaveRom?.checks;
   }
 
-  /** Every distinct ROM member the staged patches name as their input or target. */
-  private getPatchMemberRefs() {
-    return collectPatchMemberRefs(
-      this.patches.map((patch) => ({ input: patch.state.patchInput, target: patch.state.patchTarget })),
-      this.weaveRom?.member,
+  /** The members a lone bare ROM file is asked to stand in for, from the enabled patches; the run
+   * builds the same rule from its enabled-only patch list. */
+  private getBareMemberRule() {
+    return createBareMemberRule(
+      this.patches
+        .filter((patch) => !this.disabledPatches.has(patch))
+        .map((patch) => ({
+          checks: this.memberChecksFor(patch),
+          input: patch.state.patchInput,
+          target: patch.state.patchTarget,
+        })),
+      this.weaveRomMember,
     );
+  }
+
+  private getBareMemberRuleKey() {
+    const rule = this.getBareMemberRule();
+    return JSON.stringify([rule.rootMember, [...rule.memberChecks]]);
   }
 
   private async refreshPatchReadiness() {
@@ -1847,12 +1854,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (target) assignApplyPatchTarget(patch, target);
         else clearApplyPatchTarget(patch);
       } else if (targetRef?.member) {
-        const matches = findMemberAssets(
-          targetRef.member,
-          this.getPatchableInputAssets(),
-          this.memberChecksFor(patch),
-          this.getPatchMemberRefs(),
-        );
+        const matches = findMemberAssets(targetRef.member, this.getPatchableInputAssets(), this.getBareMemberRule());
         if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);
         else clearApplyPatchTarget(patch);
       }
@@ -1873,12 +1875,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
     /** The active weave's expected ROM; present (even undefined) replaces the stored one. */
-    weaveRom?: WeaveRomExpectation;
+    weaveRom?: Partial<WeaveRomExpectation>;
     /** Set when a newer input change is queued behind this pass: the ROM about to be replaced is
      * not hashed for the weave's checks, and its patches stay a retryable "unknown". */
     skipWeaveRomHash?: boolean;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
       const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
       if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
@@ -1887,6 +1890,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // the patches gaining or losing that role re-run their preflight below.
       const firstEnabledBefore = this.getFirstEnabledPatches();
       this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
+      // A new `rom.member` or a toggled member patch changes which members a bare file may stand in for.
+      if (this.getBareMemberRuleKey() !== bareMemberRuleBefore) await this.refreshPatchReadiness();
       const firstEnabledAfter = this.getFirstEnabledPatches();
       const firstEnabledMoved = new Set(
         [...firstEnabledBefore, ...firstEnabledAfter].filter(
@@ -2211,7 +2216,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         validateOutputChecksum: patch.state.validateOutputChecksum,
       })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
-      ...(this.weaveRom?.member ? { rootMember: this.weaveRom.member } : {}),
+      ...(this.weaveRomMember ? { rootMember: this.weaveRomMember } : {}),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };
