@@ -18,6 +18,8 @@ type PlaylistDisc = {
   source: File | PublicOutput;
   origin?: File | PublicOutput;
   owned?: boolean;
+  /** Path below the extraction root, for a copy of an output from a nested folder. */
+  relativePath?: string;
 };
 
 /** Whether two entries are the same file: the same source, or the same dropped file picked twice. */
@@ -40,19 +42,32 @@ const PLAYLIST_COPY_FOLDER = "runtime-output/playlist";
 /**
  * Give the Playlist tool its own copy of an output another tool keeps alive, so the playlist still
  * has the file after that tool disposes it (Extract does when it starts its next run). Every copy
- * of one handoff goes into a shared folder under its real name and relative path, so a sheet still
- * finds the track files it names.
+ * of one handoff goes into a shared folder under its path below the extraction root (its base name
+ * when it has none), so a sheet still finds the track files it names and same-named files from
+ * different folders (Disc 1/Game.cue, Disc 2/Game.cue) stay apart.
  */
 const retainPlaylistDisc = async (disc: PlaylistDisc, handoffId: string): Promise<PlaylistDisc> => {
   const { source } = disc;
   if (source instanceof Blob) return disc;
-  const copy = await copyRuntimeOutputToPath(source, source.fileName, PLAYLIST_COPY_FOLDER, handoffId);
+  const copy = await copyRuntimeOutputToPath(
+    source,
+    source.relativePath || source.fileName,
+    PLAYLIST_COPY_FOLDER,
+    handoffId,
+  );
   const owned = await createRuntimeOutputFromVfs(copy.vfs, copy.path, copy.fileName, {
     cleanup: copy.dispose,
     mediaType: copy.mediaType,
     size: copy.size,
   });
-  return { name: disc.name, origin: source, owned: true, size: disc.size, source: owned };
+  return {
+    name: disc.name,
+    origin: source,
+    owned: true,
+    ...(source.relativePath ? { relativePath: source.relativePath } : {}),
+    size: disc.size,
+    source: owned,
+  };
 };
 
 /** A fresh folder name for one handoff's copies. */

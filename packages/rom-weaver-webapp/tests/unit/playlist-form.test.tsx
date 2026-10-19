@@ -175,6 +175,42 @@ describe("Playlist form", () => {
     expect(created[0]?.dispose).toHaveBeenCalled();
   });
 
+  it("keeps same-named files from different folders apart, each under its relative path", async () => {
+    const copied: string[] = [];
+    mocks.copy.mockImplementation(async (source: { fileName: string }, name: string) => {
+      copied.push(name);
+      return { dispose: vi.fn(async () => undefined), fileName: source.fileName, path: "/copy", size: 4, vfs: {} };
+    });
+    mocks.wrap.mockImplementation(async (_vfs: unknown, _path: string, fileName: string) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName,
+      saveAs: vi.fn(),
+      size: 4,
+    }));
+    mocks.build.mockImplementation(async ({ files }) => ({
+      discIndexes: files.map((_: unknown, index: number) => index),
+      entries: files.map((file: { fileName: string }) => file.fileName),
+      output: output("order.m3u"),
+    }));
+    const view = render(<PlaylistForm />);
+    const extracted = (relativePath: string) => ({
+      ...output("Game.cue"),
+      path: `/out/${relativePath}`,
+      relativePath,
+    });
+    setPlaylistHandoff(
+      ["Disc 1/Game.cue", "Disc 2/Game.cue"].map((relativePath) => ({
+        name: "Game.cue",
+        size: 4,
+        source: extracted(relativePath) as never,
+      })),
+    );
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Game.cue", "Game.cue"]));
+    expect(copied).toEqual(["Disc 1/Game.cue", "Disc 2/Game.cue"]);
+    expect(view.container.textContent).not.toContain("A different file named");
+    view.unmount();
+  });
+
   it("copies one handoff into one folder and shows a status while it copies", async () => {
     const folders: string[] = [];
     let release: () => void = () => undefined;

@@ -30,6 +30,8 @@ const FORMAT_OPTIONS = [
   { label: "ZIP with discs", value: "zip" },
 ];
 
+/** Where a disc sits in the staging folder: its path below the extraction root, else its name. */
+const discKey = (disc: PlaylistDisc) => (disc.relativePath || disc.name).toLowerCase();
 const toDisc = (file: File): PlaylistDisc => ({ name: file.name, size: file.size, source: file });
 
 const stemOf = (name: string) => {
@@ -162,9 +164,9 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
       for (const file of incoming) {
         const held = [...previous, ...fresh];
         if (held.some((other) => isSamePlaylistFile(other, file))) continue;
-        // Every file is staged into one folder, so two different files cannot share a name: a sheet
-        // would silently read the other disc's track.
-        clash ??= held.some((other) => other.name.toLowerCase() === file.name.toLowerCase()) ? file : undefined;
+        // Files are staged into one folder unless a copy keeps its folder, so two different files
+        // cannot share a path: a sheet would silently read the other disc's track.
+        clash ??= held.some((other) => discKey(other) === discKey(file)) ? file : undefined;
         fresh.push(file);
       }
       const discard = () => {

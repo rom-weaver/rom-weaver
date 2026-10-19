@@ -191,7 +191,10 @@ const copyRuntimeOutputToPath = async (
   source: Pick<PublicOutput, "fileName" | "mediaType" | "path" | "size" | "vfs">,
   fileName = source.fileName,
   pathPrefix = "runtime-output/emulator",
-  /** Keep `fileName` (with its folders) under this folder instead of a unique-id name prefix. */
+  /**
+   * Keep `fileName` under this folder instead of a unique-id name prefix. `fileName` may carry
+   * folders (a relative path); the copy keeps them, and its own `fileName` is the base name.
+   */
   keepNameInFolder?: string,
 ): Promise<RetainedRuntimeOutput> => {
   const outputPath = keepNameInFolder
@@ -213,7 +216,8 @@ const copyRuntimeOutputToPath = async (
       await source.vfs.write(outputPath, buffer.subarray(0, bytesRead), { fileOffset: offset });
       offset += bytesRead;
     }
-    const output = await createRuntimeOutputFromVfs(source.vfs, outputPath, fileName, {
+    const outputFileName = keepNameInFolder ? getPathBaseName(fileName, fileName) : fileName;
+    const output = await createRuntimeOutputFromVfs(source.vfs, outputPath, outputFileName, {
       cleanup,
       mediaType: source.mediaType,
       size,
