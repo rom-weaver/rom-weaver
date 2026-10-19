@@ -62,6 +62,26 @@ const MAME_LZMA_LEVEL: u32 = 6;
 
 impl<const LC: u32, const LP: u32, const PB: u32> CompressionCodec for LzmaCodec<LC, LP, PB> {}
 
+/// The mode, match finder, nice length and match depth that `LzmaEncProps_Normalize` picks
+/// for a level, as liblzma options.
+fn lzma_enc_props(
+    level: u32,
+) -> (
+    liblzma_sys::lzma_mode,
+    liblzma_sys::lzma_match_finder,
+    u32,
+    u32,
+) {
+    let fast = level < 5;
+    let (mode, mf) = if fast {
+        (liblzma_sys::LZMA_MODE_FAST, liblzma_sys::LZMA_MF_HC4)
+    } else {
+        (liblzma_sys::LZMA_MODE_NORMAL, liblzma_sys::LZMA_MF_BT4)
+    };
+    let nice_len = if level < 7 { 32 } else { 64 };
+    (mode, mf, nice_len, (16 + nice_len / 2) >> u32::from(fast))
+}
+
 /// MAME/libchdr uses an ancient LZMA 19.00.
 ///
 /// To match the proper dictionary size, we copy the algorithm from
@@ -156,10 +176,9 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         // MAME compresses with LzmaEncProps level 6, in
         // https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/chdcodec.cpp#L1312-L1318
         //
-        // liblzma's presets pick the same fast/normal mode, HC4/BT4 match finder, nice length and
-        // match depth as LzmaEncProps_Normalize for each level, so only the literal/position
-        // bits and the hunk-bounded dictionary are overridden. rom-weaver already links
-        // liblzma, so this avoids carrying a second LZMA encoder.
+        // rom-weaver already links liblzma, so this avoids carrying a second LZMA encoder.
+        // liblzma's presets differ from LzmaEncProps_Normalize in mode, match finder, nice
+        // length and match depth, so those are set from LzmaEncProps below.
         //
         // LZMA1EXT with a known size writes a raw stream with no header and no end marker,
         // which is how CHD stores LZMA hunks.
@@ -177,6 +196,13 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
         if unsafe { liblzma_sys::lzma_lzma_preset(&mut options, self.level) } != 0 {
             return Err(Error::CompressionError);
         }
+        // LzmaEncProps_Normalize
+        // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L74-L78
+        // normalizes the level to the fast algorithm with a HC4 hash chain match finder below
+        // level 5, or the normal (optimum) algorithm with a BT4 binary tree otherwise
+        // (btMode = algo, numHashBytes = 4), fb = 32 below level 7 or 64 otherwise, and
+        // mc = (16 + fb / 2), halved for hash chains. Level 6 is normal, BT4, fb = 32 and mc = 32.
+        (options.mode, options.mf, options.nice_len, options.depth) = lzma_enc_props(self.level);
         options.lc = LC;
         options.lp = LP;
         options.pb = PB;
@@ -215,5 +241,23 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
             return Err(Error::CompressionError);
         }
         Ok(output_pos)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lzma_enc_props;
+    use liblzma_sys::{LZMA_MF_BT4, LZMA_MF_HC4, LZMA_MODE_FAST, LZMA_MODE_NORMAL};
+
+    #[test]
+    fn levels_use_the_lzma_enc_props_encoder_settings() {
+        // LzmaEnc.c: algo = level < 5 ? 0 : 1, fb = level < 7 ? 32 : 64,
+        // mc = (16 + fb / 2) >> (btMode ? 0 : 1).
+        assert_eq!(lzma_enc_props(0), (LZMA_MODE_FAST, LZMA_MF_HC4, 32, 16));
+        assert_eq!(lzma_enc_props(4), (LZMA_MODE_FAST, LZMA_MF_HC4, 32, 16));
+        assert_eq!(lzma_enc_props(5), (LZMA_MODE_NORMAL, LZMA_MF_BT4, 32, 32));
+        assert_eq!(lzma_enc_props(6), (LZMA_MODE_NORMAL, LZMA_MF_BT4, 32, 32));
+        assert_eq!(lzma_enc_props(7), (LZMA_MODE_NORMAL, LZMA_MF_BT4, 64, 48));
+        assert_eq!(lzma_enc_props(9), (LZMA_MODE_NORMAL, LZMA_MF_BT4, 64, 48));
     }
 }
