@@ -67,6 +67,22 @@ describe("ExtractForm", () => {
     expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
   });
 
+  it("asks for the missing parts of a split WBFS set instead of the raw size error", async () => {
+    runtime.extract.mockRejectedValue(
+      new Error("failed to open wbfs source `/work/Game.wbfs`: Invalid WBFS file size: 1398102, expected 4194304"),
+    );
+    render(<ExtractForm />);
+
+    addFile(new File(["WBFS"], "Game.wbfs"));
+
+    expect(
+      await screen.findByText(
+        "Game.wbfs is missing parts of its split set. Add it together with every .wbf1, .wbf2, ... part.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/\/work\//)).toBeNull();
+  });
+
   it("extracts the first of several dropped files and names the ones it did not use", async () => {
     runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
     render(

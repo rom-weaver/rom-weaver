@@ -31,11 +31,17 @@ const binCount = (entries: { filename: string }[]): number =>
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
 // The runtime names the file by its internal storage path, so a file that is not an archive gets a plain message.
 const NOT_A_CONTAINER_PATTERN = /no registered container matched/i;
+// A WBFS shorter than its header's size is a split set with parts left out.
+const WBFS_SIZE_PATTERN = /invalid wbfs file size/i;
 const errorMessage = (cause: unknown, file?: File): string => {
   const message = cause instanceof Error ? cause.message : String(cause);
-  return file && NOT_A_CONTAINER_PATTERN.test(message)
-    ? `${file.name} is not an archive or disc image that Extract can open.`
-    : message;
+  if (!file) return message;
+  if (NOT_A_CONTAINER_PATTERN.test(message))
+    return `${file.name} is not an archive or disc image that Extract can open.`;
+  if (WBFS_SIZE_PATTERN.test(message)) {
+    return `${file.name} is missing parts of its split set. Add it together with every .wbf1, .wbf2, ... part.`;
+  }
+  return message;
 };
 
 // Runtime labels are log text, so the form shows its own label and takes only the percent. An event
