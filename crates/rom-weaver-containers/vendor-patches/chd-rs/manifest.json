@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "name": "chd-rs",
+  "source": {
+    "url": "https://codeload.github.com/SnowflakePowered/chd-rs/tar.gz/refs/tags/v0.4.0",
+    "revision": "76785770e88ce79bb3cb64320fd1074ee1d1fe8f",
+    "sha256": "c7d4774de612924c67ef9d396f85ce2f42cf2567438299d348b410c622d9dfb8",
+    "format": "tar",
+    "root": "chd-rs-0.4.0/chd-rs/src",
+    "extraFiles": [
+      {
+        "from": "chd-rs-0.4.0/LICENSE.md",
+        "to": "LICENSE.md"
+      }
+    ]
+  },
+  "destination": "crates/rom-weaver-containers/src/chd_rs",
+  "exclude": [],
+  "materialized": true,
+  "preserve": [
+    "CHD_RS_VERSION"
+  ],
+  "patches": [
+    {
+      "file": "0001-module-paths.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest chd:: paths to crate::chd_rs:: and rom_weaver_containers::chd_rs::. mod.rs appears as a delete and add because patch renames are unsupported.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::",
+        "cargo test -p rom-weaver-containers --doc chd_rs"
+      ]
+    },
+    {
+      "file": "0002-pinned-features.patch",
+      "stage": "integration",
+      "reason": "Resolve feature gates to the pinned set (std, encode, huff_write, fast_zstd, verify_block_crc, want_subcode, want_raw_data_sector on; codec_api, huffman_api, nonstandard_channel_count and both iterator features off), deleting the zrip zstd backend, the lender-based iter module and docs.rs attributes.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/Cargo.toml"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::"
+      ]
+    },
+    {
+      "file": "0003-workspace-zstd.patch",
+      "stage": "integration",
+      "reason": "Take zstd_safe from the workspace zstd crate's re-export instead of a separate zstd-safe dependency.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/zstd.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::compression::tests::"
+      ]
+    },
+    {
+      "file": "0004-workspace-formatting.patch",
+      "stage": "integration",
+      "reason": "Apply workspace rustfmt (edition 2024 import order and blank lines left by feature resolution); formatting only.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo fmt --check -p rom-weaver-containers"
+      ]
+    },
+    {
+      "file": "0005-workspace-lints.patch",
+      "stage": "integration",
+      "reason": "Workspace clippy and rustc 2024 fixes: elided lifetimes, div_ceil, is_multiple_of, io::Error::other, collapsible ifs, non-overlapping FLAC precision ranges and CompressedHunk::is_empty.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo clippy -p rom-weaver-containers --all-targets -- -D warnings"
+      ]
+    },
+    {
+      "file": "0006-test-adaptations.patch",
+      "stage": "integration",
+      "reason": "Drop the upstream read tests that need .testimages fixtures the repository does not ship, and make the module-level doc examples compile as no_run (main wrappers, metadata_refs without ?, collected refs read through Chd::inner).",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/lib.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --doc chd_rs"
+      ]
+    }
+  ]
+}

@@ -271,7 +271,7 @@ export function mainThreadViolations(modules, roots) {
 }
 
 export function rustErrorViolations(path, source) {
-  if (path === "crates/rom-weaver-core/src/error.rs" || /\/src\/(?:nod|xdvdfs)\//.test(path))
+  if (path === "crates/rom-weaver-core/src/error.rs" || /\/src\/(?:chd_rs|nod|xdvdfs)\//.test(path))
     return [];
   // Deriving/implementing Error identifies error domains without rejecting state enums named Error.
   const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");

@@ -49,7 +49,6 @@ bzip2-sys = "0.1.13"
 block-padding = "0.4"
 bytes = "1.11"
 ciso = { version = "0.3.0", default-features = false, features = ["sync"] }
-chd = { version = "0.3.4", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
 clap = { version = "4.5.51", features = ["derive", "string"] }
 claxon = "0.4.3"
 crc = "3.4.0"
@@ -62,11 +61,11 @@ crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
 crypto-common = "0.2"
 dyn-clone = "1.0"
-# Load-bearing for the same reason as the `bzip2` pin above: upstream `chd`
-# depends on `flate2` with the pure-Rust `zlib-rs` backend. Feature unification
-# means this pin is the only thing keeping `flate2` on the C backend, which
-# `flate2` selects whenever `any_c_zlib` is enabled. Dropping it silently swaps
-# the deflate implementation underneath CHD decode.
+# Keeps `flate2` on the C zlib backend, which chdman also uses. Upstream chd-rs
+# selects the pure-Rust `zlib-rs` backend; the vendored `src/chd_rs` module uses
+# this workspace dependency instead, so CHD zlib hunks keep chdman's deflate
+# streams. Enabling `zlib-rs` or the default `rust_backend` here would swap the
+# deflate implementation underneath CHD encode and decode.
 flate2 = { version = "1.1.5", default-features = false, features = ["zlib"] }
 miniz_oxide = "0.9.1"
 flacenc = { version = "0.5.1", default-features = false }
@@ -81,7 +80,14 @@ lru = "0.18"
 polonius-the-crab = "0.6"
 qbsdiff = "1.4.4"
 rayon = "1.11.0"
-arrayvec = { version = "0.7.2", default-features = false, features = ["std"] }
+bitreader = "0.3.6"
+bitstream-io = "4.10"
+byteorder = "1.5"
+num-derive = "0.4"
+num-traits = "0.2"
+parking_lot = "0.12"
+text_io = "0.1"
+arrayvec ={ version = "0.7.2", default-features = false, features = ["std"] }
 async-trait = "0.1"
 bincode = "1.3.3"
 encoding_rs = "0.8.32"

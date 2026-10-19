@@ -1,0 +1,1057 @@
+diff --git a/block_hash.rs b/block_hash.rs
+index f0a182c4c9e92095d9ceb0a953dbac82022a0015..1ba301b28588961f5d5fafc9d24f42105aa0151d 100644
+--- a/block_hash.rs
++++ b/block_hash.rs
+@@ -1,7 +1,6 @@
+ use crate::chd_rs::Result;
+ use num_traits::ToPrimitive;
+ 
+-#[cfg(feature = "verify_block_crc")]
+ use crate::chd_rs::Error;
+ 
+ #[allow(unused_imports)]
+@@ -14,7 +13,6 @@ pub(crate) const CRC16: Crc<u16> = Crc::<u16>::new(&CRC_16_IBM_3740);
+ // The polynomial matches up (0x04c11db7 reflected = 0xedb88320), and
+ // checking with zlib crc32.c matches the check 0xcbf43926 for
+ // "12345678".
+-#[cfg(feature = "verify_block_crc")]
+ const CRC32: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+ 
+ /// Crate-private trait for the implementation of a CHD-compatible CRC instance for
+@@ -25,8 +23,7 @@ pub(crate) trait BlockChecksum {
+     ///
+     /// If the `crc` provided is `None`, this function always returns `Ok`.
+     ///
+-    /// This function should only be used to verify decompressed hunks. If the `verify_block_crc`
+-    /// feature is not enabled, this function always returns `Ok`.
++    /// This function should only be used to verify decompressed hunks.
+     fn verify_block_checksum<C: ToPrimitive, R>(crc: Option<C>, buf: &[u8], result: R)
+         -> Result<R>;
+ }
+@@ -39,14 +36,11 @@ impl BlockChecksum for Crc<u16> {
+         buf: &[u8],
+         result: R,
+     ) -> Result<R> {
+-        #[cfg(feature = "verify_block_crc")]
+         match crc.and_then(|f| f.to_u16()) {
+             Some(crc) if CRC16.checksum(buf) != crc => Err(Error::DecompressionError),
+             _ => Ok(result),
+         }
+ 
+-        #[cfg(not(feature = "verify_block_crc"))]
+-        Ok(result)
+     }
+ }
+ 
+@@ -58,13 +52,10 @@ impl BlockChecksum for Crc<u32> {
+         buf: &[u8],
+         result: R,
+     ) -> Result<R> {
+-        #[cfg(feature = "verify_block_crc")]
+         match crc.and_then(|f| f.to_u32()) {
+             Some(crc) if CRC32.checksum(buf) != crc => Err(Error::DecompressionError),
+             _ => Ok(result),
+         }
+ 
+-        #[cfg(not(feature = "verify_block_crc"))]
+-        Ok(result)
+     }
+ }
+diff --git a/chdfile.rs b/chdfile.rs
+index 5c6c0daca173ccdd2919512893310c0f106e2129..f05e0bf364e8760a85b39d0dd481f01ef5f1daea 100644
+--- a/chdfile.rs
++++ b/chdfile.rs
+@@ -7,8 +7,6 @@ use crate::chd_rs::map::{
+     UncompressedEntryProof,
+ };
+ 
+-#[cfg(feature = "unstable_lending_iterators")]
+-use crate::chd_rs::iter::{Hunks, MetadataEntries};
+ 
+ use crate::chd_rs::metadata::MetadataRefs;
+ use byteorder::{BigEndian, WriteBytesExt};
+@@ -89,14 +87,6 @@ impl<F: Read + Seek> Chd<F> {
+         }
+     }
+ 
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
+-    /// Returns an iterator over metadata entries for this CHD file.
+-    ///
+-    /// The contents of each metadata entry are lazily read.
+-    pub fn metadata(&mut self) -> MetadataEntries<F> {
+-        MetadataEntries::new(self.metadata_refs())
+-    }
+ 
+     /// Returns the hunk map of this CHD File.
+     pub fn map(&self) -> &Map {
+@@ -123,12 +113,6 @@ impl<F: Read + Seek> Chd<F> {
+         vec![0u8; hunk_size]
+     }
+ 
+-    #[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    /// Returns an iterator over the hunks of this CHD file.
+-    pub fn hunks(&mut self) -> Hunks<F> {
+-        Hunks::new(self)
+-    }
+ 
+     /// Consumes the `Chd` and returns the underlying reader and parent if present.
+     pub fn into_inner(self) -> (F, Option<Box<Chd<F>>>) {
+diff --git a/compression/avhuff.rs b/compression/avhuff.rs
+index 80d15526392e2f4b7e982b861876bbd4b916fff1..93114ff4796fc7b6f5046a714a59e5e9662ff646 100644
+--- a/compression/avhuff.rs
++++ b/compression/avhuff.rs
+@@ -2,14 +2,11 @@ use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+ use crate::chd_rs::header::CodecType;
+-#[cfg(feature = "encode")]
+ use crate::chd_rs::huffman::HuffmanEncoder;
+ use crate::chd_rs::huffman::{Huffman8BitDecoder, HuffmanDecoder};
+ use crate::chd_rs::{huffman, Error, Result};
+ use bitreader::BitReader;
+-#[cfg(feature = "encode")]
+ use bitstream_io::{BitWrite, BitWriter};
+-#[cfg(feature = "encode")]
+ use byteorder::ByteOrder;
+ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+ use claxon::frame::FrameReader;
+@@ -38,7 +35,6 @@ const fn code_to_rle_count(code: u32) -> u32 {
+ }
+ 
+ /// The largest RLE code whose count is less than or equal to the provided count.
+-#[cfg(feature = "encode")]
+ const fn rle_count_to_code(rle_count: u32) -> u32 {
+     match rle_count {
+         2048.. => 0x10f,
+@@ -58,20 +54,17 @@ const fn rle_count_to_code(rle_count: u32) -> u32 {
+ 
+ type DeltaRleHuffman<'a> = HuffmanDecoder<'a, { 256 + 16 }, 16, { huffman::lookup_len::<16>() }>;
+ 
+-#[cfg(feature = "encode")]
+ type DeltaRleHuffmanEncoder = HuffmanEncoder<'static, { 256 + 16 }, 16>;
+ 
+ /// Delta-RLE encoder for one component of the video data.
+ ///
+ /// See [avhuff.cpp](https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/avhuff.cpp#L614).
+-#[cfg(feature = "encode")]
+ struct DeltaRleEncoder {
+     huffman: DeltaRleHuffmanEncoder,
+     // The code for each item of the component, or `None` if the item is part of a run.
+     codes: Vec<Option<u16>>,
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl DeltaRleEncoder {
+     fn new() -> Self {
+         Self {
+@@ -221,11 +214,8 @@ impl<'a> DeltaRleDecoder<'a> {
+ /// enough data, the remainder of the output buffer will be zero-filled.
+ pub struct AVHuffCodec {
+     buffer: Vec<i32>,
+-    #[cfg(feature = "encode")]
+     y_context: DeltaRleEncoder,
+-    #[cfg(feature = "encode")]
+     cb_context: DeltaRleEncoder,
+-    #[cfg(feature = "encode")]
+     cr_context: DeltaRleEncoder,
+ }
+ 
+@@ -262,11 +252,8 @@ impl CodecImplementation for AVHuffCodec {
+     fn new(_hunk_bytes: u32) -> Result<Self> {
+         Ok(AVHuffCodec {
+             buffer: Vec::new(),
+-            #[cfg(feature = "encode")]
+             y_context: DeltaRleEncoder::new(),
+-            #[cfg(feature = "encode")]
+             cb_context: DeltaRleEncoder::new(),
+-            #[cfg(feature = "encode")]
+             cr_context: DeltaRleEncoder::new(),
+         })
+     }
+@@ -393,7 +380,6 @@ impl CodecImplementation for AVHuffCodec {
+     ///
+     /// Returns [`InvalidData`](Error::InvalidData) if the input is not a raw A/V frame
+     /// padded with zeroes.
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         let header = input.get(..AVHU_HEADER_LEN).ok_or(Error::InvalidData)?;
+         if &header[..4] != b"chav" {
+@@ -456,7 +442,6 @@ impl CodecImplementation for AVHuffCodec {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl AVHuffCodec {
+     /// Compress each audio channel as a separate mono FLAC stream with a single block.
+     ///
+diff --git a/compression/cdrom.rs b/compression/cdrom.rs
+index ba669b9a80b6765eea11efe69ec904289703deea..6c9d8b1df7c08675b44a3529a78a6ee2c0f239db 100644
+--- a/compression/cdrom.rs
++++ b/compression/cdrom.rs
+@@ -204,15 +204,12 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+             &mut self.buffer[..frames * CD_MAX_SECTOR_DATA as usize],
+         )?;
+ 
+-        #[cfg(feature = "want_subcode")]
+         let sub_res = self.sub_engine.decompress(
+             &input[header_bytes + sector_compressed_len as usize..],
+             &mut self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+                 [..frames * CD_MAX_SUBCODE_DATA as usize],
+         )?;
+ 
+-        #[cfg(not(feature = "want_subcode"))]
+-        let sub_res = DecompressResult::default();
+ 
+         // Decompressed data has layout
+         // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+@@ -229,7 +226,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         }
+ 
+         // Reassemble subcode data to expected layout.
+-        #[cfg(feature = "want_subcode")]
+         for (frame_num, chunk) in self.buffer[frames * CD_MAX_SECTOR_DATA as usize..]
+             .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
+             .enumerate()
+@@ -240,7 +236,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         }
+ 
+         // Recreate ECC data
+-        #[cfg(feature = "want_raw_data_sector")]
+         for frame_num in 0..frames {
+             let mut sector = <&mut [u8; CD_MAX_SECTOR_DATA as usize]>::try_from(
+                 &mut output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize],
+@@ -254,7 +249,6 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         Ok(frame_res + sub_res)
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         // https://github.com/mamedev/mame/blob/master/src/lib/util/chdcodec.cpp chd_cd_compressor::compress
+         let frames = input.len() / CD_FRAME_SIZE as usize;
+diff --git a/compression/flac.rs b/compression/flac.rs
+index 6401234ed8eb3636a541032878b90605625bfcfe..b14d94af4e1f5d49156456502bb58322069f5762 100644
+--- a/compression/flac.rs
++++ b/compression/flac.rs
+@@ -19,7 +19,6 @@ use crate::chd_rs::header::CodecType;
+ /// The byte order determines the endianness of the output data.
+ struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize = 2> {
+     buffer: Vec<i32>,
+-    #[cfg_attr(not(feature = "encode"), allow(dead_code))]
+     block_size: usize,
+     _byteorder: PhantomData<T>,
+ }
+@@ -30,7 +29,6 @@ type RawFlacEngine<T> = FlacCodec<T, 2048>;
+ /// CD-ROM FLAC has one sector worth of samples per block.
+ type CdFlacEngine = FlacCodec<BigEndian, CD_MAX_SECTOR_DATA>;
+ 
+-#[cfg(feature = "encode")]
+ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+     FlacCodec<T, MAX_BLOCK_SIZE, CHANNELS>
+ {
+@@ -122,7 +120,6 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+                 Ok(Some(block)) => {
+                     // We assume 2 channels (by default), so we can use claxon's stereo_samples
+                     // iterator for slightly better performance.
+-                    #[cfg(not(feature = "nonstandard_channel_count"))]
+                     for (l, r) in block.stereo_samples() {
+                         cursor.write_i16::<T>(l as i16)?;
+                         cursor.write_i16::<T>(r as i16)?;
+@@ -132,14 +129,6 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+                     // This is generic over number of assumed channels, but is broken effectively
+                     // for any value other than 2.
+                     // What we really want here is specialization for CHANNELS = 2 ...
+-                    #[cfg(feature = "nonstandard_channel_count")]
+-                    for sample in 0..block.len() / block.channels() {
+-                        for channel in 0..block.channels() {
+-                            let sample_data = block.sample(channel, sample) as u16;
+-                            cursor.write_i16::<T>(sample_data as i16)?;
+-                        }
+-                        samples_written += 1;
+-                    }
+ 
+                     block_buf = block.into_buffer();
+                 }
+@@ -159,7 +148,6 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+         ))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         let compressed = self.encode(input)?;
+         if compressed.len() >= input.len() {
+@@ -219,7 +207,6 @@ impl CodecImplementation for RawFlacCodec {
+     }
+ 
+     /// Compresses the input in both byte orders, keeping the smaller result like MAME.
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         let le = self.le.encode(input)?;
+         let be = self.be.encode(input)?;
+@@ -319,15 +306,12 @@ impl CodecImplementation for CdFlacCodec {
+             &mut self.buffer[..total_frames * CD_MAX_SECTOR_DATA as usize],
+         )?;
+ 
+-        #[cfg(feature = "want_subcode")]
+         let sub_res = self.sub_engine.decompress(
+             &input[frame_res.total_in()..],
+             &mut self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
+                 [..total_frames * CD_MAX_SUBCODE_DATA as usize],
+         )?;
+ 
+-        #[cfg(not(feature = "want_subcode"))]
+-        let sub_res = DecompressResult::default();
+ 
+         // Decompressed FLAC data has layout
+         // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+@@ -344,7 +328,6 @@ impl CodecImplementation for CdFlacCodec {
+         }
+ 
+         // Reassemble subcode data to expected layout.
+-        #[cfg(feature = "want_subcode")]
+         for (frame_num, chunk) in self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
+             .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
+             .enumerate()
+@@ -357,7 +340,6 @@ impl CodecImplementation for CdFlacCodec {
+         Ok(frame_res + sub_res)
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         let total_frames = input.len() / CD_FRAME_SIZE as usize;
+         let sector_len = total_frames * CD_MAX_SECTOR_DATA as usize;
+diff --git a/compression/huff.rs b/compression/huff.rs
+index e9b0a32fe54ff5c8bdcd5d486405a82733f41665..afeedb76d3d968ab3506517a2a01e5b514933d55 100644
+--- a/compression/huff.rs
++++ b/compression/huff.rs
+@@ -23,14 +23,12 @@ use bitreader::BitReader;
+ /// The input buffer must contain exactly enough data to fill the output buffer
+ /// when decompressed.
+ pub struct HuffmanCodec {
+-    #[cfg(feature = "encode")]
+     encoder: crate::chd_rs::huffman::Huffman8BitEncoder<'static>,
+ }
+ 
+ impl CodecImplementation for HuffmanCodec {
+     fn new(_: u32) -> Result<Self> {
+         Ok(HuffmanCodec {
+-            #[cfg(feature = "encode")]
+             encoder: crate::chd_rs::huffman::Huffman8BitEncoder::new(),
+         })
+     }
+@@ -49,7 +47,6 @@ impl CodecImplementation for HuffmanCodec {
+         ))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         let output_len = output.len().min(input.len());
+         let mut remaining = &mut output[..output_len];
+diff --git a/compression/lzma.rs b/compression/lzma.rs
+index 774f1ca92be606293ae1f19d7ababcdfd1b9bd36..fd711f7acd7d62314f6a88c40493a71cee2d6d01 100644
+--- a/compression/lzma.rs
++++ b/compression/lzma.rs
+@@ -5,9 +5,7 @@ use crate::chd_rs::const_assert;
+ use crate::chd_rs::error::{Error, Result};
+ use crate::chd_rs::header::CodecType;
+ use lzma_rust2::LzmaReader;
+-#[cfg(feature = "encode")]
+ use lzma_rust2::{EncodeMode, LzmaOptions, LzmaWriter, MfType};
+-#[cfg(feature = "encode")]
+ use std::io::Write;
+ use std::io::{Cursor, Read};
+ 
+@@ -134,7 +132,6 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
+         Ok(DecompressResult::new(output.len(), bytes_read))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         // MAME compresses with LzmaEncProps level 6, in
+         // https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/chdcodec.cpp#L1312-L1318
+diff --git a/compression/mod.rs b/compression/mod.rs
+index fa661e9f70c647736f2f55fc834789f93235a60c..ff2937cc0749a6b6d627a4a012761e4940872684 100644
+--- a/compression/mod.rs
++++ b/compression/mod.rs
+@@ -12,7 +12,7 @@ mod none;
+ mod zlib;
+ mod zstd;
+ 
+-#[cfg(all(test, feature = "encode"))]
++#[cfg(test)]
+ mod tests;
+ 
+ pub mod codecs {
+@@ -66,7 +66,6 @@ pub trait CodecImplementation {
+     ///
+     /// The compressed data must decompress with [`decompress`](CodecImplementation::decompress)
+     /// to an output buffer of the same length as the input buffer.
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize>;
+ }
+ 
+diff --git a/compression/none.rs b/compression/none.rs
+index 609ec5817b8e3c861ec3310ee1ae17490414c689..6df8ec415397ec37424710a19d5480b680b2582c 100644
+--- a/compression/none.rs
++++ b/compression/none.rs
+@@ -20,7 +20,6 @@ impl CodecImplementation for NoneCodec {
+         Ok(DecompressResult::new(output.write(input)?, input.len()))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         output
+             .get_mut(..input.len())
+diff --git a/compression/tests.rs b/compression/tests.rs
+index 571abb084c6ac2287c9353ecedba6db04e479038..2dd8db77f3e246a3a00d72f9be20d5cae9cf46cf 100644
+--- a/compression/tests.rs
++++ b/compression/tests.rs
+@@ -124,10 +124,7 @@ fn audio_roundtrip() {
+     assert_roundtrip::<ZlibCodec>("zlib", &input);
+     assert_roundtrip::<LzmaCodec>("lzma", &input);
+     // zrip does not entropy code literals without matches, so it can not compress the tone.
+-    #[cfg(feature = "fast_zstd")]
+     assert_roundtrip::<ZstdCodec>("zstd", &input);
+-    #[cfg(not(feature = "fast_zstd"))]
+-    assert_incompressible::<ZstdCodec>("zstd", &input);
+     assert_roundtrip::<HuffmanCodec>("huff", &input);
+     assert_roundtrip::<CdFlacCodec>("cdfl", &input);
+ 
+diff --git a/compression/zlib.rs b/compression/zlib.rs
+index 91bea8e51971bc8c43bc10c3d82828a98846240d..73cf3cedbe7118458afa11018b1332abe11a7627 100644
+--- a/compression/zlib.rs
++++ b/compression/zlib.rs
+@@ -16,7 +16,6 @@ use flate2::{Compress, Decompress, FlushDecompress};
+ /// when decompressed.
+ pub struct ZlibCodec {
+     engine: Decompress,
+-    #[cfg(feature = "encode")]
+     compressor: Compress,
+ }
+ 
+@@ -27,7 +26,6 @@ impl ZlibCodec {
+     /// to be larger than the input as long as it fits into the output buffer.
+     ///
+     /// This is pulled out so cdfl can reuse the same deflate logic.
+-    #[cfg(feature = "encode")]
+     pub(crate) fn deflate(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         self.compressor.reset();
+         let status = self
+@@ -49,7 +47,6 @@ impl CodecImplementation for ZlibCodec {
+     fn new(_: u32) -> Result<Self> {
+         Ok(ZlibCodec {
+             engine: Decompress::new(false),
+-            #[cfg(feature = "encode")]
+             compressor: Compress::new(flate2::Compression::best(), false),
+         })
+     }
+@@ -76,7 +73,6 @@ impl CodecImplementation for ZlibCodec {
+         ))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+         let output_len = output.len().min(input.len());
+diff --git a/compression/zstd.rs b/compression/zstd.rs
+index 9be1059f7f83a54199fbf561169a675415e65c9a..2ea3ddd91c45b52e398655a1ced27ca540139c34 100644
+--- a/compression/zstd.rs
++++ b/compression/zstd.rs
+@@ -4,31 +4,7 @@ use crate::chd_rs::compression::{
+ use crate::chd_rs::header::CodecType;
+ use crate::chd_rs::Error;
+ 
+-/// Zstandard (zstd) decompression codec.
+-///
+-/// ## Format Details
+-/// CHD compresses Zstandard hunks with the streaming compressor.
+-///
+-/// ## Buffer Restrictions
+-/// Each compressed Zstandard hunk decompresses to a hunk-sized chunk.
+-/// The input buffer must contain exactly enough data to fill the output buffer
+-/// when decompressed.
+-///
+-/// ## Compression
+-/// Without `fast_zstd`, hunks are compressed with the pure Rust zrip encoder at level 1,
+-/// which compresses CD-ROM data better than its higher levels. Use `fast_zstd` for
+-/// chdman-equivalent compression.
+-#[cfg(not(feature = "fast_zstd"))]
+-pub struct ZstdCodec {
+-    decoder: zrip::DecompressContext,
+-    buffer: Vec<u8>,
+-    #[cfg(feature = "encode")]
+-    encoder: zrip::CompressContext,
+-}
+ 
+-/// The compression level of zrip.
+-#[cfg(all(not(feature = "fast_zstd"), feature = "encode"))]
+-const ZRIP_LEVEL: i32 = 1;
+ 
+ /// Zstandard (zstd) decompression codec.
+ ///
+@@ -39,63 +15,12 @@ const ZRIP_LEVEL: i32 = 1;
+ /// Each compressed Zstandard hunk decompresses to a hunk-sized chunk.
+ /// The input buffer must contain exactly enough data to fill the output buffer
+ /// when decompressed.
+-#[cfg(feature = "fast_zstd")]
+ pub struct ZstdCodec {
+     zstd_context: zstd_safe::DCtx<'static>,
+-    #[cfg(feature = "encode")]
+     compressor: zstd_safe::CCtx<'static>,
+ }
+ 
+-#[cfg(not(feature = "fast_zstd"))]
+-impl CodecImplementation for ZstdCodec {
+-    fn new(_hunk_size: u32) -> crate::chd_rs::Result<Self>
+-    where
+-        Self: Sized,
+-    {
+-        Ok(Self {
+-            decoder: zrip::DecompressContext::new(),
+-            buffer: Vec::new(),
+-            #[cfg(feature = "encode")]
+-            encoder: zrip::CompressContext::new(ZRIP_LEVEL).map_err(|_| Error::CodecError)?,
+-        })
+-    }
+ 
+-    #[cfg(feature = "encode")]
+-    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<usize> {
+-        // Anything not smaller than the input is a failure, so don't bother writing more.
+-        let output_len = output.len().min(input.len());
+-        let compressed_len = self
+-            .encoder
+-            .compress_into(input, &mut output[..output_len])
+-            .map_err(|_| Error::CompressionError)?;
+-        if compressed_len >= input.len() {
+-            return Err(Error::CompressionError);
+-        }
+-        Ok(compressed_len)
+-    }
+-
+-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<DecompressResult> {
+-        self.buffer.clear();
+-        let bytes_out = self
+-            .decoder
+-            .decompress_into_with_limit(input, &mut self.buffer, output.len())
+-            .map_err(|_| Error::DecompressionError)?;
+-
+-        // If each chunk doesn't output to exactly the same then it's an error
+-        if bytes_out != output.len() {
+-            return Err(Error::DecompressionError);
+-        }
+-        output.copy_from_slice(&self.buffer);
+-
+-        Ok(DecompressResult {
+-            bytes_out,
+-            // The input is exactly the compressed hunk.
+-            bytes_read: input.len(),
+-        })
+-    }
+-}
+-
+-#[cfg(feature = "fast_zstd")]
+ impl CodecImplementation for ZstdCodec {
+     fn new(_hunk_size: u32) -> crate::chd_rs::Result<Self>
+     where
+@@ -103,12 +28,10 @@ impl CodecImplementation for ZstdCodec {
+     {
+         Ok(Self {
+             zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::chd_rs::Error::CodecError)?,
+-            #[cfg(feature = "encode")]
+             compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
+         })
+     }
+ 
+-    #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<usize> {
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+         let output_len = output.len().min(input.len());
+diff --git a/header/mod.rs b/header/mod.rs
+index 8ed9742e3be7e557a0584ab6e741b7d1bffa3d14..a011b8ab7181527f083de38dfc6f75836fecec6e 100644
+--- a/header/mod.rs
++++ b/header/mod.rs
+@@ -334,7 +334,6 @@ impl Header {
+     /// Serialize the header into it's on-disk representation.
+     ///
+     /// The length of the serialized header depends on the header version.
+-    #[cfg(feature = "encode")]
+     pub fn to_bytes(&self) -> ArrayVec<u8, CHD_MAX_HEADER_SIZE> {
+         let mut bytes = ArrayVec::new();
+         match self {
+@@ -652,7 +651,6 @@ impl Header {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl RawHeaderPrefix {
+     fn new(version: Version, length: u32) -> Self {
+         let mut magic = [0u8; 8];
+@@ -665,7 +663,6 @@ impl RawHeaderPrefix {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl HeaderV1 {
+     /// Serialize the header into it's on-disk representation.
+     ///
+@@ -706,7 +703,6 @@ impl HeaderV1 {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl HeaderV3 {
+     /// Serialize the header into it's on-disk representation.
+     pub fn to_bytes(&self) -> [u8; CHD_V3_HEADER_SIZE as usize] {
+@@ -727,7 +723,6 @@ impl HeaderV3 {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl HeaderV4 {
+     /// Serialize the header into it's on-disk representation.
+     pub fn to_bytes(&self) -> [u8; CHD_V4_HEADER_SIZE as usize] {
+@@ -747,7 +742,6 @@ impl HeaderV4 {
+     }
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl HeaderV5 {
+     /// Serialize the header into it's on-disk representation.
+     pub fn to_bytes(&self) -> [u8; CHD_V5_HEADER_SIZE as usize] {
+@@ -1018,7 +1012,6 @@ mod test {
+     use crate::chd_rs::header::extract_bps_value;
+ 
+     #[test]
+-    #[cfg(feature = "encode")]
+     fn v5_to_bytes_roundtrip() {
+         use crate::chd_rs::header::Header;
+         use std::io::Cursor;
+@@ -1049,7 +1042,6 @@ mod test {
+     }
+ 
+     #[test]
+-    #[cfg(feature = "encode")]
+     fn legacy_to_bytes_roundtrip() {
+         use crate::chd_rs::header::Header;
+         use std::io::Cursor;
+diff --git a/huffman/mod.rs b/huffman/mod.rs
+index eaee42c6130b61093f5f7911a16da64ba4371176..d1e29dfcc85d9ad9a13bc5b600b887308a0b149e 100644
+--- a/huffman/mod.rs
++++ b/huffman/mod.rs
+@@ -1,4 +1,3 @@
+-#![cfg_attr(docsrs, doc(cfg(huffman_api)))]
+ //! Implementation of the MAME CHD Huffman Decoder and Encoder.
+ //!
+ //! For format descriptions, see [huffman.cpp](https://github.com/mamedev/mame/blob/master/src/lib/util/huffman.cpp).
+@@ -9,12 +8,10 @@ use std::fmt::{Display, Formatter};
+ use std::marker::PhantomData;
+ 
+ mod decode;
+-#[cfg(feature = "huff_write")]
+ mod encode;
+ 
+ pub use decode::{lookup_len, Huffman8BitDecoder, HuffmanDecoder};
+ 
+-#[cfg(feature = "huff_write")]
+ pub use encode::{Huffman8BitEncoder, HuffmanEncoder};
+ 
+ /// Error type for Huffman decoding.
+@@ -61,7 +58,6 @@ impl From<BitReaderError> for HuffmanError {
+     }
+ }
+ 
+-#[cfg(feature = "huff_write")]
+ impl From<std::io::Error> for HuffmanError {
+     fn from(err: std::io::Error) -> Self {
+         match err.kind() {
+diff --git a/iter.rs b/iter.rs
+deleted file mode 100644
+index ce9250171b2754ee68f125c6376ff59e7a954a7e..0000000000000000000000000000000000000000
+--- a/iter.rs
++++ /dev/null
+@@ -1,139 +0,0 @@
+-//! Lending iterators for hunks and metadata.
+-//!
+-//! ## Iterating over hunks with `Lender`
+-//! [`Lender`] allows a more ergonomic interface to iterate over hunks.
+-//!```no_run
+-//! use std::fs::File;
+-//! use std::io::BufReader;
+-//! use rom_weaver_containers::chd_rs::iter::Lender;
+-//! use rom_weaver_containers::chd_rs::Chd;
+-//!
+-//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+-//! let mut f = BufReader::new(File::open("file.chd")?);
+-//! let mut chd = Chd::open(&mut f, None)?;
+-//!
+-//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
+-//! let mut hunk_buf = chd.get_hunksized_buffer();
+-//! // buffer to store compressed data.
+-//! let mut cmp_buf = Vec::new();
+-//! let mut hunks = chd.hunks();
+-//! while let Some(mut hunk) = hunks.next() {
+-//!    hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+-//! }
+-//! # Ok(())
+-//! # }
+-//! ```
+-//!
+-//! ## Iterating over metadata with `FallibleLender`
+-//! [`FallibleLender`] allows iterating over metadata without keeping a reference to the source file.
+-//!```no_run
+-//! use std::fs::File;
+-//! use std::io::BufReader;
+-//! use rom_weaver_containers::chd_rs::iter::FallibleLender;
+-//! use rom_weaver_containers::chd_rs::Chd;
+-//!
+-//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+-//! let mut f = BufReader::new(File::open("file.chd")?);
+-//! let mut chd = Chd::open(&mut f, None)?;
+-//! let mut metadata = chd.metadata();
+-//! while let Some(mut metadata) = metadata.next()? {
+-//!    let metadata = metadata.read()?;
+-//! }
+-//! # Ok(())
+-//! # }
+-//! ```
+-use crate::chd_rs::metadata::{Metadata, MetadataRef, MetadataRefs, MetadataTag};
+-use crate::chd_rs::{Chd, Error, Hunk, Result};
+-use lender::{check_covariance, check_covariance_fallible, FallibleLending, Lending};
+-use std::io::{Read, Seek};
+-
+-/// The lending iterator traits re-exported from the [lender](https://crates.io/crates/lender) crate,
+-/// which provide adapters that map to those from [`Iterator`](core::iter::Iterator).
+-pub use lender::{FallibleLender, Lender};
+-
+-/// An iterator over the hunks of a CHD file.
+-pub struct Hunks<'a, F: Read + Seek> {
+-    inner: &'a mut Chd<F>,
+-    last_hunk: u32,
+-    current_hunk: u32,
+-}
+-
+-impl<'a, F: Read + Seek> Hunks<'a, F> {
+-    pub(crate) fn new(inner: &'a mut Chd<F>) -> Self {
+-        let last_hunk = inner.header().hunk_count();
+-        Hunks {
+-            inner,
+-            last_hunk,
+-            current_hunk: 0,
+-        }
+-    }
+-}
+-
+-impl<'lend, F: Read + Seek> Lending<'lend> for Hunks<'_, F> {
+-    type Lend = Hunk<'lend, F>;
+-}
+-
+-impl<F: Read + Seek> Lender for Hunks<'_, F> {
+-    check_covariance!();
+-
+-    fn next(&mut self) -> Option<Hunk<'_, F>> {
+-        if self.current_hunk == self.last_hunk {
+-            return None;
+-        }
+-        let curr = self.current_hunk;
+-        self.current_hunk += 1;
+-        self.inner.hunk(curr).ok()
+-    }
+-}
+-
+-/// An iterator over the metadata entries of a CHD file.
+-///
+-/// If an entry can not be read, returns the error and then ends.
+-pub struct MetadataEntries<'a, F: Read + Seek + 'a> {
+-    inner: MetadataRefs<'a, F>,
+-}
+-
+-impl<'a, F: Read + Seek + 'a> MetadataEntries<'a, F> {
+-    pub(crate) fn new(inner: MetadataRefs<'a, F>) -> Self {
+-        MetadataEntries { inner }
+-    }
+-}
+-
+-impl<'a, F: Read + Seek + 'a> MetadataEntry<'a, F> {
+-    /// Read the contents of the metadata from the input stream.
+-    pub fn read(&mut self) -> Result<Metadata> {
+-        self.meta_ref.read(self.file)
+-    }
+-}
+-
+-/// A metadata entry for a CHD file that has a reference to the source file,
+-/// allowing read metadata from the stream without an explicit reference.
+-pub struct MetadataEntry<'a, F: Read + Seek + 'a> {
+-    meta_ref: MetadataRef,
+-    file: &'a mut F,
+-}
+-
+-impl<'a, F: Read + Seek + 'a> MetadataTag for MetadataEntry<'a, F> {
+-    fn metatag(&self) -> u32 {
+-        self.meta_ref.metatag()
+-    }
+-}
+-
+-impl<'lend, F: Read + Seek> FallibleLending<'lend> for MetadataEntries<'_, F> {
+-    type Lend = MetadataEntry<'lend, F>;
+-}
+-
+-impl<F: Read + Seek> FallibleLender for MetadataEntries<'_, F> {
+-    type Error = Error;
+-    check_covariance_fallible!();
+-
+-    fn next(&mut self) -> Result<Option<MetadataEntry<'_, F>>> {
+-        let Some(meta_ref) = self.inner.next().transpose()? else {
+-            return Ok(None);
+-        };
+-        Ok(Some(MetadataEntry {
+-            meta_ref,
+-            file: self.inner.file,
+-        }))
+-    }
+-}
+diff --git a/map/mod.rs b/map/mod.rs
+index 76ef97ceaae2a9f49d55b16b36897d643845a761..b55a624fc1c57223feaa62b18783918e7827bd9b 100644
+--- a/map/mod.rs
++++ b/map/mod.rs
+@@ -319,12 +319,10 @@ impl Map {
+     /// Create the map of an uncompressed V5 CHD from the offset of each hunk, in units of hunks.
+     /// An offset of 0 indicates a hunk of zeroes that is not stored in the file.
+     /// Create the map of a compressed V5 CHD from its decoded entries.
+-    #[cfg(feature = "encode")]
+     pub(crate) fn new_compressed_v5(entries: Vec<RawMapEntryV5>) -> Map {
+         Map::V5(RawMapV5(V5Map::Compressed(entries)))
+     }
+ 
+-    #[cfg(feature = "encode")]
+     pub(crate) fn new_uncompressed_v5(offsets: &[u32], hunk_bytes: u32) -> Map {
+         let entries = offsets
+             .iter()
+@@ -397,7 +395,6 @@ impl Map {
+     /// Returns [`UnsupportedVersion`](Error::UnsupportedVersion) for V1-4 maps, and
+     /// [`InvalidData`](Error::InvalidData) if the hunk data the map refers to is not
+     /// stored contiguously in hunk order, which can not be represented by a compressed map.
+-    #[cfg(feature = "encode")]
+     pub fn to_bytes(&self, header: &Header) -> Result<Vec<u8>> {
+         let Header::V5Header(header) = header else {
+             return Err(Error::UnsupportedVersion);
+@@ -417,7 +414,6 @@ impl Map {
+ /// Compress the entries of a V5 map.
+ ///
+ /// See [`chd_file::compress_v5_map`](https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/chd.cpp#L2212).
+-#[cfg(feature = "encode")]
+ fn compress_map_v5(entries: &[RawMapEntryV5], hunk_bytes: u32, unit_bytes: u32) -> Result<Vec<u8>> {
+     use crate::chd_rs::huffman::HuffmanEncoder;
+     use bitstream_io::{BigEndian, BitWrite, BitWriter};
+@@ -788,7 +784,7 @@ fn read_map_v5<F: Read + Seek>(
+     Ok(RawMapV5(V5Map::Compressed(entries)))
+ }
+ 
+-#[cfg(all(test, feature = "encode"))]
++#[cfg(test)]
+ mod tests {
+     use super::*;
+     use crate::chd_rs::header::{HeaderV5, Version};
+diff --git a/map/raw.rs b/map/raw.rs
+index 3181acf6ea15a0c8b6af37a5fd31c20f80b0aa69..0f55e89232faa505c48eec95d04f0e9985ac4650 100644
+--- a/map/raw.rs
++++ b/map/raw.rs
+@@ -120,7 +120,6 @@ impl RawCompressedMapHeader {
+         u64::from_be_bytes([0, 0, a, b, c, d, e, f])
+     }
+ 
+-    #[cfg(feature = "encode")]
+     pub fn set_first_offset(&mut self, offset: u64) {
+         let offset = offset.to_be_bytes();
+         self.first_offset = [
+diff --git a/metadata/mod.rs b/metadata/mod.rs
+index 9bcd600f613845069445bde5c6c954ddd7447a0c..8ea9fdad5a4984f722f200ce7c17f97ec85dd58c 100644
+--- a/metadata/mod.rs
++++ b/metadata/mod.rs
+@@ -79,13 +79,11 @@ impl MetadataTag for u32 {
+ }
+ 
+ /// Data that can be stored in a metadata entry.
+-#[cfg(feature = "encode")]
+ pub trait MetadataData {
+     /// The bytes stored in the metadata entry.
+     fn metadata_bytes(&self) -> &[u8];
+ }
+ 
+-#[cfg(feature = "encode")]
+ impl MetadataData for &[u8] {
+     fn metadata_bytes(&self) -> &[u8] {
+         self
+@@ -93,7 +91,6 @@ impl MetadataData for &[u8] {
+ }
+ 
+ /// Text metadata is stored with its NUL terminator, like MAME.
+-#[cfg(feature = "encode")]
+ impl MetadataData for &std::ffi::CStr {
+     fn metadata_bytes(&self) -> &[u8] {
+         self.to_bytes_with_nul()
+@@ -161,8 +158,6 @@ impl MetadataTag for MetadataRef {
+ }
+ 
+ /// An iterator over references to the metadata entries of a CHD file.
+-/// If `unstable_lending_iterators` is enabled, metadata can be
+-/// more ergonomically iterated over with [`MetadataEntries`](crate::chd_rs::iter::MetadataEntries).
+ ///
+ /// If an entry can not be read, the iterator returns the error and then ends. If the entries
+ /// link back to an earlier entry, returns [`InvalidData`](Error::InvalidData).
+diff --git a/metadata/raw.rs b/metadata/raw.rs
+index 4e9da5d26c882a2ff7c4e6195a2e7c48fd8b21fb..ad9c7c4ac7ec92853f82d82a9bcc74b10bb69ede 100644
+--- a/metadata/raw.rs
++++ b/metadata/raw.rs
+@@ -20,7 +20,6 @@ pub(crate) struct RawMetadataHeader {
+ 
+ impl RawMetadataHeader {
+     /// Create a metadata header. The length must fit in 24 bits.
+-    #[cfg(feature = "encode")]
+     pub fn new(tag: u32, flags: u8, length: u32, next: u64) -> Self {
+         let [_, a, b, c] = length.to_be_bytes();
+         RawMetadataHeader {
+diff --git a/mod.rs b/mod.rs
+index 73d86dbac327d6b7a7d159d6b60551cd994af50a..8ead0e9e75cc43e0efe184e222a4282c895ff75e 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -1,4 +1,3 @@
+-#![cfg_attr(docsrs, feature(doc_cfg))]
+ #![warn(missing_docs)]
+ //! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
+ //! for CHD V1-5.
+@@ -77,13 +76,6 @@
+ //!```
+ //!
+ 
+-#[cfg(not(feature = "std"))]
+-compile_error!(
+-    "The feature `std` is required. \
+-     no_std support is blocked on Rust issue \
+-     #48331 <https://github.com/rust-lang/rust/issues/48331>.\
+-    "
+-);
+ 
+ mod error;
+ 
+@@ -92,15 +84,10 @@ mod cdrom;
+ mod chdfile;
+ mod compression;
+ 
+-/// cbindgen:ignore
+-#[cfg(feature = "huffman_api")]
+-pub mod huffman;
+ 
+ /// cbindgen:ignore
+-#[cfg(not(feature = "huffman_api"))]
+ mod huffman;
+ 
+-#[cfg(feature = "codec_api")]
+ /// Implementations of codecs used in MAME CHD.
+ ///
+ /// Each codec may have restrictions on the hunk size, lengths and contents
+@@ -112,7 +99,6 @@ mod huffman;
+ /// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
+ /// do not check the length of the output buffer against the hunk size. It is up to the caller
+ /// of [`decompress`](crate::chd_rs::codecs::CodecImplementation::decompress) to uphold length invariants.
+-#[cfg_attr(docsrs, doc(cfg(codec_api)))]
+ pub mod codecs {
+     pub use crate::chd_rs::compression::codecs::*;
+     pub use crate::chd_rs::compression::{
+@@ -146,14 +132,8 @@ pub mod map;
+ pub mod metadata;
+ pub mod read;
+ 
+-#[cfg(feature = "encode")]
+-#[cfg_attr(docsrs, doc(cfg(encode)))]
+ pub mod write;
+ 
+-/// cbindgen:ignore
+-#[cfg(feature = "unstable_lending_iterators")]
+-#[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
+-pub mod iter;
+ 
+ #[cfg(test)]
+ mod tests {
+@@ -164,8 +144,6 @@ mod tests {
+     use std::fs::File;
+     use std::io::{BufReader, Read, Write};
+ 
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    use crate::chd_rs::iter::{FallibleLender, Lender};
+ 
+     #[test]
+     fn read_metas_test() {
+@@ -234,59 +212,7 @@ mod tests {
+         let _chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
+     }
+ 
+-    #[test]
+-    #[cfg(feature = "unsound_owning_iterators")]
+-    fn hunk_iter_test() {
+-        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
+-        let mut f_cursor = Cursor::new(f_bytes);
+-        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
+-        let mut chd = Chd::open(&mut f_cursor, None).expect("file");
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut comp_buf = Vec::new();
+-        for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
+-            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+-                .expect("hunk could not be read");
+-        }
+-    }
+ 
+-    #[test]
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    fn hunk_iter_lending_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        // let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+ 
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut comp_buf = Vec::new();
+-        let mut hunks = chd.hunks();
+-        let mut hunk_num = 0;
+-        while let Some(mut hunk) = hunks.next() {
+-            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+-                .expect(&*format!("hunk {} could not be read", hunk_num));
+-            hunk_num += 1;
+-        }
+-    }
+ 
+-    #[test]
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    fn metadata_iter_lending_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let mut metas = chd.metadata();
+-        while let Some(mut meta) = metas.next().expect("metadata entry could not be found") {
+-            let contents = meta.read().expect("metadata entry could not be read");
+-            println!("{:?}", String::from_utf8(contents.value));
+-        }
+-    }
+-
+-    #[test]
+-    #[cfg(feature = "unsound_owning_iterators")]
+-    fn metadata_iter_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        for mut meta in chd.metadata().expect("metadata could not be read") {
+-            let contents = meta.read().expect("metadata entry could not be read");
+-            println!("{:?}", String::from_utf8(contents.value));
+-        }
+-    }
+ }
+diff --git a/read.rs b/read.rs
+index 48cd890e07f48fb594f36eb17cfe77d438b8a6a2..7621cec110a95e2809af8080d303e91912366bfb 100644
+--- a/read.rs
++++ b/read.rs
+@@ -159,7 +159,7 @@ impl<F: Read + Seek> Seek for ChdReader<F> {
+     }
+ }
+ 
+-#[cfg(all(test, feature = "encode"))]
++#[cfg(test)]
+ mod tests {
+     use super::{ChdReader, HunkBufReader};
+     use crate::chd_rs::header::CodecType;

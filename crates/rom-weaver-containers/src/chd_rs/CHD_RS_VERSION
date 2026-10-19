@@ -1,0 +1,14 @@
+source: https://github.com/SnowflakePowered/chd-rs
+upstream-tag: v0.4.0
+upstream-commit: 76785770e88ce79bb3cb64320fd1074ee1d1fe8f
+manifest: crates/rom-weaver-containers/vendor-patches/chd-rs/manifest.json
+refresh: node scripts/vendor-dependencies.mjs refresh chd-rs
+check: node scripts/vendor-dependencies.mjs check chd-rs
+
+The manifest pins the immutable upstream archive checksum and the complete ordered
+patch queue. Source patches are portable changes meant for upstream; integration
+patches record module inlining, pinned features, workspace codec and formatting
+adaptations, and test adjustments.
+
+The license comes from the pinned archive through source.extraFiles. This marker
+is preserved during refresh.

@@ -39,7 +39,7 @@ block-padding.workspace = true
 bytes.workspace = true
 bzip2-sys = { workspace = true, features = ["static"] }
 cbc.workspace = true
-chd.workspace = true
+claxon.workspace = true
 ciso.workspace = true
 crc32fast.workspace = true
 crossbeam-channel = { workspace = true, optional = true }
@@ -69,6 +69,16 @@ sha1.workspace = true
 serde_json.workspace = true
 simple_moving_average.workspace = true
 tracing.workspace = true
+# Direct dependencies of the vendored `src/chd_rs` module; they leave with it.
+bitreader.workspace = true
+bitstream-io.workspace = true
+byteorder.workspace = true
+crc.workspace = true
+lzma-rust2.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+parking_lot.workspace = true
+text_io.workspace = true
 # Direct dependencies of the vendored `src/xdvdfs` module; they leave with it.
 arrayvec.workspace = true
 async-trait.workspace = true
@@ -107,7 +117,6 @@ path-slash = "0.2.1"
 [dev-dependencies]
 diffy = { version = "0.5.2", default-features = false }
 proptest = "1.6.0"
-claxon.workspace = true
 rand.workspace = true
 tar.workspace = true
 

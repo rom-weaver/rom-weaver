@@ -1,0 +1,379 @@
+use std::io::Cursor;
+use std::marker::PhantomData;
+use std::mem;
+
+use byteorder::{BigEndian, ByteOrder, LittleEndian, WriteBytesExt};
+use claxon::frame::FrameReader;
+
+use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
+use crate::chd_rs::compression::zlib::ZlibCodec;
+use crate::chd_rs::compression::{
+    CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+};
+use crate::chd_rs::error::{Error, Result};
+use crate::chd_rs::header::CodecType;
+
+/// Generic block codec for FLAC.
+///
+/// Defaults assume 2 channel interleaved FLAC.
+/// The byte order determines the endianness of the output data.
+struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize = 2> {
+    buffer: Vec<i32>,
+    block_size: usize,
+    _byteorder: PhantomData<T>,
+}
+
+/// Raw FLAC has 2048 samples per block.
+type RawFlacEngine<T> = FlacCodec<T, 2048>;
+
+/// CD-ROM FLAC has one sector worth of samples per block.
+type CdFlacEngine = FlacCodec<BigEndian, CD_MAX_SECTOR_DATA>;
+
+impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+    FlacCodec<T, MAX_BLOCK_SIZE, CHANNELS>
+{
+    /// Encode 16-bit PCM samples with byte order `T` as raw FLAC frames, without a stream header.
+    fn encode(&self, input: &[u8]) -> Result<Vec<u8>> {
+        use flacenc::component::BitRepr;
+        use flacenc::error::Verify;
+
+        let samples: Vec<i32> = input
+            .chunks_exact(mem::size_of::<i16>())
+            .map(|sample| T::read_i16(sample) as i32)
+            .collect();
+        let source = flacenc::source::MemSource::from_samples(&samples, CHANNELS, 16, 44100);
+
+        // MAME encodes with libFLAC at compression level 8, which predicts with an LPC order
+        // of up to 12, and picks the precision of the coefficients from the block size.
+        let mut config = flacenc::config::Encoder::default();
+        config.block_size = self.block_size;
+        config.subframe_coding.qlpc.lpc_order = 12;
+        config.subframe_coding.qlpc.quant_precision = match self.block_size {
+            0..=192 => 7,
+            193..=384 => 8,
+            385..=576 => 9,
+            577..=1152 => 10,
+            1153..=2304 => 11,
+            2305..=4608 => 12,
+            _ => 13,
+        };
+        let config = config
+            .into_verified()
+            .map_err(|_| Error::CompressionError)?;
+        let stream = flacenc::encode_with_fixed_block_size(&config, source, self.block_size)
+            .map_err(|_| Error::CompressionError)?;
+
+        let mut sink = flacenc::bitsink::ByteSink::new();
+        for frame in (0..stream.frame_count()).filter_map(|n| stream.frame(n)) {
+            frame
+                .write(&mut sink)
+                .map_err(|_| Error::CompressionError)?;
+        }
+        Ok(sink.into_inner())
+    }
+}
+
+impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplementation
+    for FlacCodec<T, MAX_BLOCK_SIZE, CHANNELS>
+{
+    fn new(hunk_bytes: u32) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if !hunk_bytes.is_multiple_of((CHANNELS * mem::size_of::<i16>()) as u32) {
+            return Err(Error::CodecError);
+        }
+
+        let mut block_size = hunk_bytes / 4;
+        while block_size > MAX_BLOCK_SIZE {
+            block_size /= 2;
+        }
+
+        Ok(FlacCodec {
+            buffer: Vec::new(),
+            block_size: block_size as usize,
+            _byteorder: PhantomData,
+        })
+    }
+
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+        let comp_buf = Cursor::new(input);
+
+        // Number of samples to write to the buffer.
+        let sample_len = output.len() / (CHANNELS * mem::size_of::<i16>());
+
+        // We don't need to create a fake header since claxon will read raw FLAC frames just fine.
+        // We just need to be careful not to read past the number of blocks in the input buffer.
+        let mut frame_read = FrameReader::new(comp_buf);
+
+        let mut cursor = Cursor::new(output);
+
+        // Buffer to hold decompressed FLAC block data.
+        let mut block_buf = mem::take(&mut self.buffer);
+
+        // A little bit of a misnomer. 1 'sample' refers to a sample for all channels.
+        let mut samples_written = 0;
+
+        while samples_written < sample_len {
+            // Loop through all blocks until we have enough samples written.
+            match frame_read.read_next_or_eof(block_buf) {
+                Ok(Some(block)) => {
+                    // We assume 2 channels (by default), so we can use claxon's stereo_samples
+                    // iterator for slightly better performance.
+                    for (l, r) in block.stereo_samples() {
+                        cursor.write_i16::<T>(l as i16)?;
+                        cursor.write_i16::<T>(r as i16)?;
+                        samples_written += 1;
+                    }
+
+                    // This is generic over number of assumed channels, but is broken effectively
+                    // for any value other than 2.
+                    // What we really want here is specialization for CHANNELS = 2 ...
+
+                    block_buf = block.into_buffer();
+                }
+                _ => {
+                    // If frame_read dies our buffer just gets eaten. The Error return for a failed
+                    // read does not expose the inner buffer.
+                    return Err(Error::DecompressionError);
+                }
+            }
+        }
+
+        self.buffer = block_buf;
+        let bytes_in = frame_read.into_inner().position();
+        Ok(DecompressResult::new(
+            samples_written * 4,
+            bytes_in as usize,
+        ))
+    }
+
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let compressed = self.encode(input)?;
+        if compressed.len() >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        output
+            .get_mut(..compressed.len())
+            .ok_or(Error::CompressionError)?
+            .copy_from_slice(&compressed);
+        Ok(compressed.len())
+    }
+}
+
+/// Raw FLAC (flac) decompression codec.
+///
+/// ## Format details
+/// Raw FLAC expects the first byte as either 'L' (0x4C) or 'B' (0x42) to indicate the endianness
+/// of the output data, followed by the compressed FLAC data.
+///
+/// FLAC compressed audio data is assumed to be 2-channel 16-bit signed integer PCM.
+/// The audio data is decompressed in interleaved format, with the left channel first, then
+/// the right channel for each sample, for 32 bits each sample.
+///
+/// ## Buffer Restrictions
+/// Each compressed FLAC hunk decompresses to a hunk-sized chunk.
+/// The input buffer must contain enough samples to fill the hunk-sized output buffer.
+pub struct RawFlacCodec {
+    be: RawFlacEngine<BigEndian>,
+    le: RawFlacEngine<LittleEndian>,
+}
+
+impl CompressionCodec for RawFlacCodec {}
+
+impl CompressionCodecType for RawFlacCodec {
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized,
+    {
+        CodecType::FlacV5
+    }
+}
+
+impl CodecImplementation for RawFlacCodec {
+    fn new(hunk_bytes: u32) -> Result<Self> {
+        Ok(RawFlacCodec {
+            be: FlacCodec::new(hunk_bytes)?,
+            le: FlacCodec::new(hunk_bytes)?,
+        })
+    }
+
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+        match input[0] {
+            b'L' => self.le.decompress(&input[1..], output),
+            b'B' => self.be.decompress(&input[1..], output),
+            _ => Err(Error::DecompressionError),
+        }
+    }
+
+    /// Compresses the input in both byte orders, keeping the smaller result like MAME.
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let le = self.le.encode(input)?;
+        let be = self.be.encode(input)?;
+        let (marker, compressed) = if be.len() < le.len() {
+            (b'B', be)
+        } else {
+            (b'L', le)
+        };
+
+        // The marker byte counts towards the compressed length.
+        let compressed_len = compressed.len() + 1;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        let output = output
+            .get_mut(..compressed_len)
+            .ok_or(Error::CompressionError)?;
+        output[0] = marker;
+        output[1..].copy_from_slice(&compressed);
+        Ok(compressed_len)
+    }
+}
+
+/// CD-ROM wrapper decompression codec (cdfl) using the FLAC
+/// for decompression of sector data and the [Deflate codec](crate::chd_rs::codecs::ZlibCodec) for
+/// decompression of subcode data.
+///
+/// ## Format Details
+/// FLAC compressed audio data is assumed to be 2-channel 16-bit signed integer PCM.
+/// The audio data is decompressed in interleaved format, with the left channel first, then
+/// the right channel for each sample, for 32 bits each sample.
+///
+/// CD-ROM wrapped FLAC is always written to the output stream in big-endian byte order.
+///
+/// CD-ROM compressed hunks have a layout with all compressed frame data in sequential order,
+/// followed by compressed subcode data.
+///
+/// ```c
+/// [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+/// ```
+/// Unlike CDLZ or CDZL, there is no header before the compressed data begins.
+/// The length of the compressed data is determined by the number of 2448-sized frames
+/// that can fit into the hunk-sized output buffer. Following the FLAC compressed blocks,
+/// the subcode data is a single Deflate stream.
+///
+/// After decompression, the data is swizzled so that each frame is followed by its corresponding
+/// subcode data.
+/// ```c
+/// [Frame0, Subcode0, Frame1, Subcode1, ..., FrameN, SubcodeN]
+/// ```
+/// FLAC compressed frames does not require manual reconstruction of the sync header or ECC bytes.
+///
+/// ## Buffer Restrictions
+/// Each compressed CDFL hunk decompresses to a hunk-sized chunk. The hunk size must be a multiple
+/// of 2448, the size of each CD frame. The input buffer must contain enough samples to fill
+/// the number of CD sectors that can fit into the output buffer.
+pub struct CdFlacCodec {
+    // cdfl always writes in big endian.
+    engine: CdFlacEngine,
+    sub_engine: ZlibCodec,
+    buffer: Vec<u8>,
+}
+
+impl CompressionCodec for CdFlacCodec {}
+
+impl CompressionCodecType for CdFlacCodec {
+    fn codec_type(&self) -> CodecType {
+        CodecType::FlacCdV5
+    }
+}
+
+impl CodecImplementation for CdFlacCodec {
+    fn new(hunk_size: u32) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+            return Err(Error::CodecError);
+        }
+
+        // The size of the FLAC data in each cdfl hunk, excluding the subcode data.
+        let max_frames = hunk_size / CD_FRAME_SIZE;
+        let flac_data_size = max_frames * CD_MAX_SECTOR_DATA;
+
+        // neither FlacCodec nor ZlibCodec actually make use of hunk_size.
+        Ok(CdFlacCodec {
+            engine: FlacCodec::new(flac_data_size)?,
+            sub_engine: ZlibCodec::new(hunk_size)?,
+            buffer: vec![0u8; hunk_size as usize],
+        })
+    }
+
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+        let total_frames = output.len() / CD_FRAME_SIZE as usize;
+        let frame_res = self.engine.decompress(
+            input,
+            &mut self.buffer[..total_frames * CD_MAX_SECTOR_DATA as usize],
+        )?;
+
+        let sub_res = self.sub_engine.decompress(
+            &input[frame_res.total_in()..],
+            &mut self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
+                [..total_frames * CD_MAX_SUBCODE_DATA as usize],
+        )?;
+
+        // Decompressed FLAC data has layout
+        // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+        // We need to reassemble the data to be
+        // [Frame0, Subcode0, Frame1, Subcode1, ..., FrameN, SubcodeN]
+
+        // Reassemble frame data to expected layout.
+        for (frame_num, chunk) in self.buffer[..total_frames * CD_MAX_SECTOR_DATA as usize]
+            .chunks_exact(CD_MAX_SECTOR_DATA as usize)
+            .enumerate()
+        {
+            output[frame_num * CD_FRAME_SIZE as usize..][..CD_MAX_SECTOR_DATA as usize]
+                .copy_from_slice(chunk);
+        }
+
+        // Reassemble subcode data to expected layout.
+        for (frame_num, chunk) in self.buffer[total_frames * CD_MAX_SECTOR_DATA as usize..]
+            .chunks_exact(CD_MAX_SUBCODE_DATA as usize)
+            .enumerate()
+        {
+            output[frame_num * CD_FRAME_SIZE as usize + CD_MAX_SECTOR_DATA as usize..]
+                [..CD_MAX_SUBCODE_DATA as usize]
+                .copy_from_slice(chunk);
+        }
+
+        Ok(frame_res + sub_res)
+    }
+
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+        let total_frames = input.len() / CD_FRAME_SIZE as usize;
+        let sector_len = total_frames * CD_MAX_SECTOR_DATA as usize;
+        let subcode_len = total_frames * CD_MAX_SUBCODE_DATA as usize;
+
+        // Split the hunk into
+        // [Frame0, Frame1, ..., FrameN, Subcode0, Subcode1, ..., SubcodeN]
+        let (sectors, subcodes) = self.buffer[..sector_len + subcode_len].split_at_mut(sector_len);
+        for ((frame, sector), subcode) in input
+            .chunks_exact(CD_FRAME_SIZE as usize)
+            .zip(sectors.chunks_exact_mut(CD_MAX_SECTOR_DATA as usize))
+            .zip(subcodes.chunks_exact_mut(CD_MAX_SUBCODE_DATA as usize))
+        {
+            let (frame_sector, frame_subcode) = frame.split_at(CD_MAX_SECTOR_DATA as usize);
+            sector.copy_from_slice(frame_sector);
+            subcode.copy_from_slice(frame_subcode);
+        }
+
+        // Only the total has to be smaller than the input.
+        let output_len = output.len().min(input.len());
+        let output = &mut output[..output_len];
+
+        let flac = self.engine.encode(sectors)?;
+        output
+            .get_mut(..flac.len())
+            .ok_or(Error::CompressionError)?
+            .copy_from_slice(&flac);
+        let subcode_compressed_len = self
+            .sub_engine
+            .deflate(subcodes, &mut output[flac.len()..])?;
+
+        let compressed_len = flac.len() + subcode_compressed_len;
+        if compressed_len >= input.len() {
+            return Err(Error::CompressionError);
+        }
+        Ok(compressed_len)
+    }
+}
