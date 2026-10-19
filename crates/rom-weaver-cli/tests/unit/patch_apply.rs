@@ -1273,7 +1273,8 @@ fn probing_a_zip_dcp_patch_names_dcp_instead_of_a_missing_handler() {
         ]),
     )
     .expect("fixture");
-    // Patch resolution unpacks a ZIP patch to an inner file, so the probe sees a path with no `.dcp`.
+    // Also probe an unrelated inner file as the resolved path: the handler must still report the
+    // DCP-specific message from the `.dcp` source name.
     let inner = temp.path().join("1ST_READ.BIN");
     fs::write(&inner, b"boot").expect("inner fixture");
 

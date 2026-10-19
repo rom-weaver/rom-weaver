@@ -322,7 +322,11 @@ impl CliApp {
                 "auto-extract iteration"
             );
             // A `.dcp` is a ZIP-shaped patch, not an archive: its inner entries are DCP operations.
-            if is_dcp_patch_name(&current_source.to_string_lossy()) {
+            // An explicit `--select` against the top-level source still reaches inside it; a
+            // nested `.dcp` was already picked by that selection, so it stays a leaf.
+            if is_dcp_patch_name(&current_source.to_string_lossy())
+                && (depth > 0 || select.is_empty())
+            {
                 trace!(
                     current_source = %current_source.display(),
                     "auto-extract stopped: DCP patch is a leaf"

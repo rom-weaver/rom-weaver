@@ -782,12 +782,19 @@ impl CliApp {
                 );
             }
         };
+        // A ZIP/7z holding a `.dcp` applies like the bare `.dcp`: route on the resolved name.
+        let zipped_dcp_temp_paths = if weave_resolution.is_none() && args.emit_bundle.is_none() {
+            self.unwrap_zipped_dcp_patch(&mut args, &weave_context)
+        } else {
+            Vec::new()
+        };
         if let Some(outcome) = self.validate_patch_apply_output_preflight(
             &args,
             weave_resolution.as_ref(),
             &original_input,
             local_weave.as_deref(),
         ) {
+            Self::cleanup_temp_paths(&zipped_dcp_temp_paths);
             return outcome;
         }
         let emit_bundle = args.emit_bundle.clone();
@@ -845,6 +852,7 @@ impl CliApp {
                 applied_cheats: &mut applied_cheats,
             })
         };
+        Self::cleanup_temp_paths(&zipped_dcp_temp_paths);
         Self::append_report_warnings(&mut report, weave_warnings);
         // A failed sidecar MUST preserve the completed ROM and report its warning
         // before the terminal result is emitted.
@@ -2112,6 +2120,59 @@ impl CliApp {
             .next_path("patch-apply-output-staged", Some("bin"));
         temp_paths.push(staged_path.clone());
         Ok(staged_path)
+    }
+
+    /// When the single `--patch` is an archive whose resolved patch is a `.dcp`, swap the extracted
+    /// `.dcp` in as the patch so the DCP route handles it. `context` owns the temp namespace and must outlive the apply. Returns the temp paths to clean up
+    /// (empty when nothing was swapped; resolution errors fall through to the normal path).
+    fn unwrap_zipped_dcp_patch(
+        &self,
+        args: &mut PatchApplyCommand,
+        context: &OperationContext,
+    ) -> Vec<PathBuf> {
+        let [patch] = args.patches.as_slice() else {
+            return Vec::new();
+        };
+        if args.no_extract || Self::is_dcp_patch(patch) {
+            return Vec::new();
+        }
+        let mut temp_paths = Vec::new();
+        let resolved = self.resolve_patches(
+            std::slice::from_ref(patch),
+            PatchSelectors {
+                select: &args.select,
+                per_patch: &args.patch_select,
+            },
+            context,
+            AutoExtractResolutionFlags {
+                no_extract: false,
+                no_ignore: args.no_ignore,
+                kind_filter: Self::archive_entry_kind_filter(false, args.patch_filter()),
+                stop_on_single_payload_codec: false,
+            },
+            PatchResolveLabels {
+                command: "patch-apply",
+                noun: "patch apply",
+                temp_prefix: "patch-apply-patch-extract",
+            },
+            &mut temp_paths,
+        );
+        match resolved {
+            Ok(list) => match list.patches.as_slice() {
+                [only] if Self::is_dcp_patch(&only.resolved) => {
+                    args.patches[0] = only.resolved.clone();
+                }
+                _ => {
+                    Self::cleanup_temp_paths(&temp_paths);
+                    temp_paths.clear();
+                }
+            },
+            Err(_) => {
+                Self::cleanup_temp_paths(&temp_paths);
+                temp_paths.clear();
+            }
+        }
+        temp_paths
     }
 
     fn is_dcp_patch(path: &Path) -> bool {
