@@ -236,12 +236,6 @@ enum DiscTrackMode {
     Audio,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FlacSampleByteOrder {
-    LittleEndian,
-    BigEndian,
-}
-
 /// Per-track byte source for [`DiscImageReader`]: a buffered file (the default)
 /// or an in-memory cursor for a track sourced from memory.
 enum TrackReader {
@@ -478,70 +472,11 @@ struct ChdCompressionPlan {
     primary_codec: ChdCodec,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct RustCompressedHunkEntry {
-    compression_type: u8,
-    offset: u64,
-    length: u32,
-    crc16: u16,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-struct HunkHashKey {
-    crc16: u16,
-    sha1: [u8; 20],
-}
-
-struct ParentReuseIndex {
-    by_hash: HashMap<HunkHashKey, u64>,
-    sha1: [u8; 20],
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RustMetadataEntry {
     tag: u32,
     flags: u8,
     data: Vec<u8>,
-}
-
-#[derive(Default)]
-struct MsbBitWriter {
-    bytes: Vec<u8>,
-    bit_len: usize,
-}
-
-impl MsbBitWriter {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn write_bits(&mut self, value: u64, bit_count: u8) {
-        if bit_count == 0 {
-            return;
-        }
-        for shift in (0..bit_count).rev() {
-            let bit = ((value >> shift) & 1) as u8;
-            let byte_index = self.bit_len / 8;
-            if byte_index == self.bytes.len() {
-                self.bytes.push(0);
-            }
-            let bit_index = 7 - (self.bit_len % 8);
-            self.bytes[byte_index] |= bit << bit_index;
-            self.bit_len += 1;
-        }
-    }
-
-    fn align_to_byte(&mut self) {
-        let remainder = self.bit_len % 8;
-        if remainder == 0 {
-            return;
-        }
-        self.write_bits(0, (8 - remainder) as u8);
-    }
-
-    fn finish(self) -> Vec<u8> {
-        self.bytes
-    }
 }
 
 const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
@@ -566,12 +501,9 @@ fn split_token(text: &str) -> Option<(&str, &str)> {
     }
 }
 
+#[cfg(test)]
 #[path = "cd_sector_ecc.rs"]
 mod cd_sector_ecc;
-#[path = "codec_encoders.rs"]
-mod codec_encoders;
-#[path = "compressed_map.rs"]
-mod compressed_map;
 #[path = "core.rs"]
 mod core;
 #[path = "create_pipeline.rs"]
@@ -582,16 +514,16 @@ mod disc_extract;
 mod handler_trait;
 #[path = "header_metadata.rs"]
 mod header_metadata;
-#[path = "hunk_compression.rs"]
-mod hunk_compression;
 #[path = "infer.rs"]
 mod infer;
 #[path = "read_session.rs"]
 mod read_session;
 
-use cd_sector_ecc::CD_SYNC_HEADER;
+/// The sync header that starts every CD data sector.
+const CD_SYNC_HEADER: [u8; 12] = [
+    0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+];
 use create_pipeline::CompressedCreateParams;
-use hunk_compression::ChdCompressionScratch;
 use read_session::ChdReadSession;
 
 #[cfg(test)]

@@ -15,6 +15,7 @@
   - [One 7z LZMA backend policy](#one-7z-lzma-backend-policy)
   - [The SDK encoder is native-only](#the-sdk-encoder-is-native-only)
   - [Which platforms get the assembly decode loop](#which-platforms-get-the-assembly-decode-loop)
+- [`chd-rs`, inlined into `rom-weaver-containers`](#chd-rs-inlined-into-rom-weaver-containers)
 - [`nod`, inlined into `rom-weaver-containers`](#nod-inlined-into-rom-weaver-containers)
 - [`xdvdfs`, inlined into `rom-weaver-containers`](#xdvdfs-inlined-into-rom-weaver-containers)
   - [Why it is not a crates.io dependency](#why-it-is-not-a-cratesio-dependency)
@@ -42,16 +43,17 @@ That has one consequence worth stating plainly: vendoring someone else's crate a
 | ----------------------------------------------------------- | ----------------- | ------------------------------- | ----------------------------------------------------------------------------- |
 | `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Pristine upstream sources; the build applies the tracked patch queue          |
 | `crates/rom-weaver-containers/lzma-sdk/vendor/C`            | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's LZMA1/LZMA2 coders, used by the 7z reader and native writer           |
+| `crates/rom-weaver-containers/src/chd_rs`                   | Inlined module    | part of `rom-weaver-containers` | CHD reader and writer, carrying encoder patches not yet upstream              |
 | `crates/rom-weaver-containers/src/nod`                      | Inlined module    | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs`                   | Inlined module    | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax`                             |
 
-Everything else that was once vendored has gone back upstream: `qbsdiff` and `chd` now come from crates.io, and the `akv` wrapper was removed outright. That is the preferred outcome whenever upstream can serve the need. Inlining is the fallback for when it cannot, and a published fork is the last resort.
+Everything else that was once vendored has gone back upstream: `qbsdiff` now comes from crates.io, and the `akv` wrapper was removed outright. That is the preferred outcome whenever upstream can serve the need. Inlining is the fallback for when it cannot, and a published fork is the last resort.
 
 No vendored dependency has its own `rom-weaver-*` package.
 
 ## Patch queues and updates
 
-The four modified dependencies have ordered patch queues under `crates/rom-weaver-containers/vendor-patches/<name>/`. Each `manifest.json` pins an upstream archive, revision, SHA-256, extraction rules, and destination. Its ordered `patches` entries explain each change, its upstream status, and relevant checks. The `nod` and `xdvdfs` queue READMEs record coverage limits.
+The five modified dependencies have ordered patch queues under `crates/rom-weaver-containers/vendor-patches/<name>/`. Each `manifest.json` pins an upstream archive, revision, SHA-256, extraction rules, and destination. Its ordered `patches` entries explain each change, its upstream status, and relevant checks. The `nod` and `xdvdfs` queue READMEs record coverage limits.
 
 Generic fixes use the `source` stage. Project adaptations use `integration`; build-only changes use `build`, `wasm`, or `arm64`. Keep import rewriting, disabled features, and formatting in integration patches so generic fixes remain readable against upstream. Give each integration concern its own patch, so reviewers can tell mechanical rewrites and formatting from hand edits. Project-owned C bridges and shims stay separate, with copy/append adapters recorded in the manifest where applicable.
 
@@ -168,6 +170,26 @@ Native builds keep a second safety net: if the bridge thread cannot start for an
 **Known gap:** the `linux-x64-musl` npm package builds through `cross`, which compiles inside cross-rs' own container where that script never runs, so that one binary keeps the C loop. Closing it means a repo-root `Cross.toml` with a `pre-build` that inlines the install (the project directory is not mounted during `pre-build`, so it cannot call the script), which would apply to every `cross` leg of the release fan-out. `linux-x64-gnu`, the Docker image, and anything built from source with the assembler present are unaffected.
 
 The libarchive CMake build always gets `-DROM_WEAVER_7Z_SDK_DECODER=1`; native builds also get `-DROM_WEAVER_7Z_SDK_LZMA2_ENCODER=1`. Both get only the opaque glue include directory, never the SDK headers, so the two capability boundaries remain independent.
+
+## `chd-rs`, inlined into `rom-weaver-containers`
+
+CHD reading and writing come from [SnowflakePowered/chd-rs](https://github.com/SnowflakePowered/chd-rs) (BSD-3-Clause). The source lives at `crates/rom-weaver-containers/src/chd_rs/` with upstream's license beside it, and is exposed internally as `rom_weaver_containers::chd_rs`. The CHD handler creates every CHD through its `ChdWriter`; workers compress hunks with `HunkCompressor::compress_owned` and the writer stores them in order.
+
+`src/chd_rs/CHD_RS_VERSION` points to `vendor-patches/chd-rs/manifest.json`, which pins the v0.4.0 archive. Three source patches are meant for upstream:
+
+- `HunkCompressor::compress_owned`, so a compressed hunk owns its input and can move to the writer thread.
+- Per-codec compression levels through `ChdWriteOptions::compression_levels`, with chdman's levels as the defaults. rom-weaver's `--level` maps onto them, clamped to each codec's range.
+- Skipping the CD FLAC trial on hunks whose every frame starts with the data-sector sync header. Unlike chdman, a data hunk that FLAC would compress best is stored with another codec.
+
+The integration patches after them inline the crate, resolve its feature gates to the pinned set (encode with the `zstd` C library, no zrip), take `zstd_safe` from the workspace `zstd` crate, and apply workspace formatting, lints, and test adjustments. The workspace `flate2` keeps the C zlib backend, so Deflate hunks use the same zlib as chdman.
+
+Use `npm run vendor:check -- chd-rs` to reconstruct the module and compare every source byte.
+
+When a chd-rs release contains the source patches, replace the copy with the registry crate:
+
+1. Add the released `chd` version to `[workspace.dependencies]` with the `encode` and `fast_zstd` features, keeping `flate2` on the C zlib backend.
+2. Replace `pub mod chd_rs;` with a re-export of the dependency, then remove `crates/rom-weaver-containers/src/chd_rs/` and the dependencies only it used.
+3. Run `cargo test --workspace`, the CHD `cli_smoke` tests, and `cargo publish --workspace --locked --dry-run --no-verify --allow-dirty` before deleting this section.
 
 ## `nod`, inlined into `rom-weaver-containers`
 

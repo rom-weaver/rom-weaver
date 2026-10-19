@@ -417,7 +417,9 @@ impl ChdContainerHandler {
                                 logical_bytes,
                                 create_kind: &create_kind,
                                 codecs: compression_plan.codecs,
-                                compression_level,
+                                compression_level: level_for_codec
+                                    .is_some()
+                                    .then_some(compression_level),
                                 thread_count: execution.effective_threads,
                                 parent_source: request.parent.as_deref(),
                                 on_progress: Some(&create_progress),
@@ -431,7 +433,9 @@ impl ChdContainerHandler {
                             logical_bytes,
                             create_kind: &create_kind,
                             codecs: compression_plan.codecs,
-                            compression_level,
+                            compression_level: level_for_codec
+                                .is_some()
+                                .then_some(compression_level),
                             thread_count: execution.effective_threads,
                             parent_source: request.parent.as_deref(),
                             on_progress: Some(&create_progress),

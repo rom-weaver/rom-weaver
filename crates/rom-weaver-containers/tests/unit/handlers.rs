@@ -4469,8 +4469,10 @@ mod tests {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
-        let payload = (0..(896 * 1024))
-            .map(|index| (index as u8).wrapping_mul(41))
+        // Four symbols in a non-repeating order, so every codec, Huffman included,
+        // compresses the hunks and no hunk duplicates another.
+        let payload = (0..(896 * 1024_u32))
+            .map(|index| ((index.wrapping_mul(2_654_435_761) >> 13) % 4) as u8 * 41)
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 
