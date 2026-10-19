@@ -4495,6 +4495,29 @@ fn weave_bare_file_with_a_zero_first_block_is_not_read_as_an_empty_tar() {
 }
 
 #[test]
+fn weave_member_is_extracted_from_a_tar_with_a_non_tar_name() {
+    let temp = setup_temp_dir();
+    let rom = write_weave_rom(&temp, "romA.bin");
+    // A `rom.url` with no usable name downloads to `weave-download.bin`, so a
+    // plain tar can arrive under a name no tar handler claims.
+    let archive = temp.child("archive.dat");
+    let mut builder = tar::Builder::new(File::create(archive.path()).expect("create tar"));
+    builder
+        .append_path_with_name(&rom, "romA.bin")
+        .expect("append entry");
+    builder.finish().expect("finish tar");
+    drop(builder);
+    write_offset_ips(&temp, "a.ips", 0, 0xAA);
+    let weave = r#"{"version":2,"patchBasis":"auto","patches":[
+        {"id":"a","path":"a.ips","target":{"rom":true,"member":"romA.bin"}}]}"#;
+    let (output, _) = apply_weave_to_bare_input(&temp, archive.path(), weave, 0);
+    assert_eq!(
+        fs::read(output).expect("output"),
+        patched_rom_bytes(&[(0, 0xAA)])
+    );
+}
+
+#[test]
 fn weave_rom_checks_do_not_bind_the_bare_file_to_another_member() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "romA.bin");

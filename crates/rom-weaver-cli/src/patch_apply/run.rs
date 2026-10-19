@@ -774,19 +774,15 @@ impl CliApp {
                     .insert(member.to_owned(), run.resolved_input.clone());
                 continue;
             }
-            if self.input_is_bare_member_file(&run.args.input) {
-                let matched = self
+            // A bare file whose name and checks do not match the member may
+            // still be an archive the probe missed (a tar with a non-tar name),
+            // so fall through to the exact-member resolution below.
+            let bare_input = self.input_is_bare_member_file(&run.args.input);
+            if bare_input
+                && self
                     .bare_input_matches_member(run, member)
-                    .map_err(|error| fail_error("prepare", error))?;
-                if !matched {
-                    return Err(fail_error(
-                        "prepare",
-                        RomWeaverError::Validation(format!(
-                            "weave ROM member `{member}` was not found in `{}`: the input is not an archive and neither its file name nor its checks match the member",
-                            run.args.input.display()
-                        )),
-                    ));
-                }
+                    .map_err(|error| fail_error("prepare", error))?
+            {
                 if let Some(first) = bare_bound_member {
                     return Err(fail_error(
                         "prepare",
@@ -802,35 +798,47 @@ impl CliApp {
                     .insert(member.to_owned(), run.resolved_input.clone());
                 continue;
             }
-            let resolved = self
-                .resolve_exact_member_source(
-                    &run.args.input,
-                    member,
-                    &run.context,
-                    AutoExtractResolutionLabels {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: None,
-                        source_label: "weave ROM member",
-                        temp_prefix: "patch-apply-weave-rom-member",
-                    },
-                    AutoExtractResolutionFlags {
-                        no_extract: run.args.no_extract,
-                        no_ignore: run.args.no_ignore,
-                        kind_filter: run.input_kind_filter,
-                        stop_on_single_payload_codec: false,
-                    },
-                )
-                .map_err(|error| fail_error("prepare", error))?;
-            if resolved.extracted_archives == 0 {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    None,
-                    "prepare",
-                    format!("weave ROM input has no extractable member `{member}`"),
-                    run.probe_threads.clone(),
-                )));
-            }
+            trace!(member, input = %run.args.input.display(), "resolving the weave ROM member from the input by format");
+            let resolved = self.resolve_exact_member_source(
+                &run.args.input,
+                member,
+                &run.context,
+                AutoExtractResolutionLabels {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: None,
+                    source_label: "weave ROM member",
+                    temp_prefix: "patch-apply-weave-rom-member",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract: run.args.no_extract,
+                    no_ignore: run.args.no_ignore,
+                    kind_filter: run.input_kind_filter,
+                    stop_on_single_payload_codec: false,
+                },
+            );
+            let resolved = match resolved {
+                Ok(resolved) if resolved.extracted_archives > 0 => resolved,
+                _ if bare_input => {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "weave ROM member `{member}` was not found in `{}`: the input is not an archive and neither its file name nor its checks match the member",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                Ok(_) => {
+                    return Err(Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "prepare",
+                        format!("weave ROM input has no extractable member `{member}`"),
+                        run.probe_threads.clone(),
+                    )));
+                }
+                Err(error) => return Err(fail_error("prepare", error)),
+            };
             run.temp_paths.extend(resolved.cleanup_paths);
             run.rom_member_inputs
                 .insert(member.to_owned(), resolved.source);
