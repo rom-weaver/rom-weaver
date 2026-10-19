@@ -33,6 +33,7 @@ type CreatePatchFormatOptions = {
   candidateFormats?: readonly string[] | null;
   modifiedSize?: number | null;
   originalSize?: number | null;
+  requireKnownModifiedSize?: boolean;
 };
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
@@ -208,8 +209,13 @@ const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}):
         .filter((value) => !!value)
     : [];
   const formats = candidateFormats.length
-    ? withExtendedCreatePatchFormats(Array.from(new Set(candidateFormats)), options.originalSize, options.modifiedSize)
-    : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize);
+    ? withExtendedCreatePatchFormats(
+        Array.from(new Set(candidateFormats)),
+        options.originalSize,
+        options.modifiedSize,
+        options.requireKnownModifiedSize,
+      )
+    : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize, options.requireKnownModifiedSize);
   return formats.map((value) => ({ label: `.${value}`, value }));
 };
 

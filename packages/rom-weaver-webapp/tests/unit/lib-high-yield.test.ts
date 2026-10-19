@@ -242,6 +242,21 @@ describe("create patch format policy", () => {
     expect(getCreatePatchFormatsForSizes(2048, 1024)).toContain("dps");
     expect(getCreatePatchFormatsForSizes(1024, 2048)).toContain("ips32");
     expect(getCreatePatchFormatsForSizes(1024, 1024)).toContain("ips32");
+    // Combined patches can have an unknown final size (IPS reports none), so a shrink cannot be ruled out.
+    expect(getCreatePatchFormatsForSizes(2048, 0, true)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(2048, undefined, true)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(2048, 1024, true)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(1024, 2048, true)).toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(1024, 1024, true)).toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(2048, 0)).toContain("ips32");
+    expect(
+      getPreferredCreatePatchFormat({
+        modifiedSize: 0,
+        originalSize: 2048,
+        requestedFormat: "ips32",
+        requireKnownModifiedSize: true,
+      }),
+    ).not.toBe("ips32");
     // Rust candidates keep their order and default; extended formats trail and stay selectable.
     expect(
       getPreferredCreatePatchFormat({

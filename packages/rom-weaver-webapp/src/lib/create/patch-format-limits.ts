@@ -7,6 +7,7 @@ type CreatePatchFormatPreferenceInput = {
   modifiedSize?: number | null;
   originalSize?: number | null;
   requestedFormat?: string | null;
+  requireKnownModifiedSize?: boolean;
 };
 type CreatePatchFormatList = readonly [string, ...string[]];
 
@@ -32,7 +33,7 @@ const EXTENDED_LEGACY_CREATE_PATCH_FORMATS: readonly string[] =
 const CREATE_EQUAL_LENGTH_ONLY_FORMAT = "pat";
 
 // IPS32 cannot encode a truncate footer, so a smaller Modified ROM would apply at the Original length.
-const CREATE_NO_SHRINK_FORMAT = "ips32";
+const CREATE_NO_SHRINK_FORMATS: readonly string[] = ["ips32"];
 
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")
@@ -63,31 +64,43 @@ const getExtendedCreatePatchFormatsForSizes = (maxSize: number): readonly string
   return EXTENDED_SMALL_CREATE_PATCH_FORMATS;
 };
 
-// Appends the extended formats allowed for these sizes after the recommended `formats`.
+// Appends the extended formats allowed for these sizes after the recommended `formats`, and drops the
+// formats that cannot truncate when the Modified ROM is smaller than the Original. With
+// `requireKnownModifiedSize` (combined patches, whose output size comes from parsed patches and can be
+// unknown), an unknown size also drops them, because a shrink cannot be ruled out.
 const withExtendedCreatePatchFormats = (
   formats: readonly string[],
-  ...sizes: Array<number | null | undefined>
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+  requireKnownModifiedSize = false,
 ): string[] => {
-  const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes));
-  const knownSizes = sizes.filter((size): size is number => typeof size === "number" && size > 0);
+  const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize));
+  const knownSizes = [originalSize, modifiedSize].filter(
+    (size): size is number => typeof size === "number" && size > 0,
+  );
   const lengthsDiffer = knownSizes.some((size) => size !== knownSizes[0]);
-  // Sizes are passed as (original, modified); only a known pair can shrink.
-  const [originalSize, modifiedSize] = sizes;
-  const shrinks =
-    typeof originalSize === "number" &&
-    typeof modifiedSize === "number" &&
-    modifiedSize > 0 &&
-    modifiedSize < originalSize;
+  const modifiedKnown = typeof modifiedSize === "number" && modifiedSize > 0;
+  const shrinks = typeof originalSize === "number" && modifiedKnown && modifiedSize < originalSize;
+  const mayShrink = shrinks || (requireKnownModifiedSize && !modifiedKnown);
+  const keepsFormat = (format: string) => !(mayShrink && CREATE_NO_SHRINK_FORMATS.includes(format));
   const isOffered = (format: string) => {
     if (formats.includes(format)) return false;
-    if (shrinks && format === CREATE_NO_SHRINK_FORMAT) return false;
-    return !(lengthsDiffer && format === CREATE_EQUAL_LENGTH_ONLY_FORMAT);
+    return keepsFormat(format) && !(lengthsDiffer && format === CREATE_EQUAL_LENGTH_ONLY_FORMAT);
   };
-  return [...formats, ...extended.filter(isOffered)];
+  return [...formats.filter(keepsFormat), ...extended.filter(isOffered)];
 };
 
-const getCreatePatchFormatsForSizes = (...sizes: Array<number | null | undefined>): string[] =>
-  withExtendedCreatePatchFormats(getRecommendedCreatePatchFormatsForSizes(getMaxCreateRomSize(...sizes)), ...sizes);
+const getCreatePatchFormatsForSizes = (
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+  requireKnownModifiedSize = false,
+): string[] =>
+  withExtendedCreatePatchFormats(
+    getRecommendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize)),
+    originalSize,
+    modifiedSize,
+    requireKnownModifiedSize,
+  );
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -108,11 +121,12 @@ const getPreferredCreatePatchFormat = ({
   modifiedSize,
   originalSize,
   requestedFormat,
+  requireKnownModifiedSize = false,
 }: CreatePatchFormatPreferenceInput) => {
   const candidateFormatList = normalizeCandidateCreatePatchFormats(candidateFormats);
   const formats = candidateFormatList.length
-    ? withExtendedCreatePatchFormats(candidateFormatList, originalSize, modifiedSize)
-    : getCreatePatchFormatsForSizes(originalSize, modifiedSize);
+    ? withExtendedCreatePatchFormats(candidateFormatList, originalSize, modifiedSize, requireKnownModifiedSize)
+    : getCreatePatchFormatsForSizes(originalSize, modifiedSize, requireKnownModifiedSize);
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
   // The default comes from Rust: the resolved candidate default already accounts

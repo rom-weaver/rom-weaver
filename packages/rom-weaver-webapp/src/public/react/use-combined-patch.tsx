@@ -61,6 +61,8 @@ const useCombinedPatch = ({
     modifiedSize: formatSizes.patchTargetSize,
     originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
+    // The combined output size is unknown for formats that do not report one (IPS), so formats that cannot truncate are withheld.
+    requireKnownModifiedSize: true,
   });
   const setFormat = (value: string) => {
     setInternalFormat(value);
@@ -172,6 +174,7 @@ const useCombinedPatch = ({
     formatOptions: createCreatePatchFormatOptions({
       modifiedSize: formatSizes.patchTargetSize,
       originalSize: formatSizes.romSize,
+      requireKnownModifiedSize: true,
     }),
     onFormatChange: setFormat,
     disabled: disabled || busy,
