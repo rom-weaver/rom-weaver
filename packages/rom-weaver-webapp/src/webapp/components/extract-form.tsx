@@ -31,16 +31,20 @@ const binCount = (entries: { filename: string }[]): number =>
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
 // The runtime names the file by its internal storage path, so a file that is not an archive gets a plain message.
 const NOT_A_CONTAINER_PATTERN = /no registered container matched/i;
-// A WBFS shorter than its header's size is a split set with parts left out.
-const WBFS_SIZE_PATTERN = /invalid wbfs file size/i;
+// The WBFS reader rejects a file, or split set, whose total size differs from its header's size. The
+// stream open reports the first part alone, so the last report, from the split-aware path open, counts.
+const WBFS_SIZE_PATTERN = /invalid wbfs file size: (\d+), expected (\d+)/gi;
+const wbfsSizeMessage = (file: File, actual: number, expected: number): string =>
+  actual < expected
+    ? `${file.name} is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.`
+    : `${file.name} and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.`;
 const errorMessage = (cause: unknown, file?: File): string => {
   const message = cause instanceof Error ? cause.message : String(cause);
   if (!file) return message;
   if (NOT_A_CONTAINER_PATTERN.test(message))
     return `${file.name} is not an archive or disc image that Extract can open.`;
-  if (WBFS_SIZE_PATTERN.test(message)) {
-    return `${file.name} is missing parts of its split set. Add it together with every .wbf1, .wbf2, ... part.`;
-  }
+  const wbfsSize = [...message.matchAll(WBFS_SIZE_PATTERN)].at(-1);
+  if (wbfsSize) return wbfsSizeMessage(file, Number(wbfsSize[1]), Number(wbfsSize[2]));
   return message;
 };
 

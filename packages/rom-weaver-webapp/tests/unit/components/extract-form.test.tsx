@@ -67,19 +67,26 @@ describe("ExtractForm", () => {
     expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
   });
 
-  it("asks for the missing parts of a split WBFS set instead of the raw size error", async () => {
+  it.each([
+    [
+      1398102,
+      "Game.wbfs is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.",
+    ],
+    [
+      5592405,
+      "Game.wbfs and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.",
+    ],
+  ])("explains a WBFS of %i bytes against a 4 MiB header instead of the raw size error", async (size, text) => {
     runtime.extract.mockRejectedValue(
-      new Error("failed to open wbfs source `/work/Game.wbfs`: Invalid WBFS file size: 1398102, expected 4194304"),
+      new Error(
+        `failed to open wbfs source \`/work/Game.wbfs\`: Invalid WBFS file size: 2097152, expected 4194304; path fallback failed: disc format error: Invalid WBFS file size: ${size}, expected 4194304`,
+      ),
     );
     render(<ExtractForm />);
 
     addFile(new File(["WBFS"], "Game.wbfs"));
 
-    expect(
-      await screen.findByText(
-        "Game.wbfs is missing parts of its split set. Add it together with every .wbf1, .wbf2, ... part.",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText(text)).toBeTruthy();
     expect(screen.queryByText(/\/work\//)).toBeNull();
   });
 
