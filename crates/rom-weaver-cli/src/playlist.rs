@@ -90,17 +90,35 @@ fn natural_cmp(left: &str, right: &str) -> Ordering {
     }
 }
 
-/// The name the browser stages a file under: runs of characters outside
-/// printable ASCII, and of `: * ? " < > |`, become one `_`; leading dots and
-/// edge whitespace or `_` go. A sheet that names `Pokémon.bin` still finds the
-/// staged `Pok_mon.bin`.
+/// The name the browser stages a file under (`normalizeVirtualFileName`): the
+/// same passes in the same order, each turning runs of its characters into one
+/// `_` (so a run of non-ASCII next to a reserved character gives `__`); leading
+/// dots and edge whitespace or `_` go; an empty result is `input.bin`. A sheet
+/// that names `Pokémon.bin` still finds the staged `Pok_mon.bin`.
 pub(crate) fn staged_file_name(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
+    let name = if name.is_empty() { "input.bin" } else { name };
+    let mut out = replace_runs(name, |ch| matches!(ch, '\\' | '/'));
+    out = replace_runs(&out, |ch| ch.is_ascii_control());
+    out = replace_runs(&out, |ch| !(' '..='~').contains(&ch));
+    out = replace_runs(&out, |ch| {
+        matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|')
+    });
+    let trimmed = out
+        .trim_start_matches('.')
+        .trim_matches(|ch: char| ch == '_' || ch.is_whitespace());
+    if trimmed.is_empty() {
+        "input.bin".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Replace each maximal run of characters matching `pred` with one `_`.
+fn replace_runs(text: &str, pred: impl Fn(char) -> bool) -> String {
+    let mut out = String::with_capacity(text.len());
     let mut in_run = false;
-    for ch in name.chars() {
-        let unsafe_char =
-            !(' '..='~').contains(&ch) || matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|');
-        if unsafe_char {
+    for ch in text.chars() {
+        if pred(ch) {
             if !in_run {
                 out.push('_');
             }
@@ -110,9 +128,7 @@ pub(crate) fn staged_file_name(name: &str) -> String {
             in_run = false;
         }
     }
-    out.trim_start_matches('.')
-        .trim_matches(|ch: char| ch == '_' || ch.is_whitespace())
-        .to_string()
+    out
 }
 
 /// A track file a sheet names, as it sits next to the sheet: under the exact

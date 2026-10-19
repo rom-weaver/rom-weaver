@@ -107,6 +107,14 @@ fn staged_file_name_matches_the_browser_staging_rules() {
         ("日本語 (Disc 1).bin", "(Disc 1).bin"),
         ("A:B*C.bin", "A_B_C.bin"),
         (".hidden.bin", "hidden.bin"),
+        // Separate passes, as in the browser: a non-ASCII run beside a reserved
+        // character gives two underscores (checked against the TS function).
+        ("Café: Disc 1.bin", "Caf__ Disc 1.bin"),
+        ("Pokémon™: Disc 1.bin", "Pok_mon__ Disc 1.bin"),
+        ("", "input.bin"),
+        ("日本語", "input.bin"),
+        ("é.bin", ".bin"),
+        ("a\u{1}é.bin", "a__.bin"),
     ] {
         assert_eq!(staged_file_name(name), expected, "{name}");
     }
