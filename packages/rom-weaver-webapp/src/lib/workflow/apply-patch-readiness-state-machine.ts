@@ -271,7 +271,10 @@ const resolveApplyPatchTargetForStage = async <TSource>(
   if (assets.length === 1) {
     const [target] = assets;
     if (!target) return null;
-    if (hasMemberRef && !stage.state.targetInputId && target.member === undefined && !target.discGroupId) {
+    // A member-targeted patch takes only an asset its member reference resolved to (the caller
+    // assigned it); the lone asset is not a fallback, or the row would show Verified and then fail
+    // at Apply with "ROM member was not found".
+    if (hasMemberRef && !stage.state.targetInputId) {
       clearApplyPatchTarget(stage);
       return null;
     }

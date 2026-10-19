@@ -163,3 +163,25 @@ it("hashes a declared algorithm staging does not compute to match a renamed bare
   expect(stage.state.status).toBe("ready");
   expect(controller.createPatchInput().bareFileChecksums).toEqual({ sha256: "ab".repeat(32) });
 });
+
+it("does not auto-assign a lone archive member that the targeted member does not resolve to", async () => {
+  const controller = makeController({
+    ...bareAsset("romA (USA).bin"),
+    id: "zip-member",
+    member: "romA (USA).bin",
+  });
+  const stage = makeStage("romA.bin");
+  controller.patches = [stage];
+  await controller.refreshPatchReadiness();
+  expect(stage.state.targetInputId).toBeUndefined();
+  expect(stage.state.status).toBe("needsSelection");
+});
+
+it("still assigns a lone archive member that the targeted member resolves to", async () => {
+  const controller = makeController({ ...bareAsset("romA.bin"), id: "zip-member", member: "romA.bin" });
+  const stage = makeStage("romA.bin");
+  controller.patches = [stage];
+  await controller.refreshPatchReadiness();
+  expect(stage.state.targetInputId).toBe("zip-member");
+  expect(stage.state.status).toBe("ready");
+});
