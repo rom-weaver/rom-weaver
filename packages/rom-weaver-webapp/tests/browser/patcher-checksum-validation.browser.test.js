@@ -4,6 +4,9 @@ import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-for
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import {
+  buildDcpFile,
+  buildZippedDcpFile,
+  clickCandidateSelectionOption,
   clickApplyButton,
   getInputStackRows,
   getPatchStackRows,
@@ -13,6 +16,7 @@ import {
   RAW_PATCH,
   RAW_ROM,
   selectFileInput,
+  selectFileInputs,
   setFormControlValue,
   VALID_BPS,
   VALID_UPS,
@@ -475,4 +479,105 @@ test("an unreadable patch fails its own card in plain language and blocks apply"
   expect(applyButton?.textContent || "").not.toContain("Download");
   expect(document.body.textContent || "").not.toContain("INVALID_INPUT");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault")).not.toBeNull();
+});
+
+const DCP_MESSAGE = "Dreamcast DCP patches are not supported in browser Apply yet";
+
+// The DCP card must name DCP and the CLI (as plain text), never ingest the ZIP into a selection dialog,
+// never fall back to a generic ROM/target complaint, and keep Apply from producing an output.
+const expectDcpCardAndBlockedApply = async (dcpName = "real.dcp") => {
+  const dcpRow = () =>
+    getPatchStackRows().find((row) => row.textContent?.includes(dcpName) && row.querySelector(".pfault"));
+  await expect.poll(dcpRow, { timeout: 60000 }).toBeDefined();
+  const fault = dcpRow().querySelector(".pfault");
+  expect(fault.textContent).toContain(DCP_MESSAGE);
+  expect(fault.textContent).toContain("cli-apply#apply-a-dreamcast-dcp-patch");
+  expect(dcpRow().classList.contains("bad")).toBe(true);
+  const pageText = document.body.textContent || "";
+  expect(pageText).not.toContain("no registered patch handler");
+  expect(pageText).not.toContain("expected a different ROM");
+  expect(pageText).not.toContain("target selection is required");
+  expect(document.querySelector(".rw-modal.select-modal")).toBeNull();
+  const applyButton = document.getElementById("rom-weaver-button-apply");
+  applyButton?.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 2000));
+  expect(applyButton?.textContent || "").not.toContain("Download");
+  expect(document.querySelector(".rw-modal.select-modal")).toBeNull();
+  expect(dcpRow()).toBeDefined();
+};
+
+const addFiles = (files) => selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), files);
+
+test("a real ZIP DCP with no ROM loaded names DCP and the CLI and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  addFiles([await buildDcpFile()]);
+  await expectDcpCardAndBlockedApply();
+});
+
+test("a DCP inside a ZIP archive names DCP and the CLI and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  addFiles([await loadFixtureFile(RAW_ROM), await buildZippedDcpFile()]);
+  await expectDcpCardAndBlockedApply("translation.zip");
+  expect(document.body.textContent || "").not.toContain("COMPRESSION_FAILED");
+});
+
+test("a real ZIP DCP beside a single ROM names DCP and blocks apply without a selection dialog", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  addFiles([await loadFixtureFile(RAW_ROM), await buildDcpFile()]);
+  await expectDcpCardAndBlockedApply();
+  expect(getPatchStackRows()).toHaveLength(1);
+});
+
+test("a real ZIP DCP beside a multi-track CUE disc names DCP instead of asking for a target", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const track = (fill) => new Uint8Array(2352 * 16).fill(fill);
+  const cue = new File(
+    [
+      'FILE "track1.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n' +
+        'FILE "track2.bin" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n',
+    ],
+    "multi.cue",
+    { type: "application/x-cue" },
+  );
+  addFiles([cue, new File([track(1)], "track1.bin"), new File([track(2)], "track2.bin"), await buildDcpFile()]);
+  await expectDcpCardAndBlockedApply();
+});
+
+test("a real ZIP DCP beside a GDI disc names DCP instead of asking for a target", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const gdi = new File(["2\n1 0 4 2352 track01.bin 0\n2 45000 4 2352 track02.bin 0\n"], "disc.gdi", {
+    type: "text/plain",
+  });
+  addFiles([
+    gdi,
+    new File([new Uint8Array(2352 * 16).fill(1)], "track01.bin"),
+    new File([new Uint8Array(2352 * 16).fill(2)], "track02.bin"),
+    await buildDcpFile(),
+  ]);
+  // The dropped disc files are all ROMs, so the app asks which one to use before the DCP can be judged.
+  await clickCandidateSelectionOption("disc.gdi");
+  await expectDcpCardAndBlockedApply();
+});
+
+test("a real ZIP DCP beside a headered ROM and another patch still names DCP and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const header = new Uint8Array(16);
+  header.set([0x4e, 0x45, 0x53, 0x1a, 0x02, 0x01, 0x01, 0x00]);
+  const rom = new Uint8Array(16 + 2 * 16384 + 8192).fill(0x11);
+  rom.set(header);
+  addFiles([
+    new File([rom], "game.nes", { type: "application/octet-stream" }),
+    await loadFixtureFile(RAW_PATCH),
+    await buildDcpFile(),
+  ]);
+  await expectDcpCardAndBlockedApply();
+  await expect.poll(() => getPatchStackRows().length, { timeout: 60000 }).toBe(2);
+  await expectDcpCardAndBlockedApply();
+  await expectDcpCardAndBlockedApply();
 });

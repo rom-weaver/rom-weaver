@@ -67,7 +67,7 @@ use rom_weaver_core::{
     Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
     ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
     XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
-    enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
+    enumerate_disc_sheet_refs, env_u64, is_dcp_patch_name, is_patch_filter_candidate_name,
     is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
     process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
 };

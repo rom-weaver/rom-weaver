@@ -85,7 +85,7 @@ Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author'
 
 ## Dreamcast DCP patches need the CLI
 
-Use the [CLI DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch); browser Apply lacks that disc-sheet workflow. NINJA1 and PDS cannot be applied. See [support limits](../reference/formats.md#patch-formats).
+Use the [CLI DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch); browser Apply lacks that disc-sheet workflow. Adding a `.dcp` shows a failed patch card that names DCP and gives the CLI procedure's address as plain text, and Apply stays blocked. NINJA1 and PDS cannot be applied. See [support limits](../reference/formats.md#patch-formats).
 
 ## Read the ROM and patch cards
 

@@ -1827,3 +1827,144 @@ fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
     );
     assert!(!output.path().exists());
 }
+
+#[test]
+fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+    let temp = setup_temp_dir();
+    let cooked = build_iso(
+        &[IsoFile {
+            path: "KEEP.DAT".to_string(),
+            data: b"source file".to_vec(),
+        }],
+        GD_HIGH_DENSITY_START_LBA,
+        IsoTimestamp::default(),
+    )
+    .expect("source ISO");
+    let raw = cooked
+        .chunks_exact(USER_DATA_SIZE)
+        .enumerate()
+        .flat_map(|(index, sector)| {
+            encode_mode1_sector(
+                GD_HIGH_DENSITY_START_LBA + index as u32,
+                sector.try_into().expect("cooked sector"),
+            )
+        })
+        .collect::<Vec<_>>();
+    fs::write(temp.child("track03.bin").path(), raw).expect("source track");
+    temp.child("disc.gdi")
+        .write_str("1\n3 45000 4 2352 track03.bin 0\n")
+        .expect("source GDI");
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    for (inputs, format, output) in [
+        ("NEW.DAT", "zip", "game.dcp"),
+        ("game.dcp", "zip", "translation.zip"),
+    ] {
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child(inputs).path().to_str().unwrap(),
+                "--format",
+                format,
+                "--output",
+                temp.child(output).path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+    }
+    for (patch, out) in [("game.dcp", "bare"), ("translation.zip", "zipped")] {
+        let stdout = command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                temp.child("disc.gdi").path().to_str().unwrap(),
+                "--patch",
+                temp.child(patch).path().to_str().unwrap(),
+                "--no-compress",
+                "--output",
+                temp.child(format!("{out}/disc.gdi"))
+                    .path()
+                    .to_str()
+                    .unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        let terminal = parse_json_lines(&stdout).pop().expect("terminal event");
+        assert_patch_envelope(&terminal, "patch-apply", "dcp", "succeeded");
+    }
+    for name in ["disc.gdi", "track03.bin"] {
+        assert_eq!(
+            fs::read(temp.child(format!("bare/{name}")).path()).expect("bare output"),
+            fs::read(temp.child(format!("zipped/{name}")).path()).expect("zipped output"),
+            "{name} from a zipped DCP must match the bare DCP"
+        );
+    }
+}
+
+#[test]
+fn patch_apply_zipped_multi_entry_dcp_resolves_to_dcp_not_inner_entries() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("track03.bin").path(), b"not read").expect("source track");
+    temp.child("disc.gdi")
+        .write_str("1\n3 45000 4 2352 track03.bin 0\n")
+        .expect("source GDI");
+    temp.child("NEW.DAT").write_str("first").expect("payload");
+    temp.child("OTHER.DAT")
+        .write_str("second")
+        .expect("payload");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("NEW.DAT").path().to_str().unwrap(),
+            "--input",
+            temp.child("OTHER.DAT").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("translation.zip").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("translation.zip").path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child("out/patched.gdi").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    let stdout = String::from_utf8_lossy(&stdout);
+    assert!(
+        stdout.contains("for a .dcp patch"),
+        "a zipped DCP must route to the DCP apply path: {stdout}"
+    );
+    assert!(
+        !stdout.contains("payload resolution is ambiguous"),
+        "the DCP's inner entries must not be treated as candidates: {stdout}"
+    );
+}

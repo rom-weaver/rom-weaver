@@ -1,4 +1,5 @@
 import { RomWeaverError, toRomWeaverError } from "../errors.ts";
+import { isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { resolveApplyHeaderMode, resolveApplyN64ByteOrder, toNormalizedCrc32 } from "./apply-header-resolution.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
@@ -354,6 +355,10 @@ const evaluateApplyPatchReadiness = async <TSource>(
     (warning) => !PATCH_TARGET_SELECTION_ERROR_CODES.has(String(warning.code || "")),
   );
   const changed = () => previousStatus !== stage.state.status;
+  if (isDcpPatchStage(stage)) {
+    markDcpPatchUnsupported(stage);
+    return changed();
+  }
   if (stage.state.status === "loading" && !stage.preparedPatchFile && !stage.state.candidates.length) return false;
   if (!stage.state.selectedCandidateId) {
     clearApplyPatchTarget(stage);

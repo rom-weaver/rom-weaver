@@ -1,3 +1,4 @@
+import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
   ApplyWorkflowWeaveSources,
@@ -1251,6 +1252,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       role: stage.state.role,
       sourceSize: stage.state.sourceSize,
     });
+    if (isDcpPatchName(stage.state.fileName)) {
+      // Name the DCP before any staging, ingest, or selection runs; see apply-dcp-patch.ts.
+      this.addDirectCandidate(stage, stage.state.role, stage.index, stage.state.id);
+      stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
+      markDcpPatchUnsupported(stage);
+      return stage;
+    }
     const requests: CandidateSelectionRequest[] = [];
     const options = createSourceStagingOptions({
       base: this.createExecutionOptions(),
@@ -1542,6 +1550,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       stage.state.requirements = undefined;
       stage.state.checksumPreflight = undefined;
       stage.state.patchValidation = undefined;
+      return;
+    }
+    if (isDcpPatchStage(stage)) {
+      // The ingest surfaced a .dcp (bare, or a leaf of an archive) as one patch; see apply-dcp-patch.ts.
+      markDcpPatchUnsupported(stage);
       return;
     }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
