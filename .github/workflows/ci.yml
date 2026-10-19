@@ -9,11 +9,12 @@ on:
         default: none
         type: choice
         options: [none, nightly, beta, prod]
-  # `labeled` exists only for the `preview` label, which deploys a preview of
-  # the current head. Any other label starts a run whose jobs all skip; see
-  # the concurrency group and the `gate` job's name.
+  # No `labeled`: branch protection reads the newest CI run on a commit, so a
+  # run started by a label, even one whose jobs all skip, would hide the real
+  # run's `CI gate` and block the merge. Dependabot labels every pull request
+  # it opens.
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
@@ -35,11 +36,9 @@ permissions:
 # Main validation MUST share one active slot to limit runner contention. New
 # pushes replace the pending run while the active run finishes.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
-# shared group would be replaced by the next push (or replace it). A run for a
-# label other than `preview` gets a group of its own so it cannot cancel the
-# pull request's real run.
+# shared group would be replaced by the next push (or replace it).
 concurrency:
-  group: ci-${{ github.event_name == 'schedule' && 'nightly' || (github.event.action == 'labeled' && github.event.label.name != 'preview') && format('ignored-label-{0}', github.run_id) || github.ref }}
+  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -48,8 +47,6 @@ jobs:
     runs-on: ubuntu-24.04
     # A cold identify-data cache rebuilds the packs here; see below.
     timeout-minutes: 30
-    # Every other job needs this one, so skipping it skips the whole run.
-    if: ${{ !(github.event.action == 'labeled' && github.event.label.name != 'preview') }}
     permissions:
       contents: read
       # The nightly reads its own run history to find the last green nightly.
@@ -150,7 +147,7 @@ jobs:
           (github.ref_type == 'tag' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
           steps.classify.outputs.webapp == 'true' ||
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview'))) &&
+          github.event_name == 'pull_request') &&
           (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
           (github.event_name != 'pull_request' ||
           (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -226,7 +223,6 @@ jobs:
           (steps.plan.outputs.targets != '' &&
           steps.plan.outputs.targets != '[]') ||
           (github.event_name == 'pull_request' &&
-          contains(github.event.pull_request.labels.*.name, 'preview') &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login != 'dependabot[bot]')
         run: echo "selected=true" >> "$GITHUB_OUTPUT"
@@ -831,12 +827,11 @@ jobs:
       size: ${{ steps.size.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
-    # first-party pull requests with the preview label also select their bundle.
+    # every first-party pull request also builds it for its preview.
     # The `gate` job below is the required check.
     if: >-
       needs.changes.outputs.webapp == 'true' ||
       (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'preview') &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -1659,11 +1654,8 @@ jobs:
   # failed (a skipped required check counts as passing), but a superseded or
   # hand-cancelled run is not a red gate. Each step repeats it so one failed
   # group does not hide the others.
-  # A run for a label other than `preview` skips `changes` and so every job;
-  # its gate skips under another name so the skip can never stand in for the
-  # real run's result on the same commit.
   gate:
-    name: ${{ (github.event.action == 'labeled' && github.event.label.name != 'preview') && 'CI gate (ignored label event)' || 'CI gate' }}
+    name: CI gate
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs:
@@ -1687,7 +1679,7 @@ jobs:
         webapp-e2e,
         webapp-webkit-e2e,
       ]
-    if: ${{ !cancelled() && github.ref_type != 'tag' && !(github.event.action == 'labeled' && github.event.label.name != 'preview') }}
+    if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1721,7 +1713,7 @@ jobs:
           REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
           DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
           DOCKER_RESULT: ${{ needs.docker.result }}
-          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
           WASM_RESULT: ${{ needs.wasm.result }}
           DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}

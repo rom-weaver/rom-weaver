@@ -156,11 +156,8 @@ test("identify producer runs for every selected consumer and skips fork document
     docker = "[]",
     deploy = "",
     firstParty = false,
-    preview = false,
   }) =>
-    runInNewContext(condition.replaceAll("github.event.pull_request.labels.*.name", "labels"), {
-      contains: (items, item) => items.includes(item),
-      labels: preview ? ["preview"] : [],
+    runInNewContext(condition, {
       github: {
         event_name: eventName,
         repository: "owner/repo",
@@ -185,14 +182,9 @@ test("identify producer runs for every selected consumer and skips fork document
     "manual runs can select consumers",
   );
   assert.equal(
-    selected({ eventName: "pull_request", firstParty: true, preview: true }),
-    true,
-    "opt-in previews need data",
-  );
-  assert.equal(
     selected({ eventName: "pull_request", firstParty: true }),
-    false,
-    "unrelated PRs skip data",
+    true,
+    "every first-party preview needs data",
   );
   assert.equal(
     selected({ eventName: "pull_request" }),

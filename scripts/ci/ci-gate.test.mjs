@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -84,40 +83,17 @@ test("every gate step reports on its own, but never on a cancelled run", () => {
     assert.match(expression(step.if ?? ""), /^!cancelled\(\)/u, step.name);
 });
 
-const labelContext = (eventName, action, label) => ({
-  cancelled: () => false,
-  format: (template, ...values) =>
-    template.replace(/\{(\d+)\}/gu, (_, index) => String(values[index])),
-  github: {
-    event_name: eventName,
-    ref: "refs/pull/1/merge",
-    ref_type: "branch",
-    run_id: 9,
-    event: { action, label: label === undefined ? undefined : { name: label } },
-  },
-});
-
-test("only the preview label starts a real run", () => {
-  assert.ok(!ci.on.pull_request.types.includes("unlabeled"));
-  assert.ok(ci.on.pull_request.types.includes("labeled"));
-  for (const [eventName, action, label, real] of [
-    ["pull_request", "synchronize", undefined, true],
-    ["pull_request", "opened", undefined, true],
-    ["pull_request", "labeled", "preview", true],
-    ["pull_request", "labeled", "bug", false],
-    ["pull_request", "labeled", "dependencies", false],
-    ["push", undefined, undefined, true],
-    ["schedule", undefined, undefined, true],
-  ]) {
-    const context = labelContext(eventName, action, label);
-    const evaluate = (value) => runInNewContext(expression(value), context);
-    const caseName = `${eventName} ${action} ${label}`;
-    assert.equal(evaluate(ci.jobs.changes.if), real, caseName);
-    assert.equal(evaluate(gate.if), real, caseName);
-    // A skipped job reports success, so an ignored run's gate MUST NOT carry
-    // the required name the real run reports on the same commit.
-    assert.equal(evaluate(gate.name) === "CI gate", real, caseName);
-  }
+test("labels never start a run that could hide the required gate", () => {
+  // Branch protection reads the newest CI run on a commit, so a label run
+  // would replace the real run's `CI gate`, skipped or not.
+  for (const type of ["labeled", "unlabeled"])
+    assert.ok(!ci.on.pull_request.types.includes(type), type);
+  assert.equal(gate.name, "CI gate");
+  assert.equal(ci.jobs.changes.if, undefined);
+  assert.doesNotMatch(
+    readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    /labels\.\*\.name/u,
+  );
 });
 
 test("pull requests skip Lighthouse only through the shared classifier flag", () => {
