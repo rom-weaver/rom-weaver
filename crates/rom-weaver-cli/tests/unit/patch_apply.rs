@@ -2303,3 +2303,46 @@ fn a_staged_payload_whose_name_is_not_the_archive_entry_name_is_refused() {
     );
     assert!(!requested.exists());
 }
+
+#[test]
+fn bare_input_match_reuses_seeded_checksums_and_seeds_the_rest() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let input = temp.path().join("renamed.bin");
+    fs::write(&input, b"0123456789abcdef").expect("input fixture");
+    let context = test_context(temp.path().to_path_buf());
+    // A sentinel no real hash produces: matching it proves the seed was read
+    // instead of the file being hashed again.
+    let sentinel = "feedfacefeedfacefeedfacefeedfacefeedface";
+    context.seed_checksums(
+        &input,
+        &BTreeMap::from([("sha1".to_owned(), sentinel.to_owned())]),
+    );
+    let requirement = |checksums: &[(&str, &str)]| {
+        vec![(
+            None,
+            checksums
+                .iter()
+                .map(|(algorithm, value)| ((*algorithm).to_owned(), (*value).to_owned()))
+                .collect::<BTreeMap<_, _>>(),
+        )]
+    };
+    assert!(
+        run::bare_input_satisfies_any(&input, &requirement(&[("sha1", sentinel)]), &context)
+            .expect("seeded match")
+    );
+    // An unseeded algorithm is computed once and seeded for later members.
+    let crc = "68c4f033";
+    assert!(context.seeded_checksum(&input, "crc32").is_none());
+    assert!(
+        run::bare_input_satisfies_any(
+            &input,
+            &requirement(&[("crc32", &crc.to_uppercase()), ("sha1", sentinel)]),
+            &context
+        )
+        .expect("computed match")
+    );
+    assert_eq!(
+        context.seeded_checksum(&input, "crc32").as_deref(),
+        Some(crc)
+    );
+}

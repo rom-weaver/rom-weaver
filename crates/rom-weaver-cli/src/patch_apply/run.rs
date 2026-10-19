@@ -895,28 +895,7 @@ impl CliApp {
         }) {
             candidates.push((requirements.size, requirements.checksums.clone()));
         }
-        let size = fs::metadata(&run.resolved_input)?.len();
-        for (expected_size, checksums) in candidates {
-            if expected_size.is_none() && checksums.is_empty() {
-                continue;
-            }
-            if expected_size.is_some_and(|expected| expected != size) {
-                continue;
-            }
-            if checksums.is_empty() {
-                return Ok(true);
-            }
-            let algorithms = checksums.keys().map(String::as_str).collect::<Vec<_>>();
-            let actual = checksum_file_values(&run.resolved_input, &algorithms, &run.context)?;
-            if checksums.iter().all(|(algorithm, expected)| {
-                actual
-                    .get(algorithm)
-                    .is_some_and(|value| value.eq_ignore_ascii_case(expected))
-            }) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        bare_input_satisfies_any(&run.resolved_input, &candidates, &run.context)
     }
 
     /// Resolve the patch files, check the step metadata against them, and add
@@ -1640,4 +1619,50 @@ impl CliApp {
         Self::cleanup_temp_paths(&run.temp_paths);
         report
     }
+}
+
+/// Whether `input` satisfies any of the `(size, checksums)` requirements.
+/// Checksums already seeded on `context` (from the weave ROM check or the
+/// host's cached values) are reused; the rest are computed once and seeded so
+/// later candidates and members do not re-read the file.
+pub(super) fn bare_input_satisfies_any(
+    input: &Path,
+    candidates: &[(Option<u64>, BTreeMap<String, String>)],
+    context: &OperationContext,
+) -> Result<bool> {
+    let size = fs::metadata(input)?.len();
+    for (expected_size, checksums) in candidates {
+        if expected_size.is_none() && checksums.is_empty() {
+            continue;
+        }
+        if expected_size.is_some_and(|expected| expected != size) {
+            continue;
+        }
+        if checksums.is_empty() {
+            return Ok(true);
+        }
+        let mut actual = BTreeMap::new();
+        let mut missing = Vec::new();
+        for algorithm in checksums.keys() {
+            match context.seeded_checksum(input, algorithm) {
+                Some(value) => {
+                    actual.insert(algorithm.clone(), value);
+                }
+                None => missing.push(algorithm.as_str()),
+            }
+        }
+        if !missing.is_empty() {
+            let computed = checksum_file_values(input, &missing, context)?;
+            context.seed_checksums(input, &computed);
+            actual.extend(computed);
+        }
+        if checksums.iter().all(|(algorithm, expected)| {
+            actual
+                .get(algorithm)
+                .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+        }) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
