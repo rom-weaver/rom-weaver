@@ -128,8 +128,10 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             .and_then(|value| value.to_str())
             .filter(|value| !value.is_empty())
             .unwrap_or("output");
+        // Extraction writes only data frames; PAD and 4-frame alignment frames are skipped.
         let track_bin_bytes = |track: &DiscTrack| -> u64 {
-            u64::from(track.frames).saturating_mul(track.mode.data_bytes() as u64)
+            u64::from(track.frames.saturating_sub(track.pad_frames))
+                .saturating_mul(track.mode.data_bytes() as u64)
         };
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;

@@ -595,6 +595,9 @@ impl ChdContainerHandler {
                 postgap_frames: 0,
                 pregap_has_data: false,
                 pad_frames,
+                // chdman reports the default `MODE1` pregap type for every GD
+                // track, audio included.
+                pgtype_mode1: true,
                 ..track
             });
         }
@@ -1721,7 +1724,9 @@ fn gdi_track_lines(
                 track.number, physframeofs, track_type, sector_size, track_names[track_index]
             ));
         }
-        physframeofs = physframeofs.saturating_add(track.frames);
+        // chdman advances the offset by the data frames plus explicit PAD only;
+        // the 4-frame alignment frames exist only in the hunk stream.
+        physframeofs = physframeofs.saturating_add(track.frames - track.align_pad_frames);
     }
     Ok(gdi_lines)
 }
