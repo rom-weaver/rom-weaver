@@ -4596,6 +4596,149 @@ fn weave_bare_file_matches_a_member_named_only_by_a_patch_input() {
 }
 
 #[test]
+fn weave_bare_file_binds_rom_member_plus_matching_members_only_once() {
+    let crc = crc32_hex(WEAVE_ROM_BYTES);
+    let checks = format!(r#""checks":{{"checksums":{{"crc32":"{crc}"}},"size":16}}"#);
+    /// The output's patched `(offset, byte)` edits, or the expected failure text.
+    type Expected = std::result::Result<Vec<(usize, u8)>, String>;
+    let several = |a: &str, b: &str| -> Expected {
+        Err(format!("matches several weave ROM members (`{a}`, `{b}`)"))
+    };
+    // (case, input file, archive input, `rom` object, patches, expected result)
+    let cases: Vec<(&str, &str, bool, String, &str, Expected)> = vec![
+        (
+            "untargeted root step plus a same-named member",
+            "track.bin",
+            false,
+            r#"{"member":"disc-a/track.bin"}"#.to_owned(),
+            r#"{"id":"a","path":"a.ips"},
+               {"id":"b","path":"b.ips","target":{"rom":true,"member":"disc-b/track.bin"}}"#,
+            several("disc-a/track.bin", "disc-b/track.bin"),
+        ),
+        (
+            "rom.checks verify rom.member while no step reads the root lane",
+            "track.bin",
+            false,
+            format!(r#"{{"member":"disc-a/track.bin",{checks}}}"#),
+            r#"{"id":"b","path":"b.ips","target":{"rom":true,"member":"disc-b/track.bin"}}"#,
+            several("disc-a/track.bin", "disc-b/track.bin"),
+        ),
+        (
+            "unselected optional root step",
+            "track.bin",
+            false,
+            format!(r#"{{"member":"disc-a/track.bin",{checks}}}"#),
+            r#"{"id":"a","path":"a.ips","optional":true},
+               {"id":"b","path":"b.ips","target":{"rom":true,"member":"disc-b/track.bin"}}"#,
+            several("disc-a/track.bin", "disc-b/track.bin"),
+        ),
+        (
+            "two members bound through rom.checks",
+            "game.bin",
+            false,
+            format!("{{{checks}}}"),
+            r#"{"id":"a","path":"a.ips","target":{"rom":true,"member":"first.bin"}},
+               {"id":"b","path":"b.ips","target":{"rom":true,"member":"second.bin"}}"#,
+            several("first.bin", "second.bin"),
+        ),
+        (
+            "renamed file for a target naming rom.member, with checks",
+            "mygame.bin",
+            false,
+            format!(r#"{{"member":"disc-a/game.bin",{checks}}}"#),
+            r#"{"id":"a","path":"a.ips","target":{"rom":true,"member":"disc-a/game.bin"}}"#,
+            Ok(vec![(0, 0xAA)]),
+        ),
+        (
+            "renamed file for a target naming rom.member, without checks",
+            "mygame.bin",
+            false,
+            r#"{"member":"disc-a/game.bin"}"#.to_owned(),
+            r#"{"id":"a","path":"a.ips","target":{"rom":true,"member":"disc-a/game.bin"}}"#,
+            Ok(vec![(0, 0xAA)]),
+        ),
+        (
+            "single member matched by name",
+            "game.bin",
+            false,
+            "{}".to_owned(),
+            r#"{"id":"a","path":"a.ips","target":{"rom":true,"member":"disc-a/game.bin"}}"#,
+            Ok(vec![(0, 0xAA)]),
+        ),
+        (
+            "single member matched by rom.checks",
+            "game.bin",
+            false,
+            format!("{{{checks}}}"),
+            r#"{"id":"a","path":"a.ips","target":{"rom":true,"member":"first.bin"}}"#,
+            Ok(vec![(0, 0xAA)]),
+        ),
+        (
+            "archive input holding both members",
+            "discs.tar.gz",
+            true,
+            format!(r#"{{"member":"disc-a/track.bin",{checks}}}"#),
+            r#"{"id":"b","path":"b.ips","target":{"rom":true,"member":"disc-b/track.bin"}}"#,
+            Ok(vec![(1, 0xBB)]),
+        ),
+    ];
+    let mut failures = Vec::new();
+    for (case, input_name, archive, rom, patches, expected) in cases {
+        let temp = setup_temp_dir();
+        write_offset_ips(&temp, "a.ips", 0, 0xAA);
+        write_offset_ips(&temp, "b.ips", 1, 0xBB);
+        let input = if archive {
+            let track = write_weave_rom(&temp, "track.bin");
+            let input = temp.child(input_name);
+            write_tar_gz_fixture(
+                &[(&track, "disc-a/track.bin"), (&track, "disc-b/track.bin")],
+                input.path(),
+            );
+            input.path().to_path_buf()
+        } else {
+            write_weave_rom(&temp, input_name)
+        };
+        let weave = temp.child("weave.json");
+        fs::write(
+            weave.path(),
+            format!(r#"{{"version":2,"patchBasis":"auto","rom":{rom},"patches":[{patches}]}}"#),
+        )
+        .expect("weave");
+        let output = temp.child("out.bin");
+        let run = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(["patch", "apply", "--no-compress", "--jsonl", "--input"])
+            .arg(&input)
+            .arg("--weave")
+            .arg(weave.path())
+            .arg("--output")
+            .arg(output.path())
+            .output()
+            .expect("run rom-weaver");
+        let stdout = String::from_utf8_lossy(&run.stdout);
+        let outcome = match expected {
+            Ok(edits) if run.status.success() => {
+                let bytes = fs::read(output.path()).expect("output");
+                if bytes == patched_rom_bytes(&edits) {
+                    Ok(())
+                } else {
+                    Err(format!("wrong output bytes; expected edits {edits:?}"))
+                }
+            }
+            Ok(_) => Err(format!("expected success, got: {stdout}")),
+            Err(message) if !run.status.success() && stdout.contains(&message) => Ok(()),
+            Err(message) => Err(format!(
+                "expected failure containing {message:?}, got: {stdout}"
+            )),
+        };
+        if let Err(problem) = outcome {
+            failures.push(format!("{case}: {problem}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
 fn weave_generated_output_members_support_fixed_and_cumulative_inputs() {
     let temp = setup_temp_dir();
     write_weave_rom(&temp, "game.bin");
