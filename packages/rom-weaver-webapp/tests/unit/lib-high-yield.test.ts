@@ -276,6 +276,37 @@ describe("create patch format policy", () => {
     );
   });
 
+  it("tiers formats by the largest declared patch size while the shrink check uses the final size", () => {
+    const MiB = 1024 * 1024;
+    // 200 MiB ROM grown to 300 MiB by an earlier patch, then a PPF that declares no size.
+    const grown = {
+      automaticFormatSelection: false,
+      modifiedSize: 0,
+      originalSize: 200 * MiB,
+      requireKnownModifiedSize: true,
+    };
+    expect(getPreferredCreatePatchFormat({ ...grown, requestedFormat: "bps" })).toBe("bps");
+    expect(getPreferredCreatePatchFormat({ ...grown, requestedFormat: "bps", tierSize: 300 * MiB })).toBe("xdelta");
+    expect(getCreatePatchFormatsForSizes(200 * MiB, 0, true, 300 * MiB)).toContain("ppf");
+    expect(getCreatePatchFormatsForSizes(200 * MiB, 0, true, 300 * MiB)).not.toContain("bps");
+    // 8 MiB ROM grown to 64 MiB by BPS, then an IPS that declares no size.
+    expect(getCreatePatchFormatsForSizes(8 * MiB, 0, true)).toContain("ips");
+    expect(getCreatePatchFormatsForSizes(8 * MiB, 0, true, 64 * MiB)).not.toContain("ips");
+    expect(
+      getPreferredCreatePatchFormat({
+        modifiedSize: 0,
+        originalSize: 8 * MiB,
+        requestedFormat: "ips",
+        requireKnownModifiedSize: true,
+        tierSize: 64 * MiB,
+      }),
+    ).not.toBe("ips");
+    // The tier size never relaxes the shrink check: an unknown or smaller final size still hides IPS32.
+    expect(getCreatePatchFormatsForSizes(2048, 0, true, 4096)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(2048, 1024, true, 4096)).not.toContain("ips32");
+    expect(getCreatePatchFormatsForSizes(1024, 2048, true, 4096)).toContain("ips32");
+  });
+
   it("honors candidate defaults, automatic selection, and safe fallbacks", () => {
     expect(
       getPreferredCreatePatchFormat({ candidateFormats: ["vcdiff", "vcdiff", " BPS "], candidateDefaultFormat: "bps" }),

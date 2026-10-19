@@ -44,6 +44,15 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.ready === right.ready &&
   left.romSize === right.romSize;
 
+const getEnabledPatchTargetSizes = (
+  sizes: readonly number[],
+  slotIds: readonly string[],
+  disabled: ReadonlySet<string>,
+) => {
+  const aligned = sizes.length === slotIds.length;
+  return sizes.filter((_size, index) => !(aligned && disabled.has(slotIds[index] || "")));
+};
+
 /**
  * The output size the last enabled patch declares, or 0 when that final step
  * declares none. Outside a run the workflow stages disabled patches too, lined
@@ -54,14 +63,14 @@ const getEnabledPatchTargetSize = (
   sizes: readonly number[],
   slotIds: readonly string[],
   disabled: ReadonlySet<string>,
-) => {
-  const aligned = sizes.length === slotIds.length;
-  for (let index = sizes.length - 1; index >= 0; index -= 1) {
-    if (aligned && disabled.has(slotIds[index] || "")) continue;
-    return sizes[index] || 0;
-  }
-  return 0;
-};
+) => getEnabledPatchTargetSizes(sizes, slotIds, disabled).at(-1) || 0;
+
+/** The largest output size any enabled patch declares, which bounds the sizes the chain passes through. */
+const getLargestEnabledPatchTargetSize = (
+  sizes: readonly number[],
+  slotIds: readonly string[],
+  disabled: ReadonlySet<string>,
+) => Math.max(0, ...getEnabledPatchTargetSizes(sizes, slotIds, disabled));
 
 const createApplyWorkflowSnapshotStore = () => {
   let workflow: ApplyWorkflowSnapshotSource | null = null;
@@ -130,4 +139,4 @@ const createApplyWorkflowSnapshotStore = () => {
   };
 };
 
-export { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize };
+export { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize, getLargestEnabledPatchTargetSize };

@@ -8,6 +8,8 @@ type CreatePatchFormatPreferenceInput = {
   originalSize?: number | null;
   requestedFormat?: string | null;
   requireKnownModifiedSize?: boolean;
+  // Largest size the output passes through, which can exceed the final `modifiedSize`; only sizes the format tiers.
+  tierSize?: number | null;
 };
 type CreatePatchFormatList = readonly [string, ...string[]];
 
@@ -73,8 +75,9 @@ const withExtendedCreatePatchFormats = (
   originalSize?: number | null,
   modifiedSize?: number | null,
   requireKnownModifiedSize = false,
+  tierSize?: number | null,
 ): string[] => {
-  const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize));
+  const extended = getExtendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize, tierSize));
   const knownSizes = [originalSize, modifiedSize].filter(
     (size): size is number => typeof size === "number" && size > 0,
   );
@@ -94,12 +97,14 @@ const getCreatePatchFormatsForSizes = (
   originalSize?: number | null,
   modifiedSize?: number | null,
   requireKnownModifiedSize = false,
+  tierSize?: number | null,
 ): string[] =>
   withExtendedCreatePatchFormats(
-    getRecommendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize)),
+    getRecommendedCreatePatchFormatsForSizes(getMaxCreateRomSize(originalSize, modifiedSize, tierSize)),
     originalSize,
     modifiedSize,
     requireKnownModifiedSize,
+    tierSize,
   );
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
@@ -122,11 +127,18 @@ const getPreferredCreatePatchFormat = ({
   originalSize,
   requestedFormat,
   requireKnownModifiedSize = false,
+  tierSize,
 }: CreatePatchFormatPreferenceInput) => {
   const candidateFormatList = normalizeCandidateCreatePatchFormats(candidateFormats);
   const formats = candidateFormatList.length
-    ? withExtendedCreatePatchFormats(candidateFormatList, originalSize, modifiedSize, requireKnownModifiedSize)
-    : getCreatePatchFormatsForSizes(originalSize, modifiedSize, requireKnownModifiedSize);
+    ? withExtendedCreatePatchFormats(
+        candidateFormatList,
+        originalSize,
+        modifiedSize,
+        requireKnownModifiedSize,
+        tierSize,
+      )
+    : getCreatePatchFormatsForSizes(originalSize, modifiedSize, requireKnownModifiedSize, tierSize);
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
   // The default comes from Rust: the resolved candidate default already accounts

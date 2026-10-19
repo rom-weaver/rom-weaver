@@ -34,6 +34,7 @@ type CreatePatchFormatOptions = {
   modifiedSize?: number | null;
   originalSize?: number | null;
   requireKnownModifiedSize?: boolean;
+  tierSize?: number | null;
 };
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
@@ -214,8 +215,14 @@ const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}):
         options.originalSize,
         options.modifiedSize,
         options.requireKnownModifiedSize,
+        options.tierSize,
       )
-    : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize, options.requireKnownModifiedSize);
+    : getCreatePatchFormatsForSizes(
+        options.originalSize,
+        options.modifiedSize,
+        options.requireKnownModifiedSize,
+        options.tierSize,
+      );
   return formats.map((value) => ({ label: `.${value}`, value }));
 };
 

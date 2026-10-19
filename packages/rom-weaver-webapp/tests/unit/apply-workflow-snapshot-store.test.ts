@@ -4,6 +4,7 @@ import type { PatchValidationPlan } from "../../src/wasm/index.ts";
 import {
   createApplyWorkflowSnapshotStore,
   getEnabledPatchTargetSize,
+  getLargestEnabledPatchTargetSize,
 } from "../../src/public/react/apply-workflow-snapshot-store.ts";
 
 type Snapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
@@ -222,5 +223,14 @@ describe("Apply workflow snapshot store", () => {
     // A filtered run stages only the enabled patches, so none of them is skipped.
     expect(getEnabledPatchTargetSize([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"]))).toBe(64_000_000);
     expect(getEnabledPatchTargetSize([], [], new Set())).toBe(0);
+  });
+
+  it("reports the largest enabled output size separately from the final step's size", () => {
+    const slots = ["slot-1", "slot-2"];
+    expect(getLargestEnabledPatchTargetSize([300, 0], slots, new Set())).toBe(300);
+    expect(getEnabledPatchTargetSize([300, 0], slots, new Set())).toBe(0);
+    expect(getLargestEnabledPatchTargetSize([300, 100], slots, new Set(["slot-1"]))).toBe(100);
+    expect(getLargestEnabledPatchTargetSize([300], slots, new Set(["slot-1"]))).toBe(300);
+    expect(getLargestEnabledPatchTargetSize([], [], new Set())).toBe(0);
   });
 });

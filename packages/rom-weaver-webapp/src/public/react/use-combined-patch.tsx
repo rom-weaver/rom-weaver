@@ -30,6 +30,7 @@ const useCombinedPatch = ({
   defaultPatchType,
   onPatchTypeChange,
   romSize,
+  patchLargestTargetSize,
   patchTargetSize,
   settings,
   onComplete,
@@ -44,6 +45,7 @@ const useCombinedPatch = ({
   defaultPatchType?: string;
   onPatchTypeChange?: (value: string) => void;
   romSize?: number;
+  patchLargestTargetSize?: number;
   patchTargetSize?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
@@ -53,12 +55,17 @@ const useCombinedPatch = ({
   const [fileName, setFileName] = useState("");
   const [internalFormat, setInternalFormat] = useState(defaultPatchType || "bps");
   // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
-  const [runSizes, setRunSizes] = useState<{ patchTargetSize?: number; romSize?: number } | null>(null);
-  const formatSizes = runSizes ?? { patchTargetSize, romSize };
+  const [runSizes, setRunSizes] = useState<{
+    patchLargestTargetSize?: number;
+    patchTargetSize?: number;
+    romSize?: number;
+  } | null>(null);
+  const formatSizes = runSizes ?? { patchLargestTargetSize, patchTargetSize, romSize };
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
     modifiedSize: formatSizes.patchTargetSize,
+    tierSize: formatSizes.patchLargestTargetSize,
     originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
     // The combined output size is unknown for formats that do not report one (IPS), so formats that cannot truncate are withheld.
@@ -173,6 +180,7 @@ const useCombinedPatch = ({
     formatLabel: localizer.message("ui.combinedPatch.format"),
     formatOptions: createCreatePatchFormatOptions({
       modifiedSize: formatSizes.patchTargetSize,
+      tierSize: formatSizes.patchLargestTargetSize,
       originalSize: formatSizes.romSize,
       requireKnownModifiedSize: true,
     }),
