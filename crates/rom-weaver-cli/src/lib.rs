@@ -54,8 +54,9 @@ use rom_weaver_checksum::{
     supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
-    CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
-    is_ambiguous_disc_image_extension, unregistered_output_format_message,
+    CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
+    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
+    unregistered_output_format_message,
 };
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
