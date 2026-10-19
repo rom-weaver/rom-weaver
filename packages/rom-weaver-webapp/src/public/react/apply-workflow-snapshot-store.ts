@@ -45,9 +45,10 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.romSize === right.romSize;
 
 /**
- * The largest output size an enabled patch declares. Outside a run the workflow
- * stages disabled patches too, lined up with the slots; a filtered run stages
- * only enabled ones, so a list of another length has nothing to skip.
+ * The output size the last enabled patch declares, or 0 when that final step
+ * declares none. Outside a run the workflow stages disabled patches too, lined
+ * up with the slots; a filtered run stages only enabled ones, so a list of
+ * another length has nothing to skip.
  */
 const getEnabledPatchTargetSize = (
   sizes: readonly number[],
@@ -55,10 +56,11 @@ const getEnabledPatchTargetSize = (
   disabled: ReadonlySet<string>,
 ) => {
   const aligned = sizes.length === slotIds.length;
-  return sizes.reduce(
-    (max, size, index) => (aligned && disabled.has(slotIds[index] || "") ? max : Math.max(max, size)),
-    0,
-  );
+  for (let index = sizes.length - 1; index >= 0; index -= 1) {
+    if (aligned && disabled.has(slotIds[index] || "")) continue;
+    return sizes[index] || 0;
+  }
+  return 0;
 };
 
 const createApplyWorkflowSnapshotStore = () => {

@@ -211,10 +211,14 @@ describe("Apply workflow snapshot store", () => {
     expect(store.getSnapshot()).toBe(sized);
   });
 
-  it("skips disabled patches only while the staged patches line up with the slots", () => {
-    const sizes = [64_000_000, 8_000_000];
-    expect(getEnabledPatchTargetSize(sizes, ["slot-1", "slot-2"], new Set())).toBe(64_000_000);
-    expect(getEnabledPatchTargetSize(sizes, ["slot-1", "slot-2"], new Set(["slot-1"]))).toBe(8_000_000);
+  it("reports the final enabled step's output size, or 0 when that step reports none", () => {
+    const slots = ["slot-1", "slot-2"];
+    // BPS 4096 -> 4096 then an IPS truncating to 3000 ends at 3000, not the 4096 maximum.
+    expect(getEnabledPatchTargetSize([4096, 3000], slots, new Set())).toBe(3000);
+    expect(getEnabledPatchTargetSize([4096, 0], slots, new Set())).toBe(0);
+    expect(getEnabledPatchTargetSize([64_000_000, 8_000_000], slots, new Set(["slot-2"]))).toBe(64_000_000);
+    expect(getEnabledPatchTargetSize([64_000_000, 8_000_000], slots, new Set(["slot-1"]))).toBe(8_000_000);
+    expect(getEnabledPatchTargetSize([64_000_000, 8_000_000], slots, new Set(slots))).toBe(0);
     // A filtered run stages only the enabled patches, so none of them is skipped.
     expect(getEnabledPatchTargetSize([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"]))).toBe(64_000_000);
     expect(getEnabledPatchTargetSize([], [], new Set())).toBe(0);
