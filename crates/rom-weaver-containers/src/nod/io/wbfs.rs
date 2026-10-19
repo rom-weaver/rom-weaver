@@ -432,3 +432,7 @@ impl DiscWriter for DiscWriterWBFS {
         DiscWriterWeight::Medium
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_wbfs.rs"]
+mod tests;

@@ -72,3 +72,6 @@ mod save;
 
 #[path = "cli_smoke/report_output.rs"]
 mod report_output;
+
+#[path = "cli_smoke/wbfs_split.rs"]
+mod wbfs_split;
