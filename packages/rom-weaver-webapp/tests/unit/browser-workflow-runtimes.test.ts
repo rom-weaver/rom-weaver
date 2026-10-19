@@ -230,6 +230,16 @@ describe("browser archive runtime", () => {
     for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it("stages split WBFS parts under the source's own stem so the output keeps its case", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const source = new File(["header"], "Brawl (USA).WBFS");
+    const companions = [new File(["part"], "brawl (usa).wbf1"), new File(["part"], "Brawl (USA).WBF2")];
+    state.extractAll.mockResolvedValueOnce([]);
+    await runtime.extract?.({ source, companionFiles: companions, entries: [], extractAll: true });
+    const names = io.stageSource.mock.calls.map(([request]) => (request.source as File).name);
+    expect(names).toEqual(["Brawl (USA).wbfs", "Brawl (USA).wbf1", "Brawl (USA).wbf2"]);
+  });
+
   it("probes grouped NFS inputs with every companion visible and cleans up after failure", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const files = [new File(["header"], "HIF_000000.NFS"), new File(["key"], "HTK.BIN")] as const;

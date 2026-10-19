@@ -62,10 +62,10 @@ test("WASM extracts a split WBFS set byte for byte and rejects a set with a miss
     const [source, ...parts] = splitParts(wbfsFromIso(iso), 3);
     const probe = await browserRuntime.compression.probe?.({ companionFiles: parts, options: { threads: 1 }, source });
     expect(probe?.platform).toBe("Nintendo GameCube");
-    expect(probe?.entries.map((entry) => entry.filename)).toEqual(["disc.iso"]);
+    expect(probe?.entries.map((entry) => entry.filename)).toEqual(["Disc.iso"]);
     const result = await extractAll(source, parts);
     try {
-      expect(result.outputs.map((output) => output.fileName)).toEqual(["disc.iso"]);
+      expect(result.outputs.map((output) => output.fileName)).toEqual(["Disc.iso"]);
       const blob = await browserRuntime.publicOutput.getBlob(result.outputs[0]);
       expect(new Uint8Array(await blob.arrayBuffer())).toEqual(iso);
     } finally {
