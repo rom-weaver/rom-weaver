@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use super::{disc_number, order_discs, relative_playlist_path, render_m3u, staged_file_name};
+use super::{
+    disc_number, natural_cmp, order_discs, relative_playlist_path, render_m3u, staged_file_name,
+};
 
 fn names(paths: Vec<PathBuf>) -> Vec<String> {
     paths
@@ -74,6 +76,52 @@ fn equal_disc_numbers_fall_back_to_name_order() {
             .collect(),
     );
     assert_eq!(names(sorted), ["A (Disc 1).iso", "B (Disc 1).iso"]);
+}
+
+#[test]
+fn same_named_discs_keep_their_input_order() {
+    let sorted = order_discs(
+        [
+            "b/Game (Disc 1).cue",
+            "a/Game (Disc 1).cue",
+            "c/Game (Disc 1).cue",
+        ]
+        .map(PathBuf::from)
+        .to_vec(),
+    );
+    assert_eq!(
+        sorted,
+        [
+            "b/Game (Disc 1).cue",
+            "a/Game (Disc 1).cue",
+            "c/Game (Disc 1).cue"
+        ]
+        .map(PathBuf::from)
+    );
+}
+
+#[test]
+fn natural_order_ignores_case_and_leading_zeros_and_orders_by_code_point() {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+    for (left, right, expected) in [
+        ("Disc 2", "Disc 10", Less),
+        ("Disc 02", "disc 2", Equal),
+        ("Disc 007", "Disc 8", Less),
+        ("a0b", "a00b", Equal),
+        ("a", "ab", Less),
+        ("Zed", "aa", Greater),
+        ("Pokémon", "Pokemon", Greater),
+        ("日本1", "日本2", Less),
+        ("x12", "x1y", Greater),
+        ("", "a", Less),
+    ] {
+        assert_eq!(natural_cmp(left, right), expected, "{left} vs {right}");
+        assert_eq!(
+            natural_cmp(right, left),
+            expected.reverse(),
+            "{right} vs {left}"
+        );
+    }
 }
 
 #[test]

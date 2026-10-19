@@ -4,7 +4,6 @@
 //! browser (the same code compiled to WASM) produce identical playlists.
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
 use super::*;
@@ -55,36 +54,47 @@ pub(crate) fn disc_number(file_name: &str) -> Option<u32> {
     best.map(|(_, number)| number)
 }
 
+fn without_leading_zeros(digits: &[u8]) -> &[u8] {
+    let zeros = digits.iter().take_while(|digit| **digit == b'0').count();
+    &digits[zeros..]
+}
+
 /// Compare names so `Disc 2` sorts before `Disc 10`.
+///
+/// Works on the UTF-8 bytes: byte order is code point order, and only ASCII
+/// letters fold case, so this matches comparing lowercased characters.
 fn natural_cmp(left: &str, right: &str) -> Ordering {
-    let (left, right) = (left.to_ascii_lowercase(), right.to_ascii_lowercase());
-    let (mut left, mut right) = (left.chars().peekable(), right.chars().peekable());
+    let (left, right) = (left.as_bytes(), right.as_bytes());
+    let digits_end = |bytes: &[u8], from: usize| {
+        from + bytes[from..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_digit())
+            .count()
+    };
+    let (mut at_left, mut at_right) = (0, 0);
     loop {
-        match (left.peek().copied(), right.peek().copied()) {
+        match (left.get(at_left), right.get(at_right)) {
             (None, None) => return Ordering::Equal,
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(a), Some(b)) if a.is_ascii_digit() && b.is_ascii_digit() => {
-                let take = |chars: &mut std::iter::Peekable<std::str::Chars<'_>>| {
-                    let mut digits = String::new();
-                    while let Some(&digit) = chars.peek().filter(|c| c.is_ascii_digit()) {
-                        digits.push(digit);
-                        chars.next();
-                    }
-                    digits.trim_start_matches('0').to_string()
-                };
-                let (a, b) = (take(&mut left), take(&mut right));
-                let order = a.len().cmp(&b.len()).then_with(|| a.cmp(&b));
+                let (end_left, end_right) =
+                    (digits_end(left, at_left), digits_end(right, at_right));
+                let a = without_leading_zeros(&left[at_left..end_left]);
+                let b = without_leading_zeros(&right[at_right..end_right]);
+                let order = a.len().cmp(&b.len()).then_with(|| a.cmp(b));
                 if order != Ordering::Equal {
                     return order;
                 }
+                (at_left, at_right) = (end_left, end_right);
             }
             (Some(a), Some(b)) => {
+                let (a, b) = (a.to_ascii_lowercase(), b.to_ascii_lowercase());
                 if a != b {
                     return a.cmp(&b);
                 }
-                left.next();
-                right.next();
+                at_left += 1;
+                at_right += 1;
             }
         }
     }
@@ -104,12 +114,17 @@ pub(crate) fn staged_file_name(name: &str) -> String {
 
 fn normalize_virtual_file_name(name: &str, fallback: &str) -> String {
     let name = if name.is_empty() { fallback } else { name };
-    let mut out = replace_runs(name, |ch| matches!(ch, '\\' | '/'));
-    out = replace_runs(&out, |ch| ch.is_ascii_control());
-    out = replace_runs(&out, |ch| !(' '..='~').contains(&ch));
-    out = replace_runs(&out, |ch| {
-        matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|')
-    });
+    // Plain function pointers: one shared `replace_runs` body, not one copy per pass.
+    let passes: [fn(char) -> bool; 4] = [
+        |ch| matches!(ch, '\\' | '/'),
+        |ch| ch.is_ascii_control(),
+        |ch| !(' '..='~').contains(&ch),
+        |ch| matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|'),
+    ];
+    let mut out = name.to_string();
+    for pass in passes {
+        out = replace_runs(&out, pass);
+    }
     let trimmed = out
         .trim_start_matches('.')
         .trim_matches(|ch: char| ch == '_' || ch.is_whitespace());
@@ -121,7 +136,7 @@ fn normalize_virtual_file_name(name: &str, fallback: &str) -> String {
 }
 
 /// Replace each maximal run of characters matching `pred` with one `_`.
-fn replace_runs(text: &str, pred: impl Fn(char) -> bool) -> String {
+fn replace_runs(text: &str, pred: fn(char) -> bool) -> String {
     let mut out = String::with_capacity(text.len());
     let mut in_run = false;
     for ch in text.chars() {
@@ -160,16 +175,23 @@ fn file_name_of(path: &Path) -> String {
 
 /// Order disc files by their disc number; unnumbered files follow, and ties
 /// fall back to a natural name order.
-pub(crate) fn order_discs(mut discs: Vec<PathBuf>) -> Vec<PathBuf> {
-    discs.sort_by(|left, right| {
+pub(crate) fn order_discs(discs: Vec<PathBuf>) -> Vec<PathBuf> {
+    let compare = |left: &Path, right: &Path| {
         let (left_name, right_name) = (file_name_of(left), file_name_of(right));
         let left_number = disc_number(&left_name).unwrap_or(u32::MAX);
         let right_number = disc_number(&right_name).unwrap_or(u32::MAX);
         left_number
             .cmp(&right_number)
             .then_with(|| natural_cmp(&left_name, &right_name))
-    });
-    discs
+    };
+    // A stable insertion by binary search: the same order `sort_by` gives, without
+    // pulling a whole generic sort for `PathBuf` into the WASM module.
+    let mut sorted: Vec<PathBuf> = Vec::with_capacity(discs.len());
+    for disc in discs {
+        let at = sorted.partition_point(|other| compare(other, &disc) != Ordering::Greater);
+        sorted.insert(at, disc);
+    }
+    sorted
 }
 
 /// Playlist text: one path per line, `/` separators, LF line ends, with a
@@ -280,13 +302,16 @@ fn image_companions(input: &Path) -> Vec<(PathBuf, String)> {
         return Vec::new();
     };
     let dir = input.parent().unwrap_or_else(|| Path::new(""));
-    wanted
-        .iter()
-        .flat_map(|extension| [extension.to_string(), extension.to_ascii_uppercase()])
-        .map(|extension| format!("{stem}.{extension}"))
-        .filter(|name| dir.join(name).is_file())
-        .map(|name| (dir.join(&name), name))
-        .collect()
+    let mut found = Vec::new();
+    for extension in wanted {
+        for cased in [extension.to_string(), extension.to_ascii_uppercase()] {
+            let name = format!("{stem}.{cased}");
+            if dir.join(&name).is_file() {
+                found.push((dir.join(&name), name));
+            }
+        }
+    }
+    found
 }
 
 /// Drop inputs that a disc sheet among the inputs already names (a `.cue`/`.gdi`
@@ -294,11 +319,11 @@ fn image_companions(input: &Path) -> Vec<(PathBuf, String)> {
 /// those named files as companions. Only a ZIP reads or copies companions, so
 /// only a ZIP refuses names that point outside the sheet's folder.
 fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPlan> {
-    let mut named: HashSet<String> = HashSet::new();
+    let mut named: Vec<String> = Vec::new();
     let mut companions = Vec::new();
     for input in inputs {
         for (path, name) in image_companions(input) {
-            named.insert(name.to_ascii_lowercase());
+            named.push(name.to_ascii_lowercase());
             companions.push((path, name));
         }
         if detect_disc_sheet(input).is_none() {
@@ -317,8 +342,8 @@ fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPl
                 )));
             }
             let track_name = file_name_of(Path::new(&archive_name));
-            named.insert(track_name.to_ascii_lowercase());
-            named.insert(staged_file_name(&track_name).to_ascii_lowercase());
+            named.push(track_name.to_ascii_lowercase());
+            named.push(staged_file_name(&track_name).to_ascii_lowercase());
             if zip {
                 companions.push((sheet_track_path(sheet_dir, &archive_name), archive_name));
             }
@@ -354,10 +379,9 @@ fn unique_zip_entries(
     let mut inputs: Vec<PathBuf> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     for (source, name) in items {
-        let key = name.to_ascii_lowercase();
         if let Some(index) = names
             .iter()
-            .position(|taken| taken.to_ascii_lowercase() == key)
+            .position(|taken| taken.eq_ignore_ascii_case(&name))
         {
             if super::patch_apply::paths_refer_to_same_file(&inputs[index], &source) {
                 continue;
@@ -435,21 +459,21 @@ impl CliApp {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-        let entries = match output_kind {
-            PlaylistOutput::M3u if !args.flat => plan
-                .discs
+        let relative = output_kind == PlaylistOutput::M3u && !args.flat;
+        let mut entries = Vec::with_capacity(plan.discs.len());
+        for disc in &plan.discs {
+            entries.push(if relative {
+                relative_playlist_path(&output_dir, disc)?
+            } else {
+                file_name_of(disc)
+            });
+        }
+        if let Some(duplicate) = entries.iter().enumerate().find_map(|(index, entry)| {
+            entries[..index]
                 .iter()
-                .map(|disc| relative_playlist_path(&output_dir, disc))
-                .collect::<Result<Vec<_>>>()?,
-            PlaylistOutput::M3u | PlaylistOutput::Zip => {
-                plan.discs.iter().map(|disc| file_name_of(disc)).collect()
-            }
-        };
-        let mut seen = HashSet::new();
-        if let Some(duplicate) = entries
-            .iter()
-            .find(|entry| !seen.insert(entry.to_ascii_lowercase()))
-        {
+                .any(|earlier| earlier.eq_ignore_ascii_case(entry))
+                .then_some(entry)
+        }) {
             return Err(RomWeaverError::Validation(format!(
                 "two discs share the name `{duplicate}`; rename one so each playlist line is unique"
             )));
