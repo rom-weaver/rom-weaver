@@ -9,11 +9,10 @@ on:
         default: none
         type: choice
         options: [none, nightly, beta, prod]
-  # The `preview` label calls this workflow from preview.yml instead of a
-  # `labeled` trigger here. Branch protection reads the newest CI run on a
-  # commit, so a label run here, even one whose jobs all skip, would hide the
-  # real run's `CI gate` and block the merge.
-  workflow_call:
+  # No `labeled`: branch protection reads the newest CI run on a commit, so a
+  # run started by a label, even one whose jobs all skip, would hide the real
+  # run's `CI gate` and block the merge. Dependabot labels every pull request
+  # it opens.
   pull_request:
     types: [opened, synchronize, reopened]
   push:
@@ -37,11 +36,9 @@ permissions:
 # Main validation MUST share one active slot to limit runner contention. New
 # pushes replace the pending run while the active run finishes.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
-# shared group would be replaced by the next push (or replace it). A preview
-# label run (preview.yml) gets a group of its own so it cannot cancel the pull
-# request's real run, whose gate is the required check.
+# shared group would be replaced by the next push (or replace it).
 concurrency:
-  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.event.action == 'labeled' && format('preview-{0}', github.ref) || github.ref }}
+  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -150,7 +147,7 @@ jobs:
           (github.ref_type == 'tag' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
           steps.classify.outputs.webapp == 'true' ||
-          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview'))) &&
+          github.event_name == 'pull_request') &&
           (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
           (github.event_name != 'pull_request' ||
           (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -226,7 +223,6 @@ jobs:
           (steps.plan.outputs.targets != '' &&
           steps.plan.outputs.targets != '[]') ||
           (github.event_name == 'pull_request' &&
-          contains(github.event.pull_request.labels.*.name, 'preview') &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login != 'dependabot[bot]')
         run: echo "selected=true" >> "$GITHUB_OUTPUT"
@@ -831,12 +827,11 @@ jobs:
       size: ${{ steps.size.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
-    # first-party pull requests with the preview label also select their bundle.
+    # every first-party pull request also builds it for its preview.
     # The `gate` job below is the required check.
     if: >-
       needs.changes.outputs.webapp == 'true' ||
       (github.event_name == 'pull_request' &&
-      contains(github.event.pull_request.labels.*.name, 'preview') &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -1718,7 +1713,7 @@ jobs:
           REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
           DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
           DOCKER_RESULT: ${{ needs.docker.result }}
-          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
           WASM_RESULT: ${{ needs.wasm.result }}
           DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
@@ -1794,7 +1789,6 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
-      pull-requests: read
       statuses: write
       deployments: write
     if: needs.changes.outputs.preview_branch != ''
@@ -1819,19 +1813,8 @@ jobs:
           # the key ahead of the `wasm` job that does.
           save: "false"
 
-      # Skips a head the pull request has moved past; a preview run from
-      # preview.yml is not cancelled by a later push.
-      - name: Check publication freshness
-        id: freshness
-        if: steps.wasm-cache.outputs.cache-hit == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/ci/publication-freshness.mjs
-
       - name: Mark preview deployment pending
-        if: steps.freshness.outputs.fresh == 'true'
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1844,7 +1827,7 @@ jobs:
 
       - name: Build and deploy preview
         id: pages
-        if: steps.freshness.outputs.fresh == 'true'
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
         uses: ./.github/actions/deploy-webapp-pages
         with:
           channel: preview
@@ -1857,7 +1840,7 @@ jobs:
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Publish preview deployment status
-        if: always() && steps.freshness.outputs.fresh == 'true'
+        if: always() && steps.wasm-cache.outputs.cache-hit == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1872,7 +1855,7 @@ jobs:
         run: node scripts/ci/deployment-status.mjs
 
       - name: Delete superseded deployments for this pull request
-        if: ${{ !cancelled() && steps.freshness.outputs.fresh == 'true' }}
+        if: ${{ !cancelled() && steps.wasm-cache.outputs.cache-hit == 'true' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1904,7 +1887,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      pull-requests: read
       statuses: write
       deployments: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
@@ -1951,8 +1933,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PUBLICATION_JOB_NAME: Webapp deploy (${{ matrix.target.channel }})
           PUBLICATION_STEP_NAME: Build and deploy
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/ci/publication-freshness.mjs
 
       - name: Mark deployment pending

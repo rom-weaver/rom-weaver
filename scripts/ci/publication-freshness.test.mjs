@@ -50,33 +50,13 @@ test("only a successful newer write to the same destination supersedes main publ
   }
 });
 
-test("explicit dispatch and release tags preserve their publication policy", async () => {
+test("explicit dispatch, release tags and previews preserve their publication policy", async () => {
   for (const input of [
     { GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main" },
     { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0" },
+    { GITHUB_EVENT_NAME: "pull_request", GITHUB_REF: "refs/pull/1/merge" },
   ])
     assert.equal(await isPublicationFresh(input, () => assert.fail("unexpected API call")), true);
-});
-
-test("a preview publishes only while its head is the pull request's head", async () => {
-  const preview = {
-    GITHUB_EVENT_NAME: "pull_request",
-    GITHUB_REF: "refs/pull/7/merge",
-    GITHUB_REPOSITORY: "owner/repo",
-    PULL_REQUEST_NUMBER: "7",
-    PULL_REQUEST_HEAD_SHA: "aaa",
-  };
-  const pull = (sha) => async (path) => {
-    assert.equal(path, "/repos/owner/repo/pulls/7");
-    return { head: { sha } };
-  };
-  assert.equal(await isPublicationFresh(preview, pull("aaa")), true);
-  assert.equal(await isPublicationFresh(preview, pull("bbb")), false);
-  await assert.rejects(isPublicationFresh(preview, async () => ({})), /missing pull request head/);
-  await assert.rejects(
-    isPublicationFresh({ ...preview, PULL_REQUEST_HEAD_SHA: "" }, pull("aaa")),
-    /missing pull request number or head/,
-  );
 });
 
 test("API failures and malformed responses fail closed", async () => {

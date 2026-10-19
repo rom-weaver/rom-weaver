@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
@@ -84,36 +83,17 @@ test("every gate step reports on its own, but never on a cancelled run", () => {
     assert.match(expression(step.if ?? ""), /^!cancelled\(\)/u, step.name);
 });
 
-test("labels never start a CI run that could hide the required gate", () => {
-  // Branch protection reads the newest ci.yml run on a commit, so a label run
-  // here would replace the real run's `CI gate`, skipped or not.
+test("labels never start a run that could hide the required gate", () => {
+  // Branch protection reads the newest CI run on a commit, so a label run
+  // would replace the real run's `CI gate`, skipped or not.
   for (const type of ["labeled", "unlabeled"])
     assert.ok(!ci.on.pull_request.types.includes(type), type);
   assert.equal(gate.name, "CI gate");
   assert.equal(ci.jobs.changes.if, undefined);
-
-  const preview = load(
-    readFileSync(new URL("../../.github/workflows/preview.yml", import.meta.url), "utf8"),
+  assert.doesNotMatch(
+    readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    /labels\.\*\.name/u,
   );
-  assert.deepEqual(preview.on, { pull_request: { types: ["labeled"] } });
-  assert.ok("workflow_call" in ci.on);
-  assert.deepEqual(Object.keys(preview.jobs), ["ci"]);
-  const call = preview.jobs.ci;
-  assert.equal(call.uses, "./.github/workflows/ci.yml");
-  for (const [label, runs] of [
-    ["preview", true],
-    ["dependencies", false],
-  ]) {
-    const context = { github: { event: { label: { name: label } } } };
-    assert.equal(runInNewContext(expression(call.if), context), runs, label);
-  }
-  // A called job can only narrow its caller's grants.
-  for (const [name, job] of Object.entries(ci.jobs))
-    for (const [scope, level] of Object.entries(job.permissions ?? {}))
-      assert.ok(
-        call.permissions[scope] === level || call.permissions[scope] === "write",
-        `${name} ${scope}: ${level}`,
-      );
 });
 
 test("pull requests skip Lighthouse only through the shared classifier flag", () => {
