@@ -1224,8 +1224,8 @@ const useTraceWindow = ({
   // Where the reader was when rows were last measured: pinned to the newest
   // line, or the top visible row and how far into it the viewport starts.
   const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
-  // The content height of the last commit and the lines it held. A reader at
-  // its bottom stays pinned when only measured heights changed since.
+  // The content height of the last commit and the lines it held. A reader
+  // exactly at its bottom stays pinned when only measured heights changed since.
   const committedRef = useRef<{ entries: readonly LogStoreEntry[]; height: number } | null>(null);
   const offsets = useMemo(() => {
     if (!wrapped) return null;
@@ -1280,16 +1280,23 @@ const useTraceWindow = ({
     // line to this list, which mounts and measures again.
     const style = getComputedStyle(trace);
     const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    // A list that fits the viewport has no bottom to pin to: a reader at its top
+    // stays there as the rows grow. Against the previous height only an exact
+    // bottom counts, since the restore can move a reader past it.
     const committed = committedRef.current;
-    const previous = committed?.entries === entries ? committed.height : Number.POSITIVE_INFINITY;
-    const range = Math.min(previous, offsets[entries.length] ?? 0) + padding;
     const top = trace.scrollTop;
+    const bottom = top + trace.clientHeight;
+    const atBottom = (height: number) => height + padding > trace.clientHeight + 2 && bottom >= height + padding - 2;
+    const wasAtBottom =
+      committed?.entries === entries &&
+      committed.height + padding > trace.clientHeight + 2 &&
+      Math.abs(bottom - (committed.height + padding)) <= 2;
     const index = rowAtOffset(offsets, top);
     anchorRef.current = {
       delta: top - (offsets[index] ?? 0),
       id: entries[index]?.id ?? -1,
       index,
-      pinned: top + trace.clientHeight >= range - 2,
+      pinned: atBottom(offsets[entries.length] ?? 0) || wasAtBottom,
       top,
     };
     setHeights((previous) => new Map([...previous, ...updates]));
