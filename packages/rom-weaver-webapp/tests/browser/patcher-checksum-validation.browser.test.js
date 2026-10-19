@@ -5,6 +5,7 @@ import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
 import {
   buildDcpFile,
+  buildZippedDcpFile,
   clickCandidateSelectionOption,
   clickApplyButton,
   getInputStackRows,
@@ -512,6 +513,14 @@ test("a real ZIP DCP with no ROM loaded names DCP and the CLI and blocks apply",
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
   addFiles([await buildDcpFile()]);
   await expectDcpCardAndBlockedApply();
+});
+
+test("a DCP inside a ZIP archive names DCP and the CLI and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  addFiles([await loadFixtureFile(RAW_ROM), await buildZippedDcpFile()]);
+  await expectDcpCardAndBlockedApply("translation.zip");
+  expect(document.body.textContent || "").not.toContain("COMPRESSION_FAILED");
 });
 
 test("a real ZIP DCP beside a single ROM names DCP and blocks apply without a selection dialog", async () => {
