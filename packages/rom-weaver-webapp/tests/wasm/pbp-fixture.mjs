@@ -1,7 +1,7 @@
-// Synthetic PS1 PBP builder for wasm tests. Mirrors `build_test_pbp_fixture` in
-// crates/rom-weaver-cli/tests/cli_smoke/shared.rs: every disc block is stored raw (an index length
-// equal to the block size means "not deflated"), so no compressor is needed and no real game image
-// is ever committed.
+// Synthetic PS1 PBP builder for wasm tests, following the layout of `build_test_pbp_fixture` in
+// crates/rom-weaver-cli/tests/cli_smoke/shared.rs. Unlike that builder, which deflates some blocks,
+// every disc block here is stored raw (an index length equal to the block size means "not
+// deflated"), so no compressor is needed and no real game image is ever committed.
 
 const PBP_SECTOR_BYTES = 0x930;
 const BLOCK_BYTES = PBP_SECTOR_BYTES * 16;
