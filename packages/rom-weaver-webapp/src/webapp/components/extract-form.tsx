@@ -22,6 +22,10 @@ const outputPath = (output: PublicOutput): string => output.relativePath || outp
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const isNfsPart = (file: File): boolean => /^hif_\d{6}\.nfs$/i.test(file.name);
 const isNfsKey = (file: File): boolean => /^htk\.bin$/i.test(file.name);
+// FAT32 split WBFS sets continue `game.wbfs` in `game.wbf1`, `game.wbf2`, ...; the reader finds them beside the first part.
+const wbfsStem = (file: File): string | undefined => /^(.+)\.wbf(?:s|\d+)$/i.exec(file.name)?.[1]?.toLowerCase();
+const isWbfsContinuation = (file: File, stem: string): boolean =>
+  /\.wbf\d+$/i.test(file.name) && wbfsStem(file) === stem;
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
@@ -189,11 +193,14 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         first && (isNfsPart(first) || isNfsKey(first))
           ? files.find((file) => /^hif_000000\.nfs$/i.test(file.name))
           : undefined;
-      const file = nfs || first;
+      const stem = first && wbfsStem(first);
+      const wbfs = stem ? files.find((file) => file.name.toLowerCase() === `${stem}.wbfs`) : undefined;
+      const file = nfs || wbfs || first;
       if (!file) return;
-      const companions = isNfsPart(file)
-        ? files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)))
-        : [];
+      let companions: File[] = [];
+      if (isNfsPart(file))
+        companions = files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)));
+      else if (wbfs && stem) companions = files.filter((entry) => isWbfsContinuation(entry, stem));
       if (downloadBusy) {
         setError("Wait for the download to finish, then add the file again.");
         return;
@@ -336,7 +343,12 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         guide={WORKFLOW_GUIDES.extract}
         heroLabel="Drop an archive or disc image to extract it"
         heroLabelCoarse="Tap to add an archive or disc image"
-        info={<p>Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together.</p>}
+        info={
+          <p>
+            Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together. For a split WBFS, select
+            the .wbfs and every .wbf1, .wbf2, ... part together.
+          </p>
+        }
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",
