@@ -86,6 +86,22 @@ fn libarchive_open_create_archive(
             ),
         )?;
 
+        // Entry names are UTF-8 (see `WriteArchive::start_entry`). On Windows the
+        // zip writer would otherwise transcode them to the ANSI code page; this
+        // stores them as UTF-8 and sets the zip UTF-8 name flag.
+        #[cfg(windows)]
+        if let LibarchiveCreateFormat::Zip = config.format {
+            archive.set_format_option(
+                Some("zip"),
+                "hdrcharset",
+                "UTF-8",
+                &format!(
+                    "{} create failed while setting format option `hdrcharset`",
+                    config.format_name
+                ),
+            )?;
+        }
+
         if let LibarchiveCreateFormat::SevenZ = config.format
             && total_uncompressed_bytes > 0
         {
