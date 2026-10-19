@@ -1224,9 +1224,6 @@ const useTraceWindow = ({
   // Where the reader was when rows were last measured: pinned to the newest
   // line, or the top visible row and how far into it the viewport starts.
   const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
-  // The content height as last committed, so lines that arrive in the same
-  // render as a measurement do not unpin a reader who was at the bottom.
-  const committedHeightRef = useRef(Number.POSITIVE_INFINITY);
   const offsets = useMemo(() => {
     if (!wrapped) return null;
     const result = new Float64Array(entries.length + 1);
@@ -1273,21 +1270,23 @@ const useTraceWindow = ({
     if (updates.length === 0) return;
     // Read against the offsets the rows were placed by, not scrollHeight: rows
     // taller than their estimate overflow the content box until they count.
+    // Lines that arrive later extend those offsets, so like the desktop list a
+    // reader at the bottom does not follow them. No trace log here: it would
+    // append a line to this list, which mounts and measures again.
+    const style = getComputedStyle(trace);
+    const range =
+      (offsets[entries.length] ?? 0) + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
     const top = trace.scrollTop;
     const index = rowAtOffset(offsets, top);
     anchorRef.current = {
       delta: top - (offsets[index] ?? 0),
       id: entries[index]?.id ?? -1,
       index,
-      pinned: top + trace.clientHeight >= Math.min(committedHeightRef.current, offsets[entries.length] ?? 0) - 2,
+      pinned: top + trace.clientHeight >= range - 2,
       top,
     };
-    logger.trace("wrapped log rows measured", { count: updates.length, pinned: anchorRef.current.pinned });
     setHeights((previous) => new Map([...previous, ...updates]));
   }, [entries, heights, offsets, traceRef, virtualEnd, virtualStart, windowRef]);
-  useLayoutEffect(() => {
-    committedHeightRef.current = offsets?.[entries.length] ?? Number.POSITIVE_INFINITY;
-  }, [entries, offsets]);
   return {
     contentHeight: offsets ? (offsets[entries.length] ?? 0) : entries.length * TRACE_ROW_HEIGHT,
     virtualEnd,
