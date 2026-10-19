@@ -211,6 +211,42 @@ describe("Playlist form", () => {
     view.unmount();
   });
 
+  it("keeps every handed-over file listed and removable when ordering fails", async () => {
+    mocks.copy.mockImplementation(async (source: { fileName: string }) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName: source.fileName,
+      path: "/copy",
+      size: 4,
+      vfs: {},
+    }));
+    mocks.wrap.mockImplementation(async (_vfs: unknown, _path: string, fileName: string) => ({
+      dispose: vi.fn(async () => undefined),
+      fileName,
+      saveAs: vi.fn(),
+      size: 4,
+    }));
+    mocks.build.mockImplementation(async ({ files }) => {
+      if (files.length > 1) throw new Error("two discs share the name `Game.cue`");
+      return { discIndexes: [0], entries: ["Game.cue"], output: output("order.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    setPlaylistHandoff(
+      ["Disc 1/Game.cue", "Disc 2/Game.cue"].map((relativePath) => ({
+        name: "Game.cue",
+        size: 4,
+        source: { ...output("Game.cue"), path: `/out/${relativePath}`, relativePath } as never,
+      })),
+    );
+    await waitFor(() => expect(view.container.textContent).toContain("two discs share the name"));
+    expect(cardNames(view.container)).toEqual(["Game.cue", "Game.cue"]);
+    const removers = view.container.querySelectorAll("button[aria-label='Remove Game.cue']");
+    expect(removers).toHaveLength(2);
+    fireEvent.click(removers[0] as Element);
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Game.cue"]));
+    await waitFor(() => expect(view.container.textContent).not.toContain("two discs share the name"));
+    view.unmount();
+  });
+
   it("copies one handoff into one folder and shows a status while it copies", async () => {
     const folders: string[] = [];
     let release: () => void = () => undefined;

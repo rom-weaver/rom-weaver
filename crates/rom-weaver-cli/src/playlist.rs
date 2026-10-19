@@ -90,13 +90,20 @@ fn natural_cmp(left: &str, right: &str) -> Ordering {
     }
 }
 
-/// The name the browser stages a file under (`normalizeVirtualFileName`): the
-/// same passes in the same order, each turning runs of its characters into one
-/// `_` (so a run of non-ASCII next to a reserved character gives `__`); leading
-/// dots and edge whitespace or `_` go; an empty result is `input.bin`. A sheet
-/// that names `Pokémon.bin` still finds the staged `Pok_mon.bin`.
+/// The name the browser stages a file under: `normalizeVirtualFileName` runs
+/// twice (once building the source ref with the `disc.bin` fallback, again in
+/// `createVirtualInputPath` with `input.bin`), so `ときめき.bin` goes `_.bin` ->
+/// `bin`. Each pass turns runs of its characters into one `_` (a run of non-ASCII
+/// next to a reserved character gives `__`) and drops leading dots and edge
+/// whitespace or `_`; an empty result takes the pass's fallback. A sheet that
+/// names `Pokémon.bin` still finds the staged `Pok_mon.bin`.
 pub(crate) fn staged_file_name(name: &str) -> String {
-    let name = if name.is_empty() { "input.bin" } else { name };
+    let first = normalize_virtual_file_name(name, "disc.bin");
+    normalize_virtual_file_name(&first, "input.bin")
+}
+
+fn normalize_virtual_file_name(name: &str, fallback: &str) -> String {
+    let name = if name.is_empty() { fallback } else { name };
     let mut out = replace_runs(name, |ch| matches!(ch, '\\' | '/'));
     out = replace_runs(&out, |ch| ch.is_ascii_control());
     out = replace_runs(&out, |ch| !(' '..='~').contains(&ch));
@@ -107,7 +114,7 @@ pub(crate) fn staged_file_name(name: &str) -> String {
         .trim_start_matches('.')
         .trim_matches(|ch: char| ch == '_' || ch.is_whitespace());
     if trimmed.is_empty() {
-        "input.bin".to_string()
+        fallback.to_string()
     } else {
         trimmed.to_string()
     }

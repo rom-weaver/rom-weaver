@@ -101,7 +101,9 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     else setWorkbenchActivity(PLAYLIST_ACTIVITY_KEY, { state: "idle" });
   }, [adopting, busy, error, files.length, ordering, output, removing]);
 
-  const extras = files.filter((file) => !ordered.includes(file));
+  // When ordering fails nothing is ordered; every added file still shows, removable, so the user can fix it.
+  const listed = ordered.length === 0 && error ? files : ordered;
+  const extras = files.filter((file) => !listed.includes(file));
   const idle = !(busy || ordering || adopting || removing);
   const canRun = files.length > 0 && ordered.length > 0 && !!outputName.trim() && idle && !error;
 
@@ -376,17 +378,17 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
           <StepSection num="0x02" title="Disc order">
             {ordering ? <p role="status">Ordering discs…</p> : null}
             <ol aria-label="Discs in playlist order" className="cards">
-              {ordered.map((file, index) => {
+              {listed.map((file, index) => {
                 const name = file.name;
                 return (
-                  <li key={name}>
+                  <li key={discKey(file)}>
                     <FileCard
                       handle={
                         <span className="playlist-order-buttons">
                           <button
                             aria-label={`Move ${name} up`}
                             className="rm"
-                            disabled={index === 0 || !idle}
+                            disabled={index === 0 || !idle || ordered.length === 0}
                             onClick={() => moveEntry(index, -1)}
                             type="button"
                           >
@@ -395,7 +397,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
                           <button
                             aria-label={`Move ${name} down`}
                             className="rm"
-                            disabled={index === ordered.length - 1 || !idle}
+                            disabled={index === listed.length - 1 || !idle || ordered.length === 0}
                             onClick={() => moveEntry(index, 1)}
                             type="button"
                           >

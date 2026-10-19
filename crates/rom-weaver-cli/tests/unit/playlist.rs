@@ -111,9 +111,13 @@ fn staged_file_name_matches_the_browser_staging_rules() {
         // character gives two underscores (checked against the TS function).
         ("Café: Disc 1.bin", "Caf__ Disc 1.bin"),
         ("Pokémon™: Disc 1.bin", "Pok_mon__ Disc 1.bin"),
-        ("", "input.bin"),
-        ("日本語", "input.bin"),
-        ("é.bin", ".bin"),
+        // The browser normalizes twice, with a `disc.bin` fallback on the first
+        // pass, so a name that is only non-ASCII becomes `disc.bin` and `é.bin`
+        // loses its dot to the second pass (checked against the TS function).
+        ("", "disc.bin"),
+        ("日本語", "disc.bin"),
+        ("é.bin", "bin"),
+        ("ときめき.bin", "bin"),
         ("a\u{1}é.bin", "a__.bin"),
     ] {
         assert_eq!(staged_file_name(name), expected, "{name}");

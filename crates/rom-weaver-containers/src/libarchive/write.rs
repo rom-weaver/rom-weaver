@@ -289,6 +289,9 @@ impl WriteArchive {
     pub fn start_entry(&mut self, spec: EntrySpec<'_>, context: &str) -> Result<()> {
         let entry = ArchiveEntry::new(self.as_ptr(), context)?;
         let pathname = cstring(spec.pathname, "archive entry name", context)?;
+        // Windows passes the wide form below; the cstring above still rejects interior NULs.
+        #[cfg(windows)]
+        let _ = &pathname;
         let size = i64::try_from(spec.size).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{context}: input length exceeded libarchive entry size range"
