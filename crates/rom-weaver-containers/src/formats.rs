@@ -842,19 +842,24 @@ fn split_wbfs_parts(path: &Path) -> Vec<PathBuf> {
 /// input files as-is. Only RVZ decodes the set through nod, which joins the parts itself; any other
 /// format would silently keep just the parts it was given.
 pub fn ensure_split_wbfs_inputs_complete(inputs: &[PathBuf], format: &str) -> Result<()> {
-    if format == RVZ.name {
+    if RVZ.matches_name(format) {
         return Ok(());
     }
+    // Inputs may spell the same file differently (`./disc.wbf1`, an absolute path), so compare
+    // canonical paths, keeping the literal path when it cannot be resolved.
+    let canonical =
+        |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let given: Vec<PathBuf> = inputs.iter().map(|input| canonical(input)).collect();
     for input in inputs {
         let missing: Vec<String> = split_wbfs_parts(input)
             .into_iter()
-            .filter(|part| !inputs.contains(part))
+            .filter(|part| !given.contains(&canonical(part)))
             .map(|part| part.display().to_string())
             .collect();
         if !missing.is_empty() {
             return Err(RomWeaverError::Validation(format!(
                 "`{}` is the first part of a split WBFS set; {format} output would leave out `{}`. \
-                 Pass every part as an input, or compress to rvz",
+                 Compress to rvz, or pass every part as an input to a zip or 7z archive",
                 input.display(),
                 missing.join("`, `")
             )));
