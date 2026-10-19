@@ -140,7 +140,7 @@
     "axe-core": "4.14.0",
     "browserslist": "4.29.3",
     "cross-env": "10.1.0",
-    "happy-dom": "20.14.6",
+    "happy-dom": "21.0.3",
     "jscpd": "5.4.1",
     "knip": "6.41.0",
     "lighthouse": "13.5.0",
