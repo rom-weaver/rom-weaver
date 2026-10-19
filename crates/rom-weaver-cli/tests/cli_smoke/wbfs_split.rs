@@ -176,6 +176,9 @@ fn split_wbfs_probe_reports_the_container() {
     assert_eq!(json["status"], "succeeded");
     assert_eq!(json["details"]["platform"], "Nintendo GameCube");
     assert_eq!(json["details"]["container"]["entries"][0], "disc.iso");
+    assert_eq!(json["details"]["game_id"], "RWTEST");
+    assert_eq!(json["details"]["title"], "rom-weaver-test");
+    assert!(json["details"].get("partitions").is_none(), "{json}");
     let label = json["label"].as_str().expect("label");
     assert!(label.contains("lossless=true"), "{label}");
 }

@@ -432,6 +432,19 @@ fn open_wii_partition(disc: &DiscReader, validate_hashes: bool) -> Box<dyn Parti
 }
 
 #[test]
+fn probe_details_report_the_wii_header_and_partitions() {
+    let disc = open_wii_disc(&build_wii_image(true, Damage::None));
+    let mut details = serde_json::Map::new();
+    crate::write_disc_header_details(&disc, &mut details);
+    assert_eq!(details["game_id"], "RWIIT0");
+    assert_eq!(details["title"], "rom weaver wii fixture");
+    assert_eq!(
+        details["partitions"],
+        serde_json::json!([{ "index": 0, "kind": "Data", "data_size": DATA_LEN }])
+    );
+}
+
+#[test]
 fn the_disc_reader_parses_the_partition_table_of_a_wii_image() {
     let image = build_wii_image(true, Damage::None);
     let disc = open_wii_disc(&image);

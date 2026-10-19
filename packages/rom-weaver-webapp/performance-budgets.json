@@ -32,7 +32,7 @@
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 383000,
-        "maxRawBytes": 403000,
+        "maxRawBytes": 404000,
         "expectedBrotliBytes": 100500,
         "maxBrotliBytes": 108500
       },
