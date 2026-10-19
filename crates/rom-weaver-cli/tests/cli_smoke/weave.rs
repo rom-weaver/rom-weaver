@@ -4551,6 +4551,33 @@ fn weave_bare_file_bound_to_the_root_member_refuses_a_second_member() {
 }
 
 #[test]
+fn weave_bare_file_read_implicitly_as_the_root_refuses_a_second_member() {
+    // Patch `a` reads the root lane without naming `rom.member`; the bare file
+    // already stands in for it, so patch `b`'s same-named member must not bind too.
+    for a_target in ["", r#","target":{"rom":true}"#] {
+        let temp = setup_temp_dir();
+        let rom = write_weave_rom(&temp, "track.bin");
+        write_offset_ips(&temp, "a.ips", 0, 0xAA);
+        write_offset_ips(&temp, "b.ips", 1, 0xBB);
+        let weave = format!(
+            r#"{{"version":2,"patchBasis":"auto",
+                "rom":{{"member":"disc-a/track.bin"}},
+                "patches":[
+                  {{"id":"a","path":"a.ips"{a_target}}},
+                  {{"id":"b","path":"b.ips","target":{{"rom":true,"member":"disc-b/track.bin"}}}}]}}"#
+        );
+        let (_, terminal) = apply_weave_to_bare_input(&temp, &rom, &weave, 1);
+        assert_eq!(terminal["status"], "failed");
+        assert!(
+            terminal
+                .to_string()
+                .contains("matches several weave ROM members"),
+            "unexpected failure: {terminal}"
+        );
+    }
+}
+
+#[test]
 fn weave_bare_file_matches_a_member_named_only_by_a_patch_input() {
     let temp = setup_temp_dir();
     let rom = write_weave_rom(&temp, "renamed.bin");

@@ -755,10 +755,21 @@ impl CliApp {
         };
         // A bare input already stands in for the weave's root member, so it
         // cannot also stand in for a second member.
+        let reads_root_lane = run.patch_step_metadata.iter().any(|step| {
+            let names_root = |input: &Option<WeavePatchInput>| match input {
+                Some(WeavePatchInput::Rom { member, .. }) => {
+                    member.as_ref().is_none_or(|m| Some(m) == weave_rom_member)
+                }
+                _ => false,
+            };
+            (step.input.is_none() && step.target.is_none())
+                || names_root(&step.input)
+                || names_root(&step.target)
+        });
         let mut bare_bound_member: Option<&str> =
-            weave_rom_member.map(String::as_str).filter(|root| {
+            weave_rom_member.map(String::as_str).filter(|_| {
                 run.disc_context.is_none()
-                    && explicit_rom_members.contains(root)
+                    && reads_root_lane
                     && self.input_is_bare_member_file(&run.args.input)
             });
         for member in explicit_rom_members {
