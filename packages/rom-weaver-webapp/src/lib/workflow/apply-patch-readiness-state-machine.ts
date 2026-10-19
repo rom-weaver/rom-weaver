@@ -12,6 +12,9 @@ type PatchReadinessAdapters<TSource> = {
    * reference resolved to is then not the target: it stays unassigned instead of being picked as
    * the only candidate, and the row reports that the file does not match the member. */
   memberRef?: string;
+  /** Whether the bare file matches `memberRef` by name or checks, ignoring conflicts with other
+   * members. Decides if an unassigned bare file was cleared by a conflict or matched nothing. */
+  bareMatchesMember?: (bare: InputAsset) => boolean;
   /** True for the first patch on `target` (each target is its own engine run) when it reads the
    * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
    * enforces the same); a later patch's input is usually the previous patch's output, which the
@@ -344,11 +347,10 @@ const settleApplyPatchTarget = async <TSource>(
     if (target) return;
     const [bare] = assets;
     const bareMismatch = adapters.memberRef && assets.length === 1 && bare?.member === undefined && !bare?.discGroupId;
-    // A bare file whose name equals the member's was left unassigned only because several members
-    // want it; any other bare file simply matches nothing.
-    const baseName = (value: string) => value.split(/[\\/]/).pop()?.toLowerCase();
-    const nameMatches = !!bare && baseName(bare.fileName) === baseName(adapters.memberRef ?? "");
-    const mismatchMessage = nameMatches
+    // A bare file that matches the member (by name or checks) was left unassigned only because
+    // several members want it; any other bare file simply matches nothing.
+    const matchedButConflicted = !!bare && !!adapters.bareMatchesMember?.(bare);
+    const mismatchMessage = matchedButConflicted
       ? `the bare input file \`${bare?.fileName}\` matches several weave ROM members and can stand in for only one; provide an archive or disc containing them`
       : `weave ROM member \`${adapters.memberRef}\` was not found in \`${bare?.fileName}\`: the input is not an archive and neither its file name nor its checks match the member`;
     const message = bareMismatch ? mismatchMessage : `${stage.state.fileName || "Patch"} target selection is required`;

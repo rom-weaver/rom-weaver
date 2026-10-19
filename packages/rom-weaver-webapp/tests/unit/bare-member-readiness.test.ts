@@ -104,3 +104,19 @@ it("uses the weave rom checks to match a renamed bare file when the weave names 
   expect(stage.state.targetInputId).toBe("input-0-unrelated.bin");
   expect(stage.state.status).toBe("ready");
 });
+
+it("reports a several-members conflict, not a mismatch, when the checks matched but another member cleared it", async () => {
+  const controller = makeController(bareAsset("track.bin"));
+  const stage = makeStage("disc-a/romA.bin");
+  const other = makeStage("disc-b/track.bin");
+  delete (stage.state as { patchTarget?: unknown }).patchTarget;
+  controller.patches = [stage, other];
+  controller.recomputeOutputState = vi.fn();
+  await controller.setPatchOption(0, {
+    target: { rom: true, member: "disc-a/romA.bin" },
+    inputChecks: "crc32=00000000",
+  });
+  await controller.refreshPatchReadiness();
+  expect(stage.state.targetInputId).toBeUndefined();
+  expect(stage.state.warnings.at(-1)?.message).toContain("matches several weave ROM members");
+});

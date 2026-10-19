@@ -1803,6 +1803,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
       memberRef: inputRef && !("patch" in inputRef) ? inputRef.member : undefined,
+      bareMatchesMember: (bare) =>
+        !!inputRef?.member && findMemberAssets(inputRef.member, [bare], this.memberChecksFor(stage)).length > 0,
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
