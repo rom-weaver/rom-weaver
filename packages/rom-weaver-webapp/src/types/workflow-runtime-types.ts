@@ -137,6 +137,8 @@ type PatchInput = {
   patchOptions?: PatchApplyUserOptions[];
   /** The weave's `rom.member`, which a bare file serving the root lane already stands in for. */
   rootMember?: string;
+  /** Checksums of a lone bare input file for algorithms staging does not compute, hashed on demand. */
+  bareFileChecksums?: Record<string, string>;
   /** Shared default sent once to the Rust patch planner. */
   defaultPatchBasis?: "auto" | "base" | "previous";
   preparedInputAssets?: InputAsset[];

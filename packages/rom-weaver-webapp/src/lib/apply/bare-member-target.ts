@@ -11,6 +11,9 @@ const baseName = (value: string) => value.split(/[\\/]/).pop()?.toLowerCase() ??
 type BareMemberRule = {
   rootMember?: string;
   memberChecks: ReadonlyMap<string, readonly string[]>;
+  /** Checksums of the lone bare file hashed on demand for algorithms staging does not compute
+   * (such as a weave's sha256 checks); they add to the asset's own staged checksums. */
+  fileChecksums?: Readonly<Record<string, string>>;
 };
 
 /**
@@ -23,6 +26,7 @@ type BareMemberBinding = { status: "bound" } | { status: "conflict"; members: st
 const createBareMemberRule = (
   options: ReadonlyArray<{ input?: PatchInputRef; target?: PatchInputRef; checks?: string } | null | undefined>,
   rootMember?: string,
+  fileChecksums?: Readonly<Record<string, string>>,
 ): BareMemberRule => {
   const memberChecks = new Map<string, string[]>();
   for (const option of options) {
@@ -33,14 +37,23 @@ const createBareMemberRule = (
       memberChecks.set(ref.member, checks);
     }
   }
-  return { memberChecks, ...(rootMember ? { rootMember } : {}) };
+  return {
+    memberChecks,
+    ...(rootMember ? { rootMember } : {}),
+    ...(fileChecksums && Object.keys(fileChecksums).length ? { fileChecksums } : {}),
+  };
 };
 
 /** The rule for a run's patch list (enabled patches only), matching what readiness checked. */
-const createRunBareMemberRule = (patchOptions: PatchInput["patchOptions"], rootMember: string | undefined) =>
+const createRunBareMemberRule = (
+  patchOptions: PatchInput["patchOptions"],
+  rootMember: string | undefined,
+  fileChecksums?: Readonly<Record<string, string>>,
+) =>
   createBareMemberRule(
     (patchOptions ?? []).map((option) => ({ ...option, checks: option?.inputChecks || option?.memberChecks })),
     rootMember,
+    fileChecksums,
   );
 
 const isBareFile = (asset: InputAsset) => asset.member === undefined && !asset.discGroupId;
@@ -50,7 +63,9 @@ const bareFileMatchesMember = (member: string, asset: InputAsset, rule: BareMemb
   member === rule.rootMember ||
   baseName(asset.fileName) === baseName(member) ||
   (rule.memberChecks.get(member) ?? []).some(
-    (checks) => compareWeaveRomChecks(checks, { checksums: asset.checksums, size: asset.size }).status === "match",
+    (checks) =>
+      compareWeaveRomChecks(checks, { checksums: { ...asset.checksums, ...rule.fileChecksums }, size: asset.size })
+        .status === "match",
   );
 
 /**
@@ -62,6 +77,21 @@ const bindBareFile = (member: string, asset: InputAsset, rule: BareMemberRule): 
   const claimed = [...(rule.rootMember ? [rule.rootMember] : []), ...rule.memberChecks.keys()];
   const members = [...new Set([...claimed, member])].filter((other) => bareFileMatchesMember(other, asset, rule));
   return members.length > 1 ? { members, status: "conflict" } : { status: "bound" };
+};
+
+/** The algorithms the checks declared for members need that `asset`'s staged checksums lack. */
+const missingBareFileAlgorithms = (rule: BareMemberRule, asset: InputAsset) => {
+  const missing = new Set<string>();
+  for (const checks of rule.memberChecks.values())
+    for (const declared of checks) {
+      const verdict = compareWeaveRomChecks(declared, {
+        checksums: { ...asset.checksums, ...rule.fileChecksums },
+        size: asset.size,
+      });
+      if (verdict.status === "mismatch") continue;
+      for (const algorithm of verdict.missing) missing.add(algorithm);
+    }
+  return [...missing];
 };
 
 /** The lone bare file among `patchableAssets`, which may stand in for a weave member. */
@@ -95,5 +125,12 @@ const describeBareMemberFailure = (member: string, asset: InputAsset, rule: Bare
   return `weave ROM member \`${member}\` was not found in \`${asset.fileName}\`: the input is not an archive and neither its file name nor its checks match the member`;
 };
 
-export { createBareMemberRule, createRunBareMemberRule, describeBareMemberFailure, findMemberAssets, loneBareFile };
+export {
+  createBareMemberRule,
+  createRunBareMemberRule,
+  describeBareMemberFailure,
+  findMemberAssets,
+  loneBareFile,
+  missingBareFileAlgorithms,
+};
 export type { BareMemberRule };

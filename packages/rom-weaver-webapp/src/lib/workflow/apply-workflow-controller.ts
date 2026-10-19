@@ -32,7 +32,13 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
-import { createBareMemberRule, describeBareMemberFailure, findMemberAssets } from "../apply/bare-member-target.ts";
+import {
+  createBareMemberRule,
+  describeBareMemberFailure,
+  findMemberAssets,
+  loneBareFile,
+  missingBareFileAlgorithms,
+} from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -103,6 +109,7 @@ import {
 import {
   type ComputedChecksums,
   isTransformVariant,
+  rememberComputed,
   type WeaveRomCheck,
   type WeaveRomExpectation,
   verifyWeaveRom,
@@ -175,6 +182,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private weaveRomLayout: { assetId: string; crc32: string } | undefined;
   /** Cancels the in-flight on-demand weave-ROM hash when the ROM is replaced or cleared. */
   private weaveRomHashAbort: AbortController | undefined;
+  /** Algorithms already hashed (or being hashed) for a lone bare file, so each is requested once. */
+  private readonly attemptedBareChecksums = new WeakMap<object, Set<string>>();
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -904,6 +913,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           else clearApplyPatchTarget(stage);
         } else if (option.input?.member) {
           const member = option.input.member;
+          await this.hashBareFileChecksums();
           const matches = findMemberAssets(member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
@@ -922,6 +932,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
           else clearApplyPatchTarget(stage);
         } else if (target?.member) {
+          await this.hashBareFileChecksums();
           const matches = findMemberAssets(target.member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
@@ -1618,6 +1629,56 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     session.view.state.romType = session.view.state.romType ? { ...session.view.state.romType } : undefined;
   }
 
+  /** Hash `algorithms` for one asset on demand (staging computes only CRC32, MD5 and SHA-1). A
+   * transient failure, or an aborted hash, throws; any other failure maps to no checksums. */
+  private async computeWeaveRomAssetChecksums(asset: InputAsset, algorithms: readonly string[], signal: AbortSignal) {
+    try {
+      const result = await calculateInputChecksumsForFile({
+        algorithms,
+        emitProgress: (event) => this.emitProgress(event),
+        file: asset.file,
+        identify: false,
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        progressId: `${this.id}:weave-rom:${asset.id}`,
+        role: "input",
+        runtime: this.runtime,
+        signal,
+        state: { fileName: asset.fileName, id: asset.id, size: asset.size },
+        workflow: "apply",
+      });
+      return { checksums: result.checksums, variants: result.variants };
+    } catch (error) {
+      if (signal.aborted || isTransientValidationError(error)) throw error;
+      // Not transient: the algorithm cannot be computed here, which fails verification.
+      this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
+      return { checksums: {} };
+    }
+  }
+
+  /** Hash, once per file, the algorithms a lone bare file's declared member checks need beyond
+   * staging's CRC32, MD5 and SHA-1, so the bare-member rule can compare them (a weave created with
+   * `--checksum sha256`). A transient failure leaves them unhashed; the next pass retries. */
+  private async hashBareFileChecksums(): Promise<void> {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    if (!bare) return;
+    const missing = missingBareFileAlgorithms(this.getBareMemberRule(), bare).filter(
+      (algorithm) => !this.attemptedBareChecksums.get(bare.file)?.has(algorithm),
+    );
+    if (!missing.length) return;
+    const attempted = this.attemptedBareChecksums.get(bare.file) ?? new Set<string>();
+    for (const algorithm of missing) attempted.add(algorithm);
+    this.attemptedBareChecksums.set(bare.file, attempted);
+    try {
+      const result = await this.computeWeaveRomAssetChecksums(bare, missing, this.abortController.signal);
+      rememberComputed(this.weaveRomChecksums, bare.file, missing, result);
+    } catch (error) {
+      if (this.abortController.signal.aborted) throw error;
+      for (const algorithm of missing) attempted.delete(algorithm);
+      this.trace("bare-member.checksum-unavailable", { assetId: bare.id, message: toRomWeaverError(error).message });
+    }
+  }
+
   /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
    * algorithm staging did not compute. A transient hashing failure, or a hash cancelled because
    * the ROM changed, yields a retryable `unavailable` result instead of a verdict. */
@@ -1642,30 +1703,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         expectation,
         this.getPatchableInputAssets(),
         this.weaveRomChecksums,
-        async (asset, algorithms) => {
-          try {
-            const result = await calculateInputChecksumsForFile({
-              algorithms,
-              emitProgress: (event) => this.emitProgress(event),
-              file: asset.file,
-              identify: false,
-              logLevel: this.settings.logging?.level,
-              onLog: this.settings.logging?.sink,
-              progressId: `${this.id}:weave-rom:${asset.id}`,
-              role: "input",
-              runtime: this.runtime,
-              signal: hashAbort.signal,
-              state: { fileName: asset.fileName, id: asset.id, size: asset.size },
-              workflow: "apply",
-            });
-            return { checksums: result.checksums, variants: result.variants };
-          } catch (error) {
-            if (hashAbort.signal.aborted || isTransientValidationError(error)) throw error;
-            // Not transient: the algorithm cannot be computed here, which fails verification.
-            this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
-            return { checksums: {} };
-          }
-        },
+        (asset, algorithms) => this.computeWeaveRomAssetChecksums(asset, algorithms, hashAbort.signal),
       );
       this.trace("weave.rom.verify", {
         assetId: verdict.assetId ?? "",
@@ -1793,6 +1831,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     declaredInputChecks?: string,
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
+    await this.hashBareFileChecksums();
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
     const memberRef = inputRef && !("patch" in inputRef) ? inputRef.member : undefined;
     return evaluateApplyPatchReadiness(stage, {
@@ -1833,7 +1872,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           target: patch.state.patchTarget,
         })),
       this.weaveRomMember,
+      this.getBareFileChecksums(),
     );
+  }
+
+  /** The on-demand checksums of the lone bare file (see `hashBareFileChecksums`). */
+  private getBareFileChecksums() {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    return bare ? this.weaveRomChecksums.get(bare.file)?.checksums : undefined;
   }
 
   private getBareMemberRuleKey() {
@@ -1842,6 +1888,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private async refreshPatchReadiness() {
+    await this.hashBareFileChecksums();
     for (const [index, patch] of this.patches.entries()) {
       const targetRef = patch.state.patchTarget || patch.state.patchInput;
       if (targetRef && "patch" in targetRef) {
@@ -2217,6 +2264,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
       ...(this.weaveRomMember ? { rootMember: this.weaveRomMember } : {}),
+      ...(this.getBareFileChecksums() ? { bareFileChecksums: { ...this.getBareFileChecksums() } } : {}),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };

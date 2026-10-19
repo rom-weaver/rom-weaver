@@ -610,6 +610,7 @@ const applyPreparedPatches = async ({
   patches,
   patchTargets,
   rootMember,
+  bareFileChecksums,
   runtime,
 }: {
   assetCount: number;
@@ -624,6 +625,7 @@ const applyPreparedPatches = async ({
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
   rootMember?: string;
+  bareFileChecksums?: Record<string, string>;
   runtime: WorkflowRuntime;
 }) => {
   const targets: InputAsset[] = [];
@@ -643,7 +645,7 @@ const applyPreparedPatches = async ({
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
   }
   reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
-  const bareMemberRule = createRunBareMemberRule(patchOptions, rootMember);
+  const bareMemberRule = createRunBareMemberRule(patchOptions, rootMember, bareFileChecksums);
   if (patches.length) {
     targets.push(
       ...(await traceWorkflowStageBlock(
@@ -808,6 +810,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patches,
     patchTargets,
     rootMember: input.rootMember,
+    ...(input.bareFileChecksums ? { bareFileChecksums: input.bareFileChecksums } : {}),
     runtime,
   });
   await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });

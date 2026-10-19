@@ -144,3 +144,22 @@ it("carries the weave rom checks and root member to the run path", async () => {
   controller.setWeaveRom({ checks: "crc32=00000000", member: "disc-a/track.bin" });
   expect(controller.createPatchInput().rootMember).toBe("disc-a/track.bin");
 });
+
+it("hashes a declared algorithm staging does not compute to match a renamed bare file", async () => {
+  const controller = makeController(bareAsset("unrelated.bin")) as never as ControllerInternals & {
+    computeWeaveRomAssetChecksums: (asset: unknown, algorithms: string[]) => Promise<unknown>;
+    createPatchInput: () => { bareFileChecksums?: Record<string, string> };
+  };
+  const hash = vi.fn(async () => ({ checksums: { sha256: "ab".repeat(32) } }));
+  controller.computeWeaveRomAssetChecksums = hash;
+  const stage = makeStage("romA.bin");
+  controller.patches = [stage];
+  controller.setWeaveRom({ checks: `sha256=${"ab".repeat(32)}` });
+  await controller.refreshPatchReadiness();
+  await controller.refreshPatchReadiness();
+  expect(hash).toHaveBeenCalledTimes(1);
+  expect(hash.mock.calls[0]?.[1]).toEqual(["sha256"]);
+  expect(stage.state.targetInputId).toBe("input-0-unrelated.bin");
+  expect(stage.state.status).toBe("ready");
+  expect(controller.createPatchInput().bareFileChecksums).toEqual({ sha256: "ab".repeat(32) });
+});
