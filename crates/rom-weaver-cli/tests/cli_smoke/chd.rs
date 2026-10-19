@@ -1209,6 +1209,101 @@ fn chd_compress_and_extract_gdi_round_trip() {
     assert!(gdi.contains("2 4 4 2048 \"disc (Track 2).bin\" 0"));
 }
 
+/// Writes a three-track synthetic GD-ROM (5-frame data, 3-frame audio, 7-frame
+/// data) and compresses it. Returns the temp dir, CHD path and track contents.
+fn compress_unaligned_gdi() -> (
+    assert_fs::TempDir,
+    assert_fs::fixture::ChildPath,
+    Vec<Vec<u8>>,
+) {
+    let temp = setup_temp_dir();
+    let tracks = [5_usize, 3, 7]
+        .iter()
+        .enumerate()
+        .map(|(track, frames)| {
+            (0..(frames * 2352))
+                .map(|index| ((index + track * 7) % 251) as u8)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (index, bytes) in tracks.iter().enumerate() {
+        fs::write(temp.child(format!("track{}.bin", index + 1)).path(), bytes).expect("track");
+    }
+    temp.child("disc.gdi")
+        .write_str(
+            "3\n1 0 4 2352 track1.bin 0\n2 10 0 2352 track2.bin 0\n3 45000 4 2352 track3.bin 0\n",
+        )
+        .expect("gdi fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.gdi").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path, tracks)
+}
+
+#[test]
+fn chd_gdi_tracks_are_padded_to_four_frames_like_chdman() {
+    // chdman createcd on this gdi yields 45012 units (10 + 44990 + 7 data/pad
+    // frames, plus 2 + 2 + 1 alignment frames) and extracts the original sizes.
+    let (temp, chd_path, tracks) = compress_unaligned_gdi();
+    let chd = fs::read(chd_path.path()).expect("chd");
+    let logical = u64::from_be_bytes(chd[32..40].try_into().expect("logical size"));
+    assert_eq!(logical, 45_012 * 2448);
+
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    for (index, bytes) in tracks.iter().enumerate() {
+        assert_eq!(
+            &fs::read(
+                out_dir
+                    .child(format!("disc (Track {}).bin", index + 1))
+                    .path()
+            )
+            .expect("extracted track"),
+            bytes,
+            "track {} must extract at its original size",
+            index + 1
+        );
+    }
+}
+
+#[test]
+fn chd_gdi_metadata_matches_chdman_track_fields() {
+    // Reference lines captured from chdman 0.289 createcd on the same gdi:
+    // FRAMES/PAD stay unaligned and every track reports PGTYPE:MODE1.
+    let (_temp, chd_path, _tracks) = compress_unaligned_gdi();
+    let chd = String::from_utf8_lossy(&fs::read(chd_path.path()).expect("chd")).into_owned();
+    for expected in [
+        "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:5 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44987 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:7 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+    ] {
+        assert!(chd.contains(expected), "missing metadata `{expected}`");
+    }
+}
+
 #[test]
 fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     // A redump-style GD-ROM dump ships a `.cue` next to an authoritative `.gdi`.

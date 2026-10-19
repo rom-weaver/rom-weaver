@@ -474,6 +474,8 @@ impl ChdContainerHandler {
             pregap_has_data,
             has_subcode: false,
             pad_frames: 0,
+            align_pad_frames: 0,
+            pgtype_mode1: false,
             swap_audio_on_read: track.swap_audio_on_read,
         })
     }
@@ -597,10 +599,12 @@ impl ChdContainerHandler {
             });
         }
 
-        Ok(DiscLayout {
+        let mut layout = DiscLayout {
             kind: DiscKind::GdRom,
             tracks: resolved,
-        })
+        };
+        layout.apply_cd_track_padding();
+        Ok(layout)
     }
 
     pub(super) fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
@@ -643,10 +647,12 @@ impl ChdContainerHandler {
             )));
         }
 
-        Ok(DiscLayout {
+        let mut layout = DiscLayout {
             kind: DiscKind::GdRom,
             tracks: Self::resolve_gdi_tracks(path, tracks)?,
-        })
+        };
+        layout.apply_cd_track_padding();
+        Ok(layout)
     }
 
     /// Parse the `.gdi` header line, which declares a non-zero track count.
@@ -827,6 +833,10 @@ impl ChdContainerHandler {
                 pregap_has_data: false,
                 has_subcode: false,
                 pad_frames,
+                align_pad_frames: 0,
+                // chdman's gdi parser never sets a pregap type, so every GD
+                // track reports the default `MODE1` (even audio tracks).
+                pgtype_mode1: true,
                 swap_audio_on_read: track.swap_audio_on_read,
             });
         }
@@ -901,6 +911,8 @@ impl ChdContainerHandler {
                 pregap_has_data: pgtype.starts_with('V'),
                 has_subcode: subtype != "NONE",
                 pad_frames,
+                align_pad_frames: 0,
+                pgtype_mode1: kind == DiscKind::GdRom && pgtype == "MODE1",
                 swap_audio_on_read: false,
             });
         }
@@ -915,10 +927,30 @@ impl ChdContainerHandler {
             ));
         }
 
-        // CD metadata stores the unpadded data frame count; re-derive the
-        // implicit 4-frame track padding so extraction skips it (GD-ROM keeps
-        // its padding explicitly in the PAD field, so this is a no-op there).
+        // CD and GD metadata store the unaligned frame count; re-derive the
+        // implicit 4-frame track padding so extraction skips it.
         let mut layout = DiscLayout { kind, tracks };
+        // GD-ROM CHDs written by earlier rom-weaver versions have unaligned hunk
+        // streams: the CHD holds exactly the metadata frames. Detect that by the
+        // logical size and skip the alignment, or extraction would run past the end.
+        if kind == DiscKind::GdRom {
+            let stream_frames = chd.header().logical_bytes / u64::from(Self::CD_FRAME_BYTES);
+            let metadata_frames: u64 = layout.tracks.iter().map(|t| u64::from(t.frames)).sum();
+            let aligned_frames: u64 = layout
+                .tracks
+                .iter()
+                .map(|t| u64::from(t.frames.next_multiple_of(Self::CD_TRACK_PADDING)))
+                .sum();
+            if stream_frames == metadata_frames && stream_frames != aligned_frames {
+                debug!(
+                    stream_frames,
+                    metadata_frames,
+                    aligned_frames,
+                    "legacy unaligned gd chd detected; skipping 4-frame track alignment"
+                );
+                return Ok(layout);
+            }
+        }
         layout.apply_cd_track_padding();
         Ok(layout)
     }

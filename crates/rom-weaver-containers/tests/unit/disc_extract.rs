@@ -24,6 +24,8 @@ fn track(number: u32, mode: DiscTrackMode, frames: u32, pad_frames: u32) -> Disc
         pregap_has_data: false,
         has_subcode: false,
         pad_frames,
+        align_pad_frames: 0,
+        pgtype_mode1: false,
         swap_audio_on_read: false,
     }
 }
@@ -285,16 +287,23 @@ fn apply_cd_track_padding_rounds_up_to_four_frame_boundary() {
 }
 
 #[test]
-fn apply_cd_track_padding_is_a_no_op_for_gd_rom() {
-    // GD-ROM layouts declare padding explicitly via the PAD field and must
-    // not have this CD-only rounding applied on top.
+fn apply_cd_track_padding_aligns_gd_rom_tracks_on_top_of_explicit_pad() {
+    // chdman aligns every GD track to 4 frames; the explicit PAD frames are kept
+    // and the alignment tail is tracked separately so metadata can omit it.
     let mut layout = DiscLayout {
         kind: DiscKind::GdRom,
-        tracks: vec![track(1, DiscTrackMode::Mode1, 10, 0)],
+        tracks: vec![
+            track(1, DiscTrackMode::Mode1, 10, 6),
+            track(2, DiscTrackMode::Mode1, 8, 0),
+        ],
     };
     layout.apply_cd_track_padding();
-    assert_eq!(layout.tracks[0].frames, 10);
-    assert_eq!(layout.tracks[0].pad_frames, 0);
+    assert_eq!(layout.tracks[0].frames, 12);
+    assert_eq!(layout.tracks[0].pad_frames, 8);
+    assert_eq!(layout.tracks[0].align_pad_frames, 2);
+    assert_eq!(layout.tracks[1].frames, 8);
+    assert_eq!(layout.tracks[1].pad_frames, 0);
+    assert_eq!(layout.tracks[1].align_pad_frames, 0);
 }
 
 // --- CD selection plan: single-bin vs split-track mode dispatch -------------
@@ -806,8 +815,9 @@ fn parse_disc_input_synthesizes_a_gd_rom_from_high_density_markers() {
     // becomes padding rather than stored frames.
     assert_eq!(layout.tracks[0].pad_frames, 45000 - 10);
     assert_eq!(layout.tracks[0].frames, 45000);
-    assert_eq!(layout.tracks[1].frames, 5);
-    assert_eq!(layout.tracks[1].pad_frames, 0);
+    // 5 frames align up to 8 (chdman's 4-frame track alignment).
+    assert_eq!(layout.tracks[1].frames, 8);
+    assert_eq!(layout.tracks[1].pad_frames, 3);
     assert_eq!(layout.tracks[1].pregap_frames, 0);
 
     let _ = fs::remove_dir_all(&dir);
@@ -907,18 +917,22 @@ fn parse_gdi_file_resolves_physical_offsets_into_pad_frames() {
     assert!(!layout.tracks[0].swap_audio_on_read);
     assert_eq!(
         (layout.tracks[0].frames, layout.tracks[0].pad_frames),
-        (10, 6)
+        // 10 frames up to the next track, then aligned to 4 frames like chdman.
+        (12, 8)
     );
 
     assert_eq!(layout.tracks[1].mode, DiscTrackMode::Audio);
     assert!(layout.tracks[1].swap_audio_on_read);
     assert_eq!(
         (layout.tracks[1].frames, layout.tracks[1].pad_frames),
-        (45000 - 10, 45000 - 12)
+        (45000 - 8, 45000 - 12 + 2)
     );
 
     assert_eq!(layout.tracks[2].frames, 4);
-    assert_eq!(layout.tracks[2].pad_frames, 0, "the last track never pads");
+    assert_eq!(
+        layout.tracks[2].pad_frames, 0,
+        "the last track has no explicit gdi pad"
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -933,7 +947,9 @@ fn parse_gdi_file_accepts_cooked_sectors_and_a_file_offset() {
     let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
     assert_eq!(layout.tracks[0].mode, DiscTrackMode::Mode1);
     assert_eq!(layout.tracks[0].file_offset_bytes, 2048);
-    assert_eq!(layout.tracks[0].frames, 3);
+    // 3 data frames, aligned up to 4 like chdman.
+    assert_eq!(layout.tracks[0].frames, 4);
+    assert_eq!(layout.tracks[0].pad_frames, 1);
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1445,6 +1461,129 @@ fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
     assert!(
         err.to_string().contains("current extract expects"),
         "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// --- gd-rom chdman parity (track alignment and PGTYPE) -----------------------
+
+fn gd_metadata_lines(layout: DiscLayout) -> Vec<String> {
+    ChdContainerHandler
+        .rust_metadata_entries(&ChdCreateKind::Disc(layout))
+        .expect("metadata")
+        .into_iter()
+        .map(|entry| {
+            String::from_utf8(entry.data)
+                .expect("utf8")
+                .trim_end_matches('\0')
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn gdi_tracks_are_aligned_to_four_frames_like_chdman() {
+    // Mirrors chdman createcd on a gdi: every track is rounded up to a multiple
+    // of 4 frames in the hunk stream while metadata keeps the unaligned counts.
+    let dir = scratch_dir("gdi-align");
+    write_file(&dir, "t1.bin", &raw_frames(5));
+    write_file(&dir, "t2.bin", &raw_frames(3));
+    write_file(&dir, "t3.bin", &raw_frames(7));
+    let gdi = write_file(
+        &dir,
+        "a.gdi",
+        b"3\n1 0 4 2352 t1.bin 0\n2 10 0 2352 t2.bin 0\n3 45000 4 2352 t3.bin 0\n",
+    );
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    let stream_frames: Vec<u32> = layout.tracks.iter().map(|t| t.frames).collect();
+    assert_eq!(stream_frames, vec![12, 44992, 8]);
+    assert_eq!(layout.logical_bytes().expect("bytes"), 45012 * 2448);
+
+    // Reference values captured from chdman 0.289 `createcd -c none`.
+    assert_eq!(
+        gd_metadata_lines(layout),
+        vec![
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:5 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44987 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:7 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gdi_audio_track_reports_mode1_pgtype_like_chdman() {
+    // chdman's gdi parser never sets a pregap type, so the audio track 2 of a
+    // real GD-ROM is written with `PGTYPE:MODE1`, not `PGTYPE:AUDIO`.
+    let dir = scratch_dir("gdi-pgtype");
+    write_file(&dir, "t1.bin", &raw_frames(4));
+    write_file(&dir, "t2.bin", &raw_frames(4));
+    let gdi = write_file(
+        &dir,
+        "a.gdi",
+        b"2\n1 0 4 2352 t1.bin 0\n2 4 0 2352 t2.bin 0\n",
+    );
+
+    let lines = gd_metadata_lines(ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi"));
+    assert!(lines[1].contains("TYPE:AUDIO"), "{}", lines[1]);
+    assert!(lines[1].contains("PGTYPE:MODE1"), "{}", lines[1]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gdi_unaligned_last_track_is_padded_in_the_hunk_stream_only() {
+    // Mirrors Sonic Adventure 2 track 3 (504150 frames): chdman streams two
+    // extra frames but keeps FRAMES/PAD in the metadata unchanged.
+    let dir = scratch_dir("gdi-last-track-pad");
+    write_file(&dir, "t1.bin", &raw_frames(6));
+    let gdi = write_file(&dir, "a.gdi", b"1\n1 0 4 2352 t1.bin 0\n");
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    assert_eq!(layout.tracks[0].frames, 8);
+    assert_eq!(layout.tracks[0].pad_frames, 2);
+    let lines = gd_metadata_lines(layout);
+    assert!(lines[0].contains("FRAMES:6 PAD:0 "), "{}", lines[0]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_disc_tracks_keeps_legacy_unaligned_gd_streams() {
+    // Earlier rom-weaver versions wrote GD CHDs whose hunk stream held exactly
+    // the metadata frames (no 4-frame alignment). They must still read back.
+    let dir = scratch_dir("legacy-unaligned-gd");
+    let input = dir.join("frames.raw");
+    fs::write(&input, vec![0x5A_u8; 3 * 2448]).expect("write frames");
+    let output = dir.join("legacy.chd");
+    let mut legacy = track(1, DiscTrackMode::Mode1Raw, 3, 0);
+    legacy.pgtype_mode1 = true;
+    let layout = DiscLayout {
+        kind: DiscKind::GdRom,
+        tracks: vec![legacy],
+    };
+    let handler = ChdContainerHandler;
+    handler
+        .create_uncompressed_rust_raw(
+            &input,
+            &output,
+            3 * 2448,
+            &ChdCreateKind::Disc(layout),
+            None,
+        )
+        .expect("write legacy gd chd");
+
+    let session = ChdReadSession::open(&output, None).expect("open chd");
+    let layout = handler
+        .read_disc_tracks(&session, DiscKind::GdRom)
+        .expect("read legacy gd layout");
+    assert_eq!(
+        (layout.tracks[0].frames, layout.tracks[0].pad_frames),
+        (3, 0),
+        "a legacy stream must not gain alignment frames"
     );
 
     let _ = fs::remove_dir_all(&dir);

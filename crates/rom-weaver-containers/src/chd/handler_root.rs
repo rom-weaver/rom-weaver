@@ -86,20 +86,22 @@ impl DiscLayout {
         })
     }
 
-    /// Apply MAME's CD track padding to a freshly built CD-ROM layout.
+    /// Apply MAME's track padding to a freshly built CD-ROM or GD-ROM layout.
     ///
-    /// Round CD tracks to `CD_TRACK_PADDING`, recording the zero-filled tail in
-    /// `pad_frames`. GD-ROM declares padding explicitly. Must run once while
-    /// `pad_frames == 0`.
+    /// Round every track (including any explicit GD `PAD` frames) up to
+    /// `CD_TRACK_PADDING`, recording the zero-filled tail in `pad_frames` and
+    /// `align_pad_frames`. Must run once while `align_pad_frames == 0`.
     fn apply_cd_track_padding(&mut self) {
-        if self.kind != DiscKind::CdRom {
-            return;
-        }
         let padding = ChdContainerHandler::CD_TRACK_PADDING;
         for track in &mut self.tracks {
             let data_frames = track.frames;
             let pad = (padding - data_frames % padding) % padding;
-            track.pad_frames = pad;
+            trace!(
+                track = track.number,
+                pad, "applying 4-frame track alignment"
+            );
+            track.align_pad_frames = pad;
+            track.pad_frames = track.pad_frames.saturating_add(pad);
             track.frames = data_frames.saturating_add(pad);
         }
     }
@@ -206,6 +208,11 @@ struct DiscTrack {
     pregap_has_data: bool,
     has_subcode: bool,
     pad_frames: u32,
+    /// Zero-filled tail added by chdman's 4-frame track alignment. Included in
+    /// `frames` and `pad_frames`, but excluded from the metadata `FRAMES`/`PAD`.
+    align_pad_frames: u32,
+    /// Report `PGTYPE:MODE1` regardless of track mode (chdman's gdi default).
+    pgtype_mode1: bool,
     swap_audio_on_read: bool,
 }
 
