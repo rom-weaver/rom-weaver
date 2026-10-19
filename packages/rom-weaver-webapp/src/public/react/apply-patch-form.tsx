@@ -65,6 +65,7 @@ import { SelectionTree } from "./components/ds/selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
+import { isApplyButtonActionable } from "./patcher-view-models.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import {
@@ -1915,11 +1916,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (removeId) resolvedUiController.removeRomInput?.(removeId);
   };
 
-  const applyActionEnabled = !(
-    outputState.applyButton.disabled ||
-    outputState.applyButton.loading ||
-    outputState.pendingDownloadFileName
-  );
+  const applyActionEnabled =
+    isApplyButtonActionable(outputState.applyButton) &&
+    !outputState.applyButton.loading &&
+    !outputState.pendingDownloadFileName;
   const downloadActionEnabled =
     !(outputState.applyButton.disabled || outputState.applyButton.loading) && !!outputState.pendingDownloadFileName;
   const cancelActionEnabled = anyJobBusy;
@@ -1959,7 +1959,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             name: outputState.resolvedOutputName,
             requestedName: outputState.displayFileName,
             compression: outputState.compressionFormat,
-            ready: !outputState.applyButton.disabled,
+            ready: isApplyButtonActionable(outputState.applyButton),
           },
           cheats: {
             enabled: cheatsOn,

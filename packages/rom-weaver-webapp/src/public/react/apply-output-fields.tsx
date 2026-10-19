@@ -336,6 +336,7 @@ export const ApplyOutputAction = ({
         disableRun={
           (patches.length > 0 && enabledPatchCount === 0) || !!weaveVerificationError || !!cheatHeaderStripConflict
         }
+        disableReason={weaveVerificationError || cheatHeaderStripConflict || undefined}
         showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
       />

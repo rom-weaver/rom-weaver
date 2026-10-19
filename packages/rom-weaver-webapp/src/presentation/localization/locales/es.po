@@ -550,6 +550,11 @@ msgstr "Aplicar y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Aplicar está bloqueado por una comprobación de parche fallida. Corrige el parche o la ROM, o marca «Aplicar de todos modos» donde aparezca."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Aplicar y descargar"
 

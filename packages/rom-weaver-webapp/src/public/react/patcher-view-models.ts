@@ -207,11 +207,16 @@ const buildStackViewState = ({
   }),
 });
 
+/** Whether the apply button can start a run: not disabled, not blocked by a failed validation. */
+const isApplyButtonActionable = (button: { blocked: boolean; disabled: boolean }) =>
+  !(button.disabled || button.blocked);
+
 interface OutputViewStateInput {
   activeSettings: ApplyPatchFormSettings;
   applyQueued: boolean;
   applyTimingText: string;
   busy: boolean;
+  applyBlocked: boolean;
   canQueueApply: boolean;
   completedSizeSummary: OutputSizeSummary;
   compressTimingText: string;
@@ -235,6 +240,7 @@ interface OutputViewStateInput {
 const buildOutputViewState = ({
   activeSettings,
   applyQueued,
+  applyBlocked,
   applyTimingText,
   busy,
   canQueueApply,
@@ -255,6 +261,7 @@ const buildOutputViewState = ({
   z3dsLabelSource,
 }: OutputViewStateInput) => ({
   applyButton: {
+    blocked: applyBlocked && !hasPendingDownload,
     disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
     label: hasPendingDownload ? `Download ${pendingDownloadFileName || "output"}` : "Apply & download",
     loading: busy || applyQueued,
@@ -307,4 +314,11 @@ const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewSt
   visible: !!failureMessage && !failurePlacement,
 });
 
-export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, formatHeaderAutoLabel };
+export {
+  buildNoticeViewState,
+  buildOutputViewState,
+  buildStackViewState,
+  buildUiViewState,
+  formatHeaderAutoLabel,
+  isApplyButtonActionable,
+};
