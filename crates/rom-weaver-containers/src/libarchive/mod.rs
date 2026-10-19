@@ -13,10 +13,10 @@ use rom_weaver_core::{Result, RomWeaverError};
 
 pub mod sys;
 
+#[cfg(windows)]
+use sys::archive_entry_copy_pathname_w;
 #[cfg(not(windows))]
 use sys::archive_entry_set_pathname;
-#[cfg(windows)]
-use sys::archive_entry_set_pathname_utf8;
 use sys::{
     ARCHIVE_EOF, ARCHIVE_FILTER_BZIP2, ARCHIVE_FILTER_GZIP, ARCHIVE_FILTER_XZ, ARCHIVE_FILTER_ZSTD,
     ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
