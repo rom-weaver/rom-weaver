@@ -49,7 +49,7 @@ bzip2-sys = "0.1.13"
 block-padding = "0.4"
 bytes = "1.11"
 ciso = { version = "0.3.0", default-features = false, features = ["sync"] }
-chd = { version = "0.3.4", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
+chd = { version = "0.4.0", features = ["verify_block_crc", "codec_api", "fast_zstd"] }
 clap = { version = "4.5.51", features = ["derive", "string"] }
 claxon = "0.4.3"
 crc = "3.4.0"

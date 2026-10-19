@@ -452,9 +452,9 @@ dependencies = [
 
 [[package]]
 name = "chd"
-version = "0.3.4"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e16e43ebc68e33e0c66f7158ca00f0a6eb2c1241556a8ceb36deaeb4299986"
+checksum = "a607e05d7a8756524296ba664e9c06f1c4c6759ac03e0250c40e07fdcb182593"
 dependencies = [
  "arrayvec",
  "bitreader",
@@ -462,11 +462,12 @@ dependencies = [
  "claxon",
  "crc",
  "flate2",
- "lzma-rs-perf-exp",
+ "lzma-rust2",
  "num-derive",
  "num-traits",
- "ruzstd",
  "text_io",
+ "zerocopy",
+ "zrip",
  "zstd-safe 7.2.4",
 ]
 
@@ -843,6 +844,12 @@ name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
+
+[[package]]
+name = "fearless_simd"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3296eb97d869113eaf148a6bdf01884e90b3828ad7ae2340b0f93362fc158611"
 
 [[package]]
 name = "filetime"
@@ -1251,16 +1258,6 @@ name = "lzma-rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
-dependencies = [
- "byteorder",
- "crc",
-]
-
-[[package]]
-name = "lzma-rs-perf-exp"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38435c1305548bb408c98242841c3cf161246323e72a3e4433787f3c05bf18ee"
 dependencies = [
  "byteorder",
  "crc",
@@ -1994,15 +1991,6 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
-]
-
-[[package]]
-name = "ruzstd"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
-dependencies = [
- "twox-hash",
 ]
 
 [[package]]
@@ -2778,6 +2766,43 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zrip"
+version = "0.8.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4433b2e67d67b10d0833d4a485f6e25684e485cdc00acd75f528949a8a244553"
+dependencies = [
+ "zrip-core",
+ "zrip-decode",
+ "zrip-encode",
+]
+
+[[package]]
+name = "zrip-core"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80f6de2d9ed313cfb14a113e6da994e6ddd7891c3c6af2eed5ccb887e40178ec"
+
+[[package]]
+name = "zrip-decode"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54a8b5fdab562e69236b85c659721d371ed1306aa42b57aa84917e9ae18ce6c7"
+dependencies = [
+ "fearless_simd",
+ "zrip-core",
+]
+
+[[package]]
+name = "zrip-encode"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "085e6bbd60a55c7db27f8f0d3776e5e772af6b66f9d7833955dcc10f95cbad3d"
+dependencies = [
+ "fearless_simd",
+ "zrip-core",
+]
 
 [[package]]
 name = "zstd"
