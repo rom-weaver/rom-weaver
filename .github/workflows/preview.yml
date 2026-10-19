@@ -1,0 +1,30 @@
+name: Preview
+
+# Adding the `preview` label deploys a preview of the current head by running
+# CI as a called workflow. The label trigger lives here, not in ci.yml: branch
+# protection reads the newest CI run on a commit, and a run started by any
+# other label would hide the real run's `CI gate`. A run of this workflow never
+# reports a check named `CI gate` (called jobs are named `ci / <job>`).
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    if: github.event.label.name == 'preview'
+    # A called job can only narrow the caller's grants, so this is the union of
+    # the job-level permissions in ci.yml; each job there still narrows its own.
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+      statuses: write
+      deployments: write
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit

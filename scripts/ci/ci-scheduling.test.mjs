@@ -76,19 +76,15 @@ test("main validation shares a group without cancelling active runs", () => {
     evaluateConcurrency("refs/pull/2/merge", "pull_request", 6).group,
     evaluateConcurrency("refs/pull/1/merge", "pull_request", 5).group,
   );
-  // The preview label replaces the pull request's run like a push does; any
-  // other label MUST NOT cancel it.
+  // A preview label run (preview.yml) replaces only an earlier preview run; it
+  // MUST NOT cancel the pull request's run, whose gate is the required check.
   assert.deepEqual(
     evaluateConcurrency("refs/pull/1/merge", "pull_request", 7, "labeled", "preview"),
     {
-      group: "refs/pull/1/merge",
+      group: "preview-refs/pull/1/merge",
       cancel: true,
     },
   );
-  assert.deepEqual(evaluateConcurrency("refs/pull/1/merge", "pull_request", 8, "labeled", "bug"), {
-    group: "ignored-label-8",
-    cancel: true,
-  });
 });
 
 test("publishers serialize and guard writes", () => {
