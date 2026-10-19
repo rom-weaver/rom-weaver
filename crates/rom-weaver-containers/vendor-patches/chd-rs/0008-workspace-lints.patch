@@ -46,7 +46,7 @@ index ee06dc6d4caa4c06a026843c8d4c32db5253323d..96e6df707a0241cee20fd8d87bd02898
      output.write_u16::<BigEndian>(width)?;
      output.write_u16::<BigEndian>(height)?;
 diff --git a/compression/cdrom.rs b/compression/cdrom.rs
-index 09cdc30bf05ed21b3f0f9fefa2577c9b98881846..c3408480e8ecaa4b5a225cbe3526ec888583b57d 100644
+index 124839235e1d71e1030ba1f48dd46873569da037..9839893560f1c2522675bcf0b5539972b30c15bd 100644
 --- a/compression/cdrom.rs
 +++ b/compression/cdrom.rs
 @@ -173,7 +173,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
@@ -58,7 +58,16 @@ index 09cdc30bf05ed21b3f0f9fefa2577c9b98881846..c3408480e8ecaa4b5a225cbe3526ec88
              return Err(Error::CodecError);
          }
  
-@@ -189,7 +189,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+@@ -188,7 +188,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+     /// The level applies to the sector data. Like chdman, subcode data is always
+     /// compressed at the default level.
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -202,7 +202,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
          // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
          let frames = output.len() / CD_FRAME_SIZE as usize;
          let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
@@ -68,12 +77,12 @@ index 09cdc30bf05ed21b3f0f9fefa2577c9b98881846..c3408480e8ecaa4b5a225cbe3526ec88
  
          // Extract compressed length of base
 diff --git a/compression/flac.rs b/compression/flac.rs
-index d604a7e1946d3378a33290528c5368d3d445fa1a..8dc290ccca1f7e84c853511b83b5b8f5a59b39d2 100644
+index 74b072264d0517790865ee29ab82b26f952d575f..9f360977e3abdf8ef9db84a9e28d92e9aaab95f0 100644
 --- a/compression/flac.rs
 +++ b/compression/flac.rs
-@@ -49,12 +49,12 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
-         config.block_size = self.block_size;
-         config.subframe_coding.qlpc.lpc_order = 12;
+@@ -66,12 +66,12 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+         config.subframe_coding.use_lpc = lpc_order > 0;
+         config.subframe_coding.qlpc.lpc_order = lpc_order.max(1);
          config.subframe_coding.qlpc.quant_precision = match self.block_size {
 -            ..=192 => 7,
 -            ..=384 => 8,
@@ -90,7 +99,7 @@ index d604a7e1946d3378a33290528c5368d3d445fa1a..8dc290ccca1f7e84c853511b83b5b8f5
              _ => 13,
          };
          let config = config
-@@ -80,7 +80,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+@@ -97,7 +97,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
      where
          Self: Sized,
      {
@@ -99,19 +108,28 @@ index d604a7e1946d3378a33290528c5368d3d445fa1a..8dc290ccca1f7e84c853511b83b5b8f5
              return Err(Error::CodecError);
          }
  
-@@ -92,7 +92,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
-         Ok(FlacCodec {
+@@ -110,7 +110,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
              buffer: Vec::new(),
              block_size: block_size as usize,
+             level: MAME_FLAC_LEVEL,
 -            _byteorder: PhantomData::default(),
 +            _byteorder: PhantomData,
          })
      }
  
-@@ -283,7 +283,7 @@ impl CodecImplementation for CdFlacCodec {
+@@ -321,7 +321,7 @@ impl CodecImplementation for CdFlacCodec {
      where
          Self: Sized,
      {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -340,7 +340,7 @@ impl CodecImplementation for CdFlacCodec {
+     /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8. Like chdman, subcode
+     /// data is always compressed at the default Deflate level.
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
 -        if hunk_size % CD_FRAME_SIZE != 0 {
 +        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
              return Err(Error::CodecError);
@@ -131,10 +149,10 @@ index 9a2d3e217dccc50d531247152c9a17803cb0fa92..4d9e08b26c38007c0245ae5c51f18395
  }
  
 diff --git a/header/mod.rs b/header/mod.rs
-index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c7964301849 100644
+index 45ce1faa954ab9c8b912e327f853a221c8294199..e73e4e5802471da0b5ebccae45af0dfd5833ea25 100644
 --- a/header/mod.rs
 +++ b/header/mod.rs
-@@ -532,21 +532,21 @@ impl Header {
+@@ -575,21 +575,21 @@ impl Header {
      pub(crate) fn create_compression_codecs(&self) -> Result<Codecs> {
          match self {
              Header::V1Header(c) => CodecType::from_u32(c.compression)
@@ -161,7 +179,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
              Header::V5Header(c) => {
                  let array = c
                      .compression
-@@ -582,10 +582,10 @@ impl Header {
+@@ -625,10 +625,10 @@ impl Header {
          }
  
          // Require valid flags
@@ -176,7 +194,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
          }
  
          // require valid hunk size
-@@ -805,7 +805,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
+@@ -841,7 +841,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
          (3, CHD_V3_HEADER_SIZE) => Ok(Header::V3Header(read_v3_header(raw(&raw_header)?, chd)?)),
          (4, CHD_V4_HEADER_SIZE) => Ok(Header::V4Header(read_v4_header(raw(&raw_header)?, chd)?)),
          (5, CHD_V5_HEADER_SIZE) => Ok(Header::V5Header(read_v5_header(raw(&raw_header)?)?)),
@@ -185,7 +203,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
          _ => Err(Error::UnsupportedVersion),
      }
  }
-@@ -839,7 +839,7 @@ fn read_v1_header(header: &RawHeaderV1, sector_length: Option<u32>) -> Result<He
+@@ -875,7 +875,7 @@ fn read_v1_header(header: &RawHeaderV1, sector_length: Option<u32>) -> Result<He
      }
  
      let unit_bytes = hunk_bytes / hunk_size;
@@ -194,7 +212,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
      Ok(HeaderV1 {
          version: match version {
              1 => Version::ChdV1,
-@@ -877,7 +877,7 @@ fn read_v3_header<F: Read + Seek>(header: &RawHeaderV3, chd: &mut F) -> Result<H
+@@ -913,7 +913,7 @@ fn read_v3_header<F: Read + Seek>(header: &RawHeaderV3, chd: &mut F) -> Result<H
      let sha1 = header.sha1;
      let parent_sha1 = header.parent_sha1;
      let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
@@ -203,7 +221,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
      Ok(HeaderV3 {
          version: Version::ChdV3,
          length,
-@@ -909,7 +909,7 @@ fn read_v4_header<F: Read + Seek>(header: &RawHeaderV4, chd: &mut F) -> Result<H
+@@ -945,7 +945,7 @@ fn read_v4_header<F: Read + Seek>(header: &RawHeaderV4, chd: &mut F) -> Result<H
      let raw_sha1 = header.raw_sha1;
  
      let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
@@ -212,7 +230,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
      Ok(HeaderV4 {
          version: Version::ChdV4,
          length,
-@@ -947,18 +947,17 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
+@@ -983,18 +983,17 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
      if let Some(hard_disk) = metas
          .iter()
          .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)
@@ -237,7 +255,7 @@ index a011b8ab7181527f083de38dfc6f75836fecec6e..7e1f5b7d6e2d0a7102ca503411b04c79
      }
      None
  }
-@@ -980,8 +979,8 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
+@@ -1016,8 +1015,8 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
          return Err(Error::InvalidData);
      }
  
@@ -306,10 +324,10 @@ index 5027a398c4c55328d5406d58442ff17bb1b232cc..921625ee1f2804a9d8685540c8dfabaf
          }
      }
 diff --git a/write/compressed.rs b/write/compressed.rs
-index 2ea7fbe946f54ecfd1b5263c8219b20b0c9de66e..b37ced705c17b14ec18bfaf1764a9819d37d49d9 100644
+index d87c1ee9d4b086f67c65df49acac4e7dae19d1ed..1790b6040a383e7d9659b5e0f2f1804a0cc46e45 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -143,6 +143,11 @@ impl CompressedHunk<'_> {
+@@ -148,6 +148,11 @@ impl CompressedHunk<'_> {
              HunkKind::Duplicate => 0,
          }
      }

@@ -17,6 +17,7 @@ use zstd::zstd_safe;
 pub struct ZstdCodec {
     zstd_context: zstd_safe::DCtx<'static>,
     compressor: zstd_safe::CCtx<'static>,
+    level: i32,
 }
 
 impl CodecImplementation for ZstdCodec {
@@ -27,6 +28,20 @@ impl CodecImplementation for ZstdCodec {
         Ok(Self {
             zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::chd_rs::Error::CodecError)?,
             compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
+            level: zstd_safe::max_c_level(),
+        })
+    }
+
+    /// Zstandard levels range from [`min_c_level`](zstd_safe::min_c_level) to
+    /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
+    /// chdman uses the maximum level.
+    fn with_level(hunk_size: u32, level: i32) -> crate::chd_rs::Result<Self> {
+        if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
+            return Err(Error::InvalidParameter);
+        }
+        Ok(Self {
+            level,
+            ..Self::new(hunk_size)?
         })
     }
 
@@ -35,7 +50,7 @@ impl CodecImplementation for ZstdCodec {
         let output_len = output.len().min(input.len());
         let compressed_len = self
             .compressor
-            .compress(&mut output[..output_len], input, zstd_safe::max_c_level())
+            .compress(&mut output[..output_len], input, self.level)
             .map_err(|_| Error::CompressionError)?;
         if compressed_len >= input.len() {
             return Err(Error::CompressionError);

@@ -94,7 +94,7 @@ index bef756654057bac4cca9b6518f6c8735b8f8a27a..80d15526392e2f4b7e982b861876bbd4
  #[cfg(feature = "encode")]
  use bitstream_io::{BitWrite, BitWriter};
 diff --git a/compression/cdrom.rs b/compression/cdrom.rs
-index 0f291209058f718dcf437acaa46c5539df58790a..ba669b9a80b6765eea11efe69ec904289703deea 100644
+index a6840cf0ffc07bb42672faed8a555436333651e0..bec90228f343ad6e35d62922c87bb77aa0873965 100644
 --- a/compression/cdrom.rs
 +++ b/compression/cdrom.rs
 @@ -1,18 +1,18 @@
@@ -160,7 +160,7 @@ index e349b50a0584390c7a8ec5f305442f00f0a6557b..bfea7da7b2e6428e6cd7f57ec8926cd8
  const ECC_P_OFFSET: usize = 0x81c;
  const ECC_P_NUM_BYTES: usize = 86;
 diff --git a/compression/flac.rs b/compression/flac.rs
-index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..6401234ed8eb3636a541032878b90605625bfcfe 100644
+index 071bacb2f2ba966a3be32bc26a43f35ea5dcaa91..d09832a74f7e3fe0c13e599d35222ef7faee8980 100644
 --- a/compression/flac.rs
 +++ b/compression/flac.rs
 @@ -5,13 +5,13 @@ use std::mem;
@@ -182,7 +182,7 @@ index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..6401234ed8eb3636a541032878b90605
  
  /// Generic block codec for FLAC.
  ///
-@@ -244,7 +244,7 @@ impl CodecImplementation for RawFlacCodec {
+@@ -287,7 +287,7 @@ impl CodecImplementation for RawFlacCodec {
  }
  
  /// CD-ROM wrapper decompression codec (cdfl) using the FLAC
@@ -241,7 +241,7 @@ index 050350eca2871627fe0eafc0bb2216f0759d5ae9..e9b0a32fe54ff5c8bdcd5d486405a827
          Ok(compressed_len)
      }
 diff --git a/compression/lzma.rs b/compression/lzma.rs
-index a8d7bd4c4805512ab19732e3b952f69923d2778c..774f1ca92be606293ae1f19d7ababcdfd1b9bd36 100644
+index cb6d142af1243cf2435da6bf3a490b9c3f3e9ba0..e3fcbda430449613717412b063fd0da3d1e69012 100644
 --- a/compression/lzma.rs
 +++ b/compression/lzma.rs
 @@ -1,9 +1,9 @@
@@ -259,7 +259,7 @@ index a8d7bd4c4805512ab19732e3b952f69923d2778c..774f1ca92be606293ae1f19d7ababcdf
  #[cfg(feature = "encode")]
  use lzma_rust2::{EncodeMode, LzmaOptions, LzmaWriter, MfType};
 diff --git a/compression/mod.rs b/compression/mod.rs
-index 89e098c5612d8644ba870ac203279c91e84d8437..fa661e9f70c647736f2f55fc834789f93235a60c 100644
+index 1b982bead8ec3627c63ac8a564baae9482488683..75874cda80cc92e40dbd3ca5460fe690e91444e2 100644
 --- a/compression/mod.rs
 +++ b/compression/mod.rs
 @@ -1,5 +1,5 @@
@@ -308,7 +308,25 @@ index 89e098c5612d8644ba870ac203279c91e84d8437..fa661e9f70c647736f2f55fc834789f9
      /// codec implements.
      fn codec_type(&self) -> CodecType
      where
-@@ -60,7 +60,7 @@ pub trait CodecImplementation {
+@@ -54,7 +54,7 @@ pub trait CodecImplementation {
+     ///
+     /// The range of levels depends on the codec, and [`new`](CodecImplementation::new)
+     /// uses the level that chdman compresses with. Returns
+-    /// [`InvalidParameter`](crate::Error::InvalidParameter) if the level is out of range,
++    /// [`InvalidParameter`](crate::chd_rs::Error::InvalidParameter) if the level is out of range,
+     /// or the codec has no compression levels.
+     #[cfg(feature = "encode")]
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self>
+@@ -62,7 +62,7 @@ pub trait CodecImplementation {
+         Self: Sized,
+     {
+         let _ = (hunk_size, level);
+-        Err(crate::error::Error::InvalidParameter)
++        Err(crate::chd_rs::error::Error::InvalidParameter)
+     }
+ 
+     /// Decompress compressed bytes from the input buffer into the
+@@ -76,7 +76,7 @@ pub trait CodecImplementation {
      /// Compress bytes from the input buffer into the output buffer, returning the
      /// number of compressed bytes written.
      ///
@@ -362,7 +380,7 @@ index 88bf348232bc311a25d32430fd27ae296fd2d72c..571abb084c6ac2287c9353ecedba6db0
  use rand::{RngExt, SeedableRng};
  
 diff --git a/compression/zlib.rs b/compression/zlib.rs
-index 4a013136a0a6bdc1b3a71ad66ac33b7d5956d110..91bea8e51971bc8c43bc10c3d82828a98846240d 100644
+index bb2bb48e6a70a705f05ec0d5a415f33178d11a42..84c0810785c8c109bb53103c7a07433bad6ae622 100644
 --- a/compression/zlib.rs
 +++ b/compression/zlib.rs
 @@ -1,8 +1,8 @@
@@ -378,7 +396,7 @@ index 4a013136a0a6bdc1b3a71ad66ac33b7d5956d110..91bea8e51971bc8c43bc10c3d82828a9
  
  /// Deflate (zlib) decompression codec.
 diff --git a/compression/zstd.rs b/compression/zstd.rs
-index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a675415e65c9a 100644
+index 60317590f2512aca43d9419031ca237dd3207c95..c3978883eaa2f1ac1b801670bba9dcbd260cfd33 100644
 --- a/compression/zstd.rs
 +++ b/compression/zstd.rs
 @@ -1,8 +1,8 @@
@@ -393,7 +411,7 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
  
  /// Zstandard (zstd) decompression codec.
  ///
-@@ -48,7 +48,7 @@ pub struct ZstdCodec {
+@@ -50,7 +50,7 @@ pub struct ZstdCodec {
  
  #[cfg(not(feature = "fast_zstd"))]
  impl CodecImplementation for ZstdCodec {
@@ -402,7 +420,16 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
      where
          Self: Sized,
      {
-@@ -61,7 +61,7 @@ impl CodecImplementation for ZstdCodec {
+@@ -64,7 +64,7 @@ impl CodecImplementation for ZstdCodec {
+ 
+     /// Levels are those supported by zrip.
+     #[cfg(feature = "encode")]
+-    fn with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
++    fn with_level(_hunk_size: u32, level: i32) -> crate::chd_rs::Result<Self> {
+         Ok(Self {
+             decoder: zrip::DecompressContext::new(),
+             buffer: Vec::new(),
+@@ -73,7 +73,7 @@ impl CodecImplementation for ZstdCodec {
      }
  
      #[cfg(feature = "encode")]
@@ -411,7 +438,7 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
          // Anything not smaller than the input is a failure, so don't bother writing more.
          let output_len = output.len().min(input.len());
          let compressed_len = self
-@@ -74,7 +74,7 @@ impl CodecImplementation for ZstdCodec {
+@@ -86,7 +86,7 @@ impl CodecImplementation for ZstdCodec {
          Ok(compressed_len)
      }
  
@@ -420,7 +447,7 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
          self.buffer.clear();
          let bytes_out = self
              .decoder
-@@ -97,19 +97,19 @@ impl CodecImplementation for ZstdCodec {
+@@ -109,12 +109,12 @@ impl CodecImplementation for ZstdCodec {
  
  #[cfg(feature = "fast_zstd")]
  impl CodecImplementation for ZstdCodec {
@@ -434,7 +461,17 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
 +            zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::chd_rs::Error::CodecError)?,
              #[cfg(feature = "encode")]
              compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
-         })
+             #[cfg(feature = "encode")]
+@@ -126,7 +126,7 @@ impl CodecImplementation for ZstdCodec {
+     /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
+     /// chdman uses the maximum level.
+     #[cfg(feature = "encode")]
+-    fn with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
++    fn with_level(hunk_size: u32, level: i32) -> crate::chd_rs::Result<Self> {
+         if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
+             return Err(Error::InvalidParameter);
+         }
+@@ -137,7 +137,7 @@ impl CodecImplementation for ZstdCodec {
      }
  
      #[cfg(feature = "encode")]
@@ -443,7 +480,7 @@ index 0f6f95d0001a8844a3c7343753744102c297acbd..9be1059f7f83a54199fbf561169a6754
          // Anything not smaller than the input is a failure, so don't bother writing more.
          let output_len = output.len().min(input.len());
          let compressed_len = self
-@@ -122,7 +122,7 @@ impl CodecImplementation for ZstdCodec {
+@@ -150,7 +150,7 @@ impl CodecImplementation for ZstdCodec {
          Ok(compressed_len)
      }
  
@@ -463,7 +500,7 @@ index cf23834e31809d17ab38fa2a2e77269e1864de06..9a2d3e217dccc50d531247152c9a1780
  use std::array::TryFromSliceError;
  use std::ffi::FromBytesWithNulError;
 diff --git a/header/mod.rs b/header/mod.rs
-index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1bffa3d14 100644
+index e593bae09b7dd11f4494782d70fbec20fe0aaa82..bb266ecb4425d78dabc5b03b8d9949bff816d067 100644
 --- a/header/mod.rs
 +++ b/header/mod.rs
 @@ -1,21 +1,21 @@
@@ -496,7 +533,21 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
  use arrayvec::ArrayVec;
  use num_derive::FromPrimitive;
  use num_traits::FromPrimitive;
-@@ -131,7 +131,7 @@ pub enum Version {
+@@ -26,6 +26,13 @@ use zerocopy::{FromBytes, Immutable, KnownLayout};
+ 
+ mod raw;
+ 
++/// View the start of the raw header as the layout of a header version.
++fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
++    T::ref_from_prefix(raw_header)
++        .map(|(raw, _)| raw)
++        .map_err(|_| Error::InvalidData)
++}
++
+ /// The types of compression codecs supported in a CHD file.
+ #[repr(u32)]
+ #[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq)]
+@@ -168,7 +175,7 @@ pub enum Version {
  /// A CHD V1/V2 header. V1 and V2 headers share a similar format with the only difference being
  /// V1 having a fixed 512-byte sector length, and V2 having an arbitrary sector length.
  ///
@@ -505,7 +556,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
  /// of this struct.
  #[derive(Clone)]
  pub struct HeaderV1 {
-@@ -141,7 +141,7 @@ pub struct HeaderV1 {
+@@ -178,7 +185,7 @@ pub struct HeaderV1 {
      pub length: u32,
      /// CHD file flags.
      pub flags: u32,
@@ -514,7 +565,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
      /// valid codec types supported by this library.
      pub compression: u32,
      /// The size of each hunk in the CHD file in units of sector length.
-@@ -174,7 +174,7 @@ pub struct HeaderV1 {
+@@ -211,7 +218,7 @@ pub struct HeaderV1 {
  
  /// A CHD V3 header.
  ///
@@ -523,7 +574,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
  /// of this struct.
  #[derive(Clone)]
  pub struct HeaderV3 {
-@@ -184,7 +184,7 @@ pub struct HeaderV3 {
+@@ -221,7 +228,7 @@ pub struct HeaderV3 {
      pub length: u32,
      /// CHD file flags.
      pub flags: u32,
@@ -532,7 +583,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
      /// valid codec types supported by this library.
      pub compression: u32,
      /// The size of each hunk of the CHD file in bytes.
-@@ -212,7 +212,7 @@ pub struct HeaderV3 {
+@@ -249,7 +256,7 @@ pub struct HeaderV3 {
  /// A CHD V4 header. The major difference between a V3 header and V4 header is the absence of MD5
  /// hash information in CHD V4.
  ///
@@ -541,7 +592,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
  /// of this struct.
  #[derive(Clone)]
  pub struct HeaderV4 {
-@@ -222,7 +222,7 @@ pub struct HeaderV4 {
+@@ -259,7 +266,7 @@ pub struct HeaderV4 {
      pub length: u32,
      /// CHD file flags.
      pub flags: u32,
@@ -550,7 +601,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
      /// valid codec types supported by this library.
      pub compression: u32,
      /// The total number of hunks in the CHD file.
-@@ -247,7 +247,7 @@ pub struct HeaderV4 {
+@@ -284,7 +291,7 @@ pub struct HeaderV4 {
  
  /// A CHD V5 header.
  ///
@@ -559,7 +610,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
  /// of this struct.
  #[derive(Clone)]
  pub struct HeaderV5 {
-@@ -258,7 +258,7 @@ pub struct HeaderV5 {
+@@ -295,7 +302,7 @@ pub struct HeaderV5 {
      /// The compression codec used in the CHD file. CHD V5 supports up to 4 different codecs in a
      /// single CHD file.
      ///
@@ -568,7 +619,21 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
      /// valid codec types supported by this library.
      pub compression: [u32; 4],
      /// The logical size of the compressed data in bytes.
-@@ -964,7 +964,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
+@@ -817,13 +824,6 @@ pub enum Flags {
+     Undefined = 0xfffffffc,
+ }
+ 
+-/// View the start of the raw header as the layout of a header version.
+-fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
+-    T::ref_from_prefix(raw_header)
+-        .map(|(raw, _)| raw)
+-        .map_err(|_| Error::InvalidData)
+-}
+-
+ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
+     let mut raw_header: [u8; CHD_MAX_HEADER_SIZE] = [0; CHD_MAX_HEADER_SIZE];
+ 
+@@ -1001,7 +1001,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
      }
  
      if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag())) {
@@ -577,7 +642,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
      }
      None
  }
-@@ -1015,12 +1015,12 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
+@@ -1052,12 +1052,12 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
  
  #[cfg(test)]
  mod test {
@@ -592,7 +657,7 @@ index 7ca6aea936db837575f46f4e3236c07a09e240ce..8ed9742e3be7e557a0584ab6e741b7d1
          use std::io::Cursor;
  
          let mut raw = Vec::new();
-@@ -1051,7 +1051,7 @@ mod test {
+@@ -1088,7 +1088,7 @@ mod test {
      #[test]
      #[cfg(feature = "encode")]
      fn legacy_to_bytes_roundtrip() {
@@ -1476,16 +1541,18 @@ index 2f8f504b44e330d81d3fc53bf9f50ef9971993a2..48cd890e07f48fb594f36eb17cfe77d4
      use rand::{RngExt, SeedableRng};
      use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
 diff --git a/write/compressed.rs b/write/compressed.rs
-index e33d4dbe37308187e9c6e6f1af70e900be44958a..1c55d8ac5c02bb4fd186aadc2c7805936f55d09e 100644
+index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..35efa59d1b7b681c21da5a2d9b21a6ca569cd6f5 100644
 --- a/write/compressed.rs
 +++ b/write/compressed.rs
-@@ -1,9 +1,9 @@
+@@ -1,10 +1,10 @@
  //! Hunk compression utilities for CHD encoding.
+-use crate::cdrom::{CD_FRAME_SIZE, CD_SYNC_HEADER};
 -use crate::compression::CompressionCodec;
 -use crate::error::{Error, Result};
 -use crate::header::CodecType;
 -use crate::write::ChdWriteCodecs;
 -use crate::Chd;
++use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_SYNC_HEADER};
 +use crate::chd_rs::compression::CompressionCodec;
 +use crate::chd_rs::error::{Error, Result};
 +use crate::chd_rs::header::CodecType;
@@ -1494,7 +1561,7 @@ index e33d4dbe37308187e9c6e6f1af70e900be44958a..1c55d8ac5c02bb4fd186aadc2c780593
  use arrayvec::ArrayVec;
  use parking_lot::RwLock;
  use sha1::{Digest, Sha1};
-@@ -27,7 +27,7 @@ impl HunkHash {
+@@ -29,7 +29,7 @@ impl HunkHash {
              } else {
                  [0; 20]
              },
@@ -1503,20 +1570,20 @@ index e33d4dbe37308187e9c6e6f1af70e900be44958a..1c55d8ac5c02bb4fd186aadc2c780593
          }
      }
  }
-@@ -240,9 +240,9 @@ impl HunkCompressor {
+@@ -295,9 +295,9 @@ impl HunkCompressor {
  #[cfg(test)]
  mod tests {
      use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
--    use crate::cdrom::CD_FRAME_SIZE;
+-    use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
 -    use crate::header::CodecType;
 -    use crate::Error;
-+    use crate::chd_rs::cdrom::CD_FRAME_SIZE;
++    use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
 +    use crate::chd_rs::header::CodecType;
 +    use crate::chd_rs::Error;
      use rand::rngs::StdRng;
      use rand::{RngExt, SeedableRng};
  
-@@ -329,7 +329,7 @@ mod tests {
+@@ -384,7 +384,7 @@ mod tests {
              panic!("not compressed");
          };
          assert_eq!(decompress(&codecs, index, &hunk.data), input);
@@ -1559,7 +1626,7 @@ index 704982767637392a2b9bbfd73aa9cd64289c5b04..5b45a931734f64f1bd30dd0328ffdfc5
      fn writer() -> ChdWriter<Cursor<Vec<u8>>> {
          ChdWriter::new(
 diff --git a/write/mod.rs b/write/mod.rs
-index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a5071986b6b 100644
+index 33db749ef42c7d9eb2156133610cbb254cbd0171..11e7e159541bcaae51d256dfe35d434f11468604 100644
 --- a/write/mod.rs
 +++ b/write/mod.rs
 @@ -1,11 +1,11 @@
@@ -1595,7 +1662,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
  use arrayvec::ArrayVec;
  use compressed::{CompressionState, HunkKind};
  use metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
-@@ -113,7 +113,7 @@ impl ChdWriteOptions {
+@@ -115,7 +115,7 @@ impl ChdWriteOptions {
  
      /// Default write options used for hard disk images with 512 byte sectors.
      ///
@@ -1604,7 +1671,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
      /// Compressed with LZMA, Deflate, Huffman, and FLAC.
      pub fn hard_disk() -> Self {
          Self::raw(512)
-@@ -125,7 +125,7 @@ impl ChdWriteOptions {
+@@ -127,7 +127,7 @@ impl ChdWriteOptions {
      /// frames. Compressed with the CD codecs for LZMA, Deflate, and FLAC.
      ///
      /// CD-ROM images also require track metadata, such as
@@ -1613,7 +1680,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
      pub fn cd() -> Self {
          const FRAMES_PER_HUNK: u32 = 8;
          ChdWriteOptions::new(FRAMES_PER_HUNK * CD_FRAME_SIZE, CD_FRAME_SIZE).compression(&[
-@@ -737,8 +737,8 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
+@@ -759,8 +759,8 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
  #[cfg(test)]
  mod tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1624,7 +1691,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
      use std::io::{Cursor, Write};
  
      const HUNK_BYTES: u32 = 4096;
-@@ -890,15 +890,15 @@ mod tests {
+@@ -912,15 +912,15 @@ mod tests {
  #[cfg(test)]
  mod compressed_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1644,7 +1711,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
  
      fn options() -> ChdWriteOptions {
          ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES)
-@@ -941,7 +941,7 @@ mod compressed_tests {
+@@ -963,7 +963,7 @@ mod compressed_tests {
  
      struct ReadChd {
          data: Vec<u8>,
@@ -1653,7 +1720,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
          /// The compression type and offset of each map entry.
          entries: Vec<(u8, u64)>,
      }
-@@ -1143,8 +1143,8 @@ mod compressed_tests {
+@@ -1192,8 +1192,8 @@ mod compressed_tests {
  #[cfg(test)]
  mod logical_size_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1664,7 +1731,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
      use std::io::{Cursor, ErrorKind, Write};
  
      const HUNK_BYTES: u32 = 4096;
-@@ -1178,8 +1178,8 @@ mod logical_size_tests {
+@@ -1227,8 +1227,8 @@ mod logical_size_tests {
  #[cfg(test)]
  mod failure_tests {
      use super::{ChdWriteOptions, ChdWriter};
@@ -1675,7 +1742,7 @@ index 9303bd0e63d51083228b61204ef6334c175e2769..531240f6ee83adee81abad65e4f46a50
      use std::cell::Cell;
      use std::io::{self, Cursor, Seek, SeekFrom, Write};
      use std::rc::Rc;
-@@ -1315,10 +1315,10 @@ mod failure_tests {
+@@ -1364,10 +1364,10 @@ mod failure_tests {
  #[cfg(test)]
  mod parent_tests {
      use super::{ChdWriteOptions, ChdWriter};

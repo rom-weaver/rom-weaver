@@ -26,6 +26,13 @@ use zerocopy::{FromBytes, Immutable, KnownLayout};
 
 mod raw;
 
+/// View the start of the raw header as the layout of a header version.
+fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
+    T::ref_from_prefix(raw_header)
+        .map(|(raw, _)| raw)
+        .map_err(|_| Error::InvalidData)
+}
+
 /// The types of compression codecs supported in a CHD file.
 #[repr(u32)]
 #[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq)]
@@ -106,6 +113,42 @@ impl CodecType {
             CodecType::ZstdCdV5 => {
                 CdZstdCodec::new(hunk_size).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
             }
+            #[allow(unreachable_patterns)]
+            _ => Err(Error::UnsupportedFormat),
+        }
+    }
+
+    /// Initializes the codec for the provided hunk size, compressing at the given level
+    /// if there is one.
+    pub(crate) fn init_with_level(
+        &self,
+        hunk_size: u32,
+        level: Option<i32>,
+    ) -> Result<Box<dyn CompressionCodec>> {
+        fn boxed<C: CompressionCodec + 'static>(
+            hunk_size: u32,
+            level: i32,
+        ) -> Result<Box<dyn CompressionCodec>> {
+            C::with_level(hunk_size, level).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
+        }
+
+        let Some(level) = level else {
+            return self.init(hunk_size);
+        };
+        match self {
+            CodecType::None => boxed::<NoneCodec>(hunk_size, level),
+            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
+                boxed::<ZlibCodec>(hunk_size, level)
+            }
+            CodecType::ZLibCdV5 => boxed::<CdZlibCodec>(hunk_size, level),
+            CodecType::LzmaCdV5 => boxed::<CdLzmaCodec>(hunk_size, level),
+            CodecType::FlacCdV5 => boxed::<CdFlacCodec>(hunk_size, level),
+            CodecType::LzmaV5 => boxed::<LzmaCodec>(hunk_size, level),
+            CodecType::FlacV5 => boxed::<RawFlacCodec>(hunk_size, level),
+            CodecType::HuffV5 => boxed::<HuffmanCodec>(hunk_size, level),
+            CodecType::AV | CodecType::AVHuffV5 => boxed::<AVHuffCodec>(hunk_size, level),
+            CodecType::ZstdV5 => boxed::<ZstdCodec>(hunk_size, level),
+            CodecType::ZstdCdV5 => boxed::<CdZstdCodec>(hunk_size, level),
             #[allow(unreachable_patterns)]
             _ => Err(Error::UnsupportedFormat),
         }
@@ -772,13 +815,6 @@ pub enum Flags {
 
     /// Undefined.
     Undefined = 0xfffffffc,
-}
-
-/// View the start of the raw header as the layout of a header version.
-fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
-    T::ref_from_prefix(raw_header)
-        .map(|(raw, _)| raw)
-        .map_err(|_| Error::InvalidData)
 }
 
 fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {

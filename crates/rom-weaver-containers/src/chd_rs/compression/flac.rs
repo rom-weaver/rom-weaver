@@ -20,8 +20,12 @@ use crate::chd_rs::header::CodecType;
 struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize = 2> {
     buffer: Vec<i32>,
     block_size: usize,
+    level: u32,
     _byteorder: PhantomData<T>,
 }
+
+/// The libFLAC compression level that MAME compresses with.
+const MAME_FLAC_LEVEL: u32 = 8;
 
 /// Raw FLAC has 2048 samples per block.
 type RawFlacEngine<T> = FlacCodec<T, 2048>;
@@ -45,9 +49,22 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
 
         // MAME encodes with libFLAC at compression level 8, which predicts with an LPC order
         // of up to 12, and picks the precision of the coefficients from the block size.
+        // Other levels follow the stereo decorrelation and maximum LPC order of the
+        // libFLAC compression level presets.
+        let (mid_side, lpc_order) = match self.level {
+            0 => (false, 0),
+            1 | 2 => (true, 0),
+            3 => (false, 6),
+            4..=6 => (true, 8),
+            _ => (true, 12),
+        };
         let mut config = flacenc::config::Encoder::default();
         config.block_size = self.block_size;
-        config.subframe_coding.qlpc.lpc_order = 12;
+        config.stereo_coding.use_leftside = mid_side;
+        config.stereo_coding.use_rightside = mid_side;
+        config.stereo_coding.use_midside = mid_side;
+        config.subframe_coding.use_lpc = lpc_order > 0;
+        config.subframe_coding.qlpc.lpc_order = lpc_order.max(1);
         config.subframe_coding.qlpc.quant_precision = match self.block_size {
             0..=192 => 7,
             193..=384 => 8,
@@ -92,7 +109,20 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
         Ok(FlacCodec {
             buffer: Vec::new(),
             block_size: block_size as usize,
+            level: MAME_FLAC_LEVEL,
             _byteorder: PhantomData,
+        })
+    }
+
+    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
+    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
+        let level = u32::try_from(level)
+            .ok()
+            .filter(|level| *level <= 8)
+            .ok_or(Error::InvalidParameter)?;
+        Ok(FlacCodec {
+            level,
+            ..Self::new(hunk_bytes)?
         })
     }
 
@@ -198,6 +228,14 @@ impl CodecImplementation for RawFlacCodec {
         })
     }
 
+    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
+    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
+        Ok(RawFlacCodec {
+            be: FlacCodec::with_level(hunk_bytes, level)?,
+            le: FlacCodec::with_level(hunk_bytes, level)?,
+        })
+    }
+
     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
         match input[0] {
             b'L' => self.le.decompress(&input[1..], output),
@@ -296,6 +334,20 @@ impl CodecImplementation for CdFlacCodec {
             engine: FlacCodec::new(flac_data_size)?,
             sub_engine: ZlibCodec::new(hunk_size)?,
             buffer: vec![0u8; hunk_size as usize],
+        })
+    }
+
+    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8. Like chdman, subcode
+    /// data is always compressed at the default Deflate level.
+    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+            return Err(Error::CodecError);
+        }
+
+        let flac_data_size = hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA;
+        Ok(CdFlacCodec {
+            engine: FlacCodec::with_level(flac_data_size, level)?,
+            ..Self::new(hunk_size)?
         })
     }
 

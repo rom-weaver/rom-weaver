@@ -1,0 +1,129 @@
+diff --git a/write/compressed.rs b/write/compressed.rs
+index 522871d90a41ce7a9195d097fc63f0fe1f5e22b3..3f4d99e28809684a4b4ed43e96824f7ff5193d71 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -1,4 +1,5 @@
+ //! Hunk compression utilities for CHD encoding.
++use crate::cdrom::{CD_FRAME_SIZE, CD_SYNC_HEADER};
+ use crate::compression::CompressionCodec;
+ use crate::error::{Error, Result};
+ use crate::header::CodecType;
+@@ -157,6 +158,9 @@ pub struct HunkCompressor {
+     /// Whether to look for duplicate hunks, which uncompressed CHDs can not store.
+     /// Hunks are only hashed with SHA1 when looking for duplicates.
+     find_duplicates: bool,
++    /// The index of the CD FLAC codec, if there are other codecs to compress data
++    /// sectors with.
++    cd_flac: Option<u8>,
+     best: Vec<u8>,
+     scratch: Vec<u8>,
+ }
+@@ -186,8 +190,16 @@ impl HunkCompressor {
+         hunk_bytes: u32,
+         state: CompressionState,
+     ) -> Result<Self> {
++        let codecs = codecs.into_array_vec();
++        let cd_flac = (codecs.len() > 1)
++            .then(|| {
++                codecs
++                    .iter()
++                    .position(|codec| *codec == CodecType::FlacCdV5)
++            })
++            .flatten()
++            .map(|index| index as u8);
+         let codecs = codecs
+-            .into_array_vec()
+             .iter()
+             .zip(levels)
+             .map(|(codec, level)| match codec {
+@@ -203,6 +215,7 @@ impl HunkCompressor {
+             codecs,
+             state,
+             find_duplicates,
++            cd_flac,
+             best: vec![0; hunk_bytes as usize],
+             scratch: vec![0; hunk_bytes as usize],
+         })
+@@ -242,9 +255,20 @@ impl HunkCompressor {
+ 
+         // The hunk itself is the result to beat. Each codec only gets room for a result
+         // strictly smaller than the best so far so a codec that can not beat it fails early.
++        //
++        // CD FLAC is for audio, which has no sync header. If every frame starts with the
++        // sync header of a data sector, the other codecs are tried without it. Unlike chdman,
++        // this stores the rare data hunk that FLAC compresses best with another codec.
++        let skip = self.cd_flac.filter(|_| {
++            hunk.chunks(CD_FRAME_SIZE as usize)
++                .all(|frame| frame.starts_with(&CD_SYNC_HEADER))
++        });
+         let mut best_codec = None;
+         let mut best_len = hunk.len();
+         for (index, codec) in (0u8..).zip(&mut self.codecs) {
++            if Some(index) == skip {
++                continue;
++            }
+             let limit = best_len.saturating_sub(1);
+             if let Ok(len) = codec.compress(&hunk, &mut self.scratch[..limit]) {
+                 best_codec = Some(index);
+@@ -271,7 +295,7 @@ impl HunkCompressor {
+ #[cfg(test)]
+ mod tests {
+     use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
+-    use crate::cdrom::CD_FRAME_SIZE;
++    use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
+     use crate::header::CodecType;
+     use crate::Error;
+     use rand::rngs::StdRng;
+@@ -598,4 +622,52 @@ mod tests {
+             Err(Error::InvalidParameter)
+         ));
+     }
++
++    /// CD frames that start with the data sector sync header but otherwise hold audio,
++    /// which CD FLAC compresses best.
++    fn data_frames_of_audio() -> Vec<u8> {
++        let audio = audio();
++        let mut hunk = Vec::new();
++        for sector in audio.chunks(CD_FRAME_SIZE as usize) {
++            let mut frame = sector[..CD_MAX_SECTOR_DATA as usize].to_vec();
++            frame[..12].copy_from_slice(&CD_SYNC_HEADER);
++            hunk.extend_from_slice(&frame);
++            hunk.extend_from_slice(&[0; (CD_FRAME_SIZE - CD_MAX_SECTOR_DATA) as usize]);
++        }
++        hunk
++    }
++
++    #[test]
++    fn cd_flac_is_skipped_for_data_hunks() {
++        let codecs = [CodecType::LzmaCdV5, CodecType::FlacCdV5];
++        let data = data_frames_of_audio();
++        let lzma = compress_with(CodecType::LzmaCdV5, None, &data).unwrap();
++        let flac = compress_with(CodecType::FlacCdV5, None, &data).unwrap();
++        assert!(flac.len() < lzma.len());
++
++        let mut compressor =
++            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default()).unwrap();
++        let hunk = compressor.compress(&data).unwrap();
++        assert_eq!(hunk.kind, HunkKind::Compressed(0));
++        assert_eq!(hunk.data, lzma);
++
++        // Without another codec, FLAC is still tried.
++        let mut compressor = HunkCompressor::new(
++            &[CodecType::FlacCdV5],
++            HUNK_BYTES,
++            CompressionState::default(),
++        )
++        .unwrap();
++        assert_eq!(compressor.compress(&data).unwrap().data, flac);
++
++        // A single frame without the sync header keeps FLAC in play.
++        let mut mixed = data.clone();
++        mixed[CD_FRAME_SIZE as usize] ^= 1;
++        let mut compressor =
++            HunkCompressor::new(&codecs, HUNK_BYTES, CompressionState::default()).unwrap();
++        assert_eq!(
++            compressor.compress(&mixed).unwrap().kind,
++            HunkKind::Compressed(1)
++        );
++    }
+ }

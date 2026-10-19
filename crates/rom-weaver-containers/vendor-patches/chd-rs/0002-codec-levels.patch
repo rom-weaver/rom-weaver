@@ -1,0 +1,698 @@
+diff --git a/compression/cdrom.rs b/compression/cdrom.rs
+index 0f291209058f718dcf437acaa46c5539df58790a..a6840cf0ffc07bb42672faed8a555436333651e0 100644
+--- a/compression/cdrom.rs
++++ b/compression/cdrom.rs
+@@ -183,6 +183,20 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         })
+     }
+ 
++    /// The level applies to the sector data. Like chdman, subcode data is always
++    /// compressed at the default level.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
++        if hunk_size % CD_FRAME_SIZE != 0 {
++            return Err(Error::CodecError);
++        }
++
++        Ok(CdCodec {
++            engine: Engine::with_level((hunk_size / CD_FRAME_SIZE) * CD_MAX_SECTOR_DATA, level)?,
++            ..Self::new(hunk_size)?
++        })
++    }
++
+     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
+         let frames = output.len() / CD_FRAME_SIZE as usize;
+diff --git a/compression/flac.rs b/compression/flac.rs
+index 944037bbe0e3cd972e19a809cb0e2a0d5da8dcc2..071bacb2f2ba966a3be32bc26a43f35ea5dcaa91 100644
+--- a/compression/flac.rs
++++ b/compression/flac.rs
+@@ -21,9 +21,15 @@ struct FlacCodec<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize
+     buffer: Vec<i32>,
+     #[cfg_attr(not(feature = "encode"), allow(dead_code))]
+     block_size: usize,
++    #[cfg(feature = "encode")]
++    level: u32,
+     _byteorder: PhantomData<T>,
+ }
+ 
++/// The libFLAC compression level that MAME compresses with.
++#[cfg(feature = "encode")]
++const MAME_FLAC_LEVEL: u32 = 8;
++
+ /// Raw FLAC has 2048 samples per block.
+ type RawFlacEngine<T> = FlacCodec<T, 2048>;
+ 
+@@ -47,9 +53,22 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+ 
+         // MAME encodes with libFLAC at compression level 8, which predicts with an LPC order
+         // of up to 12, and picks the precision of the coefficients from the block size.
++        // Other levels follow the stereo decorrelation and maximum LPC order of the
++        // libFLAC compression level presets.
++        let (mid_side, lpc_order) = match self.level {
++            0 => (false, 0),
++            1 | 2 => (true, 0),
++            3 => (false, 6),
++            4..=6 => (true, 8),
++            _ => (true, 12),
++        };
+         let mut config = flacenc::config::Encoder::default();
+         config.block_size = self.block_size;
+-        config.subframe_coding.qlpc.lpc_order = 12;
++        config.stereo_coding.use_leftside = mid_side;
++        config.stereo_coding.use_rightside = mid_side;
++        config.stereo_coding.use_midside = mid_side;
++        config.subframe_coding.use_lpc = lpc_order > 0;
++        config.subframe_coding.qlpc.lpc_order = lpc_order.max(1);
+         config.subframe_coding.qlpc.quant_precision = match self.block_size {
+             ..=192 => 7,
+             ..=384 => 8,
+@@ -94,10 +113,25 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+         Ok(FlacCodec {
+             buffer: Vec::new(),
+             block_size: block_size as usize,
++            #[cfg(feature = "encode")]
++            level: MAME_FLAC_LEVEL,
+             _byteorder: PhantomData::default(),
+         })
+     }
+ 
++    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
++        let level = u32::try_from(level)
++            .ok()
++            .filter(|level| *level <= 8)
++            .ok_or(Error::InvalidParameter)?;
++        Ok(FlacCodec {
++            level,
++            ..Self::new(hunk_bytes)?
++        })
++    }
++
+     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+         let comp_buf = Cursor::new(input);
+ 
+@@ -210,6 +244,15 @@ impl CodecImplementation for RawFlacCodec {
+         })
+     }
+ 
++    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_bytes: u32, level: i32) -> Result<Self> {
++        Ok(RawFlacCodec {
++            be: FlacCodec::with_level(hunk_bytes, level)?,
++            le: FlacCodec::with_level(hunk_bytes, level)?,
++        })
++    }
++
+     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+         match input[0] {
+             b'L' => self.le.decompress(&input[1..], output),
+@@ -312,6 +355,21 @@ impl CodecImplementation for CdFlacCodec {
+         })
+     }
+ 
++    /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8. Like chdman, subcode
++    /// data is always compressed at the default Deflate level.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
++        if hunk_size % CD_FRAME_SIZE != 0 {
++            return Err(Error::CodecError);
++        }
++
++        let flac_data_size = hunk_size / CD_FRAME_SIZE * CD_MAX_SECTOR_DATA;
++        Ok(CdFlacCodec {
++            engine: FlacCodec::with_level(flac_data_size, level)?,
++            ..Self::new(hunk_size)?
++        })
++    }
++
+     fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult> {
+         let total_frames = output.len() / CD_FRAME_SIZE as usize;
+         let frame_res = self.engine.decompress(
+diff --git a/compression/lzma.rs b/compression/lzma.rs
+index a8d7bd4c4805512ab19732e3b952f69923d2778c..cb6d142af1243cf2435da6bf3a490b9c3f3e9ba0 100644
+--- a/compression/lzma.rs
++++ b/compression/lzma.rs
+@@ -57,8 +57,16 @@ use std::io::{Cursor, Read};
+ /// when decompressed.
+ pub struct LzmaCodec<const LC: u32 = 3, const LP: u32 = 0, const PB: u32 = 2> {
+     dict_size: u32,
++    #[cfg(feature = "encode")]
++    level: u32,
++    #[cfg(feature = "encode")]
++    encode_dict_size: u32,
+ }
+ 
++/// The LZMA level that MAME compresses with.
++#[cfg(feature = "encode")]
++const MAME_LZMA_LEVEL: u32 = 6;
++
+ impl<const LC: u32, const LP: u32, const PB: u32> CompressionCodec for LzmaCodec<LC, LP, PB> {}
+ 
+ /// MAME/libchdr uses an ancient LZMA 19.00.
+@@ -109,6 +117,26 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
+ 
+         Ok(LzmaCodec {
+             dict_size: get_lzma_dict_size(9, hunk_size),
++            #[cfg(feature = "encode")]
++            level: MAME_LZMA_LEVEL,
++            #[cfg(feature = "encode")]
++            encode_dict_size: get_lzma_dict_size(MAME_LZMA_LEVEL, hunk_size),
++        })
++    }
++
++    /// LZMA levels range from 0 to 9, like LzmaEncProps. chdman uses 6.
++    ///
++    /// Hunks compressed at any level decompress with the dictionary size of level 9.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
++        let level = u32::try_from(level)
++            .ok()
++            .filter(|level| *level <= 9)
++            .ok_or(Error::InvalidParameter)?;
++        Ok(LzmaCodec {
++            level,
++            encode_dict_size: get_lzma_dict_size(level, hunk_size),
++            ..Self::new(hunk_size)?
+         })
+     }
+ 
+@@ -141,17 +169,26 @@ impl<const LC: u32, const LP: u32, const PB: u32> CodecImplementation for LzmaCo
+         //
+         // LzmaEncProps_Normalize
+         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/deps/lzma-19.00/src/LzmaEnc.c#L74-L78
+-        // normalizes level 6 to the normal (optimum) algorithm, fb = 32, a BT4 binary tree
+-        // match finder (btMode = 1, numHashBytes = 4), and mc = 32.
++        // normalizes the level to the fast algorithm with a HC4 hash chain match finder below
++        // level 5, or the normal (optimum) algorithm with a BT4 binary tree otherwise
++        // (btMode = algo, numHashBytes = 4), fb = 32 below level 7 or 64 otherwise, and
++        // mc = (16 + fb / 2), halved for hash chains. Level 6 is normal, BT4, fb = 32 and mc = 32.
++        let (mode, mf) = if self.level < 5 {
++            (EncodeMode::Fast, MfType::Hc4)
++        } else {
++            (EncodeMode::Normal, MfType::Bt4)
++        };
++        let nice_len = if self.level < 7 { 32 } else { 64 };
++        let depth_limit = (16 + nice_len as i32 / 2) >> u32::from(mf == MfType::Hc4);
+         let options = LzmaOptions {
+-            dict_size: self.dict_size,
++            dict_size: self.encode_dict_size,
+             lc: LC,
+             lp: LP,
+             pb: PB,
+-            mode: EncodeMode::Normal,
+-            nice_len: 32,
+-            mf: MfType::Bt4,
+-            depth_limit: 32,
++            mode,
++            nice_len,
++            mf,
++            depth_limit,
+             preset_dict: None,
+         };
+ 
+diff --git a/compression/mod.rs b/compression/mod.rs
+index 89e098c5612d8644ba870ac203279c91e84d8437..1b982bead8ec3627c63ac8a564baae9482488683 100644
+--- a/compression/mod.rs
++++ b/compression/mod.rs
+@@ -49,6 +49,22 @@ pub trait CodecImplementation {
+     where
+         Self: Sized;
+ 
++    /// Creates a new instance of this codec for the provided hunk size that compresses
++    /// at the given level, where higher levels compress smaller but slower.
++    ///
++    /// The range of levels depends on the codec, and [`new`](CodecImplementation::new)
++    /// uses the level that chdman compresses with. Returns
++    /// [`InvalidParameter`](crate::Error::InvalidParameter) if the level is out of range,
++    /// or the codec has no compression levels.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_size: u32, level: i32) -> Result<Self>
++    where
++        Self: Sized,
++    {
++        let _ = (hunk_size, level);
++        Err(crate::error::Error::InvalidParameter)
++    }
++
+     /// Decompress compressed bytes from the input buffer into the
+     /// output buffer.
+     ///
+diff --git a/compression/zlib.rs b/compression/zlib.rs
+index 4a013136a0a6bdc1b3a71ad66ac33b7d5956d110..bb2bb48e6a70a705f05ec0d5a415f33178d11a42 100644
+--- a/compression/zlib.rs
++++ b/compression/zlib.rs
+@@ -18,6 +18,8 @@ pub struct ZlibCodec {
+     engine: Decompress,
+     #[cfg(feature = "encode")]
+     compressor: Compress,
++    #[cfg(feature = "encode")]
++    level: flate2::Compression,
+ }
+ 
+ impl ZlibCodec {
+@@ -38,7 +40,7 @@ impl ZlibCodec {
+         if !matches!(status, Ok(flate2::Status::StreamEnd)) {
+             // zlib-rs can panic on the next stream if a stream that ran out of output space
+             // is reset, so start over with a new compressor instead.
+-            self.compressor = Compress::new(flate2::Compression::best(), false);
++            self.compressor = Compress::new(self.level, false);
+             return Err(Error::CompressionError);
+         }
+         Ok(self.compressor.total_out() as usize)
+@@ -51,6 +53,23 @@ impl CodecImplementation for ZlibCodec {
+             engine: Decompress::new(false),
+             #[cfg(feature = "encode")]
+             compressor: Compress::new(flate2::Compression::best(), false),
++            #[cfg(feature = "encode")]
++            level: flate2::Compression::best(),
++        })
++    }
++
++    /// Deflate levels range from 0 (stored) to 9. chdman uses 9.
++    #[cfg(feature = "encode")]
++    fn with_level(_: u32, level: i32) -> Result<Self> {
++        let level = u32::try_from(level)
++            .ok()
++            .filter(|level| *level <= 9)
++            .map(flate2::Compression::new)
++            .ok_or(Error::InvalidParameter)?;
++        Ok(ZlibCodec {
++            engine: Decompress::new(false),
++            compressor: Compress::new(level, false),
++            level,
+         })
+     }
+ 
+diff --git a/compression/zstd.rs b/compression/zstd.rs
+index 0f6f95d0001a8844a3c7343753744102c297acbd..60317590f2512aca43d9419031ca237dd3207c95 100644
+--- a/compression/zstd.rs
++++ b/compression/zstd.rs
+@@ -44,6 +44,8 @@ pub struct ZstdCodec {
+     zstd_context: zstd_safe::DCtx<'static>,
+     #[cfg(feature = "encode")]
+     compressor: zstd_safe::CCtx<'static>,
++    #[cfg(feature = "encode")]
++    level: i32,
+ }
+ 
+ #[cfg(not(feature = "fast_zstd"))]
+@@ -60,6 +62,16 @@ impl CodecImplementation for ZstdCodec {
+         })
+     }
+ 
++    /// Levels are those supported by zrip.
++    #[cfg(feature = "encode")]
++    fn with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
++        Ok(Self {
++            decoder: zrip::DecompressContext::new(),
++            buffer: Vec::new(),
++            encoder: zrip::CompressContext::new(level).map_err(|_| Error::InvalidParameter)?,
++        })
++    }
++
+     #[cfg(feature = "encode")]
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+@@ -105,6 +117,22 @@ impl CodecImplementation for ZstdCodec {
+             zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
+             #[cfg(feature = "encode")]
+             compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
++            #[cfg(feature = "encode")]
++            level: zstd_safe::max_c_level(),
++        })
++    }
++
++    /// Zstandard levels range from [`min_c_level`](zstd_safe::min_c_level) to
++    /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
++    /// chdman uses the maximum level.
++    #[cfg(feature = "encode")]
++    fn with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
++        if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
++            return Err(Error::InvalidParameter);
++        }
++        Ok(Self {
++            level,
++            ..Self::new(hunk_size)?
+         })
+     }
+ 
+@@ -114,7 +142,7 @@ impl CodecImplementation for ZstdCodec {
+         let output_len = output.len().min(input.len());
+         let compressed_len = self
+             .compressor
+-            .compress(&mut output[..output_len], input, zstd_safe::max_c_level())
++            .compress(&mut output[..output_len], input, self.level)
+             .map_err(|_| Error::CompressionError)?;
+         if compressed_len >= input.len() {
+             return Err(Error::CompressionError);
+diff --git a/header/mod.rs b/header/mod.rs
+index 7ca6aea936db837575f46f4e3236c07a09e240ce..e593bae09b7dd11f4494782d70fbec20fe0aaa82 100644
+--- a/header/mod.rs
++++ b/header/mod.rs
+@@ -110,6 +110,43 @@ impl CodecType {
+             _ => Err(Error::UnsupportedFormat),
+         }
+     }
++
++    /// Initializes the codec for the provided hunk size, compressing at the given level
++    /// if there is one.
++    #[cfg(feature = "encode")]
++    pub(crate) fn init_with_level(
++        &self,
++        hunk_size: u32,
++        level: Option<i32>,
++    ) -> Result<Box<dyn CompressionCodec>> {
++        fn boxed<C: CompressionCodec + 'static>(
++            hunk_size: u32,
++            level: i32,
++        ) -> Result<Box<dyn CompressionCodec>> {
++            C::with_level(hunk_size, level).map(|x| Box::new(x) as Box<dyn CompressionCodec>)
++        }
++
++        let Some(level) = level else {
++            return self.init(hunk_size);
++        };
++        match self {
++            CodecType::None => boxed::<NoneCodec>(hunk_size, level),
++            CodecType::Zlib | CodecType::ZlibPlus | CodecType::ZLibV5 => {
++                boxed::<ZlibCodec>(hunk_size, level)
++            }
++            CodecType::ZLibCdV5 => boxed::<CdZlibCodec>(hunk_size, level),
++            CodecType::LzmaCdV5 => boxed::<CdLzmaCodec>(hunk_size, level),
++            CodecType::FlacCdV5 => boxed::<CdFlacCodec>(hunk_size, level),
++            CodecType::LzmaV5 => boxed::<LzmaCodec>(hunk_size, level),
++            CodecType::FlacV5 => boxed::<RawFlacCodec>(hunk_size, level),
++            CodecType::HuffV5 => boxed::<HuffmanCodec>(hunk_size, level),
++            CodecType::AV | CodecType::AVHuffV5 => boxed::<AVHuffCodec>(hunk_size, level),
++            CodecType::ZstdV5 => boxed::<ZstdCodec>(hunk_size, level),
++            CodecType::ZstdCdV5 => boxed::<CdZstdCodec>(hunk_size, level),
++            #[allow(unreachable_patterns)]
++            _ => Err(Error::UnsupportedFormat),
++        }
++    }
+ }
+ 
+ /// The CHD header version.
+diff --git a/write/compressed.rs b/write/compressed.rs
+index dfc990814b14aa51cd3fe6efdb4375c2eeda2e08..522871d90a41ce7a9195d097fc63f0fe1f5e22b3 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -162,22 +162,38 @@ pub struct HunkCompressor {
+ }
+ 
+ impl HunkCompressor {
+-    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
+-    ///
+-    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec,
+-    /// or [`CodecError`](Error::CodecError) if a codec does not support the hunk size.
++    /// A compressor for the given codecs at their default levels.
++    #[cfg(test)]
+     pub(crate) fn new(
+         codecs: impl ChdWriteCodecs,
+         hunk_bytes: u32,
+         state: CompressionState,
++    ) -> Result<Self> {
++        Self::with_levels(codecs, [None; 4], hunk_bytes, state)
++    }
++
++    /// Create a compressor for the given codecs. Without codecs, every hunk is stored as is.
++    ///
++    /// Each codec compresses at the level in the same position, or its default level if
++    /// that is `None`.
++    ///
++    /// Returns [`InvalidParameter`](Error::InvalidParameter) if a codec is not a V5 codec
++    /// or a level is not valid for its codec, or [`CodecError`](Error::CodecError) if a
++    /// codec does not support the hunk size.
++    pub(crate) fn with_levels(
++        codecs: impl ChdWriteCodecs,
++        levels: [Option<i32>; 4],
++        hunk_bytes: u32,
++        state: CompressionState,
+     ) -> Result<Self> {
+         let codecs = codecs
+             .into_array_vec()
+             .iter()
+-            .map(|codec| match codec {
++            .zip(levels)
++            .map(|(codec, level)| match codec {
+                 CodecType::None => Err(Error::InvalidParameter),
+                 codec if codec.is_legacy() => Err(Error::InvalidParameter),
+-                codec => codec.init(hunk_bytes),
++                codec => codec.init_with_level(hunk_bytes, level),
+             })
+             .collect::<Result<ArrayVec<_, 4>>>()?;
+ 
+@@ -404,4 +420,182 @@ mod tests {
+             Err(Error::InvalidParameter)
+         ));
+     }
++
++    /// Correlated stereo 16-bit PCM, which FLAC compresses better with mid-side coding.
++    fn audio() -> Vec<u8> {
++        (0..HUNK_BYTES as usize / 4)
++            .flat_map(|n| {
++                let left = ((n as f64 / 20.0).sin() * 8000.0) as i16;
++                let right = left / 2 + ((n as f64 / 7.0).sin() * 500.0) as i16;
++                [left.to_be_bytes(), right.to_be_bytes()]
++            })
++            .flatten()
++            .collect()
++    }
++
++    /// Text of random words, which compresses to different sizes at different levels.
++    fn words() -> Vec<u8> {
++        const WORDS: [&str; 8] = [
++            "chd ", "hunk ", "frame ", "sector ", "map ", "lzma ", "zlib ", "flac ",
++        ];
++        let mut rng = StdRng::seed_from_u64(2);
++        let mut data = Vec::new();
++        while data.len() < HUNK_BYTES as usize {
++            data.extend_from_slice(WORDS[rng.random_range(0..WORDS.len())].as_bytes());
++        }
++        data.truncate(HUNK_BYTES as usize);
++        data
++    }
++
++    /// Each codec with levels, the level chdman compresses with, and levels to test.
++    fn leveled_codecs() -> Vec<(CodecType, i32, Vec<i32>)> {
++        #[cfg(feature = "fast_zstd")]
++        let (zstd_default, zstd_levels) = (
++            zstd_safe::max_c_level(),
++            vec![
++                zstd_safe::min_c_level(),
++                -1,
++                0,
++                1,
++                3,
++                19,
++                zstd_safe::max_c_level(),
++            ],
++        );
++        #[cfg(not(feature = "fast_zstd"))]
++        let (zstd_default, zstd_levels) = (1, vec![1]);
++        let zlib_levels: Vec<i32> = (0..=9).collect();
++        let lzma_levels: Vec<i32> = (0..=9).collect();
++        let flac_levels: Vec<i32> = (0..=8).collect();
++        vec![
++            (CodecType::ZLibV5, 9, zlib_levels.clone()),
++            (CodecType::ZLibCdV5, 9, zlib_levels),
++            (CodecType::LzmaV5, 6, lzma_levels.clone()),
++            (CodecType::LzmaCdV5, 6, lzma_levels),
++            (CodecType::ZstdV5, zstd_default, zstd_levels.clone()),
++            (CodecType::ZstdCdV5, zstd_default, zstd_levels),
++            (CodecType::FlacV5, 8, flac_levels.clone()),
++            (CodecType::FlacCdV5, 8, flac_levels),
++        ]
++    }
++
++    fn compress_with(codec: CodecType, level: Option<i32>, input: &[u8]) -> Option<Vec<u8>> {
++        let mut output = vec![0u8; HUNK_BYTES as usize];
++        let len = codec
++            .init_with_level(HUNK_BYTES, level)
++            .unwrap()
++            .compress(input, &mut output)
++            .ok()?;
++        output.truncate(len);
++        Some(output)
++    }
++
++    #[test]
++    fn default_levels_are_chdman_levels() {
++        for (codec, chdman_level, _) in leveled_codecs() {
++            for input in [text(), words(), audio()] {
++                assert_eq!(
++                    compress_with(codec, None, &input),
++                    compress_with(codec, Some(chdman_level), &input),
++                    "{:?}",
++                    codec as u32
++                );
++            }
++        }
++    }
++
++    #[test]
++    fn levels_round_trip_and_change_output() {
++        for (codec, _, levels) in leveled_codecs() {
++            let input = match codec {
++                CodecType::FlacV5 | CodecType::FlacCdV5 => audio(),
++                _ => words(),
++            };
++            let mut sizes = Vec::new();
++            for level in levels.iter().copied() {
++                // Stored Deflate is larger than the input.
++                let Some(compressed) = compress_with(codec, Some(level), &input) else {
++                    sizes.push(None);
++                    continue;
++                };
++                let mut output = vec![0u8; HUNK_BYTES as usize];
++                codec
++                    .init(HUNK_BYTES)
++                    .unwrap()
++                    .decompress(&compressed, &mut output)
++                    .unwrap();
++                assert!(output == input, "{:?} level {level}", codec as u32);
++                sizes.push(Some(compressed.len()));
++            }
++            sizes.sort();
++            sizes.dedup();
++            assert!(
++                levels.len() == 1 || sizes.len() > 1,
++                "{:?} compressed every level to {sizes:?}",
++                codec as u32
++            );
++        }
++    }
++
++    #[test]
++    fn invalid_levels() {
++        let mut invalid = vec![
++            (CodecType::ZLibV5, -1),
++            (CodecType::ZLibV5, 10),
++            (CodecType::ZLibCdV5, 10),
++            (CodecType::LzmaV5, -1),
++            (CodecType::LzmaV5, 10),
++            (CodecType::LzmaCdV5, 10),
++            (CodecType::FlacV5, -1),
++            (CodecType::FlacV5, 9),
++            (CodecType::FlacCdV5, 9),
++            (CodecType::HuffV5, 0),
++            (CodecType::AVHuffV5, 0),
++        ];
++        #[cfg(feature = "fast_zstd")]
++        invalid.extend([
++            (CodecType::ZstdV5, zstd_safe::max_c_level() + 1),
++            (CodecType::ZstdCdV5, zstd_safe::min_c_level() - 1),
++        ]);
++        for (codec, level) in invalid {
++            assert!(
++                matches!(
++                    HunkCompressor::with_levels(
++                        &[codec],
++                        [Some(level), None, None, None],
++                        HUNK_BYTES,
++                        CompressionState::default()
++                    ),
++                    Err(Error::InvalidParameter)
++                ),
++                "{:?} level {level}",
++                codec as u32
++            );
++        }
++    }
++
++    #[test]
++    fn levels_apply_to_codecs_in_order() {
++        let codecs = [CodecType::ZLibV5, CodecType::LzmaV5];
++        let input = text();
++        let mut compressor = HunkCompressor::with_levels(
++            &codecs,
++            [Some(0), None, None, None],
++            HUNK_BYTES,
++            CompressionState::default(),
++        )
++        .unwrap();
++        let hunk = compressor.compress(&input).unwrap();
++        // Stored Deflate never wins, so LZMA does.
++        assert_eq!(hunk.kind, HunkKind::Compressed(1));
++        assert!(matches!(
++            HunkCompressor::with_levels(
++                &codecs,
++                [None, Some(10), None, None],
++                HUNK_BYTES,
++                CompressionState::default()
++            ),
++            Err(Error::InvalidParameter)
++        ));
++    }
+ }
+diff --git a/write/mod.rs b/write/mod.rs
+index 58ff55c2905d9f057e4c61ce75d434d660e38c24..33db749ef42c7d9eb2156133610cbb254cbd0171 100644
+--- a/write/mod.rs
++++ b/write/mod.rs
+@@ -51,6 +51,7 @@ pub struct ChdWriteOptions {
+     unit_bytes: u32,
+     logical_bytes: Option<u64>,
+     compression_codecs: ArrayVec<CodecType, 4>,
++    compression_levels: [Option<i32>; 4],
+     hash_uncompressed: bool,
+ }
+ 
+@@ -98,6 +99,7 @@ impl ChdWriteOptions {
+             unit_bytes,
+             logical_bytes: None,
+             compression_codecs: ArrayVec::new(),
++            compression_levels: [None; 4],
+             hash_uncompressed: false,
+         }
+     }
+@@ -186,6 +188,25 @@ impl ChdWriteOptions {
+         self
+     }
+ 
++    /// Set the compression level of each codec, in the same order as the codecs.
++    ///
++    /// `None` compresses with the level chdman uses for the codec. Levels outside the
++    /// range of their codec, or levels for codecs without levels, make creating the
++    /// writer return [`InvalidParameter`](Error::InvalidParameter).
++    ///
++    /// | Codec | Levels | chdman |
++    /// |-------|--------|--------|
++    /// | Deflate (`zlib`, `cdzl`) | 0 to 9 | 9 |
++    /// | LZMA (`lzma`, `cdlz`) | 0 to 9 | 6 |
++    /// | Zstandard (`zstd`, `cdzs`) | negative to 22, where 0 is 3 | 22 |
++    /// | FLAC (`flac`, `cdfl`) | 0 to 8 | 8 |
++    ///
++    /// CD-ROM codecs compress subcode data at the chdman level regardless.
++    pub fn compression_levels(mut self, levels: [Option<i32>; 4]) -> Self {
++        self.compression_levels = levels;
++        self
++    }
++
+     /// Enable or disable calculation of SHA1 hashes for uncompressed CHDs.
+     /// chdman does not hash uncompressed CHDs, but this can be enabled
+     /// here. The output CHDs are still valid but will not match the reference
+@@ -301,8 +322,9 @@ impl<W: Write + Seek> ChdWriter<W> {
+             })
+             .transpose()?;
+ 
+-        let compressor = HunkCompressor::new(
++        let compressor = HunkCompressor::with_levels(
+             &options.compression_codecs,
++            options.compression_levels,
+             options.hunk_bytes,
+             state.clone(),
+         )?;
+@@ -351,8 +373,9 @@ impl<W: Write + Seek> ChdWriter<W> {
+     /// duplicate hunks are not compressed again. If the CHD is uncompressed, the compressor
+     /// stores every hunk as is.
+     pub fn compressor(&self) -> Result<HunkCompressor> {
+-        HunkCompressor::new(
++        HunkCompressor::with_levels(
+             &self.options.compression_codecs,
++            self.options.compression_levels,
+             self.options.hunk_bytes,
+             self.state.clone(),
+         )

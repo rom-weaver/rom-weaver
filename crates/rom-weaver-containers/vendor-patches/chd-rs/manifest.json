@@ -22,7 +22,43 @@
   ],
   "patches": [
     {
-      "file": "0001-module-paths.patch",
+      "file": "0001-owned-compressed-hunks.patch",
+      "stage": "source",
+      "reason": "Add HunkCompressor::compress_owned so a compressed hunk can own its input and move to the thread that writes it, letting callers compress on worker threads without keeping every read buffer alive.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::"
+      ]
+    },
+    {
+      "file": "0002-codec-levels.patch",
+      "stage": "source",
+      "reason": "Add CodecImplementation::with_level and ChdWriteOptions::compression_levels for Deflate (0-9), LZMA (0-9, LzmaEncProps_Normalize mapping), Zstandard and FLAC (0-8, libFLAC stereo and LPC presets). Defaults stay the chdman levels; CD subcode keeps the default level.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/mod.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::"
+      ]
+    },
+    {
+      "file": "0003-cd-flac-data-skip.patch",
+      "stage": "source",
+      "reason": "Skip the CD FLAC trial when other codecs are configured and every frame of the hunk starts with the data-sector sync header, matching rom-weaver's previous encoder. Unlike chdman, a data hunk that FLAC would compress best is stored with another codec.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::cd_flac_is_skipped_for_data_hunks -- --exact"
+      ]
+    },
+    {
+      "file": "0004-module-paths.patch",
       "stage": "integration",
       "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest chd:: paths to crate::chd_rs:: and rom_weaver_containers::chd_rs::. mod.rs appears as a delete and add because patch renames are unsupported.",
       "upstream": {
@@ -35,9 +71,9 @@
       ]
     },
     {
-      "file": "0002-pinned-features.patch",
+      "file": "0005-pinned-features.patch",
       "stage": "integration",
-      "reason": "Resolve feature gates to the pinned set (std, encode, huff_write, fast_zstd, verify_block_crc, want_subcode, want_raw_data_sector on; codec_api, huffman_api, nonstandard_channel_count and both iterator features off), deleting the zrip zstd backend, the lender-based iter module and docs.rs attributes.",
+      "reason": "Resolve feature gates to the pinned set (std, encode, huff_write, fast_zstd, verify_block_crc, want_subcode, want_raw_data_sector, codec_api on; huffman_api, nonstandard_channel_count and both iterator features off), deleting the zrip zstd backend, the lender-based iter module and docs.rs attributes.",
       "upstream": {
         "status": "project-specific",
         "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/Cargo.toml"
@@ -47,9 +83,9 @@
       ]
     },
     {
-      "file": "0003-workspace-zstd.patch",
+      "file": "0006-workspace-zstd.patch",
       "stage": "integration",
-      "reason": "Take zstd_safe from the workspace zstd crate's re-export instead of a separate zstd-safe dependency.",
+      "reason": "Take zstd_safe from the workspace zstd crate's re-export instead of a separate zstd-safe dependency, in the codec and its compressor tests.",
       "upstream": {
         "status": "project-specific",
         "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/zstd.rs"
@@ -59,7 +95,7 @@
       ]
     },
     {
-      "file": "0004-workspace-formatting.patch",
+      "file": "0007-workspace-formatting.patch",
       "stage": "integration",
       "reason": "Apply workspace rustfmt (edition 2024 import order and blank lines left by feature resolution); formatting only.",
       "upstream": {
@@ -71,7 +107,7 @@
       ]
     },
     {
-      "file": "0005-workspace-lints.patch",
+      "file": "0008-workspace-lints.patch",
       "stage": "integration",
       "reason": "Workspace clippy and rustc 2024 fixes: elided lifetimes, div_ceil, is_multiple_of, io::Error::other, collapsible ifs, non-overlapping FLAC precision ranges and CompressedHunk::is_empty.",
       "upstream": {
@@ -83,7 +119,7 @@
       ]
     },
     {
-      "file": "0006-test-adaptations.patch",
+      "file": "0009-test-adaptations.patch",
       "stage": "integration",
       "reason": "Drop the upstream read tests that need .testimages fixtures the repository does not ship, and make the module-level doc examples compile as no_run (main wrappers, metadata_refs without ?, collected refs read through Chd::inner).",
       "upstream": {
