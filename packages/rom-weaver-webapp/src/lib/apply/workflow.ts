@@ -27,7 +27,7 @@ import { type createPatchFile, getPatchFileExternalSource } from "../input/binar
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
-import { collectMemberRefs, findMemberAssets } from "./bare-member-target.ts";
+import { collectPatchMemberRefs, findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
@@ -461,18 +461,24 @@ const getPatchIds = (patchIndices: number[], patchOptions: PatchInput["patchOpti
 const memberIsAsset = (
   asset: InputAsset,
   member: string,
-  inputChecks: string | undefined,
+  patchOption: NonNullable<PatchInput["patchOptions"]>[number] | undefined,
   patchOptions: PatchInput["patchOptions"],
+  rootMember: string | undefined,
 ) =>
   asset.member === member ||
   findMemberAssets(
     member,
     [asset],
-    inputChecks,
-    collectMemberRefs((patchOptions ?? []).flatMap((option) => [option?.input, option?.target])),
+    patchOption?.inputChecks || patchOption?.memberChecks,
+    collectPatchMemberRefs(patchOptions ?? [], rootMember),
   ).length > 0;
 
-const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+const getPatchInputs = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  asset: InputAsset,
+  rootMember: string | undefined,
+) => {
   const inputs = patchIndices.map((patchIndex) => {
     const input = patchOptions?.[patchIndex]?.input;
     // Member selection already happened against prepared InputAssets. The Rust worker receives
@@ -481,7 +487,7 @@ const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchO
       input &&
       "rom" in input &&
       input.member &&
-      memberIsAsset(asset, input.member, patchOptions?.[patchIndex]?.inputChecks, patchOptions)
+      memberIsAsset(asset, input.member, patchOptions?.[patchIndex], patchOptions, rootMember)
     )
       return { rom: true } as const;
     return input || null;
@@ -489,7 +495,12 @@ const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchO
   return inputs.some(Boolean) ? inputs : undefined;
 };
 
-const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+const getPatchTargets = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  asset: InputAsset,
+  rootMember: string | undefined,
+) => {
   const targets = patchIndices.map((patchIndex) => {
     const target = patchOptions?.[patchIndex]?.target;
     // The worker receives the selected leaf, so the member is already resolved.
@@ -498,7 +509,7 @@ const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patch
       target &&
       "rom" in target &&
       target.member &&
-      memberIsAsset(asset, target.member, patchOptions?.[patchIndex]?.inputChecks, patchOptions)
+      memberIsAsset(asset, target.member, patchOptions?.[patchIndex], patchOptions, rootMember)
     )
       return { rom: true } as const;
     return target || null;
@@ -537,6 +548,7 @@ const applyPatchesToAsset = async ({
   patchOptions,
   patchFiles,
   patches,
+  rootMember,
   workerOutputName,
 }: {
   applyPatchInRuntime: ApplyPatchWorker;
@@ -549,6 +561,7 @@ const applyPatchesToAsset = async ({
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
+  rootMember?: string;
   workerOutputName?: string;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
@@ -557,8 +570,8 @@ const applyPatchesToAsset = async ({
   );
   const patchBasis = getPatchBases(patchIndices, patchOptions);
   const patchIds = getPatchIds(patchIndices, patchOptions);
-  const patchInputs = getPatchInputs(patchIndices, patchOptions, asset);
-  const patchTargets = getPatchTargets(patchIndices, patchOptions, asset);
+  const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, rootMember);
+  const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, rootMember);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
   const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
@@ -618,6 +631,7 @@ const applyPreparedPatches = async ({
   patchFiles,
   patches,
   patchTargets,
+  rootMember,
   runtime,
 }: {
   assetCount: number;
@@ -631,6 +645,7 @@ const applyPreparedPatches = async ({
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
+  rootMember?: string;
   runtime: WorkflowRuntime;
 }) => {
   const targets: InputAsset[] = [];
@@ -664,7 +679,8 @@ const applyPreparedPatches = async ({
             patchOptions?.map((option) => option?.input),
             patchOptions?.map((option) => option?.id),
             patchOptions?.map((option) => option?.target),
-            patchOptions?.map((option) => option?.inputChecks),
+            patchOptions?.map((option) => option?.inputChecks || option?.memberChecks),
+            collectPatchMemberRefs(patchOptions ?? [], rootMember),
           ),
         () => ({
           inputCount: inputAssets.length,
@@ -699,6 +715,7 @@ const applyPreparedPatches = async ({
           defaultPatchBasis,
           patchFiles,
           patches,
+          rootMember,
           workerOutputName,
         }),
       () => ({
@@ -812,6 +829,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patchFiles,
     patches,
     patchTargets,
+    rootMember: input.rootMember,
     runtime,
   });
   await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });

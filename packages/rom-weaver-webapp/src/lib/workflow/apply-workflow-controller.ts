@@ -32,7 +32,7 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
-import { collectMemberRefs, findMemberAssets } from "../apply/bare-member-target.ts";
+import { collectPatchMemberRefs, findMemberAssets } from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -1828,7 +1828,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   /** Every distinct ROM member the staged patches name as their input or target. */
   private getPatchMemberRefs() {
-    return collectMemberRefs(this.patches.flatMap((patch) => [patch.state.patchInput, patch.state.patchTarget]));
+    return collectPatchMemberRefs(
+      this.patches.map((patch) => ({ input: patch.state.patchInput, target: patch.state.patchTarget })),
+      this.weaveRom?.member,
+    );
   }
 
   private async refreshPatchReadiness() {
@@ -2194,6 +2197,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(patch.state.patchInput ? { input: patch.state.patchInput } : {}),
         ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
         ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
+        ...(this.memberChecksFor(patch) ? { memberChecks: this.memberChecksFor(patch) } : {}),
         ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
@@ -2207,6 +2211,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         validateOutputChecksum: patch.state.validateOutputChecksum,
       })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
+      ...(this.weaveRom?.member ? { rootMember: this.weaveRom.member } : {}),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };

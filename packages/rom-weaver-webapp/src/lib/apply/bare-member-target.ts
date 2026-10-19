@@ -1,4 +1,5 @@
 import type { InputAsset } from "../input/input-assets.ts";
+import type { PatchInputRef } from "../../types/workflow-runtime-types.ts";
 import { compareWeaveRomChecks } from "../weave/weave-targets.ts";
 
 const baseName = (value: string) => value.split(/[\\/]/).pop()?.toLowerCase() ?? "";
@@ -7,6 +8,26 @@ const baseName = (value: string) => value.split(/[\\/]/).pop()?.toLowerCase() ??
 const collectMemberRefs = (refs: ReadonlyArray<{ member?: string } | null | undefined>) => [
   ...new Set(refs.flatMap((ref) => (ref?.member ? [ref.member] : []))),
 ];
+
+/**
+ * Every distinct member the patches name, plus the weave's `rom.member` when any patch reads the
+ * root lane (no input/target, or a ROM reference without a member): a bare file serving that lane
+ * already stands in for the root member.
+ */
+const collectPatchMemberRefs = (
+  options: ReadonlyArray<{ input?: PatchInputRef; target?: PatchInputRef } | null | undefined>,
+  rootMember?: string,
+) => {
+  const readsRoot = options.some(
+    (option) =>
+      !(option?.input || option?.target) ||
+      [option.input, option.target].some((ref) => ref && "rom" in ref && !ref.member),
+  );
+  return collectMemberRefs([
+    ...options.flatMap((option) => [option?.input, option?.target]),
+    ...(readsRoot && rootMember ? [{ member: rootMember }] : []),
+  ]);
+};
 
 /**
  * Other weave members the bare `asset` would also satisfy by file name. One bare file stands in for
@@ -44,4 +65,4 @@ const findMemberAssets = (
   return bareFileMemberConflicts(member, only, memberRefs).length ? matches : [only];
 };
 
-export { bareFileMemberConflicts, collectMemberRefs, findMemberAssets };
+export { bareFileMemberConflicts, collectMemberRefs, collectPatchMemberRefs, findMemberAssets };

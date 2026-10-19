@@ -120,3 +120,27 @@ it("reports a several-members conflict, not a mismatch, when the checks matched 
   expect(stage.state.targetInputId).toBeUndefined();
   expect(stage.state.warnings.at(-1)?.message).toContain("matches several weave ROM members");
 });
+
+it("clears an untargeted-root conflict: the weave root member counts as a member the bare file stands in for", async () => {
+  const controller = makeController(bareAsset("track.bin"));
+  const untargeted = makeOptionStage();
+  const other = makeStage("disc-b/track.bin");
+  controller.patches = [untargeted, other];
+  controller.setWeaveRom({ checks: "crc32=00000000", member: "disc-a/track.bin" });
+  await controller.refreshPatchReadiness();
+  expect(other.state.targetInputId).toBeUndefined();
+  expect(other.state.status).toBe("needsSelection");
+});
+
+it("carries the weave rom checks and root member to the run path", async () => {
+  const controller = makeController(bareAsset("unrelated.bin")) as never as {
+    createPatchInput: () => { patchOptions: Record<string, unknown>[]; rootMember?: string };
+    patches: unknown[];
+    setWeaveRom: ControllerInternals["setWeaveRom"];
+  };
+  controller.patches = [makeStage("romA.bin")];
+  controller.setWeaveRom({ checks: "crc32=00000000" });
+  expect(controller.createPatchInput().patchOptions[0]?.memberChecks).toBe("crc32=00000000");
+  controller.setWeaveRom({ checks: "crc32=00000000", member: "disc-a/track.bin" });
+  expect(controller.createPatchInput().rootMember).toBe("disc-a/track.bin");
+});

@@ -157,6 +157,7 @@ describe("runApplyWorkflow validation and preparation", () => {
       ["patch-a"],
       [{ member: "disc/track01.bin", rom: true }],
       [undefined],
+      ["disc/track01.bin"],
     );
     expect(mocks.buildSessionOutputFiles).toHaveBeenCalledWith(
       [inputAsset],
@@ -243,6 +244,30 @@ describe("runApplyWorkflow validation and preparation", () => {
     expect(runtime.patch.applyPatch).toHaveBeenCalledOnce();
     expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
       expect.objectContaining({ options: expect.objectContaining({ patchTargets: [{ rom: true }, null] }) }),
+    );
+  });
+
+  it("sends a ROM target for a renamed bare file that matches only through the weave rom checks", async () => {
+    const inputAsset = { ...asset(), checksums: { crc32: "00000000" }, fileName: "game.bin", size: 16 };
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 16 });
+
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 16),
+        options: { output: { outputName: "result.bin" } },
+        parsedPatches: [parsedPatch("ips")],
+        patchOptions: [{ memberChecks: "crc32=00000000", target: { member: "first.bin", rom: true } }],
+        patches: [sourceRef("first.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [patchFile("first.ips")],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ patchTargets: [{ rom: true }] }) }),
     );
   });
 

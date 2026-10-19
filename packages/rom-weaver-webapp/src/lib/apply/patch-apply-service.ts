@@ -340,11 +340,12 @@ const resolvePatchTargets = async (
   patchIds?: Array<string | undefined>,
   patchTargetRefs?: Array<PatchInputRef | undefined>,
   patchInputChecks?: Array<string | undefined>,
+  weaveMemberRefs?: readonly string[],
 ): Promise<InputAsset[]> => {
   const patchableAssets = assets.filter((asset) => asset.patchable);
   if (!patchableAssets.length) throw new Error("No patchable input was provided");
 
-  const memberRefs = collectMemberRefs([...(patchInputs ?? []), ...(patchTargetRefs ?? [])]);
+  const memberRefs = weaveMemberRefs ?? collectMemberRefs([...(patchInputs ?? []), ...(patchTargetRefs ?? [])]);
   const targets: InputAsset[] = [];
   const patchIndexById = new Map<string, number>();
   for (let index = 0; index < patches.length; index++) {

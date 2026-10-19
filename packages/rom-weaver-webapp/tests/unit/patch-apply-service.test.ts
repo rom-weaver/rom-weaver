@@ -104,6 +104,22 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
     ).rejects.toThrow("matches several weave members");
   });
 
+  it("refuses a second same-named member when the weave root member is also read by the bare file", async () => {
+    const bare = asset("bare", "track.bin");
+    await expect(
+      resolvePatchTargets(
+        [bare],
+        [patch([])],
+        undefined,
+        undefined,
+        undefined,
+        [{ rom: true, member: "disc-b/track.bin" }],
+        undefined,
+        ["disc-a/track.bin", "disc-b/track.bin"],
+      ),
+    ).rejects.toThrow("matches several weave members");
+  });
+
   it("does not guess a duplicate basename for a nested member", async () => {
     const first = asset("first", "track.bin", "disc-a/track.bin");
     const second = asset("second", "track.bin", "disc-b/track.bin");
