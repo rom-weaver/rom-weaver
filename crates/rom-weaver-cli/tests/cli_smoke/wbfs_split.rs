@@ -95,6 +95,37 @@ fn split_wbfs_converts_to_rvz_that_extracts_to_the_same_iso() {
     assert_eq!(fs::read(out.join("out.iso")).expect("iso"), iso);
 }
 
+#[test]
+fn split_wbfs_converts_to_rvz_with_any_format_spelling() {
+    let temp = setup_temp_dir();
+    write_split_wbfs(&temp, 0x20000, 2);
+    let archive = temp.child("out.rvz");
+    let first = path_str(temp.child("disc.wbfs").path()).to_string();
+    let output = command_stdout(
+        &compress_args(&[&first], "RVZ", path_str(archive.path())),
+        0,
+    );
+    let last = parse_json_lines(&output).pop().expect("terminal event");
+    assert_eq!(last["status"], "succeeded", "{last}");
+}
+
+/// A part passed under a different spelling of its path still counts as passed.
+#[test]
+fn split_wbfs_parts_match_inputs_by_file_not_spelling() {
+    let temp = setup_temp_dir();
+    write_split_wbfs(&temp, 0x20000, 2);
+    fs::create_dir(temp.child("sub").path()).expect("subdir");
+    let first = path_str(temp.child("disc.wbfs").path()).to_string();
+    let second = path_str(&temp.path().join("sub/../disc.wbf1")).to_string();
+    let archive = temp.child("out.zip");
+    let output = command_stdout(
+        &compress_args(&[&first, &second], "zip", path_str(archive.path())),
+        0,
+    );
+    let last = parse_json_lines(&output).pop().expect("terminal event");
+    assert_eq!(last["status"], "succeeded", "{last}");
+}
+
 /// ZIP and 7z store the files they are given; a split set is archived by
 /// passing every part, and the extracted parts still extract to the ISO.
 #[test]
@@ -176,8 +207,34 @@ fn split_wbfs_probe_reports_the_container() {
     assert_eq!(json["status"], "succeeded");
     assert_eq!(json["details"]["platform"], "Nintendo GameCube");
     assert_eq!(json["details"]["container"]["entries"][0], "disc.iso");
+    assert_eq!(
+        json["details"]["container"]["recommended_compress_format"],
+        "rvz"
+    );
+    assert_eq!(json["details"]["container"]["reason"], "wii-gc-disc");
     let label = json["label"].as_str().expect("label");
     assert!(label.contains("lossless=true"), "{label}");
+}
+
+/// Archiving only the first part of a split set would silently drop the rest.
+#[test]
+fn split_wbfs_first_part_alone_is_refused_for_generic_archives() {
+    for format in ["zip", "7z", "chd"] {
+        let temp = setup_temp_dir();
+        write_split_wbfs(&temp, 0x20000, 3);
+        let first = path_str(temp.child("disc.wbfs").path()).to_string();
+        let second = path_str(temp.child("disc.wbf1").path()).to_string();
+        let archive = temp.child(format!("out.{format}"));
+        for inputs in [vec![first.as_str()], vec![first.as_str(), second.as_str()]] {
+            let output =
+                command_stdout(&compress_args(&inputs, format, path_str(archive.path())), 1);
+            let last = parse_json_lines(&output).pop().expect("terminal event");
+            assert_eq!(last["status"], "failed", "{format}: {last}");
+            let label = last["label"].as_str().expect("label");
+            assert!(label.contains("disc.wbf2"), "{format}: {label}");
+            assert!(!archive.path().exists(), "{format}: archive was written");
+        }
+    }
 }
 
 #[test]

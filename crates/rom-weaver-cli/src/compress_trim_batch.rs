@@ -118,7 +118,8 @@ impl CliApp {
             Err(report) => return self.finish("compress", *report),
         };
         let mut plan = plan;
-        if let Err(error) = ensure_compress_preserves_inputs(&input, &output, &plan.resolved_format)
+        if let Err(error) = ensure_split_wbfs_inputs_complete(&input, &plan.resolved_format)
+            .and_then(|()| ensure_compress_preserves_inputs(&input, &output, &plan.resolved_format))
         {
             return self.finish(
                 "compress",
