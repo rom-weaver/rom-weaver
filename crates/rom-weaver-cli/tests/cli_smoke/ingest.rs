@@ -1860,3 +1860,114 @@ fn ingest_nested_empty_psar_pbp_is_a_rom_leaf() {
         assert_eq!(fs::read(extracted).expect("extracted PBP"), pbp);
     }
 }
+
+/// Zip `members` (flat entry names taken from each path's file name) into `archive`.
+fn zip_members(temp: &TempDir, archive: &Path, members: &[&Path]) {
+    let mut args = vec!["compress", "--format", "zip"];
+    for member in members {
+        args.push("--input");
+        args.push(member.to_str().expect("member path"));
+    }
+    args.extend([
+        "--output",
+        archive.to_str().expect("archive path"),
+        "--json",
+    ]);
+    isolated_json_event(temp, &args, 0);
+}
+
+/// A real-shaped DCP: a modified file stored as `PATH.xdelta`, a `.DAT` data file, and the bootstrap.
+fn write_dcp(temp: &TempDir, name: &str) -> PathBuf {
+    let dir = temp.child(format!("{name}-members"));
+    fs::create_dir_all(dir.path()).expect("dcp member dir");
+    let members: Vec<PathBuf> = [
+        ("IP.BIN", vec![1u8; 2048]),
+        ("1ST_READ.BIN.xdelta", vec![2u8; 64]),
+        ("SOUND.DAT", vec![3u8; 1024]),
+    ]
+    .into_iter()
+    .map(|(entry, bytes)| {
+        let path = dir.path().join(entry);
+        fs::write(&path, bytes).expect("dcp member");
+        path
+    })
+    .collect();
+    let dcp = temp.child(name);
+    let member_refs: Vec<&Path> = members.iter().map(PathBuf::as_path).collect();
+    zip_members(temp, dcp.path(), &member_refs);
+    dcp.path().to_path_buf()
+}
+
+fn ingest_json(temp: &TempDir, source: &Path, output: &str) -> Value {
+    let output = temp.child(output);
+    isolated_json_event(
+        temp,
+        &[
+            "ingest",
+            "--input",
+            source.to_str().expect("source path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        0,
+    )
+}
+
+fn patch_file_names(ingest: &Value) -> Vec<(String, String)> {
+    ingest["patches"]
+        .as_array()
+        .expect("patches")
+        .iter()
+        .map(|patch| {
+            (
+                patch["file_name"].as_str().expect("file_name").to_string(),
+                patch["format"].as_str().expect("format").to_string(),
+            )
+        })
+        .collect()
+}
+
+/// A `.dcp` stores modified files as `PATH.xdelta` (and `.DAT` data), both patch-filter extensions.
+/// Ingest must report the `.dcp` as one patch leaf, never descend and surface its inner entries.
+#[test]
+fn ingest_reports_a_zipped_dcp_as_one_patch_leaf() {
+    let temp = setup_temp_dir();
+    let dcp = write_dcp(&temp, "game.dcp");
+    let bare = ingest_json(&temp, &dcp, "bare-out");
+    assert_eq!(
+        patch_file_names(&bare["details"]["ingest"]),
+        [("game.dcp".to_string(), "dcp".to_string())]
+    );
+    let zipped = temp.child("translation.zip");
+    zip_members(&temp, zipped.path(), &[dcp.as_path()]);
+    let terminal = ingest_json(&temp, zipped.path(), "zipped-out");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch");
+    assert_eq!(
+        patch_file_names(ingest),
+        [("game.dcp".to_string(), "dcp".to_string())]
+    );
+}
+
+/// A ROM bundle zip holding a disc plus a `.dcp` ingests its ROM and reports the `.dcp` as a patch
+/// instead of failing the whole ingest while descending into the `.dcp`.
+#[test]
+fn ingest_rom_bundle_with_a_dcp_reports_the_rom_and_the_dcp_patch() {
+    let temp = setup_temp_dir();
+    let dcp = write_dcp(&temp, "game.dcp");
+    let iso = temp.child("game.iso");
+    fs::write(iso.path(), vec![7u8; 4096]).expect("iso fixture");
+    let bundle = temp.child("bundle.zip");
+    zip_members(&temp, bundle.path(), &[iso.path(), dcp.as_path()]);
+    let terminal = ingest_json(&temp, bundle.path(), "bundle-out");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let assets = ingest["assets"].as_array().expect("assets");
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0]["file_name"], "game.iso");
+    assert_eq!(
+        patch_file_names(ingest),
+        [("game.dcp".to_string(), "dcp".to_string())]
+    );
+}

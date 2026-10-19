@@ -8,20 +8,14 @@ const DCP_BROWSER_UNSUPPORTED_MESSAGE =
 
 const isDcpPatchName = (fileName: string | undefined): boolean => !!fileName && /\.dcp$/i.test(fileName);
 
-// A .dcp inside an archive (translation.zip holding game.dcp) cannot be named up front: the archive
-// ingest runs in the worker and only fails once it reaches the nested .dcp, whose path the nested
-// extract error names. Recognise that failure so the zipped DCP gets the same card as a bare one.
-const ZIPPED_DCP_ERROR_REGEX = /nested extract failed for `[^`]*\.dcp`/i;
-
-const isZippedDcpError = (error: unknown): boolean =>
-  ZIPPED_DCP_ERROR_REGEX.test(error instanceof Error ? error.message : String(error ?? ""));
-
-// Stages already judged to be a DCP, so later readiness passes keep the verdict even though the
-// stage's own file name (the archive) does not end in .dcp.
+// Stages already judged to be a DCP, so later readiness passes keep the verdict. A .dcp inside an
+// archive (translation.zip holding game.dcp) is not named by the stage: native ingest reports it as
+// the archive's one patch leaf (it never descends into a .dcp), so the prepared patch file is named
+// .dcp even though the stage's own file name (the archive) is not.
 const dcpStages = new WeakSet<object>();
 
 const isDcpPatchStage = <TSource>(stage: StagedSource<TSource>): boolean =>
-  dcpStages.has(stage) || isDcpPatchName(stage.state.fileName);
+  dcpStages.has(stage) || isDcpPatchName(stage.state.fileName) || isDcpPatchName(stage.preparedPatchFile?.fileName);
 
 // Record the failed-card verdict. It is a per-patch fault independent of any ROM, so the card shows it
 // with no ROM, one ROM, or many patchable assets, and it blocks Apply like an unreadable patch.
@@ -39,4 +33,4 @@ const markDcpPatchUnsupported = <TSource>(stage: StagedSource<TSource>): void =>
   };
 };
 
-export { isDcpPatchName, isDcpPatchStage, isZippedDcpError, markDcpPatchUnsupported };
+export { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported };

@@ -109,14 +109,17 @@ const zipEntriesToFile = async (entries, fileName) => {
   }
 };
 
-// A real .dcp is a ZIP holding the files that replace a Dreamcast disc's (IP.BIN, 1ST_READ.BIN, ...),
-// built through the real zip writer so it is a valid archive rather than "PK" placeholder bytes.
+// A real .dcp is a ZIP holding the files that replace a Dreamcast disc's (IP.BIN, ...) plus modified
+// files stored as `PATH.xdelta` deltas and a `.DAT` data file, which are patch-filter extensions that
+// must not be mistaken for standalone patches. Built through the real zip writer so it is a valid
+// archive rather than "PK" placeholder bytes.
 export const buildDcpFile = (fileName = "real.dcp") =>
   zipEntriesToFile(
     [
       ["IP.BIN", new Uint8Array(2048).fill(1)],
-      ["1ST_READ.BIN", new Uint8Array(4096).fill(2)],
+      ["1ST_READ.BIN.xdelta", new Uint8Array(64).fill(2)],
       ["DATA/FONT.PVR", new Uint8Array(1024).fill(3)],
+      ["DATA/SOUND.DAT", new Uint8Array(1024).fill(4)],
     ].map(([entryName, bytes]) => ({ file: new File([bytes], entryName.split("/").pop()), fileName: entryName })),
     fileName,
   );

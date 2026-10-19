@@ -1,4 +1,4 @@
-import { isDcpPatchName, isZippedDcpError, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
+import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
   ApplyWorkflowWeaveSources,
@@ -1292,13 +1292,6 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         requestCount: requests.length,
         role: stage.state.role,
       });
-      if (!requests.length && isZippedDcpError(error)) {
-        // A .dcp inside an archive: show the same card as a bare .dcp; see apply-dcp-patch.ts.
-        this.addDirectCandidate(stage, stage.state.role, stage.index, stage.state.id);
-        stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
-        markDcpPatchUnsupported(stage);
-        return stage;
-      }
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
       if (!requests.length) this.pushWarning(stage, toRomWeaverError(error));
     }
@@ -1557,6 +1550,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       stage.state.requirements = undefined;
       stage.state.checksumPreflight = undefined;
       stage.state.patchValidation = undefined;
+      return;
+    }
+    if (isDcpPatchStage(stage)) {
+      // The ingest surfaced a .dcp (bare, or a leaf of an archive) as one patch; see apply-dcp-patch.ts.
+      markDcpPatchUnsupported(stage);
       return;
     }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
