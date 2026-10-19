@@ -120,6 +120,39 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
     ).rejects.toThrow("matches several weave ROM members (`disc-a/track.bin`, `disc-b/track.bin`)");
   });
 
+  it("rejects an input member the lone bare file also matches as the root member", async () => {
+    const bare = asset("bare", "track.bin");
+    await expect(
+      resolvePatchTargets(
+        [bare],
+        [patch([])],
+        undefined,
+        [{ rom: true, member: "disc-b/track.bin" }],
+        undefined,
+        [{ rom: true }],
+        createBareMemberRule([{ input: { rom: true, member: "disc-b/track.bin" } }], "disc-a/track.bin"),
+      ),
+    ).rejects.toThrow("matches several weave ROM members (`disc-a/track.bin`, `disc-b/track.bin`)");
+  });
+
+  it("rejects an input member a lone archive member does not hold", async () => {
+    const only = asset("only", "track.bin", "disc-a/track.bin");
+    await expect(
+      resolvePatchTargets([only], [patch([])], undefined, [{ rom: true, member: "disc-b/track.bin" }], undefined, [
+        { rom: true, member: "disc-a/track.bin" },
+      ]),
+    ).rejects.toThrow("ROM member was not found: disc-b/track.bin");
+  });
+
+  it("lets a lone bare file stand in for the named input member", async () => {
+    const bare = asset("bare", "track.bin");
+    await expect(
+      resolvePatchTargets([bare], [patch([])], undefined, [{ rom: true, member: "disc-a/track.bin" }], undefined, [
+        { rom: true },
+      ]),
+    ).resolves.toEqual([bare]);
+  });
+
   it("does not guess a duplicate basename for a nested member", async () => {
     const first = asset("first", "track.bin", "disc-a/track.bin");
     const second = asset("second", "track.bin", "disc-b/track.bin");

@@ -8,7 +8,8 @@ import type { PatchInput } from "../../src/types/workflow-runtime-types.ts";
 type StageLike = {
   state: {
     inputChecks?: string;
-    patchTarget?: { member: string; rom: true };
+    patchInput?: { member: string; rom: true };
+    patchTarget?: { member?: string; rom: true };
     status: string;
     targetInputId?: string;
     warnings: { message?: string }[];
@@ -193,5 +194,49 @@ describe("a lone bare file stands in for rom.member and at most one matching mem
       const expected = testCase.assets.find((asset) => asset.member === member) ?? testCase.assets[0];
       expect(targets[index]).toBe(expected);
     });
+  });
+});
+
+describe("an input member the lone leaf does not bind is rejected like the CLI", () => {
+  const scenarios = [
+    {
+      name: "a bare file matching both the root member and the input member",
+      assets: [romAsset("track.bin")],
+      target: { rom: true } as const,
+      weaveRom: { member: "disc-a/track.bin" },
+      message: "matches several weave ROM members (`disc-a/track.bin`, `disc-b/track.bin`)",
+    },
+    {
+      name: "an archive member that is not the input member",
+      assets: [romAsset("track.bin", "disc-a/track.bin")],
+      target: { member: "disc-a/track.bin", rom: true } as const,
+      weaveRom: undefined,
+      message: "weave ROM member `disc-b/track.bin` was not found in `disc-a/track.bin`",
+    },
+  ];
+
+  it.each(scenarios)("readiness and run path: $name", async ({ assets, message, target, weaveRom }) => {
+    const { controller, stages } = setUp({ assets, patches: [{}], weaveRom });
+    const [stage] = stages;
+    if (!stage) throw new Error("missing stage");
+    stage.state.patchTarget = target;
+    stage.state.patchInput = { member: "disc-b/track.bin", rom: true };
+    await controller.refreshPatchReadiness();
+    expect(stage.state.status).toBe("needsSelection");
+    expect(stage.state.warnings.at(-1)?.message).toContain(message);
+
+    const input = controller.createPatchInput();
+    const options = input.patchOptions ?? [];
+    await expect(
+      resolvePatchTargets(
+        assets,
+        options.map(() => ({ apply: vi.fn(), validateSourceAsync: vi.fn(async () => false) })) as never,
+        undefined,
+        options.map((option) => option.input),
+        options.map((option) => option.id),
+        options.map((option) => option.target),
+        createRunBareMemberRule(options, input.rootMember),
+      ),
+    ).rejects.toThrow(message);
   });
 });

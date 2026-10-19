@@ -17,6 +17,7 @@ import {
   type BareMemberRule,
   createBareMemberRule,
   describeBareMemberFailure,
+  describeUnboundInputMember,
   findMemberAssets,
   loneBareFile,
 } from "./bare-member-target.ts";
@@ -389,9 +390,13 @@ const resolvePatchTargets = async (
       if (!readTarget)
         throw new Error(`Patch ${index + 1} input producer has no resolved ROM target: ${inputRef.patch}`);
     } else if (inputRef.member) {
-      // An unknown member stays with the worker, which resolves members
-      // against the leaf it receives.
       readTarget = findMemberTarget(index, inputRef.member, patchableAssets, rule);
+      // The worker receives the lone leaf as a bare file and would bind the unknown member to it,
+      // so reject a member the leaf does not stand in for, as the CLI does.
+      const unbound = readTarget ? undefined : describeUnboundInputMember(inputRef.member, patchableAssets, rule);
+      if (unbound) throw new Error(`Patch ${index + 1} ROM member was not found: ${inputRef.member}; ${unbound}`);
+      // Otherwise an unknown member stays with the worker, which resolves members
+      // against the leaf it receives.
     }
     if (!readTarget || readTarget.id === writeTarget.id) continue;
     // The worker receives one leaf file per target, so a read from another

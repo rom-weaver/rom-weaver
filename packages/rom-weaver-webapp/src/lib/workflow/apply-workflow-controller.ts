@@ -35,6 +35,7 @@ import {
 import {
   createBareMemberRule,
   describeBareMemberFailure,
+  describeUnboundInputMember,
   findMemberAssets,
   loneBareFile,
   missingBareFileAlgorithms,
@@ -1839,7 +1840,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.hashBareFileChecksums();
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
     const memberRef = inputRef && !("patch" in inputRef) ? inputRef.member : undefined;
-    return evaluateApplyPatchReadiness(stage, {
+    const changed = await evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
       memberRef,
       describeBareMemberFailure: (bare) =>
@@ -1855,6 +1856,18 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
     });
+    // A target ref hides the input member ref above, but the worker still binds that member to the leaf.
+    const input = stage.state.patchInput;
+    const inputMember = stage.state.patchTarget && input && "rom" in input ? input.member : undefined;
+    const unbound =
+      inputMember && stage.state.status === "ready"
+        ? describeUnboundInputMember(inputMember, this.getPatchableInputAssets(), this.getBareMemberRule())
+        : undefined;
+    if (!unbound) return changed;
+    clearApplyPatchTarget(stage);
+    stage.state.status = "needsSelection";
+    this.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", unbound));
+    return true;
   }
 
   /** The checks a bare file must satisfy to stand in for a patch's member: the patch's own input

@@ -125,8 +125,22 @@ const describeBareMemberFailure = (member: string, asset: InputAsset, rule: Bare
   return `weave ROM member \`${member}\` was not found in \`${asset.fileName}\`: the input is not an archive and neither its file name nor its checks match the member`;
 };
 
+/**
+ * Why an input `member` ref that binds to no asset must be rejected, or undefined when it may stay
+ * with the worker. The worker receives each target as one bare leaf and binds an unknown member to
+ * it, so a lone patchable leaf that does not stand in for the member is refused here, as the CLI does.
+ */
+const describeUnboundInputMember = (member: string, patchableAssets: readonly InputAsset[], rule: BareMemberRule) => {
+  const [only] = patchableAssets;
+  if (!only || patchableAssets.length !== 1 || findMemberAssets(member, patchableAssets, rule).length) return undefined;
+  return isBareFile(only)
+    ? describeBareMemberFailure(member, only, rule)
+    : `weave ROM member \`${member}\` was not found in \`${only.member ?? only.fileName}\``;
+};
+
 export {
   createBareMemberRule,
+  describeUnboundInputMember,
   createRunBareMemberRule,
   describeBareMemberFailure,
   findMemberAssets,
