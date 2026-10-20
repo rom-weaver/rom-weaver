@@ -1448,3 +1448,33 @@ fn save_set_and_create_dry_run_carry_plan_fields_and_keep_preview() {
     assert_eq!(create["details"]["read_only"], true);
     assert!(create["details"]["save_editor"].is_object());
 }
+
+#[test]
+fn save_inspect_reports_integrity_failure_for_a_chosen_game_with_bad_checksums() {
+    let temp = setup_temp_dir();
+    let save = temp.child("badsum.sav");
+    let mut bytes = emerald_fixture();
+    for slot in 0..2 {
+        for id in 0..14 {
+            // Flip the stored section checksum in both slots.
+            bytes[section_offset(slot, id) + 0xFF6] ^= 0xFF;
+        }
+    }
+    fs::write(save.path(), &bytes).unwrap();
+    let json = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            save.path().to_str().unwrap(),
+            "--game",
+            "pokemon-emerald",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().unwrap();
+    assert!(label.contains("integrity checks"), "{label}");
+    assert!(!label.contains("no editor"), "{label}");
+    assert_eq!(fs::read(save.path()).unwrap(), bytes);
+}

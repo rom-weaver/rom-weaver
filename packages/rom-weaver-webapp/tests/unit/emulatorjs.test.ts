@@ -229,6 +229,24 @@ describe("createEmulatorDocument", () => {
     expect(document.indexOf("const hidden = [")).toBeLessThan(document.indexOf("loader.js"));
   });
 
+  it("names every EmulatorJS bar button from its own text", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const script = document.slice(
+      document.indexOf("const label = () => {"),
+      document.indexOf("new MutationObserver(label)"),
+    );
+    const attributes = new Map<string, string>();
+    const mute = {
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      hasAttribute: (name: string) => attributes.has(name),
+      setAttribute: (name: string, value: string) => attributes.set(name, value),
+      textContent: " Mute ",
+    };
+    runInNewContext(`${script}; label();`, { document: { querySelectorAll: () => [mute] } });
+    expect(attributes.get("aria-label")).toBe("Mute");
+    expect(document.indexOf("new MutationObserver(label)")).toBeLessThan(document.indexOf("loader.js"));
+  });
+
   it("requests app-owned SRAM when the emulator starts", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
     const gameStart = document.slice(
