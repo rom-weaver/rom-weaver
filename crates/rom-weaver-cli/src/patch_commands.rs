@@ -16,6 +16,12 @@ pub(super) const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
 pub(super) const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
     &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
 pub(super) const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
+/// Formats whose create cannot express a target smaller than the source: PPF rejects it and
+/// EBP (IPS plus trailing JSON metadata) has no truncate footer, so applying the patch would
+/// leave the output at the source size.
+pub(super) const NO_SHRINK_CREATE_PATCH_FORMATS: &[&str] = &["ebp", "ppf"];
+/// Formats whose patches only apply to one known source ROM (MOD/PMSR: Paper Mario USA v1.0).
+pub(super) const SOURCE_RESTRICTED_CREATE_PATCH_FORMATS: &[&str] = &["pmsr"];
 pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
     ".7z",
     ".apk",
@@ -97,6 +103,8 @@ pub struct PatchCreateFormatPolicyMetadata {
     pub medium_formats: &'static [&'static str],
     pub mid_large_formats: &'static [&'static str],
     pub large_formats: &'static [&'static str],
+    pub no_shrink_formats: &'static [&'static str],
+    pub source_restricted_formats: &'static [&'static str],
 }
 
 pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata {
@@ -112,6 +120,8 @@ pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata 
         medium_formats: MEDIUM_CREATE_PATCH_FORMATS,
         mid_large_formats: MID_LARGE_CREATE_PATCH_FORMATS,
         large_formats: LARGE_CREATE_PATCH_FORMATS,
+        no_shrink_formats: NO_SHRINK_CREATE_PATCH_FORMATS,
+        source_restricted_formats: SOURCE_RESTRICTED_CREATE_PATCH_FORMATS,
     }
 }
 

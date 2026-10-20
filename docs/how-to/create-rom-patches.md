@@ -80,7 +80,7 @@ In **Modified ROM** mode, use **0x04 Patch** to name the download and choose its
 
 BPS is a strong default unless your community expects otherwise; [Choosing a patch format](../explanation/patch-formats.md) compares the choices and their trade-offs. If you do publish IPS, put the Original's checksum prominently in the release notes - the format cannot carry it.
 
-The format list in Create only offers formats rom-weaver can make for the files you selected.
+The format list in Create only offers formats rom-weaver can make for the files you selected. For example, a target smaller than the Original hides formats that cannot shrink a file, and MOD (`.pmsr`) appears only for Paper Mario (USA) v1.0.
 
 To change an existing patch's format, [convert it](convert-patch-format-browser.md).
 
@@ -88,7 +88,7 @@ To change an existing patch's format, [convert it](convert-patch-format-browser.
 
 1. Enter a patch filename without an extension.
 2. Select the patch format.
-3. Open **Options** when you need metadata or compression settings. The download is the bare patch, such as `name.ips`; set **Type** to **.zip** or **.7z** for an archive.
+3. Open **Options** when you want an archive. The download is the bare patch, such as `name.ips`; set **Type** to **.zip** or **.7z** for an archive.
 4. Choose **CREATE & DOWNLOAD PATCH**.
 5. Save the browser download somewhere separate from your working files.
 
@@ -105,7 +105,7 @@ To change an existing patch's format, [convert it](convert-patch-format-browser.
     <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-output-mobile-dark.webp" width="1170" height="666">
     <img src="../screenshots/create-output-desktop-dark.webp" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the dark theme" width="1770" height="568">
   </picture>
-  <figcaption>The output controls set the patch name, format, and format-specific options.</figcaption>
+  <figcaption>The output controls set the patch name, format, and archive type.</figcaption>
 </figure>
 
 The browser reads both ROMs and creates the patch locally. None of those files are uploaded - see [why your files stay on your device](../explanation/local-first.md).

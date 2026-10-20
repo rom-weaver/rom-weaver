@@ -9,8 +9,8 @@ use super::patch_commands::{
     CREATE_PATCH_IPS_SIZE_LIMIT_BYTES, CREATE_PATCH_LARGE_DEFAULT_FORMAT,
     CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES, CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS,
     LARGE_CREATE_PATCH_FORMATS, MEDIUM_CREATE_PATCH_FORMATS, MID_LARGE_CREATE_PATCH_FORMATS,
-    PatchCreateFormatCandidates, PatchCreateInputInfo, PatchCreateInputSizes,
-    PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
+    NO_SHRINK_CREATE_PATCH_FORMATS, PatchCreateFormatCandidates, PatchCreateInputInfo,
+    PatchCreateInputSizes, PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
 };
 
 /// Validated output, context, and format for a non-plan `patch create`.
@@ -169,6 +169,16 @@ pub(super) fn create_patch_format_size_error_message(
         let limit = format_human_bytes(CREATE_PATCH_IPS_SIZE_LIMIT_BYTES);
         return Some(format!(
             "Create inputs at or above {limit} should use BPS, xdelta, or another large-capable patch type; selected patch type: {normalized_format}"
+        ));
+    }
+    if sizes.modified < sizes.original
+        && NO_SHRINK_CREATE_PATCH_FORMATS.contains(&normalized_format.as_str())
+    {
+        return Some(format!(
+            "{} patches cannot shrink the output (original: {}, modified: {}); use BPS, xdelta, or another patch type that can; selected patch type: {normalized_format}",
+            normalized_format.to_ascii_uppercase(),
+            sizes.original,
+            sizes.modified
         ));
     }
     if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES
@@ -492,6 +502,10 @@ impl CliApp {
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
         let mut formats = candidates.formats.to_vec();
+        if sizes.modified < sizes.original {
+            debug!("patch create plan drops formats that cannot shrink the output");
+            formats.retain(|format| !NO_SHRINK_CREATE_PATCH_FORMATS.contains(format));
+        }
         if !original_is_paper_mario_usa10(&args.original, input_info.original.size) {
             debug!("patch create plan drops pmsr: original is not Paper Mario (USA) v1.0");
             formats.retain(|format| *format != "pmsr");
