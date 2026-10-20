@@ -1,0 +1,68 @@
+diff --git a/write/compressed.rs b/write/compressed.rs
+index 5eb3c3d02aa7b917200439552d2d2d5ab345c346..01c72fa18ea5e88a7ab2b9a7a0b1f866206fdd78 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -105,6 +105,22 @@ impl CompressionState {
+         self.parent.get(hash).copied()
+     }
+ 
++    /// Reserve room in the index of previously compressed hunks for `additional` more hunks.
++    pub fn reserve(&self, additional: usize) {
++        self.hunks
++            .write()
++            .unwrap_or_else(PoisonError::into_inner)
++            .reserve(additional);
++    }
++
++    #[cfg(test)]
++    pub fn capacity(&self) -> usize {
++        self.hunks
++            .read()
++            .unwrap_or_else(PoisonError::into_inner)
++            .capacity()
++    }
++
+     /// Mark a compressed hunk as previously written.
+     pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
+         self.hunks
+diff --git a/write/mod.rs b/write/mod.rs
+index 33db749ef42c7d9eb2156133610cbb254cbd0171..03e9bb315c0c64eda25728e5d093a298341d744b 100644
+--- a/write/mod.rs
++++ b/write/mod.rs
+@@ -331,10 +331,20 @@ impl<W: Write + Seek> ChdWriter<W> {
+         let compressed = !options.compression_codecs.is_empty();
+         let raw_sha1 = (compressed || options.hash_uncompressed).then(Sha1::new);
+ 
++        // With a known number of hunks, the map and the index of stored hunks are sized
++        // up front, so they do not grow while hunks are compressed on other threads.
++        let mut entries = Vec::new();
++        if let Some(hunk_count) = hunk_count {
++            entries.reserve_exact(hunk_count as usize);
++            if compressed {
++                state.reserve(hunk_count as usize);
++            }
++        }
++
+         let mut writer = ChdWriter {
+             inner,
+             options,
+-            entries: Vec::new(),
++            entries,
+             hunk_count,
+             buffer: Vec::new(),
+             written: 0,
+@@ -1028,6 +1038,14 @@ mod compressed_tests {
+         writer.finish().unwrap().into_inner()
+     }
+ 
++    #[test]
++    fn hunk_tables_are_sized_from_the_logical_size() {
++        let options = options().logical_bytes(10 * HUNK_BYTES as u64);
++        let writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
++        assert!(writer.entries.capacity() >= 10);
++        assert!(writer.state.capacity() >= 10);
++    }
++
+     #[test]
+     fn compressed_roundtrip() {
+         let data = data();
