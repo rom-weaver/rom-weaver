@@ -1,8 +1,5 @@
 use super::*;
 
-pub(super) const CD_SYNC_HEADER: [u8; 12] = [
-    0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
-];
 pub(super) const CD_SYNC_BYTES: usize = 12;
 pub(super) const CD_MODE_OFFSET: usize = 0x0f;
 pub(super) const CD_ECC_DATA_BYTES: usize = 0x8bc;

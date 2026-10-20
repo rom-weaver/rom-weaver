@@ -1,0 +1,262 @@
+//! Types and methods relating to metadata stored in a CHD file.
+
+use crate::chd_rs::error::{Error, Result};
+use crate::chd_rs::make_tag;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+pub(crate) use raw::RawMetadataHeader;
+use std::collections::HashSet;
+use std::io::{Read, Seek, SeekFrom};
+use zerocopy::{FromZeros, IntoBytes};
+
+mod raw;
+
+pub(crate) const METADATA_HEADER_SIZE: usize = 16;
+
+/// A list of well-known metadata tags.
+#[derive(FromPrimitive, Copy, Clone)]
+#[repr(u32)]
+pub enum KnownMetadata {
+    /// Wildcard for search (0)
+    Wildcard = 0,
+    /// Hard Disk (`GDDD`)
+    HardDisk = make_tag(b"GDDD"),
+    /// Hard Disk Identifier (`IDNT`)
+    HardDiskIdent = make_tag(b"IDNT"),
+    /// Hard Disk Key (`KEY `)
+    HardDiskKey = make_tag(b"KEY "),
+    /// PCMCIA Card Information (`CIS `)
+    PcmciaCIS = make_tag(b"CIS "),
+    /// Legacy CD-ROM metadata (`CHCD`)
+    CdRomOld = make_tag(b"CHCD"),
+    /// CD-ROM track metadata (`CHTR`)
+    CdRomTrack = make_tag(b"CHTR"),
+    /// CD-ROM track metadata (`CHT2`)
+    CdRomTrack2 = make_tag(b"CHT2"),
+    /// Legacy GD-ROM metadata (`CHGT`)
+    GdRomOld = make_tag(b"CHGT"),
+    /// GD-ROM track metadata (`CHGD`)
+    GdRomTrack = make_tag(b"CHGD"),
+    /// A/V metadata (`AVAV`)
+    AudioVideo = make_tag(b"AVAV"),
+    /// LaserDisc A/V metadata (`AVLD`)
+    AudioVideoLaserDisc = make_tag(b"AVLD"),
+}
+
+impl KnownMetadata {
+    /// Returns whether a given tag indicates that the CHD contains CDROM data.
+    pub fn is_cdrom(tag: u32) -> bool {
+        if let Some(tag) = FromPrimitive::from_u32(tag) {
+            return matches!(
+                tag,
+                KnownMetadata::CdRomOld
+                    | KnownMetadata::CdRomTrack
+                    | KnownMetadata::CdRomTrack2
+                    | KnownMetadata::GdRomOld
+                    | KnownMetadata::GdRomTrack
+            );
+        }
+        false
+    }
+}
+
+/// Trait for structs that contain or represent tagged metadata.
+pub trait MetadataTag {
+    /// Returns the FourCC metatag that this struct represents or refers to.
+    fn metatag(&self) -> u32;
+}
+
+impl MetadataTag for KnownMetadata {
+    fn metatag(&self) -> u32 {
+        *self as u32
+    }
+}
+
+impl MetadataTag for u32 {
+    fn metatag(&self) -> u32 {
+        *self
+    }
+}
+
+/// Data that can be stored in a metadata entry.
+pub trait MetadataData {
+    /// The bytes stored in the metadata entry.
+    fn metadata_bytes(&self) -> &[u8];
+}
+
+impl MetadataData for &[u8] {
+    fn metadata_bytes(&self) -> &[u8] {
+        self
+    }
+}
+
+/// Text metadata is stored with its NUL terminator, like MAME.
+impl MetadataData for &std::ffi::CStr {
+    fn metadata_bytes(&self) -> &[u8] {
+        self.to_bytes_with_nul()
+    }
+}
+
+/// A complete CHD metadata entry with contents read into memory.
+#[derive(Debug)]
+pub struct Metadata {
+    /// The FourCC metadata tag.
+    pub metatag: u32,
+    /// The contents of this metadata entry.
+    pub value: Vec<u8>,
+    /// The flags of this metadata entry.
+    pub flags: u8,
+    /// The index of this metadata entry relative to the beginning of the metadata section.
+    pub index: u32,
+    /// The length of this metadata entry.
+    pub length: u32,
+}
+
+impl MetadataTag for Metadata {
+    fn metatag(&self) -> u32 {
+        self.metatag
+    }
+}
+
+/// A reference to a metadata entry within the CHD file.
+#[derive(Clone)]
+pub struct MetadataRef {
+    pub(crate) offset: u64,
+    pub(crate) length: u32,
+    flags: u8,
+    index: u32,
+    metatag: u32,
+}
+
+impl MetadataRef {
+    fn read_into<F: Read + Seek>(&self, file: &mut F, buf: &mut [u8]) -> Result<()> {
+        file.seek(SeekFrom::Start(self.offset + METADATA_HEADER_SIZE as u64))?;
+        file.read_exact(buf)?;
+        Ok(())
+    }
+
+    /// Read the contents of the metadata from the input stream. The `ChdMetadataRef` must have
+    /// the same provenance as the input stream for a successful read.
+    pub fn read<F: Read + Seek>(&self, file: &mut F) -> Result<Metadata> {
+        let mut buf = vec![0u8; self.length as usize];
+        self.read_into(file, &mut buf)?;
+        Ok(Metadata {
+            metatag: self.metatag,
+            value: buf,
+            flags: self.flags,
+            index: self.index,
+            length: self.length,
+        })
+    }
+}
+
+impl MetadataTag for MetadataRef {
+    #[inline(always)]
+    fn metatag(&self) -> u32 {
+        self.metatag
+    }
+}
+
+/// An iterator over references to the metadata entries of a CHD file.
+///
+/// If an entry can not be read, the iterator returns the error and then ends. If the entries
+/// link back to an earlier entry, returns [`InvalidData`](Error::InvalidData).
+pub struct MetadataRefs<'a, F: Read + Seek + 'a> {
+    pub(crate) file: &'a mut F,
+    curr_offset: u64,
+    curr: Option<MetadataRef>,
+    // Just use a tuple because we rarely have more than 2 or 3 types of tag.
+    indices: Vec<(u32, u32)>,
+    visited: HashSet<u64>,
+}
+
+impl<'a, F: Read + Seek + 'a> MetadataRefs<'a, F> {
+    pub(crate) fn from_stream(file: &'a mut F, initial_offset: u64) -> Self {
+        MetadataRefs {
+            file,
+            curr_offset: initial_offset,
+            curr: None,
+            indices: Vec::new(),
+            visited: HashSet::new(),
+        }
+    }
+
+    pub(crate) fn dead(file: &'a mut F) -> Self {
+        MetadataRefs {
+            file,
+            curr_offset: 0,
+            curr: None,
+            indices: Vec::new(),
+            visited: HashSet::new(),
+        }
+    }
+}
+
+impl<'a, F: Read + Seek + 'a> TryFrom<MetadataRefs<'a, F>> for Vec<Metadata> {
+    type Error = Error;
+
+    fn try_from(mut value: MetadataRefs<'a, F>) -> std::result::Result<Self, Self::Error> {
+        let metas = &mut value;
+        let metas = metas.collect::<Result<Vec<_>>>()?;
+        metas.iter().map(|e| e.read(&mut value.file)).collect()
+    }
+}
+
+impl<'a, F: Read + Seek + 'a> Iterator for MetadataRefs<'a, F> {
+    // really need GATs to do this properly...
+    type Item = Result<MetadataRef>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr_offset == 0 {
+            return None;
+        }
+
+        fn next_inner<'a, F: Read + Seek + 'a>(s: &mut MetadataRefs<'a, F>) -> Result<MetadataRef> {
+            if !s.visited.insert(s.curr_offset) {
+                return Err(Error::InvalidData);
+            }
+            let mut header = RawMetadataHeader::new_zeroed();
+            s.file.seek(SeekFrom::Start(s.curr_offset))?;
+            s.file.read_exact(header.as_mut_bytes())?;
+
+            // extract data
+            let metatag = header.tag.get();
+            let flags = header.flags;
+            let length = header.length();
+            let next = header.next.get();
+
+            let mut index = 0;
+
+            for indice in s.indices.iter_mut() {
+                if indice.0 == metatag {
+                    index = indice.1;
+                    // increment current index
+                    indice.1 += 1;
+                    break;
+                }
+            }
+
+            if index == 0 {
+                s.indices.push((metatag, 1))
+            }
+
+            let new = MetadataRef {
+                offset: s.curr_offset,
+                length,
+                metatag,
+                flags,
+                index,
+            };
+
+            s.curr_offset = next;
+            s.curr = Some(new.clone());
+            Ok(new)
+        }
+        let next = next_inner(self);
+        if next.is_err() {
+            // Stop after an error.
+            self.curr_offset = 0;
+        }
+        Some(next)
+    }
+}

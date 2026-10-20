@@ -266,7 +266,7 @@ fn compressed_params<'a>(
         logical_bytes,
         create_kind,
         codecs,
-        compression_level: 3,
+        compression_level: Some(3),
         thread_count,
         parent_source,
         on_progress: None,
@@ -309,6 +309,49 @@ fn compressed_create_matches_between_the_sequential_and_threaded_paths() {
     );
     assert_eq!(read_back(&sequential), source);
     assert_eq!(read_back(&threaded), source);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn compressed_create_applies_the_requested_level() {
+    let dir = scratch_dir("compressed-level");
+    // Words in a pseudo-random order compress to different sizes at different levels.
+    let words = ["chd ", "hunk ", "frame ", "sector ", "map ", "zlib "];
+    let source = payload(4096 * 4, 0x5EED)
+        .into_iter()
+        .flat_map(|byte| words[usize::from(byte) % words.len()].bytes())
+        .take(4096 * 4)
+        .collect::<Vec<_>>();
+    let create_kind = ChdCreateKind::Raw;
+    let handler = ChdContainerHandler;
+    let create = |name: &str, level: Option<i32>| {
+        let output = dir.join(name);
+        let mut params = compressed_params(
+            &output,
+            source.len() as u64,
+            &create_kind,
+            codec_slots(&[ChdCodec::ZLIB]),
+            1,
+            None,
+        );
+        params.compression_level = level;
+        handler
+            .create_compressed_rust_stream(&mut Cursor::new(source.clone()), "payload", params)
+            .expect("compressed create");
+        assert_eq!(read_back(&output), source);
+        fs::read(&output).expect("read chd")
+    };
+
+    let chdman_level = create("default.chd", None);
+    // chdman compresses Deflate at level 9.
+    assert_eq!(create("level-9.chd", Some(9)), chdman_level);
+    let fastest = create("level-1.chd", Some(1));
+    assert!(
+        fastest.len() > chdman_level.len(),
+        "level 1 ({} bytes) should be larger than level 9 ({} bytes)",
+        fastest.len(),
+        chdman_level.len()
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 
@@ -565,9 +608,9 @@ fn read_back_with_parent(path: &Path, parent: &Path) -> Vec<u8> {
     out
 }
 
-/// `ParentReuseIndex` does not implement `Debug`, so `Result::expect_err` is
-/// unavailable for the parent-index calls.
-fn parent_index_err(result: Result<ParentReuseIndex>, context: &str) -> RomWeaverError {
+/// `Chd` does not implement `Debug`, so `Result::expect_err` is unavailable for the
+/// parent calls.
+fn parent_index_err<T>(result: Result<T>, context: &str) -> RomWeaverError {
     match result {
         Ok(_) => panic!("expected an error: {context}"),
         Err(err) => err,
@@ -575,7 +618,7 @@ fn parent_index_err(result: Result<ParentReuseIndex>, context: &str) -> RomWeave
 }
 
 #[test]
-fn load_parent_reuse_index_rejects_mismatched_parents() {
+fn open_create_parent_rejects_mismatched_parents() {
     let dir = scratch_dir("parent-mismatch");
     let source = payload(4096 * 2, 0x4242);
     let parent = dir.join("parent.chd");
@@ -593,23 +636,23 @@ fn load_parent_reuse_index_rejects_mismatched_parents() {
 
     // The real geometry is unit 1 / hunk 4096.
     handler
-        .load_parent_reuse_index(&parent, 1, ChdContainerHandler::DEFAULT_HUNK_BYTES)
+        .open_create_parent(&parent, 1, ChdContainerHandler::DEFAULT_HUNK_BYTES)
         .expect("matching geometry");
 
     let err = parent_index_err(
-        handler.load_parent_reuse_index(&parent, 2048, ChdContainerHandler::DEFAULT_HUNK_BYTES),
+        handler.open_create_parent(&parent, 2048, ChdContainerHandler::DEFAULT_HUNK_BYTES),
         "unit size mismatch",
     );
     assert!(err.to_string().contains("unit size"), "{err}");
 
     let err = parent_index_err(
-        handler.load_parent_reuse_index(&parent, 1, 8192),
+        handler.open_create_parent(&parent, 1, 8192),
         "hunk size mismatch",
     );
     assert!(err.to_string().contains("hunk size"), "{err}");
 
     let err = parent_index_err(
-        handler.load_parent_reuse_index(&dir.join("missing.chd"), 1, 4096),
+        handler.open_create_parent(&dir.join("missing.chd"), 1, 4096),
         "missing parent",
     );
     assert!(
@@ -618,173 +661,4 @@ fn load_parent_reuse_index_rejects_mismatched_parents() {
     );
 
     let _ = fs::remove_dir_all(&dir);
-}
-
-// --- Hunk hashing and payload selection ---------------------------------------
-
-#[test]
-fn hunk_hash_key_pairs_a_crc16_with_a_sha1() {
-    let key = ChdContainerHandler::hunk_hash_key(b"123456789");
-    assert_eq!(key.crc16, ChdContainerHandler::crc16_ibm3740(b"123456789"));
-    assert_eq!(key.sha1.as_slice(), Sha1::digest(b"123456789").as_slice());
-
-    // Distinct payloads must not collide on the combined key.
-    assert_ne!(key, ChdContainerHandler::hunk_hash_key(b"12345678A"));
-    assert_eq!(key, ChdContainerHandler::hunk_hash_key(b"123456789"));
-}
-
-#[test]
-fn payload_selection_forces_compression_only_for_self_describing_codecs() {
-    // HUFFMAN and AVHUFF payloads carry their own headers, so the writer must
-    // keep the compressed form even when it is not smaller.
-    assert!(ChdContainerHandler::force_compressed_payload_for_primary_codec(ChdCodec::HUFFMAN));
-    assert!(ChdContainerHandler::force_compressed_payload_for_primary_codec(ChdCodec::AVHUFF));
-    assert!(!ChdContainerHandler::force_compressed_payload_for_primary_codec(ChdCodec::ZSTD));
-
-    let handler = ChdContainerHandler;
-    assert!(handler.prefer_compressed_payload(ChdCodec::ZSTD, 10, 20));
-    assert!(!handler.prefer_compressed_payload(ChdCodec::ZSTD, 20, 20));
-    assert!(!handler.prefer_compressed_payload(ChdCodec::ZSTD, 30, 20));
-    assert!(
-        handler.prefer_compressed_payload(ChdCodec::HUFFMAN, 30, 20),
-        "huffman keeps its compressed payload even when it grows"
-    );
-}
-
-// --- record_pipeline_hunk ------------------------------------------------------
-
-/// A `Write` that always fails, so the writer's I/O error mapping can be
-/// exercised without an unwritable filesystem.
-struct FailingWriter;
-
-impl Write for FailingWriter {
-    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-        Err(io::Error::other("synthetic write failure"))
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-/// Calls `record_pipeline_hunk` with fresh accumulators, returning them with
-/// the call's result so each map-entry shape can be asserted in isolation.
-fn record_one(
-    output_file: &mut dyn Write,
-    hash_key: HunkHashKey,
-    payload: Vec<u8>,
-    self_hunks: &mut HashMap<HunkHashKey, u64>,
-    parent_hunks: Option<&HashMap<HunkHashKey, u64>>,
-) -> (Result<()>, Vec<RustCompressedHunkEntry>, u64) {
-    let mut entries = Vec::new();
-    let mut current_offset = ChdContainerHandler::CHD_V5_HEADER_BYTES;
-    let result = ChdContainerHandler.record_pipeline_hunk(
-        output_file,
-        PipelineHunkRecord {
-            output: Path::new("out.chd"),
-            entries: &mut entries,
-            current_offset: &mut current_offset,
-            self_hunks_by_hash: self_hunks,
-            parent_hunks_by_hash: parent_hunks,
-            hunk_index: 3,
-            hash_key,
-            compression_type: 0,
-            payload,
-        },
-    );
-    (result, entries, current_offset)
-}
-
-#[test]
-fn record_pipeline_hunk_emits_self_and_parent_references() {
-    let key = ChdContainerHandler::hunk_hash_key(b"hunk payload");
-    let mut sink = Vec::new();
-
-    // A hash already stored in this image becomes a self reference.
-    let mut self_hunks = HashMap::from([(key, 7_u64)]);
-    let (result, entries, offset) =
-        record_one(&mut sink, key, vec![1, 2, 3], &mut self_hunks, None);
-    result.expect("self reference");
-    assert_eq!(entries.len(), 1);
-    assert_eq!(
-        entries[0].compression_type,
-        ChdContainerHandler::CHD_V5_MAP_TYPE_SELF
-    );
-    assert_eq!(entries[0].offset, 7);
-    assert_eq!(entries[0].length, 0);
-    assert_eq!(offset, ChdContainerHandler::CHD_V5_HEADER_BYTES);
-    assert!(sink.is_empty(), "a reference stores no payload bytes");
-
-    // A hash only present in the parent becomes a parent reference.
-    let parent_hunks = HashMap::from([(key, 11_u64)]);
-    let mut self_hunks = HashMap::new();
-    let (result, entries, _) = record_one(
-        &mut sink,
-        key,
-        vec![1, 2, 3],
-        &mut self_hunks,
-        Some(&parent_hunks),
-    );
-    result.expect("parent reference");
-    assert_eq!(
-        entries[0].compression_type,
-        ChdContainerHandler::CHD_V5_MAP_TYPE_PARENT
-    );
-    assert_eq!(entries[0].offset, 11);
-    assert!(sink.is_empty());
-}
-
-#[test]
-fn record_pipeline_hunk_stores_a_new_payload_and_advances_the_offset() {
-    let key = ChdContainerHandler::hunk_hash_key(b"fresh hunk");
-    let mut sink = Vec::new();
-    let mut self_hunks = HashMap::new();
-    let payload = vec![9_u8; 40];
-    let (result, entries, offset) =
-        record_one(&mut sink, key, payload.clone(), &mut self_hunks, None);
-    result.expect("stored hunk");
-
-    assert_eq!(sink, payload);
-    assert_eq!(entries[0].length, 40);
-    assert_eq!(entries[0].crc16, key.crc16);
-    assert_eq!(entries[0].offset, ChdContainerHandler::CHD_V5_HEADER_BYTES);
-    assert_eq!(offset, ChdContainerHandler::CHD_V5_HEADER_BYTES + 40);
-    assert_eq!(
-        self_hunks.get(&key),
-        Some(&3_u64),
-        "a stored hunk registers its own index for later self references"
-    );
-}
-
-#[test]
-fn record_pipeline_hunk_rejects_a_payload_past_the_v5_map_limit() {
-    let key = ChdContainerHandler::hunk_hash_key(b"huge");
-    let mut self_hunks = HashMap::new();
-    // The v5 map stores each chunk length in 24 bits.
-    let payload = vec![0_u8; 0x0100_0000];
-    let (result, entries, _) = record_one(&mut Vec::new(), key, payload, &mut self_hunks, None);
-    let err = result.expect_err("an oversized chunk must be refused");
-    assert!(
-        err.to_string().contains("exceeds v5 map limit"),
-        "unexpected error: {err}"
-    );
-    assert!(entries.is_empty(), "no map entry is emitted for a refusal");
-}
-
-#[test]
-fn record_pipeline_hunk_reports_a_failed_payload_write() {
-    let key = ChdContainerHandler::hunk_hash_key(b"unwritable");
-    let mut self_hunks = HashMap::new();
-    let (result, _, _) = record_one(
-        &mut FailingWriter,
-        key,
-        vec![1, 2, 3, 4],
-        &mut self_hunks,
-        None,
-    );
-    let err = result.expect_err("a failed write must surface");
-    assert!(
-        err.to_string().contains("failed to write CHD data"),
-        "unexpected error: {err}"
-    );
 }

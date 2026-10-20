@@ -1209,6 +1209,563 @@ fn chd_compress_and_extract_gdi_round_trip() {
     assert!(gdi.contains("2 4 4 2048 \"disc (Track 2).bin\" 0"));
 }
 
+/// Writes a three-track synthetic GD-ROM (data, audio, data) with the given
+/// frame counts and the audio/high-density `.gdi` offsets, then compresses it.
+/// Returns the temp dir, CHD path and track contents.
+fn compress_gdi_with(
+    frames: [usize; 3],
+    offsets: [u32; 2],
+) -> (
+    assert_fs::TempDir,
+    assert_fs::fixture::ChildPath,
+    Vec<Vec<u8>>,
+) {
+    let temp = setup_temp_dir();
+    let tracks = frames
+        .iter()
+        .enumerate()
+        .map(|(track, frames)| {
+            (0..(frames * 2352))
+                .map(|index| ((index + track * 7) % 251) as u8)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (index, bytes) in tracks.iter().enumerate() {
+        fs::write(temp.child(format!("track{}.bin", index + 1)).path(), bytes).expect("track");
+    }
+    temp.child("disc.gdi")
+        .write_str(&format!(
+            "3\n1 0 4 2352 track1.bin 0\n2 {} 0 2352 track2.bin 0\n3 {} 4 2352 track3.bin 0\n",
+            offsets[0], offsets[1]
+        ))
+        .expect("gdi fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.gdi").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path, tracks)
+}
+
+/// 5/3/7-frame tracks: none is a multiple of the 4-frame alignment.
+fn compress_unaligned_gdi() -> (
+    assert_fs::TempDir,
+    assert_fs::fixture::ChildPath,
+    Vec<Vec<u8>>,
+) {
+    compress_gdi_with([5, 3, 7], [10, 45_000])
+}
+
+fn extract_chd_to(chd_path: &Path, out_dir: &Path) {
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd_path.to_str().expect("path"),
+            "--output",
+            out_dir.to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+}
+
+/// Asserts every probe-listed `.bin` size equals the extracted file's size.
+fn assert_probe_sizes_match_extracted(chd_path: &Path, out_dir: &Path) {
+    let json = run_single_json_event(
+        &[
+            "probe",
+            "--input",
+            chd_path.to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let records = json["details"]["container"]["entry_records"]
+        .as_array()
+        .expect("entry records");
+    let mut sized = 0;
+    for record in records {
+        let Some(size) = record["size_bytes"].as_u64() else {
+            continue;
+        };
+        let name = record["file_name"].as_str().expect("file name");
+        assert_eq!(
+            size,
+            fs::metadata(out_dir.join(name))
+                .expect("extracted file")
+                .len(),
+            "listed size of `{name}` must equal the extracted size"
+        );
+        sized += 1;
+    }
+    assert!(sized > 0, "probe listed no sized entries");
+}
+
+#[test]
+fn chd_gdi_tracks_are_padded_to_four_frames_like_chdman() {
+    // chdman createcd on this gdi yields 45012 units (10 + 44990 + 7 data/pad
+    // frames, plus 2 + 2 + 1 alignment frames) and extracts the original sizes.
+    let (temp, chd_path, tracks) = compress_unaligned_gdi();
+    let chd = fs::read(chd_path.path()).expect("chd");
+    let logical = u64::from_be_bytes(chd[32..40].try_into().expect("logical size"));
+    assert_eq!(logical, 45_012 * 2448);
+
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    for (index, bytes) in tracks.iter().enumerate() {
+        assert_eq!(
+            &fs::read(
+                out_dir
+                    .child(format!("disc (Track {}).bin", index + 1))
+                    .path()
+            )
+            .expect("extracted track"),
+            bytes,
+            "track {} must extract at its original size",
+            index + 1
+        );
+    }
+}
+
+#[test]
+fn chd_gdi_extract_offsets_exclude_alignment_frames() {
+    // chdman advances the `.gdi` offset by data + explicit PAD frames only, so
+    // the 4-frame alignment never shifts later tracks. Both layouts have tracks
+    // that are not a multiple of 4 frames (450 and 5/3/7).
+    for (frames, offsets) in [([450, 3, 7], [450, 45_000]), ([5, 3, 7], [10, 45_000])] {
+        let (temp, chd_path, tracks) = compress_gdi_with(frames, offsets);
+        let out_dir = temp.child("extract");
+        extract_chd_to(chd_path.path(), out_dir.path());
+        let gdi = fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi");
+        assert_eq!(
+            gdi,
+            format!(
+                "3\n1 0 4 2352 \"disc (Track 1).bin\" 0\n2 {} 0 2352 \"disc (Track 2).bin\" 0\n3 {} 4 2352 \"disc (Track 3).bin\" 0\n",
+                offsets[0], offsets[1]
+            )
+        );
+        for (index, bytes) in tracks.iter().enumerate() {
+            assert_eq!(
+                &fs::read(
+                    out_dir
+                        .child(format!("disc (Track {}).bin", index + 1))
+                        .path()
+                )
+                .expect("track"),
+                bytes
+            );
+        }
+    }
+}
+
+#[test]
+fn chd_gdi_probe_sizes_match_extracted_sizes() {
+    let (temp, chd_path, _tracks) = compress_unaligned_gdi();
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_probe_sizes_match_extracted(chd_path.path(), out_dir.path());
+}
+
+#[test]
+fn chd_cd_probe_sizes_match_extracted_sizes() {
+    let temp = setup_temp_dir();
+    for (index, frames) in [5_usize, 3].iter().enumerate() {
+        let bytes = (0..(frames * 2352))
+            .map(|value| ((value + index) % 251) as u8)
+            .collect::<Vec<_>>();
+        fs::write(temp.child(format!("track{}.bin", index + 1)).path(), bytes).expect("track");
+    }
+    temp.child("disc.cue")
+        .write_str("FILE \"track1.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track2.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_probe_sizes_match_extracted(chd_path.path(), out_dir.path());
+}
+
+#[test]
+fn chd_cue_density_markers_report_mode1_pgtype_like_chdman() {
+    // chdman reports the default MODE1 pregap type for every GD track, audio
+    // included, whether the layout came from a `.gdi` or a density-marked cue.
+    let temp = setup_temp_dir();
+    fs::write(temp.child("track01.bin").path(), vec![1_u8; 4 * 2352]).expect("track01");
+    fs::write(temp.child("track02.bin").path(), vec![2_u8; 4 * 2352]).expect("track02");
+    temp.child("disc.cue")
+        .write_str("REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track02.bin\" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    let chd = String::from_utf8_lossy(&fs::read(chd_path.path()).expect("chd")).into_owned();
+    for expected in [
+        "TRACK:1 TYPE:AUDIO SUBTYPE:NONE FRAMES:45000 PAD:44996 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        "TRACK:2 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:4 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+    ] {
+        assert!(chd.contains(expected), "missing metadata `{expected}`");
+    }
+}
+
+#[test]
+fn chd_gdi_metadata_matches_chdman_track_fields() {
+    // Reference lines captured from chdman 0.289 createcd on the same gdi:
+    // FRAMES/PAD stay unaligned and every track reports PGTYPE:MODE1.
+    let (_temp, chd_path, _tracks) = compress_unaligned_gdi();
+    let chd = String::from_utf8_lossy(&fs::read(chd_path.path()).expect("chd")).into_owned();
+    for expected in [
+        "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:5 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44987 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:7 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+    ] {
+        assert!(chd.contains(expected), "missing metadata `{expected}`");
+    }
+}
+
+/// Writes one synthetic 2352-byte-sector track per `(name, frames)` entry (with
+/// a WAVE header for `.wav` names) plus
+/// `disc.cue`, then compresses the cue to `disc.chd`. The bytes are
+/// `(index * 31 + file_number * 17) % 251`, so a reference CHD built by
+/// chdman 0.289 from the same files has the hashes asserted by the callers.
+fn compress_synthetic_cue(
+    tracks: &[(&str, usize)],
+    cue: &str,
+) -> (assert_fs::TempDir, assert_fs::fixture::ChildPath) {
+    let temp = setup_temp_dir();
+    for (file_number, (name, frames)) in tracks.iter().enumerate() {
+        let data = (0..(frames * 2352))
+            .map(|index| ((index * 31 + (file_number + 1) * 17) % 251) as u8)
+            .collect::<Vec<_>>();
+        // A `.wav` track gets a 44-byte PCM header in front of its samples.
+        let bytes = if name.ends_with(".wav") {
+            let data_len = u32::try_from(data.len()).expect("wav length");
+            let mut wav = b"RIFF".to_vec();
+            wav.extend_from_slice(&(36 + data_len).to_le_bytes());
+            wav.extend_from_slice(b"WAVEfmt ");
+            wav.extend_from_slice(&16_u32.to_le_bytes());
+            wav.extend_from_slice(&1_u16.to_le_bytes());
+            wav.extend_from_slice(&2_u16.to_le_bytes());
+            wav.extend_from_slice(&44_100_u32.to_le_bytes());
+            wav.extend_from_slice(&(44_100_u32 * 4).to_le_bytes());
+            wav.extend_from_slice(&4_u16.to_le_bytes());
+            wav.extend_from_slice(&16_u16.to_le_bytes());
+            wav.extend_from_slice(b"data");
+            wav.extend_from_slice(&data_len.to_le_bytes());
+            wav.extend_from_slice(&data);
+            wav
+        } else {
+            data
+        };
+        fs::write(temp.child(name).path(), bytes).expect("track");
+    }
+    temp.child("disc.cue").write_str(cue).expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path)
+}
+
+/// The raw (data) SHA-1 and the overall SHA-1 from a v5 CHD header.
+fn chd_header_sha1s(chd_path: &Path) -> (String, String) {
+    let header = fs::read(chd_path).expect("chd");
+    let hex = |bytes: &[u8]| {
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    (hex(&header[64..84]), hex(&header[84..104]))
+}
+
+fn chd_track_metadata_lines(chd_path: &Path) -> Vec<String> {
+    let chd = String::from_utf8_lossy(&fs::read(chd_path).expect("chd")).into_owned();
+    chd.match_indices("TRACK:")
+        .map(|(start, _)| {
+            chd[start..]
+                .split('\0')
+                .next()
+                .expect("metadata entry")
+                .to_owned()
+        })
+        .collect()
+}
+
+#[test]
+fn chd_cd_pregap_pgtype_matches_chdman_for_every_pregap_kind() {
+    // chdman 0.289 leaves the pregap type at MODE1 unless the pregap carries
+    // data (`INDEX 00`), whatever the track type: a MODE2/2352 first track and
+    // an AUDIO track with a `PREGAP` directive both report PGTYPE:MODE1, and
+    // an AUDIO `INDEX 00` pregap reports VAUDIO. The hashes are chdman's.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track1.bin", 4), ("track2.bin", 5), ("track3.bin", 6)],
+        "FILE \"track1.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\nFILE \"track2.bin\" BINARY\n  TRACK 02 AUDIO\n    PREGAP 00:00:02\n    INDEX 01 00:00:00\nFILE \"track3.bin\" BINARY\n  TRACK 03 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:02\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:4 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:5 PREGAP:2 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:AUDIO SUBTYPE:NONE FRAMES:6 PREGAP:2 PGTYPE:VAUDIO PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "f4bdecad9e1e216141d64f4466c26b422cb38873".to_string(),
+            "14e4b87c43e96f5952c6d18c8b7228dbdcad235c".to_string()
+        )
+    );
+}
+
+#[test]
+fn chd_gd_cue_index00_pregaps_move_to_previous_track_like_chdman() {
+    // A Redump-style Dreamcast cue gives tracks 2 and up an `INDEX 00` pregap.
+    // chdman files those frames under the end of the previous track (after the
+    // density gap padding when the next track opens the high-density area), so
+    // FRAMES, the physical .gdi offsets and the hashes all differ from keeping
+    // the pregap in its own track. Reference values come from chdman 0.289.
+    let (temp, chd_path) = compress_synthetic_cue(
+        &[
+            ("track01.bin", 6),
+            ("track02.bin", 9),
+            ("track03.bin", 8),
+            ("track04.bin", 5),
+        ],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:03\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:02\nFILE \"track04.bin\" BINARY\n  TRACK 04 AUDIO\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:9 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44991 PAD:44983 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:6 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:4 TYPE:AUDIO SUBTYPE:NONE FRAMES:5 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "03e27c995f4810722daba747415f2ed23f654a4c".to_string(),
+            "0bee7f8d3b7b7b30e9026c16a712041aa690291e".to_string()
+        )
+    );
+
+    // `chdman extractcd` of that CHD writes these offsets and sizes.
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_eq!(
+        fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi"),
+        "4\n1 0 4 2352 \"disc (Track 1).bin\" 0\n2 9 0 2352 \"disc (Track 2).bin\" 0\n3 45000 4 2352 \"disc (Track 3).bin\" 0\n4 45006 0 2352 \"disc (Track 4).bin\" 0\n"
+    );
+    for (track, bytes) in [(1, 21_168), (2, 18_816), (3, 14_112), (4, 11_760)] {
+        assert_eq!(
+            fs::metadata(out_dir.child(format!("disc (Track {track}).bin")).path())
+                .expect("track")
+                .len(),
+            bytes,
+            "track {track} size"
+        );
+    }
+}
+
+#[test]
+fn chd_gd_cue_first_track_pregap_stays_and_keeps_its_own_pgtype_like_chdman() {
+    // chdman only moves pregaps for tracks 2 and up. A first-track `INDEX 00`
+    // pregap stays in the metadata with the track's own type (no `V` prefix),
+    // and a later `PREGAP` directive moves to the end of the first track.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track01.bin", 8), ("track02.bin", 6), ("track03.bin", 5)],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:03\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    PREGAP 00:00:02\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_track_metadata_lines(chd_path.path()),
+        [
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:0 PREGAP:3 PGTYPE:MODE1_RAW PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44986 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:5 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "8ee360722b15f8b8b2fc1e3b76cd6cf74c9729f1".to_string(),
+            "643af5118b1ccba14b6dcc0040d7ec1a7b3090ca".to_string()
+        )
+    );
+}
+
+/// Asserts the track metadata and the raw/overall header SHA-1s.
+fn assert_chd_matches_chdman(chd_path: &Path, tracks: &[&str], raw_sha1: &str, overall_sha1: &str) {
+    assert_eq!(chd_track_metadata_lines(chd_path), tracks);
+    assert_eq!(
+        chd_header_sha1s(chd_path),
+        (raw_sha1.to_string(), overall_sha1.to_string())
+    );
+}
+
+#[test]
+fn chd_gd_cue_wave_track_pregap_is_read_from_the_wav_file_start_like_chdman() {
+    // chdman moves the WAVE track's `INDEX 00` pregap onto the previous track
+    // by reading that file from byte 0, so the 44-byte RIFF header is part of
+    // the frames. Reference values come from chdman 0.289.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track01.bin", 6), ("track02.wav", 9), ("track03.bin", 8)],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track02.wav\" WAVE\n  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:03\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_chd_matches_chdman(
+        chd_path.path(),
+        &[
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:9 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44991 PAD:44985 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:8 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ],
+        "4029119a37a34731f0021f7354ebbddfec015a2c",
+        "8139198dc2472e8d9b296de4dfab6688674dd71d",
+    );
+}
+
+#[test]
+fn chd_cd_cue_shared_bin_tracks_split_by_index_difference_like_chdman() {
+    // chdman sizes a shared-file track by the difference of the first indexes
+    // (INDEX 01 at 00:00:02 and 00:00:10 give 8 and 12 frames, not 10 and
+    // 10) and starts the next track where the previous one's frames end.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("a.bin", 20)],
+        "FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:02\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:10\n",
+    );
+    assert_chd_matches_chdman(
+        chd_path.path(),
+        &[
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:8 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:12 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ],
+        "55d9daf85a9573346d5c3b6be9b399fca41900be",
+        "ab7d93a1a1b8ca40a0aefca47f069435ce767140",
+    );
+}
+
+#[test]
+fn chd_cd_cue_shared_bin_after_another_file_starts_after_the_previous_frames_like_chdman() {
+    // chdman starts a shared-file track at the previous track's byte offset
+    // plus its frames even when the previous track lives in another file, so
+    // track 2 reads b.bin from frame 6, not frame 0.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("a.bin", 6), ("b.bin", 20)],
+        "FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"b.bin\" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:10\n",
+    );
+    assert_chd_matches_chdman(
+        chd_path.path(),
+        &[
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:6 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:4 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ],
+        "3381c9f35f57feb284eb86d83a1036c9eb51ea46",
+        "0e894d1b7cc5421012444b8a2699b141e4c60587",
+    );
+}
+
+#[test]
+fn chd_cd_cue_zero_length_index00_pregap_still_reports_a_data_pgtype_like_chdman() {
+    // An `INDEX 00` equal to `INDEX 01` is a zero-length pregap, but chdman
+    // still records the pregap as data: PREGAP:0 PGTYPE:VAUDIO.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track01.bin", 8), ("track02.bin", 6)],
+        "FILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:00:00\n",
+    );
+    assert_chd_matches_chdman(
+        chd_path.path(),
+        &[
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:8 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:6 PREGAP:0 PGTYPE:VAUDIO PGSUB:NONE POSTGAP:0",
+        ],
+        "afc64deb1539fc3a33788800e45c73997084ddd5",
+        "e2be0a7927b3c1b6827ceec6c145ea4b04a39743",
+    );
+}
+
+#[test]
+fn chd_gd_cue_first_track_zero_length_index00_keeps_its_own_pgtype_like_chdman() {
+    // The same zero-length `INDEX 00` on a GD cue's first track reports the
+    // track's own type, PGTYPE:MODE1_RAW, not the default MODE1.
+    let (_temp, chd_path) = compress_synthetic_cue(
+        &[("track01.bin", 8), ("track02.bin", 6), ("track03.bin", 5)],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_chd_matches_chdman(
+        chd_path.path(),
+        &[
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:8 PAD:0 PREGAP:0 PGTYPE:MODE1_RAW PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44992 PAD:44986 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:5 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ],
+        "0ca6e7a401bcb73bacfd4e75490228eb92958a55",
+        "d294998e173abe3fe2de6d4f8097a1f4af3feb54",
+    );
+}
+
 #[test]
 fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
     // A redump-style GD-ROM dump ships a `.cue` next to an authoritative `.gdi`.
@@ -2485,4 +3042,286 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
         checked >= 8,
         "expected every levelled CHD codec, got {checked}"
     );
+}
+
+/// Deterministic xorshift32 bytes, so synthetic tracks do not compress away.
+fn xorshift_bytes(seed: u32, len: usize) -> Vec<u8> {
+    let mut state = seed;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// Compress a cue whose files hold exactly the given bytes.
+fn compress_cue_files(
+    files: &[(&str, Vec<u8>)],
+    cue: &str,
+) -> (assert_fs::TempDir, assert_fs::fixture::ChildPath) {
+    let temp = setup_temp_dir();
+    for (name, bytes) in files {
+        fs::write(temp.child(name).path(), bytes).expect("track");
+    }
+    temp.child("disc.cue").write_str(cue).expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path)
+}
+
+/// The hunk size from a v5 CHD header.
+fn chd_hunk_bytes(chd_path: &Path) -> u32 {
+    let header = fs::read(chd_path).expect("chd");
+    u32::from_be_bytes(header[56..60].try_into().expect("hunk bytes"))
+}
+
+/// Label, files, cue, header SHA-1s, extracted cue, merged bin length and SHA-1.
+type MixedCueCase<'a> = (
+    &'a str,
+    Vec<(&'a str, Vec<u8>)>,
+    &'a str,
+    (&'a str, &'a str),
+    &'a str,
+    u64,
+    &'a str,
+);
+
+#[test]
+fn chd_mixed_sector_size_cues_match_chdman() {
+    // Cue sheets mixing 2048-byte and 2352-byte tracks. chdman 0.289 always
+    // writes 19584-byte hunks, keeps the `.cue` track layout, and
+    // `extractcd` merges every track into one bin whatever the sector sizes.
+    // Reference values come from `chdman createcd` / `extractcd` on the same
+    // synthetic files.
+    let cases: [MixedCueCase; 3] = [
+        (
+            "separate files, MODE2/2352 track with INDEX 00",
+            vec![
+                ("t1.bin", xorshift_bytes(1, 5 * 2048)),
+                ("t2.bin", xorshift_bytes(2, 3 * 2352)),
+            ],
+            "FILE \"t1.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 MODE2/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:01\n",
+            (
+                "55baa280cd9318ad3609263f5ce745ebc165acd4",
+                "3951488ba7c860739752327b7b4cd40f3936e894",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 MODE2/2352\n    INDEX 00 00:00:05\n    INDEX 01 00:00:06\n",
+            17_296,
+            "b004a4786951452bbe36d1d31b5199373fb2bb52",
+        ),
+        (
+            "one file shared by a 2048 track and an audio track",
+            vec![("disc.bin", xorshift_bytes(3, 5 * 2048 + 6 * 2352))],
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:05\n",
+            (
+                "0cea1dcb1ad6a11bd32a73983aacdc755cdda80c",
+                "7c3eebf54bdec197362b9efb7439b0a7cf950fa9",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:05\n",
+            24_352,
+            "ed4e3afcbf7d71f788f521adcde7f00d44f7b2e3",
+        ),
+        (
+            "audio track before a 2048 track",
+            vec![
+                ("t1.bin", xorshift_bytes(4, 5 * 2352)),
+                ("t2.bin", xorshift_bytes(5, 7 * 2048)),
+            ],
+            "FILE \"t1.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 MODE1/2048\n    INDEX 01 00:00:00\n",
+            (
+                "2f9d2be9561618e43d35fcef475f65a211dc5a4c",
+                "214f7c0cbb345a1900834a8b8c73898359f6d869",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n  TRACK 02 MODE1/2048\n    INDEX 01 00:00:05\n",
+            26_096,
+            "731283f66ae40bd16895ef2d114fa27eb905feed",
+        ),
+    ];
+    for (label, files, cue, (raw_sha1, overall_sha1), extracted_cue, bin_len, bin_sha1) in cases {
+        let (temp, chd_path) = compress_cue_files(&files, cue);
+        assert_eq!(
+            chd_hunk_bytes(chd_path.path()),
+            19_584,
+            "{label}: hunk bytes"
+        );
+        assert_eq!(
+            chd_header_sha1s(chd_path.path()),
+            (raw_sha1.to_string(), overall_sha1.to_string()),
+            "{label}: header sha1s"
+        );
+        let out_dir = temp.child("extract");
+        extract_chd_to(chd_path.path(), out_dir.path());
+        assert_eq!(
+            fs::read_to_string(out_dir.child("disc.cue").path()).expect("cue"),
+            extracted_cue,
+            "{label}: extracted cue"
+        );
+        let bin = out_dir.child("disc.bin");
+        assert_eq!(
+            fs::metadata(bin.path()).expect("bin").len(),
+            bin_len,
+            "{label}: merged bin length"
+        );
+        assert_eq!(
+            checksum_value(bin.path(), "sha1"),
+            bin_sha1,
+            "{label}: merged bin sha1"
+        );
+    }
+}
+
+#[test]
+fn chd_short_cd_uses_full_hunks_like_chdman() {
+    // chdman writes 8-frame hunks even when the whole disc is shorter.
+    let (_temp, chd_path) = compress_cue_files(
+        &[("disc.bin", xorshift_bytes(9, 5 * 2352))],
+        "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(chd_hunk_bytes(chd_path.path()), 19_584);
+}
+
+#[test]
+fn chd_gd_mode2_raw_tracks_extract_to_gdi_like_chdman() {
+    // A Redump-style Dreamcast cue with MODE2/2352 data tracks yields MODE2_RAW
+    // GD tracks. `chdman extractcd` writes them as `.gdi` type 4, size 2352.
+    let (temp, chd_path) = compress_cue_files(
+        &[
+            ("track01.bin", xorshift_bytes(6, 6 * 2352)),
+            ("track02.bin", xorshift_bytes(7, 9 * 2352)),
+            ("track03.bin", xorshift_bytes(8, 8 * 2352)),
+        ],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE2/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "18532ed3b52b96d7a8d90b2606bdb5f6c6eaaba7".to_string(),
+            "42572e479794caa582fd44a5335230184849bcea".to_string()
+        )
+    );
+    assert!(
+        chd_track_metadata_lines(chd_path.path())[0].starts_with("TRACK:1 TYPE:MODE2_RAW"),
+        "{:?}",
+        chd_track_metadata_lines(chd_path.path())
+    );
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_eq!(
+        fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi"),
+        "3\n1 0 4 2352 \"disc (Track 1).bin\" 0\n2 6 0 2352 \"disc (Track 2).bin\" 0\n3 45000 4 2352 \"disc (Track 3).bin\" 0\n"
+    );
+    for (track, bytes, sha1) in [
+        (1, 14_112, "965c5cc887659b46491d960966f5517b5070e22d"),
+        (2, 21_168, "9dfa165cbc0f975c6152966d2429a3dad32276a4"),
+        (3, 18_816, "982e6d27794e822db982030ddcc00c826c06342f"),
+    ] {
+        let path = out_dir.child(format!("disc (Track {track}).bin"));
+        assert_eq!(
+            fs::metadata(path.path()).expect("track").len(),
+            bytes,
+            "track {track} size"
+        );
+        assert_eq!(
+            checksum_value(path.path(), "sha1"),
+            sha1,
+            "track {track} sha1"
+        );
+    }
+}
+
+#[test]
+fn chd_cue_track_past_end_of_shared_file_is_rejected_before_compressing() {
+    // a.bin holds 5 frames but track 2 starts at frame 50 of the same file, so
+    // the previous track's frames already run past the end of the file. This
+    // must be a cue validation error, not a mid-compress short read.
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![0x11_u8; 5 * 2352]).expect("a.bin");
+    fs::write(temp.child("b.bin").path(), vec![0x22_u8; 4 * 2352]).expect("b.bin");
+    temp.child("disc.cue")
+        .write_str("FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:50\nFILE \"b.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            temp.child("disc.chd").path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ])
+        .output()
+        .expect("run compress");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !output.status.success() && combined.contains("cue track 2 starts past the end of"),
+        "expected the early cue validation error `cue track 2 starts past the end of`, got: {combined}"
+    );
+}
+
+#[test]
+fn weave_create_resolves_cd_chd_track_member_with_split_bin_listing() {
+    // `weave create --rom-member` lists and extracts CHD tracks through
+    // source_resolution with split_bin=true, so `<stem> (Track N).bin` names
+    // must be listed even for a plain CD CHD.
+    let (temp, chd_path) = compress_synthetic_cue(
+        &[("a.bin", 6), ("b.bin", 6)],
+        "FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"b.bin\" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    let patch = temp.child("p.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: vec![0xAA],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.weave");
+    let create = run_single_json_event(
+        &[
+            "weave",
+            "create",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--rom-member",
+            "disc (Track 2).bin",
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(create["status"], "succeeded", "{create}");
+    assert!(output.path().exists());
 }
