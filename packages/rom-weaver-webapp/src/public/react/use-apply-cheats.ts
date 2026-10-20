@@ -142,6 +142,9 @@ const useApplyCheats = ({
     },
     [cheatFileName, cheatRomRow?.size, getCheatSource, resolvedAssetBaseUrl],
   );
+  // The controller object changes with every store update, so a ref keeps handleCheatSelection stable.
+  const discardCompletedOutputRef = useRef(resolvedUiController.discardCompletedOutput);
+  discardCompletedOutputRef.current = resolvedUiController.discardCompletedOutput;
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[], positions: number[] = []) => {
@@ -157,6 +160,8 @@ const useApplyCheats = ({
       setCheatNames(romRecords.map((record) => record.description));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
+      // A finished run baked the previous cheat list, so retire its Download.
+      discardCompletedOutputRef.current();
       (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords, romPositions);
       const sequence = ++preflightSequence.current;
       setCheatConflictMessage("");

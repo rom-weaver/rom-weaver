@@ -707,3 +707,21 @@ test("Master System fixture keeps the Game Genie code and drops the RAM codes", 
   assert.equal(shard.games[0].cheats.length, 1);
   assert.equal(shard.games[0].cheats[0].rawCode, "1F2-3C4");
 });
+
+test("buildCheatShard shows '&' for the '_' libretro file names use in place of it", () => {
+  const shard = buildCheatShard({
+    cheatSystem: "nes",
+    files: [
+      {
+        sourcePath: `${NES_DIRECTORY}/Dungeons _ Dragons (USA).cht`,
+        text: 'cheat0_desc = "Infinite lives"\ncheat0_code = "SXIOPO"\ncheat0_enable = false\n',
+      },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  assert.deepEqual(
+    shard.games.map((game) => game.title),
+    ["Dungeons & Dragons (USA)"],
+  );
+});
