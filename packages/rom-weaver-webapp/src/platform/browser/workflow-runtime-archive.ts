@@ -203,16 +203,26 @@ const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionP
   const trace = { logLevel: input.options?.logLevel, onLog: input.options?.onLog };
   let requests: Parameters<RuntimeWorkerIo["stageSources"]>[0];
   if (input.companionFiles?.length) {
-    const files = [input.source, ...input.companionFiles];
-    if (!files.every((file): file is File => file instanceof File)) {
+    const { source, companionFiles } = input;
+    if (!(source instanceof File && companionFiles.every((file) => file instanceof File))) {
       throw new Error("Companion extraction requires a File source and File companions.");
     }
+    const files = [source, ...companionFiles];
     const names = new Set<string>();
     const pathPrefix = `archive-input-${createVfsPathId()}`;
+    // NFS finds its parts by fixed lowercase names, so names are lowercased. Split WBFS parts
+    // instead share the source's stem (`Game.wbfs`, `Game.wbf1`); keeping that stem's case keeps
+    // the extracted ISO named like the source.
+    const sourceName = normalizeArchiveRelativePath(source.name);
+    const stem = sourceName.replace(/\.[^.]*$/, "");
+    const sharesStem = (name: string) => name.toLowerCase().startsWith(`${stem.toLowerCase()}.`);
+    const keepStem = stem !== sourceName && companionFiles.every((file) => sharesStem(file.name));
+    const stagedName = (name: string) =>
+      keepStem ? `${stem}${name.slice(stem.length).toLowerCase()}` : name.toLowerCase();
     // Grouped uploads MUST use fresh File identities to keep cached standalone stages
     // from changing the directory or fixed basename of a companion.
     requests = files.map((file) => {
-      const fileName = normalizeArchiveRelativePath(file.name).toLowerCase();
+      const fileName = stagedName(normalizeArchiveRelativePath(file.name));
       if (fileName.includes("/")) {
         throw new Error("Companion filenames cannot contain directories.");
       }
