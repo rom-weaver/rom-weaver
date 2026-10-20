@@ -1460,6 +1460,11 @@ msgstr "{label} {value} aus der Identifikationsdatenbank kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.log.copyAll"
+msgstr "Alles kopieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.copyName"
 msgstr "Name {name} kopieren"
 

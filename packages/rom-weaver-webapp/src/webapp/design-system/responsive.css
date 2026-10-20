@@ -147,13 +147,69 @@
     border-block-start: 1px solid var(--seam-soft);
     border-block-end: 0;
   }
-  .rw-app .log-dlg .settings-actions {
-    gap: var(--sp-s);
-    width: 100%;
+  /* The head: the title, the Advanced switch, and the section's head actions
+     share the first row; the description takes the full width below. */
+  .rw-app .log-dlg .console-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 4px var(--sp-s);
+    align-items: center;
   }
-  .rw-app .log-dlg .settings-actions .btn {
-    flex: 1 1 0;
-    min-height: 44px;
+  .rw-app .log-dlg .console-titles {
+    display: contents;
+  }
+  .rw-app .log-dlg .console-title {
+    grid-area: 1 / 1;
+  }
+  .rw-app .log-dlg .console-description {
+    grid-area: 2 / 1 / auto / -1;
+    margin: 0;
+  }
+  .rw-app .log-dlg .console-head .console-advanced {
+    grid-area: 1 / 2;
+    min-height: 36px;
+  }
+  .rw-app .log-dlg .console-head-actions {
+    grid-area: 1 / 3;
+  }
+  .rw-app .log-dlg .console-head-actions::after,
+  .rw-app .log-dlg .log-actions-head {
+    display: none;
+  }
+  .rw-app .log-dlg .console-head-actions .settings-defaults {
+    inline-size: 36px;
+    height: 36px;
+    padding-inline: 0;
+    border-radius: var(--r-m);
+  }
+  .rw-app .log-dlg .settings-defaults .bl {
+    display: none;
+  }
+  /* Save floats over the panel's foot, in thumb reach, instead of spending a
+     bar's height; the panel ends with room enough that it never covers the
+     last field. */
+  .rw-app .log-dlg .console-pane {
+    position: relative;
+  }
+  .rw-app .log-dlg .console-head-actions .settings-save {
+    position: absolute;
+    inset-block-end: var(--sp-l);
+    inset-inline-end: max(var(--sp-l), var(--safe-r));
+    z-index: 2;
+    inline-size: auto;
+    height: 48px;
+    padding-inline: 20px;
+    font-size: 0.95rem;
+    border-radius: var(--r-m);
+    box-shadow: var(--overlay-shadow);
+  }
+  /* The narrow-desktop rule that drops head buttons to icons matches a phone's
+     width too; floating Save keeps its label. */
+  .rw-app .log-dlg .settings-save .bl {
+    display: inline;
+  }
+  .rw-app .log-dlg .settings-body {
+    padding-block-end: calc(48px + 2 * var(--sp-l));
   }
   /**
    * One row of controls: the Now/Last toggle, the level (or refresh on
@@ -205,6 +261,34 @@
   .rw-app .log-dlg .tracelog {
     flex: 1 1 auto;
     height: auto;
+    overflow-x: hidden;
+  }
+  /* Each line wraps: time, level, and caller on top, the whole message below,
+     rather than one line scrolling far past the screen's edge. The list
+     measures these rows (log-dialog.tsx). */
+  .rw-app .log-dlg .tracelog-virtual-window {
+    width: auto;
+  }
+  .rw-app .log-dlg .tracelog .ln {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 2px var(--sp-s);
+    align-items: baseline;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding-block: 6px;
+    white-space: normal;
+  }
+  .rw-app .log-dlg .tracelog .caller {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .log-dlg .tracelog .msg {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
   }
   .rw-app .ck {
     gap: var(--sp-2xs) var(--sp-s);

@@ -1205,7 +1205,6 @@ function WebappRoot({
           {logOpen ? (
             <Suspense fallback={null}>
               <LogDialog
-                currentView={state.currentView}
                 dockTabs={dockTabs}
                 initialTab={logTab}
                 licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
