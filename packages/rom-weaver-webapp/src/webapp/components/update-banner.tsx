@@ -97,16 +97,20 @@ const UpdateBanner = ({
     let current = true;
     let hasLoaded = false;
     let requestId = 0;
+    // A response slower than the refresh interval still lands; only one older
+    // than the changelog already shown is dropped.
+    let appliedRequest = 0;
     const refresh = () => {
       const currentRequest = ++requestId;
       fetchChangelog()
         .then(({ release }) => {
-          if (!current || currentRequest !== requestId) return;
+          if (!current || currentRequest < appliedRequest) return;
+          appliedRequest = currentRequest;
           hasLoaded = true;
           setLoaded({ kind, release, since: sinceRef.current ?? {} });
         })
         .catch((error) => {
-          if (!current || currentRequest !== requestId) return;
+          if (!current || currentRequest < appliedRequest) return;
           // The banner still names the update; only the highlight is lost.
           logger.debug("Update banner changelog unavailable", { kind, message: String(error) });
           if (!hasLoaded) {

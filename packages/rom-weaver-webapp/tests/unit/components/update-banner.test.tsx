@@ -220,6 +220,83 @@ describe("UpdateBanner with a deploy waiting", () => {
   });
 });
 
+describe("UpdateBanner slow ready refreshes", () => {
+  const releaseResponse = (version: string, summary: string) =>
+    ({
+      json: () =>
+        Promise.resolve([
+          {
+            date: "2026-07-29T00:00:00Z",
+            hash: "release",
+            release: {
+              changelogUrl: `${REPOSITORY_URL}/blob/main/CHANGELOG.md`,
+              notes: [highlights(version, [summary])],
+              repositoryUrl: REPOSITORY_URL,
+              truncated: false,
+              version,
+            },
+            subject: "release",
+          },
+        ]),
+      ok: true,
+    }) as Response;
+  const settle = () =>
+    act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+  it("opens when a ready changelog request takes longer than the refresh interval", async () => {
+    vi.useFakeTimers();
+    const pending: ((response: Response) => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
+    );
+    const { openBanner, unmount } = renderBanner("ready");
+
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      expect(pending).toHaveLength(2);
+
+      pending[0]?.(releaseResponse(INCOMING, "Incoming highlight"));
+      await settle();
+
+      expect(openBanner()).not.toBeNull();
+      expect(screen.getByText(`v${INCOMING} is ready`)).toBeTruthy();
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a newer changelog when an older request settles after it", async () => {
+    vi.useFakeTimers();
+    const pending: ((response: Response) => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve))),
+    );
+    const { openBanner, unmount } = renderBanner("ready");
+
+    try {
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      pending[1]?.(releaseResponse(NEXT_INCOMING, "Next incoming highlight"));
+      await settle();
+      pending[0]?.(releaseResponse(INCOMING, "First incoming highlight"));
+      await settle();
+
+      expect(openBanner()).not.toBeNull();
+      expect(screen.getByText(`v${NEXT_INCOMING} is ready`)).toBeTruthy();
+      expect(screen.queryByText("First incoming highlight")).toBeNull();
+    } finally {
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("UpdateBanner loading", () => {
   it("still opens, without a highlight, when the changelog is unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
