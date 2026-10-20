@@ -1129,6 +1129,8 @@ fn cd_track(number: u32, mode: DiscTrackMode, frames: u32) -> DiscTrack {
         pregap_has_data: false,
         has_subcode: false,
         pad_frames: 0,
+        align_pad_frames: 0,
+        pgtype_mode1: false,
         swap_audio_on_read: false,
     }
 }
@@ -1175,13 +1177,13 @@ fn apply_cd_track_padding_rounds_frames_to_multiple() {
         (8, 0)
     );
 
-    // GD-ROM carries explicit pad metadata, so the helper is a no-op there.
+    // GD-ROM tracks are aligned the same way (chdman pads every track).
     let mut gd = DiscLayout {
         kind: DiscKind::GdRom,
         tracks: vec![cd_track(1, DiscTrackMode::Mode1Raw, 10)],
     };
     gd.apply_cd_track_padding();
-    assert_eq!((gd.tracks[0].frames, gd.tracks[0].pad_frames), (10, 0));
+    assert_eq!((gd.tracks[0].frames, gd.tracks[0].pad_frames), (12, 2));
 }
 
 #[test]

@@ -30,6 +30,8 @@ impl ChdContainerHandler {
                 for track in &layout.tracks {
                     let pgtype = if track.pregap_has_data {
                         format!("V{}", track.mode.metadata_label())
+                    } else if track.pgtype_mode1 {
+                        "MODE1".to_string()
                     } else {
                         track.mode.pregap_metadata_label().to_string()
                     };
@@ -49,8 +51,8 @@ impl ChdContainerHandler {
                                 "TRACK:{} TYPE:{} SUBTYPE:NONE FRAMES:{} PAD:{} PREGAP:{} PGTYPE:{} PGSUB:NONE POSTGAP:{}",
                                 track.number,
                                 track.mode.metadata_label(),
-                                track.frames,
-                                track.pad_frames,
+                                track.frames - track.align_pad_frames,
+                                track.pad_frames - track.align_pad_frames,
                                 track.pregap_frames,
                                 pgtype,
                                 track.postgap_frames

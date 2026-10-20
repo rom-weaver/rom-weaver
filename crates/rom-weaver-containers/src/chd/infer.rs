@@ -58,6 +58,8 @@ impl ChdContainerHandler {
                 pregap_has_data: false,
                 has_subcode: false,
                 pad_frames: 0,
+                align_pad_frames: 0,
+                pgtype_mode1: false,
                 swap_audio_on_read: false,
             }],
         };
