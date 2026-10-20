@@ -2773,6 +2773,80 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
 }
 
 #[test]
+fn patch_create_candidates_drop_formats_that_cannot_shrink_the_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world, longer").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "create",
+            "--plan",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    let formats = json["details"]["patch_create_format_candidates"]["formats"]
+        .as_array()
+        .expect("formats array")
+        .iter()
+        .map(|value| value.as_str().expect("format"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        formats,
+        vec!["bps", "xdelta", "aps", "bdf", "ips", "rup", "ups"]
+    );
+}
+
+#[test]
+fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world, longer").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    for format in ["ebp", "ppf"] {
+        let patch = temp.child(format!("new.{format}"));
+        let output = command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--jsonl",
+            ],
+            1,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["status"], "failed", "{format}");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("cannot shrink the output"),
+            "{format}: {json}"
+        );
+        assert!(!patch.path().exists(), "{format} left an output file");
+    }
+}
+
+#[test]
 fn patch_create_candidates_default_to_xdelta_for_special_compression_inputs() {
     let temp = setup_temp_dir();
     let original = temp.child("old.chd");

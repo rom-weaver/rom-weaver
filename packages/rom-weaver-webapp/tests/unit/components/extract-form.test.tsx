@@ -52,6 +52,58 @@ describe("ExtractForm", () => {
     );
   });
 
+  it("opens a split WBFS set from its .wbfs part and skips files from another set", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("Game.iso")] });
+    const first = new File(["WBFS"], "Game.wbfs");
+    const second = new File(["part"], "Game.WBF1");
+    const third = new File(["part"], "game.wbf2");
+    const other = new File(["part"], "Other.wbf1");
+    render(<ExtractForm pageDrop={{ files: [third, other, first, second], id: 1 }} />);
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [third, second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
+  });
+
+  it("opens a split WBFS set when a part from another set comes first", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("Game.iso")] });
+    const first = new File(["WBFS"], "Game.wbfs");
+    const second = new File(["part"], "Game.wbf1");
+    const other = new File(["part"], "Other.wbf1");
+    render(<ExtractForm pageDrop={{ files: [other, second, first], id: 1 }} />);
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
+  });
+
+  it.each([
+    [
+      1398102,
+      "Game.wbfs is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.",
+    ],
+    [
+      5592405,
+      "Game.wbfs and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.",
+    ],
+  ])("explains a WBFS of %i bytes against a 4 MiB header instead of the raw size error", async (size, text) => {
+    runtime.extract.mockRejectedValue(
+      new Error(
+        `failed to open wbfs source \`/work/Game.wbfs\`: Invalid WBFS file size: 2097152, expected 4194304; path fallback failed: disc format error: Invalid WBFS file size: ${size}, expected 4194304`,
+      ),
+    );
+    render(<ExtractForm />);
+
+    addFile(new File(["WBFS"], "Game.wbfs"));
+
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.queryByText(/\/work\//)).toBeNull();
+  });
+
   it("extracts the first of several dropped files and names the ones it did not use", async () => {
     runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
     render(

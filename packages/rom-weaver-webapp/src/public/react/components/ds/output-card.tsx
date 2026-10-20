@@ -38,6 +38,8 @@ type OutputCardProps = {
   fileNameId?: string;
   format: string;
   formatOptions: FormatOption[];
+  /** Hold the picker on a placeholder while the default format still depends on pending evidence. */
+  formatPending?: boolean;
   onFormatChange: (value: string) => void;
   formatLabel?: string;
   formatId?: string;
@@ -83,6 +85,7 @@ const OutputCard = ({
   fileNameId,
   format,
   formatOptions,
+  formatPending,
   onFormatChange,
   formatLabel,
   formatId,
@@ -150,12 +153,12 @@ const OutputCard = ({
           <DropdownSelect
             aria-label={resolvedFormatLabel}
             className="select mono"
-            disabled={disabled}
+            disabled={disabled || formatPending}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}
-            value={format}
+            value={formatPending ? "" : format}
           >
-            {formatOptions.map((option) => (
+            {(formatPending ? [{ label: "…", value: "" }] : formatOptions).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

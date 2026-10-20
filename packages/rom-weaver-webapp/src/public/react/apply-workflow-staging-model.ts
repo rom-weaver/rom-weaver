@@ -1,4 +1,5 @@
 import type { ParsedWeavePatchInput } from "../../types/weave.ts";
+import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
 import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
@@ -119,6 +120,7 @@ const getApplyOutputCompression = (
     parentCompressions: input?.parentCompressions,
     sourceFileName: sourceName,
     sourceSize: input?.size ?? getBinarySourceSize(snapshot.inputs[0]),
+    hasDiscEvidence: hasDiscImageEvidence(input?.romType?.recommendedFormat, input?.chdMode),
   });
 };
 

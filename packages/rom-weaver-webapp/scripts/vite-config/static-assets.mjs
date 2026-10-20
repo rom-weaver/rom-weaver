@@ -177,7 +177,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         makeBetaRouteNoindex(withShell("save-editor"), "save-editor", channel, channelLabel),
         routePreloadLinks.get("save-editor"),
       );
-      const whatsNewHtml = withRoutePreloadLinks(withShell("whats-new"), routePreloadLinks.get("whats-new"));
+      const whatsNewHtml = withRoutePreloadLinks(
+        makeBetaRouteNoindex(withShell("whats-new"), "whats-new", channel, channelLabel),
+        routePreloadLinks.get("whats-new"),
+      );
       for (const route of DOC_ROUTES) {
         const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
@@ -216,7 +219,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its
         // content is fetched release notes, so it stays out of the index.
-        ["whats-new", makeBetaRouteNoindex(whatsNewHtml, "whats-new")],
+        ["whats-new", whatsNewHtml],
         ["save-editor", saveEditorHtml],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         ["tools", makeBetaRouteNoindex(ppfUndoHtml, "ppf-undo")],

@@ -169,9 +169,9 @@ const renderFieldInfo = (
     fieldKey === "compressionProfile" ? <CompressInfoContent info={COMPRESSION_PROFILE_FIELD_INFO} /> : suggestion;
   return (
     <InfoToggle
-      ariaLabel={localizer.message("ui.output.showDetails", { label })}
+      ariaLabel={localizer.message("ui.settings.aboutField", { label })}
       portalPanel
-      title={localizer.message("ui.output.showDetails", { label })}
+      title={localizer.message("ui.settings.aboutField", { label })}
     >
       {content}
     </InfoToggle>
@@ -382,6 +382,7 @@ const SettingsRange = ({ fieldKey, draftSettings, uiState, validation, onDraftCh
         <span className="v">{current}</span>
       </div>
       <input
+        aria-valuetext={current || undefined}
         id={field.id}
         max={getSettingsFieldMax(fieldKey, draftSettings, uiState)}
         min={getSettingsFieldMin(fieldKey, draftSettings, uiState)}

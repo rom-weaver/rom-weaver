@@ -416,6 +416,9 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
   const [internalSettings, setInternalSettings] = useState<CreatePatchFormSettings>(() =>
     mergeSettingsWithOutput(providerSettings, props.defaultSettings),
   );
+  const syncedProviderOutputKeyRef = useRef(
+    JSON.stringify([providerSettings?.output ?? null, props.defaultSettings?.output ?? null]),
+  );
   const [internalPatchType, setInternalPatchType] = useState(props.defaultPatchType || "bps");
   const [patchTypeManuallySelected, setPatchTypeManuallySelected] = useState(
     () => props.patchType !== undefined || !!props.defaultPatchType,
@@ -682,7 +685,15 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
 
   useEffect(() => {
     if (props.settings !== undefined) return;
-    setInternalSettings(mergeSettingsWithOutput(providerSettings, props.defaultSettings));
+    // Unrelated app settings (the Simple/Detailed view) also replace the provider object; only a
+    // change to the provider's own output defaults may overwrite the output choices made here.
+    const providerOutputKey = JSON.stringify([providerSettings?.output ?? null, props.defaultSettings?.output ?? null]);
+    const providerOutputUnchanged = syncedProviderOutputKeyRef.current === providerOutputKey;
+    syncedProviderOutputKeyRef.current = providerOutputKey;
+    setInternalSettings((current) => {
+      const merged = mergeSettingsWithOutput(providerSettings, props.defaultSettings);
+      return providerOutputUnchanged && current.output ? { ...merged, output: current.output } : merged;
+    });
   }, [props.defaultSettings, props.settings, providerSettings]);
 
   const updateOriginal = (file: BinarySource | null) => {

@@ -2001,3 +2001,35 @@ test("auto basis keeps an independent embedded raw BPS source", async () => {
   const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
   expect(hex(output)).toBe(hex(withBytes(first, 0xa9, [0x0f])));
 });
+
+test("a malformed weave drop shows an on-page error instead of silently emptying the page", async () => {
+  const patchFile = await loadFixtureFile(RAW_PATCH);
+  const cases = [
+    { label: "bad JSON", json: "{ not json,,", entries: [] },
+    {
+      label: "unsupported version",
+      json: JSON.stringify({ patches: [{ path: "change.ips" }], version: 3 }),
+      entries: [{ file: patchFile, fileName: "change.ips" }],
+    },
+    {
+      label: "missing patch file",
+      json: JSON.stringify({ patches: [{ path: "absent.ips" }], version: 1 }),
+      entries: [],
+    },
+  ];
+  for (const [index, { label, json, entries }] of cases.entries()) {
+    const weaveFile = new File([json], "rom-weaver-weave.json", { type: "application/json" });
+    const archive = await buildZip(
+      [{ file: weaveFile, fileName: "rom-weaver-weave.json" }, ...entries],
+      `malformed-${index}.zip`,
+    );
+    mount(createElement(ApplyPatchForm, { pageDrop: { files: [archive], id: 1 } }));
+    await expect
+      .poll(() => document.querySelector("#rom-weaver-container .notice.error")?.textContent || "", {
+        message: label,
+        timeout: 30000,
+      })
+      .not.toBe("");
+    expect(getPatchStackFileNames()).toEqual([]);
+  }
+});

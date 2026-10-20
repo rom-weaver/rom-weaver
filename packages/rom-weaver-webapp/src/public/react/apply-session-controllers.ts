@@ -47,6 +47,7 @@ const inertOutputController: PatcherOutputController = {
     applyTiming: "",
     compress: null,
     compressionFormat: "zip",
+    formatPending: false,
     compressTiming: "",
     disabled: true,
     displayFileName: "",

@@ -118,6 +118,9 @@ describe("browser workflow runtime helpers", () => {
     expect(toLevelProfile("unknown")).toBeNull();
     expect(toLevelProfile(4)).toBeNull();
     expect(withCodecLevel("lzma", " 3 ")).toEqual(["lzma:3"]);
+    // zstd profiles go below zero (min = -7); clamping to 0 silently produced the default level 3.
+    expect(withCodecLevel("zstd", -7)).toEqual(["zstd:-7"]);
+    expect(withCodecLevel("zstd", " -7 ")).toEqual(["zstd:-7"]);
     expect(withCodecLevel("lzma:9", 2)).toEqual(["lzma:9"]);
     expect(withCodecLevel("", 2)).toEqual([]);
     expect(normalizeRomSpecificEntryNameForSource("staged.track.bin", "staged.cue", "game.chd")).toBe("game.track.bin");

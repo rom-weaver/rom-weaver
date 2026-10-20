@@ -391,6 +391,9 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                 })}
               </p>
               <p>{deliveryCopy(result.record, localizer).text}</p>
+              {result.record.resolution.type === "unsupported" && result.record.resolution.reason ? (
+                <p className="manual-cheat-reason">{result.record.resolution.reason}</p>
+              ) : null}
               <button
                 className="btn primary"
                 disabled={!isSelectableCheat(result.record)}

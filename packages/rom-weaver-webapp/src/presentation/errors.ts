@@ -75,7 +75,20 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
   return localized === messageId ? getErrorMessage(error) : localized;
 };
 
+const NO_ROM_IN_ARCHIVE_REGEX = /no extract entries from `([^`]+)` matched --filter rom\b/i;
+
+/** The native "nothing matched --filter rom" validation, shown without its internal path and flag. */
+const getNoRomInArchiveMessage = (error: unknown): string => {
+  for (const message of getDistinctErrorMessages(error)) {
+    const archivePath = NO_ROM_IN_ARCHIVE_REGEX.exec(message)?.[1];
+    if (archivePath) return `No ROM found in ${archivePath.split(/[\\/]/).pop() || archivePath}.`;
+  }
+  return "";
+};
+
 const formatCodedErrorForDisplay = (error: unknown, localizer: Localizer = createLocalizer()): string => {
+  const noRomMessage = getNoRomInArchiveMessage(error);
+  if (noRomMessage) return noRomMessage;
   const code = getErrorCode(error);
   const message = getUserFacingErrorMessage(error, localizer);
   if (!code) return message;

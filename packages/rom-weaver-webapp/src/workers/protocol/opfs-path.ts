@@ -165,7 +165,7 @@ const getManagedOpfsFileHandle = async (
 const removeManagedOpfsPath = async (
   filePath: string,
   navigatorObject?: Pick<Navigator, "storage"> | null,
-  options: { ignoreErrors?: boolean } = {},
+  options: { busyRetryDelaysMs?: readonly number[]; ignoreErrors?: boolean } = {},
 ): Promise<void> => {
   const directory = await getManagedOpfsDirectory(navigatorObject);
   if (!directory) return;
@@ -178,7 +178,20 @@ const removeManagedOpfsPath = async (
   let parentDirectory = directory;
   try {
     for (const part of parts) parentDirectory = await parentDirectory.getDirectoryHandle(part, { create: false });
-    await parentDirectory.removeEntry(fileName, { recursive: true });
+    // A just-terminated worker (cancelled run) releases its sync access handles a moment late, and OPFS
+    // refuses removeEntry with NoModificationAllowedError until then.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await parentDirectory.removeEntry(fileName, { recursive: true });
+        break;
+      } catch (error) {
+        const delay = options.busyRetryDelaysMs?.[attempt];
+        if ((error as { name?: string } | null)?.name !== "NoModificationAllowedError" || delay === undefined) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
   } catch (error) {
     if (options.ignoreErrors === false && !isNotFoundError(error)) throw error;
   }

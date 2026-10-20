@@ -607,6 +607,7 @@ for (const script of bundledScripts) {
 for (const [slug, title] of [
   ["save-editor", "Save Editor | rom-weaver"],
   ["trim-rom", "Trim ROM | rom-weaver"],
+  ["whats-new", "What's new | rom-weaver"],
 ]) {
   const html = read(`${slug}/index.html`);
   assertIncludes(html, `<title>${title}`, `${slug} title`);

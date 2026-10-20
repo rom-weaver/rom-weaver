@@ -380,12 +380,15 @@ const resolveAutomaticCompressionFormat = ({
   parentKind,
   sourceFileName,
   sourceSize,
+  hasDiscEvidence = false,
 }: {
   fallback?: CompressionFormat;
   parentCompressions?: readonly CompressionParentKindEntry[] | null;
   parentKind?: string | null;
   sourceFileName?: string;
   sourceSize?: number | null;
+  /** Content evidence that an ambiguous-extension source (`.bin`) is a CD image; see `disc-image-policy.ts`. */
+  hasDiscEvidence?: boolean;
 }): CompressionFormat => {
   const parentFormat =
     getCompressionFormatForParentCompressions(parentCompressions) || getCompressionFormatForParentKind(parentKind);
@@ -393,10 +396,11 @@ const resolveAutomaticCompressionFormat = ({
   const extension = normalizeExtension(getSourceFileExtension(sourceFileName));
   const extensionFormat = getCompressionFormatForFileExtension(extension);
   if (!extensionFormat) return fallback;
-  // `.bin` doubles as a bare console ROM dump; an ambiguous-extension source whose size is not
-  // sector-aligned is not a disc image, so it does not auto-resolve to a disc container. The
-  // sector sizes + ambiguous-extension list come from the shared Rust-owned disc-image policy.
-  if (isAmbiguousDiscImageExtension(extension) && !isLikelyDiscImageSize(sourceSize)) {
+  // `.bin` doubles as a bare console ROM dump; an ambiguous-extension source without content
+  // evidence (sync header / ISO9660 descriptor, or a cue sheet) and a sector-aligned size is not a
+  // disc image, so it does not auto-resolve to a disc container. The sector sizes + ambiguous-extension
+  // list come from the shared Rust-owned disc-image policy.
+  if (isAmbiguousDiscImageExtension(extension) && !(hasDiscEvidence && isLikelyDiscImageSize(sourceSize))) {
     return fallback;
   }
   return extensionFormat;

@@ -106,6 +106,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.output.options": msg({ id: "ui.output.options", message: "Options" }),
   "ui.output.profile": msg({ id: "ui.output.profile", message: "Profile" }),
   "ui.output.showDetails": msg({ id: "ui.output.showDetails", message: "Show {label} details" }),
+  "ui.settings.aboutField": msg({ id: "ui.settings.aboutField", message: "About {label}" }),
   "ui.output.standard": msg({ id: "ui.output.standard", message: "Standard" }),
   "ui.output.type": msg({ id: "ui.output.type", message: "Type" }),
   "ui.patch.headerAuto": msg({ id: "ui.patch.headerAuto", message: "header auto" }),

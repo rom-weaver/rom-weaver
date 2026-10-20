@@ -1,8 +1,14 @@
 import { useMemo } from "react";
+import { getFileNameExtension } from "../../lib/path-utils.ts";
 import {
   isRomSpecificCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
+import {
+  hasDiscImageEvidence,
+  isAmbiguousDiscImageExtension,
+  isLikelyDiscImageSize,
+} from "../../lib/compression/disc-image-policy.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import { getBinarySourceFileName, getBinarySourceSize } from "./input-session-helpers.ts";
@@ -51,18 +57,21 @@ const resolveCompressionState = ({
     OutputCompressionManager.supportsOutputCompression(z3dsLabelSource, activeCompression)
       ? activeCompression
       : "none";
+  const hasDiscEvidence = hasDiscImageEvidence(romInputs[0]?.info?.romType?.recommendedFormat, romInputs[0]?.chdMode);
   const resolvedSourceSize = romInputs[0]?.size ?? getBinarySourceSize(effectiveInputs[0]);
   const autoResolvedCompression = resolveAutomaticCompressionFormat({
     fallback: "zip",
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
     sourceSize: resolvedSourceSize,
+    hasDiscEvidence,
   });
   const defaultResolvedCompression = resolveAutomaticCompressionFormat({
     fallback: defaultArchiveCompression,
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
     sourceSize: resolvedSourceSize,
+    hasDiscEvidence,
   });
   const automaticSpecialCompression = OutputCompressionManager.resolveOutputCompression(z3dsLabelSource, {
     compressionFormat: "auto",
@@ -89,10 +98,26 @@ const resolveCompressionState = ({
         ? resolvedOutputCompression || autoResolvedCompression
         : autoResolvedCompression
       : requestedCompression;
+  // A `.bin` is a disc only on header evidence, which the engine reports while the ROM row is still
+  // staging (before its checksums land). Until then the default is unknown, so the picker waits instead of showing one value and
+  // flipping to another.
+  const firstRom = romInputs[0];
+  const evidenceDecidesDefault =
+    !(hasConfiguredOutputCompression && activeCompression !== "auto") &&
+    (allowsDefaultCompressionSpecial(defaultCompressionMode) || defaultCompressionMode === "auto");
+  const formatPending =
+    !outputCompressionEdited &&
+    evidenceDecidesDefault &&
+    !!firstRom &&
+    (firstRom.loading || !!firstRom.progress || !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5)) &&
+    isAmbiguousDiscImageExtension(getFileNameExtension(String(firstRom.info?.fileName || ""))) &&
+    isLikelyDiscImageSize(resolvedSourceSize) &&
+    !hasDiscImageEvidence(firstRom.info?.romType?.recommendedFormat, firstRom.chdMode);
   return {
     activeCompression,
     displayedCompression,
     effectiveActiveCompression,
+    formatPending,
     requestedCompression,
   };
 };
@@ -155,7 +180,7 @@ const useCompressionResolver = ({
       ),
     [compressionOptions, z3dsLabelSource],
   );
-  const { activeCompression, displayedCompression, effectiveActiveCompression, requestedCompression } =
+  const { activeCompression, displayedCompression, effectiveActiveCompression, formatPending, requestedCompression } =
     resolveCompressionState({
       activeSettings,
       effectiveInputs,
@@ -176,6 +201,7 @@ const useCompressionResolver = ({
     activeCompression,
     displayedCompression,
     effectiveActiveCompression,
+    formatPending,
     outputOptions,
     requestedCompression,
     selectedOutputOptionLabel,

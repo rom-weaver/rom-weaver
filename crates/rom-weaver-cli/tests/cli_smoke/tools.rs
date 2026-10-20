@@ -98,6 +98,46 @@ fn tools_ppf_undo_restores_the_original_rom() {
 }
 
 #[test]
+fn tools_ppf_undo_warns_when_the_rom_is_not_the_patched_rom() {
+    let temp = setup_temp_dir();
+    let patch_bytes = build_ppf3_undo_patch(&[(4, b"XYZ".to_vec(), b"AAA".to_vec())]);
+    let patch_path = temp.child("update.ppf");
+    fs::write(patch_path.path(), &patch_bytes).expect("patch fixture");
+    for (name, rom, expect_warning) in [
+        ("patched.bin", b"AAAAXYZAAAAAAAAA".to_vec(), false),
+        ("wrong.bin", b"BBBBBBBBBBBBBBBB".to_vec(), true),
+    ] {
+        let rom_path = temp.child(name);
+        let output_path = temp.child(format!("restored-{name}"));
+        fs::write(rom_path.path(), &rom).expect("rom fixture");
+        let json = run_single_json_event(
+            &[
+                "tools",
+                "ppf-undo",
+                "--no-compress",
+                "-i",
+                rom_path.path().to_str().expect("rom path"),
+                "--patch",
+                patch_path.path().to_str().expect("patch path"),
+                "-o",
+                output_path.path().to_str().expect("output path"),
+                "--json",
+            ],
+            0,
+        );
+        assert_eq!(json["status"], "succeeded");
+        let warned = json["warnings"].as_array().is_some_and(|warnings| {
+            warnings.iter().any(|warning| {
+                warning
+                    .as_str()
+                    .is_some_and(|warning| warning.contains("does not match the patched data"))
+            })
+        });
+        assert_eq!(warned, expect_warning, "{name}: {json}");
+    }
+}
+
+#[test]
 fn tools_ppf_undo_stdout_matches_file_output_and_keeps_sources() {
     let temp = setup_temp_dir();
     let original = b"AAAAAAAAAAAAAAAA".to_vec();

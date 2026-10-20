@@ -18,6 +18,7 @@ import {
 import {
   getCreatePatchFormatsForSizes,
   getPreferredCreatePatchFormat,
+  getSelectableCreatePatchFormats,
   normalizeCreatePatchFormat,
 } from "../../src/lib/create/patch-format-limits.ts";
 import {
@@ -246,6 +247,36 @@ describe("create patch format policy", () => {
       }),
     ).toBe("xdelta");
     expect(getPreferredCreatePatchFormat({ modifiedSize: 300_000_000, originalSize: 1 })).toBe("xdelta");
+  });
+
+  it("hides formats that cannot shrink a smaller target", () => {
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 300_000, originalSize: 524_288 })).not.toContain("ebp");
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 300_000, originalSize: 524_288 })).not.toContain("ppf");
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 300_000, originalSize: 524_288 })).toContain("ips");
+    expect(getCreatePatchFormatsForSizes(524_288, 300_000)).not.toContain("ebp");
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 524_288, originalSize: 524_288 })).toEqual(
+      expect.arrayContaining(["ebp", "ppf"]),
+    );
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 524_288, originalSize: 300_000 })).toEqual(
+      expect.arrayContaining(["ebp", "ppf"]),
+    );
+    // Candidates are shared across Original/Modified swaps, so they are filtered again by size.
+    expect(
+      getSelectableCreatePatchFormats({
+        candidateFormats: ["bps", "ebp", "ppf"],
+        modifiedSize: 10,
+        originalSize: 20,
+      }),
+    ).toEqual(["bps"]);
+    expect(getPreferredCreatePatchFormat({ modifiedSize: 10, originalSize: 20, requestedFormat: "ebp" })).toBe("bps");
+  });
+
+  it("offers source-restricted formats only through resolved candidates", () => {
+    expect(getSelectableCreatePatchFormats({ modifiedSize: 100, originalSize: 100 })).not.toContain("pmsr");
+    expect(getCreatePatchFormatsForSizes(100, 100)).toContain("pmsr");
+    expect(
+      getSelectableCreatePatchFormats({ candidateFormats: ["bps", "pmsr"], modifiedSize: 100, originalSize: 100 }),
+    ).toContain("pmsr");
   });
 });
 

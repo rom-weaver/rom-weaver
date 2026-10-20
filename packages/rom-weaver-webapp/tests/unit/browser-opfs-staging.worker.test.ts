@@ -43,12 +43,24 @@ let posted: PostedMessage[];
 
 const noModificationAllowedError = () => new DOMException("modification denied", "NoModificationAllowedError");
 
-const createSyncAccessHandle = (options?: { write?: (chunk: Uint8Array, at: { at: number }) => number }) => ({
-  close: vi.fn(),
-  flush: vi.fn(),
-  truncate: vi.fn(),
-  write: vi.fn(options?.write ?? ((chunk: Uint8Array) => chunk.byteLength)),
-});
+const createSyncAccessHandle = (options?: {
+  truncate?: (size: number) => void;
+  write?: (chunk: Uint8Array, at: { at: number }) => number;
+}) => {
+  let size = 0;
+  return {
+    close: vi.fn(),
+    flush: vi.fn(),
+    getSize: vi.fn(() => size),
+    truncate: vi.fn(
+      options?.truncate ??
+        ((next: number) => {
+          size = next;
+        }),
+    ),
+    write: vi.fn(options?.write ?? ((chunk: Uint8Array) => chunk.byteLength)),
+  };
+};
 
 const createWritable = (options?: { withAbort?: boolean; writeError?: unknown }) => ({
   abort: options?.withAbort === false ? undefined : vi.fn(() => Promise.resolve()),
@@ -157,6 +169,23 @@ describe("write", () => {
 
     expect(response).toMatchObject({ action: "stage-error", success: false });
     expect(response.error?.message).toContain("OPFS sync write made no progress at offset 4 (0/2 bytes)");
+    expect(accessHandle.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails a sync write whose count exceeds the bytes requested", async () => {
+    // Chromium returns 2^32 - 8 instead of throwing when a write would exceed the storage quota.
+    const accessHandle = createSyncAccessHandle({ write: () => 4294967288 });
+    mocks.getManagedOpfsFileHandle.mockResolvedValue({
+      createSyncAccessHandle: () => Promise.resolve(accessHandle),
+    });
+    const send = await loadWorker();
+
+    const response = await send({ action: "write", bytes: Uint8Array.from([1, 2]), filePath: "/a.bin", position: 4 });
+
+    expect(response).toMatchObject({ action: "stage-error", success: false });
+    expect(response.error?.message).toContain(
+      "OPFS sync write returned invalid byte count 4294967288 at offset 4 (0/2 bytes)",
+    );
     expect(accessHandle.close).toHaveBeenCalledTimes(1);
   });
 
@@ -306,6 +335,21 @@ describe("truncate", () => {
       size: 12,
       success: true,
     });
+  });
+
+  it("fails a sync truncate that leaves the file at another size", async () => {
+    // Chromium silently skips a truncate that would exceed the storage quota.
+    const accessHandle = createSyncAccessHandle({ truncate: () => undefined });
+    mocks.getManagedOpfsFileHandle.mockResolvedValue({
+      createSyncAccessHandle: () => Promise.resolve(accessHandle),
+    });
+    const send = await loadWorker();
+
+    const response = await send({ action: "truncate", filePath: "/a.bin", size: 2 ** 30 });
+
+    expect(response).toMatchObject({ success: false });
+    expect(response.error?.message).toContain("OPFS truncate of /a.bin to 1073741824 bytes left 0 bytes");
+    expect(accessHandle.close).toHaveBeenCalledTimes(1);
   });
 
   it("truncates through a writable stream when no sync handle is available", async () => {

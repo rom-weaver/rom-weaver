@@ -352,7 +352,6 @@ const BuildTag = ({
     return (
       <span className="build-tag">
         <button
-          aria-haspopup="dialog"
           aria-label={`${name}, ${versionText}`}
           className="sub-chip channel-badge"
           data-channel={key}
@@ -372,13 +371,7 @@ const BuildTag = ({
   }
   return (
     <span className="build-tag">
-      <button
-        aria-haspopup="dialog"
-        className="sub-chip sub-link"
-        onClick={onOpenWhatsNew}
-        title={versionTitle}
-        type="button"
-      >
+      <button className="sub-chip sub-link" onClick={onOpenWhatsNew} title={versionTitle} type="button">
         {versionText}
       </button>
     </span>

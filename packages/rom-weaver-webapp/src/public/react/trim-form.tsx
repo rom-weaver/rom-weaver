@@ -1,5 +1,6 @@
 import { Download, Scissors } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
@@ -311,8 +312,10 @@ const getCompletedDownloadMeta = (
   ]
     .filter(Boolean)
     .join(" · ");
+  const alreadyTrimmed = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
+  const verb = getSourceExtension(fileName) === "rvz" ? "Converted" : alreadyTrimmed ? "Already trimmed" : "Trimmed";
   return {
-    format: `${getSourceExtension(fileName) === "rvz" ? "Converted" : "Trimmed"} .${getSourceExtension(fileName)}`,
+    format: `${verb} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
     size: typeof outputSize === "number" ? formatByteSize(outputSize) : undefined,
   };
@@ -637,6 +640,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     parentCompressions: sourceState?.parentCompressions,
     sourceFileName: resolvedSourceFileName,
     sourceSize: sourceState?.size,
+    hasDiscEvidence: hasDiscImageEvidence(sourceState?.romType?.recommendedFormat, sourceState?.chdMode),
   });
   const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,

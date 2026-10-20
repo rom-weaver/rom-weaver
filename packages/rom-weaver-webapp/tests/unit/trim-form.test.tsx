@@ -142,6 +142,29 @@ describe("TrimPatchForm", () => {
     expect(container.textContent).toContain("32 B raw");
   });
 
+  it("labels a ROM that was already at its trimmed size", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ settings: { zipCodec: "store", zipLevel: 0 } });
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    (latest as NonNullable<typeof latest>).workflow.run.mockResolvedValueOnce({
+      input: latest.workflow.getInput(),
+      output: { ...latest.output, size: 128 },
+      sizeSummary: { compressionTimeMs: 0, inputSize: 128, outputSize: 128, rawSize: 128, trimTimeMs: 1 },
+    } as never);
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Trim ROM"),
+    );
+    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
+    expect(container.textContent).toContain("Already trimmed .nes");
+  });
+
   it("surfaces a trim failure and supports canceling the confirmation", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const { container } = renderForm();

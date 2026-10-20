@@ -82,6 +82,14 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     return this.handleId;
   }
 
+  /**
+   * Open the proxy handle now instead of on first access. The handle opens lazily, so a file unlinked
+   * before its first read or write would otherwise be created by that later access and never removed.
+   */
+  openNow(): void {
+    this.ensureOpen();
+  }
+
   readAt(offset: number | bigint, dst: Uint8Array): number {
     if (dst.byteLength <= 0) return 0;
     const handleId = this.ensureOpen();

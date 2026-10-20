@@ -3,7 +3,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
-import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
+import { getSelectableCreatePatchFormats } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import type { ApplySettings } from "../../types/settings.ts";
@@ -198,18 +198,11 @@ const createCreateOutputCompressionOptions = (): OutputOption[] => [
 ];
 
 const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}): OutputOption[] => {
-  const candidateFormats = Array.isArray(options.candidateFormats)
-    ? options.candidateFormats
-        .map((value) =>
-          String(value || "")
-            .trim()
-            .toLowerCase(),
-        )
-        .filter((value) => !!value)
-    : [];
-  const formats = candidateFormats.length
-    ? Array.from(new Set(candidateFormats))
-    : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize);
+  const formats = getSelectableCreatePatchFormats({
+    candidateFormats: options.candidateFormats,
+    modifiedSize: options.modifiedSize,
+    originalSize: options.originalSize,
+  });
   return formats.map((value) => ({ label: `.${value}`, value }));
 };
 

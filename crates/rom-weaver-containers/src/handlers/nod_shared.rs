@@ -19,6 +19,55 @@ pub(crate) struct NodExtractPlan {
     pub(crate) output_path: PathBuf,
 }
 
+/// Adds the disc header's game ID and title, and each Wii partition's kind and data size, to
+/// probe details. Fields that are blank or not valid text are left out.
+pub(crate) fn write_disc_header_details(
+    disc: &NodDiscReader,
+    details: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    let header = disc.header();
+    let printable = |text: &str| {
+        let text = text.trim();
+        (!text.is_empty() && !text.chars().any(char::is_control)).then(|| text.to_string())
+    };
+    let game_id = std::str::from_utf8(&header.game_id)
+        .ok()
+        .and_then(printable);
+    let title = std::ffi::CStr::from_bytes_until_nul(&header.game_title)
+        .ok()
+        .and_then(|title| title.to_str().ok())
+        .and_then(printable);
+    trace!(
+        ?game_id,
+        ?title,
+        partitions = disc.partitions().len(),
+        "nod disc probe header"
+    );
+    if let Some(game_id) = game_id {
+        details.insert("game_id".to_string(), game_id.into());
+    }
+    if let Some(title) = title {
+        details.insert("title".to_string(), title.into());
+    }
+    if !disc.partitions().is_empty() {
+        let partitions = disc
+            .partitions()
+            .iter()
+            .map(|partition| {
+                serde_json::json!({
+                    "index": partition.index,
+                    "kind": partition.kind.to_string(),
+                    "data_size": partition.data_size(),
+                })
+            })
+            .collect();
+        details.insert(
+            "partitions".to_string(),
+            serde_json::Value::Array(partitions),
+        );
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct NodCreateThreadPlan {
     preloader_threads: usize,
@@ -342,9 +391,10 @@ impl NodHandlerCore {
             Some(100.0),
             Some(execution),
         );
-        if !identity.is_empty() {
-            let mut details = serde_json::Map::new();
-            identity.write_into(&mut details);
+        let mut details = serde_json::Map::new();
+        identity.write_into(&mut details);
+        write_disc_header_details(&disc, &mut details);
+        if !details.is_empty() {
             report.details = Some(serde_json::Value::Object(details));
         }
         Ok(report)
@@ -557,7 +607,7 @@ impl NodHandlerCore {
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}{}",
-                    input.display(),
+                    display_input_name(input),
                     self.format_name(),
                     unknown_disc_hint(&error)
                 ))
@@ -622,7 +672,7 @@ impl NodHandlerCore {
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}{}",
-                    input.display(),
+                    display_input_name(input),
                     self.format_name(),
                     unknown_disc_hint(&error)
                 ))
@@ -726,6 +776,14 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// File name only, so errors do not leak internal staging directories (e.g. `/work` in the browser).
+fn display_input_name(input: &Path) -> String {
+    input.file_name().map_or_else(
+        || input.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
 
 /// Hint appended when a create input is not a disc image the nod reader recognizes.
 fn unknown_disc_hint(error: &str) -> &'static str {

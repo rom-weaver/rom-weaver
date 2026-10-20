@@ -41,6 +41,11 @@ describe("generated format metadata parity", () => {
     expect(coverage.patchFormats).not.toContain("vcdiff");
   });
 
+  it("declares which create formats cannot shrink a target or need a specific source", () => {
+    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats).toEqual(["ebp", "ppf"]);
+    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.sourceRestrictedFormats).toEqual(["pmsr"]);
+  });
+
   it("keeps the exhaustive matrix covering every compression profile and thread mode", () => {
     const cases = createExhaustiveContainerCases();
     expect(sorted(unique(cases.map((entry) => entry.format)))).toEqual(["7z", "chd", "z3ds", "zip"]);

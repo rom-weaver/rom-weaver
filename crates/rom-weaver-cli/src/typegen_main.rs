@@ -472,6 +472,8 @@ fn create_patch_format_policy_value() -> Value {
             "midLarge": metadata.mid_large_formats,
             "large": metadata.large_formats,
         },
+        "noShrinkFormats": metadata.no_shrink_formats,
+        "sourceRestrictedFormats": metadata.source_restricted_formats,
         "supportedCreateFormats": unique_formats(&[
             metadata.small_formats,
             metadata.medium_formats,

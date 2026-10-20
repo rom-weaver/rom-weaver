@@ -22,16 +22,30 @@ const outputPath = (output: PublicOutput): string => output.relativePath || outp
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const isNfsPart = (file: File): boolean => /^hif_\d{6}\.nfs$/i.test(file.name);
 const isNfsKey = (file: File): boolean => /^htk\.bin$/i.test(file.name);
+// FAT32 split WBFS sets continue `game.wbfs` in `game.wbf1`, `game.wbf2`, ...; the reader finds them beside the first part.
+const wbfsStem = (file: File): string | undefined => /^(.+)\.wbf(?:s|\d+)$/i.exec(file.name)?.[1]?.toLowerCase();
+const isWbfsContinuation = (file: File, stem: string): boolean =>
+  /\.wbf\d+$/i.test(file.name) && wbfsStem(file) === stem;
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
 // The runtime names the file by its internal storage path, so a file that is not an archive gets a plain message.
 const NOT_A_CONTAINER_PATTERN = /no registered container matched/i;
+// The WBFS reader rejects a file, or split set, whose total size differs from its header's size. The
+// stream open reports the first part alone, so the last report, from the split-aware path open, counts.
+const WBFS_SIZE_PATTERN = /invalid wbfs file size: (\d+), expected (\d+)/gi;
+const wbfsSizeMessage = (file: File, actual: number, expected: number): string =>
+  actual < expected
+    ? `${file.name} is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.`
+    : `${file.name} and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.`;
 const errorMessage = (cause: unknown, file?: File): string => {
   const message = cause instanceof Error ? cause.message : String(cause);
-  return file && NOT_A_CONTAINER_PATTERN.test(message)
-    ? `${file.name} is not an archive or disc image that Extract can open.`
-    : message;
+  if (!file) return message;
+  if (NOT_A_CONTAINER_PATTERN.test(message))
+    return `${file.name} is not an archive or disc image that Extract can open.`;
+  const wbfsSize = [...message.matchAll(WBFS_SIZE_PATTERN)].at(-1);
+  if (wbfsSize) return wbfsSizeMessage(file, Number(wbfsSize[1]), Number(wbfsSize[2]));
+  return message;
 };
 
 // Runtime labels are log text, so the form shows its own label and takes only the percent. An event
@@ -189,11 +203,19 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         first && (isNfsPart(first) || isNfsKey(first))
           ? files.find((file) => /^hif_000000\.nfs$/i.test(file.name))
           : undefined;
-      const file = nfs || first;
+      // A first part from a set without its .wbfs falls back to any .wbfs in the selection.
+      const firstStem = first && wbfsStem(first);
+      const wbfs = firstStem
+        ? (files.find((file) => file.name.toLowerCase() === `${firstStem}.wbfs`) ??
+          files.find((file) => /\.wbfs$/i.test(file.name)))
+        : undefined;
+      const stem = wbfs && wbfsStem(wbfs);
+      const file = nfs || wbfs || first;
       if (!file) return;
-      const companions = isNfsPart(file)
-        ? files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)))
-        : [];
+      let companions: File[] = [];
+      if (isNfsPart(file))
+        companions = files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)));
+      else if (wbfs && stem) companions = files.filter((entry) => isWbfsContinuation(entry, stem));
       if (downloadBusy) {
         setError("Wait for the download to finish, then add the file again.");
         return;
@@ -336,7 +358,12 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         guide={WORKFLOW_GUIDES.extract}
         heroLabel="Drop an archive or disc image to extract it"
         heroLabelCoarse="Tap to add an archive or disc image"
-        info={<p>Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together.</p>}
+        info={
+          <p>
+            Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together. For a split WBFS, select
+            the .wbfs and every .wbf1, .wbf2, ... part together.
+          </p>
+        }
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",

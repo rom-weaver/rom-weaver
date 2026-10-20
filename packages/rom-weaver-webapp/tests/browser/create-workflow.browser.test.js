@@ -305,12 +305,13 @@ test("create workflow limits over-268.44 MB inputs to xdelta and ppf", async () 
   }).workflow;
   try {
     await workflow.setOriginal(createSizeOnlyFile("large-original.nds", CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES + 1));
+    // PPF cannot shrink a target, so a 1-byte target leaves only xdelta.
     await workflow.setModified(createSizeOnlyFile("large-modified.nds", 1));
     await workflow.setPatchType("bps");
 
     await expect(workflow.run()).rejects.toMatchObject({
       code: "UNSUPPORTED_FORMAT",
-      message: expect.stringContaining("xdelta, ppf"),
+      message: expect.stringContaining("supported: xdelta"),
     });
   } finally {
     await workflow.dispose();
