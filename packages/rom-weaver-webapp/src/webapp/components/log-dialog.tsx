@@ -1184,13 +1184,13 @@ const subscribePhoneLayout = (onChange: () => void) => {
 const isPhoneLayout = () => typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
 const usePhoneLayout = () => useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false);
 
-/** Index of the row whose span holds `y`: the last row starting at or before it. */
 /** The trace's vertical padding, which its scroll range adds to the content. */
 const tracePadding = (trace: HTMLElement) => {
   const style = getComputedStyle(trace);
   return Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
 };
 
+/** Index of the row whose span holds `y`: the last row starting at or before it. */
 const rowAtOffset = (offsets: Float64Array, y: number) => {
   let low = 0;
   let high = offsets.length - 1;
@@ -1256,6 +1256,31 @@ const useTraceWindow = ({
     : Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT);
   const virtualStart = Math.max(0, firstRow - VIRTUAL_OVERSCAN_ROWS);
   const virtualEnd = Math.min(entries.length, lastRow + VIRTUAL_OVERSCAN_ROWS);
+  // Crossing the phone breakpoint swaps fixed rows for wrapped ones, so the same
+  // scrollTop lands on a different row; put the reader back on the top row they
+  // had, or at the newest line. Declared first, so it runs before the measuring.
+  const layoutTopRef = useRef<{ atNewest: boolean; id: number; wrapped: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const last = layoutTopRef.current;
+    const trace = traceRef.current;
+    if (!(last && trace) || last.wrapped === wrapped) return;
+    if (last.atNewest) trace.scrollTop = trace.scrollHeight;
+    else {
+      const index = entries.findIndex((entry) => entry.id === last.id);
+      if (index < 0) return;
+      trace.scrollTop = offsets ? (offsets[index] ?? 0) : index * TRACE_ROW_HEIGHT;
+    }
+    onScroll(trace.scrollTop);
+  }, [entries, offsets, onScroll, traceRef, wrapped]);
+  useLayoutEffect(() => {
+    const trace = traceRef.current;
+    if (!trace) return;
+    layoutTopRef.current = {
+      atNewest: scrollTop > 0 && scrollTop + trace.clientHeight >= trace.scrollHeight - 2,
+      id: entries[firstRow]?.id ?? -1,
+      wrapped,
+    };
+  }, [entries, firstRow, scrollTop, traceRef, wrapped]);
   // Measured heights move every row below them, and rows mounted above the
   // viewport push it down, so restore the anchor before paint: the newest line
   // for a pinned reader, otherwise the same spot in the same top row.
