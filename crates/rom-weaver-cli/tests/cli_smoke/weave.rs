@@ -218,6 +218,16 @@ fn weave_parse_archive_treats_unbundled_rom_path_as_user_supplied() {
     let result = &terminal["details"]["weave"];
     assert!(result["rom_source"].is_null(), "rom source: {result}");
     assert!(result["patch_sources"][0]["source"]["extracted_path"].is_string());
+    assert!(
+        result["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.contains("`game.nes` is not bundled in the archive"))),
+        "warnings: {result}"
+    );
 }
 
 #[test]
@@ -1733,6 +1743,161 @@ fn weave_apply_input_zip_with_unbundled_rom_path_asks_for_the_rom() {
             "expected name for {rom_path}: {label}"
         );
     }
+}
+
+/// Builds a tar.gz weave whose `rom.path` (`dumps/missing.bin`) is not bundled, with the ROM
+/// bytes `member_bytes` stored as `roms/renamed.bin` and `rom.checks` given by `checks_json`.
+fn write_rom_by_checks_archive(temp: &TempDir, member_bytes: &[u8], checks_json: &str) -> PathBuf {
+    let main = write_offset_ips(temp, "main.ips", 0, 0xAA);
+    let member = temp.child("renamed.bin");
+    fs::write(member.path(), member_bytes).expect("rom member fixture");
+    let weave_json = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave_json.path(),
+        format!(
+            r#"{{ "version": 1, "rom": {{ "path": "dumps/missing.bin", "checks": {checks_json} }}, "patches": [ {{ "path": "main.ips" }} ] }}"#
+        ),
+    )
+    .expect("weave fixture");
+    let archive = temp.child("weave.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (weave_json.path(), "rom-weaver-weave.json"),
+            (member.path(), "roms/renamed.bin"),
+            (main.as_path(), "main.ips"),
+        ],
+        archive.path(),
+    );
+    archive.path().to_path_buf()
+}
+
+fn parse_rom_by_checks_archive(temp: &TempDir, archive: &Path) -> serde_json::Value {
+    let extract_dir = temp.child("weave-out");
+    let events = run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            archive.to_str().expect("path"),
+            "--output",
+            extract_dir.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "succeeded");
+    terminal["details"]["weave"].clone()
+}
+
+fn assert_rom_not_bound(result: &serde_json::Value) {
+    assert!(result["rom_source"].is_null(), "rom source: {result}");
+    assert!(
+        result["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.contains("`dumps/missing.bin` is not bundled"))),
+        "warnings: {result}"
+    );
+}
+
+fn apply_rom_by_checks_archive(
+    temp: &TempDir,
+    archive: &Path,
+    expected_exit: i32,
+) -> serde_json::Value {
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            archive.to_str().expect("path"),
+            "--output",
+            temp.child("patched.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        expected_exit,
+    );
+    events.last().expect("terminal").clone()
+}
+
+#[test]
+fn weave_parse_binds_unbundled_rom_path_to_member_with_matching_checksums() {
+    let temp = setup_temp_dir();
+    let checks = format!(
+        r#"{{ "size": {}, "checksums": {{ "crc32": "{}", "md5": "{}" }} }}"#,
+        WEAVE_ROM_BYTES.len(),
+        crc32_hex(WEAVE_ROM_BYTES),
+        md5_hex(WEAVE_ROM_BYTES)
+    );
+    let archive = write_rom_by_checks_archive(&temp, WEAVE_ROM_BYTES, &checks);
+    let result = parse_rom_by_checks_archive(&temp, &archive);
+    let rom_path = result["rom_source"]["extracted_path"]
+        .as_str()
+        .unwrap_or_else(|| panic!("rom bound: {result}"));
+    assert!(
+        rom_path.ends_with("roms/renamed.bin"),
+        "rom path: {rom_path}"
+    );
+    assert_eq!(fs::read(rom_path).expect("extracted rom"), WEAVE_ROM_BYTES);
+    assert!(
+        !result["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.contains("not bundled"))),
+        "unexpected warning: {result}"
+    );
+}
+
+#[test]
+fn weave_apply_input_archive_binds_unbundled_rom_path_by_checksum() {
+    let temp = setup_temp_dir();
+    let checks = format!(
+        r#"{{ "checksums": {{ "crc32": "{}" }} }}"#,
+        crc32_hex(WEAVE_ROM_BYTES)
+    );
+    let archive = write_rom_by_checks_archive(&temp, WEAVE_ROM_BYTES, &checks);
+    let terminal = apply_rom_by_checks_archive(&temp, &archive, 0);
+    assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("patched.bin").path()).expect("output exists"),
+        patched_rom_bytes(&[(0, 0xAA)])
+    );
+}
+
+#[test]
+fn weave_unbundled_rom_path_does_not_bind_a_member_with_other_checksums() {
+    let temp = setup_temp_dir();
+    let mut other = WEAVE_ROM_BYTES.to_vec();
+    other[1] ^= 0xFF;
+    let checks = format!(
+        r#"{{ "size": {}, "checksums": {{ "crc32": "{}" }} }}"#,
+        WEAVE_ROM_BYTES.len(),
+        crc32_hex(WEAVE_ROM_BYTES)
+    );
+    let archive = write_rom_by_checks_archive(&temp, &other, &checks);
+    assert_rom_not_bound(&parse_rom_by_checks_archive(&temp, &archive));
+    let terminal = apply_rom_by_checks_archive(&temp, &archive, 1);
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("bundle.rom.missing"), "{label}");
+}
+
+#[test]
+fn weave_unbundled_rom_path_does_not_bind_on_size_only_checks() {
+    let temp = setup_temp_dir();
+    let checks = format!(r#"{{ "size": {} }}"#, WEAVE_ROM_BYTES.len());
+    let archive = write_rom_by_checks_archive(&temp, WEAVE_ROM_BYTES, &checks);
+    assert_rom_not_bound(&parse_rom_by_checks_archive(&temp, &archive));
+    let terminal = apply_rom_by_checks_archive(&temp, &archive, 1);
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("bundle.rom.missing"), "{label}");
 }
 
 #[test]

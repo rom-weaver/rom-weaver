@@ -1162,6 +1162,24 @@ for (const romMatches of [true, false]) {
   });
 }
 
+// An unbundled rom.path whose rom.checks match a bundled member under another name binds that member
+// (resolved by the Rust `weave parse`), so the weave loads without a separate ROM file.
+test("weave zip with an unbundled rom.path binds the bundled member whose checksums match", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const bundledRom = new File([await romFile.arrayBuffer()], "bundled-renamed.bin");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "bound-by-checks-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+      rom: { checks: RAW_ROM_CHECKS, path: "not-in-the-zip/game.bin" },
+      version: 2,
+    },
+    [patchFile, bundledRom],
+  );
+  await expectStrictApply([weaveArchive], { outputName: "bound-by-checks-output", romMatches: true });
+});
+
 test("weave zip whose patch path matches no member still fails to load", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   const weaveArchive = await buildWeaveArchive(

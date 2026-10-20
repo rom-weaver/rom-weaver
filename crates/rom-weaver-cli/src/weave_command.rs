@@ -209,7 +209,9 @@ impl CliApp {
         // the applying user supplies the ROM.
         // A `path` the archive does not bundle (a hand-zipped `weave create`
         // JSON) is treated like a `name`: the applying user supplies the ROM,
-        // as `patch apply --weave` does.
+        // as `patch apply --weave` does - unless a regular member's content
+        // matches the rom checksums, in which case that member is the ROM.
+        let mut warnings = loaded.warnings.clone();
         let rom_unbundled = |rom: &WeaveRom| {
             loaded.kind == WeaveSourceKind::Archive
                 && rom.url.is_none()
@@ -217,19 +219,34 @@ impl CliApp {
                     Self::find_weave_archive_entry(&loaded.archive_entries, path.trim()).is_none()
                 })
         };
-        let rom_source = match &weave.rom {
-            Some(rom) if rom_unbundled(rom) => {
-                trace!("weave rom.path is not bundled in the archive; the ROM is user-supplied");
-                None
+        let mut rom_path = weave.rom.as_ref().and_then(|rom| rom.path.clone());
+        if let Some(rom) = weave.rom.as_ref().filter(|rom| rom_unbundled(rom)) {
+            match Self::find_weave_rom_by_checks(source, &loaded, &weave, context)? {
+                Some(entry) => {
+                    trace!(member = %entry.name, "weave rom.path is not bundled; bound to archive member by checksum");
+                    rom_path = Some(entry.name);
+                }
+                None => {
+                    trace!(
+                        "weave rom.path is not bundled in the archive; the ROM is user-supplied"
+                    );
+                    warnings.push(format!(
+                        "weave rom.path `{}` is not bundled in the archive; the ROM must be supplied",
+                        rom.path.as_deref().unwrap_or_default().trim()
+                    ));
+                    rom_path = None;
+                }
             }
-            Some(rom) if rom.url.is_some() || rom.path.is_some() => {
-                let name = entry_basename(rom.path.as_deref(), rom.url.as_deref());
+        }
+        let rom_source = match &weave.rom {
+            Some(rom) if rom.url.is_some() || rom_path.is_some() => {
+                let name = entry_basename(rom_path.as_deref(), rom.url.as_deref());
                 let entry_extract_dir = (rom_extractable && selector.matches(&name))
                     .then_some(extract_dir)
                     .flatten();
                 Some(self.resolve_weave_entry_source(
                     rom.url.as_deref(),
-                    rom.path.as_deref(),
+                    rom_path.as_deref(),
                     &mut planned,
                     &loaded,
                     entry_extract_dir,
@@ -312,7 +329,7 @@ impl CliApp {
             archive_member: loaded.archive_member,
             rom_source,
             patch_sources,
-            warnings: loaded.warnings,
+            warnings,
         })
     }
 

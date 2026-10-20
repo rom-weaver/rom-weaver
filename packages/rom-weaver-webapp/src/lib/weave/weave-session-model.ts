@@ -118,7 +118,8 @@ const weaveRomExpectation = (weave: ParsedWeave): WeaveRomExpectation | undefine
   const rom = weave.rom;
   if (!rom || rom.url) return undefined;
   const checks = resolveWeaveChecks(weave, rom.checks, rom.checksRef);
-  // Callers only ask when no ROM source resolved, so a `path` here is unbundled: it names the ROM to supply.
+  // Callers only ask when no ROM source resolved, so a `path` here is unbundled (and, for archives, no
+  // member matched the rom checksums): it names the ROM to supply.
   const name = rom.name || getPathBaseName(rom.path);
   const expectation: WeaveRomExpectation = {
     ...(name ? { name } : {}),

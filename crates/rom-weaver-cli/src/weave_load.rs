@@ -1,5 +1,6 @@
 use rom_weaver_containers::libarchive::RegularArchiveFileEntry;
 
+use super::weave_apply::resolve_weave_checks;
 use super::weave_parse::{
     WEAVE_BASE_FILE_NAME, is_weave_json_candidate, weave_bytes_are_valid, weave_file_name_codec,
     weave_validation,
@@ -223,6 +224,101 @@ impl CliApp {
                     .iter()
                     .find(|entry| normalize_entry_name(&entry.name).eq_ignore_ascii_case(&wanted))
             })
+    }
+
+    /// Find the archive member that stands in for a weave `rom.path` the archive does not bundle,
+    /// by content: the first regular member (archive order) whose size and every listed checksum
+    /// match the weave's resolved rom checks. Members referenced by patch entries and the weave
+    /// JSON member are skipped. Size-only (or absent) checks never bind. Shared by `weave parse`
+    /// and `patch apply --input <weave archive>`.
+    pub(super) fn find_weave_rom_by_checks(
+        archive: &Path,
+        loaded: &LoadedWeaveSource,
+        weave: &RomWeaverWeave,
+        context: &OperationContext,
+    ) -> Result<Option<RegularArchiveFileEntry>> {
+        let Some(rom) = &weave.rom else {
+            return Ok(None);
+        };
+        let Some(checks) =
+            resolve_weave_checks(weave, rom.checks.as_ref(), rom.checks_ref.as_deref())?
+        else {
+            return Ok(None);
+        };
+        let Some(format_name) = loaded.archive_format else {
+            return Ok(None);
+        };
+        if checks.checksums.is_empty() {
+            trace!("weave rom checks carry no checksum; not searching archive members by content");
+            return Ok(None);
+        }
+        let algorithms = checks
+            .checksums
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<&str>>();
+        let patch_members = weave
+            .patches
+            .iter()
+            .filter_map(|patch| patch.path.as_deref())
+            .filter_map(|path| Self::find_weave_archive_entry(&loaded.archive_entries, path.trim()))
+            .map(|entry| entry.index)
+            .collect::<Vec<usize>>();
+        let probe_root = context.temp_paths().next_path("weave-rom-probe", None);
+        let mut found = None;
+        for entry in &loaded.archive_entries {
+            if loaded.archive_member.as_deref() == Some(entry.name.as_str()) {
+                trace!(member = %entry.name, "skipping rom candidate: weave JSON member");
+                continue;
+            }
+            if patch_members.contains(&entry.index) {
+                trace!(member = %entry.name, "skipping rom candidate: referenced by a patch entry");
+                continue;
+            }
+            if let (Some(expected), Some(actual)) = (checks.size, entry.size)
+                && expected != actual
+            {
+                trace!(member = %entry.name, expected, actual, "skipping rom candidate: size differs");
+                continue;
+            }
+            debug!(member = %entry.name, "hashing rom candidate archive member");
+            let candidate_root = probe_root.join(entry.index.to_string());
+            let extracted = match Self::extract_weave_archive_member(
+                archive,
+                format_name,
+                entry,
+                &candidate_root,
+            ) {
+                Ok(path) => path,
+                Err(error) => {
+                    debug!(member = %entry.name, %error, "skipping rom candidate: cannot extract");
+                    continue;
+                }
+            };
+            let outcome = (|| {
+                if let Some(expected) = checks.size {
+                    let actual = fs::metadata(&extracted)?.len();
+                    if actual != expected {
+                        return Ok(false);
+                    }
+                }
+                let actual = checksum_file_values(&extracted, &algorithms, context)?;
+                Ok::<bool, RomWeaverError>(checks.checksums.iter().all(|(algorithm, expected)| {
+                    actual
+                        .get(algorithm)
+                        .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+                }))
+            })();
+            let _ = fs::remove_dir_all(&candidate_root);
+            if outcome? {
+                debug!(member = %entry.name, "weave rom bound to archive member by checksum");
+                found = Some(entry.clone());
+                break;
+            }
+            trace!(member = %entry.name, "rom candidate checksums do not match");
+        }
+        let _ = fs::remove_dir_all(&probe_root);
+        Ok(found)
     }
 
     /// Extract one weave-referenced archive member below `extract_dir`,
