@@ -405,10 +405,22 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
   const handledPageDropIdRef = useRef<number | null>(null);
   const nextSourceIdRef = useRef(0);
-  const removeSkippedSource = useCallback(
-    (id: number) => setSources((previous) => previous.filter((entry) => entry.id !== id)),
-    [],
-  );
+  const sourcesRef = useRef<ChecksumSource[]>([]);
+  sourcesRef.current = sources;
+  // The set a new drop replaced: when every new file's selection is cancelled, it comes back.
+  const replacedSourcesRef = useRef<ChecksumSource[]>([]);
+  const removeSkippedSource = useCallback((id: number) => {
+    const remaining = sourcesRef.current.filter((entry) => entry.id !== id);
+    sourcesRef.current = remaining;
+    const replaced = replacedSourcesRef.current;
+    if (remaining.length || !replaced.length) {
+      setSources(remaining);
+      return;
+    }
+    replacedSourcesRef.current = [];
+    setSnapshots({});
+    setSources(replaced);
+  }, []);
 
   const reportSnapshot = useCallback(
     (id: number, snapshot: ChecksumEntrySnapshot) => setSnapshots((previous) => ({ ...previous, [id]: snapshot })),
@@ -418,6 +430,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   // Every dropped or picked file gets its own result, like `sha256sum a b c`; a new set replaces the old one.
   const handleDrop = (dropped: File[]) => {
     if (!dropped.length) return;
+    replacedSourcesRef.current = sourcesRef.current;
     setSnapshots({});
     setSources(
       dropped.map((file) => {
@@ -429,6 +442,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   usePageDropForwarder(pageDrop, handleDrop, handledPageDropIdRef);
 
   const clearSources = () => {
+    replacedSourcesRef.current = [];
     setSnapshots({});
     setSources([]);
   };
@@ -471,7 +485,13 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const multiFile = files.length > 1;
   const sets = files.flatMap((file) => getChecksumSets(file, multiFile ? file.fileName : ""));
   const compare = expectedInvalid ? null : compareChecksum(expected, sets, algorithms);
-  const matchedSets = sets.filter((set) => compare?.matches?.some((entry) => entry.setId === set.id));
+  const allMatchedSets = sets.filter((set) => compare?.matches?.some((entry) => entry.setId === set.id));
+  // A file whose own bytes match is named once, not again for each variant that shares those bytes.
+  const matchedSets = allMatchedSets.filter(
+    (set) =>
+      set.id.endsWith(":raw") ||
+      !allMatchedSets.some((other) => other.id === `${set.id.slice(0, set.id.lastIndexOf(":"))}:raw`),
+  );
   const matchedLabel = CHECKSUM_ALGORITHMS.find((entry) => entry.id === compare?.match?.algorithm)?.label;
   const matchedNames = matchedSets.map((set) => set.label);
   const matchedText =
