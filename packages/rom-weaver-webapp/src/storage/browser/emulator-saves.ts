@@ -733,15 +733,22 @@ const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImpo
 
 /**
  * A dropped raw save is stored for its ROM so later progress persists. A ROM that already has stored SRAM
- * MUST keep it, so the upload then only plays as a preview, as it does while save storage is off.
+ * MUST keep it, so the upload then only plays as a preview, as it does while save storage is off or fails.
  */
 const loadDroppedSram = async (sha1: string, data: Uint8Array, label: string): Promise<"preview" | "stored"> => {
   const gameId = normalizeSha1(sha1);
-  if (saveStorageEnabled && !(await readEmulatorSave(gameId))?.sram) {
-    clearEmulatorSavePreview(gameId);
-    await saveEmulatorSram({ data, gameId, gameName: gameId, label });
-    logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
-    return "stored";
+  try {
+    if (saveStorageEnabled && !(await readEmulatorSave(gameId))?.sram) {
+      clearEmulatorSavePreview(gameId);
+      await saveEmulatorSram({ data, gameId, gameName: gameId, label });
+      logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
+      return "stored";
+    }
+  } catch (error) {
+    logger.warn("could not store dropped SRAM; previewing it instead", {
+      gameId,
+      message: error instanceof Error ? error.message : String(error),
+    });
   }
   setEmulatorSavePreview(gameId, data);
   logger.debug("previewing dropped SRAM", { gameId, saveStorageEnabled, size: data.byteLength });

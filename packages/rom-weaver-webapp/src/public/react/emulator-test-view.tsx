@@ -366,7 +366,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
   }, []);
 
   const handleFiles = useCallback(
-    async (files: File[], prepareAudio = true, save?: File): Promise<boolean> => {
+    async (files: File[], prepareAudio = true, save?: File, keepHeldSave = false): Promise<boolean> => {
       const file = files[0];
       if (!file || busy) return false;
       if (!hasWebgl2()) {
@@ -434,25 +434,27 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         const staged = await readPendingTestSave();
         pendingReadRevisionRef.current += 1;
         setPendingSave(staged);
+        // A held raw save names no game, so it yields to a save dropped with this ROM and to the guided sample.
         const stagedMatches =
           !!staged &&
-          (!staged.platform || getEmulatorJsCore(staged.platform) === core) &&
+          (staged.platform ? getEmulatorJsCore(staged.platform) === core : !(save || keepHeldSave)) &&
           (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
         if (stagedMatches) await clearPendingTestSave();
         const identity = createEmulatorGameIdentity(entry);
-        // A save the visitor dropped is theirs to keep, so it is stored before the player asks for SRAM.
-        // The Save editor's copy stays a preview: it is a test of an edit, not a replacement.
+        if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);
+        // Replacing the current game with the same ROM clears that ROM's preview, so saves load after addEntry.
+        addEntry(entry);
+        // A save the visitor dropped is theirs to keep, so it is stored. The Save editor's copy stays a
+        // preview: it is a test of an edit, not a replacement.
         const matched = staged && stagedMatches ? staged : undefined;
         let droppedBytes: Uint8Array | undefined = save ? new Uint8Array(await save.arrayBuffer()) : undefined;
         if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
         if (droppedBytes) await loadDroppedSram(identity.saveId, droppedBytes, loaded.fileName);
         else if (matched) setEmulatorSavePreview(identity.saveId, matched.bytes);
-        if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);
-        addEntry(entry);
-        if (stagedMatches || droppedBytes) restartCurrentGameWithSave(entry.id);
+        if (matched || droppedBytes) restartCurrentGameWithSave(entry.id);
         if (stagedMatches) {
           setPendingSave(undefined);
-        } else if (staged && !save) {
+        } else if (staged?.platform && !save) {
           setError({
             detail: staged.romSha1
               ? "Choose the ROM linked to the uploaded save."
@@ -532,7 +534,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const file = new File([await response.blob()], TEST_SAMPLE_ASSET, { type: "application/octet-stream" });
         if (abortController.signal.aborted || sampleAbortControllerRef.current !== abortController) return;
-        const playable = await handleFiles([file], prepareAudio);
+        const playable = await handleFiles([file], prepareAudio, undefined, true);
         if (abortController.signal.aborted) return;
         if (!playable) setSampleTutorialActive(false);
       } catch {

@@ -202,6 +202,34 @@ describe("EmulatorTestView", () => {
     await waitFor(() => expect(screen.queryByText("zelda.srm")).toBeNull());
   });
 
+  it("keeps a held save when a save arrives with the ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "mario.nes"), new File([new Uint8Array([4, 5])], "mario.sav")], id: 1 }}
+        />,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith(
+        "b".repeat(40),
+        new Uint8Array([4, 5]),
+        "mario.nes",
+      ),
+    );
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(screen.getByText("zelda.srm")).toBeTruthy();
+  });
+
   it("stores a save dropped together with its ROM", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
@@ -342,6 +370,34 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "A game is loaded" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
+  });
+
+  it("leaves a held save for the visitor's own ROM when the guided sample loads", async () => {
+    stubObjectUrls();
+    stubReducedMotion();
+    stubUserActivation(true);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({ blob: () => Promise.resolve(new Blob(["sample"])), ok: true, status: 200 } as Response),
+    );
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Play a practice ROM/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start a practice run" }));
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(screen.queryByText(/does not match/)).toBeNull();
   });
 
   it("copies the game name and SHA-1 from the player header", async () => {

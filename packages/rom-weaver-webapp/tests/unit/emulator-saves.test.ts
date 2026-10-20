@@ -302,6 +302,15 @@ describe("emulator saves", () => {
     clearEmulatorSavePreview(sha1);
   });
 
+  it("previews a dropped SRAM when storage cannot keep it", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      clearEmulatorSavePreview(sha1);
+    }
+  });
+
   it("only previews a dropped SRAM while save storage is off", async () => {
     configureEmulatorSaveStorage(false);
     try {
