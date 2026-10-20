@@ -384,6 +384,26 @@ describe("EmulatorTestView", () => {
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
+  it("rejects an empty ROM with a clear message instead of booting it", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    loadRomMock.mockResolvedValue({
+      blob: new Blob([]),
+      checksum: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+      fileName: "empty.nes",
+    });
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File([], "empty.nes")] },
+    });
+
+    const alert = (await screen.findByRole("alert")).textContent;
+    expect(alert).toContain("Cannot play empty.nes.");
+    expect(alert).toContain("empty (0 bytes)");
+    expect(getEmulatorSessionState().entries).toHaveLength(0);
+  });
+
   it("unloads the previous game when the replacement file is unsupported", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

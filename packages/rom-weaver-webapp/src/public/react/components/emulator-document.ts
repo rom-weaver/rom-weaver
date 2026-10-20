@@ -171,6 +171,25 @@ const DISABLE_UPDATE_CHECK = `
         });
       })();`;
 
+/**
+ * EmulatorJS builds its bar buttons from an icon plus a text span that its
+ * stylesheet hides for some of them (mute/unmute), which leaves a button with
+ * no accessible name. The bar is the core's own markup, so the wrapper names
+ * each button from its own text as the bar is built.
+ */
+const LABEL_MENU_BUTTONS = `
+      (() => {
+        const label = () => {
+          for (const button of document.querySelectorAll('.ejs_menu_button')) {
+            if (button.hasAttribute('aria-label')) continue;
+            const text = (button.textContent || '').trim() || button.getAttribute('title');
+            if (text) button.setAttribute('aria-label', text);
+          }
+        };
+        new MutationObserver(label).observe(document.documentElement, { childList: true, subtree: true });
+        label();
+      })();`;
+
 const createEmulatorAudioContextBridgeScript = (gameName: string) => `
       (() => {
         const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
@@ -321,6 +340,7 @@ const createEmulatorDocument = (
     </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${LABEL_MENU_BUTTONS}</script>
     <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
     <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName)}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>

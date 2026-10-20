@@ -404,6 +404,30 @@ describe("SaveEditor", () => {
     expect(screen.getByLabelText("Badge 1").textContent).toContain("1");
   });
 
+  it("shows a toggle's id only when it differs from its label", async () => {
+    const toggle = (id: string, label: string) => ({
+      constraints: { choices: [], max: null, max_length: null, min: null },
+      description: label,
+      editable: true,
+      encoding: null,
+      id,
+      kind: "boolean",
+      label,
+      section_id: 0,
+      step: null,
+      value: { bool: false },
+      warnings: [],
+    });
+    inspectSave.mockResolvedValueOnce(
+      documentResult([textField(), toggle("options.region_map_zoom", "Region map zoom"), toggle("flags.rtc", "Clock")]),
+    );
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    const ids = [...container.querySelectorAll(".save-editor-toggle-id")].map((node) => node.textContent);
+    expect(ids).toEqual(["rtc"]);
+    expect(screen.getByRole("checkbox", { name: "Region map zoom" })).toBeTruthy();
+  });
+
   it("shows a field error and keeps the previous value for invalid integers", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();

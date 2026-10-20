@@ -104,6 +104,16 @@ const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
 const titleFor = (segment: string) =>
   GROUP_TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1).replaceAll("_", " ");
 const isReadOnly = (field: SaveField) => !field.editable || field.kind.startsWith("read_only");
+/** The short field id is worth showing only when it adds something the label does not already say. */
+const toggleIdHint = (field: SaveField): string => {
+  const hint = field.id.split(".").at(-1) ?? "";
+  const labelSlug = field.label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  return hint === labelSlug ? "" : hint;
+};
+
 const isToggle = (field: SaveField) => field.kind === "boolean" || field.kind === "bitfield_boolean";
 const groupCount = (editable: number, total: number, localizer: Localizer) =>
   total > editable
@@ -916,7 +926,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         />
         <span aria-hidden="true" className="save-editor-toggle-mark" />
         <span className="save-editor-toggle-label">{field.label}</span>
-        <span className="save-editor-toggle-id mono">{field.id.split(".").at(-1)}</span>
+        {toggleIdHint(field) ? <span className="save-editor-toggle-id mono">{toggleIdHint(field)}</span> : null}
       </label>
     );
   };

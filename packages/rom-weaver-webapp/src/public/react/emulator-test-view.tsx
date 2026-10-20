@@ -401,6 +401,14 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           signal: abortController.signal,
         });
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
+        if (loaded.blob.size === 0) {
+          if (currentGameId) disposeEntry(currentGameId);
+          setError({
+            detail: "The file is empty (0 bytes). Choose a ROM that has data.",
+            summary: `Cannot play ${loaded.fileName}.`,
+          });
+          return false;
+        }
         const core = getEmulatorJsCore(loaded.platform, loaded.fileName);
         if (!core) {
           // The new pick replaces the session even when it cannot play, so drop the previous game's player.
