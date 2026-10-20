@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::{
     borrow::Cow,
     fs::{self, File},
@@ -10,12 +10,10 @@ use std::{
     },
 };
 
-use flacenc::{component::BitRepr as _, error::Verify as _};
-use flate2::{Compression as GzipCompression, write::DeflateEncoder};
 use rom_weaver_checksum::{StreamingChecksum, detect_rom_identity_for_path};
 use rom_weaver_core::codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
-    ChdMediaScope, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
+    ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OperationStatus, OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError,
@@ -26,9 +24,7 @@ use rom_weaver_core::{
     reserve_parallel_heap,
 };
 use serde_json::{Map, Value, json};
-use sha1::{Digest, Sha1};
 use tracing::{debug, trace};
-use zstd::bulk::compress as zstd_compress;
 
 pub const CHD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,

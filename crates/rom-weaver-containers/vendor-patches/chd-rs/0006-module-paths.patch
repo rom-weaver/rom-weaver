@@ -1,0 +1,1799 @@
+diff --git a/block_hash.rs b/block_hash.rs
+index 321c5451c7e2d34f36a9f890c5b0c79613a2ae77..f0a182c4c9e92095d9ceb0a953dbac82022a0015 100644
+--- a/block_hash.rs
++++ b/block_hash.rs
+@@ -1,8 +1,8 @@
+-use crate::Result;
++use crate::chd_rs::Result;
+ use num_traits::ToPrimitive;
+ 
+ #[cfg(feature = "verify_block_crc")]
+-use crate::Error;
++use crate::chd_rs::Error;
+ 
+ #[allow(unused_imports)]
+ use crc::{Crc, CRC_16_IBM_3740, CRC_32_ISO_HDLC};
+diff --git a/chdfile.rs b/chdfile.rs
+index d832ebaec5c4a69551ec33c232b8a3c11e1032c0..5c6c0daca173ccdd2919512893310c0f106e2129 100644
+--- a/chdfile.rs
++++ b/chdfile.rs
+@@ -1,16 +1,16 @@
+-use crate::block_hash::BlockChecksum;
+-use crate::compression::CompressionCodec;
+-use crate::error::{Error, Result};
+-use crate::header::Header;
+-use crate::map::{
++use crate::chd_rs::block_hash::BlockChecksum;
++use crate::chd_rs::compression::CompressionCodec;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::Header;
++use crate::chd_rs::map::{
+     CompressedEntryProof, CompressionTypeLegacy, CompressionTypeV5, Map, MapEntry,
+     UncompressedEntryProof,
+ };
+ 
+ #[cfg(feature = "unstable_lending_iterators")]
+-use crate::iter::{Hunks, MetadataEntries};
++use crate::chd_rs::iter::{Hunks, MetadataEntries};
+ 
+-use crate::metadata::MetadataRefs;
++use crate::chd_rs::metadata::MetadataRefs;
+ use byteorder::{BigEndian, WriteBytesExt};
+ use crc::Crc;
+ use num_traits::ToPrimitive;
+@@ -34,13 +34,13 @@ impl<F: Read + Seek> Chd<F> {
+     /// The CHD header and hunk map are read and validated immediately.
+     ///
+     /// If the CHD file requires a parent, and a parent is provided, the parent hash is
+-    /// validated. If hash validation fails, returns [`Error::InvalidParent`](crate::Error::InvalidParent).
++    /// validated. If hash validation fails, returns [`Error::InvalidParent`](crate::chd_rs::Error::InvalidParent).
+     ///
+     /// If the CHD file does not require a parent, and a parent is provided, returns
+-    /// [`Error::InvalidParameter`](crate::Error::InvalidParameter).
++    /// [`Error::InvalidParameter`](crate::chd_rs::Error::InvalidParameter).
+     /// If no parent CHD is provided and the file requires a parent, then the presence of the parent
+-    /// will not be immediately validated. However, calls to [`read_hunk_in`](crate::Hunk::read_hunk_in)
+-    /// will fail with [`Error::RequiresParent`](crate::Error::RequiresParent) when a hunk is read that
++    /// will not be immediately validated. However, calls to [`read_hunk_in`](crate::chd_rs::Hunk::read_hunk_in)
++    /// will fail with [`Error::RequiresParent`](crate::chd_rs::Error::RequiresParent) when a hunk is read that
+     /// refers to the parent CHD.
+     pub fn open(mut file: F, parent: Option<Box<Chd<F>>>) -> Result<Chd<F>> {
+         let header = Header::try_read_header(&mut file)?;
+@@ -375,10 +375,10 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
+     /// the output buffer.
+     ///
+     /// If the hunk refers to a parent CHD that was not provided, this will return
+-    /// [`Error::RequiresParent`](crate::Error::RequiresParent).
++    /// [`Error::RequiresParent`](crate::chd_rs::Error::RequiresParent).
+     ///
+     /// If the provided output buffer is the wrong length, this will return
+-    /// [`Error::OutOfMemory`](crate::Error::OutOfMemory).
++    /// [`Error::OutOfMemory`](crate::chd_rs::Error::OutOfMemory).
+     pub fn read_hunk_in(
+         &mut self,
+         compressed_buffer: &mut Vec<u8>,
+diff --git a/compression/avhuff.rs b/compression/avhuff.rs
+index bef756654057bac4cca9b6518f6c8735b8f8a27a..80d15526392e2f4b7e982b861876bbd4b916fff1 100644
+--- a/compression/avhuff.rs
++++ b/compression/avhuff.rs
+@@ -1,11 +1,11 @@
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::header::CodecType;
++use crate::chd_rs::header::CodecType;
+ #[cfg(feature = "encode")]
+-use crate::huffman::HuffmanEncoder;
+-use crate::huffman::{Huffman8BitDecoder, HuffmanDecoder};
+-use crate::{huffman, Error, Result};
++use crate::chd_rs::huffman::HuffmanEncoder;
++use crate::chd_rs::huffman::{Huffman8BitDecoder, HuffmanDecoder};
++use crate::chd_rs::{huffman, Error, Result};
+ use bitreader::BitReader;
+ #[cfg(feature = "encode")]
+ use bitstream_io::{BitWrite, BitWriter};
+diff --git a/compression/cdrom.rs b/compression/cdrom.rs
+index a6840cf0ffc07bb42672faed8a555436333651e0..bec90228f343ad6e35d62922c87bb77aa0873965 100644
+--- a/compression/cdrom.rs
++++ b/compression/cdrom.rs
+@@ -1,18 +1,18 @@
+ /// Common logic for CD-ROM decompression codecs.
+-use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
+-use crate::compression::ecc::ErrorCorrectedSector;
+-use crate::compression::lzma::LzmaCodec;
+-use crate::compression::zlib::ZlibCodec;
+-use crate::compression::zstd::ZstdCodec;
+-use crate::compression::{
++use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA, CD_SYNC_HEADER};
++use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
++use crate::chd_rs::compression::lzma::LzmaCodec;
++use crate::chd_rs::compression::zlib::ZlibCodec;
++use crate::chd_rs::compression::zstd::ZstdCodec;
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::error::{Error, Result};
+-use crate::header::CodecType;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::CodecType;
+ use std::convert::TryFrom;
+ 
+-/// CD-ROM wrapper codec (cdlz) that uses the [LZMA codec](crate::codecs::LzmaCodec)
+-/// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
++/// CD-ROM wrapper codec (cdlz) that uses the [LZMA codec](crate::chd_rs::codecs::LzmaCodec)
++/// for decompression of sector data and the [Deflate codec](crate::chd_rs::codecs::ZlibCodec) for
+ /// decompression of subcode data.
+ ///
+ /// ## Format Details
+@@ -52,8 +52,8 @@ use std::convert::TryFrom;
+ /// when decompressed.
+ pub type CdLzmaCodec = CdCodec<LzmaCodec, ZlibCodec>;
+ 
+-/// CD-ROM wrapper decompression codec (cdzl) using the [Deflate codec](crate::codecs::ZlibCodec)
+-/// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
++/// CD-ROM wrapper decompression codec (cdzl) using the [Deflate codec](crate::chd_rs::codecs::ZlibCodec)
++/// for decompression of sector data and the [Deflate codec](crate::chd_rs::codecs::ZlibCodec) for
+ /// decompression of subcode data.
+ ///
+ /// ## Format Details
+@@ -94,8 +94,8 @@ pub type CdLzmaCodec = CdCodec<LzmaCodec, ZlibCodec>;
+ /// when decompressed.
+ pub type CdZlibCodec = CdCodec<ZlibCodec, ZlibCodec>;
+ 
+-/// CD-ROM wrapper decompression codec (cdzs) using the [Zstandard codec](crate::codecs::ZstdCodec)
+-/// for decompression of sector data and the [Zstandard codec](crate::codecs::ZstdCodec) for
++/// CD-ROM wrapper decompression codec (cdzs) using the [Zstandard codec](crate::chd_rs::codecs::ZstdCodec)
++/// for decompression of sector data and the [Zstandard codec](crate::chd_rs::codecs::ZstdCodec) for
+ /// decompression of subcode data.
+ ///
+ /// ## Format Details
+diff --git a/compression/ecc.rs b/compression/ecc.rs
+index e349b50a0584390c7a8ec5f305442f00f0a6557b..bfea7da7b2e6428e6cd7f57ec8926cd8e673048d 100644
+--- a/compression/ecc.rs
++++ b/compression/ecc.rs
+@@ -1,5 +1,5 @@
+ /// CD ROM ECC calculation helpers.
+-use crate::cdrom::{CD_MAX_SECTOR_DATA, CD_MODE_OFFSET, CD_SYNC_NUM_BYTES, CD_SYNC_OFFSET};
++use crate::chd_rs::cdrom::{CD_MAX_SECTOR_DATA, CD_MODE_OFFSET, CD_SYNC_NUM_BYTES, CD_SYNC_OFFSET};
+ 
+ const ECC_P_OFFSET: usize = 0x81c;
+ const ECC_P_NUM_BYTES: usize = 86;
+diff --git a/compression/flac.rs b/compression/flac.rs
+index 071bacb2f2ba966a3be32bc26a43f35ea5dcaa91..d09832a74f7e3fe0c13e599d35222ef7faee8980 100644
+--- a/compression/flac.rs
++++ b/compression/flac.rs
+@@ -5,13 +5,13 @@ use std::mem;
+ use byteorder::{BigEndian, ByteOrder, LittleEndian, WriteBytesExt};
+ use claxon::frame::FrameReader;
+ 
+-use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
+-use crate::compression::zlib::ZlibCodec;
+-use crate::compression::{
++use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_MAX_SUBCODE_DATA};
++use crate::chd_rs::compression::zlib::ZlibCodec;
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::error::{Error, Result};
+-use crate::header::CodecType;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::CodecType;
+ 
+ /// Generic block codec for FLAC.
+ ///
+@@ -287,7 +287,7 @@ impl CodecImplementation for RawFlacCodec {
+ }
+ 
+ /// CD-ROM wrapper decompression codec (cdfl) using the FLAC
+-/// for decompression of sector data and the [Deflate codec](crate::codecs::ZlibCodec) for
++/// for decompression of sector data and the [Deflate codec](crate::chd_rs::codecs::ZlibCodec) for
+ /// decompression of subcode data.
+ ///
+ /// ## Format Details
+diff --git a/compression/huff.rs b/compression/huff.rs
+index 050350eca2871627fe0eafc0bb2216f0759d5ae9..e9b0a32fe54ff5c8bdcd5d486405a82733f41665 100644
+--- a/compression/huff.rs
++++ b/compression/huff.rs
+@@ -1,9 +1,9 @@
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::error::Result;
+-use crate::header::CodecType;
+-use crate::huffman::Huffman8BitDecoder;
++use crate::chd_rs::error::Result;
++use crate::chd_rs::header::CodecType;
++use crate::chd_rs::huffman::Huffman8BitDecoder;
+ use bitreader::BitReader;
+ 
+ /// MAME 8-bit Huffman (huff) codec.
+@@ -24,14 +24,14 @@ use bitreader::BitReader;
+ /// when decompressed.
+ pub struct HuffmanCodec {
+     #[cfg(feature = "encode")]
+-    encoder: crate::huffman::Huffman8BitEncoder<'static>,
++    encoder: crate::chd_rs::huffman::Huffman8BitEncoder<'static>,
+ }
+ 
+ impl CodecImplementation for HuffmanCodec {
+     fn new(_: u32) -> Result<Self> {
+         Ok(HuffmanCodec {
+             #[cfg(feature = "encode")]
+-            encoder: crate::huffman::Huffman8BitEncoder::new(),
++            encoder: crate::chd_rs::huffman::Huffman8BitEncoder::new(),
+         })
+     }
+ 
+@@ -55,11 +55,11 @@ impl CodecImplementation for HuffmanCodec {
+         let mut remaining = &mut output[..output_len];
+         self.encoder
+             .encode(input, &mut remaining)
+-            .map_err(|_| crate::Error::CompressionError)?;
++            .map_err(|_| crate::chd_rs::Error::CompressionError)?;
+ 
+         let compressed_len = output_len - remaining.len();
+         if compressed_len >= input.len() {
+-            return Err(crate::Error::CompressionError);
++            return Err(crate::chd_rs::Error::CompressionError);
+         }
+         Ok(compressed_len)
+     }
+diff --git a/compression/lzma.rs b/compression/lzma.rs
+index cb6d142af1243cf2435da6bf3a490b9c3f3e9ba0..e3fcbda430449613717412b063fd0da3d1e69012 100644
+--- a/compression/lzma.rs
++++ b/compression/lzma.rs
+@@ -1,9 +1,9 @@
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::const_assert;
+-use crate::error::{Error, Result};
+-use crate::header::CodecType;
++use crate::chd_rs::const_assert;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::CodecType;
+ use lzma_rust2::LzmaReader;
+ #[cfg(feature = "encode")]
+ use lzma_rust2::{EncodeMode, LzmaOptions, LzmaWriter, MfType};
+diff --git a/compression/mod.rs b/compression/mod.rs
+index 1b982bead8ec3627c63ac8a564baae9482488683..75874cda80cc92e40dbd3ca5460fe690e91444e2 100644
+--- a/compression/mod.rs
++++ b/compression/mod.rs
+@@ -1,5 +1,5 @@
+-use crate::error::Result;
+-use crate::header::CodecType;
++use crate::chd_rs::error::Result;
++use crate::chd_rs::header::CodecType;
+ use std::ops::{Add, AddAssign};
+ 
+ mod avhuff;
+@@ -16,17 +16,17 @@ mod zstd;
+ mod tests;
+ 
+ pub mod codecs {
+-    pub use crate::compression::avhuff::AVHuffCodec;
+-    pub use crate::compression::cdrom::CdLzmaCodec;
+-    pub use crate::compression::cdrom::CdZlibCodec;
+-    pub use crate::compression::cdrom::CdZstdCodec;
+-    pub use crate::compression::flac::CdFlacCodec;
+-    pub use crate::compression::flac::RawFlacCodec;
+-    pub use crate::compression::huff::HuffmanCodec;
+-    pub use crate::compression::lzma::LzmaCodec;
+-    pub use crate::compression::none::NoneCodec;
+-    pub use crate::compression::zlib::ZlibCodec;
+-    pub use crate::compression::zstd::ZstdCodec;
++    pub use crate::chd_rs::compression::avhuff::AVHuffCodec;
++    pub use crate::chd_rs::compression::cdrom::CdLzmaCodec;
++    pub use crate::chd_rs::compression::cdrom::CdZlibCodec;
++    pub use crate::chd_rs::compression::cdrom::CdZstdCodec;
++    pub use crate::chd_rs::compression::flac::CdFlacCodec;
++    pub use crate::chd_rs::compression::flac::RawFlacCodec;
++    pub use crate::chd_rs::compression::huff::HuffmanCodec;
++    pub use crate::chd_rs::compression::lzma::LzmaCodec;
++    pub use crate::chd_rs::compression::none::NoneCodec;
++    pub use crate::chd_rs::compression::zlib::ZlibCodec;
++    pub use crate::chd_rs::compression::zstd::ZstdCodec;
+ }
+ 
+ // unstable(trait_alias)
+@@ -35,7 +35,7 @@ pub trait CompressionCodec: CodecImplementation + CompressionCodecType + Send +
+ 
+ /// Trait for a codec that implements a known CHD codec type.
+ pub trait CompressionCodecType {
+-    /// Returns the known [`CodecType`](crate::header::CodecType) that this
++    /// Returns the known [`CodecType`](crate::chd_rs::header::CodecType) that this
+     /// codec implements.
+     fn codec_type(&self) -> CodecType
+     where
+@@ -54,7 +54,7 @@ pub trait CodecImplementation {
+     ///
+     /// The range of levels depends on the codec, and [`new`](CodecImplementation::new)
+     /// uses the level that chdman compresses with. Returns
+-    /// [`InvalidParameter`](crate::Error::InvalidParameter) if the level is out of range,
++    /// [`InvalidParameter`](crate::chd_rs::Error::InvalidParameter) if the level is out of range,
+     /// or the codec has no compression levels.
+     #[cfg(feature = "encode")]
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self>
+@@ -62,7 +62,7 @@ pub trait CodecImplementation {
+         Self: Sized,
+     {
+         let _ = (hunk_size, level);
+-        Err(crate::error::Error::InvalidParameter)
++        Err(crate::chd_rs::error::Error::InvalidParameter)
+     }
+ 
+     /// Decompress compressed bytes from the input buffer into the
+@@ -76,7 +76,7 @@ pub trait CodecImplementation {
+     /// Compress bytes from the input buffer into the output buffer, returning the
+     /// number of compressed bytes written.
+     ///
+-    /// Returns [`CompressionError`](crate::Error::CompressionError) if the compressed data
++    /// Returns [`CompressionError`](crate::chd_rs::Error::CompressionError) if the compressed data
+     /// is not smaller than the input, or does not fit in the output buffer. In that case
+     /// the data should be stored uncompressed instead.
+     ///
+diff --git a/compression/none.rs b/compression/none.rs
+index 506b24c6167703167f7084a492297904ac327c8d..609ec5817b8e3c861ec3310ee1ae17490414c689 100644
+--- a/compression/none.rs
++++ b/compression/none.rs
+@@ -1,9 +1,9 @@
+ // None (copy) codec
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::error::Result;
+-use crate::header::CodecType;
++use crate::chd_rs::error::Result;
++use crate::chd_rs::header::CodecType;
+ use std::io::Write;
+ 
+ /// None/copy codec that does a byte-for-byte copy of the input buffer.
+@@ -24,7 +24,7 @@ impl CodecImplementation for NoneCodec {
+     fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize> {
+         output
+             .get_mut(..input.len())
+-            .ok_or(crate::Error::CompressionError)?
++            .ok_or(crate::chd_rs::Error::CompressionError)?
+             .copy_from_slice(input);
+         Ok(input.len())
+     }
+diff --git a/compression/tests.rs b/compression/tests.rs
+index 88bf348232bc311a25d32430fd27ae296fd2d72c..571abb084c6ac2287c9353ecedba6db04e479038 100644
+--- a/compression/tests.rs
++++ b/compression/tests.rs
+@@ -1,8 +1,8 @@
+-use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
+-use crate::compression::codecs::*;
+-use crate::compression::ecc::ErrorCorrectedSector;
+-use crate::compression::CodecImplementation;
+-use crate::Error;
++use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
++use crate::chd_rs::compression::codecs::*;
++use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
++use crate::chd_rs::compression::CodecImplementation;
++use crate::chd_rs::Error;
+ use rand::rngs::StdRng;
+ use rand::{RngExt, SeedableRng};
+ 
+diff --git a/compression/zlib.rs b/compression/zlib.rs
+index bb2bb48e6a70a705f05ec0d5a415f33178d11a42..84c0810785c8c109bb53103c7a07433bad6ae622 100644
+--- a/compression/zlib.rs
++++ b/compression/zlib.rs
+@@ -1,8 +1,8 @@
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::error::{Error, Result};
+-use crate::header::CodecType;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::CodecType;
+ use flate2::{Compress, Decompress, FlushDecompress};
+ 
+ /// Deflate (zlib) decompression codec.
+diff --git a/compression/zstd.rs b/compression/zstd.rs
+index 60317590f2512aca43d9419031ca237dd3207c95..c3978883eaa2f1ac1b801670bba9dcbd260cfd33 100644
+--- a/compression/zstd.rs
++++ b/compression/zstd.rs
+@@ -1,8 +1,8 @@
+-use crate::compression::{
++use crate::chd_rs::compression::{
+     CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+ };
+-use crate::header::CodecType;
+-use crate::Error;
++use crate::chd_rs::header::CodecType;
++use crate::chd_rs::Error;
+ 
+ /// Zstandard (zstd) decompression codec.
+ ///
+@@ -50,7 +50,7 @@ pub struct ZstdCodec {
+ 
+ #[cfg(not(feature = "fast_zstd"))]
+ impl CodecImplementation for ZstdCodec {
+-    fn new(_hunk_size: u32) -> crate::Result<Self>
++    fn new(_hunk_size: u32) -> crate::chd_rs::Result<Self>
+     where
+         Self: Sized,
+     {
+@@ -64,7 +64,7 @@ impl CodecImplementation for ZstdCodec {
+ 
+     /// Levels are those supported by zrip.
+     #[cfg(feature = "encode")]
+-    fn with_level(_hunk_size: u32, level: i32) -> crate::Result<Self> {
++    fn with_level(_hunk_size: u32, level: i32) -> crate::chd_rs::Result<Self> {
+         Ok(Self {
+             decoder: zrip::DecompressContext::new(),
+             buffer: Vec::new(),
+@@ -73,7 +73,7 @@ impl CodecImplementation for ZstdCodec {
+     }
+ 
+     #[cfg(feature = "encode")]
+-    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
++    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<usize> {
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+         let output_len = output.len().min(input.len());
+         let compressed_len = self
+@@ -86,7 +86,7 @@ impl CodecImplementation for ZstdCodec {
+         Ok(compressed_len)
+     }
+ 
+-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
++    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<DecompressResult> {
+         self.buffer.clear();
+         let bytes_out = self
+             .decoder
+@@ -109,12 +109,12 @@ impl CodecImplementation for ZstdCodec {
+ 
+ #[cfg(feature = "fast_zstd")]
+ impl CodecImplementation for ZstdCodec {
+-    fn new(_hunk_size: u32) -> crate::Result<Self>
++    fn new(_hunk_size: u32) -> crate::chd_rs::Result<Self>
+     where
+         Self: Sized,
+     {
+         Ok(Self {
+-            zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::Error::CodecError)?,
++            zstd_context: zstd_safe::DCtx::try_create().ok_or(crate::chd_rs::Error::CodecError)?,
+             #[cfg(feature = "encode")]
+             compressor: zstd_safe::CCtx::try_create().ok_or(Error::CodecError)?,
+             #[cfg(feature = "encode")]
+@@ -126,7 +126,7 @@ impl CodecImplementation for ZstdCodec {
+     /// [`max_c_level`](zstd_safe::max_c_level), where 0 is the zstd default level.
+     /// chdman uses the maximum level.
+     #[cfg(feature = "encode")]
+-    fn with_level(hunk_size: u32, level: i32) -> crate::Result<Self> {
++    fn with_level(hunk_size: u32, level: i32) -> crate::chd_rs::Result<Self> {
+         if !(zstd_safe::min_c_level()..=zstd_safe::max_c_level()).contains(&level) {
+             return Err(Error::InvalidParameter);
+         }
+@@ -137,7 +137,7 @@ impl CodecImplementation for ZstdCodec {
+     }
+ 
+     #[cfg(feature = "encode")]
+-    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<usize> {
++    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<usize> {
+         // Anything not smaller than the input is a failure, so don't bother writing more.
+         let output_len = output.len().min(input.len());
+         let compressed_len = self
+@@ -150,7 +150,7 @@ impl CodecImplementation for ZstdCodec {
+         Ok(compressed_len)
+     }
+ 
+-    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::Result<DecompressResult> {
++    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> crate::chd_rs::Result<DecompressResult> {
+         self.zstd_context
+             .reset(zstd_safe::ResetDirective::SessionAndParameters)
+             .map_err(|_| Error::DecompressionError)?;
+diff --git a/error.rs b/error.rs
+index cf23834e31809d17ab38fa2a2e77269e1864de06..9a2d3e217dccc50d531247152c9a17803cb0fa92 100644
+--- a/error.rs
++++ b/error.rs
+@@ -1,4 +1,4 @@
+-use crate::huffman::HuffmanError;
++use crate::chd_rs::huffman::HuffmanError;
+ use bitreader::BitReaderError;
+ use std::array::TryFromSliceError;
+ use std::ffi::FromBytesWithNulError;
+diff --git a/header/mod.rs b/header/mod.rs
+index e593bae09b7dd11f4494782d70fbec20fe0aaa82..bb266ecb4425d78dabc5b03b8d9949bff816d067 100644
+--- a/header/mod.rs
++++ b/header/mod.rs
+@@ -1,21 +1,21 @@
+ //! Types and methods relating to header data for a CHD file.
+ //!
+ //! CHD V1-5 all have different header formats that are supported by this library.
+-//! Common information can be accessed with the [`Header`](crate::header::Header) enum,
++//! Common information can be accessed with the [`Header`](crate::chd_rs::header::Header) enum,
+ //! but if version-specific information is needed, all fields in each version header struct
+ //! can be accessed publicly.
+ //!
+-//! [`Header`](crate::header::Header) makes no ABI guarantees and is not ABI-compatible
++//! [`Header`](crate::chd_rs::header::Header) makes no ABI guarantees and is not ABI-compatible
+ //! with [`libchdr::chd_header`](https://github.com/rtissera/libchdr/blob/6eeb6abc4adc094d489c8ba8cafdcff9ff61251b/include/libchdr/chd.h#L302).
+-use crate::chdfile::Codecs;
+-use crate::compression::codecs::{
++use crate::chd_rs::chdfile::Codecs;
++use crate::chd_rs::compression::codecs::{
+     AVHuffCodec, CdFlacCodec, CdLzmaCodec, CdZlibCodec, CdZstdCodec, HuffmanCodec, LzmaCodec,
+     NoneCodec, RawFlacCodec, ZlibCodec, ZstdCodec,
+ };
+-use crate::compression::{CodecImplementation, CompressionCodec};
+-use crate::error::{Error, Result};
+-use crate::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
+-use crate::{make_tag, map};
++use crate::chd_rs::compression::{CodecImplementation, CompressionCodec};
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::metadata::{KnownMetadata, MetadataRefs, MetadataTag};
++use crate::chd_rs::{make_tag, map};
+ use arrayvec::ArrayVec;
+ use num_derive::FromPrimitive;
+ use num_traits::FromPrimitive;
+@@ -26,6 +26,13 @@ use zerocopy::{FromBytes, Immutable, KnownLayout};
+ 
+ mod raw;
+ 
++/// View the start of the raw header as the layout of a header version.
++fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
++    T::ref_from_prefix(raw_header)
++        .map(|(raw, _)| raw)
++        .map_err(|_| Error::InvalidData)
++}
++
+ /// The types of compression codecs supported in a CHD file.
+ #[repr(u32)]
+ #[derive(FromPrimitive, Debug, Copy, Clone, PartialEq, Eq)]
+@@ -168,7 +175,7 @@ pub enum Version {
+ /// A CHD V1/V2 header. V1 and V2 headers share a similar format with the only difference being
+ /// V1 having a fixed 512-byte sector length, and V2 having an arbitrary sector length.
+ ///
+-/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
++/// While all members of this struct are public, prefer the [`Header`](crate::chd_rs::header::Header) API over the fields
+ /// of this struct.
+ #[derive(Clone)]
+ pub struct HeaderV1 {
+@@ -178,7 +185,7 @@ pub struct HeaderV1 {
+     pub length: u32,
+     /// CHD file flags.
+     pub flags: u32,
+-    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
++    /// The compression codec used in the CHD file. See [`CodecType`](crate::chd_rs::header::CodecType) for the
+     /// valid codec types supported by this library.
+     pub compression: u32,
+     /// The size of each hunk in the CHD file in units of sector length.
+@@ -211,7 +218,7 @@ pub struct HeaderV1 {
+ 
+ /// A CHD V3 header.
+ ///
+-/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
++/// While all members of this struct are public, prefer the [`Header`](crate::chd_rs::header::Header) API over the fields
+ /// of this struct.
+ #[derive(Clone)]
+ pub struct HeaderV3 {
+@@ -221,7 +228,7 @@ pub struct HeaderV3 {
+     pub length: u32,
+     /// CHD file flags.
+     pub flags: u32,
+-    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
++    /// The compression codec used in the CHD file. See [`CodecType`](crate::chd_rs::header::CodecType) for the
+     /// valid codec types supported by this library.
+     pub compression: u32,
+     /// The size of each hunk of the CHD file in bytes.
+@@ -249,7 +256,7 @@ pub struct HeaderV3 {
+ /// A CHD V4 header. The major difference between a V3 header and V4 header is the absence of MD5
+ /// hash information in CHD V4.
+ ///
+-/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
++/// While all members of this struct are public, prefer the [`Header`](crate::chd_rs::header::Header) API over the fields
+ /// of this struct.
+ #[derive(Clone)]
+ pub struct HeaderV4 {
+@@ -259,7 +266,7 @@ pub struct HeaderV4 {
+     pub length: u32,
+     /// CHD file flags.
+     pub flags: u32,
+-    /// The compression codec used in the CHD file. See [`CodecType`](crate::header::CodecType) for the
++    /// The compression codec used in the CHD file. See [`CodecType`](crate::chd_rs::header::CodecType) for the
+     /// valid codec types supported by this library.
+     pub compression: u32,
+     /// The total number of hunks in the CHD file.
+@@ -284,7 +291,7 @@ pub struct HeaderV4 {
+ 
+ /// A CHD V5 header.
+ ///
+-/// While all members of this struct are public, prefer the [`Header`](crate::header::Header) API over the fields
++/// While all members of this struct are public, prefer the [`Header`](crate::chd_rs::header::Header) API over the fields
+ /// of this struct.
+ #[derive(Clone)]
+ pub struct HeaderV5 {
+@@ -295,7 +302,7 @@ pub struct HeaderV5 {
+     /// The compression codec used in the CHD file. CHD V5 supports up to 4 different codecs in a
+     /// single CHD file.
+     ///
+-    /// See [`CodecType`](crate::header::CodecType) for the
++    /// See [`CodecType`](crate::chd_rs::header::CodecType) for the
+     /// valid codec types supported by this library.
+     pub compression: [u32; 4],
+     /// The logical size of the compressed data in bytes.
+@@ -817,13 +824,6 @@ pub enum Flags {
+     Undefined = 0xfffffffc,
+ }
+ 
+-/// View the start of the raw header as the layout of a header version.
+-fn raw<T: FromBytes + KnownLayout + Immutable>(raw_header: &[u8]) -> Result<&T> {
+-    T::ref_from_prefix(raw_header)
+-        .map(|(raw, _)| raw)
+-        .map_err(|_| Error::InvalidData)
+-}
+-
+ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
+     let mut raw_header: [u8; CHD_MAX_HEADER_SIZE] = [0; CHD_MAX_HEADER_SIZE];
+ 
+@@ -1001,7 +1001,7 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
+     }
+ 
+     if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag())) {
+-        return Some(crate::cdrom::CD_FRAME_SIZE as u32);
++        return Some(crate::chd_rs::cdrom::CD_FRAME_SIZE as u32);
+     }
+     None
+ }
+@@ -1052,12 +1052,12 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
+ 
+ #[cfg(test)]
+ mod test {
+-    use crate::header::extract_bps_value;
++    use crate::chd_rs::header::extract_bps_value;
+ 
+     #[test]
+     #[cfg(feature = "encode")]
+     fn v5_to_bytes_roundtrip() {
+-        use crate::header::Header;
++        use crate::chd_rs::header::Header;
+         use std::io::Cursor;
+ 
+         let mut raw = Vec::new();
+@@ -1088,7 +1088,7 @@ mod test {
+     #[test]
+     #[cfg(feature = "encode")]
+     fn legacy_to_bytes_roundtrip() {
+-        use crate::header::Header;
++        use crate::chd_rs::header::Header;
+         use std::io::Cursor;
+ 
+         fn bytes(seed: u8, len: usize) -> impl Iterator<Item = u8> {
+diff --git a/huffman/decode.rs b/huffman/decode.rs
+index ca63d695f70943f660426aa7b46e50bf8d9c5449..dc2cef6a3085d722f9f22d6b13e9df0710ac7d30 100644
+--- a/huffman/decode.rs
++++ b/huffman/decode.rs
+@@ -1,5 +1,5 @@
+ use super::{assign_canonical_codes, rle_full_bits, rle_num_bits, HuffmanError, HuffmanNode};
+-use crate::const_assert;
++use crate::chd_rs::const_assert;
+ use bitreader::{BitReader, BitReaderError};
+ use std::marker::PhantomData;
+ 
+diff --git a/huffman/encode.rs b/huffman/encode.rs
+index 6bd40306e35bb99d5a459438e28336598caaeb05..c5886d822f1b94775ca62c7a4d7f1066eea1e8d2 100644
+--- a/huffman/encode.rs
++++ b/huffman/encode.rs
+@@ -1,5 +1,5 @@
+ use super::{assign_canonical_codes, rle_full_bits, rle_num_bits, HuffmanError, HuffmanNode};
+-use crate::const_assert;
++use crate::chd_rs::const_assert;
+ use bitstream_io::{BigEndian, BitWrite, BitWriter};
+ use std::cmp::Ordering;
+ 
+@@ -176,7 +176,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8> HuffmanEncoder<'a, NUM_CODE
+     /// Export the Huffman tree as an RLE encoded tree.
+     ///
+     /// The resulting bit stream is readable by
+-    /// [`HuffmanDecoder::from_tree_rle`](crate::huffman::HuffmanDecoder::from_tree_rle).
++    /// [`HuffmanDecoder::from_tree_rle`](crate::chd_rs::huffman::HuffmanDecoder::from_tree_rle).
+     pub fn export_tree_rle<W: BitWrite>(&self, writer: &mut W) -> Result<(), HuffmanError> {
+         let num_bits = Self::RLE_NUM_BITS as u32;
+         let max_repeats = (1 << num_bits) - 1;
+@@ -215,7 +215,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8> HuffmanEncoder<'a, NUM_CODE
+     /// Export the Huffman tree as a Huffman encoded tree.
+     ///
+     /// The resulting bit stream is readable by
+-    /// [`HuffmanDecoder::from_huffman_tree`](crate::huffman::HuffmanDecoder::from_huffman_tree).
++    /// [`HuffmanDecoder::from_huffman_tree`](crate::chd_rs::huffman::HuffmanDecoder::from_huffman_tree).
+     pub fn export_huffman_tree<W: BitWrite>(&self, writer: &mut W) -> Result<(), HuffmanError> {
+         // First RLE compress the lengths of all the nodes. Each run is written as its length,
+         // followed by the rest of the run as either another literal or a repeat token.
+@@ -291,7 +291,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8> HuffmanEncoder<'a, NUM_CODE
+ impl<'a> HuffmanEncoder<'a, 256, 16> {
+     /// Encode a buffer of bytes with the CHD Huffman codec.
+     ///
+-    /// The resulting buffer can be decoded with [`Huffman8BitDecoder::from_huffman_tree`](crate::huffman::Huffman8BitDecoder).
++    /// The resulting buffer can be decoded with [`Huffman8BitDecoder::from_huffman_tree`](crate::chd_rs::huffman::Huffman8BitDecoder).
+     pub fn encode<W: std::io::Write>(
+         &mut self,
+         input: &[u8],
+@@ -313,9 +313,9 @@ impl<'a> HuffmanEncoder<'a, 256, 16> {
+ #[cfg(test)]
+ mod tests {
+     use super::{Huffman8BitEncoder, HuffmanEncoder, HuffmanError};
+-    use crate::compression::codecs::HuffmanCodec;
+-    use crate::compression::CodecImplementation;
+-    use crate::huffman::{lookup_len, Huffman8BitDecoder, HuffmanDecoder};
++    use crate::chd_rs::compression::codecs::HuffmanCodec;
++    use crate::chd_rs::compression::CodecImplementation;
++    use crate::chd_rs::huffman::{lookup_len, Huffman8BitDecoder, HuffmanDecoder};
+     use bitreader::BitReader;
+     use bitstream_io::{BigEndian, BitWrite, BitWriter};
+     use rand::rngs::StdRng;
+diff --git a/iter.rs b/iter.rs
+index a364b97f209b2b0a21219ac477bd844e32e49ad0..ce9250171b2754ee68f125c6376ff59e7a954a7e 100644
+--- a/iter.rs
++++ b/iter.rs
+@@ -5,10 +5,10 @@
+ //!```no_run
+ //! use std::fs::File;
+ //! use std::io::BufReader;
+-//! use chd::iter::Lender;
+-//! use chd::Chd;
++//! use rom_weaver_containers::chd_rs::iter::Lender;
++//! use rom_weaver_containers::chd_rs::Chd;
+ //!
+-//! # fn main() -> chd::Result<()> {
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut f = BufReader::new(File::open("file.chd")?);
+ //! let mut chd = Chd::open(&mut f, None)?;
+ //!
+@@ -29,10 +29,10 @@
+ //!```no_run
+ //! use std::fs::File;
+ //! use std::io::BufReader;
+-//! use chd::iter::FallibleLender;
+-//! use chd::Chd;
++//! use rom_weaver_containers::chd_rs::iter::FallibleLender;
++//! use rom_weaver_containers::chd_rs::Chd;
+ //!
+-//! # fn main() -> chd::Result<()> {
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut f = BufReader::new(File::open("file.chd")?);
+ //! let mut chd = Chd::open(&mut f, None)?;
+ //! let mut metadata = chd.metadata();
+@@ -42,8 +42,8 @@
+ //! # Ok(())
+ //! # }
+ //! ```
+-use crate::metadata::{Metadata, MetadataRef, MetadataRefs, MetadataTag};
+-use crate::{Chd, Error, Hunk, Result};
++use crate::chd_rs::metadata::{Metadata, MetadataRef, MetadataRefs, MetadataTag};
++use crate::chd_rs::{Chd, Error, Hunk, Result};
+ use lender::{check_covariance, check_covariance_fallible, FallibleLending, Lending};
+ use std::io::{Read, Seek};
+ 
+diff --git a/lib.rs b/lib.rs
+deleted file mode 100644
+index 9e22c910ed21f1c9a3891647659d4dea60539ab3..0000000000000000000000000000000000000000
+--- a/lib.rs
++++ /dev/null
+@@ -1,292 +0,0 @@
+-#![cfg_attr(docsrs, feature(doc_cfg))]
+-#![warn(missing_docs)]
+-//! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
+-//! for CHD V1-5.
+-//!
+-//! ## Supported Compression Codecs
+-//! chd-rs supports the following compression codecs.
+-//!
+-//! * None
+-//! * Zlib/Zlib+/Zlib V5
+-//! * CDZL (CD Zlib)
+-//! * CDLZ (CD LZMA)
+-//! * CDFL (CD FLAC)
+-//! * FLAC (Raw FLAC)
+-//! * LZMA (Raw LZMA)
+-//! * Huff (MAME Static Huffman)
+-//! * AVHU (AV Huffman)
+-//! * Zstandard
+-//! * CDZS (CD Zstandard)
+-//!
+-//! ## Iterating over hunks
+-//! Because [`Hunk`](crate::Hunk) keeps a mutable reference to its owning
+-//! [`Chd`](crate::Chd), direct iteration of hunks is not possible without
+-//! Generic Associated Types. Instead, the hunk indices should be iterated over.
+-//!
+-//!```rust
+-//! use std::fs::File;
+-//! use std::io::BufReader;
+-//! use chd::Chd;
+-//!
+-//! let mut f = BufReader::new(File::open("file.chd")?);
+-//! let mut chd = Chd::open(&mut f, None)?;
+-//! let hunk_count = chd.header().hunk_count();
+-//! let hunk_size = chd.header().hunk_size();
+-//!
+-//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
+-//! let mut hunk_buf = chd.get_hunksized_buffer();
+-//! // buffer to store compressed data.
+-//! let mut cmp_buf = Vec::new();
+-//!
+-//! for hunk_num in 0..hunk_count {
+-//!     let mut hunk = chd.hunk(hunk_num)?;
+-//!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+-//! }
+-//! ```
+-//!
+-//! ## Iterating over metadata
+-//! Metadata in a CHD file consists of a list of entries that contain offsets to the
+-//! byte data of the metadata contents in the CHD file. The individual metadata entries
+-//! can be iterated directly, but a reference to the source stream has to be provided to
+-//! read the data.
+-//! ```rust
+-//! use std::fs::File;
+-//! use std::io::BufReader;
+-//! use chd::Chd;
+-//!
+-//! let mut f = BufReader::new(File::open("file.chd")?);
+-//! let mut chd = Chd::open(&mut f, None)?;
+-//! let entries = chd.metadata_refs()?;
+-//! for entry in entries {
+-//!     let metadata = entry?.read(&mut f)?;
+-//! }
+-//!```
+-//! `Vec<Metadata>` implements `TryFrom<MetadataRefs>` so all metadata entries
+-//! can be collected at once without requiring a reference to the file.
+-//! ```rust
+-//! use std::fs::File;
+-//! use std::io::BufReader;
+-//! use chd::Chd;
+-//! use chd::metadata::Metadata;
+-//!
+-//! let mut f = BufReader::new(File::open("file.chd")?);
+-//! // chd takes ownership of f here
+-//! let mut chd = Chd::open(f, None)?;
+-//!
+-//! let metadatas: Vec<Metadata> = chd.metadata_refs()?.try_into()?;
+-//!```
+-//!
+-
+-#[cfg(not(feature = "std"))]
+-compile_error!(
+-    "The feature `std` is required. \
+-     no_std support is blocked on Rust issue \
+-     #48331 <https://github.com/rust-lang/rust/issues/48331>.\
+-    "
+-);
+-
+-mod error;
+-
+-mod block_hash;
+-mod cdrom;
+-mod chdfile;
+-mod compression;
+-
+-/// cbindgen:ignore
+-#[cfg(feature = "huffman_api")]
+-pub mod huffman;
+-
+-/// cbindgen:ignore
+-#[cfg(not(feature = "huffman_api"))]
+-mod huffman;
+-
+-#[cfg(feature = "codec_api")]
+-/// Implementations of codecs used in MAME CHD.
+-///
+-/// Each codec may have restrictions on the hunk size, lengths and contents
+-/// of the buffer. If [`decompress`](crate::codecs::CodecImplementation::decompress) is called
+-/// with buffers that do not satisfy the constraints, it may return [`CompressionError`](crate::Error),
+-/// or panic, especially if the output buffer does not satisfy length requirements.
+-///
+-/// Because codecs are allowed to be used outside of a hunk-sized granularity, such as in
+-/// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
+-/// do not check the length of the output buffer against the hunk size. It is up to the caller
+-/// of [`decompress`](crate::codecs::CodecImplementation::decompress) to uphold length invariants.
+-#[cfg_attr(docsrs, doc(cfg(codec_api)))]
+-pub mod codecs {
+-    pub use crate::compression::codecs::*;
+-    pub use crate::compression::{
+-        CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
+-    };
+-}
+-
+-const fn make_tag(a: &[u8; 4]) -> u32 {
+-    ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
+-}
+-
+-macro_rules! const_assert {
+-    ($($list:ident : $ty:ty),* => $expr:expr) => {{
+-        struct Assert<$(const $list: $ty,)*>;
+-        impl<$(const $list: $ty,)*> Assert<$($list,)*> {
+-            const OK: u8 = 0 - !($expr) as u8;
+-        }
+-        Assert::<$($list,)*>::OK
+-    }};
+-    ($expr:expr) => {
+-        const OK: u8 = 0 - !($expr) as u8;
+-    };
+-}
+-
+-pub(crate) use const_assert;
+-
+-pub use chdfile::{Chd, Hunk};
+-pub use error::{Error, Result};
+-pub mod header;
+-pub mod map;
+-pub mod metadata;
+-pub mod read;
+-
+-#[cfg(feature = "encode")]
+-#[cfg_attr(docsrs, doc(cfg(encode)))]
+-pub mod write;
+-
+-/// cbindgen:ignore
+-#[cfg(feature = "unstable_lending_iterators")]
+-#[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
+-pub mod iter;
+-
+-#[cfg(test)]
+-mod tests {
+-    use crate::metadata::Metadata;
+-    use crate::read::{ChdReader, HunkBufReader};
+-    use crate::Chd;
+-    use std::convert::TryInto;
+-    use std::fs::File;
+-    use std::io::{BufReader, Read, Write};
+-
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    use crate::iter::{FallibleLender, Lender};
+-
+-    #[test]
+-    fn read_metas_test() {
+-        let mut f = File::open(".testimages/Test.chd").expect("");
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-
+-        let metadatas: Vec<Metadata> = chd.metadata_refs().try_into().expect("");
+-        let meta_datas: Vec<_> = metadatas
+-            .into_iter()
+-            .map(|s| String::from_utf8(s.value).unwrap())
+-            .collect();
+-        println!("{:?}", meta_datas);
+-    }
+-
+-    #[test]
+-    fn read_hunk_buffer_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let hunk_count = chd.header().hunk_count();
+-
+-        let mut hunk_buf = Vec::new();
+-        let mut cmp_buf = Vec::new();
+-        for hunk_num in 0..hunk_count {
+-            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+-            let read = HunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
+-                .expect(format!("could not read_hunk {}", hunk_num).as_str());
+-            hunk_buf = read.into_inner();
+-        }
+-    }
+-
+-    #[test]
+-    fn read_hunk_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let hunk_count = chd.header().hunk_count();
+-
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut cmp_buf = Vec::new();
+-        for hunk_num in 0..hunk_count {
+-            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+-            hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
+-                .expect(format!("could not read_hunk {}", hunk_num).as_str());
+-            println!("Read hunk {}", hunk_num);
+-        }
+-    }
+-
+-    #[test]
+-    fn read_file_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let chd = Chd::open(&mut f, None).expect("file");
+-        let mut read = ChdReader::new(chd);
+-
+-        let mut buf = Vec::new(); // this is really bad..
+-        read.read_to_end(&mut buf).expect("can read to end");
+-        let mut f_out = File::create(".testimages/out.bin").expect("");
+-        f_out.write_all(&buf).expect("did not write")
+-    }
+-
+-    #[test]
+-    fn read_parent_test() {
+-        let p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
+-        let pchd = Chd::open(p, None).expect("parent");
+-
+-        let f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
+-
+-        let _chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
+-    }
+-
+-    #[test]
+-    #[cfg(feature = "unsound_owning_iterators")]
+-    fn hunk_iter_test() {
+-        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
+-        let mut f_cursor = Cursor::new(f_bytes);
+-        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
+-        let mut chd = Chd::open(&mut f_cursor, None).expect("file");
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut comp_buf = Vec::new();
+-        for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
+-            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+-                .expect("hunk could not be read");
+-        }
+-    }
+-
+-    #[test]
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    fn hunk_iter_lending_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        // let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut comp_buf = Vec::new();
+-        let mut hunks = chd.hunks();
+-        let mut hunk_num = 0;
+-        while let Some(mut hunk) = hunks.next() {
+-            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
+-                .expect(&*format!("hunk {} could not be read", hunk_num));
+-            hunk_num += 1;
+-        }
+-    }
+-
+-    #[test]
+-    #[cfg(feature = "unstable_lending_iterators")]
+-    fn metadata_iter_lending_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let mut metas = chd.metadata();
+-        while let Some(mut meta) = metas.next().expect("metadata entry could not be found") {
+-            let contents = meta.read().expect("metadata entry could not be read");
+-            println!("{:?}", String::from_utf8(contents.value));
+-        }
+-    }
+-
+-    #[test]
+-    #[cfg(feature = "unsound_owning_iterators")]
+-    fn metadata_iter_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        for mut meta in chd.metadata().expect("metadata could not be read") {
+-            let contents = meta.read().expect("metadata entry could not be read");
+-            println!("{:?}", String::from_utf8(contents.value));
+-        }
+-    }
+-}
+diff --git a/map/mod.rs b/map/mod.rs
+index 529e5a0dd25a071dfcfb85eaf376c734292f0353..76ef97ceaae2a9f49d55b16b36897d643845a761 100644
+--- a/map/mod.rs
++++ b/map/mod.rs
+@@ -7,9 +7,9 @@ use num_derive::{FromPrimitive, ToPrimitive};
+ use num_traits::FromPrimitive;
+ use zerocopy::{FromBytes, FromZeros, IntoBytes};
+ 
+-use crate::error::{Error, Result};
+-use crate::header::{Header, HeaderV5};
+-use crate::huffman::{lookup_len, HuffmanDecoder};
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::{Header, HeaderV5};
++use crate::chd_rs::huffman::{lookup_len, HuffmanDecoder};
+ pub(crate) use raw::RawMapEntryV5;
+ use raw::{RawCompressedMapHeader, RawMapEntryV1, RawMapEntryV3, RawMapEntryV5Uncompressed};
+ 
+@@ -232,7 +232,7 @@ impl V5UncompressedMapEntry<'_> {
+     }
+ 
+     /// Returns size of the hunk data. For an uncompressed hunk, this is equal to the hunk
+-    /// size of the [`Chd`](crate::Chd).
++    /// size of the [`Chd`](crate::chd_rs::Chd).
+     pub fn block_size(&self) -> u32 {
+         self.1
+     }
+@@ -295,7 +295,7 @@ impl UncompressedEntryProof {
+     }
+ }
+ 
+-/// Iterator for [`Map`](crate::map::Map).
++/// Iterator for [`Map`](crate::chd_rs::map::Map).
+ pub struct MapEntries<'a> {
+     map: &'a Map,
+     curr: usize,
+@@ -419,7 +419,7 @@ impl Map {
+ /// See [`chd_file::compress_v5_map`](https://github.com/mamedev/mame/blob/74b9fae5a3ca3c99828fe41da154e3c84951414e/src/lib/util/chd.cpp#L2212).
+ #[cfg(feature = "encode")]
+ fn compress_map_v5(entries: &[RawMapEntryV5], hunk_bytes: u32, unit_bytes: u32) -> Result<Vec<u8>> {
+-    use crate::huffman::HuffmanEncoder;
++    use crate::chd_rs::huffman::HuffmanEncoder;
+     use bitstream_io::{BigEndian, BitWrite, BitWriter};
+     use raw::V5_COMPRESSED_MAP_HEADER_SIZE;
+     use CompressionTypeV5::*;
+@@ -575,7 +575,7 @@ fn compress_map_v5(entries: &[RawMapEntryV5], hunk_bytes: u32, unit_bytes: u32)
+     map_header.length = ((output.len() - V5_COMPRESSED_MAP_HEADER_SIZE) as u32).into();
+     map_header.set_first_offset(first_offset);
+     // The CRC covers the entries with self and parent references in their concrete form.
+-    map_header.crc = crate::block_hash::CRC16.checksum(entries.as_bytes()).into();
++    map_header.crc = crate::chd_rs::block_hash::CRC16.checksum(entries.as_bytes()).into();
+     map_header.length_bits = length_bits;
+     map_header.self_bits = self_bits;
+     map_header.parent_bits = parent_bits;
+@@ -781,7 +781,7 @@ fn read_map_v5<F: Read + Seek>(
+     }
+ 
+     // Verify map CRC
+-    if crate::block_hash::CRC16.checksum(entries.as_bytes()) != map_header.crc.get() {
++    if crate::chd_rs::block_hash::CRC16.checksum(entries.as_bytes()) != map_header.crc.get() {
+         return Err(Error::DecompressionError);
+     }
+ 
+@@ -791,7 +791,7 @@ fn read_map_v5<F: Read + Seek>(
+ #[cfg(all(test, feature = "encode"))]
+ mod tests {
+     use super::*;
+-    use crate::header::{HeaderV5, Version};
++    use crate::chd_rs::header::{HeaderV5, Version};
+     use std::io::Cursor;
+ 
+     const HUNK_BYTES: u32 = 4096;
+@@ -804,7 +804,7 @@ mod tests {
+             length: 124,
+             compression: [
+                 if compressed {
+-                    crate::make_tag(b"lzma")
++                    crate::chd_rs::make_tag(b"lzma")
+                 } else {
+                     0
+                 },
+diff --git a/metadata/mod.rs b/metadata/mod.rs
+index 11acadf2dcd3d6ac8404bb336cc440b7ea4e7350..9bcd600f613845069445bde5c6c954ddd7447a0c 100644
+--- a/metadata/mod.rs
++++ b/metadata/mod.rs
+@@ -1,7 +1,7 @@
+ //! Types and methods relating to metadata stored in a CHD file.
+ 
+-use crate::error::{Error, Result};
+-use crate::make_tag;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::make_tag;
+ use num_derive::FromPrimitive;
+ use num_traits::FromPrimitive;
+ pub(crate) use raw::RawMetadataHeader;
+@@ -162,7 +162,7 @@ impl MetadataTag for MetadataRef {
+ 
+ /// An iterator over references to the metadata entries of a CHD file.
+ /// If `unstable_lending_iterators` is enabled, metadata can be
+-/// more ergonomically iterated over with [`MetadataEntries`](crate::iter::MetadataEntries).
++/// more ergonomically iterated over with [`MetadataEntries`](crate::chd_rs::iter::MetadataEntries).
+ ///
+ /// If an entry can not be read, the iterator returns the error and then ends. If the entries
+ /// link back to an earlier entry, returns [`InvalidData`](Error::InvalidData).
+diff --git a/mod.rs b/mod.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..73d86dbac327d6b7a7d159d6b60551cd994af50a
+--- /dev/null
++++ b/mod.rs
+@@ -0,0 +1,292 @@
++#![cfg_attr(docsrs, feature(doc_cfg))]
++#![warn(missing_docs)]
++//! An implementation of the MAME CHD (Compressed Hunks of Data) format in pure Safe Rust, with support
++//! for CHD V1-5.
++//!
++//! ## Supported Compression Codecs
++//! chd-rs supports the following compression codecs.
++//!
++//! * None
++//! * Zlib/Zlib+/Zlib V5
++//! * CDZL (CD Zlib)
++//! * CDLZ (CD LZMA)
++//! * CDFL (CD FLAC)
++//! * FLAC (Raw FLAC)
++//! * LZMA (Raw LZMA)
++//! * Huff (MAME Static Huffman)
++//! * AVHU (AV Huffman)
++//! * Zstandard
++//! * CDZS (CD Zstandard)
++//!
++//! ## Iterating over hunks
++//! Because [`Hunk`](crate::chd_rs::Hunk) keeps a mutable reference to its owning
++//! [`Chd`](crate::chd_rs::Chd), direct iteration of hunks is not possible without
++//! Generic Associated Types. Instead, the hunk indices should be iterated over.
++//!
++//!```rust
++//! use std::fs::File;
++//! use std::io::BufReader;
++//! use rom_weaver_containers::chd_rs::Chd;
++//!
++//! let mut f = BufReader::new(File::open("file.chd")?);
++//! let mut chd = Chd::open(&mut f, None)?;
++//! let hunk_count = chd.header().hunk_count();
++//! let hunk_size = chd.header().hunk_size();
++//!
++//! // buffer to store uncompressed hunk data must be the same length as the hunk size.
++//! let mut hunk_buf = chd.get_hunksized_buffer();
++//! // buffer to store compressed data.
++//! let mut cmp_buf = Vec::new();
++//!
++//! for hunk_num in 0..hunk_count {
++//!     let mut hunk = chd.hunk(hunk_num)?;
++//!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
++//! }
++//! ```
++//!
++//! ## Iterating over metadata
++//! Metadata in a CHD file consists of a list of entries that contain offsets to the
++//! byte data of the metadata contents in the CHD file. The individual metadata entries
++//! can be iterated directly, but a reference to the source stream has to be provided to
++//! read the data.
++//! ```rust
++//! use std::fs::File;
++//! use std::io::BufReader;
++//! use rom_weaver_containers::chd_rs::Chd;
++//!
++//! let mut f = BufReader::new(File::open("file.chd")?);
++//! let mut chd = Chd::open(&mut f, None)?;
++//! let entries = chd.metadata_refs()?;
++//! for entry in entries {
++//!     let metadata = entry?.read(&mut f)?;
++//! }
++//!```
++//! `Vec<Metadata>` implements `TryFrom<MetadataRefs>` so all metadata entries
++//! can be collected at once without requiring a reference to the file.
++//! ```rust
++//! use std::fs::File;
++//! use std::io::BufReader;
++//! use rom_weaver_containers::chd_rs::Chd;
++//! use rom_weaver_containers::chd_rs::metadata::Metadata;
++//!
++//! let mut f = BufReader::new(File::open("file.chd")?);
++//! // chd takes ownership of f here
++//! let mut chd = Chd::open(f, None)?;
++//!
++//! let metadatas: Vec<Metadata> = chd.metadata_refs()?.try_into()?;
++//!```
++//!
++
++#[cfg(not(feature = "std"))]
++compile_error!(
++    "The feature `std` is required. \
++     no_std support is blocked on Rust issue \
++     #48331 <https://github.com/rust-lang/rust/issues/48331>.\
++    "
++);
++
++mod error;
++
++mod block_hash;
++mod cdrom;
++mod chdfile;
++mod compression;
++
++/// cbindgen:ignore
++#[cfg(feature = "huffman_api")]
++pub mod huffman;
++
++/// cbindgen:ignore
++#[cfg(not(feature = "huffman_api"))]
++mod huffman;
++
++#[cfg(feature = "codec_api")]
++/// Implementations of codecs used in MAME CHD.
++///
++/// Each codec may have restrictions on the hunk size, lengths and contents
++/// of the buffer. If [`decompress`](crate::chd_rs::codecs::CodecImplementation::decompress) is called
++/// with buffers that do not satisfy the constraints, it may return [`CompressionError`](crate::chd_rs::Error),
++/// or panic, especially if the output buffer does not satisfy length requirements.
++///
++/// Because codecs are allowed to be used outside of a hunk-sized granularity, such as in
++/// CD-ROM wrapped codecs that use Deflate to decompress subcode data, the codec implementations
++/// do not check the length of the output buffer against the hunk size. It is up to the caller
++/// of [`decompress`](crate::chd_rs::codecs::CodecImplementation::decompress) to uphold length invariants.
++#[cfg_attr(docsrs, doc(cfg(codec_api)))]
++pub mod codecs {
++    pub use crate::chd_rs::compression::codecs::*;
++    pub use crate::chd_rs::compression::{
++        CodecImplementation, CompressionCodec, CompressionCodecType, DecompressResult,
++    };
++}
++
++const fn make_tag(a: &[u8; 4]) -> u32 {
++    ((a[0] as u32) << 24) | ((a[1] as u32) << 16) | ((a[2] as u32) << 8) | (a[3] as u32)
++}
++
++macro_rules! const_assert {
++    ($($list:ident : $ty:ty),* => $expr:expr) => {{
++        struct Assert<$(const $list: $ty,)*>;
++        impl<$(const $list: $ty,)*> Assert<$($list,)*> {
++            const OK: u8 = 0 - !($expr) as u8;
++        }
++        Assert::<$($list,)*>::OK
++    }};
++    ($expr:expr) => {
++        const OK: u8 = 0 - !($expr) as u8;
++    };
++}
++
++pub(crate) use const_assert;
++
++pub use chdfile::{Chd, Hunk};
++pub use error::{Error, Result};
++pub mod header;
++pub mod map;
++pub mod metadata;
++pub mod read;
++
++#[cfg(feature = "encode")]
++#[cfg_attr(docsrs, doc(cfg(encode)))]
++pub mod write;
++
++/// cbindgen:ignore
++#[cfg(feature = "unstable_lending_iterators")]
++#[cfg_attr(docsrs, doc(cfg(unstable_lending_iterators)))]
++pub mod iter;
++
++#[cfg(test)]
++mod tests {
++    use crate::chd_rs::metadata::Metadata;
++    use crate::chd_rs::read::{ChdReader, HunkBufReader};
++    use crate::chd_rs::Chd;
++    use std::convert::TryInto;
++    use std::fs::File;
++    use std::io::{BufReader, Read, Write};
++
++    #[cfg(feature = "unstable_lending_iterators")]
++    use crate::chd_rs::iter::{FallibleLender, Lender};
++
++    #[test]
++    fn read_metas_test() {
++        let mut f = File::open(".testimages/Test.chd").expect("");
++        let mut chd = Chd::open(&mut f, None).expect("file");
++
++        let metadatas: Vec<Metadata> = chd.metadata_refs().try_into().expect("");
++        let meta_datas: Vec<_> = metadatas
++            .into_iter()
++            .map(|s| String::from_utf8(s.value).unwrap())
++            .collect();
++        println!("{:?}", meta_datas);
++    }
++
++    #[test]
++    fn read_hunk_buffer_test() {
++        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
++        let mut chd = Chd::open(&mut f, None).expect("file");
++        let hunk_count = chd.header().hunk_count();
++
++        let mut hunk_buf = Vec::new();
++        let mut cmp_buf = Vec::new();
++        for hunk_num in 0..hunk_count {
++            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
++            let read = HunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
++                .expect(format!("could not read_hunk {}", hunk_num).as_str());
++            hunk_buf = read.into_inner();
++        }
++    }
++
++    #[test]
++    fn read_hunk_test() {
++        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
++        let mut chd = Chd::open(&mut f, None).expect("file");
++        let hunk_count = chd.header().hunk_count();
++
++        let mut hunk_buf = chd.get_hunksized_buffer();
++        let mut cmp_buf = Vec::new();
++        for hunk_num in 0..hunk_count {
++            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
++            hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
++                .expect(format!("could not read_hunk {}", hunk_num).as_str());
++            println!("Read hunk {}", hunk_num);
++        }
++    }
++
++    #[test]
++    fn read_file_test() {
++        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
++        let chd = Chd::open(&mut f, None).expect("file");
++        let mut read = ChdReader::new(chd);
++
++        let mut buf = Vec::new(); // this is really bad..
++        read.read_to_end(&mut buf).expect("can read to end");
++        let mut f_out = File::create(".testimages/out.bin").expect("");
++        f_out.write_all(&buf).expect("did not write")
++    }
++
++    #[test]
++    fn read_parent_test() {
++        let p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
++        let pchd = Chd::open(p, None).expect("parent");
++
++        let f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
++
++        let _chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
++    }
++
++    #[test]
++    #[cfg(feature = "unsound_owning_iterators")]
++    fn hunk_iter_test() {
++        let f_bytes = include_bytes!("../.testimages/mocapbj_a29a02.chd");
++        let mut f_cursor = Cursor::new(f_bytes);
++        // let mut f = BufReader::new(File::open(".testimages/mocapbj_a29a02.chd").expect(""));
++        let mut chd = Chd::open(&mut f_cursor, None).expect("file");
++        let mut hunk_buf = chd.get_hunksized_buffer();
++        let mut comp_buf = Vec::new();
++        for (_hunk_num, mut hunk) in chd.hunks().skip(7838).enumerate() {
++            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
++                .expect("hunk could not be read");
++        }
++    }
++
++    #[test]
++    #[cfg(feature = "unstable_lending_iterators")]
++    fn hunk_iter_lending_test() {
++        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
++        // let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
++
++        let mut chd = Chd::open(&mut f, None).expect("file");
++        let mut hunk_buf = chd.get_hunksized_buffer();
++        let mut comp_buf = Vec::new();
++        let mut hunks = chd.hunks();
++        let mut hunk_num = 0;
++        while let Some(mut hunk) = hunks.next() {
++            hunk.read_hunk_in(&mut comp_buf, &mut hunk_buf)
++                .expect(&*format!("hunk {} could not be read", hunk_num));
++            hunk_num += 1;
++        }
++    }
++
++    #[test]
++    #[cfg(feature = "unstable_lending_iterators")]
++    fn metadata_iter_lending_test() {
++        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
++        let mut chd = Chd::open(&mut f, None).expect("file");
++        let mut metas = chd.metadata();
++        while let Some(mut meta) = metas.next().expect("metadata entry could not be found") {
++            let contents = meta.read().expect("metadata entry could not be read");
++            println!("{:?}", String::from_utf8(contents.value));
++        }
++    }
++
++    #[test]
++    #[cfg(feature = "unsound_owning_iterators")]
++    fn metadata_iter_test() {
++        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
++        let mut chd = Chd::open(&mut f, None).expect("file");
++        for mut meta in chd.metadata().expect("metadata could not be read") {
++            let contents = meta.read().expect("metadata entry could not be read");
++            println!("{:?}", String::from_utf8(contents.value));
++        }
++    }
++}
+diff --git a/read.rs b/read.rs
+index 2f8f504b44e330d81d3fc53bf9f50ef9971993a2..48cd890e07f48fb594f36eb17cfe77d438b8a6a2 100644
+--- a/read.rs
++++ b/read.rs
+@@ -3,13 +3,13 @@
+ //! ## Usage
+ //! These adapters provide `Read + Seek` implementations over individual hunks and files by keeping
+ //! an internal buffer of decompressed hunk data. For the best performance and flexibility,
+-//! [`Hunk::read_hunk_in`](crate::Hunk::read_hunk_in) should be used which will
++//! [`Hunk::read_hunk_in`](crate::chd_rs::Hunk::read_hunk_in) should be used which will
+ //! avoid unnecessary buffering.
+-use crate::error::Result;
+-use crate::{Chd, Error, Hunk};
++use crate::chd_rs::error::Result;
++use crate::chd_rs::{Chd, Error, Hunk};
+ use std::io::{BufRead, Cursor, Read, Seek, SeekFrom};
+ 
+-/// Buffered `BufRead + Seek` adapter for [`Hunk`](crate::Hunk).
++/// Buffered `BufRead + Seek` adapter for [`Hunk`](crate::chd_rs::Hunk).
+ pub struct HunkBufReader {
+     inner: Cursor<Vec<u8>>,
+ }
+@@ -26,14 +26,14 @@ impl HunkBufReader {
+     /// Creates a `HunkBufReader` with the provided buffers.
+     ///
+     /// Ownership of `buffer` is transferred to the created `ChdHunkBufReader` and can be
+-    /// reacquired with [`HunkBufReader::into_inner`](crate::read::HunkBufReader::into_inner).
++    /// reacquired with [`HunkBufReader::into_inner`](crate::chd_rs::read::HunkBufReader::into_inner).
+     ///
+     /// The hunk contents are immediately buffered from the stream upon creation.
+     ///
+     /// `cmp_buffer` is used temporarily to hold the compressed data from the hunk. Ownership of
+     /// `buffer` is taken to be used as the internal buffer for this reader.
+     ///
+-    /// Unlike [`Hunk::read_hunk_in`](crate::Hunk::read_hunk_in), there are no
++    /// Unlike [`Hunk::read_hunk_in`](crate::chd_rs::Hunk::read_hunk_in), there are no
+     /// length restrictions on the provided buffers.
+     pub fn new_in<F: Read + Seek>(
+         hunk: &mut Hunk<F>,
+@@ -76,7 +76,7 @@ impl BufRead for HunkBufReader {
+     }
+ }
+ 
+-/// Utility adapter for [`Chd`](crate::Chd) that implements `Read + Seek` over the logical
++/// Utility adapter for [`Chd`](crate::chd_rs::Chd) that implements `Read + Seek` over the logical
+ /// data of the CHD.
+ ///
+ /// `ChdReader` will allocate and manage intermediate buffers to support
+@@ -93,7 +93,7 @@ pub struct ChdReader<F: Read + Seek> {
+ }
+ 
+ impl<F: Read + Seek> ChdReader<F> {
+-    /// Create a new `ChdReader` from an opened [`Chd`](crate::Chd).
++    /// Create a new `ChdReader` from an opened [`Chd`](crate::chd_rs::Chd).
+     pub fn new(chd: Chd<F>) -> Self {
+         ChdReader {
+             chd,
+@@ -162,9 +162,9 @@ impl<F: Read + Seek> Seek for ChdReader<F> {
+ #[cfg(all(test, feature = "encode"))]
+ mod tests {
+     use super::{ChdReader, HunkBufReader};
+-    use crate::header::CodecType;
+-    use crate::write::{ChdWriteOptions, ChdWriter};
+-    use crate::Chd;
++    use crate::chd_rs::header::CodecType;
++    use crate::chd_rs::write::{ChdWriteOptions, ChdWriter};
++    use crate::chd_rs::Chd;
+     use rand::rngs::StdRng;
+     use rand::{RngExt, SeedableRng};
+     use std::io::{BufRead, Cursor, Read, Seek, SeekFrom, Write};
+diff --git a/write/compressed.rs b/write/compressed.rs
+index 01c72fa18ea5e88a7ab2b9a7a0b1f866206fdd78..a296ff7d43e4c9a47116d9ab42dc4552ebcd4f9c 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -1,10 +1,10 @@
+ //! Hunk compression utilities for CHD encoding.
+-use crate::cdrom::{CD_FRAME_SIZE, CD_SYNC_HEADER};
+-use crate::compression::CompressionCodec;
+-use crate::error::{Error, Result};
+-use crate::header::CodecType;
+-use crate::write::ChdWriteCodecs;
+-use crate::Chd;
++use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_SYNC_HEADER};
++use crate::chd_rs::compression::CompressionCodec;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::CodecType;
++use crate::chd_rs::write::ChdWriteCodecs;
++use crate::chd_rs::Chd;
+ use arrayvec::ArrayVec;
+ use sha1::{Digest, Sha1};
+ use std::borrow::Cow;
+@@ -28,7 +28,7 @@ impl HunkHash {
+             } else {
+                 [0; 20]
+             },
+-            crc16: crate::block_hash::CRC16.checksum(hunk),
++            crc16: crate::chd_rs::block_hash::CRC16.checksum(hunk),
+         }
+     }
+ }
+@@ -320,9 +320,9 @@ impl HunkCompressor {
+ #[cfg(test)]
+ mod tests {
+     use super::{CompressionState, HunkCompressor, HunkHash, HunkKind};
+-    use crate::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
+-    use crate::header::CodecType;
+-    use crate::Error;
++    use crate::chd_rs::cdrom::{CD_FRAME_SIZE, CD_MAX_SECTOR_DATA, CD_SYNC_HEADER};
++    use crate::chd_rs::header::CodecType;
++    use crate::chd_rs::Error;
+     use rand::rngs::StdRng;
+     use rand::{RngExt, SeedableRng};
+ 
+@@ -409,7 +409,7 @@ mod tests {
+             panic!("not compressed");
+         };
+         assert_eq!(decompress(&codecs, index, &hunk.data), input);
+-        assert_eq!(hunk.hash.crc16, crate::block_hash::CRC16.checksum(&input));
++        assert_eq!(hunk.hash.crc16, crate::chd_rs::block_hash::CRC16.checksum(&input));
+     }
+ 
+     #[test]
+diff --git a/write/metadata.rs b/write/metadata.rs
+index 704982767637392a2b9bbfd73aa9cd64289c5b04..5b45a931734f64f1bd30dd0328ffdfc5807d82c7 100644
+--- a/write/metadata.rs
++++ b/write/metadata.rs
+@@ -1,7 +1,7 @@
+ //! Metadata encode handling.
+-use crate::error::{Error, Result};
+-use crate::metadata::{RawMetadataHeader, METADATA_HEADER_SIZE};
+-use crate::Chd;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::metadata::{RawMetadataHeader, METADATA_HEADER_SIZE};
++use crate::chd_rs::Chd;
+ use sha1::{Digest, Sha1};
+ use std::io::{Read, Seek, SeekFrom, Write};
+ use zerocopy::IntoBytes;
+@@ -171,13 +171,13 @@ impl MetadataList {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use crate::metadata::{KnownMetadata, Metadata};
+-    use crate::write::{ChdWriteOptions, ChdWriter};
+-    use crate::{Chd, Error};
++    use crate::chd_rs::metadata::{KnownMetadata, Metadata};
++    use crate::chd_rs::write::{ChdWriteOptions, ChdWriter};
++    use crate::chd_rs::{Chd, Error};
+     use std::io::Cursor;
+ 
+     const HUNK_BYTES: u32 = 4096;
+-    const TAG: u32 = crate::make_tag(b"TEST");
++    const TAG: u32 = crate::chd_rs::make_tag(b"TEST");
+ 
+     fn writer() -> ChdWriter<Cursor<Vec<u8>>> {
+         ChdWriter::new(
+diff --git a/write/mod.rs b/write/mod.rs
+index 03e9bb315c0c64eda25728e5d093a298341d744b..288096c1747d314f0323dbe3b5e6bed95baec266 100644
+--- a/write/mod.rs
++++ b/write/mod.rs
+@@ -1,11 +1,11 @@
+ //! Writing CHD files.
+ //!
+ //! ```no_run
+-//! use chd::write::{ChdWriteOptions, ChdWriter};
++//! use rom_weaver_containers::chd_rs::write::{ChdWriteOptions, ChdWriter};
+ //! use std::fs::File;
+ //! use std::io;
+ //!
+-//! # fn main() -> chd::Result<()> {
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut input = File::open("image.bin")?;
+ //! // Compressed like `chdman createraw -us 512`.
+ //! let options = ChdWriteOptions::raw(512);
+@@ -15,12 +15,12 @@
+ //! # Ok(())
+ //! # }
+ //! ```
+-use crate::cdrom::CD_FRAME_SIZE;
+-use crate::error::{Error, Result};
+-use crate::header::{CodecType, Header, HeaderV5, Version};
+-use crate::map::{CompressionTypeV5, Map, RawMapEntryV5};
+-use crate::metadata::{MetadataData, MetadataTag};
+-use crate::Chd;
++use crate::chd_rs::cdrom::CD_FRAME_SIZE;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::{CodecType, Header, HeaderV5, Version};
++use crate::chd_rs::map::{CompressionTypeV5, Map, RawMapEntryV5};
++use crate::chd_rs::metadata::{MetadataData, MetadataTag};
++use crate::chd_rs::Chd;
+ use arrayvec::ArrayVec;
+ use compressed::{CompressionState, HunkKind};
+ use metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
+@@ -115,7 +115,7 @@ impl ChdWriteOptions {
+ 
+     /// Default write options used for hard disk images with 512 byte sectors.
+     ///
+-    /// Hard disk images also need [`HardDisk`](crate::metadata::KnownMetadata::HardDisk) metadata to describe the disk geometry.
++    /// Hard disk images also need [`HardDisk`](crate::chd_rs::metadata::KnownMetadata::HardDisk) metadata to describe the disk geometry.
+     /// Compressed with LZMA, Deflate, Huffman, and FLAC.
+     pub fn hard_disk() -> Self {
+         Self::raw(512)
+@@ -127,7 +127,7 @@ impl ChdWriteOptions {
+     /// frames. Compressed with the CD codecs for LZMA, Deflate, and FLAC.
+     ///
+     /// CD-ROM images also require track metadata, such as
+-    /// [`CdRomTrack2`](crate::metadata::KnownMetadata::CdRomTrack2).
++    /// [`CdRomTrack2`](crate::chd_rs::metadata::KnownMetadata::CdRomTrack2).
+     pub fn cd() -> Self {
+         const FRAMES_PER_HUNK: u32 = 8;
+         ChdWriteOptions::new(FRAMES_PER_HUNK * CD_FRAME_SIZE, CD_FRAME_SIZE).compression(&[
+@@ -769,8 +769,8 @@ impl<W: Write + Seek> Write for ChdWriter<W> {
+ #[cfg(test)]
+ mod tests {
+     use super::{ChdWriteOptions, ChdWriter};
+-    use crate::map::MapEntry;
+-    use crate::{Chd, Error};
++    use crate::chd_rs::map::MapEntry;
++    use crate::chd_rs::{Chd, Error};
+     use std::io::{Cursor, Write};
+ 
+     const HUNK_BYTES: u32 = 4096;
+@@ -922,15 +922,15 @@ mod tests {
+ #[cfg(test)]
+ mod compressed_tests {
+     use super::{ChdWriteOptions, ChdWriter};
+-    use crate::header::{CodecType, Header};
+-    use crate::map::{CompressionTypeV5, MapEntry};
+-    use crate::{Chd, Error};
++    use crate::chd_rs::header::{CodecType, Header};
++    use crate::chd_rs::map::{CompressionTypeV5, MapEntry};
++    use crate::chd_rs::{Chd, Error};
+     use sha1::{Digest, Sha1};
+     use std::io::{Cursor, Write};
+ 
+     const HUNK_BYTES: u32 = 4096;
+     const UNIT_BYTES: u32 = 512;
+-    const TAG: u32 = crate::make_tag(b"TEST");
++    const TAG: u32 = crate::chd_rs::make_tag(b"TEST");
+ 
+     fn options() -> ChdWriteOptions {
+         ChdWriteOptions::new(HUNK_BYTES, UNIT_BYTES)
+@@ -973,7 +973,7 @@ mod compressed_tests {
+ 
+     struct ReadChd {
+         data: Vec<u8>,
+-        header: crate::header::HeaderV5,
++        header: crate::chd_rs::header::HeaderV5,
+         /// The compression type and offset of each map entry.
+         entries: Vec<(u8, u64)>,
+     }
+@@ -1210,8 +1210,8 @@ mod compressed_tests {
+ #[cfg(test)]
+ mod logical_size_tests {
+     use super::{ChdWriteOptions, ChdWriter};
+-    use crate::header::CodecType;
+-    use crate::Chd;
++    use crate::chd_rs::header::CodecType;
++    use crate::chd_rs::Chd;
+     use std::io::{Cursor, ErrorKind, Write};
+ 
+     const HUNK_BYTES: u32 = 4096;
+@@ -1245,8 +1245,8 @@ mod logical_size_tests {
+ #[cfg(test)]
+ mod failure_tests {
+     use super::{ChdWriteOptions, ChdWriter};
+-    use crate::header::CodecType;
+-    use crate::{Chd, Error};
++    use crate::chd_rs::header::CodecType;
++    use crate::chd_rs::{Chd, Error};
+     use std::cell::Cell;
+     use std::io::{self, Cursor, Seek, SeekFrom, Write};
+     use std::rc::Rc;
+@@ -1382,10 +1382,10 @@ mod failure_tests {
+ #[cfg(test)]
+ mod parent_tests {
+     use super::{ChdWriteOptions, ChdWriter};
+-    use crate::header::{CodecType, Header};
+-    use crate::map::{CompressionTypeV5, MapEntry};
+-    use crate::read::ChdReader;
+-    use crate::{Chd, Error};
++    use crate::chd_rs::header::{CodecType, Header};
++    use crate::chd_rs::map::{CompressionTypeV5, MapEntry};
++    use crate::chd_rs::read::ChdReader;
++    use crate::chd_rs::{Chd, Error};
+     use rand::rngs::StdRng;
+     use rand::{RngExt, SeedableRng};
+     use std::io::{Cursor, Write};
+diff --git a/write/update.rs b/write/update.rs
+index 118ce445af79cbb308813888b7c8c203553ca540..efa4a9799491f95efe2c3a74dbf8cc5add881616 100644
+--- a/write/update.rs
++++ b/write/update.rs
+@@ -1,9 +1,9 @@
+ //! Implementations to edit existing CHD files in place.
+ use super::metadata::{MetadataList, METADATA_FLAG_CHECKSUM};
+-use crate::error::{Error, Result};
+-use crate::header::Header;
+-use crate::metadata::{MetadataData, MetadataTag};
+-use crate::Chd;
++use crate::chd_rs::error::{Error, Result};
++use crate::chd_rs::header::Header;
++use crate::chd_rs::metadata::{MetadataData, MetadataTag};
++use crate::chd_rs::Chd;
+ use std::io::{Read, Seek, SeekFrom, Write};
+ 
+ impl<F: Read + Seek> Chd<F> {
+@@ -134,15 +134,15 @@ impl<F: Read + Write + Seek> Chd<F> {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use crate::header::{CodecType, Header};
+-    use crate::metadata::{Metadata, METADATA_HEADER_SIZE};
+-    use crate::write::{ChdWriteOptions, ChdWriter};
+-    use crate::{Chd, Error};
++    use crate::chd_rs::header::{CodecType, Header};
++    use crate::chd_rs::metadata::{Metadata, METADATA_HEADER_SIZE};
++    use crate::chd_rs::write::{ChdWriteOptions, ChdWriter};
++    use crate::chd_rs::{Chd, Error};
+     use sha1::{Digest, Sha1};
+     use std::io::{Cursor, Write};
+ 
+-    const TAG: u32 = crate::make_tag(b"TEST");
+-    const OTHER: u32 = crate::make_tag(b"OTHR");
++    const TAG: u32 = crate::chd_rs::make_tag(b"TEST");
++    const OTHER: u32 = crate::chd_rs::make_tag(b"OTHR");
+ 
+     fn data() -> Vec<u8> {
+         (0..3 * 4096 + 100).map(|i| (i % 251) as u8).collect()

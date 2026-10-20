@@ -1,0 +1,46 @@
+diff --git a/write/compressed.rs b/write/compressed.rs
+index 3f4d99e28809684a4b4ed43e96824f7ff5193d71..5eb3c3d02aa7b917200439552d2d2d5ab345c346 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -6,12 +6,11 @@ use crate::header::CodecType;
+ use crate::write::ChdWriteCodecs;
+ use crate::Chd;
+ use arrayvec::ArrayVec;
+-use parking_lot::RwLock;
+ use sha1::{Digest, Sha1};
+ use std::borrow::Cow;
+ use std::collections::HashMap;
+ use std::io::{Read, Seek};
+-use std::sync::Arc;
++use std::sync::{Arc, PoisonError, RwLock};
+ 
+ /// Hash key for an uncompressed hunk.
+ #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+@@ -92,7 +91,13 @@ impl CompressionState {
+ 
+     /// Find the index of the previously compressed hunk with the given hash
+     pub fn find(&self, hash: &HunkHash) -> Option<u32> {
+-        self.hunks.read().get(hash).copied()
++        // A panic while holding the lock can not leave the map half-updated, so a poisoned
++        // lock is still safe to use.
++        self.hunks
++            .read()
++            .unwrap_or_else(PoisonError::into_inner)
++            .get(hash)
++            .copied()
+     }
+ 
+     /// Find the unit of the parent CHD that starts a run of units with the given hash.
+@@ -102,7 +107,11 @@ impl CompressionState {
+ 
+     /// Mark a compressed hunk as previously written.
+     pub fn insert(&self, hash: HunkHash, hunk_num: u32) {
+-        self.hunks.write().entry(hash).or_insert(hunk_num);
++        self.hunks
++            .write()
++            .unwrap_or_else(PoisonError::into_inner)
++            .entry(hash)
++            .or_insert(hunk_num);
+     }
+ 
+     /// Whether this is the same state, shared by the same writer.
