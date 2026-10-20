@@ -97,6 +97,10 @@ type RunnerCreateOptions = { threads?: RuntimeValue };
 // Keep about half the thread budget as idle runners, with a floor of two and this cap.
 // The scheduler separately limits active operations by the thread budget.
 const MAX_WARM_IDLE_RUNNERS = 8;
+// Every admitted operation holds its own runner: a worker plus a WASM heap and a thread-pool shell set.
+// A large drop must queue behind this cap, or dozens of simultaneous runners exhaust the page's memory
+// and address space (a 14-file identify drop crashed the tab) even though thread-less ops reserve no threads.
+const MAX_CONCURRENT_RUNNERS = 8;
 const resolveWarmIdleRunners = (): number => {
   // WASM heaps never shrink. Mobile keeps one runner because shared-memory reservations leave little headroom.
   if (isMobileRuntime()) return 1;
@@ -342,7 +346,7 @@ const getOperationScheduler = (): OperationScheduler => {
     // Limit operations by the thread budget. The thread gate keeps their total request within it, so full-budget work runs alone.
     const threadBudget = getDefaultBrowserThreadCount();
     operationScheduler = createOperationScheduler({
-      maxConcurrency: threadBudget,
+      maxConcurrency: Math.min(threadBudget, MAX_CONCURRENT_RUNNERS),
       memoryCeiling: resolveMemoryCeilingBytes(),
       // Rust plans I/O batches from browser memory, thread limits, and source sizes. Its planner command bypasses this scheduler.
       planBatch: (jobSizes, planOptions) =>
