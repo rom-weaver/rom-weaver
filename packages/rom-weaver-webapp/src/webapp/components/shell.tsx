@@ -31,9 +31,13 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** CSS-only slide reveal wrapper (banners). JS only flips hidden + is-open. */
+/**
+ * CSS-only slide reveal wrapper (banners). JS only flips hidden + is-open + inert. `.reveal` sets
+ * display:grid so it can animate, which overrides `hidden`; `inert` is what actually removes a closed
+ * banner (and its stale live-region text) from the accessibility tree.
+ */
 const Reveal = ({ open, children }: { open: boolean; children: ReactNode }) => (
-  <div className={join("reveal", open && "is-open")} hidden={!open}>
+  <div className={join("reveal", open && "is-open")} hidden={!open} inert={!open}>
     {children}
   </div>
 );

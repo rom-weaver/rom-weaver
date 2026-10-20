@@ -503,6 +503,7 @@ function ApplyWorkflowFormView({
   patchEnablement,
   patchInputBasis,
   onPatchInputBasisChange,
+  dropError = null,
   pendingDrops = [],
   romLookupRequest,
   startup = { message: "", status: "ready" },
@@ -553,6 +554,7 @@ function ApplyWorkflowFormView({
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
+  dropError?: string | null;
   pendingDrops?: PendingDrop[];
   romLookupRequest?: RomLookupResultRequest;
   startup?: StartupState;
@@ -958,6 +960,7 @@ function ApplyWorkflowFormView({
         afterDropZone={
           <>
             <ApplyDropAfter pendingDrops={pendingDrops} />
+            {dropError ? <Notice level="error">{dropError}</Notice> : null}
             {/* Apply keeps the search available without competing with the
                 primary file-drop action. The form moves to 0x02 after a match. */}
             {canSearchRom && workflowEmpty ? (

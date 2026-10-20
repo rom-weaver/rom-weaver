@@ -16,7 +16,7 @@ import type {
   BrowserCreateResult,
   WorkflowProgress,
 } from "../../platform/browser/browser-api.ts";
-import { getErrorCode } from "../../presentation/errors.ts";
+import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import type {
   ApplyWorkflowWeaveSources,
@@ -1843,12 +1843,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
   // until their ROM-vs-patch bucket is classified.
-  const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
+  // A drop that cannot be read (malformed weave, missing patch file) is dropped from the bench;
+  // keep its message on the page until the next drop so the user is not left with an empty state.
+  const [dropError, setDropError] = useState<string | null>(null);
+  const { onDrop: rawUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
     resolvedUiController,
     setLocalWeaveSession,
-    props.onError,
+    (error) => {
+      setDropError(formatCodedErrorForDisplay(error, localizer));
+      props.onError?.(error);
+    },
     selectFile,
   );
+  const handleUnifiedDrop: typeof rawUnifiedDrop = (...args) => {
+    setDropError(null);
+    rawUnifiedDrop(...args);
+  };
   const [createRomChoice, setCreateRomChoice] = useState<File[] | null>(null);
   const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
     if (mode !== "create" || !props.onCreateRomDrop) {
@@ -2099,6 +2109,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }}
         patchInputBasis={patchInputBasis}
         onPatchInputBasisChange={handlePatchInputBasisChange}
+        dropError={dropError}
         pendingDrops={pendingDrops}
         romLookupRequest={props.romLookupRequest}
         startup={startup}
