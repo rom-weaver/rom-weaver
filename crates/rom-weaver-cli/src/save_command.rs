@@ -3,7 +3,8 @@ use std::{collections::HashSet, fs::OpenOptions, num::IntErrorKind};
 use super::*;
 use rom_weaver_core::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
-    SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveValue, candidate_save_formats,
+    SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveRecognitionReason, SaveValue,
+    candidate_save_formats,
 };
 
 const SAVE_DETAILS_KEY: &str = "save_editor";
@@ -516,10 +517,24 @@ fn detect_for_edit(
                     .join(", ")
             ),
         ))),
-        SaveRecognitionOutcome::Unsupported { .. } => Err(Box::new((
+        SaveRecognitionOutcome::Unsupported { reasons } => Err(Box::new((
             recognition.clone(),
-            "unsupported operation: ROMWeaver has no editor for this save".to_string(),
+            unsupported_save_message(input, reasons),
         ))),
+    }
+}
+
+/// A save for a game the caller chose that fails its checksums is a damaged
+/// save, not a missing editor; say so instead of "no editor".
+fn unsupported_save_message(
+    input: &SaveDetectionInput,
+    reasons: &[SaveRecognitionReason],
+) -> String {
+    match &input.selected_game {
+        Some(game) if reasons.contains(&SaveRecognitionReason::ChecksumMismatch) => format!(
+            "validation failed: the save failed its integrity checks (checksum mismatch) for {game}; it may be corrupt or from another game"
+        ),
+        _ => "unsupported operation: ROMWeaver has no editor for this save".to_string(),
     }
 }
 
