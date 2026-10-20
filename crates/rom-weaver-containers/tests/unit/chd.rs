@@ -1130,7 +1130,8 @@ fn cd_track(number: u32, mode: DiscTrackMode, frames: u32) -> DiscTrack {
         has_subcode: false,
         pad_frames: 0,
         align_pad_frames: 0,
-        pgtype_mode1: false,
+        pgtype_track_mode: false,
+        tail: None,
         swap_audio_on_read: false,
     }
 }
@@ -1203,11 +1204,6 @@ fn disc_track_mode_label_tables_are_exhaustive() {
         DiscTrackMode::Mode2FormMix.metadata_label(),
         "MODE2_FORM_MIX"
     );
-
-    // Raw modes collapse to their cooked label inside pregap metadata.
-    assert_eq!(DiscTrackMode::Mode1Raw.pregap_metadata_label(), "MODE1");
-    assert_eq!(DiscTrackMode::Mode2Raw.pregap_metadata_label(), "MODE2");
-    assert_eq!(DiscTrackMode::Mode1.pregap_metadata_label(), "MODE1");
 
     assert_eq!(DiscTrackMode::Mode1.data_bytes(), 2048);
     assert_eq!(DiscTrackMode::Mode2.data_bytes(), 2336);

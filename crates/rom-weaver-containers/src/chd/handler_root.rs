@@ -114,25 +114,34 @@ impl DiscLayout {
         for ovr in overrides {
             let mut matched = false;
             for track in &mut self.tracks {
-                if !is_same_track_file(&track.file_path, &ovr.original_path) {
-                    continue;
-                }
-                trace!(
-                    track = track.number,
-                    track_file = %track.file_path.display(),
-                    original = %ovr.original_path.display(),
-                    "disc create track override matched"
-                );
-                match &ovr.source {
-                    CreateInputSource::Path(path) => {
-                        track.file_path = path.clone();
-                        track.memory_source = None;
+                let sources = std::iter::once((&mut track.file_path, &mut track.memory_source))
+                    .chain(
+                        track
+                            .tail
+                            .iter_mut()
+                            .map(|tail| (&mut tail.file_path, &mut tail.memory_source)),
+                    );
+                for (file_path, memory_source) in sources {
+                    if !is_same_track_file(file_path, &ovr.original_path) {
+                        continue;
                     }
-                    CreateInputSource::Bytes(bytes) => {
-                        track.memory_source = Some(Arc::clone(bytes));
+                    trace!(
+                        track = track.number,
+                        track_file = %file_path.display(),
+                        original = %ovr.original_path.display(),
+                        "disc create track override matched"
+                    );
+                    match &ovr.source {
+                        CreateInputSource::Path(path) => {
+                            *file_path = path.clone();
+                            *memory_source = None;
+                        }
+                        CreateInputSource::Bytes(bytes) => {
+                            *memory_source = Some(Arc::clone(bytes));
+                        }
                     }
+                    matched = true;
                 }
-                matched = true;
             }
             if !matched {
                 return Err(RomWeaverError::Validation(format!(
@@ -211,8 +220,27 @@ struct DiscTrack {
     /// Zero-filled tail added by chdman's 4-frame track alignment. Included in
     /// `frames` and `pad_frames`, but excluded from the metadata `FRAMES`/`PAD`.
     align_pad_frames: u32,
-    /// Report `PGTYPE:MODE1` regardless of track mode (chdman's gdi default).
-    pgtype_mode1: bool,
+    /// Report the track's own type (no `V` prefix) as `PGTYPE`. chdman does
+    /// this for a GD cue's first track when the sheet has an `INDEX 00` line
+    /// (even a zero-length pregap), because it only resets the pregap type for
+    /// tracks 2 and up.
+    pgtype_track_mode: bool,
+    /// Data frames at the end of this track that are read from the start of
+    /// the next track's file, from its byte 0 even for a WAVE file (chdman
+    /// moves a GD cue track's `INDEX 00` pregap onto the end of the previous
+    /// track).
+    tail: Option<Box<TrackTail>>,
+    swap_audio_on_read: bool,
+}
+
+/// A run of frames appended to a track from another track's source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TrackTail {
+    mode: DiscTrackMode,
+    file_path: PathBuf,
+    memory_source: Option<Arc<[u8]>>,
+    file_offset_bytes: u64,
+    frames: u32,
     swap_audio_on_read: bool,
 }
 
@@ -259,13 +287,18 @@ impl Read for TrackReader {
     }
 }
 
+/// Streams a layout's frames in chdman's order. Each track is its main data,
+/// then its physical gap padding, then any tail frames moved onto it from the
+/// next track's file, then the 4-frame alignment padding.
 struct DiscImageReader<'a> {
     tracks: &'a [DiscTrack],
     track_index: usize,
     track_initialized: bool,
     track_reader: Option<TrackReader>,
-    track_data_frames_remaining: u32,
-    track_pad_frames_remaining: u32,
+    track_main_frames_remaining: u32,
+    track_gap_pad_frames_remaining: u32,
+    track_tail_frames_remaining: u32,
+    track_align_pad_frames_remaining: u32,
     frame: Vec<u8>,
     frame_cursor: usize,
     frame_len: usize,
@@ -279,13 +312,34 @@ impl<'a> DiscImageReader<'a> {
             track_index: 0,
             track_initialized: false,
             track_reader: None,
-            track_data_frames_remaining: 0,
-            track_pad_frames_remaining: 0,
+            track_main_frames_remaining: 0,
+            track_gap_pad_frames_remaining: 0,
+            track_tail_frames_remaining: 0,
+            track_align_pad_frames_remaining: 0,
             frame: vec![0_u8; ChdContainerHandler::CD_FRAME_BYTES as usize],
             frame_cursor: 0,
             frame_len: 0,
             data: Vec::new(),
         }
+    }
+
+    fn open_track_reader(
+        memory_source: Option<&Arc<[u8]>>,
+        file_path: &Path,
+        file_offset_bytes: u64,
+    ) -> io::Result<TrackReader> {
+        Ok(match memory_source {
+            Some(bytes) => {
+                let mut reader = Cursor::new(Arc::clone(bytes));
+                reader.seek(SeekFrom::Start(file_offset_bytes))?;
+                TrackReader::Memory(reader)
+            }
+            None => {
+                let mut reader = BufReader::new(File::open(file_path)?);
+                reader.seek(SeekFrom::Start(file_offset_bytes))?;
+                TrackReader::File(reader)
+            }
+        })
     }
 
     fn load_next_frame(&mut self) -> io::Result<bool> {
@@ -295,37 +349,52 @@ impl<'a> DiscImageReader<'a> {
                 return Ok(false);
             }
 
+            let track = &self.tracks[self.track_index];
             if !self.track_initialized {
-                let track = &self.tracks[self.track_index];
-                self.track_data_frames_remaining = track.frames.saturating_sub(track.pad_frames);
-                self.track_pad_frames_remaining = track.pad_frames;
+                let data_frames = track.frames.saturating_sub(track.pad_frames);
+                let tail_frames = track
+                    .tail
+                    .as_ref()
+                    .map_or(0, |tail| tail.frames)
+                    .min(data_frames);
+                let align_pad_frames = track.align_pad_frames.min(track.pad_frames);
+                self.track_main_frames_remaining = data_frames - tail_frames;
+                self.track_gap_pad_frames_remaining = track.pad_frames - align_pad_frames;
+                self.track_tail_frames_remaining = tail_frames;
+                self.track_align_pad_frames_remaining = align_pad_frames;
                 self.track_initialized = true;
             }
 
-            if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
-                self.track_index += 1;
-                self.track_initialized = false;
-                self.track_reader = None;
-                continue;
-            }
-
-            let track = &self.tracks[self.track_index];
-            if self.track_data_frames_remaining > 0 {
+            let in_main = self.track_main_frames_remaining > 0;
+            let in_tail = !in_main
+                && self.track_gap_pad_frames_remaining == 0
+                && self.track_tail_frames_remaining > 0;
+            if in_main || in_tail {
+                let (mode, swap_audio, memory_source, file_path, file_offset_bytes) =
+                    match (&track.tail, in_tail) {
+                        (Some(tail), true) => (
+                            tail.mode,
+                            tail.swap_audio_on_read,
+                            tail.memory_source.as_ref(),
+                            tail.file_path.as_path(),
+                            tail.file_offset_bytes,
+                        ),
+                        _ => (
+                            track.mode,
+                            track.swap_audio_on_read,
+                            track.memory_source.as_ref(),
+                            track.file_path.as_path(),
+                            track.file_offset_bytes,
+                        ),
+                    };
                 if self.track_reader.is_none() {
-                    self.track_reader = Some(match &track.memory_source {
-                        Some(bytes) => {
-                            let mut reader = Cursor::new(Arc::clone(bytes));
-                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
-                            TrackReader::Memory(reader)
-                        }
-                        None => {
-                            let mut reader = BufReader::new(File::open(&track.file_path)?);
-                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
-                            TrackReader::File(reader)
-                        }
-                    });
+                    self.track_reader = Some(Self::open_track_reader(
+                        memory_source,
+                        file_path,
+                        file_offset_bytes,
+                    )?);
                 }
-                let data_len = track.mode.data_bytes();
+                let data_len = mode.data_bytes();
                 if self.data.len() != data_len {
                     self.data.resize(data_len, 0);
                 }
@@ -333,31 +402,33 @@ impl<'a> DiscImageReader<'a> {
                     .as_mut()
                     .expect("track reader should be initialized")
                     .read_exact(&mut self.data)?;
-                if track.swap_audio_on_read {
-                    track.mode.swap_audio_bytes(&mut self.data);
+                if swap_audio {
+                    mode.swap_audio_bytes(&mut self.data);
                 }
                 self.frame.fill(0);
                 self.frame[..data_len].copy_from_slice(&self.data);
-                self.frame_cursor = 0;
-                self.frame_len = self.frame.len();
-                self.track_data_frames_remaining -= 1;
-                if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
-                    self.track_index += 1;
-                    self.track_initialized = false;
-                    self.track_reader = None;
+                if in_main {
+                    self.track_main_frames_remaining -= 1;
+                    if self.track_main_frames_remaining == 0 {
+                        self.track_reader = None;
+                    }
+                } else {
+                    self.track_tail_frames_remaining -= 1;
                 }
-                return Ok(true);
-            }
-
-            self.frame.fill(0);
-            self.frame_cursor = 0;
-            self.frame_len = self.frame.len();
-            self.track_pad_frames_remaining -= 1;
-            if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
+            } else if self.track_gap_pad_frames_remaining > 0 {
+                self.frame.fill(0);
+                self.track_gap_pad_frames_remaining -= 1;
+            } else if self.track_align_pad_frames_remaining > 0 {
+                self.frame.fill(0);
+                self.track_align_pad_frames_remaining -= 1;
+            } else {
                 self.track_index += 1;
                 self.track_initialized = false;
                 self.track_reader = None;
+                continue;
             }
+            self.frame_cursor = 0;
+            self.frame_len = self.frame.len();
             return Ok(true);
         }
     }
@@ -412,14 +483,6 @@ impl DiscTrackMode {
             Self::Mode2FormMix => "MODE2_FORM_MIX",
             Self::Mode2Raw => "MODE2_RAW",
             Self::Audio => "AUDIO",
-        }
-    }
-
-    fn pregap_metadata_label(self) -> &'static str {
-        match self {
-            Self::Mode1Raw => "MODE1",
-            Self::Mode2Raw => "MODE2",
-            _ => self.metadata_label(),
         }
     }
 
