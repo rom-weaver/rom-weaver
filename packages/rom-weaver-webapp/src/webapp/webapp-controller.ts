@@ -75,9 +75,9 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (entry && WORKFLOW_ENTRY_ROUTES[entry].view === view) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
-  // Already on this route: a rewrite would only drop the hash, such as a console deep link.
+  // Already on this route: a rewrite would only drop a console deep link hash. Other hashes are legacy routes.
   const currentUrl = new URL(window.location.href);
-  currentUrl.hash = "";
+  if (currentUrl.hash.startsWith("#console-")) currentUrl.hash = "";
   if (nextUrl.href === currentUrl.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };
