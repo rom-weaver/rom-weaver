@@ -524,6 +524,8 @@ describe("Masthead", () => {
     );
     const buildTag = container.querySelector(".build-tag .sub-link") as HTMLButtonElement;
     expect(buildTag.textContent).toBe("v1.2.3+3*");
+    // It navigates to the What's new page; it opens no dialog.
+    expect(buildTag.hasAttribute("aria-haspopup")).toBe(false);
     fireEvent.click(buildTag);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 

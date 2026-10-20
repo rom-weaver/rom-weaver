@@ -22,6 +22,9 @@
   margin-inline-start: var(--sp-l);
 }
 .rw-app .page-footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }

@@ -57,7 +57,9 @@
   fill: var(--thread);
 }
 .rw-app .brand-word-link {
+  display: block;
   min-width: 0;
+  min-block-size: 24px;
   color: inherit;
   border-radius: var(--r-s);
 }
