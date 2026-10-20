@@ -3245,3 +3245,83 @@ fn chd_gd_mode2_raw_tracks_extract_to_gdi_like_chdman() {
         );
     }
 }
+
+#[test]
+fn chd_cue_track_past_end_of_shared_file_is_rejected_before_compressing() {
+    // a.bin holds 5 frames but track 2 starts at frame 50 of the same file, so
+    // the previous track's frames already run past the end of the file. This
+    // must be a cue validation error, not a mid-compress short read.
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![0x11_u8; 5 * 2352]).expect("a.bin");
+    fs::write(temp.child("b.bin").path(), vec![0x22_u8; 4 * 2352]).expect("b.bin");
+    temp.child("disc.cue")
+        .write_str("FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:50\nFILE \"b.bin\" BINARY\n  TRACK 03 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            temp.child("disc.chd").path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ])
+        .output()
+        .expect("run compress");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !output.status.success() && combined.contains("cue track 2 starts past the end of"),
+        "expected the early cue validation error `cue track 2 starts past the end of`, got: {combined}"
+    );
+}
+
+#[test]
+fn weave_create_resolves_cd_chd_track_member_with_split_bin_listing() {
+    // `weave create --rom-member` lists and extracts CHD tracks through
+    // source_resolution with split_bin=true, so `<stem> (Track N).bin` names
+    // must be listed even for a plain CD CHD.
+    let (temp, chd_path) = compress_synthetic_cue(
+        &[("a.bin", 6), ("b.bin", 6)],
+        "FILE \"a.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"b.bin\" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    let patch = temp.child("p.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: vec![0xAA],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.weave");
+    let create = run_single_json_event(
+        &[
+            "weave",
+            "create",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--rom-member",
+            "disc (Track 2).bin",
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(create["status"], "succeeded", "{create}");
+    assert!(output.path().exists());
+}

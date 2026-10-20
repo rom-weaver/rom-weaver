@@ -443,6 +443,13 @@ impl ChdContainerHandler {
                 }
                 None => 0,
             };
+            if continues_previous_file && after_previous > file_end {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue track {} starts past the end of `{}`",
+                    track.number,
+                    track.file_path.display()
+                )));
+            }
             let shares_with_previous = index > 0 && tracks[index - 1].file_path == track.file_path;
             let shares_with_next = tracks
                 .get(index + 1)
@@ -1254,8 +1261,8 @@ impl ChdContainerHandler {
 
     /// Resolve which CD outputs to write (cue, single combined bin, or per-track
     /// bins) from the request's split-bin flag, explicit selections, and
-    /// kind-filter. A layout whose tracks all share one data-byte size extracts as
-    /// a single bin unless split-bin was requested; otherwise it splits per track.
+    /// kind-filter. Every layout extracts as a single bin, as chdman does even when
+    /// track sector sizes differ, unless split-bin was requested.
     /// When the cue alone was selected, the matching payload outputs are re-enabled
     /// so the cue does not reference files that were never written.
     fn plan_cd_selection(

@@ -82,7 +82,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             .unwrap_or("output");
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
-            let single_bin = true;
+            let single_bin = !request.split_bin;
             let mut entries = vec![format!("{stem}.cue")];
             if single_bin {
                 entries.push(format!("{stem}.bin"));
