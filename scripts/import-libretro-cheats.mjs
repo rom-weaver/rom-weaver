@@ -681,7 +681,8 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
     const kindHint = codeKind ? null : codeKindForFileName(sourceTitle, cheatSystem);
     const normalizedTitle = normalizeReleaseName(sourceTitle);
     const matched = byTitle.get(normalizedTitle) ?? [];
-    const canonicalTitle = matched[0]?.name ?? stripDeviceAnnotation(sourceTitle);
+    // libretro file names write "&" as "_" because "&" is unsafe in paths.
+    const canonicalTitle = matched[0]?.name ?? stripDeviceAnnotation(sourceTitle).replace(/ _ /gu, " & ");
     const gameId = stableGameId(cheatSystem, normalizedTitle);
     if (!games.has(gameId)) {
       const metadata = titleMetadata(canonicalTitle, matched[0]?.region);
