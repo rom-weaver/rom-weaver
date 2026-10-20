@@ -82,15 +82,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             .unwrap_or("output");
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
-            let first_data_bytes = layout
-                .tracks
-                .first()
-                .map(|track| track.mode.data_bytes())
-                .unwrap_or(2352);
-            let single_bin = layout
-                .tracks
-                .iter()
-                .all(|track| track.mode.data_bytes() == first_data_bytes);
+            let single_bin = !request.split_bin;
             let mut entries = vec![format!("{stem}.cue")];
             if single_bin {
                 entries.push(format!("{stem}.bin"));
@@ -128,23 +120,16 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             .and_then(|value| value.to_str())
             .filter(|value| !value.is_empty())
             .unwrap_or("output");
+        // Extraction writes only data frames; PAD and 4-frame alignment frames are skipped.
         let track_bin_bytes = |track: &DiscTrack| -> u64 {
-            u64::from(track.frames).saturating_mul(track.mode.data_bytes() as u64)
+            u64::from(track.frames.saturating_sub(track.pad_frames))
+                .saturating_mul(track.mode.data_bytes() as u64)
         };
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
-            let first_data_bytes = layout
-                .tracks
-                .first()
-                .map(|track| track.mode.data_bytes())
-                .unwrap_or(2352);
-            // Mirror the extract naming decision: a single BIN is only produced when every track
-            // shares a sector size and split output was not explicitly requested.
-            let single_bin = !request.split_bin
-                && layout
-                    .tracks
-                    .iter()
-                    .all(|track| track.mode.data_bytes() == first_data_bytes);
+            // Mirror the extract naming decision: a single BIN is produced unless split output
+            // was explicitly requested (chdman merges tracks of different sector sizes too).
+            let single_bin = !request.split_bin;
             // The `.cue` is generated text; its size is not known without rendering it, so leave it
             // unsized (discovery only needs the patchable bin sizes).
             let mut entries = vec![ContainerListEntry {
@@ -417,7 +402,9 @@ impl ChdContainerHandler {
                                 logical_bytes,
                                 create_kind: &create_kind,
                                 codecs: compression_plan.codecs,
-                                compression_level,
+                                compression_level: level_for_codec
+                                    .is_some()
+                                    .then_some(compression_level),
                                 thread_count: execution.effective_threads,
                                 parent_source: request.parent.as_deref(),
                                 on_progress: Some(&create_progress),
@@ -431,7 +418,9 @@ impl ChdContainerHandler {
                             logical_bytes,
                             create_kind: &create_kind,
                             codecs: compression_plan.codecs,
-                            compression_level,
+                            compression_level: level_for_codec
+                                .is_some()
+                                .then_some(compression_level),
                             thread_count: execution.effective_threads,
                             parent_source: request.parent.as_deref(),
                             on_progress: Some(&create_progress),

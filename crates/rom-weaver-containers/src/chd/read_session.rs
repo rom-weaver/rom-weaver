@@ -32,7 +32,7 @@ impl ChdReadSession {
 
         let header = Self::convert_header(chd.header());
         let mut metadata_by_tag_and_index = BTreeMap::new();
-        let metadatas: Vec<chd::metadata::Metadata> = chd
+        let metadatas: Vec<crate::chd_rs::metadata::Metadata> = chd
             .metadata_refs()
             .try_into()
             .map_err(|error| format!("failed to read CHD metadata: {error}"))?;
@@ -99,14 +99,13 @@ impl ChdReadSession {
         }
     }
 
-    fn convert_header(header: &chd::header::Header) -> ChdHeader {
+    fn convert_header(header: &crate::chd_rs::header::Header) -> ChdHeader {
         let compression = match header {
-            chd::header::Header::V1Header(value) | chd::header::Header::V2Header(value) => {
-                [value.compression, 0, 0, 0]
-            }
-            chd::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
-            chd::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
-            chd::header::Header::V5Header(value) => value.compression,
+            crate::chd_rs::header::Header::V1Header(value)
+            | crate::chd_rs::header::Header::V2Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V5Header(value) => value.compression,
         };
         ChdHeader {
             version: header.version() as u32,
@@ -141,7 +140,7 @@ impl ChdReadSession {
     pub(super) fn open_rust_chd(
         source: &Path,
         parent_source: Option<&Path>,
-    ) -> std::result::Result<chd::Chd<BufReader<File>>, String> {
+    ) -> std::result::Result<crate::chd_rs::Chd<BufReader<File>>, String> {
         let parent = if let Some(parent_source) = parent_source {
             let parent_file = File::open(parent_source).map_err(|error| {
                 format!(
@@ -160,7 +159,7 @@ impl ChdReadSession {
                 .len();
             let mut parent_reader = BufReader::new(parent_file);
             Self::validate_v5_map_allocation(&mut parent_reader, parent_source, parent_file_len)?;
-            let parent_chd = chd::Chd::open(parent_reader, None).map_err(|error| {
+            let parent_chd = crate::chd_rs::Chd::open(parent_reader, None).map_err(|error| {
                 format!(
                     "failed to parse parent chd `{}`: {error}",
                     parent_source.display()
@@ -179,7 +178,7 @@ impl ChdReadSession {
             .len();
         let mut reader = BufReader::new(file);
         Self::validate_v5_map_allocation(&mut reader, source, file_len)?;
-        chd::Chd::open(reader, parent)
+        crate::chd_rs::Chd::open(reader, parent)
             .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
     }
 
@@ -340,7 +339,7 @@ impl ChdReadSession {
     /// Decode a single hunk into `hunk_buffer` (with `compressed_buffer` as scratch), using the
     /// uniform "failed to decode/read hunk N of `path`" wording shared by every Rust decode path.
     fn decode_hunk_into(
-        chd: &mut chd::Chd<BufReader<File>>,
+        chd: &mut crate::chd_rs::Chd<BufReader<File>>,
         hunk_index: u32,
         source: &Path,
         compressed_buffer: &mut Vec<u8>,

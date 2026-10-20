@@ -83,6 +83,13 @@ test("domain errors fail but state enums and vendor errors pass", () => {
     ),
     [],
   );
+  assert.deepEqual(
+    rustErrorViolations(
+      "crates/rom-weaver-containers/src/chd_rs/error.rs",
+      "impl std::error::Error for Error {}",
+    ),
+    [],
+  );
 });
 test("worker-only blocking and synchronous reader APIs reject main modules", () => {
   for (const source of [

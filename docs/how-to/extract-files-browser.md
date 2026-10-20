@@ -27,6 +27,8 @@ Extract opens one archive per run. If you add several files at once, it extracts
 
 For an NFS disc, add `hif_000000.nfs`, the remaining `hif_*.nfs` parts, and `htk.bin` together in the same file selection or drop. Wait for the ISO to appear in **Files**.
 
+For a WBFS disc split for FAT32, add the `.wbfs` file and every `.wbf1`, `.wbf2`, ... part together in the same file selection or drop.
+
 To stop a long extraction, cancel it from the progress bar. Select **Extract again** to restart it.
 
 ## Download the files

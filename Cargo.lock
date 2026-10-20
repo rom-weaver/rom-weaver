@@ -238,6 +238,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitstream-io"
+version = "4.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7eff00be299a18769011411c9def0d827e8f2d7bf0c3dbf53633147a8867fd1f"
+dependencies = [
+ "no_std_io2",
+]
+
+[[package]]
 name = "blake3"
 version = "1.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -448,26 +457,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "rand_core",
-]
-
-[[package]]
-name = "chd"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e16e43ebc68e33e0c66f7158ca00f0a6eb2c1241556a8ceb36deaeb4299986"
-dependencies = [
- "arrayvec",
- "bitreader",
- "byteorder",
- "claxon",
- "crc",
- "flate2",
- "lzma-rs-perf-exp",
- "num-derive",
- "num-traits",
- "ruzstd",
- "text_io",
- "zstd-safe 7.2.4",
 ]
 
 [[package]]
@@ -883,7 +872,6 @@ checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
 dependencies = [
  "crc32fast",
  "libz-sys",
- "zlib-rs",
 ]
 
 [[package]]
@@ -1257,16 +1245,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lzma-rs-perf-exp"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38435c1305548bb408c98242841c3cf161246323e72a3e4433787f3c05bf18ee"
-dependencies = [
- "byteorder",
- "crc",
-]
-
-[[package]]
 name = "lzma-rust2"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1365,6 +1343,15 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "no_std_io2"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "418abd1b6d34fbf6cae440dc874771b0525a604428704c76e48b29a5e67b8003"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -1821,15 +1808,18 @@ dependencies = [
  "base16ct",
  "bincode",
  "bindgen",
+ "bitreader",
+ "bitstream-io",
  "block-padding",
+ "byteorder",
  "bytes",
  "bzip2-sys",
  "cbc",
  "cc",
- "chd",
  "ciso",
  "claxon",
  "cmake",
+ "crc",
  "crc32fast",
  "crossbeam-channel",
  "crossbeam-utils",
@@ -1847,8 +1837,11 @@ dependencies = [
  "lru",
  "lz4-sys",
  "lz4_flex 0.14.0",
+ "lzma-rust2",
  "maybe-async",
  "md-5 0.11.0",
+ "num-derive",
+ "num-traits",
  "openssl-sys",
  "path-slash",
  "polonius-the-crab",
@@ -1865,6 +1858,7 @@ dependencies = [
  "sha1",
  "simple_moving_average",
  "tar",
+ "text_io",
  "thiserror",
  "tracing",
  "xxhash-rust",
@@ -1994,15 +1988,6 @@ dependencies = [
  "quick-error",
  "tempfile",
  "wait-timeout",
-]
-
-[[package]]
-name = "ruzstd"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c1c839d570d835527c9a5e4db7cb2198683a988cb9d7293fc8674e6bd58fc8"
-dependencies = [
- "twox-hash",
 ]
 
 [[package]]
@@ -2766,12 +2751,6 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
-
-[[package]]
-name = "zlib-rs"
-version = "0.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b142a20ec14a91d5bc708c1dc21b080c550113d8aa77afa29635673a65dd02c5"
 
 [[package]]
 name = "zmij"

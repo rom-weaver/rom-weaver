@@ -16,6 +16,7 @@ use std::{
 mod archive_entries;
 mod archive_formats;
 pub mod chd;
+pub mod chd_rs;
 mod constants;
 mod extract_support;
 mod formats;
@@ -218,6 +219,8 @@ pub(crate) use xiso::XisoContainerHandler;
 #[path = "handlers/nod_shared.rs"]
 mod nod_shared;
 pub(crate) use nod_shared::NodHandlerCore;
+#[cfg(test)]
+pub(crate) use nod_shared::write_disc_header_details;
 
 #[path = "handlers/gc_ciso.rs"]
 mod gc_ciso;
