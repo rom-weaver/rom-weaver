@@ -64,7 +64,7 @@ describe("PPF Undo ingestion", () => {
     const onError = vi.fn();
     const { result } = renderHook(() => usePpfUndoInputs(onInputs, onError));
     await act(async () => result.current.stage([new File(["archive"], "patches.zip")]));
-    expect(onInputs).toHaveBeenCalledWith(undefined, undefined);
+    expect(onInputs).toHaveBeenCalledWith(undefined, null);
     expect(onError).toHaveBeenCalledWith("No valid PPF patch was selected. Add a valid PPF patch to continue.");
     expect(result.current.warnings).toEqual([
       "Ignored valid.ips: PPF Undo requires a valid PPF patch.",

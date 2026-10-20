@@ -161,8 +161,7 @@ const usePpfUndoInputs = (
         }
         if (abort.signal.aborted) return;
         for (const entry of Object.values(chosen)) owned.current.set(entry.file, entry);
-        // An invalid file never replaces a patch that is already loaded.
-        onInputs(chosen.rom?.file, chosen.patch?.file);
+        onInputs(chosen.rom?.file, chosen.patch?.file ?? (invalidPatch ? null : undefined));
         setWarnings(notices);
         if (!chosen.patch && invalidPatch) {
           onError("No valid PPF patch was selected. Add a valid PPF patch to continue.");
