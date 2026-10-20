@@ -687,3 +687,43 @@ test("create queued run cancels when source preparation warns", async () => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
 });
+
+test("create keeps the chosen output Type when the Simple/Detailed view changes", async () => {
+  const renderForm = (settings) =>
+    mount(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings },
+        createElement(
+          CreatePatchForm,
+          withCreateWorkflowMock({
+            defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+            defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+          }),
+        ),
+      ),
+    );
+  const root = renderForm({ detailedViewEnabled: false });
+
+  await expect
+    .poll(() => document.getElementById("patch-builder-select-output-compression"))
+    .toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(document.getElementById("patch-builder-select-output-compression"), "7z");
+  await expect.poll(() => document.getElementById("patch-builder-select-output-compression")?.value).toBe("7z");
+
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(
+        CreatePatchForm,
+        withCreateWorkflowMock({
+          defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+          defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+        }),
+      ),
+    ),
+  );
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 100));
+  expect(document.getElementById("patch-builder-select-output-compression")?.value).toBe("7z");
+});
