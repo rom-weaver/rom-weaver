@@ -550,6 +550,11 @@ msgstr "Anwenden und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Anwenden ist durch eine fehlgeschlagene Patch-Prüfung blockiert. Korrigiere Patch oder ROM oder aktiviere „Trotz abweichender Patch- und ROM-Prüfung anwenden“, wo angeboten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Anwenden und herunterladen"
 
@@ -1452,6 +1457,11 @@ msgstr "{label} {value} kopieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.copyDatabase"
 msgstr "{label} {value} aus der Identifikationsdatenbank kopieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.copyAll"
+msgstr "Alles kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

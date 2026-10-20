@@ -1026,6 +1026,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.trustOriginalsBody": msg({ id: "ui.home.trustOriginalsBody", message: "Every result is a new file." }),
   "ui.home.trustTitle": msg({ id: "ui.home.trustTitle", message: "There is no server to send your files to" }),
   "ui.output.applyDownload": msg({ id: "ui.output.applyDownload", message: "Apply & download" }),
+  "ui.output.applyBlocked": msg({
+    id: "ui.output.applyBlocked",
+    message:
+      "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered.",
+  }),
   "ui.output.cancelApply": msg({ id: "ui.output.cancelApply", message: "Cancel applying" }),
   "ui.output.downloadFile": msg({ id: "ui.output.downloadFile", message: "Download {name}" }),
   "ui.output.patchedFormat": msg({ id: "ui.output.patchedFormat", message: "Patched {format}" }),
@@ -1684,6 +1689,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The platform's data lists no version of this game.",
   }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
+  "ui.log.copyAll": msg({ id: "ui.log.copyAll", message: "Copy all" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),
   "ui.log.filterLabel": msg({ id: "ui.log.filterLabel", message: "Filter log" }),
   "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "This visit" }),

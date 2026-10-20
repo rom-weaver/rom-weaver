@@ -82,7 +82,8 @@
   padding-inline: 12px;
   font-size: 0.76rem;
 }
-.rw-app .btn:disabled {
+.rw-app .btn:disabled,
+.rw-app .btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.45;
   transform: none;

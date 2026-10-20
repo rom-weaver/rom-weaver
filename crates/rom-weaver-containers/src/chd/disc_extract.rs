@@ -177,10 +177,7 @@ impl ChdContainerHandler {
             )));
         }
 
-        let mut resolved = Vec::with_capacity(tracks.len());
-        for index in 0..tracks.len() {
-            resolved.push(Self::resolve_cue_track(path, &tracks, index)?);
-        }
+        let resolved = Self::resolve_cue_track_spans(path, &tracks)?;
         Ok((resolved, high_density_first))
     }
 
@@ -402,108 +399,142 @@ impl ChdContainerHandler {
         })
     }
 
-    /// Resolve `tracks[index]` into a byte span of its file: it runs from its
-    /// first index to the next track that shares the same file, or to the end
-    /// of the file.
-    fn resolve_cue_track(
-        path: &Path,
-        tracks: &[CuePendingTrack],
-        index: usize,
-    ) -> Result<DiscTrack> {
-        let track = &tracks[index];
-        let index01_frames = Self::cue_track_index01(path, track)?;
-        if track.pregap_frames > 0 && track.index00_frames.is_some() {
-            return Err(RomWeaverError::Validation(format!(
-                "cue track {} in `{}` uses both INDEX 00 and PREGAP; current chd cue support requires one pregap style",
-                track.number,
-                path.display()
-            )));
+    /// Resolve the pending tracks into byte spans of their files the way
+    /// chdman's `parse_cue` does. Consecutive tracks that share a file split it
+    /// by the difference of their first indexes (`INDEX 00`, else `INDEX 01`);
+    /// each such track starts where the previous track's frames end, and the
+    /// last one takes the rest of the file. A track alone in its file spans the
+    /// whole file whatever its index times say.
+    fn resolve_cue_track_spans(path: &Path, tracks: &[CuePendingTrack]) -> Result<Vec<DiscTrack>> {
+        let mut resolved = Vec::<DiscTrack>::with_capacity(tracks.len());
+        for (index, track) in tracks.iter().enumerate() {
+            let index01_frames = Self::cue_track_index01(path, track)?;
+            if track.pregap_frames > 0 && track.index00_frames.is_some() {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue track {} in `{}` uses both INDEX 00 and PREGAP; current chd cue support requires one pregap style",
+                    track.number,
+                    path.display()
+                )));
+            }
+            let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
+            let first_index = track.index00_frames.unwrap_or(index01_frames);
+            let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
+            // A track that continues the previous track's file starts after that
+            // track's frames (checked below); `INDEX` times count frames, not
+            // bytes, once the file mixes sector sizes.
+            let continues_previous_file =
+                index > 0 && tracks[index - 1].file_path == track.file_path;
+            if !continues_previous_file
+                && track.file_offset_base_bytes + u64::from(first_index) * sector_bytes > file_end
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue track {} starts past the end of `{}`",
+                    track.number,
+                    track.file_path.display()
+                )));
+            }
+            // chdman places a track after the previous one's frames (whatever
+            // file that was) unless it is alone in its file or a WAVE track.
+            let after_previous = match resolved.last() {
+                Some(previous) => {
+                    let previous_sector_bytes =
+                        u64::try_from(previous.mode.data_bytes()).unwrap_or(2352);
+                    previous.file_offset_bytes + u64::from(previous.frames) * previous_sector_bytes
+                }
+                None => 0,
+            };
+            if continues_previous_file && after_previous > file_end {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue track {} starts past the end of `{}`",
+                    track.number,
+                    track.file_path.display()
+                )));
+            }
+            let shares_with_previous = index > 0 && tracks[index - 1].file_path == track.file_path;
+            let shares_with_next = tracks
+                .get(index + 1)
+                .is_some_and(|next| next.file_path == track.file_path);
+            let (start, byte_len) = if track.file_offset_base_bytes != 0 {
+                (track.file_offset_base_bytes, track.file_data_len_bytes)
+            } else if shares_with_previous && index + 1 == tracks.len() {
+                if after_previous > file_end {
+                    return Err(RomWeaverError::Validation(format!(
+                        "cue track {} starts past the end of `{}`",
+                        track.number,
+                        track.file_path.display()
+                    )));
+                }
+                (after_previous, file_end - after_previous)
+            } else if shares_with_next {
+                let next = &tracks[index + 1];
+                let next_first_index = next
+                    .index00_frames
+                    .unwrap_or(Self::cue_track_index01(path, next)?);
+                let frames = i64::from(next_first_index) - i64::from(first_index);
+                if frames < 0 {
+                    return Err(RomWeaverError::Validation(format!(
+                        "cue track {} has descending frame offsets in `{}`",
+                        track.number,
+                        path.display()
+                    )));
+                }
+                if frames == 0 {
+                    return Err(RomWeaverError::Validation(format!(
+                        "cue track {} in `{}` has no frames before the next track in its file",
+                        track.number,
+                        path.display()
+                    )));
+                }
+                let start = if index > 0 { after_previous } else { 0 };
+                (start, u64::try_from(frames).unwrap_or(0) * sector_bytes)
+            } else {
+                (0, track.file_data_len_bytes)
+            };
+            if !byte_len.is_multiple_of(sector_bytes) {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue track {} length in `{}` is not divisible by {} bytes",
+                    track.number,
+                    track.file_path.display(),
+                    sector_bytes
+                )));
+            }
+            let frames = u32::try_from(byte_len / sector_bytes).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "cue track {} is too large for current chd cd support",
+                    track.number
+                ))
+            })?;
+            // chdman marks the pregap as data whenever the sheet has an
+            // `INDEX 00` line, even one equal to `INDEX 01` (a zero pregap).
+            let pregap_has_data = track.index00_frames.is_some();
+            let pregap_frames = if pregap_has_data {
+                index01_frames.saturating_sub(first_index)
+            } else {
+                track.pregap_frames
+            };
+            trace!(
+                track = track.number,
+                start, frames, pregap_frames, "resolved cue track span"
+            );
+            resolved.push(DiscTrack {
+                number: track.number,
+                mode: track.mode,
+                file_path: track.file_path.clone(),
+                memory_source: None,
+                file_offset_bytes: start,
+                frames,
+                pregap_frames,
+                postgap_frames: track.postgap_frames,
+                pregap_has_data,
+                has_subcode: false,
+                pad_frames: 0,
+                align_pad_frames: 0,
+                pgtype_track_mode: false,
+                tail: None,
+                swap_audio_on_read: track.swap_audio_on_read,
+            });
         }
-        let start_frame = track.index00_frames.unwrap_or(index01_frames);
-        let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
-        let start = track.file_offset_base_bytes + u64::from(start_frame) * sector_bytes;
-        let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
-        if start > file_end {
-            return Err(RomWeaverError::Validation(format!(
-                "cue track {} starts past the end of `{}`",
-                track.number,
-                track.file_path.display()
-            )));
-        }
-        let next_start =
-            Self::next_cue_track_start(path, track, &tracks[index + 1..], sector_bytes)?
-                .unwrap_or(file_end);
-        if next_start < start {
-            return Err(RomWeaverError::Validation(format!(
-                "cue track {} has descending frame offsets in `{}`",
-                track.number,
-                path.display()
-            )));
-        }
-        let byte_len = next_start - start;
-        if !byte_len.is_multiple_of(sector_bytes) {
-            return Err(RomWeaverError::Validation(format!(
-                "cue track {} length in `{}` is not divisible by {} bytes",
-                track.number,
-                track.file_path.display(),
-                sector_bytes
-            )));
-        }
-        let frames = u32::try_from(byte_len / sector_bytes).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "cue track {} is too large for current chd cd support",
-                track.number
-            ))
-        })?;
-        let pregap_from_index = index01_frames.saturating_sub(start_frame);
-        let pregap_has_data = track.index00_frames.is_some() && pregap_from_index > 0;
-        let pregap_frames = if pregap_has_data {
-            pregap_from_index
-        } else {
-            track.pregap_frames
-        };
-        Ok(DiscTrack {
-            number: track.number,
-            mode: track.mode,
-            file_path: track.file_path.clone(),
-            memory_source: None,
-            file_offset_bytes: start,
-            frames,
-            pregap_frames,
-            postgap_frames: track.postgap_frames,
-            pregap_has_data,
-            has_subcode: false,
-            pad_frames: 0,
-            swap_audio_on_read: track.swap_audio_on_read,
-        })
-    }
-
-    /// Byte offset where the first later track in the same file span starts,
-    /// or `None` when `track` is the last one in its file.
-    fn next_cue_track_start(
-        path: &Path,
-        track: &CuePendingTrack,
-        later_tracks: &[CuePendingTrack],
-        sector_bytes: u64,
-    ) -> Result<Option<u64>> {
-        let Some(candidate) = later_tracks.iter().find(|candidate| {
-            candidate.file_path == track.file_path
-                && candidate.file_offset_base_bytes == track.file_offset_base_bytes
-        }) else {
-            return Ok(None);
-        };
-        if candidate.mode.data_bytes() != track.mode.data_bytes() {
-            return Err(RomWeaverError::Validation(format!(
-                "cue `{}` shares `{}` across tracks with different sector sizes; current chd cue support requires a separate file per sector size",
-                path.display(),
-                track.file_path.display()
-            )));
-        }
-        let candidate_index01 = Self::cue_track_index01(path, candidate)?;
-        let candidate_start_frame = candidate.index00_frames.unwrap_or(candidate_index01);
-        Ok(Some(
-            candidate.file_offset_base_bytes + u64::from(candidate_start_frame) * sector_bytes,
-        ))
+        Ok(resolved)
     }
 
     /// Parse a cue sheet as a plain CD-ROM layout (with MAME's implicit 4-frame
@@ -555,9 +586,10 @@ impl ChdContainerHandler {
     /// padding frames, mirroring how `parse_gdi_file` frames an explicit `.gdi`.
     fn synthesize_gd_from_cue_tracks(
         &self,
-        tracks: Vec<DiscTrack>,
+        mut tracks: Vec<DiscTrack>,
         high_density_first: u32,
     ) -> Result<DiscLayout> {
+        Self::move_gd_cue_pregaps_to_previous_track(&mut tracks)?;
         let mut phys_ofs = 0_u32;
         let mut phys_starts = Vec::with_capacity(tracks.len());
         for track in &tracks {
@@ -587,20 +619,84 @@ impl ChdContainerHandler {
                     })?,
                 None => 0,
             };
+            // Only the first track keeps its pregap in the metadata (see
+            // `move_gd_cue_pregaps_to_previous_track`). chdman reports the
+            // default `MODE1` pregap type for every other GD track, audio
+            // included, but leaves a first-track `INDEX 00` pregap typed as
+            // the track itself.
+            let keeps_pregap = index == 0 && (track.pregap_frames > 0 || track.pregap_has_data);
             resolved.push(DiscTrack {
                 frames: data_frames.saturating_add(pad_frames),
-                pregap_frames: 0,
+                pregap_frames: if keeps_pregap { track.pregap_frames } else { 0 },
                 postgap_frames: 0,
+                pgtype_track_mode: keeps_pregap && track.pregap_has_data,
                 pregap_has_data: false,
                 pad_frames,
                 ..track
             });
         }
 
-        Ok(DiscLayout {
+        let mut layout = DiscLayout {
             kind: DiscKind::GdRom,
             tracks: resolved,
-        })
+        };
+        layout.apply_cd_track_padding();
+        Ok(layout)
+    }
+
+    /// chdman treats a pregap on GD cue track 2 and up (an `INDEX 00` gap or a
+    /// `PREGAP` directive) as the first frames of that track's file and files
+    /// them under the end of the previous track instead. The hunk stream is
+    /// unchanged; only the track boundaries, and so the `FRAMES` counts and
+    /// the physical offsets, move.
+    fn move_gd_cue_pregaps_to_previous_track(tracks: &mut [DiscTrack]) -> Result<()> {
+        for index in 1..tracks.len() {
+            let pregap = tracks[index].pregap_frames;
+            if pregap == 0 {
+                continue;
+            }
+            let track = &tracks[index];
+            if pregap > track.frames {
+                return Err(RomWeaverError::Validation(format!(
+                    "gd-rom track {} pregap is longer than the track",
+                    track.number
+                )));
+            }
+            let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
+            debug!(
+                track = track.number,
+                pregap, "moving gd cue pregap onto the previous track"
+            );
+            // The frames are stored as part of the previous track, so they
+            // take its type (an audio pregap after a data track is not
+            // byte-swapped) while the bytes come from this track's file.
+            let tail = TrackTail {
+                mode: tracks[index - 1].mode,
+                file_path: track.file_path.clone(),
+                memory_source: None,
+                file_offset_bytes: 0,
+                frames: pregap,
+                swap_audio_on_read: tracks[index - 1].swap_audio_on_read,
+            };
+            let previous_frames =
+                tracks[index - 1]
+                    .frames
+                    .checked_add(pregap)
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation(
+                            "gd-rom track layout exceeds addressable frames".to_string(),
+                        )
+                    })?;
+            let track = &mut tracks[index];
+            track.file_offset_bytes += u64::from(pregap) * sector_bytes;
+            track.frames -= pregap;
+            track.pregap_frames = 0;
+            track.pregap_has_data = false;
+            let previous = &mut tracks[index - 1];
+            previous.frames = previous_frames;
+            previous.tail = Some(Box::new(tail));
+        }
+        Ok(())
     }
 
     pub(super) fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
@@ -643,10 +739,12 @@ impl ChdContainerHandler {
             )));
         }
 
-        Ok(DiscLayout {
+        let mut layout = DiscLayout {
             kind: DiscKind::GdRom,
             tracks: Self::resolve_gdi_tracks(path, tracks)?,
-        })
+        };
+        layout.apply_cd_track_padding();
+        Ok(layout)
     }
 
     /// Parse the `.gdi` header line, which declares a non-zero track count.
@@ -827,6 +925,11 @@ impl ChdContainerHandler {
                 pregap_has_data: false,
                 has_subcode: false,
                 pad_frames,
+                align_pad_frames: 0,
+                // chdman's gdi parser never sets a pregap type, so every GD
+                // track reports the default `MODE1` (even audio tracks).
+                pgtype_track_mode: false,
+                tail: None,
                 swap_audio_on_read: track.swap_audio_on_read,
             });
         }
@@ -901,6 +1004,11 @@ impl ChdContainerHandler {
                 pregap_has_data: pgtype.starts_with('V'),
                 has_subcode: subtype != "NONE",
                 pad_frames,
+                align_pad_frames: 0,
+                // Keep a pregap type that names the track's own type (chdman's
+                // GD cue first track) so rewriting the metadata preserves it.
+                pgtype_track_mode: pgtype == mode.metadata_label(),
+                tail: None,
                 swap_audio_on_read: false,
             });
         }
@@ -915,10 +1023,30 @@ impl ChdContainerHandler {
             ));
         }
 
-        // CD metadata stores the unpadded data frame count; re-derive the
-        // implicit 4-frame track padding so extraction skips it (GD-ROM keeps
-        // its padding explicitly in the PAD field, so this is a no-op there).
+        // CD and GD metadata store the unaligned frame count; re-derive the
+        // implicit 4-frame track padding so extraction skips it.
         let mut layout = DiscLayout { kind, tracks };
+        // GD-ROM CHDs written by earlier rom-weaver versions have unaligned hunk
+        // streams: the CHD holds exactly the metadata frames. Detect that by the
+        // logical size and skip the alignment, or extraction would run past the end.
+        if kind == DiscKind::GdRom {
+            let stream_frames = chd.header().logical_bytes / u64::from(Self::CD_FRAME_BYTES);
+            let metadata_frames: u64 = layout.tracks.iter().map(|t| u64::from(t.frames)).sum();
+            let aligned_frames: u64 = layout
+                .tracks
+                .iter()
+                .map(|t| u64::from(t.frames.next_multiple_of(Self::CD_TRACK_PADDING)))
+                .sum();
+            if stream_frames == metadata_frames && stream_frames != aligned_frames {
+                debug!(
+                    stream_frames,
+                    metadata_frames,
+                    aligned_frames,
+                    "legacy unaligned gd chd detected; skipping 4-frame track alignment"
+                );
+                return Ok(layout);
+            }
+        }
         layout.apply_cd_track_padding();
         Ok(layout)
     }
@@ -1133,8 +1261,8 @@ impl ChdContainerHandler {
 
     /// Resolve which CD outputs to write (cue, single combined bin, or per-track
     /// bins) from the request's split-bin flag, explicit selections, and
-    /// kind-filter. A layout whose tracks all share one data-byte size extracts as
-    /// a single bin unless split-bin was requested; otherwise it splits per track.
+    /// kind-filter. Every layout extracts as a single bin, as chdman does even when
+    /// track sector sizes differ, unless split-bin was requested.
     /// When the cue alone was selected, the matching payload outputs are re-enabled
     /// so the cue does not reference files that were never written.
     fn plan_cd_selection(
@@ -1143,16 +1271,9 @@ impl ChdContainerHandler {
         request: &ContainerExtractRequest,
         stem: &str,
     ) -> Result<CdSelectionPlan> {
-        let first_data_bytes = layout
-            .tracks
-            .first()
-            .map(|track| track.mode.data_bytes())
-            .unwrap_or(2352);
-        let natural_single_bin = layout
-            .tracks
-            .iter()
-            .all(|track| track.mode.data_bytes() == first_data_bytes);
-        let single_bin = natural_single_bin && !request.split_bin;
+        // chdman `extractcd` writes one bin whatever the sector sizes of the
+        // tracks (each track keeps its own data size in the merged bin).
+        let single_bin = !request.split_bin;
         let selection_requested = !request.selections.is_empty();
         let cue_name = format!("{stem}.cue");
         let mut selections = SelectionMatcher::new(&request.selections);
@@ -1682,14 +1803,16 @@ fn gdi_track_lines(
     let mut gdi_lines = Vec::new();
     let mut physframeofs = 0_u32;
     for (track_index, track) in layout.tracks.iter().enumerate() {
-        let (track_type, sector_size) = track.mode.gdi_track_descriptor()?;
+        let (track_type, sector_size) = track.mode.gdi_track_descriptor();
         if write_tracks[track_index] {
             gdi_lines.push(format!(
                 "{} {} {} {} \"{}\" 0",
                 track.number, physframeofs, track_type, sector_size, track_names[track_index]
             ));
         }
-        physframeofs = physframeofs.saturating_add(track.frames);
+        // chdman advances the offset by the data frames plus explicit PAD only;
+        // the 4-frame alignment frames exist only in the hunk stream.
+        physframeofs = physframeofs.saturating_add(track.frames - track.align_pad_frames);
     }
     Ok(gdi_lines)
 }

@@ -154,3 +154,57 @@ test("weave targets preserve a selected track chain when an optional patch is en
     await created.archiveOutput?.dispose();
   }
 }, 180000);
+
+test("a patch-level target member accepts the bare member file and rejects an unrelated one", async () => {
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const romBytes = new Uint8Array(4096);
+  for (let index = 0; index < romBytes.length; index += 1) romBytes[index] = (index * 13) & 0xff;
+  const memberName = `bare-member-${runId}.bin`;
+  const run = async (inputName) => {
+    const workflow = new ApplyWorkflow({
+      settings: {
+        output: { compression: "none", outputName: `bare-member-result-${runId}-${inputName}` },
+        workers: { threads: 1 },
+      },
+    });
+    try {
+      await workflow.setInput([new File([romBytes], inputName, { type: "application/octet-stream" })]);
+      await workflow.addPatch(createIpsPatch("a.ips", 0, 0xa1));
+      await workflow.setPatchOption(0, { id: "a", target: { member: memberName, rom: true } });
+      const result = await workflow.run();
+      try {
+        return new Uint8Array(await (await result.output.getBlob()).arrayBuffer());
+      } finally {
+        await result.output.dispose();
+      }
+    } finally {
+      await workflow.dispose();
+    }
+  };
+  const expected = romBytes.slice();
+  expected[0] = 0xa1;
+  expect(await run(memberName)).toEqual(expected);
+  await expect(run(`unrelated-${runId}.bin`)).rejects.toThrow(/neither its file name nor its checks match the member/);
+}, 180000);
+
+test("a bare file does not stand in for several same-named members", async () => {
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const romBytes = new Uint8Array(4096);
+  for (let index = 0; index < romBytes.length; index += 1) romBytes[index] = (index * 13) & 0xff;
+  const workflow = new ApplyWorkflow({
+    settings: {
+      output: { compression: "none", outputName: `bare-several-${runId}` },
+      workers: { threads: 1 },
+    },
+  });
+  try {
+    await workflow.setInput([new File([romBytes], "track.bin", { type: "application/octet-stream" })]);
+    await workflow.addPatch(createIpsPatch("a.ips", 0, 0xa1));
+    await workflow.addPatch(createIpsPatch("b.ips", 1, 0xb2));
+    await workflow.setPatchOption(0, { id: "a", target: { member: "disc-a/track.bin", rom: true } });
+    await workflow.setPatchOption(1, { id: "b", target: { member: "disc-b/track.bin", rom: true } });
+    await expect(workflow.run()).rejects.toThrow(/matches several weave ROM members/);
+  } finally {
+    await workflow.dispose();
+  }
+}, 180000);

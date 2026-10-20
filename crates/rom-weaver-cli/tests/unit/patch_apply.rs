@@ -1217,6 +1217,87 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
     );
 }
 
+/// A minimal valid ZIP of stored entries, shaped like a real DCP (IP.BIN, 1ST_READ.BIN, DATA/FONT.PVR).
+fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut archive = Vec::new();
+    let mut directory = Vec::new();
+    for (name, data) in entries {
+        let offset = u32::try_from(archive.len()).expect("offset");
+        let crc = crc32fast::hash(data);
+        let size = u32::try_from(data.len()).expect("size");
+        let name_len = u16::try_from(name.len()).expect("name length");
+        let mut common = Vec::new();
+        common.extend_from_slice(&20_u16.to_le_bytes());
+        // Flags and method (stored), then DOS mod time 00:00:00 and date 1980-01-01.
+        common.extend_from_slice(&[0; 4]);
+        common.extend_from_slice(&0_u16.to_le_bytes());
+        common.extend_from_slice(&0x0021_u16.to_le_bytes());
+        common.extend_from_slice(&crc.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&name_len.to_le_bytes());
+        archive.extend_from_slice(b"PK\x03\x04");
+        archive.extend_from_slice(&common);
+        archive.extend_from_slice(&0_u16.to_le_bytes());
+        archive.extend_from_slice(name.as_bytes());
+        archive.extend_from_slice(data);
+        directory.extend_from_slice(b"PK\x01\x02");
+        directory.extend_from_slice(&20_u16.to_le_bytes());
+        directory.extend_from_slice(&common);
+        directory.extend_from_slice(&[0; 12]);
+        directory.extend_from_slice(&offset.to_le_bytes());
+        directory.extend_from_slice(name.as_bytes());
+    }
+    let directory_offset = u32::try_from(archive.len()).expect("directory offset");
+    let count = u16::try_from(entries.len()).expect("entry count");
+    archive.extend_from_slice(&directory);
+    archive.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&u32::try_from(directory.len()).expect("size").to_le_bytes());
+    archive.extend_from_slice(&directory_offset.to_le_bytes());
+    archive.extend_from_slice(&0_u16.to_le_bytes());
+    archive
+}
+
+#[test]
+fn probing_a_zip_dcp_patch_names_dcp_instead_of_a_missing_handler() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let dcp = temp.path().join("real.dcp");
+    fs::write(
+        &dcp,
+        stored_zip(&[
+            ("IP.BIN", b"ip"),
+            ("1ST_READ.BIN", b"boot"),
+            ("DATA/FONT.PVR", b"font"),
+        ]),
+    )
+    .expect("fixture");
+    // Also probe an unrelated inner file as the resolved path: the handler must still report the
+    // DCP-specific message from the `.dcp` source name.
+    let inner = temp.path().join("1ST_READ.BIN");
+    fs::write(&inner, b"boot").expect("inner fixture");
+
+    for (source, resolved) in [(&dcp, &inner), (&dcp, &dcp)] {
+        let Err(report) = app().probe_patch_handler(source, resolved, 0, 1, None) else {
+            panic!("a DCP has no per-patch handler");
+        };
+        assert_eq!(report.status, OperationStatus::Failed);
+        assert_eq!(report.format.as_deref(), Some("DCP"));
+        assert!(
+            report.label.contains("Dreamcast DCP patch"),
+            "{}",
+            report.label
+        );
+        assert!(
+            !report.label.contains("no registered patch handler")
+                && !report.label.contains("ambiguous"),
+            "{}",
+            report.label
+        );
+    }
+}
+
 #[test]
 fn probing_an_unhandled_patch_names_both_the_original_and_resolved_paths() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
@@ -2221,4 +2302,47 @@ fn a_staged_payload_whose_name_is_not_the_archive_entry_name_is_refused() {
         failure.label
     );
     assert!(!requested.exists());
+}
+
+#[test]
+fn bare_input_match_reuses_seeded_checksums_and_seeds_the_rest() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let input = temp.path().join("renamed.bin");
+    fs::write(&input, b"0123456789abcdef").expect("input fixture");
+    let context = test_context(temp.path().to_path_buf());
+    // A sentinel no real hash produces: matching it proves the seed was read
+    // instead of the file being hashed again.
+    let sentinel = "feedfacefeedfacefeedfacefeedfacefeedface";
+    context.seed_checksums(
+        &input,
+        &BTreeMap::from([("sha1".to_owned(), sentinel.to_owned())]),
+    );
+    let requirement = |checksums: &[(&str, &str)]| {
+        vec![(
+            None,
+            checksums
+                .iter()
+                .map(|(algorithm, value)| ((*algorithm).to_owned(), (*value).to_owned()))
+                .collect::<BTreeMap<_, _>>(),
+        )]
+    };
+    assert!(
+        run::bare_input_satisfies_any(&input, &requirement(&[("sha1", sentinel)]), &context)
+            .expect("seeded match")
+    );
+    // An unseeded algorithm is computed once and seeded for later members.
+    let crc = "68c4f033";
+    assert!(context.seeded_checksum(&input, "crc32").is_none());
+    assert!(
+        run::bare_input_satisfies_any(
+            &input,
+            &requirement(&[("crc32", &crc.to_uppercase()), ("sha1", sentinel)]),
+            &context
+        )
+        .expect("computed match")
+    );
+    assert_eq!(
+        context.seeded_checksum(&input, "crc32").as_deref(),
+        Some(crc)
+    );
 }

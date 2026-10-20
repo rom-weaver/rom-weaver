@@ -220,6 +220,11 @@ pub fn is_patch_filter_candidate_name(candidate_name: &str) -> bool {
     has_extension(candidate_name, PATCH_FILTER_FILE_EXTENSIONS)
 }
 
+/// A Dreamcast `.dcp`: a ZIP-shaped patch that is one leaf, never an archive to descend into.
+pub fn is_dcp_patch_name(candidate_name: &str) -> bool {
+    has_extension(candidate_name, &[".dcp"])
+}
+
 pub fn is_rom_filter_candidate_name(candidate_name: &str) -> bool {
     has_extension(candidate_name, ROM_FILTER_FILE_EXTENSIONS)
 }

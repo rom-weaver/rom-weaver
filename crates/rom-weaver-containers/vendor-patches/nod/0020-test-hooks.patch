@@ -142,6 +142,18 @@ index f6a0fbec8..d73cb1c0f 100644
 +#[cfg(test)]
 +#[path = "../../../tests/unit/nod_tgc.rs"]
 +mod tests;
+diff --git a/io/wbfs.rs b/io/wbfs.rs
+index b178cd5fa..e680c3261 100644
+--- a/io/wbfs.rs
++++ b/io/wbfs.rs
+@@ -432,3 +432,7 @@ impl DiscWriter for DiscWriterWBFS {
+         DiscWriterWeight::Medium
+     }
+ }
++
++#[cfg(test)]
++#[path = "../../../tests/unit/nod_wbfs.rs"]
++mod tests;
 diff --git a/io/wia.rs b/io/wia.rs
 index c9b2965b7..3ab34729f 100644
 --- a/io/wia.rs

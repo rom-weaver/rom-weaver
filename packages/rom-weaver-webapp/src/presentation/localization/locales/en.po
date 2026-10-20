@@ -550,6 +550,11 @@ msgstr "Apply & download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Apply & download"
 
@@ -1452,6 +1457,11 @@ msgstr "Copy {label} {value}"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.copyDatabase"
 msgstr "Copy {label} {value} from the identification database"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.copyAll"
+msgstr "Copy all"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

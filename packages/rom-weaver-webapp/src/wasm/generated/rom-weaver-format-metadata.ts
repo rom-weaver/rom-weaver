@@ -1294,6 +1294,28 @@ export const ROM_WEAVER_CONTAINER_FORMATS = [
     },
     "defaultOutput": null,
     "extensions": [
+      ".ciso"
+    ],
+    "magic": [],
+    "name": "gc-ciso"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "create": false,
+      "createThreads": {
+        "maxThreads": 1,
+        "parallel": false
+      },
+      "extract": true,
+      "extractThreads": {
+        "maxThreads": null,
+        "parallel": true
+      },
+      "probeDetails": true
+    },
+    "defaultOutput": null,
+    "extensions": [
       ".gcz"
     ],
     "magic": [],

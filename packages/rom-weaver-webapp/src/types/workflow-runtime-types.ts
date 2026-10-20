@@ -103,6 +103,8 @@ type PatchApplyUserOptions = {
   target?: PatchInputRef;
   /** Expected checks for the concrete input state, forwarded to patch-apply. */
   inputChecks?: string;
+  /** Checks a bare file must match to stand in for this patch's member when `inputChecks` is unset (the weave's `rom.checks`). */
+  memberChecks?: string;
   /** Expected checks for this patch's output, forwarded to patch-apply. */
   outputChecks?: string;
   /** Which state this patch's embedded input checks describe. */
@@ -133,6 +135,10 @@ type PatchInput = {
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
   patchOptions?: PatchApplyUserOptions[];
+  /** The weave's `rom.member`, which a bare file serving the root lane already stands in for. */
+  rootMember?: string;
+  /** Checksums of a lone bare input file for algorithms staging does not compute, hashed on demand. */
+  bareFileChecksums?: Record<string, string>;
   /** Shared default sent once to the Rust patch planner. */
   defaultPatchBasis?: "auto" | "base" | "previous";
   preparedInputAssets?: InputAsset[];

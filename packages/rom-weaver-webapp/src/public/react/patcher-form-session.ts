@@ -561,6 +561,7 @@ const useLocalApplyPatchFormSession = ({
     () =>
       buildOutputViewState({
         activeSettings,
+        applyBlocked: strictInputChecksumBlocked || patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
@@ -585,6 +586,8 @@ const useLocalApplyPatchFormSession = ({
       applyQueued,
       applyDisabled,
       activeSettings,
+      strictInputChecksumBlocked,
+      patchValidationBlocked,
       identifiedTitle,
       applyTimingText,
       busy,

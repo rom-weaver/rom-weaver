@@ -1860,3 +1860,44 @@ fn checksum_argument_errors_show_the_subcommand_usage() {
     );
     assert!(!stderr.contains("<COMMAND>"), "{stderr}");
 }
+
+#[test]
+fn checksum_select_reaches_inside_a_dcp() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("IP.BIN").path(), b"ip bytes").expect("ip fixture");
+    fs::write(temp.child("OTHER.DAT").path(), b"other").expect("other fixture");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("IP.BIN").path().to_str().expect("path"),
+            "--input",
+            temp.child("OTHER.DAT").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let selected = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("game.dcp").path().to_str().expect("path"),
+            "--select",
+            "IP.BIN",
+            "--algo",
+            "sha1",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&selected);
+    assert_eq!(json["details"]["file_name"], "IP.BIN");
+    assert_eq!(
+        json["details"]["checksums"]["sha1"],
+        checksum_value(temp.child("IP.BIN").path(), "sha1")
+    );
+}

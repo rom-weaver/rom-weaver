@@ -88,11 +88,12 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 | CSO | `ciso` | `.cso`, `.ciso` | ✅ | ✅ ³ | ❌ |
 | PBP | none | `.pbp` | ✅ | ✅ | ❌ |
 | CHD | `chd-cd`, `chd-gd`, `chd-dvd`, `chd-raw`, `chd-hd`, `chd-av`, `chd-ld` | `.chd` | ✅ | ✅ ² | ✅ ² |
+| GameCube CISO | `gc-ciso` | `.ciso` | ✅ | ✅ ⁵ | ❌ |
 | GCZ | none | `.gcz` | ✅ | ✅ | ❌ |
 | WIA | none | `.wia` | ✅ | ✅ | ❌ |
 | TGC | none | `.tgc` | ✅ | ✅ | ❌ |
 | NFS | none | `.nfs` | ✅ | ✅ | ❌ |
-| WBFS | none | `.wbfs` | ✅ | ✅ | ❌ |
+| WBFS | none | `.wbfs` | ✅ | ✅ ⁴ | ❌ |
 | RVZ | none | `.rvz` | ✅ | ✅ | ✅ |
 | Z3DS | `3ds` | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | ✅ | ✅ | ✅ |
 | XISO | none | `.xiso`, `.xiso.iso` | ❌ | ⚠️ ¹ | ❌ |
@@ -101,7 +102,11 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
 >
-> ³ CSO v1 (raw-deflate blocks) images extract. v2 images extract only in the `ciso` crate's layout (length-prefixed LZ4 blocks); `maxcso --format=cso2` output is not read. GameCube `.ciso` files share the extension but use a different layout and are not read as CSO.
+> ³ CSO v1 (raw-deflate blocks) and v2 images extract, including `maxcso --format=cso2` output (deflate, bare LZ4 from `--only-lz4`, and raw blocks) and the `ciso` crate's length-prefixed LZ4 layout. As in maxcso, a v2 block with the high index bit clear whose stored length reaches the header block size is raw (a block with the bit set and such a length is rejected), and a final partial block is read as a block padded to the block size and then truncated. Support for maxcso output is tested against images generated to maxcso's documented layout, not against output from a maxcso build. GameCube `.ciso` files share the extension but use a different layout; they are detected from the header and read as GameCube CISO (see ⁵), not as CSO.
+>
+> ⁴ WBFS holds one disc per file. The native CLI reads split sets written for FAT32 (`.wbfs` plus `.wbf1`, `.wbf2`, ...) when every part sits beside the first, and rejects a set with a missing part as an invalid file size. Whole WBFS drive images that hold several games are not supported and fail with "Only single WBFS discs are supported". Discs over 4 GiB are read with 64-bit offsets. `compress` to RVZ reads every part from the first. ZIP and 7z store only the files passed as `--input`, so `compress` to them fails unless every part (`.wbfs`, `.wbf1`, ...) is passed. CHD and z3ds take one input, so they refuse a split set. Browser extract takes a single `.wbfs` file; split sets are not staged there yet. `probe` reports the platform, disc format, and container entry, not the game ID, title, or partitions.
+>
+> ⁵ GameCube CISO shares the `CISO` magic and `.ciso` extension with PSP CSO. The value at bytes 4..8 separates them: 24 (any version) or 0 (v1 and earlier) is PSP CSO, a non-zero multiple of 32 KiB is the GameCube block size. GameCube CISO is extract-only, decoded by the same disc reader as GCZ and WBFS; extract writes an ISO, which `compress` accepts for RVZ, ZIP, or 7z. Creating `.ciso` is not supported.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 
@@ -204,6 +209,8 @@ The Test page supports these platforms:
 - Sega Saturn
 - Sony PlayStation
 - Sony PSP
+
+A PlayStation PBP is opened like an archive of disc images. A single-disc PBP extracts to `<name>.cue` and `<name>.bin`; a multi-disc PBP extracts every disc as `<name>.disc01.cue` and `<name>.disc01.bin`, `<name>.disc02.cue`, and so on, each byte-identical to the source disc. `checksum` and `identify` hash one extracted file, so they need `--select <name>.bin`, or `--select <name>.discNN.bin` for a multi-disc PBP. A CHD holds a single disc, so CHD conversion takes one disc's cue sheet per run; with several discs selected, the Compress page offers only ZIP and 7z, which keep every selected cue and bin file in one archive. The CLI `compress` command does not open a PBP: it stores the `.pbp` file as is. The Test page extracts a disc PBP and loads one extracted file rather than handing the `.pbp` to the core, so a multi-disc PBP cannot switch discs there; M3U playlists are tracked in [#1227](https://github.com/rom-weaver/rom-weaver/issues/1227). Booting these through the emulator cores has not been verified.
 
 A PBP with an empty `DATA.PSAR` section, such as a PSP homebrew `EBOOT.PBP`, has no disc to extract. rom-weaver treats it as a PSP ROM, including inside nested archives, and the Test page passes it to the emulator core unchanged. `checksum` and `identify` use the PBP itself. `probe` reports it as a self-contained PSP executable, and direct `extract` rejects it.
 

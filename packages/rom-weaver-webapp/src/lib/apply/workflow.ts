@@ -27,6 +27,7 @@ import { type createPatchFile, getPatchFileExternalSource } from "../input/binar
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { roundElapsedMs } from "../workflow/source-preparation.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
+import { type BareMemberRule, createRunBareMemberRule, findMemberAssets } from "./bare-member-target.ts";
 import { parsePatchForApply, resolvePatchTargets, toPublicOutput } from "./patch-apply-service.ts";
 
 type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
@@ -456,23 +457,39 @@ const getPatchIds = (patchIndices: number[], patchOptions: PatchInput["patchOpti
   return ids.some(Boolean) ? ids : undefined;
 };
 
-const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+// A member reference names this asset when it is the asset's own member or a bare file standing in for it.
+const memberIsAsset = (asset: InputAsset, member: string, rule: BareMemberRule) =>
+  asset.member === member || findMemberAssets(member, [asset], rule).length > 0;
+
+const getPatchInputs = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  asset: InputAsset,
+  rule: BareMemberRule,
+) => {
   const inputs = patchIndices.map((patchIndex) => {
     const input = patchOptions?.[patchIndex]?.input;
     // Member selection already happened against prepared InputAssets. The Rust worker receives
     // that leaf directly, so carrying the member selector into patch-apply would select it twice.
-    if (input && "rom" in input && input.member && asset.member === input.member) return { rom: true } as const;
+    if (input && "rom" in input && input.member && memberIsAsset(asset, input.member, rule))
+      return { rom: true } as const;
     return input || null;
   });
   return inputs.some(Boolean) ? inputs : undefined;
 };
 
-const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+const getPatchTargets = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  asset: InputAsset,
+  rule: BareMemberRule,
+) => {
   const targets = patchIndices.map((patchIndex) => {
     const target = patchOptions?.[patchIndex]?.target;
     // The worker receives the selected leaf, so the member is already resolved.
     // Keep the ROM target slot to distinguish this explicit lane from an unscoped patch.
-    if (target && "rom" in target && target.member && asset.member === target.member) return { rom: true } as const;
+    if (target && "rom" in target && target.member && memberIsAsset(asset, target.member, rule))
+      return { rom: true } as const;
     return target || null;
   });
   return targets.some(Boolean) ? targets : undefined;
@@ -509,6 +526,7 @@ const applyPatchesToAsset = async ({
   patchOptions,
   patchFiles,
   patches,
+  bareMemberRule,
   workerOutputName,
 }: {
   applyPatchInRuntime: ApplyPatchWorker;
@@ -521,6 +539,7 @@ const applyPatchesToAsset = async ({
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
+  bareMemberRule: BareMemberRule;
   workerOutputName?: string;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
@@ -529,8 +548,8 @@ const applyPatchesToAsset = async ({
   );
   const patchBasis = getPatchBases(patchIndices, patchOptions);
   const patchIds = getPatchIds(patchIndices, patchOptions);
-  const patchInputs = getPatchInputs(patchIndices, patchOptions, asset);
-  const patchTargets = getPatchTargets(patchIndices, patchOptions, asset);
+  const patchInputs = getPatchInputs(patchIndices, patchOptions, asset, bareMemberRule);
+  const patchTargets = getPatchTargets(patchIndices, patchOptions, asset, bareMemberRule);
   const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
   const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
@@ -590,6 +609,8 @@ const applyPreparedPatches = async ({
   patchFiles,
   patches,
   patchTargets,
+  rootMember,
+  bareFileChecksums,
   runtime,
 }: {
   assetCount: number;
@@ -603,6 +624,8 @@ const applyPreparedPatches = async ({
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
+  rootMember?: string;
+  bareFileChecksums?: Record<string, string>;
   runtime: WorkflowRuntime;
 }) => {
   const targets: InputAsset[] = [];
@@ -622,6 +645,7 @@ const applyPreparedPatches = async ({
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
   }
   reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
+  const bareMemberRule = createRunBareMemberRule(patchOptions, rootMember, bareFileChecksums);
   if (patches.length) {
     targets.push(
       ...(await traceWorkflowStageBlock(
@@ -636,6 +660,7 @@ const applyPreparedPatches = async ({
             patchOptions?.map((option) => option?.input),
             patchOptions?.map((option) => option?.id),
             patchOptions?.map((option) => option?.target),
+            bareMemberRule,
           ),
         () => ({
           inputCount: inputAssets.length,
@@ -670,6 +695,7 @@ const applyPreparedPatches = async ({
           defaultPatchBasis,
           patchFiles,
           patches,
+          bareMemberRule,
           workerOutputName,
         }),
       () => ({
@@ -783,6 +809,8 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patchFiles,
     patches,
     patchTargets,
+    rootMember: input.rootMember,
+    ...(input.bareFileChecksums ? { bareFileChecksums: input.bareFileChecksums } : {}),
     runtime,
   });
   await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });

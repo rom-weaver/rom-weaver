@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inside } from "./tree.mjs";
 
-export const DEPENDENCIES = ["libarchive", "lzma-sdk", "nod", "xdvdfs"];
+export const DEPENDENCIES = ["chd-rs", "libarchive", "lzma-sdk", "nod", "xdvdfs"];
 export const QUEUE_ROOT = "crates/rom-weaver-containers/vendor-patches";
 const STAGES = new Set(["source", "integration", "build", "wasm", "arm64"]);
 

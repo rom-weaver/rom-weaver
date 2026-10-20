@@ -436,8 +436,9 @@ impl PatchRegistry {
     /// Positively identify a patch by its leading magic alone (no extension fallback).
     ///
     /// Confirmed patch magic skips the container-probe cascade. Unlike [`Self::probe`],
-    /// extension-only matches return `None`, so ambiguous ZIP-backed formats such
-    /// as `.dcp` still receive container probing.
+    /// extension-only matches return `None`, so ambiguous extension-only formats
+    /// still receive container probing. A `.dcp` is excluded earlier by name, so
+    /// nested extraction treats it as a patch leaf and never probes it.
     pub fn probe_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
         let ebp_extension = is_ebp_extension(path);
         let xdelta_extension = is_xdelta_extension(path);

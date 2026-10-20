@@ -54,8 +54,9 @@ use rom_weaver_checksum::{
     supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
-    CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
-    is_ambiguous_disc_image_extension, unregistered_output_format_message,
+    CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
+    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
+    unregistered_output_format_message,
 };
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
@@ -67,7 +68,7 @@ use rom_weaver_core::{
     Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
     ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
     XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
-    enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
+    enumerate_disc_sheet_refs, env_u64, is_dcp_patch_name, is_patch_filter_candidate_name,
     is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
     process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
 };

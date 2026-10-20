@@ -1,0 +1,164 @@
+diff --git a/compression/tests.rs b/compression/tests.rs
+index 033f06b3f0db38be5609a019994705b46084d183..f7babc36121964ae31cc6ed92e9875bbe0f20b5c 100644
+--- a/compression/tests.rs
++++ b/compression/tests.rs
+@@ -123,7 +123,6 @@ fn audio_roundtrip() {
+     let input = audio(true);
+     assert_roundtrip::<ZlibCodec>("zlib", &input);
+     assert_roundtrip::<LzmaCodec>("lzma", &input);
+-    // zrip does not entropy code literals without matches, so it can not compress the tone.
+     assert_roundtrip::<ZstdCodec>("zstd", &input);
+     assert_roundtrip::<HuffmanCodec>("huff", &input);
+     assert_roundtrip::<CdFlacCodec>("cdfl", &input);
+diff --git a/mod.rs b/mod.rs
+index 921625ee1f2804a9d8685540c8dfabafa6aba20b..a00d233c75f9f36d6c0420b2a6f49c3948779c71 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -22,11 +22,12 @@
+ //! [`Chd`](crate::chd_rs::Chd), direct iteration of hunks is not possible without
+ //! Generic Associated Types. Instead, the hunk indices should be iterated over.
+ //!
+-//!```rust
++//!```no_run
+ //! use std::fs::File;
+ //! use std::io::BufReader;
+ //! use rom_weaver_containers::chd_rs::Chd;
+ //!
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut f = BufReader::new(File::open("file.chd")?);
+ //! let mut chd = Chd::open(&mut f, None)?;
+ //! let hunk_count = chd.header().hunk_count();
+@@ -41,6 +42,8 @@
+ //!     let mut hunk = chd.hunk(hunk_num)?;
+ //!     hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)?;
+ //! }
++//! # Ok(())
++//! # }
+ //! ```
+ //!
+ //! ## Iterating over metadata
+@@ -48,31 +51,38 @@
+ //! byte data of the metadata contents in the CHD file. The individual metadata entries
+ //! can be iterated directly, but a reference to the source stream has to be provided to
+ //! read the data.
+-//! ```rust
++//! ```no_run
+ //! use std::fs::File;
+ //! use std::io::BufReader;
+ //! use rom_weaver_containers::chd_rs::Chd;
++//! use rom_weaver_containers::chd_rs::metadata::MetadataRef;
+ //!
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut f = BufReader::new(File::open("file.chd")?);
+ //! let mut chd = Chd::open(&mut f, None)?;
+-//! let entries = chd.metadata_refs()?;
++//! let entries = chd.metadata_refs().collect::<Result<Vec<MetadataRef>, _>>()?;
+ //! for entry in entries {
+-//!     let metadata = entry?.read(&mut f)?;
++//!     let metadata = entry.read(chd.inner())?;
+ //! }
++//! # Ok(())
++//! # }
+ //!```
+ //! `Vec<Metadata>` implements `TryFrom<MetadataRefs>` so all metadata entries
+ //! can be collected at once without requiring a reference to the file.
+-//! ```rust
++//! ```no_run
+ //! use std::fs::File;
+ //! use std::io::BufReader;
+ //! use rom_weaver_containers::chd_rs::Chd;
+ //! use rom_weaver_containers::chd_rs::metadata::Metadata;
+ //!
++//! # fn main() -> rom_weaver_containers::chd_rs::Result<()> {
+ //! let mut f = BufReader::new(File::open("file.chd")?);
+ //! // chd takes ownership of f here
+ //! let mut chd = Chd::open(f, None)?;
+ //!
+-//! let metadatas: Vec<Metadata> = chd.metadata_refs()?.try_into()?;
++//! let metadatas: Vec<Metadata> = chd.metadata_refs().try_into()?;
++//! # Ok(())
++//! # }
+ //!```
+ //!
+ 
+@@ -131,80 +141,3 @@ pub mod metadata;
+ pub mod read;
+ 
+ pub mod write;
+-
+-#[cfg(test)]
+-mod tests {
+-    use crate::chd_rs::Chd;
+-    use crate::chd_rs::metadata::Metadata;
+-    use crate::chd_rs::read::{ChdReader, HunkBufReader};
+-    use std::convert::TryInto;
+-    use std::fs::File;
+-    use std::io::{BufReader, Read, Write};
+-
+-    #[test]
+-    fn read_metas_test() {
+-        let mut f = File::open(".testimages/Test.chd").expect("");
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-
+-        let metadatas: Vec<Metadata> = chd.metadata_refs().try_into().expect("");
+-        let meta_datas: Vec<_> = metadatas
+-            .into_iter()
+-            .map(|s| String::from_utf8(s.value).unwrap())
+-            .collect();
+-        println!("{:?}", meta_datas);
+-    }
+-
+-    #[test]
+-    fn read_hunk_buffer_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let hunk_count = chd.header().hunk_count();
+-
+-        let mut hunk_buf = Vec::new();
+-        let mut cmp_buf = Vec::new();
+-        for hunk_num in 0..hunk_count {
+-            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+-            let read = HunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
+-                .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
+-            hunk_buf = read.into_inner();
+-        }
+-    }
+-
+-    #[test]
+-    fn read_hunk_test() {
+-        let mut f = BufReader::new(File::open(".testimages/cliffhgr.chd").expect(""));
+-        let mut chd = Chd::open(&mut f, None).expect("file");
+-        let hunk_count = chd.header().hunk_count();
+-
+-        let mut hunk_buf = chd.get_hunksized_buffer();
+-        let mut cmp_buf = Vec::new();
+-        for hunk_num in 0..hunk_count {
+-            let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+-            hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
+-                .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
+-            println!("Read hunk {}", hunk_num);
+-        }
+-    }
+-
+-    #[test]
+-    fn read_file_test() {
+-        let mut f = BufReader::new(File::open(".testimages/Test.chd").expect(""));
+-        let chd = Chd::open(&mut f, None).expect("file");
+-        let mut read = ChdReader::new(chd);
+-
+-        let mut buf = Vec::new(); // this is really bad..
+-        read.read_to_end(&mut buf).expect("can read to end");
+-        let mut f_out = File::create(".testimages/out.bin").expect("");
+-        f_out.write_all(&buf).expect("did not write")
+-    }
+-
+-    #[test]
+-    fn read_parent_test() {
+-        let p = BufReader::new(File::open(".testimages/TombRaider.chd").expect(""));
+-        let pchd = Chd::open(p, None).expect("parent");
+-
+-        let f = BufReader::new(File::open(".testimages/TombRaiderR1.chd").expect(""));
+-
+-        let _chd = Chd::open(f, Some(Box::new(pchd))).expect("child");
+-    }
+-}

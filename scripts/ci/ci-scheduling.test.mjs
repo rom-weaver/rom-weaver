@@ -7,14 +7,11 @@ const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.m
 const job = (name) => workflow.split(`\n  ${name}:\n`)[1].split(/\n  [\w-]+:\n/u)[0];
 const evaluate = (
   expression,
-  { webapp = false, preview = false, firstParty = true, dependabot = false } = {},
-) => {
-  expression = expression.replaceAll("github.event.pull_request.labels.*.name", "labels");
-  return runInNewContext(expression, {
-    contains: (items, item) => items.includes(item),
-    labels: preview ? ["preview"] : [],
+  { webapp = false, event = "pull_request", firstParty = true, dependabot = false } = {},
+) =>
+  runInNewContext(expression, {
     github: {
-      event_name: "pull_request",
+      event_name: event,
       repository: "owner/repo",
       event: {
         pull_request: {
@@ -25,20 +22,20 @@ const evaluate = (
     },
     needs: { changes: { outputs: { webapp: String(webapp) } } },
   });
-};
 
-test("preview opt-in and validation use the same WASM selection", () => {
+test("first-party previews and validation use the same WASM selection", () => {
   const condition = job("wasm")
     .match(/    if: >-\n([\s\S]*?)\n    env:/u)[1]
     .trim();
   const aggregate = job("gate").match(/WASM_SELECTED: \$\{\{ (.*) \}\}/u)[1];
   for (const [options, expected] of [
-    [{}, false],
-    [{ preview: true }, true],
-    [{ webapp: true }, true],
-    [{ preview: true, firstParty: false }, false],
-    [{ preview: true, dependabot: true }, false],
+    [{}, true],
+    [{ event: "push" }, false],
+    [{ event: "push", webapp: true }, true],
+    [{ firstParty: false }, false],
+    [{ dependabot: true }, false],
     [{ webapp: true, firstParty: false }, true],
+    [{ webapp: true, dependabot: true }, true],
   ]) {
     assert.equal(evaluate(condition, options), expected);
     assert.equal(evaluate(aggregate, options), expected);
@@ -49,12 +46,8 @@ test("main validation shares a group without cancelling active runs", () => {
   const concurrency = workflow.split("\nconcurrency:\n")[1].split("\njobs:\n")[0];
   const group = concurrency.match(/group: ci-\$\{\{ (.*) \}\}/u)[1];
   const cancel = concurrency.match(/cancel-in-progress: \$\{\{ (.*) \}\}/u)[1];
-  const evaluateConcurrency = (ref, event, runId, action = undefined, label = undefined) => {
-    const context = {
-      format: (template, ...values) =>
-        template.replace(/\{(\d+)\}/gu, (_, index) => String(values[index])),
-      github: { ref, event_name: event, run_id: runId, event: { action, label: { name: label } } },
-    };
+  const evaluateConcurrency = (ref, event, runId) => {
+    const context = { github: { ref, event_name: event, run_id: runId } };
     return {
       group: runInNewContext(group, context),
       cancel: runInNewContext(cancel, context),
@@ -76,19 +69,6 @@ test("main validation shares a group without cancelling active runs", () => {
     evaluateConcurrency("refs/pull/2/merge", "pull_request", 6).group,
     evaluateConcurrency("refs/pull/1/merge", "pull_request", 5).group,
   );
-  // The preview label replaces the pull request's run like a push does; any
-  // other label MUST NOT cancel it.
-  assert.deepEqual(
-    evaluateConcurrency("refs/pull/1/merge", "pull_request", 7, "labeled", "preview"),
-    {
-      group: "refs/pull/1/merge",
-      cancel: true,
-    },
-  );
-  assert.deepEqual(evaluateConcurrency("refs/pull/1/merge", "pull_request", 8, "labeled", "bug"), {
-    group: "ignored-label-8",
-    cancel: true,
-  });
 });
 
 test("publishers serialize and guard writes", () => {

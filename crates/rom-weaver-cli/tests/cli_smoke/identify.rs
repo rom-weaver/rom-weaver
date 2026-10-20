@@ -116,10 +116,17 @@ pub(crate) fn identify_pack_with_entries(entries: &[([u8; 4], &str)]) -> Vec<u8>
     rwfp1_pack(entries)
 }
 
-fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
+pub(crate) fn identify_pack_for_disc(
+    platform: &str,
+    size: u64,
+    crc32: [u8; 4],
+    md5: [u8; 16],
+    sha1: [u8; 20],
+    name: &str,
+) -> Vec<u8> {
     let game = PackGame {
         name: name.to_string(),
-        platform: "Test System".to_string(),
+        platform: platform.to_string(),
         source: IdentifySource::Libretro,
         upstream_source: UpstreamSource::Libretro,
         provenance: Vec::new(),
@@ -137,7 +144,7 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
             ordinal: 0,
             hash_scope: "full_file".to_string(),
             filename: None,
-            size: 5,
+            size,
             crc32: Some(crc32.iter().map(|byte| format!("{byte:02x}")).collect()),
             md5: Some(md5.iter().map(|byte| format!("{byte:02x}")).collect()),
             sha1: Some(sha1.iter().map(|byte| format!("{byte:02x}")).collect()),
@@ -149,7 +156,7 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
         }],
     };
     rom_weaver_checksum::identify_pack_v1::encode(
-        "Test System",
+        platform,
         IdentifySource::Libretro,
         "full_file",
         &serde_json::json!([]),
@@ -158,6 +165,9 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
     .expect("RWFP1 pack")
 }
 
+fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
+    identify_pack_for_disc("Test System", 5, crc32, md5, sha1, name)
+}
 pub(crate) fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
     identify_pack_with_hashes(
         crc32,

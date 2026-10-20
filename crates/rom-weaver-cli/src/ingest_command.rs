@@ -405,10 +405,13 @@ impl CliApp {
         // A container handler matching means the source is an archive or single-payload codec:
         // classify its entries and extract. No handler means a bare file (cartridge ROM or loose patch) that
         // is classified by name and checksummed in place / described directly.
+        // A `.dcp` is ZIP-shaped but is one patch, not an archive of payloads: describe it as a
+        // single patch leaf instead of descending into its `PATH.xdelta` entries.
         let container = self
             .containers
             .probe(source)
-            .filter(|handler| !handler.is_self_contained_rom(source));
+            .filter(|handler| !handler.is_self_contained_rom(source))
+            .filter(|_| !is_dcp_patch_name(&source.to_string_lossy()));
         if let Some(handler) = container {
             return self.ingest_container(
                 handler.as_ref(),

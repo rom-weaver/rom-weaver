@@ -65,6 +65,7 @@ import { SelectionTree } from "./components/ds/selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
+import { isApplyButtonActionable } from "./patcher-view-models.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import {
@@ -101,11 +102,13 @@ import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workfl
 import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
 
 // The weave's `rom.checks` and `rom.member`, which the workflow verifies against the supplied ROM
-// for every weave, whatever its patches target.
-const weaveRomExpectation = (session: WeaveApplySession | null): WeaveRomExpectation | undefined => {
+// for every weave, whatever its patches target. `rom.member` is passed even without checks: a bare
+// ROM file always stands in for it.
+const weaveRomExpectation = (session: WeaveApplySession | null): Partial<WeaveRomExpectation> | undefined => {
   const checks = weaveCheckTokens(session?.romChecks);
-  if (!checks) return undefined;
-  return session?.romMember ? { checks, member: session.romMember } : { checks };
+  const member = session?.romMember;
+  if (!(checks || member)) return undefined;
+  return { ...(checks ? { checks } : {}), ...(member ? { member } : {}) };
 };
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
@@ -1915,11 +1918,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (removeId) resolvedUiController.removeRomInput?.(removeId);
   };
 
-  const applyActionEnabled = !(
-    outputState.applyButton.disabled ||
-    outputState.applyButton.loading ||
-    outputState.pendingDownloadFileName
-  );
+  const applyActionEnabled =
+    isApplyButtonActionable(outputState.applyButton) &&
+    !outputState.applyButton.loading &&
+    !outputState.pendingDownloadFileName;
   const downloadActionEnabled =
     !(outputState.applyButton.disabled || outputState.applyButton.loading) && !!outputState.pendingDownloadFileName;
   const cancelActionEnabled = anyJobBusy;
@@ -1959,7 +1961,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             name: outputState.resolvedOutputName,
             requestedName: outputState.displayFileName,
             compression: outputState.compressionFormat,
-            ready: !outputState.applyButton.disabled,
+            ready: isApplyButtonActionable(outputState.applyButton),
           },
           cheats: {
             enabled: cheatsOn,

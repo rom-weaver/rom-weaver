@@ -149,9 +149,8 @@
   max-height: min(90dvh, 940px);
 }
 /* ── settings console ──
-   Wide screens: a sidebar of sections beside the pane, with jump links under
-   Settings and the Advanced switch at the sidebar's foot. Phones: see the
-   media block below. */
+   Wide screens: a sidebar of sections beside the pane, with the Advanced
+   switch at the sidebar's foot. Phones: see the media block below. */
 .rw-app .log-dlg .dlg-frame.console {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
@@ -177,20 +176,14 @@
 .rw-app .log-dlg .dock {
   display: none;
 }
-/* The tabs join the sidebar's own column so the jump links can sit right under
-   Settings. Only the selected tab is tabbable (roving tabindex), so focus still
-   reaches the jump links straight after Settings, the order they are seen in. */
 .rw-app .console-tabs {
-  display: contents;
-}
-.rw-app .console-tab[data-logtab="settings"] {
-  order: 1;
+  display: grid;
+  gap: 2px;
 }
 .rw-app .console-tab {
   display: flex;
   gap: 10px;
   align-items: center;
-  order: 3;
   width: 100%;
   padding: 8px 10px;
   font-size: 0.86rem;
@@ -220,38 +213,13 @@
   .rw-app .console-tab:not([aria-selected="true"]):hover {
     background: color-mix(in oklab, var(--ink) 6%, transparent);
   }
-  .rw-app .console-jump:hover {
-    color: var(--ink);
-  }
 }
 .rw-app .console-tab:not([aria-selected="true"]):active {
   background: color-mix(in oklab, var(--ink) 10%, transparent);
 }
-.rw-app .console-jumps {
-  order: 2;
-  padding: 0;
-  margin: 0 0 var(--sp-s);
-  list-style: none;
-}
-.rw-app .console-jump {
-  display: block;
-  width: 100%;
-  padding: 4px 10px 4px 37px;
-  font-size: 0.8rem;
-  color: var(--ink-3);
-  text-align: start;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-s);
-}
-.rw-app .console-jump:active {
-  color: var(--ink);
-}
 .rw-app .console-nav-foot {
   display: grid;
   gap: var(--sp-s);
-  order: 4;
   padding-block-start: var(--sp-m);
   margin-block-start: auto;
   border-block-start: 1px solid var(--seam-soft);
@@ -342,6 +310,37 @@
   margin: 1px 0 0;
   font-size: 0.8rem;
   color: var(--ink-3);
+}
+/* What the open section offers - Defaults and Save, or Copy all and Download -
+   sits beside the close button, with a short rule between the two groups. */
+.rw-app .console-head-actions {
+  display: flex;
+  flex: none;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app .console-head-actions::after {
+  inline-size: 1px;
+  block-size: 20px;
+  margin-inline-start: 2px;
+  content: "";
+  background: var(--seam-soft);
+}
+.rw-app .console-head-actions .btn {
+  height: 30px;
+  padding-inline: 12px;
+  font-size: 0.76rem;
+}
+/* A narrow desktop pane keeps its description readable: the buttons drop to
+   their icons, and their titles and accessible names still say what they do. */
+@media (max-width: 1000px) {
+  .rw-app .console-head-actions .btn {
+    inline-size: 30px;
+    padding-inline: 0;
+  }
+  .rw-app .console-head-actions .bl {
+    display: none;
+  }
 }
 .rw-app .console-hidden-note {
   display: flex;
@@ -450,11 +449,14 @@
     display: grid;
     flex: none;
   }
+  /* A label and its switch, unboxed: the head row also holds Defaults, and two
+     outlined shapes side by side crowded the title. */
   .rw-app .console-head .console-advanced {
     display: flex;
     width: auto;
-    padding: 4px 6px 4px 12px;
-    border-radius: 999px;
+    padding: 0;
+    background: transparent;
+    border: 0;
   }
   .rw-app .console-head .console-advanced-hint {
     display: none;
@@ -499,12 +501,11 @@
   color: var(--fault);
   border-color: color-mix(in oklab, var(--fault) 55%, transparent);
 }
-/* Every tab's own controls live in a bar under the head rather than in it, so
-   the head carries nothing but the tab rail and the close button at any width.
-   Rows stack: the controls own the first, and a filter (logs, storage) the one
-   below. Sharing one row made the filter and the view toggle compete for the
-   same width, and a phone left both unusable - ellipsed toggle labels above a
-   filter too narrow to read back what you had typed. */
+/* The controls that choose what the logs and storage tabs show live in a bar
+   under the head. Rows stack on a phone: the controls own the first, and the
+   filter the one below. Sharing one row there made the filter and the view
+   toggle compete for the same width - ellipsed toggle labels above a filter too
+   narrow to read back what you had typed. */
 .rw-app .dlg-subhead {
   display: flex;
   flex: none;
@@ -533,10 +534,33 @@
 .rw-app .dlg-subhead .log-controls > .log-actions {
   margin-inline-start: 0;
 }
-/* Settings has no left-hand control, so its pair carries the auto margin and
-   lands under the close button - where the head used to hold it. */
-.rw-app .dlg-subhead .settings-actions {
-  margin-inline-start: auto;
+/* Desktop: Copy all and Download live in the head, so the bar is one row -
+   which log, the filter taking the free width, then the level (or OPFS
+   refresh). The storage section title keeps a line of its own above it. */
+@media (min-width: 861px), (min-width: 721px) and (min-height: 521px) {
+  .rw-app .dlg-subhead {
+    flex-flow: row wrap;
+    align-items: center;
+  }
+  .rw-app .dlg-subhead .log-controls {
+    display: contents;
+  }
+  .rw-app .dlg-subhead .storage-section-title {
+    flex-basis: 100%;
+  }
+  .rw-app .dlg-subhead .log-filter {
+    flex: 1 1 12rem;
+    order: 1;
+    min-inline-size: 0;
+  }
+  .rw-app .dlg-subhead .log-controls > .loglevel,
+  .rw-app .dlg-subhead .log-controls > .log-refresh {
+    order: 2;
+    margin-inline-start: 0;
+  }
+  .rw-app .log-actions-bar {
+    display: none;
+  }
 }
 .rw-app .dlg-subhead .log-filter {
   inline-size: 100%;
@@ -729,14 +753,6 @@
 .rw-app .log-dlg .settings-body {
   padding-block-end: max(var(--sp-l), env(safe-area-inset-bottom));
   container: settings-card / inline-size;
-}
-.rw-app .log-dlg .settings-actions {
-  flex: 0 0 auto;
-}
-.rw-app .log-dlg .settings-actions .btn {
-  height: 30px;
-  padding-inline: 12px;
-  font-size: 0.76rem;
 }
 @container settings-card (min-width: 688px) {
   .rw-app .settings-panel {

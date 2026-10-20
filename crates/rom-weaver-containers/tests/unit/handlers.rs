@@ -9,6 +9,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use crate::chd_rs::{
+        header::Header,
+        map::{CompressionTypeV5, Map, MapEntry},
+    };
     #[cfg(not(target_family = "wasm"))]
     use crate::lzma2_sdk_threads_for_budget_with_limits;
     use crate::nod::{
@@ -26,10 +30,6 @@ mod tests {
         SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
         copy_progress_buffer_size, lzma2_liblzma_threads_for_budget_with_limits,
         lzma2_preset_dict_bytes, lzma2_threads_for_budget, zstd_threads_for_budget,
-    };
-    use chd::{
-        header::Header,
-        map::{CompressionTypeV5, Map, MapEntry},
     };
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
@@ -370,6 +370,33 @@ mod tests {
         destination.flush().expect("flush wbfs fixture");
     }
 
+    fn write_test_gc_ciso(input: &Path, output: &Path) {
+        let disc = NodDiscReader::new(input, &NodDiscOptions::default())
+            .expect("open ciso source fixture");
+        let options = NodFormatOptions {
+            format: NodFormat::Ciso,
+            compression: NodCompression::None,
+            block_size: NodFormat::Ciso.default_block_size(),
+        };
+        let writer = NodDiscWriter::new(disc, &options).expect("create ciso writer");
+        let mut destination = fs::File::create(output).expect("create ciso fixture");
+        let finalization = writer
+            .process(
+                |data, _processed, _total| destination.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .expect("write ciso fixture");
+        if !finalization.header.is_empty() {
+            destination
+                .seek(SeekFrom::Start(0))
+                .expect("seek ciso header");
+            destination
+                .write_all(finalization.header.as_ref())
+                .expect("write ciso header");
+        }
+        destination.flush().expect("flush ciso fixture");
+    }
+
     fn write_test_wia(input: &Path, output: &Path) {
         let disc =
             NodDiscReader::new(input, &NodDiscOptions::default()).expect("open wia source fixture");
@@ -605,8 +632,8 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "pbp", "chd", "gcz", "wia", "tgc", "nfs", "wbfs", "rvz",
-                "z3ds", "xiso"
+                "xz", "zst", "cso", "pbp", "chd", "gc-ciso", "gcz", "wia", "tgc", "nfs", "wbfs",
+                "rvz", "z3ds", "xiso"
             ]
         );
     }
@@ -1621,6 +1648,7 @@ mod tests {
             ("wia", "wia"),
             ("tgc", "tgc"),
             ("wbfs", "wbfs"),
+            ("gc-ciso", "gc-ciso"),
         ] {
             assert_extract_only_create_rejected(format, output_extension);
         }
@@ -1891,6 +1919,108 @@ mod tests {
     }
 
     #[test]
+    fn cso_maxcso_v2_extract_round_trips_deflate_lz4_and_raw_blocks() {
+        let block = TEST_CSO_BLOCK_BYTES * 2;
+        let alignment = 3_u32;
+        for only_lz4 in [false, true] {
+            let temp_dir = temp_dir_path(if only_lz4 { "cso-v2-lz4" } else { "cso-v2-mix" });
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            // Blocks cycle through repetitive, incompressible (stored raw), and zero data. maxcso
+            // sizes are whole 2048-byte sectors, and the final block here is a half-size
+            // incompressible one that maxcso pads to `block` and then deflates or LZ4-compresses
+            // to more than its logical `block / 2` bytes but fewer than `block`.
+            let mut seed = 0x1287_u32;
+            let mut random = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            };
+            let source = (0..block * 6 + 2048)
+                .map(|index| match (index / block + 1) % 3 {
+                    0 => (index % 13) as u8,
+                    1 => random(),
+                    _ => 0,
+                })
+                .collect::<Vec<_>>();
+            let mut raw_blocks = 0;
+            let mut padded_tail_stored = 0;
+            let table_len = 24 + (source.len().div_ceil(block) + 1) * 4;
+            let mut body = vec![0xaa_u8; table_len.next_multiple_of(8) - table_len];
+            let mut index = Vec::new();
+            for (number, chunk) in source.chunks(block).enumerate() {
+                let mut padded = chunk.to_vec();
+                padded.resize(block, 0);
+                let chunk = padded.as_slice();
+                let position = ((table_len + body.len()) >> alignment) as u32;
+                let (stored, flag) = if only_lz4 || number % 3 == 2 {
+                    (lz4_flex::block::compress(chunk), 0x8000_0000)
+                } else {
+                    let mut encoder = DeflateEncoder::new(Vec::new(), DeflateCompression::best());
+                    encoder.write_all(chunk).expect("deflate block");
+                    (encoder.finish().expect("finish block"), 0)
+                };
+                if stored.len().next_multiple_of(8) >= block {
+                    raw_blocks += 1;
+                    index.push(position);
+                    body.extend_from_slice(chunk);
+                } else {
+                    if number == 6 {
+                        padded_tail_stored = stored.len().next_multiple_of(8);
+                    }
+                    index.push(position | flag);
+                    body.extend_from_slice(&stored);
+                }
+                body.resize(body.len().next_multiple_of(8), 0xaa);
+            }
+            assert!(raw_blocks >= 2, "raw blocks occur: {raw_blocks}");
+            assert!(
+                (block / 2..block).contains(&padded_tail_stored),
+                "final block stored size {padded_tail_stored} lies between its logical size and block"
+            );
+            index.push(((table_len + body.len()) >> alignment) as u32);
+            let mut image = b"CISO".to_vec();
+            image.extend_from_slice(&24_u32.to_le_bytes());
+            image.extend_from_slice(&(source.len() as u64).to_le_bytes());
+            image.extend_from_slice(&(block as u32).to_le_bytes());
+            image.extend_from_slice(&[2, alignment as u8, 0, 0]);
+            for entry in index {
+                image.extend_from_slice(&entry.to_le_bytes());
+            }
+            image.extend_from_slice(&body);
+            let cso = temp_dir.join("disc.cso");
+            fs::write(&cso, &image).expect("write maxcso v2 cso");
+
+            let registry = ContainerRegistry::new();
+            let handler = registry.find_by_name("cso").expect("cso handler");
+            let output_dir = temp_dir.join("out");
+            handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: cso,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 1),
+                )
+                .expect("extract maxcso v2 cso");
+            assert_eq!(
+                fs::read(output_dir.join("disc.iso")).expect("read extracted output"),
+                source,
+                "only_lz4 {only_lz4}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        }
+    }
+
+    #[test]
     fn wbfs_extract_round_trips_to_iso_output() {
         let temp_dir = temp_dir_path("wbfs-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -1925,6 +2055,76 @@ mod tests {
         let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
         assert_eq!(extracted, source);
 
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn gamecube_ciso_routes_to_nod_and_extracts_byte_exact_iso() {
+        let temp_dir = temp_dir_path("gc-ciso-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let source = build_test_gamecube_iso(0x8000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        // Both the shared `.ciso` extension and a misnamed `.cso` must route to the nod handler.
+        for name in ["disc.ciso", "disc.cso"] {
+            let image = temp_dir.join(name);
+            write_test_gc_ciso(&input_iso, &image);
+            let handler = registry.probe(&image).expect("handler for gamecube ciso");
+            assert_eq!(handler.descriptor().name, "gc-ciso", "for {name}");
+
+            let output_dir = temp_dir.join(format!("out-{name}"));
+            let report = handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: image,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract gamecube ciso");
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+            let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+            assert_eq!(extracted, source, "for {name}");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn psp_cso_headers_are_not_routed_to_gamecube_ciso() {
+        use super::super::gc_ciso::is_gamecube_ciso_header;
+        let header = |size_field: u32| {
+            let mut bytes = b"CISO".to_vec();
+            bytes.extend_from_slice(&size_field.to_le_bytes());
+            bytes
+        };
+        // v2 (24) and v1 (0) header sizes stay PSP CSO; sector-aligned block sizes are GameCube.
+        assert!(!is_gamecube_ciso_header(&header(24)));
+        assert!(!is_gamecube_ciso_header(&header(0)));
+        assert!(!is_gamecube_ciso_header(&header(0x8001)));
+        assert!(!is_gamecube_ciso_header(b"CISO"));
+        assert!(!is_gamecube_ciso_header(b"WBFS\0\x80\0\0"));
+        assert!(is_gamecube_ciso_header(&header(0x8000)));
+        assert!(is_gamecube_ciso_header(&header(0x20_0000)));
+
+        let temp_dir = temp_dir_path("psp-cso-probe");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, vec![0x5a_u8; 4096]).expect("source");
+        let cso = temp_dir.join("disc.ciso");
+        write_test_cso(&input, &cso);
+        let registry = ContainerRegistry::new();
+        let handler = registry.probe(&cso).expect("handler for psp cso");
+        assert_eq!(handler.descriptor().name, "cso");
         let _ = fs::remove_dir_all(temp_dir);
     }
 
@@ -4269,8 +4469,10 @@ mod tests {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
-        let payload = (0..(896 * 1024))
-            .map(|index| (index as u8).wrapping_mul(41))
+        // Four symbols in a non-repeating order, so every codec, Huffman included,
+        // compresses the hunks and no hunk duplicates another.
+        let payload = (0..(896 * 1024_u32))
+            .map(|index| ((index.wrapping_mul(2_654_435_761) >> 13) % 4) as u8 * 41)
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 

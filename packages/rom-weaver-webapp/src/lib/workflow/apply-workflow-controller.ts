@@ -1,3 +1,4 @@
+import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
   ApplyWorkflowWeaveSources,
@@ -31,6 +32,14 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
+import {
+  createBareMemberRule,
+  describeBareMemberFailure,
+  describeUnboundInputMember,
+  findMemberAssets,
+  loneBareFile,
+  missingBareFileAlgorithms,
+} from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -101,6 +110,7 @@ import {
 import {
   type ComputedChecksums,
   isTransformVariant,
+  rememberComputed,
   type WeaveRomCheck,
   type WeaveRomExpectation,
   verifyWeaveRom,
@@ -163,6 +173,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private cheatPositions: number[] = [];
   /** The active weave's `rom.checks`, verified against the supplied ROM file. */
   private weaveRom: WeaveRomExpectation | undefined;
+  /** The active weave's `rom.member`, set with or without `rom.checks`: a lone bare ROM file always
+   * stands in for it. */
+  private weaveRomMember: string | undefined;
   /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
   private readonly weaveRomChecksums = new WeakMap<object, ComputedChecksums>();
   /** The variant the weave's `rom.checks` matched when the raw file did not: its asset and CRC32.
@@ -170,6 +183,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private weaveRomLayout: { assetId: string; crc32: string } | undefined;
   /** Cancels the in-flight on-demand weave-ROM hash when the ROM is replaced or cleared. */
   private weaveRomHashAbort: AbortController | undefined;
+  /** Algorithms already hashed (or being hashed) for a lone bare file, so each is requested once. */
+  private readonly attemptedBareChecksums = new WeakMap<object, Set<string>>();
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -226,8 +241,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
-  setWeaveRom(expectation: WeaveRomExpectation | undefined): void {
-    const next = expectation?.checks ? { ...expectation } : undefined;
+  setWeaveRom(expectation: Partial<WeaveRomExpectation> | undefined): void {
+    this.weaveRomMember = expectation?.member;
+    const next = expectation?.checks ? { ...expectation, checks: expectation.checks } : undefined;
     if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member) {
       this.weaveRomLayout = undefined;
       this.chainLayoutBases.clear();
@@ -874,7 +890,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.mutate("setPatchOption", async () => {
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
       let verificationChanged = false;
+      if ("inputChecks" in option) {
+        const value = option.inputChecks?.trim() || undefined;
+        verificationChanged ||= stage.state.inputChecks !== value;
+        stage.state.inputChecks = value;
+      }
       if ("id" in option) {
         verificationChanged ||= stage.state.patchId !== option.id?.trim();
         stage.state.patchId = option.id?.trim() || undefined;
@@ -893,7 +915,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           else clearApplyPatchTarget(stage);
         } else if (option.input?.member) {
           const member = option.input.member;
-          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === member);
+          await this.hashBareFileChecksums();
+          const matches = findMemberAssets(member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -911,15 +934,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
           else clearApplyPatchTarget(stage);
         } else if (target?.member) {
-          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === target.member);
+          await this.hashBareFileChecksums();
+          const matches = findMemberAssets(target.member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
-      }
-      if ("inputChecks" in option) {
-        const value = option.inputChecks?.trim() || undefined;
-        verificationChanged ||= stage.state.inputChecks !== value;
-        stage.state.inputChecks = value;
       }
       if ("outputChecks" in option) {
         const value = option.outputChecks?.trim() || undefined;
@@ -954,6 +973,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // validation key - must be recomputed. The caller reruns the deep
       // validation off the new key. No-op writes skip the recompute entirely.
       if (verificationChanged) await this.evaluatePatchReadiness(stage);
+      // A weave load sets the patches one at a time, so a patch bound earlier saw a rule without
+      // this one. A changed rule re-resolves every member patch against the whole rule.
+      if (loneBareFile(this.getPatchableInputAssets()) && this.getBareMemberRuleKey() !== bareMemberRuleBefore)
+        await this.refreshPatchReadiness();
       this.recomputeOutputState();
     });
   }
@@ -1251,6 +1274,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       role: stage.state.role,
       sourceSize: stage.state.sourceSize,
     });
+    if (isDcpPatchName(stage.state.fileName)) {
+      // Name the DCP before any staging, ingest, or selection runs; see apply-dcp-patch.ts.
+      this.addDirectCandidate(stage, stage.state.role, stage.index, stage.state.id);
+      stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
+      markDcpPatchUnsupported(stage);
+      return stage;
+    }
     const requests: CandidateSelectionRequest[] = [];
     const options = createSourceStagingOptions({
       base: this.createExecutionOptions(),
@@ -1544,6 +1574,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       stage.state.patchValidation = undefined;
       return;
     }
+    if (isDcpPatchStage(stage)) {
+      // The ingest surfaced a .dcp (bare, or a leaf of an archive) as one patch; see apply-dcp-patch.ts.
+      markDcpPatchUnsupported(stage);
+      return;
+    }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
     if (!parsed) {
       // An unreadable patch is a per-card failure (like a checksum mismatch), not a workflow error:
@@ -1600,6 +1635,56 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     session.view.state.romType = session.view.state.romType ? { ...session.view.state.romType } : undefined;
   }
 
+  /** Hash `algorithms` for one asset on demand (staging computes only CRC32, MD5 and SHA-1). A
+   * transient failure, or an aborted hash, throws; any other failure maps to no checksums. */
+  private async computeWeaveRomAssetChecksums(asset: InputAsset, algorithms: readonly string[], signal: AbortSignal) {
+    try {
+      const result = await calculateInputChecksumsForFile({
+        algorithms,
+        emitProgress: (event) => this.emitProgress(event),
+        file: asset.file,
+        identify: false,
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        progressId: `${this.id}:weave-rom:${asset.id}`,
+        role: "input",
+        runtime: this.runtime,
+        signal,
+        state: { fileName: asset.fileName, id: asset.id, size: asset.size },
+        workflow: "apply",
+      });
+      return { checksums: result.checksums, variants: result.variants };
+    } catch (error) {
+      if (signal.aborted || isTransientValidationError(error)) throw error;
+      // Not transient: the algorithm cannot be computed here, which fails verification.
+      this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
+      return { checksums: {} };
+    }
+  }
+
+  /** Hash, once per file, the algorithms a lone bare file's declared member checks need beyond
+   * staging's CRC32, MD5 and SHA-1, so the bare-member rule can compare them (a weave created with
+   * `--checksum sha256`). A transient failure leaves them unhashed; the next pass retries. */
+  private async hashBareFileChecksums(): Promise<void> {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    if (!bare) return;
+    const missing = missingBareFileAlgorithms(this.getBareMemberRule(), bare).filter(
+      (algorithm) => !this.attemptedBareChecksums.get(bare.file)?.has(algorithm),
+    );
+    if (!missing.length) return;
+    const attempted = this.attemptedBareChecksums.get(bare.file) ?? new Set<string>();
+    for (const algorithm of missing) attempted.add(algorithm);
+    this.attemptedBareChecksums.set(bare.file, attempted);
+    try {
+      const result = await this.computeWeaveRomAssetChecksums(bare, missing, this.abortController.signal);
+      rememberComputed(this.weaveRomChecksums, bare.file, missing, result);
+    } catch (error) {
+      if (this.abortController.signal.aborted) throw error;
+      for (const algorithm of missing) attempted.delete(algorithm);
+      this.trace("bare-member.checksum-unavailable", { assetId: bare.id, message: toRomWeaverError(error).message });
+    }
+  }
+
   /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
    * algorithm staging did not compute. A transient hashing failure, or a hash cancelled because
    * the ROM changed, yields a retryable `unavailable` result instead of a verdict. */
@@ -1624,30 +1709,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         expectation,
         this.getPatchableInputAssets(),
         this.weaveRomChecksums,
-        async (asset, algorithms) => {
-          try {
-            const result = await calculateInputChecksumsForFile({
-              algorithms,
-              emitProgress: (event) => this.emitProgress(event),
-              file: asset.file,
-              identify: false,
-              logLevel: this.settings.logging?.level,
-              onLog: this.settings.logging?.sink,
-              progressId: `${this.id}:weave-rom:${asset.id}`,
-              role: "input",
-              runtime: this.runtime,
-              signal: hashAbort.signal,
-              state: { fileName: asset.fileName, id: asset.id, size: asset.size },
-              workflow: "apply",
-            });
-            return { checksums: result.checksums, variants: result.variants };
-          } catch (error) {
-            if (hashAbort.signal.aborted || isTransientValidationError(error)) throw error;
-            // Not transient: the algorithm cannot be computed here, which fails verification.
-            this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
-            return { checksums: {} };
-          }
-        },
+        (asset, algorithms) => this.computeWeaveRomAssetChecksums(asset, algorithms, hashAbort.signal),
       );
       this.trace("weave.rom.verify", {
         assetId: verdict.assetId ?? "",
@@ -1775,9 +1837,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     declaredInputChecks?: string,
     previousLayout?: StagedSource<TSource>["state"],
   ): Promise<boolean> {
+    await this.hashBareFileChecksums();
     const inputRef = stage.state.patchTarget || stage.state.patchInput;
-    return evaluateApplyPatchReadiness(stage, {
+    const memberRef = inputRef && !("patch" in inputRef) ? inputRef.member : undefined;
+    const changed = await evaluateApplyPatchReadiness(stage, {
       declaredInputChecks,
+      memberRef,
+      describeBareMemberFailure: (bare) =>
+        memberRef ? describeBareMemberFailure(memberRef, bare, this.getBareMemberRule()) : undefined,
       filenameCrc32AppliesTo: (target) =>
         this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
       previousLayout,
@@ -1789,9 +1856,57 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
     });
+    // A target ref hides the input member ref above, but the worker still binds that member to the leaf.
+    const input = stage.state.patchInput;
+    const inputMember = stage.state.patchTarget && input && "rom" in input ? input.member : undefined;
+    const unbound =
+      inputMember && stage.state.status === "ready"
+        ? describeUnboundInputMember(inputMember, this.getPatchableInputAssets(), this.getBareMemberRule())
+        : undefined;
+    if (!unbound) return changed;
+    clearApplyPatchTarget(stage);
+    stage.state.status = "needsSelection";
+    this.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", unbound));
+    return true;
+  }
+
+  /** The checks a bare file must satisfy to stand in for a patch's member: the patch's own input
+   * checks, else the weave's `rom.checks` when the weave names no `rom.member` (those checks then
+   * describe the root ROM rather than a member). */
+  private memberChecksFor(stage: StagedSource<TSource>): string | undefined {
+    if (stage.state.inputChecks) return stage.state.inputChecks;
+    return this.weaveRomMember ? undefined : this.weaveRom?.checks;
+  }
+
+  /** The members a lone bare ROM file is asked to stand in for, from the enabled patches; the run
+   * builds the same rule from its enabled-only patch list. */
+  private getBareMemberRule() {
+    return createBareMemberRule(
+      this.patches
+        .filter((patch) => !this.disabledPatches.has(patch))
+        .map((patch) => ({
+          checks: this.memberChecksFor(patch),
+          input: patch.state.patchInput,
+          target: patch.state.patchTarget,
+        })),
+      this.weaveRomMember,
+      this.getBareFileChecksums(),
+    );
+  }
+
+  /** The on-demand checksums of the lone bare file (see `hashBareFileChecksums`). */
+  private getBareFileChecksums() {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    return bare ? this.weaveRomChecksums.get(bare.file)?.checksums : undefined;
+  }
+
+  private getBareMemberRuleKey() {
+    const rule = this.getBareMemberRule();
+    return JSON.stringify([rule.rootMember, [...rule.memberChecks]]);
   }
 
   private async refreshPatchReadiness() {
+    await this.hashBareFileChecksums();
     for (const [index, patch] of this.patches.entries()) {
       const targetRef = patch.state.patchTarget || patch.state.patchInput;
       if (targetRef && "patch" in targetRef) {
@@ -1804,7 +1919,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (target) assignApplyPatchTarget(patch, target);
         else clearApplyPatchTarget(patch);
       } else if (targetRef?.member) {
-        const matches = this.getPatchableInputAssets().filter((asset) => asset.member === targetRef.member);
+        const matches = findMemberAssets(targetRef.member, this.getPatchableInputAssets(), this.getBareMemberRule());
         if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);
         else clearApplyPatchTarget(patch);
       }
@@ -1825,12 +1940,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
     /** The active weave's expected ROM; present (even undefined) replaces the stored one. */
-    weaveRom?: WeaveRomExpectation;
+    weaveRom?: Partial<WeaveRomExpectation>;
     /** Set when a newer input change is queued behind this pass: the ROM about to be replaced is
      * not hashed for the weave's checks, and its patches stay a retryable "unknown". */
     skipWeaveRomHash?: boolean;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
       if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
       const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
       if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
@@ -1839,6 +1955,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // the patches gaining or losing that role re-run their preflight below.
       const firstEnabledBefore = this.getFirstEnabledPatches();
       this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
+      // A new `rom.member` or a toggled member patch changes which members a bare file may stand in for.
+      if (this.getBareMemberRuleKey() !== bareMemberRuleBefore) await this.refreshPatchReadiness();
       const firstEnabledAfter = this.getFirstEnabledPatches();
       const firstEnabledMoved = new Set(
         [...firstEnabledBefore, ...firstEnabledAfter].filter(
@@ -2149,6 +2267,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(patch.state.patchInput ? { input: patch.state.patchInput } : {}),
         ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
         ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
+        ...(this.memberChecksFor(patch) ? { memberChecks: this.memberChecksFor(patch) } : {}),
         ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
@@ -2162,6 +2281,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         validateOutputChecksum: patch.state.validateOutputChecksum,
       })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
+      ...(this.weaveRomMember ? { rootMember: this.weaveRomMember } : {}),
+      ...(this.getBareFileChecksums() ? { bareFileChecksums: { ...this.getBareFileChecksums() } } : {}),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };

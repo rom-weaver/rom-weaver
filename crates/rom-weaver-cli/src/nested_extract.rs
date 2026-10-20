@@ -323,9 +323,13 @@ impl CliApp {
 
     /// Resolve a nested container, skipping signature-confirmed patch leaves.
     ///
-    /// Avoids dozens of container header reads per patch. Extension-only matches
-    /// still fall through so ZIP-backed formats such as `.dcp` remain probeable.
+    /// Avoids dozens of container header reads per patch. A `.dcp` is a ZIP-shaped patch, so it is
+    /// a patch leaf and never descended: its inner `PATH.xdelta`/`.DAT` entries are DCP operations,
+    /// not standalone patches or ROM payloads.
     fn nested_candidate_container(&self, path: &Path) -> Option<Arc<dyn ContainerHandler>> {
+        if is_dcp_patch_name(&path.to_string_lossy()) {
+            return None;
+        }
         if is_patch_filter_candidate_name(&path.to_string_lossy())
             && self.patches.probe_signature(path).is_some()
         {
