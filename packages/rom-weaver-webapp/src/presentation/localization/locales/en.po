@@ -1200,6 +1200,11 @@ msgstr "Choose ROM and test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.importReplaces"
+msgstr "Importing replaces the stored save for {label}, last changed {date}. Export it first to keep it."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.importHint"
 msgstr "Choose the file type. Raw saves also need the ROM SHA-1."
 

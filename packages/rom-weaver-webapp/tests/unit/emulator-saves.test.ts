@@ -12,6 +12,7 @@ import {
   loadDroppedSram,
   parseSerializedEmulatorSave,
   readPendingTestSave,
+  readPendingTestSaves,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
   stagePendingTestSave,
@@ -320,6 +321,58 @@ describe("emulator saves", () => {
       clearEmulatorSavePreview(sha1);
     }
     expect(await listEmulatorSaves()).toEqual([]);
+  });
+
+  it("keeps a held save only in this page while save storage is off", async () => {
+    await stagePendingTestSave({ data: new Uint8Array([4]), fileName: "older.sav" });
+    configureEmulatorSaveStorage(false);
+    try {
+      const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+      expect(staged.memoryOnly).toBe(true);
+      expect(await readPendingTestSave()).toMatchObject({ fileName: "game.sav", memoryOnly: true });
+      vi.resetModules();
+      const reloaded = await import("../../src/storage/browser/emulator-saves.ts");
+      expect(await reloaded.readPendingTestSave()).toBeUndefined();
+    } finally {
+      configureEmulatorSaveStorage(true);
+    }
+    await clearPendingTestSave();
+    expect(await readPendingTestSave()).toBeUndefined();
+  });
+
+  it("holds a save in memory while storage is off even when IndexedDB is missing", async () => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+      expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), memoryOnly: true });
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
+  it("keeps a dropped save and a Save editor hand-off in separate slots, newest first", async () => {
+    const now = vi.spyOn(Date, "now");
+    try {
+      now.mockReturnValue(10);
+      await stagePendingTestSave({ data: new Uint8Array([1]), fileName: "edit.sav", gameId: "g", platform: "gba" });
+      now.mockReturnValue(20);
+      await stagePendingTestSave({ data: new Uint8Array([2]), fileName: "drop.srm", slot: "dropped" });
+      expect((await readPendingTestSaves()).map((save) => [save.fileName, save.slot])).toEqual([
+        ["drop.srm", "dropped"],
+        ["edit.sav", "handoff"],
+      ]);
+
+      await clearPendingTestSave("handoff");
+      expect((await readPendingTestSaves()).map((save) => save.fileName)).toEqual(["drop.srm"]);
+      await clearPendingTestSave();
+      expect(await readPendingTestSaves()).toEqual([]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("replaces and clears the fixed pending test save", async () => {

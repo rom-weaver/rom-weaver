@@ -742,6 +742,19 @@ describe("page-level drag and drop", () => {
     await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
   });
 
+  it("opens Saves & storage for a save backup dropped on another workflow", async () => {
+    const { called, container } = await renderRoot({ currentView: "test" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["{}"], "game.rw-emulator-save.json")]));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+  });
+
   it("lets the veil go without naming a workflow when a landing-page drop needs a choice", async () => {
     const { called, container } = await renderRoot({ currentView: "home" });
 

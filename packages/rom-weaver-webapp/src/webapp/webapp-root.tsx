@@ -571,6 +571,7 @@ function WebappRoot({
   const pageDropIdRef = useRef(0);
   const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
   const [saveImport, setSaveImport] = useState<EmulatorSaveImportRequest | null>(null);
+  const clearSaveImport = useCallback(() => setSaveImport(null), []);
   const [dropRouting, setDropRouting] = useState<DropRouting | null>(null);
   const dropRoutingTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cancelFileRouting = useCallback(() => {
@@ -704,6 +705,12 @@ function WebappRoot({
     saveSettings,
     settingsFocusHint,
   } = useUnifiedDialog(actions, state);
+  // A backup the dialog closed on before Saves & storage mounted MUST NOT import on a later visit.
+  const logWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (logWasOpenRef.current && !logOpen) setSaveImport(null);
+    logWasOpenRef.current = logOpen;
+  }, [logOpen]);
   /* Every workflow the user has visited stays mounted, so a single page drop
      would otherwise reach all of them at once - two forms staging the same file
      and overwriting each other's activity-store entry. The drop goes ONLY to the
@@ -807,52 +814,56 @@ function WebappRoot({
         .catch(() => undefined)
         .then(async () => {
           if (generation !== routingGenerationRef.current) return;
-          let files = await selected;
-          if (!files.length || generation !== routingGenerationRef.current) return;
-          if (directView) {
-            await enqueuePageDrop(directView, files);
-            return;
-          }
+          const dropped = await selected;
+          if (!dropped.length || generation !== routingGenerationRef.current) return;
           const routeVeil: typeof showDropRouting = (routing, holdMs) => {
             if (fromDrop) showDropRouting(routing, holdMs);
           };
-          // Save backups belong to no workflow; Saves & storage imports them and shows the result.
-          const saveExports = files.filter((file) => isEmulatorSaveExportName(file.name));
-          if (saveExports.length) {
-            logger.debug("importing dropped save backups", { names: saveExports.map((file) => file.name) });
-            pageDropIdRef.current += 1;
-            setSaveImport({ files: saveExports, id: pageDropIdRef.current });
-            openStorageTab();
-            files = files.filter((file) => !saveExports.includes(file));
+          // Save backups belong to no workflow. Saves & storage imports them once the rest of the drop is
+          // routed, so two dialogs never open at once.
+          const backups = dropped.filter((file) => isEmulatorSaveExportName(file.name));
+          const files = backups.length ? dropped.filter((file) => !backups.includes(file)) : dropped;
+          try {
             if (!files.length) {
               routeVeil(null);
               return;
             }
-          }
-          routeVeil({ phase: "reading" });
-          const entries = await readDropEntries(files);
-          if (generation !== routingGenerationRef.current) return;
-          const plan = planDropDestinations(countDropEntries(entries));
-          const [only] = plan.destinations;
-          if (
-            only &&
-            plan.destinations.length === 1 &&
-            entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket))
-          ) {
-            routeVeil({ phase: "opening", view: only });
-            await preloadWorkflowRoute(only).catch(() => undefined);
+            if (directView) {
+              await enqueuePageDrop(directView, files);
+              return;
+            }
+            routeVeil({ phase: "reading" });
+            const entries = await readDropEntries(files);
             if (generation !== routingGenerationRef.current) return;
-            routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
-            await deliverDrop(only, files);
-            return;
+            const plan = planDropDestinations(countDropEntries(entries));
+            const [only] = plan.destinations;
+            if (
+              only &&
+              plan.destinations.length === 1 &&
+              entries.every((entry) => isUsableDropFile(only, entry.name, entry.archiveBucket))
+            ) {
+              routeVeil({ phase: "opening", view: only });
+              await preloadWorkflowRoute(only).catch(() => undefined);
+              if (generation !== routingGenerationRef.current) return;
+              routeVeil({ phase: "opening", view: only }, DROP_ROUTING_HOLD_MS);
+              await deliverDrop(only, files);
+              return;
+            }
+            routeVeil(null);
+            if (!only) return;
+            pageDropIdRef.current += 1;
+            setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
+            await new Promise<void>((resolve) => {
+              routeChoiceRef.current = resolve;
+            });
+          } finally {
+            if (backups.length && generation === routingGenerationRef.current) {
+              logger.debug("importing dropped save backups", { names: backups.map((file) => file.name) });
+              pageDropIdRef.current += 1;
+              setSaveImport({ files: backups, id: pageDropIdRef.current });
+              openStorageTab();
+            }
           }
-          routeVeil(null);
-          if (!only) return;
-          pageDropIdRef.current += 1;
-          setDropRoute({ chooseDestination: true, entries, files, from, id: pageDropIdRef.current });
-          await new Promise<void>((resolve) => {
-            routeChoiceRef.current = resolve;
-          });
         })
         .catch((error: unknown) => {
           if (fromDrop && generation === routingGenerationRef.current) showDropRouting(null);
@@ -944,14 +955,21 @@ function WebappRoot({
       const needsDestination =
         state.currentView === "save-editor" &&
         names.some((entry) => ["rom", "patch"].includes(classifyDropEntry(entry)));
-      if (!(needsDestination || planDropRedirect(state.currentView, countDropEntries(names)))) return;
+      const redirect = planDropRedirect(state.currentView, countDropEntries(names));
+      const hasBackup = names.some((entry) => classifyDropEntry(entry) === "backup");
+      if (!(needsDestination || redirect || hasBackup)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       const fromView = state.currentView;
       void readDataTransferFiles(event.dataTransfer).then((files) => {
         if (!files.length || currentViewRef.current !== fromView) return;
-        if (needsDestination) {
+        if (needsDestination || (hasBackup && redirect)) {
           void routeFiles(files, true);
+          return;
+        }
+        if (hasBackup) {
+          // Any workflow can receive a backup: it is imported, and the rest stays with this workflow.
+          void routeFiles(files, true, fromView);
           return;
         }
         pageDropIdRef.current += 1;
@@ -1256,7 +1274,7 @@ function WebappRoot({
                 onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
                 settingsFocusHint={settingsFocusHint}
                 emulatorSaveImport={saveImport}
-                onEmulatorSaveImportStarted={() => setSaveImport(null)}
+                onEmulatorSaveImportStarted={clearSaveImport}
                 settingsPanel={
                   <Suspense fallback={null}>
                     <SettingsPanel

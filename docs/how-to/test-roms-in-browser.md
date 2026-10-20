@@ -112,7 +112,9 @@ Restore the save in a browser that has the same ROM:
 
 **Saves & storage** also accepts the older uncompressed JSON export.
 
-You can also drop an exported ZIP or JSON file on the home page. **Saves & storage** opens and imports it.
+You can also drop an exported ZIP or JSON file on any page. **Saves & storage** opens with the file ready to import; select **Import** to restore it. If the drop also holds ROMs, those are opened first.
+
+An import replaces the stored save for that ROM. When one exists, the import form names it and when it last changed, so you can export it first.
 
 To import a raw SRAM or save-state file:
 
@@ -127,9 +129,13 @@ The import merges with any other save part for the same SHA-1. You can select **
 To load a raw SRAM file without its SHA-1:
 
 1. Drop the `.sav`, `.srm`, `.sra`, `.eep`, `.fla`, `.mpk`, `.mcr`, or `.mcd` file on the home page or on Test. You can drop its ROM with it.
-2. If you dropped the save alone, add the ROM for that game on Test.
+2. If you dropped the save alone, add the ROM for that game on Test, unless the game is already loaded.
 
-The game restarts with the save. rom-weaver stores the save for that ROM if the ROM has no stored SRAM. Otherwise the save plays without replacing the stored SRAM.
+The game restarts with the save. rom-weaver stores the save for that ROM if the ROM has no stored SRAM. Otherwise the save plays as a preview: Test says so, and progress in it is not stored. Import it in **Saves & storage** to replace the stored save.
+
+Only one save loads at a time. When you drop several, Test names the ones it ignored.
+
+A save dropped alone plays in the game that is already loaded when its system fits; otherwise it waits on Test until you add a ROM. A `.eep`, `.sra`, `.fla`, or `.mpk` file only opens a Nintendo 64 ROM, and a `.mcr` or `.mcd` file only a PlayStation ROM. A save waiting for a ROM does not replace one the Save editor sent to Test. While save storage is off, it is kept only until you reload or close the page, and Test shows a warning.
 
 ## Disable save storage
 

@@ -587,7 +587,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       }
       const rawSave = bytes.subarray(rawOffset, end);
       if (canTest && testGame?.checksum) {
-        await clearPendingTestSave();
+        await clearPendingTestSave("handoff");
         setEmulatorSavePreview(testGame.checksum, rawSave);
         restartCurrentGameWithSave(testGame.id);
       } else {

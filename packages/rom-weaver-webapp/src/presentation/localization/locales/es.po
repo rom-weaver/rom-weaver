@@ -1200,6 +1200,11 @@ msgstr "Elegir ROM y probar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.importReplaces"
+msgstr "Importar reemplaza la partida guardada de {label}, modificada por última vez el {date}. Expórtala antes para conservarla."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.importHint"
 msgstr "Elige el tipo de archivo. Las partidas sin procesar también necesitan el SHA-1 de la ROM."
 

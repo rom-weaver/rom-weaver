@@ -25,7 +25,7 @@ vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({ lo
 vi.mock("../../../src/storage/browser/emulator-saves.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/storage/browser/emulator-saves.ts")>()),
   clearPendingTestSave: pending.clear,
-  readPendingTestSave: pending.read,
+  readPendingTestSaves: pending.read,
 }));
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
@@ -89,7 +89,7 @@ beforeEach(() => {
   Object.assign(TestURL, { createObjectURL: vi.fn().mockReturnValue("blob:created"), revokeObjectURL: vi.fn() });
   vi.stubGlobal("URL", TestURL);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
-  pending.read.mockResolvedValue(undefined);
+  pending.read.mockResolvedValue([]);
   pending.clear.mockResolvedValue(undefined);
   loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({ blob, checksum: SHA1, fileName }));
   configureEmulatorSaveStorage(false);
@@ -115,13 +115,16 @@ describe("EmulatorTestView save previews for the current ROM", () => {
   });
 
   it("keeps a Save editor hand-off for the ROM that is already playing", async () => {
-    pending.read.mockResolvedValue({
-      bytes: new Uint8Array([7]),
-      fileName: "game.sav",
-      gameId: "game",
-      platform: "snes",
-      updatedAt: 1,
-    });
+    pending.read.mockResolvedValue([
+      {
+        bytes: new Uint8Array([7]),
+        fileName: "game.sav",
+        gameId: "game",
+        platform: "snes",
+        slot: "handoff",
+        updatedAt: 1,
+      },
+    ]);
     loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
       blob,
       checksum: SHA1,

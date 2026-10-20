@@ -20,9 +20,11 @@ const logger = createLogger("drop-destination");
 /** The workflows a drop can be sent to. Ids match `WebappView`. */
 type DropDestination = "creator" | "patcher" | "test" | "weave";
 
-type DropFileKind = "patch" | "rom" | "save" | "unknown";
+type DropFileKind = "backup" | "patch" | "rom" | "save" | "unknown";
 
 type DropCounts = {
+  /** Exported Saves & storage backups, which belong to no workflow and count toward none of the others. */
+  backups: number;
   patches: number;
   weaves: number;
   /** Files with a known ROM or container name, cue/gdi tracks folded into their sheet. */
@@ -81,6 +83,7 @@ const isSaveFileName = (name: string) => SAVE_NAME.test(name);
 const isEmulatorSaveExportName = (name: string) => EMULATOR_SAVE_EXPORT_NAME.test(name);
 
 const classifyDropEntry = (entry: DropEntry): DropFileKind => {
+  if (isEmulatorSaveExportName(entry.name)) return "backup";
   if (entry.weave || isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
   if (isArchiveFileName(entry.name)) {
     if (entry.archiveBucket) return entry.archiveBucket;
@@ -95,12 +98,13 @@ const classifyDropEntry = (entry: DropEntry): DropFileKind => {
  * is one ROM, so `.bin`/`.raw` tracks stop counting once a sheet is present.
  */
 const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
-  const counts: DropCounts = { patches: 0, weaves: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
+  const counts: DropCounts = { backups: 0, patches: 0, weaves: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
   const hasSheet = entries.some((entry) => SHEET_NAME.test(entry.name));
   for (const entry of entries) {
     if (entry.weave || isWeaveFileName(entry.name)) counts.weaves += 1;
     const kind = classifyDropEntry(entry);
-    if (kind === "patch") counts.patches += 1;
+    if (kind === "backup") counts.backups += 1;
+    else if (kind === "patch") counts.patches += 1;
     else if (kind === "save") counts.saves += 1;
     else if (kind === "unknown") counts.unknown += 1;
     else if (!(hasSheet && TRACK_NAME.test(entry.name) && !isArchiveFileName(entry.name))) counts.roms += 1;

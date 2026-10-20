@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   importEmulatorSave: vi.fn(),
   importEmulatorSavePart: vi.fn(),
   listEmulatorSaves: vi.fn(),
+  parseEmulatorSaveFile: vi.fn(),
+  readEmulatorSave: vi.fn(),
   triggerBrowserDownload: vi.fn(),
 }));
 
@@ -23,6 +25,8 @@ vi.mock("../../src/storage/browser/emulator-saves.ts", () => ({
   importEmulatorSave: mocks.importEmulatorSave,
   importEmulatorSavePart: mocks.importEmulatorSavePart,
   listEmulatorSaves: mocks.listEmulatorSaves,
+  parseEmulatorSaveFile: mocks.parseEmulatorSaveFile,
+  readEmulatorSave: mocks.readEmulatorSave,
 }));
 
 vi.mock("../../src/storage/browser/emulator-save-export.ts", () => ({
@@ -63,7 +67,12 @@ beforeEach(() => {
   mocks.deleteEmulatorSave.mockResolvedValue(undefined);
   mocks.importEmulatorSave.mockResolvedValue(SAVE);
   mocks.importEmulatorSavePart.mockResolvedValue(SAVE);
+  mocks.parseEmulatorSaveFile.mockResolvedValue(SAVE);
+  mocks.readEmulatorSave.mockResolvedValue(undefined);
 });
+
+const submitImportForm = () =>
+  fireEvent.submit(screen.getByRole("button", { name: "Import" }).closest("form") as HTMLFormElement);
 
 describe("EmulatorSavesPanel listing", () => {
   it("lists the stored saves with their fingerprint and part sizes", async () => {
@@ -167,7 +176,7 @@ describe("EmulatorSavesPanel delete", () => {
 });
 
 describe("EmulatorSavesPanel dropped backups", () => {
-  it("imports each dropped backup once and lists the result", async () => {
+  it("asks before importing each dropped backup, one at a time", async () => {
     const extracted = new Blob(["json"]);
     mocks.extractEmulatorSaveExport.mockResolvedValue(extracted);
     const zip = new File(["zip"], "a.rw-emulator-save.zip");
@@ -176,30 +185,44 @@ describe("EmulatorSavesPanel dropped backups", () => {
     const onImportStarted = vi.fn();
     const view = render(<EmulatorSavesPanel importRequest={request} onImportStarted={onImportStarted} />);
 
-    await waitFor(() => expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2));
-    expect(mocks.extractEmulatorSaveExport).toHaveBeenCalledWith(zip);
-    expect(mocks.importEmulatorSave).toHaveBeenCalledWith(extracted);
-    expect(mocks.importEmulatorSave).toHaveBeenCalledWith(json);
+    await screen.findByText("Import a.rw-emulator-save.zip");
     expect(onImportStarted).toHaveBeenCalledTimes(1);
-    await screen.findByText("Sample Game");
+    expect(mocks.importEmulatorSave).not.toHaveBeenCalled();
+    expect((screen.getByLabelText("File type") as HTMLSelectElement).value).toBe("combined");
+
+    submitImportForm();
+    await waitFor(() => expect(mocks.importEmulatorSave).toHaveBeenCalledWith(extracted));
+    await screen.findByText("Import b.rw-emulator-save.json");
+    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("File type")).toBeNull();
+    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(1);
 
     view.rerender(<EmulatorSavesPanel importRequest={request} onImportStarted={vi.fn()} />);
-    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText("File type")).toBeNull();
   });
 
-  it("keeps importing after a failed backup and reports the failure", async () => {
-    mocks.importEmulatorSave.mockRejectedValueOnce(new Error("Invalid save export")).mockResolvedValue(SAVE);
-    render(
-      <EmulatorSavesPanel
-        importRequest={{
-          files: [new File(["x"], "bad.rw-emulator-save.json"), new File(["{}"], "good.rw-emulator-save.json")],
-          id: 1,
-        }}
-      />,
-    );
+  it("names the stored save a dropped backup would replace", async () => {
+    mocks.readEmulatorSave.mockResolvedValue({ ...SAVE, label: "Stored Game" });
+    const json = new File(["{}"], "b.rw-emulator-save.json");
+    render(<EmulatorSavesPanel importRequest={{ files: [json], id: 1 }} />);
 
+    expect(await screen.findByText(/replaces the stored save for Stored Game/)).toBeTruthy();
+    expect(mocks.parseEmulatorSaveFile).toHaveBeenCalledWith(json);
+    expect(mocks.readEmulatorSave).toHaveBeenCalledWith(SAVE.gameId);
+  });
+
+  it("shows no replace warning for a new game or an unreadable backup", async () => {
+    mocks.parseEmulatorSaveFile.mockRejectedValue(new Error("Invalid save export"));
+    render(<EmulatorSavesPanel importRequest={{ files: [new File(["x"], "bad.rw-emulator-save.json")], id: 1 }} />);
+    await screen.findByText("Import bad.rw-emulator-save.json");
+    await waitFor(() => expect(mocks.parseEmulatorSaveFile).toHaveBeenCalled());
+
+    expect(screen.queryByText(/replaces the stored save/)).toBeNull();
+    mocks.importEmulatorSave.mockRejectedValue(new Error("Invalid save export"));
+    submitImportForm();
     expect((await screen.findByRole("alert")).textContent).toBe("Invalid save export");
-    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -228,7 +251,8 @@ describe("EmulatorSavesPanel import", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Import" }).closest("form") as HTMLFormElement);
 
     await waitFor(() => expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(1));
-    expect(mocks.extractEmulatorSaveExport).toHaveBeenCalledTimes(1);
+    // Once to check which stored save it replaces, once to import it.
+    expect(mocks.extractEmulatorSaveExport).toHaveBeenCalledTimes(2);
     expect(mocks.listEmulatorSaves).toHaveBeenCalledTimes(2);
   });
 
@@ -261,6 +285,20 @@ describe("EmulatorSavesPanel import", () => {
     await waitFor(() =>
       expect(mocks.importEmulatorSavePart).toHaveBeenCalledWith({ data: file, part: "state", sha1: "abc123" }),
     );
+  });
+
+  it("warns when a raw part would replace the stored part for that SHA-1", async () => {
+    mocks.readEmulatorSave.mockResolvedValue(SAVE);
+    render(<EmulatorSavesPanel />);
+    await screen.findByText("Sample Game");
+
+    selectFile(new File(["sram"], "game.srm"));
+    fireEvent.change(await screen.findByLabelText("ROM SHA-1"), { target: { value: "abc123" } });
+    expect(screen.queryByText(/replaces the stored save/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("ROM SHA-1"), { target: { value: SAVE.gameId.toUpperCase() } });
+
+    expect(await screen.findByText(/replaces the stored save for Sample Game/)).toBeTruthy();
+    expect(mocks.readEmulatorSave).toHaveBeenCalledWith(SAVE.gameId);
   });
 
   it("defaults an unrecognized extension to SRAM", async () => {

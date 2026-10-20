@@ -39,6 +39,14 @@ describe("isEmulatorSaveExportName", () => {
   });
 });
 
+describe("save backups", () => {
+  it("classify as backups, which count toward no workflow", () => {
+    expect(classifyDropEntry({ name: "Zelda.rw-emulator-save.zip" })).toBe("backup");
+    expect(counts("Zelda.rw-emulator-save.zip", "game.nes")).toMatchObject({ backups: 1, roms: 1, unknown: 0 });
+    expect(plan("Zelda.rw-emulator-save.json")).toEqual({ destinations: [], mixed: false });
+  });
+});
+
 describe("countDropEntries", () => {
   it("folds cue/gdi track files into their sheet", () => {
     expect(counts("game.cue", "game (Track 1).bin", "game (Track 2).bin").roms).toBe(1);

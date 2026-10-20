@@ -10,7 +10,11 @@ const DATABASE_NAME = "rom-weaver-emulator-saves";
 const DATABASE_VERSION = 4;
 const STORE_NAME = "games";
 const PENDING_TEST_SAVE_STORE_NAME = "pending-test-save";
-const PENDING_TEST_SAVE_KEY = "current";
+/**
+ * Two kinds of held save never share a slot: the Save editor's edit waiting to be tested (`handoff`, key
+ * `current` for saves staged before slots existed) and a raw save the visitor dropped without its ROM.
+ */
+const PENDING_TEST_SAVE_KEYS = { dropped: "dropped", handoff: "current" } as const;
 const MESSAGE_SOURCE = "rom-weaver-emulator";
 const SAVE_FORMAT = "rom-weaver-emulator-save";
 const SAVE_FORMAT_VERSION = 3;
@@ -55,7 +59,9 @@ type EmulatorSavePartImport = {
   sha1: string;
 };
 
-/** A raw save dropped without its ROM has no `platform` or `gameId`, so it matches any ROM. */
+type PendingSaveSlot = keyof typeof PENDING_TEST_SAVE_KEYS;
+
+/** A raw save dropped without its ROM has no `platform` or `gameId`; its file name may still name the system. */
 type PendingTestSave = {
   bytes: Uint8Array;
   fileName: string;
@@ -63,6 +69,10 @@ type PendingTestSave = {
   gameId?: string;
   romSha1?: string;
   updatedAt: number;
+  /** Which kind of hold this is. Set on reads; staging takes it as input. */
+  slot?: PendingSaveSlot;
+  /** Held only in this page because save storage was off, so a reload loses it. */
+  memoryOnly?: true;
 };
 
 type SerializedEmulatorSave = {
@@ -85,6 +95,7 @@ type EmulatorSaveMessage = {
 };
 
 let saveStorageEnabled = true;
+const memoryPendingTestSaves = new Map<PendingSaveSlot, PendingTestSave>();
 
 const storageUnavailable = () => new Error("Emulator save storage is unavailable in this browser.");
 
@@ -348,16 +359,20 @@ const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | un
   });
 };
 
-const updatePart = async (
+type UpdatePartResult = { record: EmulatorSaveRecord; written: boolean };
+
+/** `keepExisting` leaves a part that is already stored alone, decided inside the writing transaction. */
+const updatePartResult = async (
   kind: EmulatorSavePart,
   update: EmulatorSaveUpdate,
-  { preserveMetadata = false }: { preserveMetadata?: boolean } = {},
-): Promise<EmulatorSaveRecord> => {
+  { keepExisting = false, preserveMetadata = false }: { keepExisting?: boolean; preserveMetadata?: boolean } = {},
+): Promise<UpdatePartResult> => {
   await readEmulatorSave(update.gameId);
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction: IDBTransaction;
     let next: EmulatorSaveRecord | undefined;
+    let written = false;
     let failure: Error | undefined;
     try {
       transaction = database.transaction(STORE_NAME, "readwrite");
@@ -369,6 +384,11 @@ const updatePart = async (
       request.onsuccess = () => {
         try {
           const previous = normalizeRecord(request.result);
+          if (keepExisting && previous?.[kind]) {
+            next = previous;
+            return;
+          }
+          written = true;
           next = {
             gameId: update.gameId,
             gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
@@ -402,10 +422,16 @@ const updatePart = async (
         reject(new Error("Emulator save transaction completed without a record."));
         return;
       }
-      resolve(copyRecord(next));
+      resolve({ record: copyRecord(next), written });
     };
   });
 };
+
+const updatePart = async (
+  kind: EmulatorSavePart,
+  update: EmulatorSaveUpdate,
+  options?: { preserveMetadata?: boolean },
+): Promise<EmulatorSaveRecord> => (await updatePartResult(kind, update, options)).record;
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
   let result = await readTransaction<unknown[]>((store) => store.getAll());
@@ -642,6 +668,8 @@ const copyPendingTestSave = (save: PendingTestSave): PendingTestSave => ({
   ...(save.platform ? { platform: save.platform, gameId: save.gameId } : {}),
   ...(save.romSha1 ? { romSha1: save.romSha1 } : {}),
   updatedAt: save.updatedAt,
+  ...(save.slot ? { slot: save.slot } : {}),
+  ...(save.memoryOnly ? { memoryOnly: true } : {}),
 });
 
 const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined => {
@@ -681,7 +709,9 @@ const stagePendingTestSave = async (input: {
   platform?: string;
   gameId?: string;
   romSha1?: string;
+  slot?: PendingSaveSlot;
 }): Promise<PendingTestSave> => {
+  const slot = input.slot ?? "handoff";
   const save: PendingTestSave = {
     bytes: await readImportBytes(input.data),
     fileName: normalizePendingText(input.fileName, "file name", MAX_LABEL_LENGTH),
@@ -692,27 +722,69 @@ const stagePendingTestSave = async (input: {
           gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
         }),
     ...(input.romSha1 === undefined ? {} : { romSha1: normalizeSha1(input.romSha1) }),
+    slot,
     updatedAt: Date.now(),
   };
+  if (!saveStorageEnabled) {
+    // With save storage off the held save MUST NOT outlive the page; Test warns that a reload loses it.
+    memoryPendingTestSaves.set(slot, copyPendingTestSave({ ...save, memoryOnly: true }));
+    await runTransaction(
+      "readwrite",
+      (store) => store.delete(PENDING_TEST_SAVE_KEYS[slot]),
+      PENDING_TEST_SAVE_STORE_NAME,
+    ).catch((error) =>
+      logger.warn("could not clear the stored held save", {
+        message: error instanceof Error ? error.message : String(error),
+        slot,
+      }),
+    );
+    return copyPendingTestSave({ ...save, memoryOnly: true });
+  }
+  memoryPendingTestSaves.delete(slot);
   await runTransaction(
     "readwrite",
-    (store) => store.put(copyPendingTestSave(save), PENDING_TEST_SAVE_KEY),
+    (store) => store.put(copyPendingTestSave(save), PENDING_TEST_SAVE_KEYS[slot]),
     PENDING_TEST_SAVE_STORE_NAME,
   );
   return copyPendingTestSave(save);
 };
 
-const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => {
+const readPendingSlot = async (slot: PendingSaveSlot): Promise<PendingTestSave | undefined> => {
+  const memory = memoryPendingTestSaves.get(slot);
+  if (memory) return copyPendingTestSave(memory);
   const value = await readTransaction<unknown>(
-    (store) => store.get(PENDING_TEST_SAVE_KEY),
+    (store) => store.get(PENDING_TEST_SAVE_KEYS[slot]),
     PENDING_TEST_SAVE_STORE_NAME,
   );
   const save = normalizePendingTestSave(value);
-  return save ? copyPendingTestSave(save) : undefined;
+  return save ? copyPendingTestSave({ ...save, slot }) : undefined;
 };
 
-const clearPendingTestSave = async (): Promise<void> => {
-  await runTransaction("readwrite", (store) => store.delete(PENDING_TEST_SAVE_KEY), PENDING_TEST_SAVE_STORE_NAME);
+/** Every held save, newest first, so a caller can pick the one that fits and leave the rest held. */
+const readPendingTestSaves = async (): Promise<PendingTestSave[]> => {
+  const results = await Promise.allSettled(
+    (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]).map(readPendingSlot),
+  );
+  const held = results.flatMap((result) => (result.status === "fulfilled" && result.value ? [result.value] : []));
+  // A save held in this page survives storage that cannot be read; with nothing held, the failure surfaces.
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure && !held.length) throw failure.reason;
+  return held.sort((left, right) => right.updatedAt - left.updatedAt);
+};
+
+const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => (await readPendingTestSaves())[0];
+
+/** Clears one slot, or both when none is named. */
+const clearPendingTestSave = async (slot?: PendingSaveSlot): Promise<void> => {
+  const slots = slot ? [slot] : (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]);
+  for (const name of slots) memoryPendingTestSaves.delete(name);
+  await runTransaction(
+    "readwrite",
+    (store) => {
+      for (const name of slots) store.delete(PENDING_TEST_SAVE_KEYS[name]);
+    },
+    PENDING_TEST_SAVE_STORE_NAME,
+  );
 };
 
 const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {
@@ -738,11 +810,18 @@ const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImpo
 const loadDroppedSram = async (sha1: string, data: Uint8Array, label: string): Promise<"preview" | "stored"> => {
   const gameId = normalizeSha1(sha1);
   try {
-    if (saveStorageEnabled && !(await readEmulatorSave(gameId))?.sram) {
-      clearEmulatorSavePreview(gameId);
-      await saveEmulatorSram({ data, gameId, gameName: gameId, label });
-      logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
-      return "stored";
+    if (saveStorageEnabled) {
+      // One transaction decides and writes, so an in-game save arriving meanwhile is never overwritten.
+      const { written } = await updatePartResult(
+        "sram",
+        { data, gameId, gameName: gameId, label },
+        { keepExisting: true },
+      );
+      if (written) {
+        clearEmulatorSavePreview(gameId);
+        logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
+        return "stored";
+      }
     }
   } catch (error) {
     logger.warn("could not store dropped SRAM; previewing it instead", {
@@ -877,9 +956,12 @@ export {
   importEmulatorSavePart,
   listEmulatorSaves,
   loadDroppedSram,
+  parseEmulatorSaveFile,
   parseSerializedEmulatorSave,
   readImportBytes,
+  readEmulatorSave,
   readPendingTestSave,
+  readPendingTestSaves,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
   stagePendingTestSave,
