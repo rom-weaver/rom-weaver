@@ -43,9 +43,36 @@ const resetBrowserTransientOpfs = async (
   );
 };
 
+// libarchive spools some writers (7z) into `libarchive_XXXXXX` files at the OPFS root. A run that dies
+// before removing its temp file (tab closed or worker killed mid-compress) leaves it behind. Only the
+// boot sweep, which holds the exclusive lock while no other page is alive, may remove them.
+const LIBARCHIVE_TEMP_PREFIX = "libarchive_";
+// Per-run TMPDIR directories made for compress runs (see rom-weaver-runner); the same boot-time rule applies.
+const RUN_SCRATCH_DIR_PREFIX = "rw-tmp-";
+
+const sweepStaleLibarchiveTemps = async (): Promise<void> => {
+  const response = await requestBrowserOpfsStorage({ action: "list-metadata" });
+  if (!response.success) return;
+  const stale = (response.entries || []).filter(
+    (entry) =>
+      entry.path.lastIndexOf("/") === 0 &&
+      ((entry.kind === "file" && entry.path.startsWith(`/${LIBARCHIVE_TEMP_PREFIX}`)) ||
+        (entry.kind === "directory" && entry.path.startsWith(`/${RUN_SCRATCH_DIR_PREFIX}`))),
+  );
+  await Promise.all(
+    stale.map(async (entry) => {
+      const removed = await requestBrowserOpfsStorage({ action: "remove", filePath: `/work${entry.path}` });
+      if (!removed.success) logger.debug("Skipped stale compress temp", { path: entry.path });
+    }),
+  );
+};
+
 const startBrowserOpfsBootCleanup = (): Promise<void> => {
   if (!bootCleanupPromise) {
-    const cleanup = () => resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
+    const cleanup = async () => {
+      await resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
+      await sweepStaleLibarchiveTemps();
+    };
     const locks = globalThis.navigator?.locks;
     bootCleanupPromise = locks
       ? new Promise<void>((resolve, reject) => {

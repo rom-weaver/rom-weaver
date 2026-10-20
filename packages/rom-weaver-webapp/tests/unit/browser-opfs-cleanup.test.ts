@@ -53,6 +53,32 @@ describe("browser OPFS cleanup", () => {
     expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({ action: "remove", filePath: "/work/operations" });
   });
 
+  it("sweeps stale root libarchive temp files at boot and leaves nested or unrelated files", async () => {
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      (request as { action?: string })?.action === "list-metadata"
+        ? ({
+            entries: [
+              { kind: "file", path: "/libarchive_AbC123" },
+              { kind: "file", path: "/operations/x/libarchive_keep" },
+              { kind: "file", path: "/rom.bin" },
+              { kind: "directory", path: "/libarchive_dir" },
+              { kind: "directory", path: "/rw-tmp-abc" },
+              { kind: "file", path: "/rw-tmp-abc/.keep" },
+            ],
+            success: true,
+          } as never)
+        : { success: true },
+    );
+    vi.stubGlobal("navigator", {});
+    vi.resetModules();
+    const fresh = await import("../../src/storage/browser/browser-opfs-cleanup.ts");
+    await fresh.startBrowserOpfsBootCleanup();
+    const removed = requestBrowserOpfsStorage.mock.calls
+      .map(([request]) => (request as { filePath?: string })?.filePath)
+      .filter((path) => path?.includes("libarchive_") || path?.includes("rw-tmp-"));
+    expect(removed).toEqual(["/work/libarchive_AbC123", "/work/rw-tmp-abc"]);
+  });
+
   it("sweeps emulator retention only for the boot cleanup", async () => {
     await startBrowserOpfsBootCleanup();
     expect(requestBrowserOpfsStorage).toHaveBeenCalledWith({
