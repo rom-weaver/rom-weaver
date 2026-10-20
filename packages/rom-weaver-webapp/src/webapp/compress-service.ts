@@ -128,15 +128,16 @@ const getCompressSource = async (files: File[]): Promise<CompressSource | null> 
 
 /**
  * Whether a single `.bin` shows CD-image evidence in its bytes: the engine probe reads the header and
- * reports a disc medium only for the CD sync header or an ISO9660 descriptor at sector 16. Without a runtime or
- * on a probe failure there is no evidence, so a cartridge `.bin` is never offered a CD CHD.
+ * recommends CHD or reports a CD medium for the CD sync header or an ISO9660 descriptor at sector 16. Other
+ * media (a GameCube DVD dump named `.bin`) are not CD evidence. Without a runtime or on a probe failure there is
+ * no evidence, so a cartridge `.bin` is never offered a CD CHD.
  */
 const hasBinDiscEvidence = async (file: File, loadRuntime?: () => Promise<WorkflowRuntime>): Promise<boolean> => {
   try {
     const probe = (await loadRuntime?.())?.compression.probe;
     if (!probe) return false;
     const result = await probe({ source: file });
-    return String(result.recommendedFormat || "").toLowerCase() === "chd" || !!result.discFormat;
+    return String(result.recommendedFormat || "").toLowerCase() === "chd" || result.discFormat === "CD";
   } catch (error) {
     logger.debug("bin disc probe failed", { error: String(error), fileName: file.name });
     return false;

@@ -101,6 +101,8 @@ describe("compress service", () => {
     expect(await getCompressFormats([cart], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z"]);
     // Header evidence (sync header or ISO9660 descriptor) from the engine probe offers CHD.
     expect(await getCompressFormats([cart], runtimeWith("CD"))).toEqual(["zip", "7z", "chd"]);
+    // A non-CD medium, such as a GameCube DVD dump named `.bin`, is not CD evidence.
+    expect(await getCompressFormats([cart], runtimeWith("DVD"))).toEqual(["zip", "7z"]);
     // Evidence still needs whole sectors.
     const unaligned = file("odd.bin", new Uint8Array(524_289));
     expect(await getCompressFormats([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
