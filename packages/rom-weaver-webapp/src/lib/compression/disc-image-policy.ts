@@ -1,7 +1,9 @@
 import { ROM_WEAVER_DISC_IMAGE_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 // Shared consumer of Rust-owned disc-image policy. Ambiguous extensions such as `.bin` count as
-// disc images only when their known size aligns to a supported sector size.
+// disc images only with content evidence (the engine's header-based CHD recommendation, or a cue/gdi
+// sheet) AND a known size that aligns to a supported sector size. Size alone is not evidence: a
+// 524,288-byte cartridge `.bin` is a whole number of 2048-byte sectors.
 
 const AMBIGUOUS_DISC_IMAGE_EXTENSIONS: readonly string[] = ROM_WEAVER_DISC_IMAGE_POLICY.ambiguousDiscImageExtensions;
 const CD_SECTOR_SIZES: readonly number[] = ROM_WEAVER_DISC_IMAGE_POLICY.cdSectorSizes;
@@ -26,9 +28,19 @@ const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
  * Apply the size gate for ambiguous disc extensions; other extensions pass through unchecked.
  * Callers MUST first establish that the source is a candidate disc image.
  */
-const isLikelyDiscImageSource = (extension: string | null | undefined, size: number | null | undefined): boolean => {
+const isLikelyDiscImageSource = (
+  extension: string | null | undefined,
+  size: number | null | undefined,
+  hasDiscEvidence = false,
+): boolean => {
   if (!isAmbiguousDiscImageExtension(extension)) return true;
-  return isLikelyDiscImageSize(size);
+  return hasDiscEvidence && isLikelyDiscImageSize(size);
 };
 
-export { isAmbiguousDiscImageExtension, isLikelyDiscImageSize, isLikelyDiscImageSource };
+/** Whether engine identity (header-based CHD recommendation) or a CD/DVD sheet mode marks a source as a disc. */
+const hasDiscImageEvidence = (
+  recommendedFormat: string | null | undefined,
+  chdMode: string | null | undefined,
+): boolean => String(recommendedFormat ?? "").toLowerCase() === "chd" || !!chdMode;
+
+export { hasDiscImageEvidence, isAmbiguousDiscImageExtension, isLikelyDiscImageSize, isLikelyDiscImageSource };

@@ -89,6 +89,23 @@ describe("compress service", () => {
     expect(await getCompressFormats([file("a.bin"), file("b.ips")])).toEqual(["zip", "7z"]);
   });
 
+  it("offers CHD for a single .bin only when its header shows a CD image, not by sector-aligned size", async () => {
+    // 524,288 bytes is a whole number of 2048-byte sectors, like a cartridge ROM dump.
+    const cart = file("cart.bin", new Uint8Array(524_288));
+    const runtimeWith = (discFormat?: string) => async () =>
+      ({
+        compression: { probe: async () => ({ entries: [], ...(discFormat ? { discFormat } : {}) }) },
+      }) as unknown as WorkflowRuntime;
+    expect(await getCompressFormats([cart], runtimeWith())).toEqual(["zip", "7z"]);
+    expect(await getCompressFormats([cart])).toEqual(["zip", "7z"]);
+    expect(await getCompressFormats([cart], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z"]);
+    // Header evidence (sync header or ISO9660 descriptor) from the engine probe offers CHD.
+    expect(await getCompressFormats([cart], runtimeWith("CD"))).toEqual(["zip", "7z", "chd"]);
+    // Evidence still needs whole sectors.
+    const unaligned = file("odd.bin", new Uint8Array(524_289));
+    expect(await getCompressFormats([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
+  });
+
   it("keeps CD codecs, output metadata, and lazy bytes consistent for a small ISO", async () => {
     const source = file("disc.iso", new Uint8Array(2048));
     const read = vi.spyOn(source, "arrayBuffer");

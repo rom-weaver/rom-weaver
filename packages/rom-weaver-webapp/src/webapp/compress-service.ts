@@ -12,7 +12,7 @@ import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../l
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
 import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
 import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
-import { isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
+import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
 import { createLogger } from "../lib/logging.ts";
 import { replaceCueFileReferences } from "../workers/protocol/cue-file-utils.ts";
@@ -126,7 +126,27 @@ const getCompressSource = async (files: File[]): Promise<CompressSource | null> 
   return (await validateInputs(files)).source;
 };
 
-const getCompressFormats = async (files: File[]): Promise<ConcreteCompressFormat[]> => {
+/**
+ * Whether a single `.bin` shows CD-image evidence in its bytes: the engine probe reads the header and
+ * reports a disc medium only for the CD sync header or an ISO9660 descriptor at sector 16. Without a runtime or
+ * on a probe failure there is no evidence, so a cartridge `.bin` is never offered a CD CHD.
+ */
+const hasBinDiscEvidence = async (file: File, loadRuntime?: () => Promise<WorkflowRuntime>): Promise<boolean> => {
+  try {
+    const probe = (await loadRuntime?.())?.compression.probe;
+    if (!probe) return false;
+    const result = await probe({ source: file });
+    return String(result.recommendedFormat || "").toLowerCase() === "chd" || !!result.discFormat;
+  } catch (error) {
+    logger.debug("bin disc probe failed", { error: String(error), fileName: file.name });
+    return false;
+  }
+};
+
+const getCompressFormats = async (
+  files: File[],
+  loadRuntime?: () => Promise<WorkflowRuntime>,
+): Promise<ConcreteCompressFormat[]> => {
   if (files.length === 0) return [];
   const input = await validateInputs(files);
   if (input.sheet) return input.sheetProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
@@ -136,12 +156,15 @@ const getCompressFormats = async (files: File[]): Promise<ConcreteCompressFormat
   const extension = getExtension(source.fileName);
   if (extension === "gdi" || ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS.includes(extension))
     return [...ARCHIVE_FORMATS];
+  const discEvidence =
+    !isAmbiguousDiscImageExtension(extension) ||
+    (isLikelyDiscImageSize(source.size) && (await hasBinDiscEvidence(files[0] as File, loadRuntime)));
   return [
     ...ARCHIVE_FORMATS,
     ...ROM_SPECIFIC_FORMATS.filter(
       (format) =>
         OutputCompressionManager.supportsOutputCompression(source, format) &&
-        (format !== "chd" || (source.size > 0 && isLikelyDiscImageSize(source.size))),
+        (format !== "chd" || (source.size > 0 && isLikelyDiscImageSize(source.size) && discEvidence)),
     ),
   ];
 };

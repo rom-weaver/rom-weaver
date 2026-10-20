@@ -5,6 +5,7 @@ import {
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../compression/container-format-registry.ts";
+import { hasDiscImageEvidence } from "../compression/disc-image-policy.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../input/path-utils.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { buildCheatOutputBaseName, buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
@@ -34,6 +35,7 @@ const resolveAutomaticFormat = (
     parentCompressions: input?.view?.parentCompressions,
     sourceFileName: stripFileNameQuery(sourceName),
     sourceSize: getSourceSize(input?.sources[0]),
+    hasDiscEvidence: hasDiscImageEvidence(input?.view?.state?.romType?.recommendedFormat, input?.view?.state?.chdMode),
   });
 };
 

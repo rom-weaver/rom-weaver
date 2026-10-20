@@ -259,7 +259,18 @@ const runRomWeaverProbeWorker = async (
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const platform = typeof details?.platform === "string" ? details.platform.trim() : "";
   const chd = getChdProbeDetails(details?.chd);
-  return { entries: getContainerEntriesFromProbe(result), ...(platform ? { platform } : {}), ...(chd ? { chd } : {}) };
+  const container = asRecord(details?.container);
+  const discFormat = typeof details?.disc_format === "string" ? details.disc_format.trim() : "";
+  const recommendedFormat = String(
+    container?.recommended_compress_format ?? details?.recommended_compress_format ?? "",
+  ).trim();
+  return {
+    entries: getContainerEntriesFromProbe(result),
+    ...(platform ? { platform } : {}),
+    ...(discFormat ? { discFormat } : {}),
+    ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chd ? { chd } : {}),
+  };
 };
 
 // The CHD header's own digests: `raw_sha1` covers the decoded payload, `sha1` the payload plus

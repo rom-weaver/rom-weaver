@@ -223,6 +223,8 @@ interface OutputViewStateInput {
   disabled: boolean;
   displayedCompression: CompressionFormat;
   effectiveResolvedOutputName: string;
+  /** The default output format is still waiting on the engine's header evidence for a `.bin`. */
+  formatPending: boolean;
   hasPendingDownload: boolean;
   /** The ROM's identified title, or null when it has no single confident match. */
   identifiedTitle: string | null;
@@ -249,6 +251,7 @@ const buildOutputViewState = ({
   disabled,
   displayedCompression,
   effectiveResolvedOutputName,
+  formatPending,
   hasPendingDownload,
   identifiedTitle,
   outputName,
@@ -277,6 +280,7 @@ const buildOutputViewState = ({
   applyTiming: applyTimingText,
   compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>, z3dsLabelSource),
   compressionFormat: displayedCompression,
+  formatPending,
   compressTiming: compressTimingText,
   disabled: disabled || busy,
   displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,

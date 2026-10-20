@@ -27,6 +27,8 @@ const RAW_SECTOR_BYTES: usize = 2352;
 const USER_SECTOR_BYTES: usize = 2048;
 /// PS2 discs at or above this size are DVDs; smaller ones are CDs. PS2 CD-ROM
 /// titles top out around 700 MiB (a single CD), DVD titles start well above it.
+/// Largest 2048-byte-sector image that still fits a CD (450,000 sectors); larger is DVD.
+const CD_ISO_MAX_BYTES: u64 = 450_000 * 2048;
 const PS2_DVD_THRESHOLD_BYTES: u64 = 800 * 1024 * 1024;
 
 /// Optical medium of a disc image. Cartridge/card dumps have no medium.
@@ -118,7 +120,7 @@ impl DiscSectorSource for PrefixDisc<'_> {
 /// be masked by weak cartridge heuristics (e.g. a zeroed prefix or a leading
 /// `"AB"`).
 pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str>) -> RomIdentity {
-    if let Some(identity) = detect_disc_identity(prefix, total_len) {
+    if let Some(identity) = detect_disc_identity(prefix, total_len, extension) {
         trace!(
             platform = ?identity.platform,
             disc_format = ?identity.disc_format,
@@ -237,7 +239,11 @@ pub fn detect_rom_identity_for_path(path: &Path) -> RomIdentity {
 
 /// Returns a disc identity when the prefix looks like an optical disc image
 /// (CD raw framing, an ISO 9660 PVD, or a recognised system-area signature).
-fn detect_disc_identity(prefix: &[u8], total_len: u64) -> Option<RomIdentity> {
+fn detect_disc_identity(
+    prefix: &[u8],
+    total_len: u64,
+    extension: Option<&str>,
+) -> Option<RomIdentity> {
     let cd_raw = prefix.len() >= CD_SYNC.len() && prefix[..CD_SYNC.len()] == CD_SYNC;
     let (frame, data_offset) = if cd_raw {
         // Mode byte lives at raw offset 15; Mode 2 user data starts after an
@@ -269,13 +275,30 @@ fn detect_disc_identity(prefix: &[u8], total_len: u64) -> Option<RomIdentity> {
             },
         )
     });
-    let is_disc = cd_raw || console.is_some() || has_iso9660_pvd(&source);
+    let has_pvd = has_iso9660_pvd(&source);
+    let is_disc = cd_raw || console.is_some() || has_pvd;
     if !is_disc {
         return None;
     }
+    // A cooked ISO9660 image of an unknown console is still a disc, but only a `.bin` or
+    // extensionless file needs the medium (a cartridge `.bin` of whole sectors is not a disc, so the
+    // descriptor is the evidence): whole 2048-byte sectors with a descriptor at sector 16, as in
+    // `compress`'s CHD layout rule. Other extensions keep their medium-less identity.
+    let plain_iso_bin = !cd_raw
+        && console.is_none()
+        && has_pvd
+        && total_len.is_multiple_of(USER_SECTOR_BYTES as u64)
+        && extension.is_none_or(|ext| ext.eq_ignore_ascii_case(".bin"));
+    let disc_format = medium_for(console, cd_raw, total_len).or_else(|| {
+        plain_iso_bin.then_some(if total_len > CD_ISO_MAX_BYTES {
+            DiscFormat::Dvd
+        } else {
+            DiscFormat::Cd
+        })
+    });
     Some(RomIdentity {
         platform: console,
-        disc_format: medium_for(console, cd_raw, total_len),
+        disc_format,
     })
 }
 
@@ -375,6 +398,30 @@ mod tests {
         let identity = detect_rom_identity(&image, image.len() as u64, Some(".bin"));
         assert_eq!(identity.platform, Some(platform::DREAMCAST));
         assert_eq!(identity.disc_format, Some(DiscFormat::GdRom));
+    }
+
+    #[test]
+    fn plain_iso9660_bin_reports_a_cd_medium_only_for_bin_or_no_extension() {
+        let mut image = logical_image(20);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES, &[1]);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        let len = image.len() as u64;
+        for extension in [Some(".bin"), Some(".BIN"), None] {
+            let identity = detect_rom_identity(&image, len, extension);
+            assert_eq!(identity.disc_format, Some(DiscFormat::Cd), "{extension:?}");
+        }
+        // `.iso` keeps its medium-less identity, and a size off the sector grid is not a disc image.
+        assert_eq!(
+            detect_rom_identity(&image, len, Some(".iso")).disc_format,
+            None
+        );
+        assert_eq!(
+            detect_rom_identity(&image, len + 1, Some(".bin")).disc_format,
+            None
+        );
+        // A cartridge-sized `.bin` of whole sectors with no descriptor is not a disc.
+        let cartridge = vec![0x5a_u8; 2048 * 256];
+        assert!(detect_rom_identity(&cartridge, cartridge.len() as u64, Some(".bin")).is_empty());
     }
 
     #[test]

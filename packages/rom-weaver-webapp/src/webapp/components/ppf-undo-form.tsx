@@ -14,7 +14,7 @@ import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { usePpfUndoInputs } from "./ppf-undo-inputs.tsx";
-import { isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
+import { hasDiscImageEvidence, isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
 import { getFileNameExtension } from "../../lib/path-utils.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../../lib/compression/container-format-registry.ts";
@@ -181,7 +181,11 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         OutputCompressionManager.supportsOutputCompression(compressionSource, format) &&
         (format !== "chd" ||
           !!compressionSource?.metadata?.cuePath ||
-          isLikelyDiscImageSource(getFileNameExtension(compressionSource?.fileName || ""), compressionSource?.size)),
+          isLikelyDiscImageSource(
+            getFileNameExtension(compressionSource?.fileName || ""),
+            compressionSource?.size,
+            hasDiscImageEvidence(compressionSource?.metadata?.recommendedFormat, compressionSource?.metadata?.mode),
+          )),
     ),
   ];
   const compression = formats.includes(selectedCompression) ? selectedCompression : "none";

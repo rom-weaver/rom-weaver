@@ -1,5 +1,6 @@
 import { Download, Scissors } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
@@ -637,6 +638,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     parentCompressions: sourceState?.parentCompressions,
     sourceFileName: resolvedSourceFileName,
     sourceSize: sourceState?.size,
+    hasDiscEvidence: hasDiscImageEvidence(sourceState?.romType?.recommendedFormat, sourceState?.chdMode),
   });
   const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,
