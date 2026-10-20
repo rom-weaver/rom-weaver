@@ -67,6 +67,20 @@ describe("ExtractForm", () => {
     expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
   });
 
+  it("opens a split WBFS set when a part from another set comes first", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("Game.iso")] });
+    const first = new File(["WBFS"], "Game.wbfs");
+    const second = new File(["part"], "Game.wbf1");
+    const other = new File(["part"], "Other.wbf1");
+    render(<ExtractForm pageDrop={{ files: [other, second, first], id: 1 }} />);
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
+  });
+
   it.each([
     [
       1398102,

@@ -203,8 +203,13 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         first && (isNfsPart(first) || isNfsKey(first))
           ? files.find((file) => /^hif_000000\.nfs$/i.test(file.name))
           : undefined;
-      const stem = first && wbfsStem(first);
-      const wbfs = stem ? files.find((file) => file.name.toLowerCase() === `${stem}.wbfs`) : undefined;
+      // A first part from a set without its .wbfs falls back to any .wbfs in the selection.
+      const firstStem = first && wbfsStem(first);
+      const wbfs = firstStem
+        ? (files.find((file) => file.name.toLowerCase() === `${firstStem}.wbfs`) ??
+          files.find((file) => /\.wbfs$/i.test(file.name)))
+        : undefined;
+      const stem = wbfs && wbfsStem(wbfs);
       const file = nfs || wbfs || first;
       if (!file) return;
       let companions: File[] = [];
