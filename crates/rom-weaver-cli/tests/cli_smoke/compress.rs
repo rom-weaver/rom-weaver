@@ -1711,4 +1711,5 @@ fn compress_rvz_rejects_non_disc_input_with_hint() {
         "{label}"
     );
     assert!(!label.contains("stream fallback failed"), "{label}");
+    assert!(label.contains("`source.bin`"), "{label}");
 }
