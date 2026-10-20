@@ -403,7 +403,7 @@ impl CliApp {
             .path
             .as_deref()
             .filter(|_| rom_unbundled)
-            .and_then(|path| path.trim().rsplit('/').next());
+            .and_then(|path| path.trim().rsplit(['/', '\\']).next());
         if let Some(name) = rom
             .name
             .as_deref()

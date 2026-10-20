@@ -1691,43 +1691,48 @@ fn weave_apply_input_zip_with_unbundled_rom_path_asks_for_the_rom() {
     // A hand-zipped `weave create` JSON records the input ROM as `rom.path`, which the
     // zip does not bundle: the guidance matches a `rom.name` weave, not bundle.path.unresolved,
     // and names the expected ROM by the path's basename since there is no `rom.name`.
-    let temp = setup_temp_dir();
-    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
-    let weave_json = temp.child("rom-weaver-weave.json");
-    fs::write(
-        weave_json.path(),
-        r#"{ "version": 1, "rom": { "path": "dumps/game.bin" }, "patches": [ { "path": "main.ips" } ] }"#,
-    )
-    .expect("weave fixture");
-    let archive = temp.child("weave.tar.gz");
-    write_tar_gz_fixture(
-        &[
-            (weave_json.path(), "rom-weaver-weave.json"),
-            (main.as_path(), "main.ips"),
-        ],
-        archive.path(),
-    );
-    let events = run_json_events(
-        &[
-            "patch-apply",
-            "--input",
-            archive.path().to_str().expect("path"),
-            "--output",
-            temp.child("nope.bin").path().to_str().expect("path"),
-            "--jsonl",
-        ],
-        1,
-    );
-    let terminal = events.last().expect("terminal");
-    assert_eq!(terminal["status"], "failed");
-    let label = terminal["label"].as_str().expect("label");
-    assert!(label.contains("bundle.rom.missing"), "{label}");
-    assert!(!label.contains("bundle.path.unresolved"), "{label}");
-    assert!(label.contains("not bundled in the archive"), "{label}");
-    assert!(
-        label.contains("expected_name=game.bin"),
-        "expected name in label: {label}"
-    );
+    // Weave paths accept either separator, so a backslash path names the same basename.
+    for rom_path in [r"dumps/game.bin", r"dumps\\game.bin"] {
+        let temp = setup_temp_dir();
+        let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+        let weave_json = temp.child("rom-weaver-weave.json");
+        fs::write(
+            weave_json.path(),
+            format!(
+                r#"{{ "version": 1, "rom": {{ "path": "{rom_path}" }}, "patches": [ {{ "path": "main.ips" }} ] }}"#
+            ),
+        )
+        .expect("weave fixture");
+        let archive = temp.child("weave.tar.gz");
+        write_tar_gz_fixture(
+            &[
+                (weave_json.path(), "rom-weaver-weave.json"),
+                (main.as_path(), "main.ips"),
+            ],
+            archive.path(),
+        );
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--output",
+                temp.child("nope.bin").path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            1,
+        );
+        let terminal = events.last().expect("terminal");
+        assert_eq!(terminal["status"], "failed");
+        let label = terminal["label"].as_str().expect("label");
+        assert!(label.contains("bundle.rom.missing"), "{label}");
+        assert!(!label.contains("bundle.path.unresolved"), "{label}");
+        assert!(label.contains("not bundled in the archive"), "{label}");
+        assert!(
+            label.contains("expected_name=game.bin"),
+            "expected name for {rom_path}: {label}"
+        );
+    }
 }
 
 #[test]
