@@ -439,16 +439,18 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           !!staged &&
           (staged.platform ? getEmulatorJsCore(staged.platform) === core : !(save || keepHeldSave)) &&
           (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
+        // A save the visitor dropped is theirs to keep, so it is stored. The Save editor's copy stays a
+        // preview: it is a test of an edit, not a replacement. The file is read before anything changes, so
+        // an unreadable save fails the load without losing the held save.
+        const matched = staged && stagedMatches ? staged : undefined;
+        let droppedBytes: Uint8Array | undefined;
+        if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
+        else if (save) droppedBytes = new Uint8Array(await save.arrayBuffer());
         if (stagedMatches) await clearPendingTestSave();
         const identity = createEmulatorGameIdentity(entry);
         if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);
         // Replacing the current game with the same ROM clears that ROM's preview, so saves load after addEntry.
         addEntry(entry);
-        // A save the visitor dropped is theirs to keep, so it is stored. The Save editor's copy stays a
-        // preview: it is a test of an edit, not a replacement.
-        const matched = staged && stagedMatches ? staged : undefined;
-        let droppedBytes: Uint8Array | undefined = save ? new Uint8Array(await save.arrayBuffer()) : undefined;
-        if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
         if (droppedBytes) await loadDroppedSram(identity.saveId, droppedBytes, loaded.fileName);
         else if (matched) setEmulatorSavePreview(identity.saveId, matched.bytes);
         if (matched || droppedBytes) restartCurrentGameWithSave(entry.id);

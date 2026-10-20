@@ -230,6 +230,45 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("zelda.srm")).toBeTruthy();
   });
 
+  it("loads nothing when a save dropped with its ROM cannot be read", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const save = new File([new Uint8Array([4])], "game.sav");
+    vi.spyOn(save, "arrayBuffer").mockRejectedValue(new DOMException("File changed", "NotReadableError"));
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [new File(["rom"], "game.nes"), save], id: 1 }} />));
+
+    expect(await screen.findByText(/Could not load game.nes/)).toBeTruthy();
+    expect(getEmulatorSessionState().entries).toHaveLength(0);
+  });
+
+  it("opens a Save editor hand-off without reading a save dropped beside the ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "edited.srm",
+      gameId: "zelda",
+      platform: "snes",
+      updatedAt: 1,
+    });
+    loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName,
+      platform: "snes",
+    }));
+    const save = new File([new Uint8Array([4])], "zelda.srm");
+    const read = vi.spyOn(save, "arrayBuffer").mockRejectedValue(new DOMException("File changed", "NotReadableError"));
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [new File(["rom"], "zelda.sfc"), save], id: 1 }} />));
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1));
+    expect(read).not.toHaveBeenCalled();
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Could not load/)).toBeNull();
+  });
+
   it("stores a save dropped together with its ROM", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
