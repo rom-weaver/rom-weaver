@@ -200,17 +200,16 @@ test("create output options expose patch format and archive choices", () => {
     "bdf",
     "ebp",
     "ips",
-    "pmsr",
     "ppf",
     "rup",
     "ups",
   ]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_IPS_SIZE_LIMIT_BYTES }).map((option) => option.value),
-  ).toEqual(["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  ).toEqual(["bps", "xdelta", "aps", "bdf", "ppf", "rup", "ups"]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_BPS_DEFAULT_LIMIT_BYTES }).map((option) => option.value),
-  ).toEqual(["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  ).toEqual(["xdelta", "bps", "aps", "bdf", "ppf", "rup", "ups"]);
   expect(
     createCreatePatchFormatOptions({ originalSize: CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES + 1 }).map(
       (option) => option.value,

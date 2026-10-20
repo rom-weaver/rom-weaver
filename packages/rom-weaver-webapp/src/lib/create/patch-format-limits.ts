@@ -16,6 +16,10 @@ const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLI
 const CREATE_PATCH_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.defaultFormat;
 const CREATE_PATCH_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
 
+const NO_SHRINK_CREATE_PATCH_FORMATS: readonly string[] = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats;
+const SOURCE_RESTRICTED_CREATE_PATCH_FORMATS: readonly string[] =
+  ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.sourceRestrictedFormats;
+
 const SMALL_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.small;
 const MEDIUM_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.medium;
 const MID_LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.midLarge;
@@ -37,13 +41,37 @@ const getMaxCreateRomSize = (...sizes: Array<number | null | undefined>) => {
   return maxSize;
 };
 
-const getCreatePatchFormatsForSizes = (...sizes: Array<number | null | undefined>) => {
+const getCreatePatchFormatsForSizeBucket = (...sizes: Array<number | null | undefined>) => {
   const maxSize = getMaxCreateRomSize(...sizes);
   if (maxSize > CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES) return LARGE_CREATE_PATCH_FORMATS;
   if (maxSize >= CREATE_BPS_DEFAULT_LIMIT_BYTES) return MID_LARGE_CREATE_PATCH_FORMATS;
   if (maxSize >= CREATE_IPS_SIZE_LIMIT_BYTES) return MEDIUM_CREATE_PATCH_FORMATS;
   return SMALL_CREATE_PATCH_FORMATS;
 };
+
+/** True when the target is known to be smaller than the source, which some formats cannot encode. */
+const isShrinkingCreate = (originalSize?: number | null, modifiedSize?: number | null) =>
+  typeof originalSize === "number" &&
+  typeof modifiedSize === "number" &&
+  Number.isFinite(originalSize) &&
+  Number.isFinite(modifiedSize) &&
+  modifiedSize < originalSize;
+
+const withoutNoShrinkFormats = <T extends string>(
+  formats: readonly T[],
+  originalSize?: number | null,
+  modifiedSize?: number | null,
+): readonly T[] =>
+  isShrinkingCreate(originalSize, modifiedSize)
+    ? formats.filter((format) => !NO_SHRINK_CREATE_PATCH_FORMATS.includes(format))
+    : formats;
+
+/**
+ * Formats Create accepts for the sizes (original first). Source-restricted formats stay allowed here
+ * because only the resolved candidates can say whether the original is the one ROM they target.
+ */
+const getCreatePatchFormatsForSizes = (originalSize?: number | null, modifiedSize?: number | null) =>
+  withoutNoShrinkFormats(getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize), originalSize, modifiedSize);
 
 const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null): string[] => {
   const out: string[] = [];
@@ -57,6 +85,29 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
   return out;
 };
 
+/**
+ * Formats to offer in the picker. Resolved candidates (from the Rust plan) win; without them the
+ * size list is used minus source-restricted formats. A shrinking target also drops formats that
+ * cannot encode it, since candidates are shared between Original/Modified orderings.
+ */
+const getSelectableCreatePatchFormats = ({
+  candidateFormats,
+  modifiedSize,
+  originalSize,
+}: {
+  candidateFormats?: readonly string[] | null;
+  modifiedSize?: number | null;
+  originalSize?: number | null;
+}): readonly string[] => {
+  const candidates = normalizeCandidateCreatePatchFormats(candidateFormats);
+  const formats = candidates.length
+    ? candidates
+    : getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize).filter(
+        (format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format),
+      );
+  return withoutNoShrinkFormats(formats, originalSize, modifiedSize);
+};
+
 const getPreferredCreatePatchFormat = ({
   automaticFormatSelection = true,
   candidateDefaultFormat,
@@ -65,10 +116,7 @@ const getPreferredCreatePatchFormat = ({
   originalSize,
   requestedFormat,
 }: CreatePatchFormatPreferenceInput) => {
-  const candidateFormatList = normalizeCandidateCreatePatchFormats(candidateFormats);
-  const formats = candidateFormatList.length
-    ? candidateFormatList
-    : getCreatePatchFormatsForSizes(originalSize, modifiedSize);
+  const formats = getSelectableCreatePatchFormats({ candidateFormats, modifiedSize, originalSize });
   const normalizedRequestedFormat = normalizeCreatePatchFormat(requestedFormat);
   const normalizedCandidateDefaultFormat = normalizeCreatePatchFormat(candidateDefaultFormat);
   // The default comes from Rust: the resolved candidate default already accounts
@@ -78,7 +126,7 @@ const getPreferredCreatePatchFormat = ({
   const supportedDefaultFormat =
     normalizedCandidateDefaultFormat && formats.includes(normalizedCandidateDefaultFormat)
       ? normalizedCandidateDefaultFormat
-      : formats[0];
+      : (formats[0] ?? CREATE_PATCH_DEFAULT_FORMAT);
   if (!normalizedRequestedFormat) return supportedDefaultFormat;
   if (
     automaticFormatSelection &&
@@ -94,6 +142,7 @@ export {
   CREATE_IPS_SIZE_LIMIT_BYTES,
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
   getCreatePatchFormatsForSizes,
+  getSelectableCreatePatchFormats,
   getPreferredCreatePatchFormat,
   normalizeCreatePatchFormat,
 };
