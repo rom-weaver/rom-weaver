@@ -1185,6 +1185,12 @@ const isPhoneLayout = () => typeof window.matchMedia === "function" && window.ma
 const usePhoneLayout = () => useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false);
 
 /** Index of the row whose span holds `y`: the last row starting at or before it. */
+/** The trace's vertical padding, which its scroll range adds to the content. */
+const tracePadding = (trace: HTMLElement) => {
+  const style = getComputedStyle(trace);
+  return Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+};
+
 const rowAtOffset = (offsets: Float64Array, y: number) => {
   let low = 0;
   let high = offsets.length - 1;
@@ -1224,11 +1230,16 @@ const useTraceWindow = ({
   // Where the reader was when rows were last measured: pinned to the newest
   // line, or the top visible row and how far into it the viewport starts.
   const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
-  // The content height of the last commit and the lines it held. A reader
-  // exactly at its bottom stays pinned when only measured heights changed since.
-  const committedRef = useRef<{ entries: readonly LogStoreEntry[]; height: number; offsets: Float64Array } | null>(
-    null,
-  );
+  // The last commit that moved the offsets: its lines, its scroll range (content
+  // plus padding), and the viewport height then. A reader exactly at its bottom
+  // stays pinned when only measured heights or the viewport changed since; a
+  // rotation changes the padding and viewport in the same layout as the width.
+  const committedRef = useRef<{
+    clientHeight: number;
+    entries: readonly LogStoreEntry[];
+    offsets: Float64Array;
+    range: number;
+  } | null>(null);
   const offsets = useMemo(() => {
     if (!wrapped) return null;
     const result = new Float64Array(entries.length + 1);
@@ -1280,8 +1291,7 @@ const useTraceWindow = ({
     // that arrive later extend the offsets, so like the desktop list a reader
     // at the bottom does not follow them. No trace log here: it would append a
     // line to this list, which mounts and measures again.
-    const style = getComputedStyle(trace);
-    const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    const padding = tracePadding(trace);
     // A list that fits the viewport has no bottom to pin to: a reader at its top
     // stays there as the rows grow. Against the previous height only an exact
     // bottom counts, since the restore can move a reader past it.
@@ -1289,10 +1299,13 @@ const useTraceWindow = ({
     const top = trace.scrollTop;
     const bottom = top + trace.clientHeight;
     const atBottom = (height: number) => height + padding > trace.clientHeight + 2 && bottom >= height + padding - 2;
+    // The viewport may have changed since that commit (a rotation) or been laid
+    // out only after it (the first open), so either height can mark its bottom.
     const wasAtBottom =
       committed?.entries === entries &&
-      committed.height + padding > trace.clientHeight + 2 &&
-      Math.abs(bottom - (committed.height + padding)) <= 2;
+      [trace.clientHeight, committed.clientHeight].some(
+        (viewport) => committed.range > viewport + 2 && Math.abs(top + viewport - committed.range) <= 2,
+      );
     const index = rowAtOffset(offsets, top);
     anchorRef.current = {
       delta: top - (offsets[index] ?? 0),
@@ -1314,20 +1327,23 @@ const useTraceWindow = ({
     const trace = traceRef.current;
     if (!(wrapped && trace) || typeof ResizeObserver === "undefined") return;
     let width = trace.clientWidth;
+    let height = trace.clientHeight;
     const observer = new ResizeObserver(() => {
+      // Judge the bottom with the viewport height the reader had before this
+      // resize, against the scroll range they last saw.
+      const previousHeight = height;
+      height = trace.clientHeight;
       if (trace.clientWidth === width) return;
       width = trace.clientWidth;
       const committed = committedRef.current;
       if (committed) {
-        const style = getComputedStyle(trace);
-        const range = committed.height + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
         const top = trace.scrollTop;
         const index = rowAtOffset(committed.offsets, top);
         anchorRef.current = {
           delta: top - (committed.offsets[index] ?? 0),
           id: committed.entries[index]?.id ?? -1,
           index,
-          pinned: range > trace.clientHeight + 2 && top + trace.clientHeight >= range - 2,
+          pinned: committed.range > previousHeight + 2 && top + previousHeight >= committed.range - 2,
           top,
         };
       }
@@ -1337,8 +1353,17 @@ const useTraceWindow = ({
     return () => observer.disconnect();
   }, [traceRef, wrapped]);
   useLayoutEffect(() => {
-    committedRef.current = offsets ? { entries, height: offsets[entries.length] ?? 0, offsets } : null;
-  }, [entries, offsets]);
+    const trace = traceRef.current;
+    committedRef.current =
+      offsets && trace
+        ? {
+            clientHeight: trace.clientHeight,
+            entries,
+            offsets,
+            range: (offsets[entries.length] ?? 0) + tracePadding(trace),
+          }
+        : null;
+  }, [entries, offsets, traceRef]);
   return {
     contentHeight: offsets ? (offsets[entries.length] ?? 0) : entries.length * TRACE_ROW_HEIGHT,
     virtualEnd,
