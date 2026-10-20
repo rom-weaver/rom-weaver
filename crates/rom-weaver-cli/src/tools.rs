@@ -215,7 +215,7 @@ impl CliApp {
             Some(0.0),
             context.single_thread_execution(),
         );
-        rom_weaver_patches::undo_ppf(input, patch, &raw_output)?;
+        let mismatched_records = rom_weaver_patches::undo_ppf(input, patch, &raw_output)?;
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some("PPF".to_string()),
@@ -224,6 +224,13 @@ impl CliApp {
             Some(100.0),
             context.single_thread_execution(),
         );
+        if mismatched_records > 0 {
+            let warning = format!(
+                "the input ROM does not match the patched data in {mismatched_records} PPF record(s); it may not be the ROM this patch produced, so the restored ROM may be wrong"
+            );
+            report.label.push_str(&format!("; warning: {warning}"));
+            Self::append_report_warnings(&mut report, [warning]);
+        }
         let mut ready_output = raw_output;
         if let Some(plan) = compression_plan.as_mut() {
             let staged_output = context.temp_paths().next_path(

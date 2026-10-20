@@ -25,6 +25,15 @@ describe("presentation errors", () => {
     );
   });
 
+  it("shows a plain no-ROM message without the internal path or filter flag", () => {
+    const message = "validation failed: no extract entries from `/work/version.rar` matched --filter rom";
+    const formatted = formatCodedErrorForDisplay(codedError(message, "COMPRESSION_FAILED"));
+    expect(formatted).toBe("No ROM found in version.rar.");
+    expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: new Error(message) }))).toBe(
+      "No ROM found in version.rar.",
+    );
+  });
+
   it("keeps messages that carry required runtime detail", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(
       "INVALID_INPUT: Multi-file output needs an archive",
