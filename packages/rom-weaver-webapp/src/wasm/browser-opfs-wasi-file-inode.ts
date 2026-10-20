@@ -15,6 +15,7 @@ export interface RandomAccessFileLike {
   allocateAtLeast?: (size: number) => void;
   close?: () => void;
   flush: () => void;
+  openNow?: () => void;
   readAt: (offset: number | bigint, dst: Uint8Array) => number;
   reopen?: () => void;
   scratchName?: string | null;

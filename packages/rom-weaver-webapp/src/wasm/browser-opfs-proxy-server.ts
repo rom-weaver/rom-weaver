@@ -643,6 +643,14 @@ class OpfsProxyServer {
       } catch {
         // best-effort close
       }
+      // Unlinked-while-open files would otherwise outlive a cancelled run: finish their deferred removal.
+      if (entry.pendingRemoval) {
+        const { dir, name } = entry.pendingRemoval;
+        entry.pendingRemoval = null;
+        void Promise.resolve(dir.removeEntry?.(name)).catch((error: unknown) => {
+          this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${entry.path} ${String(error)}`);
+        });
+      }
     }
     this.byId.clear();
     this.byPath.clear();
