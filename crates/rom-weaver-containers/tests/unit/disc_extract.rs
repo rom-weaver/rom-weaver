@@ -329,7 +329,7 @@ fn plan_cd_selection_uses_single_bin_when_modes_match_and_not_forced_split() {
 }
 
 #[test]
-fn plan_cd_selection_splits_when_track_modes_differ() {
+fn plan_cd_selection_merges_tracks_with_different_sector_sizes_like_chdman() {
     let handler = ChdContainerHandler;
     let layout = DiscLayout {
         kind: DiscKind::CdRom,
@@ -342,18 +342,10 @@ fn plan_cd_selection_splits_when_track_modes_differ() {
     let plan = handler
         .plan_cd_selection(&layout, &request, "game")
         .unwrap();
-    assert!(
-        !plan.single_bin,
-        "mixed track modes cannot share one .bin layout"
-    );
-    assert_eq!(
-        plan.split_track_names,
-        vec![
-            handler.track_output_name("game", 1),
-            handler.track_output_name("game", 2),
-        ]
-    );
-    assert_eq!(plan.write_split_tracks, vec![true, true]);
+    // chdman `extractcd` writes one bin even when the sector sizes differ.
+    assert!(plan.single_bin, "mixed sector sizes still share one .bin");
+    assert!(plan.write_single_bin);
+    assert!(plan.split_track_names.is_empty());
 }
 
 #[test]
@@ -387,7 +379,7 @@ fn plan_cd_selection_filters_to_a_specific_track_selection() {
         ],
     };
     let track_two_name = handler.track_output_name("game", 2);
-    let request = extract_request(vec![track_two_name.as_str()], false);
+    let request = extract_request(vec![track_two_name.as_str()], true);
     let plan = handler
         .plan_cd_selection(&layout, &request, "game")
         .unwrap();
@@ -825,20 +817,10 @@ fn parse_cue_file_rejects_inconsistent_track_geometry() {
     let handler = ChdContainerHandler;
     let cue = dir.join("game.cue");
 
-    let cases: [(&str, &str); 4] = [
+    let cases: [(&str, &str); 3] = [
         (
             "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:10\n",
             "starts past the end of",
-        ),
-        (
-            concat!(
-                "FILE \"game.bin\" BINARY\n",
-                "  TRACK 01 MODE1/2352\n",
-                "    INDEX 01 00:00:00\n",
-                "  TRACK 02 MODE1/2048\n",
-                "    INDEX 01 00:00:01\n",
-            ),
-            "across tracks with different sector sizes",
         ),
         (
             concat!(
@@ -1670,4 +1652,33 @@ fn read_disc_tracks_keeps_legacy_unaligned_gd_streams() {
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_splits_a_shared_file_with_mixed_sector_sizes_like_chdman() {
+    // chdman counts INDEX times in frames and starts each later track after
+    // the previous track's bytes, whatever the sector sizes involved.
+    let dir = scratch_dir("cue-mixed-shared");
+    let mut bytes = vec![0_u8; 3 * 2048];
+    bytes.extend_from_slice(&raw_frames(2));
+    write_file(&dir, "game.bin", &bytes);
+    let cue = dir.join("game.cue");
+    fs::write(
+        &cue,
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2048\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 01 00:00:03\n",
+        ),
+    )
+    .expect("write cue");
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("layout");
+    let spans: Vec<(u64, u32)> = layout
+        .tracks
+        .iter()
+        .map(|track| (track.file_offset_bytes, track.frames - track.pad_frames))
+        .collect();
+    assert_eq!(spans, [(0, 3), (3 * 2048, 2)]);
 }

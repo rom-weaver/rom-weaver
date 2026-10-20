@@ -82,15 +82,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             .unwrap_or("output");
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
-            let first_data_bytes = layout
-                .tracks
-                .first()
-                .map(|track| track.mode.data_bytes())
-                .unwrap_or(2352);
-            let single_bin = layout
-                .tracks
-                .iter()
-                .all(|track| track.mode.data_bytes() == first_data_bytes);
+            let single_bin = !request.split_bin;
             let mut entries = vec![format!("{stem}.cue")];
             if single_bin {
                 entries.push(format!("{stem}.bin"));
@@ -135,18 +127,9 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         };
         if media_kind == ChdMediaKind::CdRom {
             let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
-            let first_data_bytes = layout
-                .tracks
-                .first()
-                .map(|track| track.mode.data_bytes())
-                .unwrap_or(2352);
-            // Mirror the extract naming decision: a single BIN is only produced when every track
-            // shares a sector size and split output was not explicitly requested.
-            let single_bin = !request.split_bin
-                && layout
-                    .tracks
-                    .iter()
-                    .all(|track| track.mode.data_bytes() == first_data_bytes);
+            // Mirror the extract naming decision: a single BIN is produced unless split output
+            // was explicitly requested (chdman merges tracks of different sector sizes too).
+            let single_bin = !request.split_bin;
             // The `.cue` is generated text; its size is not known without rendering it, so leave it
             // unsized (discovery only needs the patchable bin sizes).
             let mut entries = vec![ContainerListEntry {

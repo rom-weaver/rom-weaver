@@ -630,28 +630,17 @@ fn unit_bytes_per_create_kind() {
 }
 
 #[test]
-fn hunk_bytes_scales_disc_hunks_with_frame_count() {
+fn hunk_bytes_uses_chdman_hunk_sizes() {
     let handler = ChdContainerHandler;
     // Non-disc media uses the default hunk size.
-    assert_eq!(
-        handler.hunk_bytes(&ChdCreateKind::Raw, 100_000, ChdCodec::NONE),
-        4096
-    );
+    assert_eq!(handler.hunk_bytes(&ChdCreateKind::Raw), 4096);
     let disc = ChdCreateKind::Disc(DiscLayout {
         kind: DiscKind::CdRom,
         tracks: Vec::new(),
     });
-    // Uncompressed disc media uses the full 8-frame hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 100_000, ChdCodec::NONE), 19584);
-    // Four frames compressed: ceil(4/2)=2 frames per hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 2448 * 4, ChdCodec::CD_LZMA), 4896);
-    // A single frame falls back to the full hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 2448, ChdCodec::CD_LZMA), 19584);
-    // Large inputs cap at eight frames per hunk.
-    assert_eq!(
-        handler.hunk_bytes(&disc, 2448 * 100, ChdCodec::CD_LZMA),
-        19584
-    );
+    // chdman 0.289 `createcd` always writes 8-frame hunks, even for a disc
+    // shorter than one hunk (verified for 1..16 frames with cdlz).
+    assert_eq!(handler.hunk_bytes(&disc), 19584);
 }
 
 #[test]
@@ -1212,22 +1201,21 @@ fn disc_track_mode_label_tables_are_exhaustive() {
 }
 
 #[test]
-fn gdi_track_descriptor_supports_only_gdrom_modes() {
-    assert_eq!(
-        DiscTrackMode::Mode1Raw.gdi_track_descriptor().unwrap(),
-        (4, 2352)
-    );
-    assert_eq!(
-        DiscTrackMode::Mode1.gdi_track_descriptor().unwrap(),
-        (4, 2048)
-    );
-    assert_eq!(
-        DiscTrackMode::Audio.gdi_track_descriptor().unwrap(),
-        (0, 2352)
-    );
-    // GD-ROM output rejects the Mode2 family.
-    assert!(DiscTrackMode::Mode2.gdi_track_descriptor().is_err());
-    assert!(DiscTrackMode::Mode2Form1.gdi_track_descriptor().is_err());
+fn gdi_track_descriptor_matches_chdman_extractcd() {
+    // chdman writes track type 0 for audio and 4 for every other track type,
+    // with the track's own data size.
+    for (mode, expected) in [
+        (DiscTrackMode::Mode1Raw, (4, 2352)),
+        (DiscTrackMode::Mode1, (4, 2048)),
+        (DiscTrackMode::Audio, (0, 2352)),
+        (DiscTrackMode::Mode2Raw, (4, 2352)),
+        (DiscTrackMode::Mode2, (4, 2336)),
+        (DiscTrackMode::Mode2Form1, (4, 2048)),
+        (DiscTrackMode::Mode2Form2, (4, 2324)),
+        (DiscTrackMode::Mode2FormMix, (4, 2336)),
+    ] {
+        assert_eq!(mode.gdi_track_descriptor(), expected, "{mode:?}");
+    }
 }
 
 #[test]

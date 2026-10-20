@@ -60,7 +60,7 @@ impl ChdContainerHandler {
             return Err(RomWeaverError::Unsupported(UnsupportedOp::ChdStoreModeOnly));
         }
 
-        let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, ChdCodec::NONE);
+        let hunk_bytes = self.hunk_bytes(create_kind);
         let unit_bytes = self.unit_bytes(create_kind);
         let hunk_count = Self::create_hunk_count(hunk_bytes, unit_bytes, logical_bytes)?;
         debug!(
@@ -212,7 +212,7 @@ impl ChdContainerHandler {
             ));
         };
 
-        let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, primary_codec);
+        let hunk_bytes = self.hunk_bytes(create_kind);
         let unit_bytes = self.unit_bytes(create_kind);
         let hunk_count = Self::create_hunk_count(hunk_bytes, unit_bytes, logical_bytes)?;
         let hunk_count_usize = usize::try_from(hunk_count).map_err(|_| {
