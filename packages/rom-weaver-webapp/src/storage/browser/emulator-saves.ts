@@ -55,11 +55,12 @@ type EmulatorSavePartImport = {
   sha1: string;
 };
 
+/** A raw save dropped without its ROM has no `platform` or `gameId`, so it matches any ROM. */
 type PendingTestSave = {
   bytes: Uint8Array;
   fileName: string;
-  platform: string;
-  gameId: string;
+  platform?: string;
+  gameId?: string;
   romSha1?: string;
   updatedAt: number;
 };
@@ -638,8 +639,7 @@ const normalizePendingText = (value: unknown, label: string, maxLength: number):
 const copyPendingTestSave = (save: PendingTestSave): PendingTestSave => ({
   bytes: new Uint8Array(save.bytes),
   fileName: save.fileName,
-  platform: save.platform,
-  gameId: save.gameId,
+  ...(save.platform ? { platform: save.platform, gameId: save.gameId } : {}),
   ...(save.romSha1 ? { romSha1: save.romSha1 } : {}),
   updatedAt: save.updatedAt,
 });
@@ -653,12 +653,13 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
     typeof candidate.fileName !== "string" ||
     !candidate.fileName ||
     candidate.fileName.length > MAX_LABEL_LENGTH ||
-    typeof candidate.platform !== "string" ||
-    !candidate.platform ||
-    candidate.platform.length > 128 ||
-    typeof candidate.gameId !== "string" ||
-    !candidate.gameId ||
-    candidate.gameId.length > MAX_LABEL_LENGTH ||
+    (candidate.platform !== undefined &&
+      (typeof candidate.platform !== "string" ||
+        !candidate.platform ||
+        candidate.platform.length > 128 ||
+        typeof candidate.gameId !== "string" ||
+        !candidate.gameId ||
+        candidate.gameId.length > MAX_LABEL_LENGTH)) ||
     (candidate.romSha1 !== undefined && !/^[a-f0-9]{40}$/.test(candidate.romSha1)) ||
     typeof candidate.updatedAt !== "number" ||
     !Number.isFinite(candidate.updatedAt)
@@ -668,8 +669,7 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
   return {
     bytes,
     fileName: candidate.fileName,
-    platform: candidate.platform,
-    gameId: candidate.gameId,
+    ...(candidate.platform ? { platform: candidate.platform, gameId: candidate.gameId } : {}),
     ...(candidate.romSha1 ? { romSha1: candidate.romSha1 } : {}),
     updatedAt: candidate.updatedAt,
   };
@@ -678,15 +678,19 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
 const stagePendingTestSave = async (input: {
   data: Blob | ArrayBuffer | ArrayBufferView;
   fileName: string;
-  platform: string;
-  gameId: string;
+  platform?: string;
+  gameId?: string;
   romSha1?: string;
 }): Promise<PendingTestSave> => {
   const save: PendingTestSave = {
     bytes: await readImportBytes(input.data),
     fileName: normalizePendingText(input.fileName, "file name", MAX_LABEL_LENGTH),
-    platform: normalizePendingText(input.platform, "platform", 128),
-    gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
+    ...(input.platform === undefined && input.gameId === undefined
+      ? {}
+      : {
+          platform: normalizePendingText(input.platform, "platform", 128),
+          gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
+        }),
     ...(input.romSha1 === undefined ? {} : { romSha1: normalizeSha1(input.romSha1) }),
     updatedAt: Date.now(),
   };
@@ -725,6 +729,23 @@ const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImpo
     },
     { preserveMetadata: true },
   );
+};
+
+/**
+ * A dropped raw save is stored for its ROM so later progress persists. A ROM that already has stored SRAM
+ * MUST keep it, so the upload then only plays as a preview, as it does while save storage is off.
+ */
+const loadDroppedSram = async (sha1: string, data: Uint8Array, label: string): Promise<"preview" | "stored"> => {
+  const gameId = normalizeSha1(sha1);
+  if (saveStorageEnabled && !(await readEmulatorSave(gameId))?.sram) {
+    clearEmulatorSavePreview(gameId);
+    await saveEmulatorSram({ data, gameId, gameName: gameId, label });
+    logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
+    return "stored";
+  }
+  setEmulatorSavePreview(gameId, data);
+  logger.debug("previewing dropped SRAM", { gameId, saveStorageEnabled, size: data.byteLength });
+  return "preview";
 };
 
 const isSaveMessage = (value: unknown): value is EmulatorSaveMessage => {
@@ -848,6 +869,7 @@ export {
   importEmulatorSave,
   importEmulatorSavePart,
   listEmulatorSaves,
+  loadDroppedSram,
   parseSerializedEmulatorSave,
   readPendingTestSave,
   replaceEmulatorSaveSram,

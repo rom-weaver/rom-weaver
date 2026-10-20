@@ -112,6 +112,8 @@ Restore the save in a browser that has the same ROM:
 
 **Saves & storage** also accepts the older uncompressed JSON export.
 
+You can also drop an exported ZIP or JSON file on the home page. **Saves & storage** opens and imports it.
+
 To import a raw SRAM or save-state file:
 
 1. Open **Settings**, then select **Saves & storage**.
@@ -121,6 +123,13 @@ To import a raw SRAM or save-state file:
 5. Enter the ROM's 40-character SHA-1.
 
 The import merges with any other save part for the same SHA-1. You can select **Delete** before the import if you want to test the complete restore process.
+
+To load a raw SRAM file without its SHA-1:
+
+1. Drop the `.sav`, `.srm`, `.sra`, `.eep`, `.fla`, `.mpk`, `.mcr`, or `.mcd` file on the home page or on Test. You can drop its ROM with it.
+2. If you dropped the save alone, add the ROM for that game on Test.
+
+The game restarts with the save. rom-weaver stores the save for that ROM if the ROM has no stored SRAM. Otherwise the save plays without replacing the stored SRAM.
 
 ## Disable save storage
 

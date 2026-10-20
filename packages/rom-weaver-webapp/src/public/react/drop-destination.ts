@@ -63,6 +63,8 @@ type DropRedirect = {
 
 /** Matches the raw saves the Save editor reads; wrapped formats need its conversion first. */
 const SAVE_NAME = /\.(?:sav|srm|sra|eep|fla|mpk|mcr|mcd)$/i;
+/** The backups Saves & storage exports; `getCompressedFileName` turns the JSON name into the ZIP one. */
+const EMULATOR_SAVE_EXPORT_NAME = /\.rw-emulator-save\.(?:json|zip)$/i;
 const SHEET_NAME = /\.(?:cue|gdi)$/i;
 const TRACK_NAME = /\.(?:bin|raw)$/i;
 
@@ -72,6 +74,8 @@ const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
 const isPatchArchiveName = (name: string) => isPatchFileName(baseName(name).replace(/\.[^.]+$/, ""));
 
 const isSaveFileName = (name: string) => SAVE_NAME.test(name);
+
+const isEmulatorSaveExportName = (name: string) => EMULATOR_SAVE_EXPORT_NAME.test(name);
 
 const classifyDropEntry = (entry: DropEntry): DropFileKind => {
   if (entry.weave || isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
@@ -110,6 +114,7 @@ const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
  * - a weave, with or without companion files → Apply or Weave
  * - patches only, or one ROM with patches → Apply
  * - one ROM with a save → Test, which loads the save with it
+ * - saves only → Test, which holds the save for the next ROM
  * - one ROM → Apply or Test
  * - two or more ROMs → Create
  * - two or more ROMs with patches → Create or Apply, flagged as mixed
@@ -118,7 +123,8 @@ const planDropDestinations = ({ patches, weaves, roms, saves, unknown }: DropCou
   const inputs = roms + unknown;
   let plan: DropPlan;
   if (weaves > 0) plan = { destinations: ["patcher", "weave"], mixed: false };
-  else if (inputs === 0) plan = { destinations: patches ? ["patcher"] : [], mixed: false };
+  else if (inputs === 0 && patches === 0) plan = { destinations: saves ? ["test"] : [], mixed: false };
+  else if (inputs === 0) plan = { destinations: ["patcher"], mixed: false };
   else if (inputs === 1 && patches === 0 && saves > 0) plan = { destinations: ["test"], mixed: false };
   else if (inputs === 1) plan = { destinations: patches ? ["patcher"] : ["patcher", "test"], mixed: false };
   else if (patches === 0) plan = { destinations: ["creator"], mixed: false };
@@ -191,6 +197,7 @@ const readDropEntries = (
 export {
   classifyDropEntry,
   countDropEntries,
+  isEmulatorSaveExportName,
   isSaveFileName,
   isUsableDropFile,
   planDropDestinations,

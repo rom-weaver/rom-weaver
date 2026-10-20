@@ -166,6 +166,43 @@ describe("EmulatorSavesPanel delete", () => {
   });
 });
 
+describe("EmulatorSavesPanel dropped backups", () => {
+  it("imports each dropped backup once and lists the result", async () => {
+    const extracted = new Blob(["json"]);
+    mocks.extractEmulatorSaveExport.mockResolvedValue(extracted);
+    const zip = new File(["zip"], "a.rw-emulator-save.zip");
+    const json = new File(["{}"], "b.rw-emulator-save.json");
+    const request = { files: [zip, json], id: 1 };
+    const onImportStarted = vi.fn();
+    const view = render(<EmulatorSavesPanel importRequest={request} onImportStarted={onImportStarted} />);
+
+    await waitFor(() => expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2));
+    expect(mocks.extractEmulatorSaveExport).toHaveBeenCalledWith(zip);
+    expect(mocks.importEmulatorSave).toHaveBeenCalledWith(extracted);
+    expect(mocks.importEmulatorSave).toHaveBeenCalledWith(json);
+    expect(onImportStarted).toHaveBeenCalledTimes(1);
+    await screen.findByText("Sample Game");
+
+    view.rerender(<EmulatorSavesPanel importRequest={request} onImportStarted={vi.fn()} />);
+    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps importing after a failed backup and reports the failure", async () => {
+    mocks.importEmulatorSave.mockRejectedValueOnce(new Error("Invalid save export")).mockResolvedValue(SAVE);
+    render(
+      <EmulatorSavesPanel
+        importRequest={{
+          files: [new File(["x"], "bad.rw-emulator-save.json"), new File(["{}"], "good.rw-emulator-save.json")],
+          id: 1,
+        }}
+      />,
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Invalid save export");
+    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("EmulatorSavesPanel import", () => {
   it("opens the hidden file picker from the import button", async () => {
     render(<EmulatorSavesPanel />);

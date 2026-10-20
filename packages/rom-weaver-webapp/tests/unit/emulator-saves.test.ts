@@ -9,6 +9,7 @@ import {
   importEmulatorSavePart,
   registerEmulatorSaveBridge,
   listEmulatorSaves,
+  loadDroppedSram,
   parseSerializedEmulatorSave,
   readPendingTestSave,
   replaceEmulatorSaveSram,
@@ -278,6 +279,38 @@ describe("emulator saves", () => {
     if (!read) throw new Error("Expected a staged pending test save.");
     read.bytes[2] = 9;
     expect((await readPendingTestSave())?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("stages a dropped save that names no game", async () => {
+    const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+    expect(staged).not.toHaveProperty("platform");
+    expect(staged).not.toHaveProperty("gameId");
+    expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), fileName: "game.sav" });
+    await expect(
+      stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", platform: "nes" }),
+    ).rejects.toThrow("requires a game ID");
+  });
+
+  it("stores a dropped SRAM only when its ROM has none stored", async () => {
+    expect(await loadDroppedSram(sha1.toUpperCase(), new Uint8Array([1, 2]), "game.nes")).toBe("stored");
+    expect(await loadDroppedSram(sha1, new Uint8Array([3]), "game.nes")).toBe("preview");
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toMatchObject({
+      label: "game.nes",
+      sram: new Uint8Array([1, 2]),
+    });
+    clearEmulatorSavePreview(sha1);
+  });
+
+  it("only previews a dropped SRAM while save storage is off", async () => {
+    configureEmulatorSaveStorage(false);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      configureEmulatorSaveStorage(true);
+      clearEmulatorSavePreview(sha1);
+    }
+    expect(await listEmulatorSaves()).toEqual([]);
   });
 
   it("replaces and clears the fixed pending test save", async () => {

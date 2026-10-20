@@ -54,7 +54,7 @@ import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { isReactWebappDevelopmentMode } from "../development-defaults.ts";
 import { setAdvancedSettings, useAdvancedSettings } from "../advanced-settings.ts";
 import { ADVANCED_SETTINGS_FIELDS, SETTINGS_FIELD_ID_TO_KEY } from "../settings/settings-state.ts";
-import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
+import { EmulatorSavesPanel, type EmulatorSaveImportRequest } from "./emulator-saves-panel.tsx";
 import {
   describeWarmupUnit,
   installingRuntimeLabel,
@@ -1474,12 +1474,14 @@ const LogsStoragePanel = ({
   advanced,
   copyFeedback,
   currentLevel,
+  emulatorSaveImport,
   entries,
   exportText,
   filter,
   hasPrevious,
   localizer,
   onFilterChange,
+  onEmulatorSaveImportStarted,
   onLevelChange,
   onRefreshOpfs,
   onScroll,
@@ -1496,12 +1498,14 @@ const LogsStoragePanel = ({
   advanced: boolean;
   copyFeedback: CopyFeedback;
   currentLevel: LogLevel;
+  emulatorSaveImport?: EmulatorSaveImportRequest | null;
   entries: readonly LogStoreEntry[];
   exportText: string;
   filter: string;
   hasPrevious: boolean;
   localizer: Localizer;
   onFilterChange: (filter: string) => void;
+  onEmulatorSaveImportStarted?: () => void;
   onLevelChange: (level: string) => void;
   onRefreshOpfs: () => void;
   onScroll: (scrollTop: number) => void;
@@ -1521,14 +1525,16 @@ const LogsStoragePanel = ({
   if (showingOpfs && !advanced) {
     return (
       <div aria-labelledby="logtab-storage" className="dlg-body storage-body" id="logpanel-storage" role="tabpanel">
-        <EmulatorSavesPanel active />
+        <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
         <HiddenNote localizer={localizer}>{localizer.message("ui.console.hiddenOpfs")}</HiddenNote>
       </div>
     );
   }
   return (
     <>
-      {showingOpfs ? <EmulatorSavesPanel active /> : null}
+      {showingOpfs ? (
+        <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
+      ) : null}
       <div className="dlg-subhead">
         {showingOpfs ? (
           <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
@@ -1627,6 +1633,8 @@ const LogDialog = ({
   onOfflineCopyEnabledChange,
   settingsFocusHint,
   settingsPanel,
+  emulatorSaveImport = null,
+  onEmulatorSaveImportStarted,
   updateReady = false,
   previewRuntimeState = null,
   onPreviewRuntimeStateChange,
@@ -1655,6 +1663,9 @@ const LogDialog = ({
   settingsFocusHint?: SettingsFocusHint | null;
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
+  /** Save backups dropped on the page for Saves & storage to import. */
+  emulatorSaveImport?: EmulatorSaveImportRequest | null;
+  onEmulatorSaveImportStarted?: () => void;
   updateReady?: boolean;
   previewRuntimeState?: RuntimeState | null;
   onPreviewRuntimeStateChange?: (state: RuntimeState | null) => void;
@@ -2023,6 +2034,7 @@ const LogDialog = ({
               advanced={advanced}
               copyFeedback={copyFeedback}
               currentLevel={currentLevel}
+              emulatorSaveImport={emulatorSaveImport}
               entries={visible}
               exportText={exportText}
               filter={filter}
@@ -2034,6 +2046,7 @@ const LogDialog = ({
                 if (traceRef.current) traceRef.current.scrollTop = 0;
                 setScrollTop(0);
               }}
+              onEmulatorSaveImportStarted={onEmulatorSaveImportStarted}
               onLevelChange={onLevelChange}
               onRefreshOpfs={() => void refreshOpfs()}
               onScroll={onTraceScroll}

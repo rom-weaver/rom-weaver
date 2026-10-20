@@ -10,9 +10,11 @@ import {
 import {
   clearPendingTestSave,
   configureEmulatorSaveStorage,
+  loadDroppedSram,
   registerEmulatorSaveBridge,
   readPendingTestSave,
   setEmulatorSavePreview,
+  stagePendingTestSave,
   type PendingTestSave,
 } from "../../storage/browser/emulator-saves.ts";
 import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-client.ts";
@@ -434,20 +436,23 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         setPendingSave(staged);
         const stagedMatches =
           !!staged &&
-          getEmulatorJsCore(staged.platform) === core &&
+          (!staged.platform || getEmulatorJsCore(staged.platform) === core) &&
           (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
         if (stagedMatches) await clearPendingTestSave();
-        if (prepareAudio) prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
+        const identity = createEmulatorGameIdentity(entry);
+        // A save the visitor dropped is theirs to keep, so it is stored before the player asks for SRAM.
+        // The Save editor's copy stays a preview: it is a test of an edit, not a replacement.
+        const matched = staged && stagedMatches ? staged : undefined;
+        let droppedBytes: Uint8Array | undefined = save ? new Uint8Array(await save.arrayBuffer()) : undefined;
+        if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
+        if (droppedBytes) await loadDroppedSram(identity.saveId, droppedBytes, loaded.fileName);
+        else if (matched) setEmulatorSavePreview(identity.saveId, matched.bytes);
+        if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);
         addEntry(entry);
-        if (staged && stagedMatches) {
-          setEmulatorSavePreview(loaded.checksum, staged.bytes);
-          restartCurrentGameWithSave(entry.id);
+        if (stagedMatches || droppedBytes) restartCurrentGameWithSave(entry.id);
+        if (stagedMatches) {
           setPendingSave(undefined);
-        } else if (save) {
-          // A raw save dropped with its ROM loads the same way the Save editor hands one over.
-          setEmulatorSavePreview(loaded.checksum, new Uint8Array(await save.arrayBuffer()));
-          restartCurrentGameWithSave(entry.id);
-        } else if (staged) {
+        } else if (staged && !save) {
           setError({
             detail: staged.romSha1
               ? "Choose the ROM linked to the uploaded save."
@@ -474,14 +479,26 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
     [busy, currentGameId],
   );
   // A drop can carry a ROM and its battery save together; the save rides along with the ROM.
+  // A save dropped alone waits for the next ROM, across reloads, like a save the Save editor hands over.
   const handleDroppedFiles = useCallback(
     (files: File[]) => {
       const save = files.find((file) => isSaveFileName(file.name));
-      void handleFiles(
-        files.filter((file) => file !== save && !isSaveFileName(file.name)),
-        true,
-        save,
-      );
+      const roms = files.filter((file) => !isSaveFileName(file.name));
+      if (save && !roms.length) {
+        void stagePendingTestSave({ data: save, fileName: save.name })
+          .then((staged) => {
+            pendingReadRevisionRef.current += 1;
+            setPendingSave(staged);
+          })
+          .catch((reason) =>
+            setError({
+              detail: errorDetail(reason, "The save could not be kept for the next ROM."),
+              summary: `Could not hold ${save.name}.`,
+            }),
+          );
+        return;
+      }
+      void handleFiles(roms, true, save);
     },
     [handleFiles],
   );

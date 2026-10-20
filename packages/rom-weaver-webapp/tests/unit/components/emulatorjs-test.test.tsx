@@ -26,7 +26,9 @@ vi.mock("../../../src/public/react/emulator-audio-context.ts", () => emulatorAud
 const loadRomMock = vi.hoisted(() => vi.fn());
 const pendingSaveMocks = vi.hoisted(() => ({
   clearPendingTestSave: vi.fn(),
+  loadDroppedSram: vi.fn(),
   readPendingTestSave: vi.fn(),
+  stagePendingTestSave: vi.fn(),
 }));
 
 vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
@@ -36,7 +38,9 @@ vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
 vi.mock("../../../src/storage/browser/emulator-saves.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/storage/browser/emulator-saves.ts")>()),
   clearPendingTestSave: pendingSaveMocks.clearPendingTestSave,
+  loadDroppedSram: pendingSaveMocks.loadDroppedSram,
   readPendingTestSave: pendingSaveMocks.readPendingTestSave,
+  stagePendingTestSave: pendingSaveMocks.stagePendingTestSave,
 }));
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
@@ -78,6 +82,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   pendingSaveMocks.readPendingTestSave.mockResolvedValue(undefined);
   pendingSaveMocks.clearPendingTestSave.mockResolvedValue(undefined);
+  pendingSaveMocks.loadDroppedSram.mockResolvedValue("stored");
   loadRomMock.mockReset();
   loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
     blob,
@@ -156,6 +161,66 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Save loaded and game restarted. Check the game's Continue menu.")).toBeTruthy();
     expect(screen.queryByText("zelda.srm")).toBeNull();
   });
+  it("holds a save dropped without a ROM for the next ROM", async () => {
+    const save = new File([new Uint8Array([7])], "zelda.srm");
+    pendingSaveMocks.stagePendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [save], id: 1 }} />));
+
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    expect(pendingSaveMocks.stagePendingTestSave).toHaveBeenCalledWith({ data: save, fileName: "zelda.srm" });
+    expect(loadRomMock).not.toHaveBeenCalled();
+  });
+
+  it("stores a held dropped save for whichever ROM opens next", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const bytes = new Uint8Array([1, 2]);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({ bytes, fileName: "zelda.srm", updatedAt: 1 });
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "zelda.sfc",
+      platform: "snes",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "zelda.sfc")] },
+    });
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), bytes, "zelda.sfc"),
+    );
+    expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1);
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1);
+    await waitFor(() => expect(screen.queryByText("zelda.srm")).toBeNull());
+  });
+
+  it("stores a save dropped together with its ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "game.nes"), new File([new Uint8Array([4])], "game.sav")], id: 1 }}
+        />,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), new Uint8Array([4]), "game.nes"),
+    );
+    expect(loadRomMock).toHaveBeenCalledWith(expect.any(File), "game.nes", expect.anything());
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1);
+  });
+
   it("discards a staged save from its tray", async () => {
     pendingSaveMocks.readPendingTestSave.mockResolvedValue({
       bytes: new Uint8Array([1, 2, 3, 4]),

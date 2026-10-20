@@ -24,9 +24,30 @@ type ReadyEmulatorSaveExport = {
   gameId: string;
 };
 
-const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
+/** Save backups dropped elsewhere on the page; `id` tells two drops of the same files apart. */
+type EmulatorSaveImportRequest = {
+  files: File[];
+  id: number;
+};
+
+const isZipFile = (file: File) => /\.zip$/i.test(file.name) || file.type === "application/zip";
+
+const importSaveBackup = async (file: File) =>
+  importEmulatorSave(isZipFile(file) ? await extractEmulatorSaveExport(file) : file);
+
+const EmulatorSavesPanel = ({
+  active = true,
+  importRequest = null,
+  onImportStarted,
+}: {
+  active?: boolean;
+  importRequest?: EmulatorSaveImportRequest | null;
+  /** Called once the request is taken, so a remounted panel does not import it again. */
+  onImportStarted?: () => void;
+}) => {
   const localizer = useUiLocalizer();
   const inputRef = useRef<HTMLInputElement>(null);
+  const handledImportIdRef = useRef<number | null>(null);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +72,23 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   useEffect(() => {
     if (active) void refresh();
   }, [active, refresh]);
+  useEffect(() => {
+    if (!importRequest || handledImportIdRef.current === importRequest.id) return;
+    handledImportIdRef.current = importRequest.id;
+    onImportStarted?.();
+    void (async () => {
+      let failure: unknown;
+      for (const file of importRequest.files) {
+        try {
+          await importSaveBackup(file);
+        } catch (reason) {
+          failure ??= reason;
+        }
+      }
+      await refresh();
+      if (failure) setError(failure instanceof Error ? failure.message : String(failure));
+    })();
+  }, [importRequest, onImportStarted, refresh]);
 
   const reportActionError = (reason: unknown) => {
     setError(reason instanceof Error ? reason.message : String(reason));
@@ -93,11 +131,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
     setError("");
     try {
       if (pendingImport.kind === "combined") {
-        const source =
-          /\.zip$/i.test(pendingImport.file.name) || pendingImport.file.type === "application/zip"
-            ? await extractEmulatorSaveExport(pendingImport.file)
-            : pendingImport.file;
-        await importEmulatorSave(source);
+        await importSaveBackup(pendingImport.file);
       } else {
         await importEmulatorSavePart({ data: pendingImport.file, part: pendingImport.kind, sha1: importSha1 });
       }
@@ -260,4 +294,4 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   );
 };
 
-export { EmulatorSavesPanel };
+export { EmulatorSavesPanel, type EmulatorSaveImportRequest };

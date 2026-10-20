@@ -50,6 +50,7 @@ import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import {
   classifyDropEntry,
   countDropEntries,
+  isEmulatorSaveExportName,
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
@@ -61,6 +62,7 @@ import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
+import type { EmulatorSaveImportRequest } from "./components/emulator-saves-panel.tsx";
 import { LoadErrorBoundary } from "./components/load-error-boundary.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead } from "./components/shell.tsx";
@@ -568,6 +570,7 @@ function WebappRoot({
   const routeChoiceRef = useRef<(() => void) | null>(null);
   const pageDropIdRef = useRef(0);
   const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
+  const [saveImport, setSaveImport] = useState<EmulatorSaveImportRequest | null>(null);
   const [dropRouting, setDropRouting] = useState<DropRouting | null>(null);
   const dropRoutingTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cancelFileRouting = useCallback(() => {
@@ -804,7 +807,7 @@ function WebappRoot({
         .catch(() => undefined)
         .then(async () => {
           if (generation !== routingGenerationRef.current) return;
-          const files = await selected;
+          let files = await selected;
           if (!files.length || generation !== routingGenerationRef.current) return;
           if (directView) {
             await enqueuePageDrop(directView, files);
@@ -813,6 +816,19 @@ function WebappRoot({
           const routeVeil: typeof showDropRouting = (routing, holdMs) => {
             if (fromDrop) showDropRouting(routing, holdMs);
           };
+          // Save backups belong to no workflow; Saves & storage imports them and shows the result.
+          const saveExports = files.filter((file) => isEmulatorSaveExportName(file.name));
+          if (saveExports.length) {
+            logger.debug("importing dropped save backups", { names: saveExports.map((file) => file.name) });
+            pageDropIdRef.current += 1;
+            setSaveImport({ files: saveExports, id: pageDropIdRef.current });
+            openStorageTab();
+            files = files.filter((file) => !saveExports.includes(file));
+            if (!files.length) {
+              routeVeil(null);
+              return;
+            }
+          }
           routeVeil({ phase: "reading" });
           const entries = await readDropEntries(files);
           if (generation !== routingGenerationRef.current) return;
@@ -845,7 +861,7 @@ function WebappRoot({
       routingQueueRef.current = delivery;
       return delivery;
     },
-    [deliverDrop, enqueuePageDrop, showDropRouting],
+    [deliverDrop, enqueuePageDrop, openStorageTab, showDropRouting],
   );
   useEffect(
     () =>
@@ -1239,6 +1255,8 @@ function WebappRoot({
                 offlineCopyEnabled={state.settings.offlineCopyEnabled}
                 onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
                 settingsFocusHint={settingsFocusHint}
+                emulatorSaveImport={saveImport}
+                onEmulatorSaveImportStarted={() => setSaveImport(null)}
                 settingsPanel={
                   <Suspense fallback={null}>
                     <SettingsPanel
