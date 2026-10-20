@@ -25,10 +25,10 @@ const CD_SYNC: [u8; 12] = [
 const RAW_SECTOR_BYTES: usize = 2352;
 /// Logical (user-data) sector size.
 const USER_SECTOR_BYTES: usize = 2048;
-/// PS2 discs at or above this size are DVDs; smaller ones are CDs. PS2 CD-ROM
-/// titles top out around 700 MiB (a single CD), DVD titles start well above it.
 /// Largest 2048-byte-sector image that still fits a CD (450,000 sectors); larger is DVD.
 const CD_ISO_MAX_BYTES: u64 = 450_000 * 2048;
+/// PS2 discs at or above this size are DVDs; smaller ones are CDs. PS2 CD-ROM
+/// titles top out around 700 MiB (a single CD), DVD titles start well above it.
 const PS2_DVD_THRESHOLD_BYTES: u64 = 800 * 1024 * 1024;
 
 /// Optical medium of a disc image. Cartridge/card dumps have no medium.
@@ -418,6 +418,15 @@ mod tests {
         assert_eq!(
             detect_rom_identity(&image, len + 1, Some(".bin")).disc_format,
             None
+        );
+        // The medium follows the total length: up to 450,000 sectors is a CD, one sector more a DVD.
+        assert_eq!(
+            detect_rom_identity(&image, CD_ISO_MAX_BYTES, Some(".bin")).disc_format,
+            Some(DiscFormat::Cd)
+        );
+        assert_eq!(
+            detect_rom_identity(&image, CD_ISO_MAX_BYTES + 2048, Some(".bin")).disc_format,
+            Some(DiscFormat::Dvd)
         );
         // A cartridge-sized `.bin` of whole sectors with no descriptor is not a disc.
         let cartridge = vec![0x5a_u8; 2048 * 256];
