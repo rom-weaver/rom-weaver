@@ -63,8 +63,11 @@ type DropRedirect = {
 
 /** Matches the raw saves the Save editor reads; wrapped formats need its conversion first. */
 const SAVE_NAME = /\.(?:sav|srm|sra|eep|fla|mpk|mcr|mcd)$/i;
-/** The backups Saves & storage exports; `getCompressedFileName` turns the JSON name into the ZIP one. */
-const EMULATOR_SAVE_EXPORT_NAME = /\.rw-emulator-save\.(?:json|zip)$/i;
+/**
+ * The backups Saves & storage exports; `getCompressedFileName` turns the JSON name into the ZIP one. Browsers
+ * download a repeat export as `name (1).zip`, so a counter MAY follow the marker.
+ */
+const EMULATOR_SAVE_EXPORT_NAME = /\.rw-emulator-save(?: ?\(\d+\))?\.(?:json|zip)$/i;
 const SHEET_NAME = /\.(?:cue|gdi)$/i;
 const TRACK_NAME = /\.(?:bin|raw)$/i;
 

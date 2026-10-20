@@ -12,6 +12,7 @@ import {
   configureEmulatorSaveStorage,
   loadDroppedSram,
   registerEmulatorSaveBridge,
+  readImportBytes,
   readPendingTestSave,
   setEmulatorSavePreview,
   stagePendingTestSave,
@@ -445,7 +446,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         const matched = staged && stagedMatches ? staged : undefined;
         let droppedBytes: Uint8Array | undefined;
         if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
-        else if (save) droppedBytes = new Uint8Array(await save.arrayBuffer());
+        else if (save) droppedBytes = await readImportBytes(save);
         if (stagedMatches) await clearPendingTestSave();
         const identity = createEmulatorGameIdentity(entry);
         if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);

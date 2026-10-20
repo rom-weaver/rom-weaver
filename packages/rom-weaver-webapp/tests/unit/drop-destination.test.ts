@@ -32,6 +32,8 @@ describe("isEmulatorSaveExportName", () => {
   it("matches the backups Saves & storage exports, compressed or not", () => {
     expect(isEmulatorSaveExportName("Zelda.rw-emulator-save.zip")).toBe(true);
     expect(isEmulatorSaveExportName("Zelda.RW-EMULATOR-SAVE.json")).toBe(true);
+    expect(isEmulatorSaveExportName("Zelda.rw-emulator-save (1).zip")).toBe(true);
+    expect(isEmulatorSaveExportName("Zelda.rw-emulator-save(12).json")).toBe(true);
     expect(isEmulatorSaveExportName("game.zip")).toBe(false);
     expect(isEmulatorSaveExportName("rom-weaver-weave.json")).toBe(false);
   });

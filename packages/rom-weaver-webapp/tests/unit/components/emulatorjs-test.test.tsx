@@ -230,6 +230,21 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("zelda.srm")).toBeTruthy();
   });
 
+  it("loads nothing when a save dropped with its ROM is empty", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+
+    render(
+      withSettings(
+        <EmulatorTestView pageDrop={{ files: [new File(["rom"], "game.nes"), new File([], "game.sav")], id: 1 }} />,
+      ),
+    );
+
+    expect(await screen.findByText(/The uploaded emulator save is empty/)).toBeTruthy();
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(getEmulatorSessionState().entries).toHaveLength(0);
+  });
+
   it("loads nothing when a save dropped with its ROM cannot be read", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

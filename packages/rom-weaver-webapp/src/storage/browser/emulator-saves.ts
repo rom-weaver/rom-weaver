@@ -878,6 +878,7 @@ export {
   listEmulatorSaves,
   loadDroppedSram,
   parseSerializedEmulatorSave,
+  readImportBytes,
   readPendingTestSave,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
