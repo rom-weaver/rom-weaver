@@ -6,11 +6,7 @@ impl ChdContainerHandler {
     pub(super) const HD_SECTOR_BYTES: u32 = 512;
     pub(super) const CD_FRAME_BYTES: u32 = CD_FRAME_SIZE;
     pub(super) const CD_HUNK_BYTES: u32 = CD_FRAME_SIZE * 8;
-    pub(super) const FLAC_CHANNELS: usize = 2;
-    pub(super) const FLAC_BITS_PER_SAMPLE: usize = 16;
-    pub(super) const FLAC_SAMPLE_RATE_HZ: usize = 44_100;
     pub(super) const CD_SECTOR_DATA_BYTES: usize = crate::chd::CD_SECTOR_SIZES[0] as usize;
-    pub(super) const CD_SUBCODE_BYTES: usize = 96;
     // Supported WAVE formats need at most the 40-byte WAVE_FORMAT_EXTENSIBLE
     // layout; cap untrusted chunk lengths before allocating a read buffer.
     pub(super) const MAX_WAVE_FMT_CHUNK_BYTES: u64 = 40;
@@ -30,30 +26,7 @@ impl ChdContainerHandler {
     pub(super) const LZMA_LEVEL_MAX: i32 = 9;
     pub(super) const FLAC_LEVEL_MIN: i32 = 0;
     pub(super) const FLAC_LEVEL_MAX: i32 = 9;
-    pub(super) const CHD_V5_HEADER_BYTES: u64 = 124;
-    pub(super) const CHD_V5_MAP_TYPE_COMPRESSED_MAX: u8 = 3;
-    pub(super) const CHD_V5_MAP_TYPE_UNCOMPRESSED: u8 = 4;
-    pub(super) const CHD_V5_MAP_TYPE_SELF: u8 = 5;
-    pub(super) const CHD_V5_MAP_TYPE_PARENT: u8 = 6;
-    pub(super) const CHD_V5_MAP_TYPE_RLE_SMALL: u8 = 7;
-    pub(super) const CHD_V5_MAP_TYPE_RLE_LARGE: u8 = 8;
-    pub(super) const CHD_V5_MAP_TYPE_SELF0: u8 = 9;
-    pub(super) const CHD_V5_MAP_TYPE_SELF1: u8 = 10;
-    pub(super) const CHD_V5_MAP_TYPE_PARENT_SELF: u8 = 11;
-    pub(super) const CHD_V5_MAP_TYPE_PARENT0: u8 = 12;
-    pub(super) const CHD_V5_MAP_TYPE_PARENT1: u8 = 13;
-    pub(super) const CHD_V5_MAP_SYMBOL_COUNT: usize = 16;
-    pub(super) const CHD_V5_HEADER_MAP_OFFSET: u64 = 40;
-    pub(super) const CHD_V5_HEADER_META_OFFSET: u64 = 48;
-    pub(super) const CHD_V5_HEADER_RAW_SHA1_OFFSET: u64 = 64;
-    pub(super) const CHD_V5_HEADER_SHA1_OFFSET: u64 = 84;
-    pub(super) const CHD_V5_HEADER_PARENT_SHA1_OFFSET: u64 = 104;
-    pub(super) const CHD_SHA1_BYTES: usize = 20;
     pub(super) const SUPPORTED_CODEC_CLAUSE: &str = "supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)";
-    pub(super) const HUFFMAN_SMALL_TREE_BITS: [u8; 5] = [1, 7, 0, 1, 7];
-    pub(super) const AVHUFF_DELTA_TREE_SYMBOLS: usize = 256 + 16;
-    pub(super) const AVHUFF_DELTA_TREE_BITS: u8 = 5;
-    pub(super) const AVHUFF_DELTA_TREE_8BIT_COUNT: usize = 240;
 
     pub(super) fn progress_bytes_callback(
         &self,
@@ -323,7 +296,7 @@ impl ChdContainerHandler {
                     logical_bytes,
                     create_kind: &ChdCreateKind::Raw,
                     codecs: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
-                    compression_level: level,
+                    compression_level: Self::codec_accepts_level(codec).then_some(level),
                     thread_count,
                     parent_source: None,
                     on_progress: None,
@@ -365,12 +338,36 @@ impl ChdContainerHandler {
 
     #[cfg(test)]
     pub fn encode_raw_flac_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
-        self.compress_rust_hunk(&ChdCreateKind::Raw, ChdCodec::FLAC, 0, hunk)
+        Self::encode_payload_for_tests(crate::chd_rs::header::CodecType::FlacV5, hunk)
     }
 
     #[cfg(test)]
     pub fn encode_cd_flac_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
-        self.compress_rust_cd_hunk(ChdCodec::CD_FLAC, 0, hunk)
+        Self::encode_payload_for_tests(crate::chd_rs::header::CodecType::FlacCdV5, hunk)
+    }
+
+    #[cfg(test)]
+    pub fn encode_cd_zlib_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
+        Self::encode_payload_for_tests(crate::chd_rs::header::CodecType::ZLibCdV5, hunk)
+    }
+
+    /// Compresses one hunk-sized buffer with a codec at its chdman level.
+    #[cfg(test)]
+    fn encode_payload_for_tests(
+        codec: crate::chd_rs::header::CodecType,
+        hunk: &[u8],
+    ) -> Result<Vec<u8>> {
+        let error = |error: crate::chd_rs::Error| RomWeaverError::Validation(error.to_string());
+        let hunk_bytes = u32::try_from(hunk.len())
+            .map_err(|_| RomWeaverError::Validation("test hunk too large".into()))?;
+        let mut output = vec![0_u8; hunk.len()];
+        let len = codec
+            .init(hunk_bytes)
+            .map_err(error)?
+            .compress(hunk, &mut output)
+            .map_err(error)?;
+        output.truncate(len);
+        Ok(output)
     }
 
     pub(super) fn explicit_codec_plan(&self, codecs: Vec<ChdCodec>) -> Result<ChdCompressionPlan> {

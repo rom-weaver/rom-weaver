@@ -16,6 +16,7 @@ use std::{
 mod archive_entries;
 mod archive_formats;
 pub mod chd;
+pub mod chd_rs;
 mod constants;
 mod extract_support;
 mod formats;
