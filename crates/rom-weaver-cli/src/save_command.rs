@@ -524,15 +524,15 @@ fn detect_for_edit(
     }
 }
 
-/// A save for a game the caller chose that fails its checksums is a damaged
-/// save, not a missing editor; say so instead of "no editor".
+/// A save for a game the caller chose that fails its checksums is a blank or
+/// damaged save, not a missing editor; say so instead of "no editor".
 fn unsupported_save_message(
     input: &SaveDetectionInput,
     reasons: &[SaveRecognitionReason],
 ) -> String {
     match &input.selected_game {
         Some(game) if reasons.contains(&SaveRecognitionReason::ChecksumMismatch) => format!(
-            "validation failed: the save failed its integrity checks (checksum mismatch) for {game}; it may be corrupt or from another game"
+            "validation failed: the save failed its integrity checks (checksum mismatch) for {game}; it may be blank, corrupt, or from another game"
         ),
         _ => "unsupported operation: ROMWeaver has no editor for this save".to_string(),
     }
