@@ -164,7 +164,7 @@ const usePpfUndoInputs = (
         onInputs(chosen.rom?.file, chosen.patch?.file ?? (invalidPatch ? null : undefined));
         setWarnings(notices);
         if (!chosen.patch && invalidPatch) {
-          onError("No valid PPF patch was selected. Replace the invalid input to continue.");
+          onError("No valid PPF patch was selected. Add a valid PPF patch to continue.");
         }
       } catch (cause) {
         if (!abort.signal.aborted) {

@@ -416,9 +416,44 @@ fn undo_ppf_restores_the_original_rom() {
             &test_context_with_threads(&temp, 1),
         )
         .expect("apply");
-    undo_ppf(&applied_path, &patch_path, &restored_path).expect("undo");
+    let mismatched = undo_ppf(&applied_path, &patch_path, &restored_path).expect("undo");
 
+    assert_eq!(mismatched, 0);
     assert_eq!(fs::read(restored_path).expect("restored output"), original);
+}
+
+#[test]
+fn undo_reports_records_that_do_not_match_the_input() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ppf");
+    let applied_path = temp.child("applied.bin");
+    let restored_path = temp.child("restored.bin");
+
+    let (original, _already_patched, block, record) = ppf3_blockcheck_overlap_fixture();
+    fs::write(&input_path, &original).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_ppf3_patch("PPF3 undo", 1, true, true, Some(&block), vec![record]),
+    )
+    .expect("fixture");
+    PpfPatchHandler::new(&PPF)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path.clone()],
+                output: applied_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    // The unpatched ROM is not what the patch produced.
+    let unpatched_path = temp.child("unpatched.bin");
+    fs::write(&unpatched_path, &original).expect("unpatched");
+    let mismatched = undo_ppf(&unpatched_path, &patch_path, &restored_path).expect("undo");
+
+    assert_eq!(mismatched, 1);
 }
 
 #[test]

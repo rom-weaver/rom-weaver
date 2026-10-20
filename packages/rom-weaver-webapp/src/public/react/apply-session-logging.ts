@@ -35,7 +35,10 @@ const getErrorLogDetails = (error: Error): Record<string, unknown> => {
 };
 
 const logUiError = (context: string, error: Error) => {
-  logger.error(context, getErrorLogDetails(error));
+  const details = getErrorLogDetails(error);
+  // A cancelled picker (for example Reset while it is open) is a user action, not a failure.
+  if (details.code === "WORKFLOW_SELECTION_SKIPPED") logger.debug(context, details);
+  else logger.error(context, details);
 };
 
 export { getTraceSourceSummaries, getTraceSourceSummary, logUiError };

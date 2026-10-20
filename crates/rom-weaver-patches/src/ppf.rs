@@ -50,7 +50,10 @@ impl PpfPatchHandler {
 }
 
 /// Restore a ROM produced by a PPF3 patch using each record's stored original bytes.
-pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Result<()> {
+///
+/// Returns how many records did not match the input, meaning the input is not the ROM this
+/// patch produced. The restore still runs so a deliberately modified ROM can be undone.
+pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Result<usize> {
     let parsed = parse_ppf_file(patch_path)?;
     if !parsed.undo_enabled
         || parsed
@@ -64,6 +67,9 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
     }
 
     let input_len = fs::metadata(input_path)?.len();
+    let mut mismatched_records = 0;
+    let mut input = File::open(input_path)?;
+    let mut present = Vec::new();
     for record in &parsed.records {
         let undo = record.undo_data.as_ref().expect("validated above");
         let end = record
@@ -75,7 +81,13 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
                 "PPF undo data exceeds ROM bounds".into(),
             ));
         }
+        present.resize(record.data.len(), 0);
+        input.seek(SeekFrom::Start(record.offset))?;
+        if input.read_exact(&mut present).is_err() || present != record.data {
+            mismatched_records += 1;
+        }
     }
+    drop(input);
     if let Some(parent) = output_path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -90,7 +102,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
         output.write_all(undo)?;
     }
     output.flush()?;
-    Ok(())
+    Ok(mismatched_records)
 }
 
 impl PatchHandler for PpfPatchHandler {
