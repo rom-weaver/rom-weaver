@@ -1689,6 +1689,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The platform's data lists no version of this game.",
   }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
+  "ui.log.copyAll": msg({ id: "ui.log.copyAll", message: "Copy all" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),
   "ui.log.filterLabel": msg({ id: "ui.log.filterLabel", message: "Filter log" }),
   "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "This visit" }),

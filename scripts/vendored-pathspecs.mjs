@@ -4,6 +4,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 export const VENDORED_PATHS = [
+  "crates/rom-weaver-containers/src/chd_rs",
   "crates/rom-weaver-containers/libarchive/vendor",
   "crates/rom-weaver-containers/lzma-sdk/vendor",
   "crates/rom-weaver-containers/src/nod",

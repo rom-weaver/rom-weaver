@@ -277,7 +277,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
   { fields: ["rvzBlockSize"], title: "RVZ" },
 ];
 
-/** Anchor id of a settings panel group; the console's jump links scroll to it. */
+/** Anchor id of a settings panel group. */
 const settingsGroupId = (title: string) => `settings-group-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
 /**

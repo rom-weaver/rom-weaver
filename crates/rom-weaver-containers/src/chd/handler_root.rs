@@ -86,20 +86,22 @@ impl DiscLayout {
         })
     }
 
-    /// Apply MAME's CD track padding to a freshly built CD-ROM layout.
+    /// Apply MAME's track padding to a freshly built CD-ROM or GD-ROM layout.
     ///
-    /// Round CD tracks to `CD_TRACK_PADDING`, recording the zero-filled tail in
-    /// `pad_frames`. GD-ROM declares padding explicitly. Must run once while
-    /// `pad_frames == 0`.
+    /// Round every track (including any explicit GD `PAD` frames) up to
+    /// `CD_TRACK_PADDING`, recording the zero-filled tail in `pad_frames` and
+    /// `align_pad_frames`. Must run once while `align_pad_frames == 0`.
     fn apply_cd_track_padding(&mut self) {
-        if self.kind != DiscKind::CdRom {
-            return;
-        }
         let padding = ChdContainerHandler::CD_TRACK_PADDING;
         for track in &mut self.tracks {
             let data_frames = track.frames;
             let pad = (padding - data_frames % padding) % padding;
-            track.pad_frames = pad;
+            trace!(
+                track = track.number,
+                pad, "applying 4-frame track alignment"
+            );
+            track.align_pad_frames = pad;
+            track.pad_frames = track.pad_frames.saturating_add(pad);
             track.frames = data_frames.saturating_add(pad);
         }
     }
@@ -112,25 +114,34 @@ impl DiscLayout {
         for ovr in overrides {
             let mut matched = false;
             for track in &mut self.tracks {
-                if !is_same_track_file(&track.file_path, &ovr.original_path) {
-                    continue;
-                }
-                trace!(
-                    track = track.number,
-                    track_file = %track.file_path.display(),
-                    original = %ovr.original_path.display(),
-                    "disc create track override matched"
-                );
-                match &ovr.source {
-                    CreateInputSource::Path(path) => {
-                        track.file_path = path.clone();
-                        track.memory_source = None;
+                let sources = std::iter::once((&mut track.file_path, &mut track.memory_source))
+                    .chain(
+                        track
+                            .tail
+                            .iter_mut()
+                            .map(|tail| (&mut tail.file_path, &mut tail.memory_source)),
+                    );
+                for (file_path, memory_source) in sources {
+                    if !is_same_track_file(file_path, &ovr.original_path) {
+                        continue;
                     }
-                    CreateInputSource::Bytes(bytes) => {
-                        track.memory_source = Some(Arc::clone(bytes));
+                    trace!(
+                        track = track.number,
+                        track_file = %file_path.display(),
+                        original = %ovr.original_path.display(),
+                        "disc create track override matched"
+                    );
+                    match &ovr.source {
+                        CreateInputSource::Path(path) => {
+                            *file_path = path.clone();
+                            *memory_source = None;
+                        }
+                        CreateInputSource::Bytes(bytes) => {
+                            *memory_source = Some(Arc::clone(bytes));
+                        }
                     }
+                    matched = true;
                 }
-                matched = true;
             }
             if !matched {
                 return Err(RomWeaverError::Validation(format!(
@@ -206,6 +217,30 @@ struct DiscTrack {
     pregap_has_data: bool,
     has_subcode: bool,
     pad_frames: u32,
+    /// Zero-filled tail added by chdman's 4-frame track alignment. Included in
+    /// `frames` and `pad_frames`, but excluded from the metadata `FRAMES`/`PAD`.
+    align_pad_frames: u32,
+    /// Report the track's own type (no `V` prefix) as `PGTYPE`. chdman does
+    /// this for a GD cue's first track when the sheet has an `INDEX 00` line
+    /// (even a zero-length pregap), because it only resets the pregap type for
+    /// tracks 2 and up.
+    pgtype_track_mode: bool,
+    /// Data frames at the end of this track that are read from the start of
+    /// the next track's file, from its byte 0 even for a WAVE file (chdman
+    /// moves a GD cue track's `INDEX 00` pregap onto the end of the previous
+    /// track).
+    tail: Option<Box<TrackTail>>,
+    swap_audio_on_read: bool,
+}
+
+/// A run of frames appended to a track from another track's source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TrackTail {
+    mode: DiscTrackMode,
+    file_path: PathBuf,
+    memory_source: Option<Arc<[u8]>>,
+    file_offset_bytes: u64,
+    frames: u32,
     swap_audio_on_read: bool,
 }
 
@@ -236,12 +271,6 @@ enum DiscTrackMode {
     Audio,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FlacSampleByteOrder {
-    LittleEndian,
-    BigEndian,
-}
-
 /// Per-track byte source for [`DiscImageReader`]: a buffered file (the default)
 /// or an in-memory cursor for a track sourced from memory.
 enum TrackReader {
@@ -258,13 +287,18 @@ impl Read for TrackReader {
     }
 }
 
+/// Streams a layout's frames in chdman's order. Each track is its main data,
+/// then its physical gap padding, then any tail frames moved onto it from the
+/// next track's file, then the 4-frame alignment padding.
 struct DiscImageReader<'a> {
     tracks: &'a [DiscTrack],
     track_index: usize,
     track_initialized: bool,
     track_reader: Option<TrackReader>,
-    track_data_frames_remaining: u32,
-    track_pad_frames_remaining: u32,
+    track_main_frames_remaining: u32,
+    track_gap_pad_frames_remaining: u32,
+    track_tail_frames_remaining: u32,
+    track_align_pad_frames_remaining: u32,
     frame: Vec<u8>,
     frame_cursor: usize,
     frame_len: usize,
@@ -278,13 +312,34 @@ impl<'a> DiscImageReader<'a> {
             track_index: 0,
             track_initialized: false,
             track_reader: None,
-            track_data_frames_remaining: 0,
-            track_pad_frames_remaining: 0,
+            track_main_frames_remaining: 0,
+            track_gap_pad_frames_remaining: 0,
+            track_tail_frames_remaining: 0,
+            track_align_pad_frames_remaining: 0,
             frame: vec![0_u8; ChdContainerHandler::CD_FRAME_BYTES as usize],
             frame_cursor: 0,
             frame_len: 0,
             data: Vec::new(),
         }
+    }
+
+    fn open_track_reader(
+        memory_source: Option<&Arc<[u8]>>,
+        file_path: &Path,
+        file_offset_bytes: u64,
+    ) -> io::Result<TrackReader> {
+        Ok(match memory_source {
+            Some(bytes) => {
+                let mut reader = Cursor::new(Arc::clone(bytes));
+                reader.seek(SeekFrom::Start(file_offset_bytes))?;
+                TrackReader::Memory(reader)
+            }
+            None => {
+                let mut reader = BufReader::new(File::open(file_path)?);
+                reader.seek(SeekFrom::Start(file_offset_bytes))?;
+                TrackReader::File(reader)
+            }
+        })
     }
 
     fn load_next_frame(&mut self) -> io::Result<bool> {
@@ -294,37 +349,52 @@ impl<'a> DiscImageReader<'a> {
                 return Ok(false);
             }
 
+            let track = &self.tracks[self.track_index];
             if !self.track_initialized {
-                let track = &self.tracks[self.track_index];
-                self.track_data_frames_remaining = track.frames.saturating_sub(track.pad_frames);
-                self.track_pad_frames_remaining = track.pad_frames;
+                let data_frames = track.frames.saturating_sub(track.pad_frames);
+                let tail_frames = track
+                    .tail
+                    .as_ref()
+                    .map_or(0, |tail| tail.frames)
+                    .min(data_frames);
+                let align_pad_frames = track.align_pad_frames.min(track.pad_frames);
+                self.track_main_frames_remaining = data_frames - tail_frames;
+                self.track_gap_pad_frames_remaining = track.pad_frames - align_pad_frames;
+                self.track_tail_frames_remaining = tail_frames;
+                self.track_align_pad_frames_remaining = align_pad_frames;
                 self.track_initialized = true;
             }
 
-            if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
-                self.track_index += 1;
-                self.track_initialized = false;
-                self.track_reader = None;
-                continue;
-            }
-
-            let track = &self.tracks[self.track_index];
-            if self.track_data_frames_remaining > 0 {
+            let in_main = self.track_main_frames_remaining > 0;
+            let in_tail = !in_main
+                && self.track_gap_pad_frames_remaining == 0
+                && self.track_tail_frames_remaining > 0;
+            if in_main || in_tail {
+                let (mode, swap_audio, memory_source, file_path, file_offset_bytes) =
+                    match (&track.tail, in_tail) {
+                        (Some(tail), true) => (
+                            tail.mode,
+                            tail.swap_audio_on_read,
+                            tail.memory_source.as_ref(),
+                            tail.file_path.as_path(),
+                            tail.file_offset_bytes,
+                        ),
+                        _ => (
+                            track.mode,
+                            track.swap_audio_on_read,
+                            track.memory_source.as_ref(),
+                            track.file_path.as_path(),
+                            track.file_offset_bytes,
+                        ),
+                    };
                 if self.track_reader.is_none() {
-                    self.track_reader = Some(match &track.memory_source {
-                        Some(bytes) => {
-                            let mut reader = Cursor::new(Arc::clone(bytes));
-                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
-                            TrackReader::Memory(reader)
-                        }
-                        None => {
-                            let mut reader = BufReader::new(File::open(&track.file_path)?);
-                            reader.seek(SeekFrom::Start(track.file_offset_bytes))?;
-                            TrackReader::File(reader)
-                        }
-                    });
+                    self.track_reader = Some(Self::open_track_reader(
+                        memory_source,
+                        file_path,
+                        file_offset_bytes,
+                    )?);
                 }
-                let data_len = track.mode.data_bytes();
+                let data_len = mode.data_bytes();
                 if self.data.len() != data_len {
                     self.data.resize(data_len, 0);
                 }
@@ -332,31 +402,33 @@ impl<'a> DiscImageReader<'a> {
                     .as_mut()
                     .expect("track reader should be initialized")
                     .read_exact(&mut self.data)?;
-                if track.swap_audio_on_read {
-                    track.mode.swap_audio_bytes(&mut self.data);
+                if swap_audio {
+                    mode.swap_audio_bytes(&mut self.data);
                 }
                 self.frame.fill(0);
                 self.frame[..data_len].copy_from_slice(&self.data);
-                self.frame_cursor = 0;
-                self.frame_len = self.frame.len();
-                self.track_data_frames_remaining -= 1;
-                if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
-                    self.track_index += 1;
-                    self.track_initialized = false;
-                    self.track_reader = None;
+                if in_main {
+                    self.track_main_frames_remaining -= 1;
+                    if self.track_main_frames_remaining == 0 {
+                        self.track_reader = None;
+                    }
+                } else {
+                    self.track_tail_frames_remaining -= 1;
                 }
-                return Ok(true);
-            }
-
-            self.frame.fill(0);
-            self.frame_cursor = 0;
-            self.frame_len = self.frame.len();
-            self.track_pad_frames_remaining -= 1;
-            if self.track_data_frames_remaining == 0 && self.track_pad_frames_remaining == 0 {
+            } else if self.track_gap_pad_frames_remaining > 0 {
+                self.frame.fill(0);
+                self.track_gap_pad_frames_remaining -= 1;
+            } else if self.track_align_pad_frames_remaining > 0 {
+                self.frame.fill(0);
+                self.track_align_pad_frames_remaining -= 1;
+            } else {
                 self.track_index += 1;
                 self.track_initialized = false;
                 self.track_reader = None;
+                continue;
             }
+            self.frame_cursor = 0;
+            self.frame_len = self.frame.len();
             return Ok(true);
         }
     }
@@ -414,14 +486,6 @@ impl DiscTrackMode {
         }
     }
 
-    fn pregap_metadata_label(self) -> &'static str {
-        match self {
-            Self::Mode1Raw => "MODE1",
-            Self::Mode2Raw => "MODE2",
-            _ => self.metadata_label(),
-        }
-    }
-
     fn data_bytes(self) -> usize {
         match self {
             Self::Mode1 | Self::Mode2Form1 => 2048,
@@ -431,15 +495,13 @@ impl DiscTrackMode {
         }
     }
 
-    fn gdi_track_descriptor(self) -> Result<(u32, u32)> {
+    /// `.gdi` track type and sector size as `chdman extractcd` writes them:
+    /// type 0 for audio, 4 for every other track, with the track's data size.
+    fn gdi_track_descriptor(self) -> (u32, u32) {
+        let sector_bytes = u32::try_from(self.data_bytes()).unwrap_or(2352);
         match self {
-            Self::Mode1Raw => Ok((4, 2352)),
-            Self::Mode1 => Ok((4, 2048)),
-            Self::Audio => Ok((0, 2352)),
-            other => Err(RomWeaverError::Validation(format!(
-                "gd-rom output does not support {} tracks",
-                other.metadata_label()
-            ))),
+            Self::Audio => (0, sector_bytes),
+            _ => (4, sector_bytes),
         }
     }
 
@@ -478,70 +540,11 @@ struct ChdCompressionPlan {
     primary_codec: ChdCodec,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct RustCompressedHunkEntry {
-    compression_type: u8,
-    offset: u64,
-    length: u32,
-    crc16: u16,
-}
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-struct HunkHashKey {
-    crc16: u16,
-    sha1: [u8; 20],
-}
-
-struct ParentReuseIndex {
-    by_hash: HashMap<HunkHashKey, u64>,
-    sha1: [u8; 20],
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RustMetadataEntry {
     tag: u32,
     flags: u8,
     data: Vec<u8>,
-}
-
-#[derive(Default)]
-struct MsbBitWriter {
-    bytes: Vec<u8>,
-    bit_len: usize,
-}
-
-impl MsbBitWriter {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn write_bits(&mut self, value: u64, bit_count: u8) {
-        if bit_count == 0 {
-            return;
-        }
-        for shift in (0..bit_count).rev() {
-            let bit = ((value >> shift) & 1) as u8;
-            let byte_index = self.bit_len / 8;
-            if byte_index == self.bytes.len() {
-                self.bytes.push(0);
-            }
-            let bit_index = 7 - (self.bit_len % 8);
-            self.bytes[byte_index] |= bit << bit_index;
-            self.bit_len += 1;
-        }
-    }
-
-    fn align_to_byte(&mut self) {
-        let remainder = self.bit_len % 8;
-        if remainder == 0 {
-            return;
-        }
-        self.write_bits(0, (8 - remainder) as u8);
-    }
-
-    fn finish(self) -> Vec<u8> {
-        self.bytes
-    }
 }
 
 const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
@@ -566,12 +569,9 @@ fn split_token(text: &str) -> Option<(&str, &str)> {
     }
 }
 
+#[cfg(test)]
 #[path = "cd_sector_ecc.rs"]
 mod cd_sector_ecc;
-#[path = "codec_encoders.rs"]
-mod codec_encoders;
-#[path = "compressed_map.rs"]
-mod compressed_map;
 #[path = "core.rs"]
 mod core;
 #[path = "create_pipeline.rs"]
@@ -582,16 +582,16 @@ mod disc_extract;
 mod handler_trait;
 #[path = "header_metadata.rs"]
 mod header_metadata;
-#[path = "hunk_compression.rs"]
-mod hunk_compression;
 #[path = "infer.rs"]
 mod infer;
 #[path = "read_session.rs"]
 mod read_session;
 
-use cd_sector_ecc::CD_SYNC_HEADER;
+/// The sync header that starts every CD data sector.
+const CD_SYNC_HEADER: [u8; 12] = [
+    0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+];
 use create_pipeline::CompressedCreateParams;
-use hunk_compression::ChdCompressionScratch;
 use read_session::ChdReadSession;
 
 #[cfg(test)]

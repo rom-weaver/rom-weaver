@@ -121,7 +121,7 @@ export async function runVendor({
   }
 }
 
-const HELP = `Usage: node scripts/vendor-dependencies.mjs <list|check|refresh> [all|libarchive|lzma-sdk|nod|xdvdfs] [--offline] [--keep-work]
+const HELP = `Usage: node scripts/vendor-dependencies.mjs <list|check|refresh> [all|chd-rs|libarchive|lzma-sdk|nod|xdvdfs] [--offline] [--keep-work]
 
 list     Explain the ordered local patches and their upstream status.
 check    Verify archive checksums, patch replay, and committed source equality.
