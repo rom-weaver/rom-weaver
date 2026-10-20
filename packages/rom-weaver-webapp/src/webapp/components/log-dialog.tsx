@@ -21,6 +21,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1180,8 +1181,8 @@ const OpfsInspector = ({
 /**
  * The virtualized trace listing. Only rows near the viewport are mounted; the
  * fixed CSS row height keeps the native scrollbar exact without a list library.
- * The scroll state lives on the dialog, so leaving this tab and coming back does
- * not re-run the scroll-to-newest effect and lose the reader's place.
+ * The scroll state lives on the dialog, so leaving this tab and coming back
+ * restores the reader's place on mount instead of starting at the top.
  */
 const TraceList = ({
   advanced,
@@ -1208,6 +1209,12 @@ const TraceList = ({
     Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
   );
   const emptyMessage = filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-";
+  // A remounted list starts at the top while the rows mount at the saved
+  // offset, which leaves the viewport blank; put the scroll back before paint.
+  const mountScrollTopRef = useRef(scrollTop);
+  useLayoutEffect(() => {
+    if (traceRef.current) traceRef.current.scrollTop = mountScrollTopRef.current;
+  }, [traceRef]);
   return (
     <div
       aria-atomic="false"
@@ -1609,13 +1616,19 @@ const LogDialog = ({
     return () => window.removeEventListener("resize", updateViewport);
   }, [open, tab]);
 
-  // Keep the newest lines in view while the dialog is open.
+  // Open the log at the newest lines, once per open: a later resize changes the
+  // viewport height too, and must not throw a reader back to the bottom.
+  const openedAtNewestRef = useRef(false);
   useEffect(() => {
-    const trace = traceRef.current;
-    if (open && trace && viewportHeight > 0) {
-      trace.scrollTop = trace.scrollHeight;
-      setScrollTop(trace.scrollTop);
+    if (!open) {
+      openedAtNewestRef.current = false;
+      return;
     }
+    const trace = traceRef.current;
+    if (openedAtNewestRef.current || !trace || viewportHeight <= 0) return;
+    openedAtNewestRef.current = true;
+    trace.scrollTop = trace.scrollHeight;
+    setScrollTop(trace.scrollTop);
   }, [open, viewportHeight]);
 
   return (
