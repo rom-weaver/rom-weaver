@@ -1226,7 +1226,9 @@ const useTraceWindow = ({
   const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
   // The content height of the last commit and the lines it held. A reader
   // exactly at its bottom stays pinned when only measured heights changed since.
-  const committedRef = useRef<{ entries: readonly LogStoreEntry[]; height: number } | null>(null);
+  const committedRef = useRef<{ entries: readonly LogStoreEntry[]; height: number; offsets: Float64Array } | null>(
+    null,
+  );
   const offsets = useMemo(() => {
     if (!wrapped) return null;
     const result = new Float64Array(entries.length + 1);
@@ -1299,10 +1301,43 @@ const useTraceWindow = ({
       pinned: atBottom(offsets[entries.length] ?? 0) || wasAtBottom,
       top,
     };
-    setHeights((previous) => new Map([...previous, ...updates]));
+    // Keep only the listed lines: ids are never reused, so heights of lines the
+    // store has dropped would otherwise pile up while lines stream in.
+    const listed = new Set(entries.map((entry) => entry.id));
+    setHeights((previous) => new Map([...[...previous].filter(([id]) => listed.has(id)), ...updates]));
   }, [entries, heights, offsets, traceRef, virtualEnd, virtualStart, windowRef]);
+  // A new width re-wraps every row, so every measured height is stale; clearing
+  // them re-measures the mounted rows even when the window did not move. The
+  // anchor comes from the offsets the reader last saw, so the restore keeps
+  // their top row (or the newest line) in place.
   useLayoutEffect(() => {
-    committedRef.current = offsets ? { entries, height: offsets[entries.length] ?? 0 } : null;
+    const trace = traceRef.current;
+    if (!(wrapped && trace) || typeof ResizeObserver === "undefined") return;
+    let width = trace.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (trace.clientWidth === width) return;
+      width = trace.clientWidth;
+      const committed = committedRef.current;
+      if (committed) {
+        const style = getComputedStyle(trace);
+        const range = committed.height + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+        const top = trace.scrollTop;
+        const index = rowAtOffset(committed.offsets, top);
+        anchorRef.current = {
+          delta: top - (committed.offsets[index] ?? 0),
+          id: committed.entries[index]?.id ?? -1,
+          index,
+          pinned: range > trace.clientHeight + 2 && top + trace.clientHeight >= range - 2,
+          top,
+        };
+      }
+      setHeights(new Map());
+    });
+    observer.observe(trace);
+    return () => observer.disconnect();
+  }, [traceRef, wrapped]);
+  useLayoutEffect(() => {
+    committedRef.current = offsets ? { entries, height: offsets[entries.length] ?? 0, offsets } : null;
   }, [entries, offsets]);
   return {
     contentHeight: offsets ? (offsets[entries.length] ?? 0) : entries.length * TRACE_ROW_HEIGHT,
