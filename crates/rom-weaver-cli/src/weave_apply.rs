@@ -363,11 +363,39 @@ impl CliApp {
             trace!("weave rom source ignored: the apply input supplies the ROM directly");
             return Ok(rom_checks);
         }
-        if rom.url.is_some() || rom.path.is_some() {
+        // A `path` the archive does not bundle (a hand-zipped `weave create` JSON) is treated
+        // like a `name`: the applying user supplies the ROM.
+        let mut rom_unbundled = rom.url.is_none()
+            && source.loaded.kind == WeaveSourceKind::Archive
+            && rom.path.as_deref().is_some_and(|path| {
+                Self::find_weave_archive_entry(&source.loaded.archive_entries, path.trim())
+                    .is_none()
+            });
+        let mut bound_path: Option<String> = None;
+        if rom_unbundled {
+            match Self::find_weave_rom_by_checks(
+                &source.archive_source,
+                &source.loaded,
+                weave,
+                context,
+            )? {
+                Some(entry) => {
+                    trace!(member = %entry.name, "weave rom.path is not bundled; bound to archive member by checksum");
+                    bound_path = Some(entry.name);
+                    rom_unbundled = false;
+                }
+                None => {
+                    trace!(
+                        "weave rom.path is not bundled in the archive; the ROM is user-supplied"
+                    );
+                }
+            }
+        }
+        if (rom.url.is_some() || rom.path.is_some()) && !rom_unbundled {
             if let Some(resolved) =
                 self.resolve_weave_apply_entry(ResolveWeaveApplyEntryInputs {
                     url: rom.url.as_deref(),
-                    path: rom.path.as_deref(),
+                    path: bound_path.as_deref().or(rom.path.as_deref()),
                     loaded: &source.loaded,
                     archive_source: &source.archive_source,
                     weave_dir: &source.weave_dir,
@@ -382,12 +410,21 @@ impl CliApp {
             return Ok(rom_checks);
         }
 
-        let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(
-            "weave rom entry provides no source; pass the ROM as the apply input and the weave via --weave",
-        );
+        let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(if rom_unbundled {
+            "weave rom path is not bundled in the archive; pass the ROM as the apply input and the weave via --weave"
+        } else {
+            "weave rom entry provides no source; pass the ROM as the apply input and the weave via --weave"
+        });
+        // An unbundled `rom.path` without a `rom.name` still names the expected file by its basename.
+        let unbundled_name = rom
+            .path
+            .as_deref()
+            .filter(|_| rom_unbundled)
+            .and_then(|path| path.trim().rsplit(['/', '\\']).next());
         if let Some(name) = rom
             .name
             .as_deref()
+            .or(unbundled_name)
             .map(str::trim)
             .filter(|name| !name.is_empty())
         {
@@ -838,7 +875,7 @@ fn weave_patch_step_metadata(
     Ok((step, effective_basis, is_chain_prefix))
 }
 
-fn resolve_weave_checks(
+pub(super) fn resolve_weave_checks(
     weave: &RomWeaverWeave,
     inline: Option<&WeaveChecks>,
     reference: Option<&str>,

@@ -10,7 +10,7 @@ import type {
   ParsedWeaveParseResult,
   ParsedWeaveSourceRef,
 } from "../../types/weave.ts";
-
+import { getPathBaseName } from "../path-utils.ts";
 import { readsWeaveRootRom, resolveWeaveChecks } from "./weave-targets.ts";
 
 type WeaveAcquisition = { kind: "url"; url: string } | { kind: "extracted"; extractedPath: string };
@@ -116,10 +116,13 @@ const weaveSessionDisplayName = (weave: ParsedWeave): string | undefined => weav
 /** The expected-ROM details to surface when the weave ships no ROM source. */
 const weaveRomExpectation = (weave: ParsedWeave): WeaveRomExpectation | undefined => {
   const rom = weave.rom;
-  if (!rom || rom.url || rom.path) return undefined;
+  if (!rom || rom.url) return undefined;
   const checks = resolveWeaveChecks(weave, rom.checks, rom.checksRef);
+  // Callers only ask when no ROM source resolved, so a `path` here is unbundled (and, for archives, no
+  // member matched the rom checksums): it names the ROM to supply.
+  const name = rom.name || getPathBaseName(rom.path);
   const expectation: WeaveRomExpectation = {
-    ...(rom.name ? { name: rom.name } : {}),
+    ...(name ? { name } : {}),
     ...(checks ? { checks } : {}),
   };
   return Object.keys(expectation).length ? expectation : undefined;
