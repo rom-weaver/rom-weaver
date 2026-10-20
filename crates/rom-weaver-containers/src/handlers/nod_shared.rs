@@ -607,7 +607,7 @@ impl NodHandlerCore {
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}{}",
-                    input.display(),
+                    display_input_name(input),
                     self.format_name(),
                     unknown_disc_hint(&error)
                 ))
@@ -672,7 +672,7 @@ impl NodHandlerCore {
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}{}",
-                    input.display(),
+                    display_input_name(input),
                     self.format_name(),
                     unknown_disc_hint(&error)
                 ))
@@ -776,6 +776,14 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// File name only, so errors do not leak internal staging directories (e.g. `/work` in the browser).
+fn display_input_name(input: &Path) -> String {
+    input.file_name().map_or_else(
+        || input.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
 
 /// Hint appended when a create input is not a disc image the nod reader recognizes.
 fn unknown_disc_hint(error: &str) -> &'static str {
