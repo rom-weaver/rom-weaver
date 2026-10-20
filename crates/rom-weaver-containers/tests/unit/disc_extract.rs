@@ -18,7 +18,6 @@ fn track(number: u32, mode: DiscTrackMode, frames: u32, pad_frames: u32) -> Disc
         file_path: PathBuf::from(format!("track{number}.bin")),
         memory_source: None,
         file_offset_bytes: 0,
-        file_base_offset_bytes: 0,
         frames,
         pregap_frames: 0,
         postgap_frames: 0,

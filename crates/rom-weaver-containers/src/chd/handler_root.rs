@@ -211,9 +211,6 @@ struct DiscTrack {
     /// byte-identical.
     memory_source: Option<Arc<[u8]>>,
     file_offset_bytes: u64,
-    /// Start of the file's payload. chdman reads a GD cue pregap that it moves
-    /// onto the previous track from here, not from `file_offset_bytes`.
-    file_base_offset_bytes: u64,
     frames: u32,
     pregap_frames: u32,
     postgap_frames: u32,
@@ -224,12 +221,14 @@ struct DiscTrack {
     /// `frames` and `pad_frames`, but excluded from the metadata `FRAMES`/`PAD`.
     align_pad_frames: u32,
     /// Report the track's own type (no `V` prefix) as `PGTYPE`. chdman does
-    /// this for a GD cue's first track when it carries a pregap, because it
-    /// only resets the pregap type for tracks 2 and up.
+    /// this for a GD cue's first track when the sheet has an `INDEX 00` line
+    /// (even a zero-length pregap), because it only resets the pregap type for
+    /// tracks 2 and up.
     pgtype_track_mode: bool,
     /// Data frames at the end of this track that are read from the start of
-    /// the next track's file (chdman moves a GD cue track's `INDEX 00`
-    /// pregap onto the end of the previous track).
+    /// the next track's file, from its byte 0 even for a WAVE file (chdman
+    /// moves a GD cue track's `INDEX 00` pregap onto the end of the previous
+    /// track).
     tail: Option<Box<TrackTail>>,
     swap_audio_on_read: bool,
 }

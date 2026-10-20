@@ -59,8 +59,8 @@ impl ChdContainerHandler {
                 let mut entries = Vec::with_capacity(layout.tracks.len());
                 for track in &layout.tracks {
                     // chdman leaves the pregap type at its zero value (`MODE1`)
-                    // unless the pregap carries data (cue `INDEX 00`), in which
-                    // case it is `V` plus the track type. This holds for every
+                    // unless the sheet has an `INDEX 00` line (even one equal to
+                    // `INDEX 01`, a zero-length pregap), in which case it is `V` plus the track type. This holds for every
                     // track mode, including audio and raw MODE2. The one
                     // exception is a GD cue's first track, which keeps its own
                     // type (chdman resets the pregap type for tracks 2 and up).
