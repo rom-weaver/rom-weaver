@@ -35,6 +35,8 @@ import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
+import { createVfsPathId } from "../../storage/vfs/path-id.ts";
+import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
@@ -434,6 +436,9 @@ const isRunnerUnrecoverableError = (error: unknown): boolean => {
   );
 };
 
+// A terminated runner releases its OPFS handles a moment after the abort.
+const SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200];
+
 const createRunnerAbortError = () => {
   const error = new Error("Workflow was cancelled") as Error & { code?: string };
   error.name = "AbortError";
@@ -504,6 +509,22 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   // Reserve the estimated working set from staged input sizes to prevent overlap that exhausts device memory.
   const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
 
+  // libarchive's 7z writer spools into an unlinked temp file under TMPDIR. A cancelled run kills the worker
+  // (and its OPFS proxy) before the deferred removal can happen, so give each compress its own scratch
+  // directory and remove it from here once the run settles, whatever the outcome.
+  const createRunScratchDir = async (): Promise<string | null> => {
+    if (command.type !== "compress") return null;
+    const scratchPath = `/work/rw-tmp-${createVfsPathId()}`;
+    try {
+      // Creating a file makes the parent directory; the guest needs the directory to exist before the run.
+      await getManagedOpfsFileHandle(`${scratchPath}/.keep`, { create: true });
+      return scratchPath;
+    } catch (error) {
+      emitRunnerTraceLine(options, `runJson scratch dir unavailable; using default temp ${String(error)}`);
+      return null;
+    }
+  };
+
   const dispatchRun = async (assignedThreads: number): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
     // Wait for warmup to release its lease so the first operation can reuse that runner.
@@ -519,6 +540,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       `runJson dispatch mode=${lease.runner.ready.mode} threaded=${String(lease.runner.ready.threaded)}`,
     );
     let removeAbortListener: (() => void) | undefined;
+    const scratchPath = await createRunScratchDir();
+    const leaseRunOptions: RomWeaverRunnerRunJsonOptions = scratchPath
+      ? ({
+          ...runOptions,
+          env: { ...(runOptions as { env?: Record<string, string> }).env, TMPDIR: scratchPath },
+        } as RomWeaverRunnerRunJsonOptions)
+      : runOptions;
     const recycleUnrecoverableError = (error: unknown) => {
       if (isRunnerUnrecoverableError(error)) {
         emitRunnerTraceLine(options, "runJson unrecoverable failure; terminating runner");
@@ -552,7 +580,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
             `runJson thread allotment threadsPerOp=${forcedThreads} threadBudget=${threadBudget}`,
           );
         }
-        lease.runner.runJson(dispatchInput, runOptions).then(
+        lease.runner.runJson(dispatchInput, leaseRunOptions).then(
           (result) => {
             if (settled) return;
             settled = true;
@@ -573,6 +601,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       throw error;
     } finally {
       removeAbortListener?.();
+      if (scratchPath) {
+        void removeManagedOpfsPath(scratchPath, undefined, { busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS });
+      }
       if (isMobileRuntime()) {
         // Mobile releases runners after heavy or threaded work. Light-operation runners remain for a short burst, then idle eviction releases them.
         const mobileHeavyOp = operationBytes >= IDLE_RECYCLE_MIN_OP_BYTES || operationThreads > 1;
