@@ -626,24 +626,9 @@ impl ChdContainerHandler {
         }
     }
 
-    pub(super) fn hunk_bytes(
-        &self,
-        create_kind: &ChdCreateKind,
-        logical_bytes: u64,
-        codec: ChdCodec,
-    ) -> u32 {
+    pub(super) fn hunk_bytes(&self, create_kind: &ChdCreateKind) -> u32 {
         match create_kind {
-            ChdCreateKind::Disc(_) if codec != ChdCodec::NONE => {
-                let total_frames = logical_bytes / u64::from(Self::CD_FRAME_BYTES);
-                if total_frames <= 1 {
-                    Self::CD_HUNK_BYTES
-                } else {
-                    let frames_per_hunk = total_frames.div_ceil(2).min(8);
-                    u32::try_from(frames_per_hunk)
-                        .unwrap_or(8)
-                        .saturating_mul(Self::CD_FRAME_BYTES)
-                }
-            }
+            // chdman always uses 8 frames per hunk for CDs, however short the disc is.
             ChdCreateKind::Disc(_) => Self::CD_HUNK_BYTES,
             ChdCreateKind::Av(profile) => profile.frame_bytes,
             _ => Self::DEFAULT_HUNK_BYTES,

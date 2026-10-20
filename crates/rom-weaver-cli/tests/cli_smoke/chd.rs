@@ -3043,3 +3043,205 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
         "expected every levelled CHD codec, got {checked}"
     );
 }
+
+/// Deterministic xorshift32 bytes, so synthetic tracks do not compress away.
+fn xorshift_bytes(seed: u32, len: usize) -> Vec<u8> {
+    let mut state = seed;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// Compress a cue whose files hold exactly the given bytes.
+fn compress_cue_files(
+    files: &[(&str, Vec<u8>)],
+    cue: &str,
+) -> (assert_fs::TempDir, assert_fs::fixture::ChildPath) {
+    let temp = setup_temp_dir();
+    for (name, bytes) in files {
+        fs::write(temp.child(name).path(), bytes).expect("track");
+    }
+    temp.child("disc.cue").write_str(cue).expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma",
+            "--jsonl",
+        ],
+        0,
+    );
+    (temp, chd_path)
+}
+
+/// The hunk size from a v5 CHD header.
+fn chd_hunk_bytes(chd_path: &Path) -> u32 {
+    let header = fs::read(chd_path).expect("chd");
+    u32::from_be_bytes(header[56..60].try_into().expect("hunk bytes"))
+}
+
+/// Label, files, cue, header SHA-1s, extracted cue, merged bin length and SHA-1.
+type MixedCueCase<'a> = (
+    &'a str,
+    Vec<(&'a str, Vec<u8>)>,
+    &'a str,
+    (&'a str, &'a str),
+    &'a str,
+    u64,
+    &'a str,
+);
+
+#[test]
+fn chd_mixed_sector_size_cues_match_chdman() {
+    // Cue sheets mixing 2048-byte and 2352-byte tracks. chdman 0.289 always
+    // writes 19584-byte hunks, keeps the `.cue` track layout, and
+    // `extractcd` merges every track into one bin whatever the sector sizes.
+    // Reference values come from `chdman createcd` / `extractcd` on the same
+    // synthetic files.
+    let cases: [MixedCueCase; 3] = [
+        (
+            "separate files, MODE2/2352 track with INDEX 00",
+            vec![
+                ("t1.bin", xorshift_bytes(1, 5 * 2048)),
+                ("t2.bin", xorshift_bytes(2, 3 * 2352)),
+            ],
+            "FILE \"t1.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 MODE2/2352\n    INDEX 00 00:00:00\n    INDEX 01 00:00:01\n",
+            (
+                "55baa280cd9318ad3609263f5ce745ebc165acd4",
+                "3951488ba7c860739752327b7b4cd40f3936e894",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 MODE2/2352\n    INDEX 00 00:00:05\n    INDEX 01 00:00:06\n",
+            17_296,
+            "b004a4786951452bbe36d1d31b5199373fb2bb52",
+        ),
+        (
+            "one file shared by a 2048 track and an audio track",
+            vec![("disc.bin", xorshift_bytes(3, 5 * 2048 + 6 * 2352))],
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:05\n",
+            (
+                "0cea1dcb1ad6a11bd32a73983aacdc755cdda80c",
+                "7c3eebf54bdec197362b9efb7439b0a7cf950fa9",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:00:05\n",
+            24_352,
+            "ed4e3afcbf7d71f788f521adcde7f00d44f7b2e3",
+        ),
+        (
+            "audio track before a 2048 track",
+            vec![
+                ("t1.bin", xorshift_bytes(4, 5 * 2352)),
+                ("t2.bin", xorshift_bytes(5, 7 * 2048)),
+            ],
+            "FILE \"t1.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\nFILE \"t2.bin\" BINARY\n  TRACK 02 MODE1/2048\n    INDEX 01 00:00:00\n",
+            (
+                "2f9d2be9561618e43d35fcef475f65a211dc5a4c",
+                "214f7c0cbb345a1900834a8b8c73898359f6d869",
+            ),
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n  TRACK 02 MODE1/2048\n    INDEX 01 00:00:05\n",
+            26_096,
+            "731283f66ae40bd16895ef2d114fa27eb905feed",
+        ),
+    ];
+    for (label, files, cue, (raw_sha1, overall_sha1), extracted_cue, bin_len, bin_sha1) in cases {
+        let (temp, chd_path) = compress_cue_files(&files, cue);
+        assert_eq!(
+            chd_hunk_bytes(chd_path.path()),
+            19_584,
+            "{label}: hunk bytes"
+        );
+        assert_eq!(
+            chd_header_sha1s(chd_path.path()),
+            (raw_sha1.to_string(), overall_sha1.to_string()),
+            "{label}: header sha1s"
+        );
+        let out_dir = temp.child("extract");
+        extract_chd_to(chd_path.path(), out_dir.path());
+        assert_eq!(
+            fs::read_to_string(out_dir.child("disc.cue").path()).expect("cue"),
+            extracted_cue,
+            "{label}: extracted cue"
+        );
+        let bin = out_dir.child("disc.bin");
+        assert_eq!(
+            fs::metadata(bin.path()).expect("bin").len(),
+            bin_len,
+            "{label}: merged bin length"
+        );
+        assert_eq!(
+            checksum_value(bin.path(), "sha1"),
+            bin_sha1,
+            "{label}: merged bin sha1"
+        );
+    }
+}
+
+#[test]
+fn chd_short_cd_uses_full_hunks_like_chdman() {
+    // chdman writes 8-frame hunks even when the whole disc is shorter.
+    let (_temp, chd_path) = compress_cue_files(
+        &[("disc.bin", xorshift_bytes(9, 5 * 2352))],
+        "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(chd_hunk_bytes(chd_path.path()), 19_584);
+}
+
+#[test]
+fn chd_gd_mode2_raw_tracks_extract_to_gdi_like_chdman() {
+    // A Redump-style Dreamcast cue with MODE2/2352 data tracks yields MODE2_RAW
+    // GD tracks. `chdman extractcd` writes them as `.gdi` type 4, size 2352.
+    let (temp, chd_path) = compress_cue_files(
+        &[
+            ("track01.bin", xorshift_bytes(6, 6 * 2352)),
+            ("track02.bin", xorshift_bytes(7, 9 * 2352)),
+            ("track03.bin", xorshift_bytes(8, 8 * 2352)),
+        ],
+        "REM SINGLE-DENSITY AREA\nFILE \"track01.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\nFILE \"track02.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\nREM HIGH-DENSITY AREA\nFILE \"track03.bin\" BINARY\n  TRACK 03 MODE2/2352\n    INDEX 01 00:00:00\n",
+    );
+    assert_eq!(
+        chd_header_sha1s(chd_path.path()),
+        (
+            "18532ed3b52b96d7a8d90b2606bdb5f6c6eaaba7".to_string(),
+            "42572e479794caa582fd44a5335230184849bcea".to_string()
+        )
+    );
+    assert!(
+        chd_track_metadata_lines(chd_path.path())[0].starts_with("TRACK:1 TYPE:MODE2_RAW"),
+        "{:?}",
+        chd_track_metadata_lines(chd_path.path())
+    );
+    let out_dir = temp.child("extract");
+    extract_chd_to(chd_path.path(), out_dir.path());
+    assert_eq!(
+        fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi"),
+        "3\n1 0 4 2352 \"disc (Track 1).bin\" 0\n2 6 0 2352 \"disc (Track 2).bin\" 0\n3 45000 4 2352 \"disc (Track 3).bin\" 0\n"
+    );
+    for (track, bytes, sha1) in [
+        (1, 14_112, "965c5cc887659b46491d960966f5517b5070e22d"),
+        (2, 21_168, "9dfa165cbc0f975c6152966d2429a3dad32276a4"),
+        (3, 18_816, "982e6d27794e822db982030ddcc00c826c06342f"),
+    ] {
+        let path = out_dir.child(format!("disc (Track {track}).bin"));
+        assert_eq!(
+            fs::metadata(path.path()).expect("track").len(),
+            bytes,
+            "track {track} size"
+        );
+        assert_eq!(
+            checksum_value(path.path(), "sha1"),
+            sha1,
+            "track {track} sha1"
+        );
+    }
+}

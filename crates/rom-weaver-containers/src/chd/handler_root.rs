@@ -495,15 +495,13 @@ impl DiscTrackMode {
         }
     }
 
-    fn gdi_track_descriptor(self) -> Result<(u32, u32)> {
+    /// `.gdi` track type and sector size as `chdman extractcd` writes them:
+    /// type 0 for audio, 4 for every other track, with the track's data size.
+    fn gdi_track_descriptor(self) -> (u32, u32) {
+        let sector_bytes = u32::try_from(self.data_bytes()).unwrap_or(2352);
         match self {
-            Self::Mode1Raw => Ok((4, 2352)),
-            Self::Mode1 => Ok((4, 2048)),
-            Self::Audio => Ok((0, 2352)),
-            other => Err(RomWeaverError::Validation(format!(
-                "gd-rom output does not support {} tracks",
-                other.metadata_label()
-            ))),
+            Self::Audio => (0, sector_bytes),
+            _ => (4, sector_bytes),
         }
     }
 

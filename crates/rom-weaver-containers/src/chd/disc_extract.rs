@@ -419,7 +419,14 @@ impl ChdContainerHandler {
             let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
             let first_index = track.index00_frames.unwrap_or(index01_frames);
             let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
-            if track.file_offset_base_bytes + u64::from(first_index) * sector_bytes > file_end {
+            // A track that continues the previous track's file starts after that
+            // track's frames (checked below); `INDEX` times count frames, not
+            // bytes, once the file mixes sector sizes.
+            let continues_previous_file =
+                index > 0 && tracks[index - 1].file_path == track.file_path;
+            if !continues_previous_file
+                && track.file_offset_base_bytes + u64::from(first_index) * sector_bytes > file_end
+            {
                 return Err(RomWeaverError::Validation(format!(
                     "cue track {} starts past the end of `{}`",
                     track.number,
@@ -453,13 +460,6 @@ impl ChdContainerHandler {
                 (after_previous, file_end - after_previous)
             } else if shares_with_next {
                 let next = &tracks[index + 1];
-                if next.mode.data_bytes() != track.mode.data_bytes() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "cue `{}` shares `{}` across tracks with different sector sizes; current chd cue support requires a separate file per sector size",
-                        path.display(),
-                        track.file_path.display()
-                    )));
-                }
                 let next_first_index = next
                     .index00_frames
                     .unwrap_or(Self::cue_track_index01(path, next)?);
@@ -1264,16 +1264,9 @@ impl ChdContainerHandler {
         request: &ContainerExtractRequest,
         stem: &str,
     ) -> Result<CdSelectionPlan> {
-        let first_data_bytes = layout
-            .tracks
-            .first()
-            .map(|track| track.mode.data_bytes())
-            .unwrap_or(2352);
-        let natural_single_bin = layout
-            .tracks
-            .iter()
-            .all(|track| track.mode.data_bytes() == first_data_bytes);
-        let single_bin = natural_single_bin && !request.split_bin;
+        // chdman `extractcd` writes one bin whatever the sector sizes of the
+        // tracks (each track keeps its own data size in the merged bin).
+        let single_bin = !request.split_bin;
         let selection_requested = !request.selections.is_empty();
         let cue_name = format!("{stem}.cue");
         let mut selections = SelectionMatcher::new(&request.selections);
@@ -1803,7 +1796,7 @@ fn gdi_track_lines(
     let mut gdi_lines = Vec::new();
     let mut physframeofs = 0_u32;
     for (track_index, track) in layout.tracks.iter().enumerate() {
-        let (track_type, sector_size) = track.mode.gdi_track_descriptor()?;
+        let (track_type, sector_size) = track.mode.gdi_track_descriptor();
         if write_tracks[track_index] {
             gdi_lines.push(format!(
                 "{} {} {} {} \"{}\" 0",
