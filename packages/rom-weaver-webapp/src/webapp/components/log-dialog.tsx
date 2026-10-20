@@ -1616,17 +1616,25 @@ const LogDialog = ({
     return () => window.removeEventListener("resize", updateViewport);
   }, [open, tab]);
 
-  // Open the log at the newest lines, once per open: a later resize changes the
-  // viewport height too, and must not throw a reader back to the bottom.
+  // Open the log at the newest lines. A later viewport height change keeps a
+  // reader there only while they are at the newest line: a mid-list reader keeps
+  // their place, and one at the bottom still sees the newest lines after a shrink.
   const openedAtNewestRef = useRef(false);
+  const atNewestRef = useRef(false);
+  const onTraceScroll = useCallback((nextScrollTop: number) => {
+    setScrollTop(nextScrollTop);
+    const trace = traceRef.current;
+    atNewestRef.current = !!trace && nextScrollTop + trace.clientHeight >= trace.scrollHeight - 1;
+  }, []);
   useEffect(() => {
     if (!open) {
       openedAtNewestRef.current = false;
       return;
     }
     const trace = traceRef.current;
-    if (openedAtNewestRef.current || !trace || viewportHeight <= 0) return;
+    if (!trace || viewportHeight <= 0 || (openedAtNewestRef.current && !atNewestRef.current)) return;
     openedAtNewestRef.current = true;
+    atNewestRef.current = true;
     trace.scrollTop = trace.scrollHeight;
     setScrollTop(trace.scrollTop);
   }, [open, viewportHeight]);
@@ -1792,7 +1800,7 @@ const LogDialog = ({
               }}
               onLevelChange={onLevelChange}
               onRefreshOpfs={() => void refreshOpfs()}
-              onScroll={setScrollTop}
+              onScroll={onTraceScroll}
               onViewChange={setView}
               opfsEntries={visibleOpfs}
               opfsError={opfsError}

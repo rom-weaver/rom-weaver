@@ -264,6 +264,20 @@ describe("trace scroll position", () => {
 
     expect(trace.scrollTop).toBe(200);
   });
+
+  it("keeps a reader at the newest line there when the window shrinks", () => {
+    vi.mocked(getLogEntries).mockReturnValue(Array.from({ length: 60 }, (_, index) => entry({ id: index })));
+    const { container } = renderDialog({ initialTab: "logs" });
+    const trace = traceOf(container);
+    sizeTrace(trace, 300);
+    fireEvent(window, new Event("resize"));
+    scrollTrace(trace, 1200);
+
+    sizeTrace(trace, 250);
+    fireEvent(window, new Event("resize"));
+
+    expect(trace.scrollTop).toBe(1500);
+  });
 });
 
 describe("previous session view", () => {
