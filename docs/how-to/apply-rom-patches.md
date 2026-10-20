@@ -132,7 +132,7 @@ In **Patches & Cheats**, select **Add cheats to the patch order**, then choose d
 If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearby warning. In **Apply**:
 
 1. Enter a filename without an extension.
-2. The format selector starts on the ROM's own extension, such as **.gba**, or a ROM-specific format for disc images such as **.chd**. A **.bin** starts on **.chd** only when its contents show a CD image (a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with that descriptor), or when a supplied cue sheet names it; a cartridge **.bin** stays on **.bin**, and you can pick **.bin** in the selector to keep any raw file; several output files download as one **.zip**. Pick **.zip** or **.7z** only if you need an archive; the selector adds the extension.
+2. The format selector starts on the ROM's own extension, such as **.gba**, or a ROM-specific format for disc images such as **.chd**. A **.bin** starts on **.chd** only when its contents show a CD image ([content check](../reference/formats.md#container-and-compression-formats)) or a supplied cue sheet names it; a cartridge **.bin** stays on **.bin**, and you can pick **.bin** in the selector to keep any raw file; several output files download as one **.zip**. Pick **.zip** or **.7z** only if you need an archive; the selector adds the extension.
 3. Open **Options** for compression, output header, or weave controls when needed.
 4. Choose **APPLY & DOWNLOAD**, wait, and save the new file.
 
