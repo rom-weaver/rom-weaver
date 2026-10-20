@@ -9,6 +9,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use crate::chd_rs::{
+        header::Header,
+        map::{CompressionTypeV5, Map, MapEntry},
+    };
     #[cfg(not(target_family = "wasm"))]
     use crate::lzma2_sdk_threads_for_budget_with_limits;
     use crate::nod::{
@@ -26,10 +30,6 @@ mod tests {
         SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
         copy_progress_buffer_size, lzma2_liblzma_threads_for_budget_with_limits,
         lzma2_preset_dict_bytes, lzma2_threads_for_budget, zstd_threads_for_budget,
-    };
-    use chd::{
-        header::Header,
-        map::{CompressionTypeV5, Map, MapEntry},
     };
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
@@ -4469,8 +4469,10 @@ mod tests {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
-        let payload = (0..(896 * 1024))
-            .map(|index| (index as u8).wrapping_mul(41))
+        // Four symbols in a non-repeating order, so every codec, Huffman included,
+        // compresses the hunks and no hunk duplicates another.
+        let payload = (0..(896 * 1024_u32))
+            .map(|index| ((index.wrapping_mul(2_654_435_761) >> 13) % 4) as u8 * 41)
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 

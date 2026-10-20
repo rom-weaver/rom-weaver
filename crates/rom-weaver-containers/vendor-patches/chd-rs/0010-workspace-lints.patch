@@ -1,0 +1,341 @@
+diff --git a/cdrom.rs b/cdrom.rs
+index 924e2fecf53473e1d3b8285151878274cb4c2d67..af7a132cfe44d07b8ebfbd8393aa8afa7717f4c4 100644
+--- a/cdrom.rs
++++ b/cdrom.rs
+@@ -1,4 +1,4 @@
+-/// Constants for CD-ROM decoding.
++//! Constants for CD-ROM decoding.
+ 
+ /* The following constants are present in headers, but are unused for this implementation. */
+ 
+diff --git a/chdfile.rs b/chdfile.rs
+index e212ca7cd799f76b3659a4a154337a5a83c2b2c0..e4371d1baa8daa240faec98f8f41f33d0c0bf9d4 100644
+--- a/chdfile.rs
++++ b/chdfile.rs
+@@ -77,7 +77,7 @@ impl<F: Read + Seek> Chd<F> {
+     /// Returns an iterator over references to metadata entries for this CHD file.
+     ///
+     /// The contents of each metadata entry are lazily read.
+-    pub fn metadata_refs(&mut self) -> MetadataRefs<F> {
++    pub fn metadata_refs(&mut self) -> MetadataRefs<'_, F> {
+         let offset = self.header().meta_offset();
+         if let Some(offset) = offset {
+             MetadataRefs::from_stream(&mut self.file, offset)
+@@ -95,7 +95,7 @@ impl<F: Read + Seek> Chd<F> {
+     ///
+     /// If the requested hunk is larger than the number of hunks in the CHD file,
+     /// returns `Error::HunkOutOfRange`.
+-    pub fn hunk(&mut self, hunk_num: u32) -> Result<Hunk<F>> {
++    pub fn hunk(&mut self, hunk_num: u32) -> Result<Hunk<'_, F>> {
+         if hunk_num >= self.header.hunk_count() {
+             return Err(Error::HunkOutOfRange);
+         }
+diff --git a/compression/avhuff.rs b/compression/avhuff.rs
+index ee06dc6d4caa4c06a026843c8d4c32db5253323d..96e6df707a0241cee20fd8d87bd028987f2ac961 100644
+--- a/compression/avhuff.rs
++++ b/compression/avhuff.rs
+@@ -240,8 +240,8 @@ fn avhuff_write_header(
+ ) -> Result<DecompressResult> {
+     let mut output = &mut output[..];
+     output.write_all(b"chav")?;
+-    output.write_u8(meta_size as u8)?;
+-    output.write_u8(channels as u8)?;
++    output.write_u8(meta_size)?;
++    output.write_u8(channels)?;
+     output.write_u16::<BigEndian>(samples)?;
+     output.write_u16::<BigEndian>(width)?;
+     output.write_u16::<BigEndian>(height)?;
+diff --git a/compression/cdrom.rs b/compression/cdrom.rs
+index 124839235e1d71e1030ba1f48dd46873569da037..9839893560f1c2522675bcf0b5539972b30c15bd 100644
+--- a/compression/cdrom.rs
++++ b/compression/cdrom.rs
+@@ -173,7 +173,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+     for CdCodec<Engine, SubEngine>
+ {
+     fn new(hunk_size: u32) -> Result<Self> {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -188,7 +188,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+     /// The level applies to the sector data. Like chdman, subcode data is always
+     /// compressed at the default level.
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -202,7 +202,7 @@ impl<Engine: CodecImplementation, SubEngine: CodecImplementation> CodecImplement
+         // https://github.com/rtissera/libchdr/blob/cdcb714235b9ff7d207b703260706a364282b063/src/libchdr_chd.c#L647
+         let frames = output.len() / CD_FRAME_SIZE as usize;
+         let complen_bytes = if output.len() < 65536 { 2 } else { 3 };
+-        let ecc_bytes = (frames + 7) / 8;
++        let ecc_bytes = frames.div_ceil(8);
+         let header_bytes = ecc_bytes + complen_bytes;
+ 
+         // Extract compressed length of base
+diff --git a/compression/flac.rs b/compression/flac.rs
+index 74b072264d0517790865ee29ab82b26f952d575f..9f360977e3abdf8ef9db84a9e28d92e9aaab95f0 100644
+--- a/compression/flac.rs
++++ b/compression/flac.rs
+@@ -66,12 +66,12 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize>
+         config.subframe_coding.use_lpc = lpc_order > 0;
+         config.subframe_coding.qlpc.lpc_order = lpc_order.max(1);
+         config.subframe_coding.qlpc.quant_precision = match self.block_size {
+-            ..=192 => 7,
+-            ..=384 => 8,
+-            ..=576 => 9,
+-            ..=1152 => 10,
+-            ..=2304 => 11,
+-            ..=4608 => 12,
++            0..=192 => 7,
++            193..=384 => 8,
++            385..=576 => 9,
++            577..=1152 => 10,
++            1153..=2304 => 11,
++            2305..=4608 => 12,
+             _ => 13,
+         };
+         let config = config
+@@ -97,7 +97,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+     where
+         Self: Sized,
+     {
+-        if hunk_bytes % (CHANNELS * mem::size_of::<i16>()) as u32 != 0 {
++        if !hunk_bytes.is_multiple_of((CHANNELS * mem::size_of::<i16>()) as u32) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -110,7 +110,7 @@ impl<T: ByteOrder, const MAX_BLOCK_SIZE: u32, const CHANNELS: usize> CodecImplem
+             buffer: Vec::new(),
+             block_size: block_size as usize,
+             level: MAME_FLAC_LEVEL,
+-            _byteorder: PhantomData::default(),
++            _byteorder: PhantomData,
+         })
+     }
+ 
+@@ -321,7 +321,7 @@ impl CodecImplementation for CdFlacCodec {
+     where
+         Self: Sized,
+     {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+@@ -340,7 +340,7 @@ impl CodecImplementation for CdFlacCodec {
+     /// FLAC levels range from 0 to 8, like libFLAC. chdman uses 8. Like chdman, subcode
+     /// data is always compressed at the default Deflate level.
+     fn with_level(hunk_size: u32, level: i32) -> Result<Self> {
+-        if hunk_size % CD_FRAME_SIZE != 0 {
++        if !hunk_size.is_multiple_of(CD_FRAME_SIZE) {
+             return Err(Error::CodecError);
+         }
+ 
+diff --git a/error.rs b/error.rs
+index 9a2d3e217dccc50d531247152c9a17803cb0fa92..4d9e08b26c38007c0245ae5c51f18395d543e40b 100644
+--- a/error.rs
++++ b/error.rs
+@@ -185,7 +185,7 @@ impl From<HuffmanError> for Error {
+ 
+ impl From<Error> for std::io::Error {
+     fn from(e: Error) -> Self {
+-        std::io::Error::new(ErrorKind::Other, e)
++        std::io::Error::other(e)
+     }
+ }
+ 
+diff --git a/header/mod.rs b/header/mod.rs
+index 45ce1faa954ab9c8b912e327f853a221c8294199..e73e4e5802471da0b5ebccae45af0dfd5833ea25 100644
+--- a/header/mod.rs
++++ b/header/mod.rs
+@@ -575,21 +575,21 @@ impl Header {
+     pub(crate) fn create_compression_codecs(&self) -> Result<Codecs> {
+         match self {
+             Header::V1Header(c) => CodecType::from_u32(c.compression)
+-                .map(|e| (e.init(self.hunk_size())))
++                .map(|e| e.init(self.hunk_size()))
+                 .ok_or(Error::UnsupportedFormat)?
+-                .map(|e| Codecs::Single(e)),
++                .map(Codecs::Single),
+             Header::V2Header(c) => CodecType::from_u32(c.compression)
+                 .map(|e| e.init(self.hunk_size()))
+                 .ok_or(Error::UnsupportedFormat)?
+-                .map(|e| Codecs::Single(e)),
++                .map(Codecs::Single),
+             Header::V3Header(c) => CodecType::from_u32(c.compression)
+                 .map(|e| e.init(self.hunk_size()))
+                 .ok_or(Error::UnsupportedFormat)?
+-                .map(|e| Codecs::Single(e)),
++                .map(Codecs::Single),
+             Header::V4Header(c) => CodecType::from_u32(c.compression)
+                 .map(|e| e.init(self.hunk_size()))
+                 .ok_or(Error::UnsupportedFormat)?
+-                .map(|e| Codecs::Single(e)),
++                .map(Codecs::Single),
+             Header::V5Header(c) => {
+                 let array = c
+                     .compression
+@@ -625,10 +625,10 @@ impl Header {
+         }
+ 
+         // Require valid flags
+-        if let Some(flags) = self.flags() {
+-            if flags & Flags::Undefined as u32 != 0 {
+-                return false;
+-            }
++        if let Some(flags) = self.flags()
++            && flags & Flags::Undefined as u32 != 0
++        {
++            return false;
+         }
+ 
+         // require valid hunk size
+@@ -841,7 +841,7 @@ fn read_header<T: Read + Seek>(chd: &mut T) -> Result<Header> {
+         (3, CHD_V3_HEADER_SIZE) => Ok(Header::V3Header(read_v3_header(raw(&raw_header)?, chd)?)),
+         (4, CHD_V4_HEADER_SIZE) => Ok(Header::V4Header(read_v4_header(raw(&raw_header)?, chd)?)),
+         (5, CHD_V5_HEADER_SIZE) => Ok(Header::V5Header(read_v5_header(raw(&raw_header)?)?)),
+-        (1 | 2 | 3 | 4 | 5, _) => Err(Error::InvalidData),
++        (1..=5, _) => Err(Error::InvalidData),
+         _ => Err(Error::UnsupportedVersion),
+     }
+ }
+@@ -875,7 +875,7 @@ fn read_v1_header(header: &RawHeaderV1, sector_length: Option<u32>) -> Result<He
+     }
+ 
+     let unit_bytes = hunk_bytes / hunk_size;
+-    let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
++    let unit_count = logical_bytes.div_ceil(unit_bytes as u64);
+     Ok(HeaderV1 {
+         version: match version {
+             1 => Version::ChdV1,
+@@ -913,7 +913,7 @@ fn read_v3_header<F: Read + Seek>(header: &RawHeaderV3, chd: &mut F) -> Result<H
+     let sha1 = header.sha1;
+     let parent_sha1 = header.parent_sha1;
+     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
+-    let unit_count = (logical_bytes + (unit_bytes as u64) - 1) / unit_bytes as u64;
++    let unit_count = logical_bytes.div_ceil(unit_bytes as u64);
+     Ok(HeaderV3 {
+         version: Version::ChdV3,
+         length,
+@@ -945,7 +945,7 @@ fn read_v4_header<F: Read + Seek>(header: &RawHeaderV4, chd: &mut F) -> Result<H
+     let raw_sha1 = header.raw_sha1;
+ 
+     let unit_bytes = guess_unit_bytes(chd, meta_offset).unwrap_or(hunk_bytes);
+-    let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
++    let unit_count = logical_bytes.div_ceil(unit_bytes as u64);
+     Ok(HeaderV4 {
+         version: Version::ChdV4,
+         length,
+@@ -983,18 +983,17 @@ fn guess_unit_bytes<F: Read + Seek>(chd: &mut F, off: u64) -> Option<u32> {
+     if let Some(hard_disk) = metas
+         .iter()
+         .find(|&e| e.metatag() == KnownMetadata::HardDisk as u32)
++        && let Ok(text) = hard_disk.read(chd)
+     {
+-        if let Ok(text) = hard_disk.read(chd) {
+-            let bps = extract_bps_value(&text.value);
+-            // Only return this if we can parse it properly. Fallback to cdrom otherwise.
+-            if let Some(bps) = bps {
+-                return Some(bps);
+-            }
++        let bps = extract_bps_value(&text.value);
++        // Only return this if we can parse it properly. Fallback to cdrom otherwise.
++        if let Some(bps) = bps {
++            return Some(bps);
+         }
+     }
+ 
+     if metas.iter().any(|e| KnownMetadata::is_cdrom(e.metatag())) {
+-        return Some(crate::chd_rs::cdrom::CD_FRAME_SIZE as u32);
++        return Some(crate::chd_rs::cdrom::CD_FRAME_SIZE);
+     }
+     None
+ }
+@@ -1016,8 +1015,8 @@ fn read_v5_header(header: &RawHeaderV5) -> Result<HeaderV5> {
+         return Err(Error::InvalidData);
+     }
+ 
+-    let hunk_count = ((logical_bytes + hunk_bytes as u64 - 1) / hunk_bytes as u64) as u32;
+-    let unit_count = (logical_bytes + unit_bytes as u64 - 1) / unit_bytes as u64;
++    let hunk_count = logical_bytes.div_ceil(hunk_bytes as u64) as u32;
++    let unit_count = logical_bytes.div_ceil(unit_bytes as u64);
+     let map_entry_bytes = match CodecType::from_u32(compression[0]) {
+         // uncompressed map entries are 4 bytes long
+         Some(CodecType::None) => map::V5_UNCOMPRESSED_MAP_ENTRY_SIZE as u32,
+diff --git a/huffman/decode.rs b/huffman/decode.rs
+index 9b6aee5707b516635f58fbb91fc6a79bb2cbdb9b..edd7775920ae0250e014f3bc40d4fbee812b13eb 100644
+--- a/huffman/decode.rs
++++ b/huffman/decode.rs
+@@ -50,7 +50,7 @@ impl<'a, const NUM_CODES: usize, const MAX_BITS: u8, const LOOKUP_ARRAY_LEN: usi
+ 
+         HuffmanDecoder {
+             lookup_array: [0u16; LOOKUP_ARRAY_LEN],
+-            _phantom: PhantomData::default(),
++            _phantom: PhantomData,
+         }
+     }
+ 
+diff --git a/map/mod.rs b/map/mod.rs
+index b23e442f64901bd3a1880e36c06a087c1aace8c5..766e593175961fc1c84c21186d908cc02bef0b36 100644
+--- a/map/mod.rs
++++ b/map/mod.rs
+@@ -345,7 +345,7 @@ impl Map {
+     }
+ 
+     /// Gets the `MapEntry` for the specified hunk number if it exists.
+-    pub fn get_entry(&self, hunk_num: usize) -> Option<MapEntry> {
++    pub fn get_entry(&self, hunk_num: usize) -> Option<MapEntry<'_>> {
+         match self {
+             Map::V5(RawMapV5(V5Map::Compressed(entries))) => entries
+                 .get(hunk_num)
+@@ -361,7 +361,7 @@ impl Map {
+     }
+ 
+     /// Gets an iterator over the entries of this hunk map.
+-    pub fn iter(&self) -> MapEntries {
++    pub fn iter(&self) -> MapEntries<'_> {
+         MapEntries { map: self, curr: 0 }
+     }
+ 
+diff --git a/mod.rs b/mod.rs
+index 5027a398c4c55328d5406d58442ff17bb1b232cc..921625ee1f2804a9d8685540c8dfabafa6aba20b 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -165,7 +165,7 @@ mod tests {
+         for hunk_num in 0..hunk_count {
+             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+             let read = HunkBufReader::new_in(&mut hunk, &mut cmp_buf, hunk_buf)
+-                .expect(format!("could not read_hunk {}", hunk_num).as_str());
++                .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
+             hunk_buf = read.into_inner();
+         }
+     }
+@@ -181,7 +181,7 @@ mod tests {
+         for hunk_num in 0..hunk_count {
+             let mut hunk = chd.hunk(hunk_num).expect("could not acquire hunk");
+             hunk.read_hunk_in(&mut cmp_buf, &mut hunk_buf)
+-                .expect(format!("could not read_hunk {}", hunk_num).as_str());
++                .unwrap_or_else(|_| panic!("could not read_hunk {}", hunk_num));
+             println!("Read hunk {}", hunk_num);
+         }
+     }
+diff --git a/write/compressed.rs b/write/compressed.rs
+index eef1d60fd2be26e6244aaa1677797b769ff27b8f..98a4314db9244b6f55e61616921c5ab9adbb7fd0 100644
+--- a/write/compressed.rs
++++ b/write/compressed.rs
+@@ -173,6 +173,11 @@ impl CompressedHunk<'_> {
+             HunkKind::Duplicate => 0,
+         }
+     }
++
++    /// Whether the hunk stores no data, which is only the case for duplicate hunks.
++    pub fn is_empty(&self) -> bool {
++        self.len() == 0
++    }
+ }
+ 
+ /// Compresses hunks for encoding.

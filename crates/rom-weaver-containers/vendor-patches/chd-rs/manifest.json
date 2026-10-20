@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "name": "chd-rs",
+  "source": {
+    "url": "https://codeload.github.com/SnowflakePowered/chd-rs/tar.gz/refs/tags/v0.4.0",
+    "revision": "76785770e88ce79bb3cb64320fd1074ee1d1fe8f",
+    "sha256": "c7d4774de612924c67ef9d396f85ce2f42cf2567438299d348b410c622d9dfb8",
+    "format": "tar",
+    "root": "chd-rs-0.4.0/chd-rs/src",
+    "extraFiles": [
+      {
+        "from": "chd-rs-0.4.0/LICENSE.md",
+        "to": "LICENSE.md"
+      }
+    ]
+  },
+  "destination": "crates/rom-weaver-containers/src/chd_rs",
+  "exclude": [],
+  "materialized": true,
+  "preserve": [
+    "CHD_RS_VERSION"
+  ],
+  "patches": [
+    {
+      "file": "0001-owned-compressed-hunks.patch",
+      "stage": "source",
+      "reason": "Add HunkCompressor::compress_owned so a compressed hunk can own its input and move to the thread that writes it, letting callers compress on worker threads without keeping every read buffer alive.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::"
+      ]
+    },
+    {
+      "file": "0002-codec-levels.patch",
+      "stage": "source",
+      "reason": "Add CodecImplementation::with_level and ChdWriteOptions::compression_levels for Deflate (0-9), LZMA (0-9, LzmaEncProps_Normalize mapping), Zstandard and FLAC (0-8, libFLAC stereo and LPC presets). Defaults stay the chdman levels; CD subcode keeps the default level.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/mod.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::"
+      ]
+    },
+    {
+      "file": "0003-cd-flac-data-skip.patch",
+      "stage": "source",
+      "reason": "Skip the CD FLAC trial when other codecs are configured and every frame of the hunk starts with the data-sector sync header, matching rom-weaver's previous encoder. Unlike chdman, a data hunk that FLAC would compress best is stored with another codec.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed::tests::cd_flac_is_skipped_for_data_hunks -- --exact"
+      ]
+    },
+    {
+      "file": "0004-std-rwlock.patch",
+      "stage": "source",
+      "reason": "Use std::sync::RwLock for the shared hunk index instead of parking_lot. On wasm32 parking_lot parks only with its nightly feature, so a contended lock panicked with 'Parking not supported on this platform' on browser wasi-threads; std's lock works there and the parking_lot dependency goes away.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/compressed.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::",
+        "npm --prefix packages/rom-weaver-webapp run test:browser:wasm -- tests/wasm/browser-chd-create-threads.test.mjs"
+      ]
+    },
+    {
+      "file": "0005-reserve-hunk-tables.patch",
+      "stage": "source",
+      "reason": "Reserve the hunk map and the index of stored hunks from the hunk count when the logical size is set, so they do not reallocate while other threads compress. On browser wasi-threads a heap that grows while sibling threads run can trap their bulk-memory instructions; rom-weaver's previous encoder sized both up front the same way.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/write/mod.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::write::compressed_tests::hunk_tables_are_sized_from_the_logical_size -- --exact"
+      ]
+    },
+    {
+      "file": "0006-module-paths.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest chd:: paths to crate::chd_rs:: and rom_weaver_containers::chd_rs::. mod.rs appears as a delete and add because patch renames are unsupported.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::",
+        "cargo test -p rom-weaver-containers --doc chd_rs"
+      ]
+    },
+    {
+      "file": "0007-pinned-features.patch",
+      "stage": "integration",
+      "reason": "Resolve feature gates to the pinned set (std, encode, huff_write, fast_zstd, verify_block_crc, want_subcode, want_raw_data_sector, codec_api on; huffman_api, nonstandard_channel_count and both iterator features off), deleting the zrip zstd backend, the lender-based iter module and docs.rs attributes.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/Cargo.toml"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::"
+      ]
+    },
+    {
+      "file": "0008-workspace-zstd.patch",
+      "stage": "integration",
+      "reason": "Take zstd_safe from the workspace zstd crate's re-export instead of a separate zstd-safe dependency, in the codec and its compressor tests.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/compression/zstd.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib chd_rs::compression::tests::"
+      ]
+    },
+    {
+      "file": "0009-workspace-formatting.patch",
+      "stage": "integration",
+      "reason": "Apply workspace rustfmt (edition 2024 import order and blank lines left by feature resolution); formatting only.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo fmt --check -p rom-weaver-containers"
+      ]
+    },
+    {
+      "file": "0010-workspace-lints.patch",
+      "stage": "integration",
+      "reason": "Workspace clippy and rustc 2024 fixes: elided lifetimes, div_ceil, is_multiple_of, io::Error::other, collapsible ifs, non-overlapping FLAC precision ranges and CompressedHunk::is_empty.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo clippy -p rom-weaver-containers --all-targets -- -D warnings"
+      ]
+    },
+    {
+      "file": "0011-test-adaptations.patch",
+      "stage": "integration",
+      "reason": "Drop the upstream read tests that need .testimages fixtures the repository does not ship, and make the module-level doc examples compile as no_run (main wrappers, metadata_refs without ?, collected refs read through Chd::inner).",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs/blob/v0.4.0/chd-rs/src/lib.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --doc chd_rs"
+      ]
+    },
+    {
+      "file": "0012-liblzma-encoder.patch",
+      "stage": "integration",
+      "reason": "Compress CHD LZMA hunks with liblzma (liblzma-sys, already linked for libarchive) as raw LZMA1EXT with chdman's lc/lp/pb, a hunk-bounded dictionary, and the mode, match finder, nice length and depth LzmaEncProps_Normalize picks for each level, instead of lzma-rust2's encoder, so the WASM module carries one LZMA encoder. Decoding stays on lzma-rust2.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers chd",
+        "cargo test -p rom-weaver-containers --lib chd_rs::compression::lzma::tests::levels_use_the_lzma_enc_props_encoder_settings -- --exact"
+      ]
+    }
+  ]
+}
