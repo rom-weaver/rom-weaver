@@ -89,6 +89,33 @@ describe("compress service", () => {
     expect(await getCompressFormats([file("a.bin"), file("b.ips")])).toEqual(["zip", "7z"]);
   });
 
+  it("offers CHD for a single .bin only when its header shows a CD image, not by sector-aligned size", async () => {
+    // 524,288 bytes is a whole number of 2048-byte sectors, like a cartridge ROM dump.
+    const cart = file("cart.bin", new Uint8Array(524_288));
+    const runtimeWith = (discFormat?: string) => async () =>
+      ({
+        compression: { probe: async () => ({ entries: [], ...(discFormat ? { discFormat } : {}) }) },
+      }) as unknown as WorkflowRuntime;
+    expect(await getCompressFormats([cart], runtimeWith())).toEqual(["zip", "7z"]);
+    expect(await getCompressFormats([cart])).toEqual(["zip", "7z"]);
+    expect(await getCompressFormats([cart], async () => Promise.reject(new Error("no worker")))).toEqual(["zip", "7z"]);
+    // Header evidence (sync header or ISO9660 descriptor) from the engine probe offers CHD.
+    expect(await getCompressFormats([cart], runtimeWith("CD"))).toEqual(["zip", "7z", "chd"]);
+    // A non-CD medium, such as a GameCube DVD dump named `.bin`, is not CD evidence.
+    expect(await getCompressFormats([cart], runtimeWith("DVD"))).toEqual(["zip", "7z"]);
+    // Evidence still needs whole sectors.
+    const unaligned = file("odd.bin", new Uint8Array(524_289));
+    expect(await getCompressFormats([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
+  });
+
+  it("compresses a single CD .bin to CHD on the runtime's header evidence", async () => {
+    const source = file("disc.bin", new Uint8Array(2352 * 20));
+    const { create, runtime } = makeRuntime();
+    Object.assign(runtime.compression, { probe: async () => ({ entries: [], discFormat: "CD" }) });
+    await compressFiles([source], options("chd"), runtime);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ source, format: "chd" }));
+  });
+
   it("keeps CD codecs, output metadata, and lazy bytes consistent for a small ISO", async () => {
     const source = file("disc.iso", new Uint8Array(2048));
     const read = vi.spyOn(source, "arrayBuffer");

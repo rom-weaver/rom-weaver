@@ -37,6 +37,7 @@ type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (ac
 type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
 type InputInfo = { files: File[]; formats: CompressionFormat[]; source: CompressSource | null };
 const logger = createLogger("compress-form");
+const loadBrowserRuntime = async () => (await import("../../platform/browser/workflow-runtime.ts")).browserRuntime;
 
 const disposeOutput = (output: PublicOutput | null) => {
   void output?.dispose().catch((cause: unknown) => logger.warn("Output cleanup failed", { cause }));
@@ -108,7 +109,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   useEffect(() => {
     let current = true;
     if (!files.length) return;
-    void Promise.all([getCompressSource(files), getCompressFormats(files)]).then(
+    void Promise.all([getCompressSource(files), getCompressFormats(files, loadBrowserRuntime)]).then(
       ([nextSource, nextFormats]) => {
         if (current) setInputInfo({ files, formats: nextFormats, source: nextSource });
       },

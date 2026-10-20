@@ -23,7 +23,7 @@
         "expectedRawBytes": 2362391,
         "maxRawBytes": 2487352,
         "expectedBrotliBytes": 635991,
-        "maxBrotliBytes": 652500
+        "maxBrotliBytes": 654000
       },
       {
         "name": "Documentation search JavaScript",
@@ -32,7 +32,7 @@
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 383000,
-        "maxRawBytes": 404000,
+        "maxRawBytes": 405500,
         "expectedBrotliBytes": 100500,
         "maxBrotliBytes": 108500
       },

@@ -897,6 +897,7 @@ function ApplyWorkflowFormView({
     fileNameId: "rom-weaver-input-output-file-name",
     fileNamePlaceholder: localizer.message("ui.apply.outputFilename"),
     format: outputState.compressionFormat,
+    formatPending: outputState.formatPending,
     formatId: "rom-weaver-select-output-format",
     formatOptions: outputState.options,
     nameSource: outputState.identifiedName

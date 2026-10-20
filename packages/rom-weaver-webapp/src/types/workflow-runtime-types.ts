@@ -335,6 +335,10 @@ type CompressionProbeResult = {
   entries: CompressionEntryInfo[];
   /** Console decoded from the container's bytes, when the probe recognises one. */
   platform?: string;
+  /** Optical medium ("CD", "DVD", ...) the engine detected from the header bytes, when the file is a disc image. */
+  discFormat?: string;
+  /** Rom-specific container the engine recommends from the file's header bytes (e.g. `chd` for a CD image). */
+  recommendedFormat?: string;
   /** Digests read from a CHD header, without decompressing the payload. */
   chd?: { rawSha1?: string; sha1?: string };
 };

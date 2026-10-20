@@ -160,3 +160,37 @@ test("automatic output format does not guess for iso without compression context
     ),
   ).toBe("7z");
 });
+
+test("automatic output format keeps a sector-aligned cartridge .bin as .bin and sends disc evidence to chd", () => {
+  // 524,288 bytes is a whole number of 2048-byte sectors, but size alone is not disc evidence.
+  const cart = { fallback: "zip", sourceFileName: "cart.bin", sourceSize: 524_288 };
+  expect(resolveAutomaticCompressionFormat(cart)).toBe("zip");
+  expect(resolveAutomaticCompressionFormat({ ...cart, hasDiscEvidence: true })).toBe("chd");
+  // Evidence from the header still needs whole sectors.
+  expect(resolveAutomaticCompressionFormat({ ...cart, hasDiscEvidence: true, sourceSize: 524_289 })).toBe("zip");
+  expect(
+    OutputCompressionManager.resolveOutputCompression(
+      { fileName: "cart.bin", size: 524_288 },
+      { compressionFormat: "auto" },
+    ),
+  ).not.toBe("chd");
+  expect(
+    OutputCompressionManager.resolveOutputCompression(
+      { fileName: "disc.bin", metadata: { recommendedFormat: "chd" }, size: 2352 * 100 },
+      { compressionFormat: "auto" },
+    ),
+  ).toBe("chd");
+  expect(
+    OutputCompressionManager.resolveOutputCompression(
+      { fileName: "disc.bin", metadata: { recommendedFormat: "chd" }, size: 524_289 },
+      { compressionFormat: "auto" },
+    ),
+  ).not.toBe("chd");
+  // The engine's medium travels with the recommendation and must not bypass the sector check.
+  expect(
+    OutputCompressionManager.resolveOutputCompression(
+      { fileName: "disc.bin", metadata: { format: "CD", recommendedFormat: "chd" }, size: 524_289 },
+      { compressionFormat: "auto" },
+    ),
+  ).not.toBe("chd");
+});

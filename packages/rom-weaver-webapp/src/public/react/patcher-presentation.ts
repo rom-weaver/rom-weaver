@@ -37,6 +37,7 @@ type PatcherOutputState = {
   identifiedName?: { name: string; on: boolean } | null;
   resolvedOutputName: string;
   compressionFormat: string;
+  formatPending: boolean;
   applyTiming: string;
   compressTiming: string;
   /** Combined wall time for every completed action (apply + compress). */
@@ -162,6 +163,7 @@ const createEmptyPatcherOutputState = ({
   },
   applyTiming: "",
   compressionFormat: "zip",
+  formatPending: false,
   compressTiming: "",
   disabled: true,
   displayFileName: "",
