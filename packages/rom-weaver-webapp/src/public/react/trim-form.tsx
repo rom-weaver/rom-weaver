@@ -312,8 +312,10 @@ const getCompletedDownloadMeta = (
   ]
     .filter(Boolean)
     .join(" · ");
+  const alreadyTrimmed = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
+  const verb = getSourceExtension(fileName) === "rvz" ? "Converted" : alreadyTrimmed ? "Already trimmed" : "Trimmed";
   return {
-    format: `${getSourceExtension(fileName) === "rvz" ? "Converted" : "Trimmed"} .${getSourceExtension(fileName)}`,
+    format: `${verb} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
     size: typeof outputSize === "number" ? formatByteSize(outputSize) : undefined,
   };

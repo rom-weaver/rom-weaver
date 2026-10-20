@@ -232,6 +232,61 @@ describe("ChecksumForm", () => {
     expect(screen.getByText("Match: the CRC32 of this file (Headerless).")).toBeTruthy();
   });
 
+  it("names a file once when a variant shares the bytes of its own checksum", async () => {
+    workflow.setInput.mockResolvedValue({
+      ...readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) }),
+      files: [
+        {
+          checksums: { crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) },
+          fileName: "game.z64",
+          id: "rom",
+          size: 16,
+          checksumVariants: [{ checksums: { crc32: CRC32 }, id: "big-endian", label: "N64 byte order: big-endian" }],
+        },
+      ],
+    });
+    render(<ChecksumForm />);
+    addRom();
+    await screen.findAllByText(CRC32);
+
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: CRC32 } });
+
+    expect(screen.getByText("Match: the CRC32 of this file.")).toBeTruthy();
+  });
+
+  it("keeps the earlier results when the new file's selection is cancelled", async () => {
+    workflow.setInput.mockImplementation(async (file: File) => {
+      if (file.name === "pick.zip") return new Promise(() => undefined);
+      const input = readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) });
+      return { ...input, fileName: file.name, files: [{ ...input.files[0], fileName: file.name }] };
+    });
+    const { container } = render(<ChecksumForm />);
+    fireEvent.change(screen.getByLabelText("Drop a file to checksum it"), {
+      target: { files: [new File(["1"], "first.sfc")] },
+    });
+    await screen.findAllByText(CRC32);
+
+    fireEvent.change(container.querySelector("input[type=file]") as HTMLInputElement, {
+      target: { files: [new File(["2"], "pick.zip")] },
+    });
+    await waitFor(() => expect(workflow.options.length).toBeGreaterThan(1));
+    workflow.options
+      .at(-1)
+      ?.selectFile({
+        candidates: [{ fileName: "inner.rom", id: "a", kind: "rom", selectable: true, type: "file" }],
+        role: "input",
+        sourceIndex: 0,
+        sourceName: "pick.zip",
+        warnings: [],
+      })
+      .catch(() => undefined);
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(await screen.findByText("first.sfc")).toBeTruthy();
+    expect(screen.queryByText("pick.zip")).toBeNull();
+  });
+
   it("does not match a checksum whose algorithm is switched off", async () => {
     render(<ChecksumForm />);
     addRom();

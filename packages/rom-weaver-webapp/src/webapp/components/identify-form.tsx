@@ -130,7 +130,9 @@ const CandidateResult = ({
           expected,
         }}
       />
-      <IdentifyCheatInspection identity={candidateCheatIdentity(candidate)} label={candidate.path} />
+      {candidate.sizeBytes === 0 ? null : (
+        <IdentifyCheatInspection identity={candidateCheatIdentity(candidate)} label={candidate.path} />
+      )}
     </>
   );
 };
