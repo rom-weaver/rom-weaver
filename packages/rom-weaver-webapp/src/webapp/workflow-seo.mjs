@@ -95,6 +95,7 @@ const readWorkflowEntryFromPathname = (pathname) => {
 const BETA_ROUTE_TITLES = Object.freeze({
   "save-editor": `Save Editor | ${SITE_NAME}`,
   "trim-rom": `Trim ROM | ${SITE_NAME}`,
+  "whats-new": `What's new | ${SITE_NAME}`,
 });
 
 /**

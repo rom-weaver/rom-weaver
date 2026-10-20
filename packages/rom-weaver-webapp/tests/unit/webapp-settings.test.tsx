@@ -119,7 +119,10 @@ describe("SettingsPanel localization", () => {
     expect(Array.from(logLevel.options, (option) => option.textContent)).toContain("Fehler");
     const byteUnits = container.querySelector("#settings-byte-units") as HTMLSelectElement;
     expect(byteUnits.options[0]?.textContent).toBe("Dezimal (KB, MB, GB) (Standard)");
-    expect(getAllByRole("button", { name: /Details zu .* anzeigen/ }).length).toBeGreaterThan(0);
+    expect(getAllByRole("button", { name: /Info zu / }).length).toBeGreaterThan(0);
+    // The slider announces its level name, not the bare index.
+    const slider = container.querySelector("#settings-compression-profile") as HTMLInputElement;
+    expect(slider.getAttribute("aria-valuetext")).toBeTruthy();
     setAdvancedSettings(false);
   });
 });

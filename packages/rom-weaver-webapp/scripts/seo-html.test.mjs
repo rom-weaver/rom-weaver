@@ -128,6 +128,7 @@ test("beta tool pages get their own title, social titles, and channel badge", ()
   for (const [slug, name] of [
     ["save-editor", "Save Editor"],
     ["trim-rom", "Trim ROM"],
+    ["whats-new", "What's new"],
   ]) {
     const prod = makeBetaRouteNoindex(shell, slug, "prod", "Production");
     assert.ok(prod.includes(`<title>${name} | rom-weaver</title>`), `${slug} title`);

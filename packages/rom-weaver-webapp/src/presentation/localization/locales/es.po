@@ -4650,6 +4650,11 @@ msgstr "Mostrar detalles de {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.aboutField"
+msgstr "Acerca de {label}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.console.showAdvanced"
 msgstr "Mostrar avanzado"
 
