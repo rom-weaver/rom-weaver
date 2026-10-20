@@ -167,7 +167,7 @@ const OutputCompressionManager = (() => {
   const _resolveAutomaticOutputCompression = (source: CompressionSource | null | undefined) => {
     const engineRecommended = _engineRecommendedRomSpecific(source);
     if (engineRecommended) return engineRecommended;
-    if (_hasChdSourceMetadata(source)) return OUTPUT_COMPRESSION.CHD;
+    if (_hasChdSourceMetadata(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
     if (_isUnambiguousZ3dsCompressionInput(source) || _isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
     if ((_isUnambiguousChdCompressionInput(source) || _isChdSource(source)) && _isLikelyDiscImageSource(source))
       return OUTPUT_COMPRESSION.CHD;

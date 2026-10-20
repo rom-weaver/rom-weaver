@@ -416,7 +416,7 @@ const compressFiles = async (
   }
   const input = await validateInputs(files);
   if (compression === "chd" && input.sheetProblem) throw new Error(input.sheetProblem);
-  const supported = await getCompressFormats(files);
+  const supported = await getCompressFormats(files, async () => runtime);
   if (!supported.includes(compression as ConcreteCompressFormat)) {
     throw new Error(`Compression format ${compression} does not support this file set`);
   }

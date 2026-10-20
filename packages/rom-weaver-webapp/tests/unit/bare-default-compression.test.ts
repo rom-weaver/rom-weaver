@@ -46,4 +46,18 @@ describe("Apply and Create download the bare file by default", () => {
     });
     expect(picked.requestedCompression).toBe("zip");
   });
+
+  it("waits for disc evidence on a sector-aligned .bin only when the default depends on it", () => {
+    const base = {
+      effectiveInputs: [],
+      outputCompressionEdited: false,
+      romInputs: [{ info: { fileName: "game.bin" }, loading: true, size: 524_288 }],
+      z3dsLabelSource: undefined,
+    } as unknown as Parameters<typeof resolveCompressionState>[0];
+    const pending = (activeSettings: Parameters<typeof resolveCompressionState>[0]["activeSettings"]) =>
+      resolveCompressionState({ ...base, activeSettings }).formatPending;
+    expect(pending({ defaultCompression: "zip/special" })).toBe(true);
+    expect(pending({ defaultCompression: "zip/special", output: { compression: "zip" } })).toBe(false);
+    expect(pending({ defaultCompression: "7z only" })).toBe(false);
+  });
 });

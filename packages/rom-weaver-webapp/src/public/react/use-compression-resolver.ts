@@ -102,8 +102,12 @@ const resolveCompressionState = ({
   // staging (before its checksums land). Until then the default is unknown, so the picker waits instead of showing one value and
   // flipping to another.
   const firstRom = romInputs[0];
+  const evidenceDecidesDefault =
+    !(hasConfiguredOutputCompression && activeCompression !== "auto") &&
+    (allowsDefaultCompressionSpecial(defaultCompressionMode) || defaultCompressionMode === "auto");
   const formatPending =
     !outputCompressionEdited &&
+    evidenceDecidesDefault &&
     !!firstRom &&
     (firstRom.loading || !!firstRom.progress || !(firstRom.info?.crc32 || firstRom.info?.sha1 || firstRom.info?.md5)) &&
     isAmbiguousDiscImageExtension(getFileNameExtension(String(firstRom.info?.fileName || ""))) &&

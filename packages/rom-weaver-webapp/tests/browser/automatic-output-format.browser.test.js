@@ -186,4 +186,11 @@ test("automatic output format keeps a sector-aligned cartridge .bin as .bin and 
       { compressionFormat: "auto" },
     ),
   ).not.toBe("chd");
+  // The engine's medium travels with the recommendation and must not bypass the sector check.
+  expect(
+    OutputCompressionManager.resolveOutputCompression(
+      { fileName: "disc.bin", metadata: { format: "CD", recommendedFormat: "chd" }, size: 524_289 },
+      { compressionFormat: "auto" },
+    ),
+  ).not.toBe("chd");
 });

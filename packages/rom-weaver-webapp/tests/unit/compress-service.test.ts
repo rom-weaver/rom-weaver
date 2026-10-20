@@ -106,6 +106,14 @@ describe("compress service", () => {
     expect(await getCompressFormats([unaligned], runtimeWith("CD"))).toEqual(["zip", "7z"]);
   });
 
+  it("compresses a single CD .bin to CHD on the runtime's header evidence", async () => {
+    const source = file("disc.bin", new Uint8Array(2352 * 20));
+    const { create, runtime } = makeRuntime();
+    Object.assign(runtime.compression, { probe: async () => ({ entries: [], discFormat: "CD" }) });
+    await compressFiles([source], options("chd"), runtime);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ source, format: "chd" }));
+  });
+
   it("keeps CD codecs, output metadata, and lazy bytes consistent for a small ISO", async () => {
     const source = file("disc.iso", new Uint8Array(2048));
     const read = vi.spyOn(source, "arrayBuffer");
