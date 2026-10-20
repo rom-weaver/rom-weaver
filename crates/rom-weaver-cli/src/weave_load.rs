@@ -252,11 +252,7 @@ impl CliApp {
             trace!("weave rom checks carry no checksum; not searching archive members by content");
             return Ok(None);
         }
-        let algorithms = checks
-            .checksums
-            .keys()
-            .map(String::as_str)
-            .collect::<Vec<&str>>();
+        let algorithms = checks.checksums.keys().cloned().collect::<Vec<String>>();
         let patch_members = weave
             .patches
             .iter()
@@ -264,7 +260,6 @@ impl CliApp {
             .filter_map(|path| Self::find_weave_archive_entry(&loaded.archive_entries, path.trim()))
             .map(|entry| entry.index)
             .collect::<Vec<usize>>();
-        let probe_root = context.temp_paths().next_path("weave-rom-probe", None);
         let mut found = None;
         for entry in &loaded.archive_entries {
             if loaded.archive_member.as_deref() == Some(entry.name.as_str()) {
@@ -281,43 +276,47 @@ impl CliApp {
                 trace!(member = %entry.name, expected, actual, "skipping rom candidate: size differs");
                 continue;
             }
+            // Hash the member straight from the archive stream: probing writes nothing to disk.
             debug!(member = %entry.name, "hashing rom candidate archive member");
-            let candidate_root = probe_root.join(entry.index.to_string());
-            let extracted = match Self::extract_weave_archive_member(
+            let hashed = with_regular_archive_file_entry_reader(
                 archive,
                 format_name,
-                entry,
-                &candidate_root,
-            ) {
-                Ok(path) => path,
+                entry.index,
+                &entry.name,
+                |reader| {
+                    let mut counted = CountingReader {
+                        inner: reader,
+                        bytes: 0,
+                    };
+                    let values = checksum_reader_values_with_progress(
+                        &mut counted,
+                        &algorithms,
+                        context,
+                        &mut |_| {},
+                    )?;
+                    Ok((counted.bytes, values.values))
+                },
+            );
+            let (size, actual) = match hashed {
+                Ok(hashed) => hashed,
                 Err(error) => {
-                    debug!(member = %entry.name, %error, "skipping rom candidate: cannot extract");
+                    debug!(member = %entry.name, %error, "skipping rom candidate: cannot read");
                     continue;
                 }
             };
-            let outcome = (|| {
-                if let Some(expected) = checks.size {
-                    let actual = fs::metadata(&extracted)?.len();
-                    if actual != expected {
-                        return Ok(false);
-                    }
-                }
-                let actual = checksum_file_values(&extracted, &algorithms, context)?;
-                Ok::<bool, RomWeaverError>(checks.checksums.iter().all(|(algorithm, expected)| {
+            let matches = checks.size.is_none_or(|expected| expected == size)
+                && checks.checksums.iter().all(|(algorithm, expected)| {
                     actual
                         .get(algorithm)
                         .is_some_and(|value| value.eq_ignore_ascii_case(expected))
-                }))
-            })();
-            let _ = fs::remove_dir_all(&candidate_root);
-            if outcome? {
+                });
+            if matches {
                 debug!(member = %entry.name, "weave rom bound to archive member by checksum");
                 found = Some(entry.clone());
                 break;
             }
-            trace!(member = %entry.name, "rom candidate checksums do not match");
+            trace!(member = %entry.name, size, "rom candidate checksums do not match");
         }
-        let _ = fs::remove_dir_all(&probe_root);
         Ok(found)
     }
 
@@ -457,6 +456,20 @@ fn read_weave_bytes_capped(reader: &mut dyn Read, label: &str) -> Result<Vec<u8>
         return Err(weave_too_large(label, bytes.len() as u64));
     }
     Ok(bytes)
+}
+
+/// Counts the bytes read through it, so a streamed member's size is known without its metadata.
+struct CountingReader<'reader> {
+    inner: &'reader mut dyn Read,
+    bytes: u64,
+}
+
+impl Read for CountingReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buf)?;
+        self.bytes += read as u64;
+        Ok(read)
+    }
 }
 
 #[cfg(test)]

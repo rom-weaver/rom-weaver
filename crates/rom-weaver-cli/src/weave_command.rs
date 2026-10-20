@@ -55,7 +55,8 @@ pub struct WeaveParseResult {
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub archive_member: Option<String>,
     /// Resolved ROM source; `None` when the user supplies the ROM (no ROM
-    /// entry, a name- or checks-only entry, or an unbundled archive `path`).
+    /// entry, a name- or checks-only entry, or an unbundled archive `path`
+    /// that no member matches by `rom.checks` checksums).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub rom_source: Option<WeaveSourceRef>,
