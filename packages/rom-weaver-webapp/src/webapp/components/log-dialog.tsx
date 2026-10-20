@@ -21,6 +21,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1180,8 +1181,8 @@ const OpfsInspector = ({
 /**
  * The virtualized trace listing. Only rows near the viewport are mounted; the
  * fixed CSS row height keeps the native scrollbar exact without a list library.
- * The scroll state lives on the dialog, so leaving this tab and coming back does
- * not re-run the scroll-to-newest effect and lose the reader's place.
+ * The scroll state lives on the dialog, so leaving this tab and coming back
+ * restores the reader's place on mount instead of starting at the top.
  */
 const TraceList = ({
   advanced,
@@ -1208,6 +1209,12 @@ const TraceList = ({
     Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
   );
   const emptyMessage = filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-";
+  // A remounted list starts at the top while the rows mount at the saved
+  // offset, which leaves the viewport blank; put the scroll back before paint.
+  const mountScrollTopRef = useRef(scrollTop);
+  useLayoutEffect(() => {
+    if (traceRef.current) traceRef.current.scrollTop = mountScrollTopRef.current;
+  }, [traceRef]);
   return (
     <div
       aria-atomic="false"
@@ -1609,13 +1616,27 @@ const LogDialog = ({
     return () => window.removeEventListener("resize", updateViewport);
   }, [open, tab]);
 
-  // Keep the newest lines in view while the dialog is open.
-  useEffect(() => {
+  // Open the log at the newest lines. A later viewport height change keeps a
+  // reader there only while they are at the newest line: a mid-list reader keeps
+  // their place, and one at the bottom still sees the newest lines after a shrink.
+  const openedAtNewestRef = useRef(false);
+  const atNewestRef = useRef(false);
+  const onTraceScroll = useCallback((nextScrollTop: number) => {
+    setScrollTop(nextScrollTop);
     const trace = traceRef.current;
-    if (open && trace && viewportHeight > 0) {
-      trace.scrollTop = trace.scrollHeight;
-      setScrollTop(trace.scrollTop);
+    atNewestRef.current = !!trace && nextScrollTop + trace.clientHeight >= trace.scrollHeight - 1;
+  }, []);
+  useEffect(() => {
+    if (!open) {
+      openedAtNewestRef.current = false;
+      return;
     }
+    const trace = traceRef.current;
+    if (!trace || viewportHeight <= 0 || (openedAtNewestRef.current && !atNewestRef.current)) return;
+    openedAtNewestRef.current = true;
+    atNewestRef.current = true;
+    trace.scrollTop = trace.scrollHeight;
+    setScrollTop(trace.scrollTop);
   }, [open, viewportHeight]);
 
   return (
@@ -1779,7 +1800,7 @@ const LogDialog = ({
               }}
               onLevelChange={onLevelChange}
               onRefreshOpfs={() => void refreshOpfs()}
-              onScroll={setScrollTop}
+              onScroll={onTraceScroll}
               onViewChange={setView}
               opfsEntries={visibleOpfs}
               opfsError={opfsError}

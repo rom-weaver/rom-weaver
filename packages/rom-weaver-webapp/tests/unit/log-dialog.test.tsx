@@ -224,6 +224,62 @@ describe("trace listing", () => {
   });
 });
 
+describe("trace scroll position", () => {
+  const traceOf = (container: HTMLElement) => {
+    const trace = container.querySelector<HTMLElement>(".tracelog");
+    if (!trace) throw new Error("The dialog rendered no trace list");
+    return trace;
+  };
+  const sizeTrace = (trace: HTMLElement, clientHeight: number) => {
+    Object.defineProperty(trace, "clientHeight", { configurable: true, value: clientHeight });
+    Object.defineProperty(trace, "scrollHeight", { configurable: true, value: 1500 });
+  };
+  const scrollTrace = (trace: HTMLElement, scrollTop: number) => {
+    trace.scrollTop = scrollTop;
+    fireEvent.scroll(trace);
+  };
+
+  it("restores the reader's place after leaving the logs tab and coming back", () => {
+    vi.mocked(getLogEntries).mockReturnValue(Array.from({ length: 60 }, (_, index) => entry({ id: index })));
+    const { container } = renderDialog({ initialTab: "logs" });
+    scrollTrace(traceOf(container), 500);
+
+    fireEvent.click(container.querySelector('[data-logtab="about"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-logtab="logs"]') as HTMLButtonElement);
+
+    expect(traceOf(container).scrollTop).toBe(500);
+  });
+
+  it("keeps the reader's place when the window resizes", () => {
+    vi.mocked(getLogEntries).mockReturnValue(Array.from({ length: 60 }, (_, index) => entry({ id: index })));
+    const { container } = renderDialog({ initialTab: "logs" });
+    const trace = traceOf(container);
+    sizeTrace(trace, 300);
+    fireEvent(window, new Event("resize"));
+    expect(trace.scrollTop).toBe(1500);
+    scrollTrace(trace, 200);
+
+    sizeTrace(trace, 250);
+    fireEvent(window, new Event("resize"));
+
+    expect(trace.scrollTop).toBe(200);
+  });
+
+  it("keeps a reader at the newest line there when the window shrinks", () => {
+    vi.mocked(getLogEntries).mockReturnValue(Array.from({ length: 60 }, (_, index) => entry({ id: index })));
+    const { container } = renderDialog({ initialTab: "logs" });
+    const trace = traceOf(container);
+    sizeTrace(trace, 300);
+    fireEvent(window, new Event("resize"));
+    scrollTrace(trace, 1200);
+
+    sizeTrace(trace, 250);
+    fireEvent(window, new Event("resize"));
+
+    expect(trace.scrollTop).toBe(1500);
+  });
+});
+
 describe("previous session view", () => {
   it("offers the toggle only when a previous session exists and switches to it", () => {
     vi.mocked(getLogEntries).mockReturnValue([entry({ message: "current run" })]);
