@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
@@ -108,4 +108,40 @@ test("one enabled patch or cheat allows Apply and off entries leave the output u
   const patchOnly = original.slice();
   patchOnly[0xa8] = 0x7f;
   expect(new Uint8Array(await outputs[1].arrayBuffer())).toEqual(patchOnly);
+});
+
+test("removing cheat controls preserves ROM-only batch queueing", async () => {
+  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  const rom = await loadFixtureFile(NES_ROM);
+  const second = new File([rom], "second.nes");
+  const Harness = () => {
+    const [inputs, setInputs] = useState([]);
+    return createElement(
+      "div",
+      null,
+      createElement("button", { type: "button", onClick: () => setInputs([rom, second]) }, "Add second ROM"),
+      createElement(ApplyPatchForm, {
+        inputs,
+        onInputsChange: setInputs,
+        defaultSettings: { output: { compression: "zip" } },
+      }),
+    );
+  };
+  mount(createElement(Harness));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), rom);
+  await clickButtonByText("Add cheats to the patch order");
+  await addPracticeCheat("Make the greeting start with M");
+  await clickButtonByText("Close");
+  await waitForApplyButtonEnabled();
+
+  await clickButtonByText("Add second ROM");
+
+  await expect.poll(() => document.querySelectorAll('button[aria-label="Remove ROM"]').length).toBe(2);
+  expect(document.querySelectorAll(".cheat-card").length).toBe(0);
+  await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(false);
+  await clickApplyButton();
+  await expect
+    .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+    .toContain("Waiting for other actions");
 });

@@ -349,6 +349,18 @@ describe("CheatDatabaseSection", () => {
     expect(onPresenceChange).toHaveBeenLastCalledWith(false);
   });
 
+  it("reports no cheat cards when the section unmounts", async () => {
+    const onPresenceChange = vi.fn();
+    const view = render(<CheatDatabaseSection {...props} onPresenceChange={onPresenceChange} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
+
+    view.unmount();
+
+    expect(onPresenceChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("shows the cheat kind and source in the card drawer", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);

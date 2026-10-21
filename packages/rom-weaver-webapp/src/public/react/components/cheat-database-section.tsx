@@ -804,6 +804,7 @@ export const CheatDatabaseSection = ({
   const cardsPresent = cards.length > 0;
   useEffect(() => {
     onPresenceChange?.(cardsPresent);
+    return () => onPresenceChange?.(false);
   }, [cardsPresent, onPresenceChange]);
   const reorderList = useListReorder({
     count: cards.length,
