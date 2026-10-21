@@ -64,6 +64,9 @@ const exportCheats = async (rom, patches, descriptions, patchEnabled = true) => 
     await expect.poll(() => document.querySelector("#rom-weaver-weave-job .cks-head")).not.toBeNull();
     const drawer = document.querySelector("#rom-weaver-weave-job .cks-head");
     if (drawer.getAttribute("aria-expanded") !== "true") drawer.click();
+    expect(document.querySelector("#rom-weaver-weave-job .patch-off-note")?.textContent).toBe(
+      "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off.",
+    );
     await expect.poll(() => document.getElementById("rom-weaver-button-export-weave")?.disabled).toBe(false);
     document.getElementById("rom-weaver-button-export-weave").click();
     await expect.poll(() => archive, { timeout: 60000 }).not.toBeNull();

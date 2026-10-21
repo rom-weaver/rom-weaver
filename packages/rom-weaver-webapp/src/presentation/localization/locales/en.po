@@ -5315,8 +5315,8 @@ msgstr "This visit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.weaveExport.combinedCheats"
-msgstr "This weave contains one combined patch with the enabled patches and cheats in their current order."
+msgid "ui.weaveExport.cheatSteps"
+msgstr "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

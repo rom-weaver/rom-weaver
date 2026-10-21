@@ -448,9 +448,7 @@ export const WeaveOutputStep = ({
     <WorkflowOutputStep
       action={
         <>
-          {combinedCheats ? (
-            <p className="patch-off-note">{localizer.message("ui.weaveExport.combinedCheats")}</p>
-          ) : null}
+          {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
           {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
           <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
         </>
@@ -552,7 +550,7 @@ export const WeaveSecondaryJob = ({
   const localizer = useUiLocalizer();
   return (
     <SecondaryOutputJob hash="#weave" id="rom-weaver-weave-job" label={localizer.message("ui.secondary.downloadWeave")}>
-      {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.combinedCheats")}</p> : null}
+      {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
       <WeaveOutputFields weaveExport={weaveExport} weaveTools={weaveTools} />
       {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
       <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />

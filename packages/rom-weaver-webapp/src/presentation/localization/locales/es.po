@@ -5315,8 +5315,8 @@ msgstr "Actual"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.weaveExport.combinedCheats"
-msgstr "Este weave contiene un parche combinado con los parches y trucos activados en su orden actual."
+msgid "ui.weaveExport.cheatSteps"
+msgstr "Cada truco activado se convierte en un parche independiente. Los destinatarios pueden activar o desactivar cada truco."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

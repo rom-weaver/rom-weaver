@@ -562,9 +562,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.secondary.downloadRom": msg({ id: "ui.secondary.downloadRom", message: "Download patched ROM" }),
   "ui.secondary.downloadThisRom": msg({ id: "ui.secondary.downloadThisRom", message: "Download this ROM" }),
   "ui.secondary.downloadWeave": msg({ id: "ui.secondary.downloadWeave", message: "Download the weave" }),
-  "ui.weaveExport.combinedCheats": msg({
-    id: "ui.weaveExport.combinedCheats",
-    message: "This weave contains one combined patch with the enabled patches and cheats in their current order.",
+  "ui.weaveExport.cheatSteps": msg({
+    id: "ui.weaveExport.cheatSteps",
+    message: "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off.",
   }),
   "ui.create.needsModified": msg({ id: "ui.create.needsModified", message: "Add your modified ROM" }),
   "ui.apply.needsRom": msg({ id: "ui.apply.needsRom", message: "Choose your original ROM" }),
