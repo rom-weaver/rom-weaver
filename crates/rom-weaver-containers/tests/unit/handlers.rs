@@ -435,6 +435,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join(format!("payload.{output_extension}")),
@@ -753,6 +754,7 @@ mod tests {
         let report = Z3dsContainerHandler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("out.z3ds"),
@@ -787,6 +789,7 @@ mod tests {
         Z3dsContainerHandler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: output.clone(),
@@ -1067,6 +1070,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -1190,6 +1194,7 @@ mod tests {
                 let archive_path =
                     temp_dir.join(format!("payload-{}.{}", format.replace('.', "-"), format));
                 let create_request = ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_dir.clone()],
                     output: archive_path.clone(),
@@ -1331,6 +1336,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: temp_dir.join(format!("payload-{level}.zip")),
@@ -1384,6 +1390,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.zip"),
@@ -1421,6 +1428,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
@@ -1680,6 +1688,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
@@ -1757,6 +1766,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
@@ -2611,6 +2621,39 @@ mod tests {
     }
 
     #[test]
+    fn rvz_invalid_block_size_rejects_create_and_dry_run_before_output() {
+        let temp_dir = temp_dir_path("rvz-invalid-block-size");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, build_test_gamecube_iso(65536)).expect("fixture");
+        let handler = RvzContainerHandler;
+        for block_size in [0, 1, 65535, 1_u32 << 31, u32::MAX] {
+            let request = ContainerCreateRequest {
+                rvz_block_size: Some(block_size),
+                archive_names: None,
+                inputs: vec![input.clone()],
+                output: temp_dir.join(format!("missing-{block_size}/disc.rvz")),
+                format: "rvz".to_string(),
+                codec: None,
+                level: None,
+                parent: None,
+            };
+            let context = test_context(&temp_dir, 1);
+            for result in [
+                handler.create(&request, &context).map(|_| ()),
+                handler.create_dry_run_size(&request, &context).map(|_| ()),
+            ] {
+                let error = result.expect_err("invalid RVZ block size must fail");
+                assert!(
+                    matches!(error, RomWeaverError::Validation(ref message) if message.contains("--rvz-block-size must be a power of two from 32768 to 1073741824 bytes")),
+                    "unexpected error: {error}"
+                );
+                assert!(!request.output.parent().expect("output parent").exists());
+            }
+        }
+    }
+
+    #[test]
     fn rvz_create_and_nested_extract_runtime_threads_match_capability() {
         let temp_dir = temp_dir_path("rvz-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -2627,6 +2670,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: output_path.clone(),
@@ -2739,6 +2783,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
@@ -2777,6 +2822,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
@@ -2827,6 +2873,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: archive_path.clone(),
@@ -2895,6 +2942,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -2972,6 +3020,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -3034,6 +3083,7 @@ mod tests {
                 handler
                     .create(
                         &ContainerCreateRequest {
+                            rvz_block_size: None,
                             archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
@@ -3104,6 +3154,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -3355,6 +3406,7 @@ mod tests {
                 let create_report = handler
                     .create(
                         &ContainerCreateRequest {
+                            rvz_block_size: None,
                             archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
@@ -3473,6 +3525,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
@@ -3507,6 +3560,7 @@ mod tests {
             seven_z
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path],
                         output: path.clone(),
@@ -4165,6 +4219,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -4219,6 +4274,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -4334,6 +4390,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -4392,6 +4449,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: parent_chd.clone(),
@@ -4406,6 +4464,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: child_chd.clone(),
@@ -4680,6 +4739,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -4730,6 +4790,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path],
                     output: archive_path.clone(),
@@ -4793,6 +4854,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input.clone()],
                         output: archive_path.clone(),
@@ -4858,6 +4920,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -4925,6 +4988,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
@@ -4978,6 +5042,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
@@ -5029,6 +5094,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
@@ -5089,6 +5155,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -5147,6 +5214,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -5206,6 +5274,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
@@ -5433,6 +5502,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
@@ -5463,6 +5533,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
@@ -5495,6 +5566,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![first, second],
                     output: temp_dir.join("disc.z3ds"),
@@ -5547,6 +5619,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.cso"),
@@ -5738,6 +5811,7 @@ mod tests {
     fn nod_ensure_single_create_input_rejects_multiple_inputs() {
         let core = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs: vec![PathBuf::from("a.iso"), PathBuf::from("b.iso")],
             output: PathBuf::from("out.rvz"),

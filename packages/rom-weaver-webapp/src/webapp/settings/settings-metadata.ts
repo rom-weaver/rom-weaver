@@ -572,7 +572,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getUiSettingsLabel("rvzBlockSize"),
     labelId: "ui.settings.rvzBlockSize",
     max: 2147483647,
-    min: 1,
+    min: 32768,
     step: 1,
     validationLabel: "RVZ block size",
   },

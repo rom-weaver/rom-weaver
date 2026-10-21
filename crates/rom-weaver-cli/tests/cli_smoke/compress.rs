@@ -1713,3 +1713,215 @@ fn compress_rvz_rejects_non_disc_input_with_hint() {
     assert!(!label.contains("stream fallback failed"), "{label}");
     assert!(label.contains("`source.bin`"), "{label}");
 }
+
+#[test]
+fn compress_rvz_typed_block_size_controls_header_and_roundtrips() {
+    let temp = setup_temp_dir();
+    let source = build_test_gamecube_iso(2 * 1024 * 1024);
+    let input = temp.child("source.iso");
+    fs::write(input.path(), &source).expect("fixture");
+    for size in [32768_u32, 65536, 1048576] {
+        let output = temp.child(format!("out-{size}.rvz"));
+        let request = serde_json::from_value(serde_json::json!({
+            "command": {"type": "compress", "args": {
+                "input": [input.path()], "output": output.path(), "codec": ["zstd:1"],
+                "rvz_block_size": size, "threads": 1
+            }}
+        }))
+        .expect("typed request");
+        assert_eq!(
+            rom_weaver_app::run_request(request, false),
+            std::process::ExitCode::SUCCESS
+        );
+        let bytes = fs::read(output.path()).expect("RVZ output");
+        assert_eq!(
+            u32::from_be_bytes(bytes[84..88].try_into().expect("chunk size")),
+            size,
+            "RVZ typed rvz_block_size request was ignored"
+        );
+        let mut disc =
+            NodDiscReader::new(output.path(), &NodDiscOptions::default()).expect("open RVZ");
+        let mut extracted = Vec::new();
+        std::io::Read::read_to_end(&mut disc, &mut extracted).expect("extract RVZ");
+        assert_eq!(extracted, source, "RVZ full extraction parity at {size}");
+    }
+}
+
+#[test]
+fn compress_rvz_block_size_rejects_invalid_or_wrong_format_before_output() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.iso");
+    fs::write(input.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
+    for format in ["rvz", "zip"] {
+        for size in [0_u32, 1, 65535, 65536, 1_u32 << 31] {
+            if format == "rvz" && size == 65536 {
+                continue;
+            }
+            for dry_run in [false, true] {
+                let output = temp.child(format!("missing-{format}-{size}-{dry_run}/out.{format}"));
+                let request = serde_json::from_value(serde_json::json!({
+                    "command": {"type": "compress", "args": {
+                        "input": [input.path()], "output": output.path(), "rvz_block_size": size, "threads": 1
+                    }}, "dry_run": dry_run
+                })).expect("typed request");
+                assert_eq!(
+                    rom_weaver_app::run_request(request, false),
+                    std::process::ExitCode::FAILURE,
+                    "must reject {size} with {format}, dry_run={dry_run}"
+                );
+                assert!(
+                    !output.path().parent().expect("output parent").exists(),
+                    "invalid request touched output parent"
+                );
+            }
+        }
+    }
+    let output = temp.child("existing.rvz");
+    fs::write(output.path(), b"keep existing output").expect("existing fixture");
+    let request = serde_json::from_value(serde_json::json!({
+        "command": {"type": "compress", "args": {
+            "input": [input.path()], "output": output.path(), "rvz_block_size": 1, "force": true
+        }}
+    }))
+    .expect("typed request");
+    assert_eq!(
+        rom_weaver_app::run_request(request, false),
+        std::process::ExitCode::FAILURE
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("existing output"),
+        b"keep existing output"
+    );
+}
+
+#[test]
+fn compress_rvz_default_block_size_preserves_output_bytes() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.iso");
+    fs::write(input.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
+    let mut outputs = Vec::new();
+    for size in [None, Some(131072_u32)] {
+        let output = temp.child(format!("default-{}.rvz", outputs.len()));
+        let mut args = serde_json::json!({"input": [input.path()], "output": output.path(), "codec": ["zstd:1"], "threads": 1});
+        if let Some(size) = size {
+            args["rvz_block_size"] = serde_json::json!(size);
+        }
+        let request = serde_json::from_value(
+            serde_json::json!({"command": {"type": "compress", "args": args}}),
+        )
+        .expect("typed request");
+        assert_eq!(
+            rom_weaver_app::run_request(request, false),
+            std::process::ExitCode::SUCCESS
+        );
+        let bytes = fs::read(output.path()).expect("RVZ output");
+        assert_eq!(
+            u32::from_be_bytes(bytes[84..88].try_into().expect("chunk size")),
+            131072
+        );
+        outputs.push(bytes);
+    }
+    assert_eq!(
+        outputs[0], outputs[1],
+        "omitted and explicit default must be byte identical"
+    );
+}
+
+#[test]
+fn compress_rvz_cli_block_size_controls_header() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.iso");
+    let output = temp.child("output.rvz");
+    fs::write(input.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
+    let stdout = command_stdout(
+        &[
+            "compress",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--rvz-block-size",
+            "65536",
+            "--codec",
+            "zstd:1",
+            "--threads",
+            "1",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(parse_single_json_line(&stdout)["status"], "succeeded");
+    let bytes = fs::read(output.path()).expect("RVZ output");
+    assert_eq!(
+        u32::from_be_bytes(bytes[84..88].try_into().expect("chunk size")),
+        65536
+    );
+}
+
+#[test]
+fn compress_rvz_cli_block_size_rejects_invalid_and_wrong_format() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.iso");
+    fs::write(input.path(), build_test_gamecube_iso(32768)).expect("fixture");
+    for (format, size) in [
+        ("rvz", "0"),
+        ("rvz", "1"),
+        ("rvz", "65535"),
+        ("rvz", "2147483648"),
+        ("rvz", "4294967296"),
+        ("zip", "65536"),
+    ] {
+        let output = temp.child(format!("missing-{format}-{size}/out.{format}"));
+        Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "compress",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--rvz-block-size",
+                size,
+            ])
+            .assert()
+            .failure();
+        assert!(!output.path().parent().expect("parent").exists());
+    }
+}
+
+#[test]
+fn compress_rvz_block_size_dry_run_matches_created_size() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.iso");
+    fs::write(input.path(), build_test_gamecube_iso(2 * 1024 * 1024)).expect("fixture");
+    for size in ["32768", "1048576"] {
+        let output = temp.child(format!("output-{size}.rvz"));
+        let args = [
+            "compress",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--rvz-block-size",
+            size,
+            "--codec",
+            "zstd:1",
+            "--threads",
+            "1",
+            "--jsonl",
+        ];
+        let mut dry_args = args.to_vec();
+        dry_args.push("--dry-run");
+        let dry_stdout = command_stdout(&dry_args, 0);
+        assert!(!output.path().exists());
+        command_stdout(&args, 0);
+        let estimate = parse_single_json_line(&dry_stdout)["details"]["estimated_output_bytes"]
+            .as_u64()
+            .expect("dry run byte estimate");
+        assert_eq!(
+            estimate,
+            fs::metadata(output.path()).expect("output metadata").len(),
+            "dry run must use block size {size}"
+        );
+    }
+}

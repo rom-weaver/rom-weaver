@@ -11,8 +11,8 @@ import {
   normalizeCodecList,
   normalizeCodecListWithFallback,
   normalizeCompressionProfile,
-  normalizeIntegerInRange,
   parseIntegerInRange,
+  parseRvzBlockSize,
 } from "./settings-compression.ts";
 import type {
   SettingsDraft,
@@ -270,15 +270,23 @@ const validateConditionalCodecField = (
         true,
       );
 
-const validateConditionalPositiveIntegerField = (
-  fieldKey: SettingsFieldKey,
+const validateRvzBlockSize = (
   rawDraft: SettingsDraft,
   validation: SettingsValidation,
   settings: SettingsState,
-): number =>
-  isValidationFieldEnabled(fieldKey, validation.settings)
-    ? normalizeIntegerSetting(fieldKey, rawDraft[fieldKey] as string | number | null | undefined, validation)
-    : normalizePositiveIntegerField(fieldKey, rawDraft[fieldKey], settings[fieldKey] as number, settings);
+): number => {
+  if (!isValidationFieldEnabled("rvzBlockSize", validation.settings))
+    return normalizePositiveIntegerField("rvzBlockSize", rawDraft.rvzBlockSize, settings.rvzBlockSize, settings);
+  try {
+    const size = parseRvzBlockSize(rawDraft.rvzBlockSize as string | number | null | undefined);
+    if (size === null) throw new Error("RVZ block size is required.");
+    return size;
+  } catch (cause) {
+    validation.messages.push(cause instanceof Error ? cause.message : "Invalid RVZ block size.");
+    validation.invalidFields.push(getSettingsFieldId("rvzBlockSize"));
+    return settings.rvzBlockSize;
+  }
+};
 
 const validateChoiceSetting = <K extends SettingsFieldKey>(
   fieldKey: K,
@@ -311,33 +319,6 @@ const validateCodecList = (
     const raw = String(value || "").trim();
     if (!raw) return "";
     return raw;
-  }
-};
-
-const normalizeIntegerSetting = (
-  fieldKey: SettingsFieldKey,
-  value: string | number | null | undefined,
-  validation: SettingsValidation,
-  settings: SettingsState = validation.settings,
-): number => {
-  const { max, min } = getNumericFieldRange(fieldKey, settings);
-  const rangeText = formatLevelRange(min, max);
-  const parsedValue = readStoredField(storedStringOrNumberSchema, value);
-  try {
-    return parseIntegerInRange(parsedValue === undefined ? value : parsedValue, {
-      failureMessage: getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`),
-      max,
-      min,
-      requireExactString: true,
-    }) as number;
-  } catch {
-    validation.messages.push(getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`));
-    validation.invalidFields.push(getSettingsFieldId(fieldKey));
-    return normalizeIntegerInRange(value, {
-      fallback: min,
-      max,
-      min,
-    }) as number;
   }
 };
 
@@ -753,12 +734,7 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
       fieldKey,
       validateConditionalCodecField(fieldKey, rawDraft, validation, settings),
     );
-  validation.settings.rvzBlockSize = validateConditionalPositiveIntegerField(
-    "rvzBlockSize",
-    rawDraft,
-    validation,
-    settings,
-  );
+  validation.settings.rvzBlockSize = validateRvzBlockSize(rawDraft, validation, settings);
   validation.settings.threads = normalizeThreadsSetting(rawDraft.threads, validation);
 
   return validation;

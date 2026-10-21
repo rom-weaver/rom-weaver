@@ -101,6 +101,7 @@ fn verify_archives(payloads: Vec<Vec<u8>>) -> Result<(), TestCaseError> {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         inputs: inputs.clone(),
                         archive_names: Some(names.clone()),
                         output: archive.clone(),
@@ -142,6 +143,7 @@ fn verify_archives(payloads: Vec<Vec<u8>>) -> Result<(), TestCaseError> {
         for name in ["../escape.bin", "/escape.bin", "games/../../escape.bin"] {
             let result = handler.create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     inputs: vec![inputs[0].clone()],
                     archive_names: Some(vec![name.into()]),
                     output: scratch.0.join(format!("unsafe.{format}")),

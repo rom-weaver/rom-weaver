@@ -147,7 +147,10 @@ const FIELD_INFO: Record<string, CompressFieldInfo> = {
   },
   compressionProfile: COMPRESSION_PROFILE_FIELD_INFO,
   rvzBlockSize: {
-    items: [`Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}.`, "Valid values: 1-2147483647."],
+    items: [
+      `Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}.`,
+      "Valid values: powers of two from 32768 to 1073741824 bytes.",
+    ],
     title: getSettingsLabel("rvzBlockSize"),
   },
   rvzCodec: {

@@ -937,6 +937,18 @@ pub struct CompressCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "rvz-block-size",
+            value_name = "BYTES",
+            help = "RVZ block size in bytes (power of two, 32768 to 1073741824 (1 GiB); default: 131072)"
+        )
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rvz_block_size: Option<u32>,
+
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             short = 'i',
             long = "input",
             required = true,
