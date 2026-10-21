@@ -57,7 +57,9 @@ impl ReadArchive {
                 "{context}: libarchive reader allocation returned null"
             ))
         })?;
-        Ok(Self { ptr: Some(ptr) })
+        let reader = Self { ptr: Some(ptr) };
+        ffi::configure_utf8(reader.as_ptr(), context)?;
+        Ok(reader)
     }
 
     pub fn support_raw_format(&mut self, context: &str) -> Result<()> {
@@ -117,9 +119,16 @@ impl ReadArchive {
         block_size: usize,
         context: &str,
     ) -> Result<()> {
-        let input = path_to_cstring(input, label)?;
-        let status =
-            unsafe { archive_read_open_filename(self.as_ptr(), input.as_ptr(), block_size) };
+        #[cfg(windows)]
+        let status = {
+            let input = ffi::path_to_wide(input, label)?;
+            unsafe { sys::archive_read_open_filename_w(self.as_ptr(), input.as_ptr(), block_size) }
+        };
+        #[cfg(not(windows))]
+        let status = {
+            let input = path_to_cstring(input, label)?;
+            unsafe { sys::archive_read_open_filename(self.as_ptr(), input.as_ptr(), block_size) }
+        };
         self.check_status(status, context)
     }
 

@@ -1,0 +1,20 @@
+diff --git a/libarchive/archive_string.c b/libarchive/archive_string.c
+--- a/libarchive/archive_string.c
++++ b/libarchive/archive_string.c
+@@ -1710,6 +1710,16 @@
+ 		return (NULL);
+ 	}
+ 
++	/* Unicode archive names MUST retain distinct normalization sequences.
++	 * The UTF-8 archive boundary does not require filesystem normalization. */
++	if (a != NULL && a->current_code != NULL &&
++	    strcmp(a->current_code, "UTF-8") == 0 &&
++	    (sc->flag & (SCONV_FROM_UTF8 | SCONV_FROM_UTF16)) &&
++	    (sc->flag & (SCONV_TO_UTF8 | SCONV_TO_UTF16))) {
++		sc->flag &= ~(SCONV_NORMALIZATION_C | SCONV_NORMALIZATION_D);
++		setup_converter(sc);
++	}
++
+ 	/*
+ 	 * If there is no converter for current string conversion object,
+ 	 * we cannot handle this conversion.

@@ -1,5 +1,17 @@
 use super::*;
 
+// The project adapter is appended to archive_string.c to keep conversion state per archive.
+unsafe extern "C" {
+    fn rom_weaver_archive_set_utf8(archive: *mut archive) -> i32;
+}
+
+pub(crate) fn configure_utf8(archive_ptr: *mut archive, context: &str) -> Result<()> {
+    let status = unsafe { rom_weaver_archive_set_utf8(archive_ptr) };
+    check_status_for_ptr(status, archive_ptr, context)?;
+    tracing::trace!("configured libarchive UTF-8 pathname conversion");
+    Ok(())
+}
+
 pub(crate) fn check_status_for_ptr(
     status: i32,
     archive_ptr: *mut archive,
@@ -39,6 +51,7 @@ pub(crate) fn error_from_archive(archive_ptr: *mut archive, context: &str) -> Ro
         RomWeaverError::Validation(format!("{context}: {message}"))
     }
 }
+#[cfg(any(not(windows), test))]
 pub(crate) fn path_to_cstring(path: &Path, label: &str) -> Result<CString> {
     CString::new(path_bytes(path).as_ref()).map_err(|_| {
         RomWeaverError::Validation(format!(
@@ -59,7 +72,22 @@ fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     Cow::Borrowed(path.as_os_str().as_bytes())
 }
 
-#[cfg(not(any(unix, target_os = "wasi")))]
+#[cfg(all(not(any(unix, target_os = "wasi")), any(not(windows), test)))]
 fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     Cow::Owned(path.to_string_lossy().as_bytes().to_vec())
+}
+
+#[cfg(windows)]
+pub(crate) fn path_to_wide(path: &Path, label: &str) -> Result<Vec<u16>> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if wide.contains(&0) {
+        return Err(RomWeaverError::Validation(format!(
+            "{label} path contains an interior NUL: `{}`",
+            path.display()
+        )));
+    }
+    wide.push(0);
+    Ok(wide)
 }

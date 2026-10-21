@@ -109,9 +109,9 @@ const WASM_BINDGEN_WRITE_FUNCTIONS: &[&str] = &[
     "archive_write_set_format_option",
     "archive_write_set_filter_option",
     "archive_entry_free",
-    "archive_entry_new",
+    "archive_entry_new2",
     "archive_entry_set_filetype",
-    "archive_entry_set_pathname",
+    "archive_entry_set_pathname_utf8",
     "archive_entry_set_perm",
     "archive_entry_set_size",
 ];

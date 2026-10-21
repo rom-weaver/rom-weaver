@@ -236,6 +236,13 @@
         "status": "local"
       },
       "tests": ["cargo test -p rom-weaver-cli --test cli_smoke extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer"]
+    },
+    {
+      "file": "0019-preserve-unicode-normalization.patch",
+      "stage": "source",
+      "reason": "Preserve exact Unicode normalization sequences across UTF-8 archive boundaries.",
+      "upstream": { "status": "local" },
+      "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
     }
   ],
   "materialized": false,
@@ -244,6 +251,11 @@
       "file": "libarchive/patches/wasm/archive_write_set_format_wasm_shim.c",
       "target": "libarchive/archive_write_set_format_wasm_shim.c",
       "mode": "copy"
+    },
+    {
+      "file": "libarchive/patches/utf8_charset.c",
+      "target": "libarchive/archive_string.c",
+      "mode": "append"
     },
     {
       "file": "libarchive/patches/7zip_solid_block.c",

@@ -84,11 +84,13 @@ impl WriteArchive {
                 "{context}: libarchive writer allocation returned null"
             ))
         })?;
-        Ok(Self {
+        let writer = Self {
             ptr: Some(ptr),
             codec_progress_callback_data: None,
             write_callback_data: None,
-        })
+        };
+        ffi::configure_utf8(writer.as_ptr(), context)?;
+        Ok(writer)
     }
 
     pub fn set_format(&mut self, format: WriteFormat, context: &str) -> Result<()> {
@@ -102,7 +104,11 @@ impl WriteArchive {
                 WriteFormat::Raw => archive_write_set_format_raw(self.as_ptr()),
             }
         };
-        self.check_status(status, context)
+        self.check_status(status, context)?;
+        if matches!(format, WriteFormat::Zip) {
+            self.set_format_option(Some("zip"), "hdrcharset", "UTF-8", context)?;
+        }
+        Ok(())
     }
 
     pub fn add_filter(&mut self, filter: WriteFilter, context: &str) -> Result<()> {
@@ -187,8 +193,16 @@ impl WriteArchive {
     }
 
     pub fn open_filename(&mut self, output: &Path, label: &str, context: &str) -> Result<()> {
-        let output = path_to_cstring(output, label)?;
-        let status = unsafe { archive_write_open_filename(self.as_ptr(), output.as_ptr()) };
+        #[cfg(windows)]
+        let status = {
+            let output = ffi::path_to_wide(output, label)?;
+            unsafe { sys::archive_write_open_filename_w(self.as_ptr(), output.as_ptr()) }
+        };
+        #[cfg(not(windows))]
+        let status = {
+            let output = path_to_cstring(output, label)?;
+            unsafe { sys::archive_write_open_filename(self.as_ptr(), output.as_ptr()) }
+        };
         self.check_status(status, context)
     }
 
@@ -273,7 +287,7 @@ impl WriteArchive {
     }
 
     pub fn start_entry(&mut self, spec: EntrySpec<'_>, context: &str) -> Result<()> {
-        let entry = ArchiveEntry::new(context)?;
+        let entry = ArchiveEntry::new(self.as_ptr(), context)?;
         let pathname = cstring(spec.pathname, "archive entry name", context)?;
         let size = i64::try_from(spec.size).map_err(|_| {
             RomWeaverError::Validation(format!(
@@ -282,7 +296,7 @@ impl WriteArchive {
         })?;
 
         unsafe {
-            archive_entry_set_pathname(entry.as_ptr(), pathname.as_ptr());
+            archive_entry_set_pathname_utf8(entry.as_ptr(), pathname.as_ptr());
             archive_entry_set_filetype(entry.as_ptr(), spec.file_type.libarchive_mode() as _);
             archive_entry_set_perm(entry.as_ptr(), spec.perm as _);
             archive_entry_set_size(entry.as_ptr(), size);
@@ -480,8 +494,8 @@ struct ArchiveEntry {
 }
 
 impl ArchiveEntry {
-    fn new(context: &str) -> Result<Self> {
-        let ptr = unsafe { archive_entry_new() };
+    fn new(archive_ptr: *mut archive, context: &str) -> Result<Self> {
+        let ptr = unsafe { archive_entry_new2(archive_ptr) };
         let ptr = NonNull::new(ptr).ok_or_else(|| {
             RomWeaverError::Validation(format!(
                 "{context}: libarchive entry allocation returned null"
