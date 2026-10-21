@@ -99,6 +99,15 @@ type RunnerCreateOptions = { threads?: RuntimeValue };
 // Keep about half the thread budget as idle runners, with a floor of two and this cap.
 // The scheduler separately limits active operations by the thread budget.
 const MAX_WARM_IDLE_RUNNERS = 8;
+// Every admitted operation holds its own runner: a worker plus a WASM heap and a thread-pool shell set.
+// A large drop must queue behind this cap, or dozens of simultaneous runners exhaust the page's memory
+// and address space (a 14-file identify drop crashed the tab) even though thread-less ops reserve no threads.
+const MAX_CONCURRENT_RUNNERS = 8;
+// Mobile WebKit reserves each runner's whole shared-memory maximum (the mobile memory ceiling) up front,
+// so a phone's 4-6 thread budget would still reserve several GiB. Mobile also keeps only one warm runner.
+const MAX_MOBILE_CONCURRENT_RUNNERS = 2;
+const resolveMaxConcurrentRunners = (threadBudget: number, root?: Parameters<typeof isMobileRuntime>[0]): number =>
+  Math.min(threadBudget, isMobileRuntime(root) ? MAX_MOBILE_CONCURRENT_RUNNERS : MAX_CONCURRENT_RUNNERS);
 const resolveWarmIdleRunners = (): number => {
   // WASM heaps never shrink. Mobile keeps one runner because shared-memory reservations leave little headroom.
   if (isMobileRuntime()) return 1;
@@ -344,7 +353,7 @@ const getOperationScheduler = (): OperationScheduler => {
     // Limit operations by the thread budget. The thread gate keeps their total request within it, so full-budget work runs alone.
     const threadBudget = getDefaultBrowserThreadCount();
     operationScheduler = createOperationScheduler({
-      maxConcurrency: threadBudget,
+      maxConcurrency: resolveMaxConcurrentRunners(threadBudget),
       memoryCeiling: resolveMemoryCeilingBytes(),
       // Rust plans I/O batches from browser memory, thread limits, and source sizes. Its planner command bypasses this scheduler.
       planBatch: (jobSizes, planOptions) =>
@@ -808,6 +817,7 @@ export {
   noteRomWeaverIoBatch,
   recycleWarmRomWeaverRunner,
   resetRomWeaverRunner,
+  resolveMaxConcurrentRunners,
   runRomWeaverJson,
   setInputSelectionHandler,
   warmupRomWeaverRunner,
