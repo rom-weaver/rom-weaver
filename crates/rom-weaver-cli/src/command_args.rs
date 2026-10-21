@@ -939,7 +939,7 @@ pub struct CompressCommand {
         arg(
             long = "rvz-block-size",
             value_name = "BYTES",
-            help = "RVZ block size in bytes (power of two, at least 32768; default: 131072)"
+            help = "RVZ block size in bytes (power of two, 32768 to 1073741824 (1 GiB); default: 131072)"
         )
     )]
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1066,11 +1066,11 @@ fn rvz_block_size_is_rejected_by_other_registered_handlers() {
 }
 
 #[test]
-fn rvz_block_size_validation_accepts_u32_power_of_two_boundaries() {
-    for size in [32768, 65536, 131072, 1048576, 1_u32 << 31] {
+fn rvz_block_size_validation_accepts_group_size_boundaries() {
+    for size in [32768, 65536, 131072, 1048576, 1_u32 << 30] {
         ContainerCreateRequest::validate_rvz_block_size("rvz", Some(size)).expect("valid RVZ size");
     }
-    for size in [0, 1, 32767, 65535, u32::MAX] {
+    for size in [0, 1, 32767, 65535, 1_u32 << 31, u32::MAX] {
         assert!(
             ContainerCreateRequest::validate_rvz_block_size("rvz", Some(size)).is_err(),
             "invalid RVZ size {size}"

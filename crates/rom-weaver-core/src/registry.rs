@@ -281,9 +281,12 @@ impl ContainerCreateRequest {
                 "--rvz-block-size requires RVZ output format".to_string(),
             ));
         }
-        if block_size < 32768 || !block_size.is_power_of_two() {
+        // RVZGroup reserves bit 31 for the compression flag, so block sizes MUST
+        // fit in 31 bits; the largest valid power of two is 1 GiB.
+        if !(32768..=1073741824).contains(&block_size) || !block_size.is_power_of_two() {
             return Err(RomWeaverError::Validation(
-                "--rvz-block-size must be a power of two of at least 32768 bytes".to_string(),
+                "--rvz-block-size must be a power of two from 32768 to 1073741824 bytes"
+                    .to_string(),
             ));
         }
         Ok(())

@@ -2627,7 +2627,7 @@ mod tests {
         let input = temp_dir.join("disc.iso");
         fs::write(&input, build_test_gamecube_iso(65536)).expect("fixture");
         let handler = RvzContainerHandler;
-        for block_size in [0, 1, 65535, u32::MAX] {
+        for block_size in [0, 1, 65535, 1_u32 << 31, u32::MAX] {
             let request = ContainerCreateRequest {
                 rvz_block_size: Some(block_size),
                 archive_names: None,
@@ -2645,7 +2645,7 @@ mod tests {
             ] {
                 let error = result.expect_err("invalid RVZ block size must fail");
                 assert!(
-                    matches!(error, RomWeaverError::Validation(ref message) if message.contains("power of two of at least 32768")),
+                    matches!(error, RomWeaverError::Validation(ref message) if message.contains("--rvz-block-size must be a power of two from 32768 to 1073741824 bytes")),
                     "unexpected error: {error}"
                 );
                 assert!(!request.output.parent().expect("output parent").exists());

@@ -1753,7 +1753,7 @@ fn compress_rvz_block_size_rejects_invalid_or_wrong_format_before_output() {
     let input = temp.child("source.iso");
     fs::write(input.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
     for format in ["rvz", "zip"] {
-        for size in [0_u32, 1, 65535, 65536] {
+        for size in [0_u32, 1, 65535, 65536, 1_u32 << 31] {
             if format == "rvz" && size == 65536 {
                 continue;
             }
@@ -1867,6 +1867,7 @@ fn compress_rvz_cli_block_size_rejects_invalid_and_wrong_format() {
         ("rvz", "0"),
         ("rvz", "1"),
         ("rvz", "65535"),
+        ("rvz", "2147483648"),
         ("rvz", "4294967296"),
         ("zip", "65536"),
     ] {
