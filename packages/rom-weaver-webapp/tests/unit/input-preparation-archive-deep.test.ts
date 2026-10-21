@@ -12,6 +12,10 @@ vi.mock("../../src/lib/input/input-archive-patch-leaves.ts", () => ({
   getPatchLeafParentCompressionsForSelection: vi.fn(),
   resolvePatchArchiveLeaf: mocks.resolvePatchArchiveLeaf,
 }));
+vi.mock("../../src/lib/input/input-preparation-compression.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/lib/input/input-preparation-compression.ts")>()),
+  resolveInputPreparationRuntime: async () => runtime,
+}));
 vi.mock("../../src/lib/runtime/public-output-bin-file.ts", () => ({
   createPatchFileFromPublicOutput: mocks.createPatchFileFromPublicOutput,
 }));
@@ -20,6 +24,7 @@ import {
   attachBareRomIngestMetadata,
   describeArchiveFileForTrace,
   getCompressionFormat,
+  listDroppedArchiveEntryNames,
   getCompressionRuntimeSource,
   isCompressionFile,
   resolveArchiveInput,
@@ -382,5 +387,57 @@ describe("attachBareRomIngestMetadata", () => {
     await attachBareRomIngestMetadata(fallback as never, undefined, runtime as never);
     expect(fallback).toMatchObject({ checksums: { crc32: "abc" }, romType: { platform: "snes" } });
     expect(fallback._precomputedChecksumMs).toEqual(expect.any(Number));
+  });
+});
+
+describe("nested archive drop classification", () => {
+  it.each(["original.bin", "fix.ips", "rom-weaver-weave.json"])(
+    "discovers %s behind an archive-only root and releases extracted files",
+    async (leaf) => {
+      runtime.compression.probe.mockResolvedValue({ entries: [{ filename: "nested/inner.zip" }] });
+      const cleanup = vi.fn();
+      runtime.compression.extract.mockResolvedValue({
+        outputs: [{ ...output(leaf), relativePath: `nested/inner/${leaf}`, cleanup }],
+      });
+      const names = await listDroppedArchiveEntryNames(new File(["zip"], "nested.zip"));
+      expect(names).toEqual([`nested/inner/${leaf}`]);
+      expect(runtime.compression.extract).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extractAll: true,
+          options: expect.objectContaining({ interactiveSelectionEnabled: false }),
+        }),
+      );
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("releases every recursive output when reading a discovered name fails", async () => {
+    runtime.compression.probe.mockResolvedValue({ entries: [{ filename: "inner.zip" }] });
+    const cleanups = [vi.fn(), vi.fn()];
+    runtime.compression.extract.mockResolvedValue({
+      outputs: [
+        {
+          ...output("first.bin"),
+          cleanup: cleanups[0],
+          get relativePath() {
+            throw new Error("bad leaf metadata");
+          },
+        },
+        { ...output("second.bin"), cleanup: cleanups[1] },
+      ],
+    });
+    await expect(listDroppedArchiveEntryNames(new File(["zip"], "broken.zip"))).rejects.toThrow("bad leaf metadata");
+    for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the cheap listing for direct ROMs, patches, and root manifests", async () => {
+    for (const leaf of ["original.bin", "fix.ips", "rom-weaver-weave.json"]) {
+      runtime.compression.probe.mockResolvedValue({ entries: [{ filename: leaf }, { filename: "inner.zip" }] });
+      await expect(listDroppedArchiveEntryNames(new File(["zip"], `${leaf}.zip`))).resolves.toEqual([
+        leaf,
+        "inner.zip",
+      ]);
+    }
+    expect(runtime.compression.extract).not.toHaveBeenCalled();
   });
 });

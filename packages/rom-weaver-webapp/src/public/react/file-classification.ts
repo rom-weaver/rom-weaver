@@ -50,11 +50,9 @@ const isWeaveFileName = (name: string) =>
  */
 const classifyArchiveBucket = (archive: { name: string }, names: readonly string[]): "rom" | "patch" => {
   const hasRom = names.some(isRomFileName);
-  const hasPatch = names.some(isPatchFileName);
-  // Archive-only roots usually wrap nested patch weaves; route them to patch
-  // enumeration instead of the ROM keep-one prompt. Rust corrects real ROMs.
+  const hasPatch = names.some((name) => isPatchFileName(name) || isWeaveFileName(name));
   const hasNestedArchive = names.some(isArchiveFileName);
-  const bucket = hasRom ? "rom" : hasPatch || hasNestedArchive ? "patch" : "rom";
+  const bucket = hasRom ? "rom" : hasPatch ? "patch" : "rom";
   logger.trace("archive content classified", {
     bucket,
     entryCount: names.length,
