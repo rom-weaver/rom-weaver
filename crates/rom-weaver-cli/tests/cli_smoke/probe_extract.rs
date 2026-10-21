@@ -2155,6 +2155,49 @@ fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
     }
 }
 
+// The 7z reader decodes into a 64 KiB buffer. A folder that unpacks to a multiple of that fills
+// the buffer with its last byte, before the decoder has read the LZMA2 end marker, so reading
+// the next folder first decodes that marker alone and gets no data.
+#[test]
+fn extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer() {
+    let temp = setup_temp_dir();
+    let payloads: Vec<Vec<u8>> = (0..3)
+        .map(|seed| pseudo_random_bytes(1 << 20, seed))
+        .collect();
+    let names = ["a.bin", "b.bin", "c.bin"];
+    let files: Vec<(&str, &[u8])> = names
+        .iter()
+        .zip(&payloads)
+        .map(|(name, payload)| (*name, payload.as_slice()))
+        .collect();
+    let archive = temp.child("roms.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &files, 22);
+
+    for threads in ["1", "2"] {
+        let out_dir = temp.child(format!("out-{threads}"));
+        run_json_events(
+            &[
+                "extract",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--output",
+                out_dir.path().to_str().expect("path"),
+                "--threads",
+                threads,
+                "--jsonl",
+            ],
+            0,
+        );
+        for (name, payload) in names.iter().zip(&payloads) {
+            assert_eq!(
+                &fs::read(out_dir.child(name).path()).expect("read extracted"),
+                payload,
+                "{name} with {threads} threads"
+            );
+        }
+    }
+}
+
 #[test]
 fn checksum_fails_on_truncated_zip_instead_of_hashing_the_container() {
     let temp = setup_temp_dir();
