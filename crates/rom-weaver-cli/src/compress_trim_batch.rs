@@ -133,7 +133,9 @@ impl CliApp {
             );
         }
         if !entry_names.is_empty()
-            && (!plan.handler.descriptor().matches_name("zip") || entry_names.len() != input.len())
+            && (!(plan.handler.descriptor().matches_name("zip")
+                || plan.handler.descriptor().matches_name("7z"))
+                || entry_names.len() != input.len())
         {
             return self.finish(
                 "compress",
@@ -141,7 +143,7 @@ impl CliApp {
                     OperationFamily::Container,
                     Some(plan.resolved_format.clone()),
                     "validate",
-                    "--entry-name requires ZIP format and one name per input",
+                    "--entry-name requires ZIP or 7z format and one name per input",
                     probe_threads,
                 ),
             );

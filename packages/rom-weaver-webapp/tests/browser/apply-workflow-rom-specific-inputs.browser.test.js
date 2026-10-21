@@ -320,59 +320,70 @@ test("CHD staging emits descent trace events", async () => {
   }
 });
 
-test("apply workflow stores direct CUE plus BIN raw output in one ZIP", async () => {
-  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const inputStem = `direct-disc-${runId}`;
-  const outputStem = `patched-disc-${runId}`;
-  const workflow = new ApplyWorkflow({
-    settings: {
-      output: {
-        compression: "none",
-        outputName: outputStem,
+test.each(["default", "custom", "cue extension"])(
+  "apply workflow stores direct CUE plus BIN raw output in one ZIP (%s name)",
+  async (naming) => {
+    const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const inputStem = `direct-disc-${runId}`;
+    const outputStem = `patched-disc-${runId}`;
+    const outputName = naming === "cue extension" ? `${outputStem}.cue` : outputStem;
+    const expectedStem = naming === "default" ? `${inputStem} [change]` : outputStem;
+    const workflow = new ApplyWorkflow({
+      settings: {
+        output: {
+          compression: "none",
+          ...(naming === "default" ? {} : { outputName }),
+        },
+        workers: {
+          threads: 1,
+        },
       },
-      workers: {
-        threads: 1,
-      },
-    },
-  });
-  try {
-    const rawInput = await loadFixtureFile(RAW_ROM);
-    const binFile = new File([await rawInput.arrayBuffer()], `${inputStem}.bin`, {
-      type: "application/octet-stream",
     });
-    const cueFile = new File(
-      [`FILE "${inputStem}.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n`],
-      `${inputStem}.cue`,
-      { type: "application/x-cue" },
-    );
-
-    await workflow.setInput([cueFile, binFile]);
-    await workflow.addPatch(await loadFixtureFile(RAW_PATCH));
-
-    const result = await workflow.run();
     try {
-      expect(result.outputs).toHaveLength(1);
-      expect(result.output.fileName).toBe(`${outputStem}.zip`);
-      expect(result.sizeSummary?.rawSize).toBeGreaterThan(rawInput.size);
+      const rawInput = await loadFixtureFile(RAW_ROM);
+      const binFile = new File([await rawInput.arrayBuffer()], `${inputStem}.bin`, {
+        type: "application/octet-stream",
+      });
+      const cueFile = new File(
+        [`FILE "${inputStem}.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n`],
+        `${inputStem}.cue`,
+        { type: "application/x-cue" },
+      );
 
-      const blob = await result.output.getBlob?.();
-      expect(blob).toBeInstanceOf(Blob);
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+      await workflow.setInput([cueFile, binFile]);
+      await workflow.addPatch(await loadFixtureFile(RAW_PATCH));
 
-      const entries = readZipCentralDirectoryEntries(bytes);
-      expect(entries.map((entry) => entry.fileName).sort()).toEqual([`${outputStem}.bin`, `${outputStem}.cue`]);
-      expect(entries.map((entry) => entry.method)).toEqual([0, 0]);
-      expect(entries.every((entry) => entry.compressedSize === entry.uncompressedSize)).toBe(true);
+      const result = await workflow.run();
+      try {
+        expect(result.outputs).toHaveLength(1);
+        expect(result.output.fileName).toBe(`${naming === "default" ? `${expectedStem}.cue` : outputName}.zip`);
+        expect(result.sizeSummary?.rawSize).toBeGreaterThan(rawInput.size);
 
-      const cueEntry = entries.find((entry) => entry.fileName === `${outputStem}.cue`);
-      expect(cueEntry).toBeTruthy();
-      const cueText = new TextDecoder().decode(readZipStoredEntryData(bytes, cueEntry));
-      expect(cueText).toContain(`FILE "${outputStem}.bin" BINARY`);
+        const blob = await result.output.getBlob?.();
+        expect(blob).toBeInstanceOf(Blob);
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+
+        const entries = readZipCentralDirectoryEntries(bytes);
+        expect(entries.map((entry) => entry.fileName).sort()).toEqual([`${expectedStem}.bin`, `${expectedStem}.cue`]);
+        expect(new Set(entries.map((entry) => entry.fileName)).size).toBe(2);
+        expect(entries.map((entry) => entry.method)).toEqual([0, 0]);
+        expect(entries.every((entry) => entry.compressedSize === entry.uncompressedSize)).toBe(true);
+
+        const cueEntry = entries.find((entry) => entry.fileName === `${expectedStem}.cue`);
+        expect(cueEntry).toBeTruthy();
+        const cueText = new TextDecoder().decode(readZipStoredEntryData(bytes, cueEntry));
+        expect(cueText).toContain(`FILE "${expectedStem}.bin" BINARY`);
+        const binEntry = entries.find((entry) => entry.fileName === `${expectedStem}.bin`);
+        expect(binEntry).toBeTruthy();
+        const expectedBin = new Uint8Array(await rawInput.arrayBuffer());
+        expectedBin[1] = 0x58;
+        expect(readZipStoredEntryData(bytes, binEntry)).toEqual(expectedBin);
+      } finally {
+        await result.output.dispose();
+      }
     } finally {
-      await result.output.dispose();
+      await workflow.dispose();
     }
-  } finally {
-    await workflow.dispose();
-  }
-});
+  },
+);

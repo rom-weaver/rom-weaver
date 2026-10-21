@@ -1713,3 +1713,113 @@ fn compress_rvz_rejects_non_disc_input_with_hint() {
     assert!(!label.contains("stream fallback failed"), "{label}");
     assert!(label.contains("`source.bin`"), "{label}");
 }
+
+#[test]
+fn compress_named_disc_outputs_round_trip() {
+    for format in ["zip", "7z"] {
+        let temp = setup_temp_dir();
+        let cue = temp.child("cue/disc.cue");
+        let track = temp.child("patched/disc.cue");
+        let cue_bytes =
+            b"FILE \"disc [change].bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n";
+        fs::create_dir_all(cue.path().parent().expect("cue directory")).expect("cue directory");
+        fs::create_dir_all(track.path().parent().expect("track directory"))
+            .expect("track directory");
+        fs::write(cue.path(), cue_bytes).expect("cue fixture");
+        fs::write(track.path(), b"patched track").expect("track fixture");
+        let archive = temp.child(format!("disc.{format}"));
+        isolated_json_event(
+            &temp,
+            &[
+                "compress",
+                "--json",
+                "-i",
+                cue.path().to_str().expect("cue path"),
+                "--entry-name",
+                "disc [change].cue",
+                "-i",
+                track.path().to_str().expect("track path"),
+                "--entry-name",
+                "disc [change].bin",
+                "-f",
+                format,
+                "-o",
+                archive.path().to_str().expect("archive path"),
+            ],
+            0,
+        );
+        let extracted = temp.child("extracted");
+        isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--json",
+                "-i",
+                archive.path().to_str().expect("archive path"),
+                "-o",
+                extracted.path().to_str().expect("output path"),
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(extracted.child("disc [change].cue").path()).expect("extracted cue"),
+            cue_bytes
+        );
+        assert_eq!(
+            fs::read(extracted.child("disc [change].bin").path()).expect("extracted track"),
+            b"patched track"
+        );
+    }
+}
+
+#[test]
+fn compress_named_inputs_reject_invalid_names_and_formats() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.bin");
+    source.write_str("payload").expect("fixture");
+    for format in ["zip", "7z"] {
+        for names in [vec!["../escape.bin"], vec!["one.bin", "two.bin"]] {
+            let archive = temp.child(format!("invalid.{format}"));
+            let mut args = vec![
+                "compress",
+                "--json",
+                "-i",
+                source.path().to_str().expect("source path"),
+                "-f",
+                format,
+                "-o",
+                archive.path().to_str().expect("archive path"),
+            ];
+            for name in names {
+                args.extend(["--entry-name", name]);
+            }
+            isolated_json_event(&temp, &args, 1);
+            assert!(!archive.path().exists());
+        }
+    }
+    let archive = temp.child("invalid.chd");
+    let terminal = isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--json",
+            "-i",
+            source.path().to_str().expect("source path"),
+            "-f",
+            "chd",
+            "--entry-name",
+            "logical.bin",
+            "-o",
+            archive.path().to_str().expect("archive path"),
+        ],
+        1,
+    );
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("validation label")
+            .contains("--entry-name requires"),
+        "{terminal}"
+    );
+    assert!(!archive.path().exists());
+}

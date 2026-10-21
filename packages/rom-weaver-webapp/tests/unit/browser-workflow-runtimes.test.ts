@@ -394,6 +394,49 @@ describe("browser archive runtime", () => {
     },
   );
 
+  it.each([
+    ["zip", undefined],
+    ["zip", false],
+    ["7z", undefined],
+    ["7z", false],
+    ["7z", true],
+  ])("uses logical flat %s names for VFS-backed disc outputs (preservePaths: %s)", async (format, preservePaths) => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const paths = ["/work/cue/disc [change].cue", "/work/patched/disc [change].cue"];
+    for (const filePath of paths) {
+      state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc [change].cue", filePath });
+    }
+
+    await runtime.create?.({
+      entries: [
+        { filename: "folder/disc [change].cue", filePath: paths[0] },
+        { filename: "folder/disc [change].bin", filePath: paths[1] },
+      ],
+      format,
+      options: { preservePaths },
+    } as never);
+
+    expect(state.compressionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputPaths: paths,
+        entryNames: ["disc [change].cue", "disc [change].bin"],
+      }),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it.each(["zip", "7z"])("rejects unsafe logical %s names before dispatch", async (format) => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.create?.({
+        entries: [{ filename: "../disc.bin", filePath: "/work/disc.bin" }],
+        format,
+      } as never),
+    ).rejects.toThrow("unsafe relative path");
+    expect(state.compressionCreate).not.toHaveBeenCalled();
+  });
+
   it("passes aligned relative entry names when a zip preserves paths", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
 
