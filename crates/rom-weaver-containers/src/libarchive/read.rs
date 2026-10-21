@@ -10,6 +10,7 @@ type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 // snapshot of the fork, and the accessor only exists in the staged build copy.
 unsafe extern "C" {
     fn rom_weaver_7zip_entry_solid_block(archive: *mut archive) -> i64;
+    fn rom_weaver_7zip_entry_decoder_bytes(archive: *mut archive) -> i64;
 }
 
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
@@ -276,6 +277,14 @@ impl<'a> ReadArchiveEntry<'a> {
     pub(crate) fn solid_block(&self) -> Option<u64> {
         let index = unsafe { rom_weaver_7zip_entry_solid_block(self.archive.as_ptr()) };
         u64::try_from(index).ok()
+    }
+
+    // Decoder working state (LZMA dictionaries, PPMd models) the 7z solid block holding this
+    // entry declares, or `None` when `solid_block` is `None`. Each worker that decodes the
+    // block allocates it, so it bounds how many workers fit the memory budget.
+    pub(crate) fn decoder_bytes(&self) -> Option<u64> {
+        let bytes = unsafe { rom_weaver_7zip_entry_decoder_bytes(self.archive.as_ptr()) };
+        u64::try_from(bytes).ok()
     }
 
     pub(crate) fn into_reader(self) -> ArchiveDataReader<'a> {

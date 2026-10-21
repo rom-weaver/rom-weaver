@@ -657,6 +657,103 @@ pub(crate) fn encode_all_varints(values: &[u64]) -> Vec<u8> {
     bytes
 }
 
+/// 7z's variable-length NUMBER: leading one bits in the first byte count the little-endian bytes
+/// that follow, and the first byte's remaining bits hold the value's top bits.
+fn encode_7z_number(out: &mut Vec<u8>, value: u64) {
+    let mut first = 0u8;
+    let mut mask = 0x80u8;
+    let mut extra = 0;
+    while extra < 8 {
+        if value < 1u64 << (7 * (extra + 1)) {
+            first |= (value >> (8 * extra)) as u8;
+            break;
+        }
+        first |= mask;
+        mask >>= 1;
+        extra += 1;
+    }
+    out.push(first);
+    out.extend_from_slice(&value.to_le_bytes()[..extra]);
+}
+
+/// Writes a 7z archive with one solid block (folder) per file, each an LZMA2 stream declaring
+/// dictionary property `dictionary_prop` (40 declares 4 GiB - 1) whatever its size. The streams
+/// use LZMA2's uncompressed chunks, so no encoder is involved and any declared dictionary is valid.
+pub(crate) fn write_7z_lzma2_folders_fixture(
+    path: &Path,
+    files: &[(&str, &[u8])],
+    dictionary_prop: u8,
+) {
+    let mut packed = Vec::new();
+    let mut pack_sizes = Vec::new();
+    for (_, data) in files {
+        let start = packed.len();
+        for (index, chunk) in data.chunks(1 << 16).enumerate() {
+            // Control 1 starts an uncompressed chunk and resets the dictionary; 2 continues it.
+            packed.push(if index == 0 { 0x01 } else { 0x02 });
+            let stored_len = u16::try_from(chunk.len() - 1).expect("LZMA2 chunk length");
+            packed.extend_from_slice(&stored_len.to_be_bytes());
+            packed.extend_from_slice(chunk);
+        }
+        packed.push(0x00);
+        pack_sizes.push((packed.len() - start) as u64);
+    }
+    let count = files.len() as u64;
+    // Header, MainStreamsInfo, PackInfo at offset 0 with one stream per folder.
+    let mut header = vec![0x01, 0x04, 0x06];
+    encode_7z_number(&mut header, 0);
+    encode_7z_number(&mut header, count);
+    header.push(0x09);
+    for size in &pack_sizes {
+        encode_7z_number(&mut header, *size);
+    }
+    header.push(0x00);
+    // UnPackInfo: inline folders of one coder each - flags 0x21 (1-byte id, has properties),
+    // id 0x21 (LZMA2), one property byte - then each folder's unpacked size.
+    header.extend_from_slice(&[0x07, 0x0B]);
+    encode_7z_number(&mut header, count);
+    header.push(0x00);
+    for _ in files {
+        header.extend_from_slice(&[0x01, 0x21, 0x21, 0x01, dictionary_prop]);
+    }
+    header.push(0x0C);
+    for (_, data) in files {
+        encode_7z_number(&mut header, data.len() as u64);
+    }
+    header.push(0x00);
+    // SubStreamsInfo: one file per folder (the default) with every CRC defined.
+    header.extend_from_slice(&[0x08, 0x0A, 0x01]);
+    for (_, data) in files {
+        header.extend_from_slice(&crc32fast::hash(data).to_le_bytes());
+    }
+    header.extend_from_slice(&[0x00, 0x00]);
+    // FilesInfo: inline UTF-16LE names, NUL-terminated.
+    header.push(0x05);
+    encode_7z_number(&mut header, count);
+    let mut names = vec![0x00];
+    for (name, _) in files {
+        for unit in name.encode_utf16() {
+            names.extend_from_slice(&unit.to_le_bytes());
+        }
+        names.extend_from_slice(&[0, 0]);
+    }
+    header.push(0x11);
+    encode_7z_number(&mut header, names.len() as u64);
+    header.extend_from_slice(&names);
+    header.extend_from_slice(&[0x00, 0x00]);
+
+    let mut start_header = Vec::new();
+    start_header.extend_from_slice(&(packed.len() as u64).to_le_bytes());
+    start_header.extend_from_slice(&(header.len() as u64).to_le_bytes());
+    start_header.extend_from_slice(&crc32fast::hash(&header).to_le_bytes());
+    let mut archive = vec![b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C, 0x00, 0x04];
+    archive.extend_from_slice(&crc32fast::hash(&start_header).to_le_bytes());
+    archive.extend_from_slice(&start_header);
+    archive.extend_from_slice(&packed);
+    archive.extend_from_slice(&header);
+    fs::write(path, archive).expect("write 7z fixture");
+}
+
 pub(crate) fn adler32(bytes: &[u8]) -> u32 {
     const MOD_ADLER: u32 = 65_521;
     let mut a = 1u32;

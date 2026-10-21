@@ -90,6 +90,22 @@ pub fn physical_memory_bytes() -> Option<u64> {
     None
 }
 
+/// Memory the engine may use, in bytes. The browser runner sets it to the shared memory maximum the
+/// browser granted (1 GiB on Apple mobile WebKit, up to the 4 GiB link maximum elsewhere); a native
+/// host can set it when physical RAM overstates its share, as under a container memory limit.
+const MEMORY_LIMIT_ENV: &str = "ROM_WEAVER_MEMORY_LIMIT_BYTES";
+
+/// Bytes the concurrent decoders of one operation may hold, for capping how many run at once.
+///
+/// Three quarters of `ROM_WEAVER_MEMORY_LIMIT_BYTES`, else of [`physical_memory_bytes`], leaving
+/// room for the runtime, I/O buffers, and thread stacks that per-decoder estimates leave out.
+/// Unknown memory imposes no cap.
+pub fn decode_memory_budget_bytes() -> u64 {
+    crate::env::env_u64_opt(MEMORY_LIMIT_ENV)
+        .or_else(physical_memory_bytes)
+        .map_or(u64::MAX, |bytes| bytes / 4 * 3)
+}
+
 /// Resolves the thread count for `ThreadBudget::Auto`: the host's available parallelism on
 /// native targets, falling back to [`DEFAULT_THREAD_COUNT`] on wasm or when the query fails.
 fn auto_thread_count() -> usize {
