@@ -215,6 +215,13 @@
         "status": "local"
       },
       "tests": ["mise run wasm-check"]
+    },
+    {
+      "file": "0018-preserve-unicode-normalization.patch",
+      "stage": "source",
+      "reason": "Preserve exact Unicode normalization sequences across UTF-8 archive boundaries.",
+      "upstream": { "status": "local" },
+      "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
     }
   ],
   "materialized": false,

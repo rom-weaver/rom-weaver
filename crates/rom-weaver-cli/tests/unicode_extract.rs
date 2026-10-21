@@ -38,10 +38,13 @@ fn create_unicode_archive_names_round_trip() {
     let temp = assert_fs::TempDir::new().expect("temporary directory");
     let payload = b"unicode payload\x00\xff";
     for format in ["zip", "7z"] {
-        for (index, name) in ["ゲーム.bin", "café.bin", "game.bin"].iter().enumerate() {
+        for (index, name) in ["ゲーム.bin", "café.bin", "cafe\u{301}.bin", "game.bin"]
+            .iter()
+            .enumerate()
+        {
             let source = temp.path().join(name);
             fs::write(&source, payload).expect("source payload");
-            let archive = temp.path().join(format!("created-{index}.{format}"));
+            let archive = temp.path().join(format!("créé-{index}.{format}"));
             cli(&temp)
                 .args(["compress", "--threads", "1", "--input"])
                 .arg(source)

@@ -1,7 +1,6 @@
 use std::ffi::c_void;
 use std::fs::File;
 use std::{
-    borrow::Cow,
     collections::BTreeSet,
     ffi::{CStr, CString},
     fs,
@@ -21,26 +20,25 @@ use sys::{
     archive_entry_filetype, archive_entry_pathname, archive_entry_pathname_utf8,
     archive_entry_size, archive_entry_size_is_set, archive_errno, archive_error_string,
     archive_filter_code, archive_format, archive_read_close, archive_read_data, archive_read_free,
-    archive_read_new, archive_read_next_header, archive_read_open_filename,
-    archive_read_support_filter_bzip2, archive_read_support_filter_compress,
-    archive_read_support_filter_gzip, archive_read_support_filter_lzip,
-    archive_read_support_filter_lzma, archive_read_support_filter_rpm,
-    archive_read_support_filter_uu, archive_read_support_filter_xz,
-    archive_read_support_filter_zstd, archive_read_support_format_7zip,
-    archive_read_support_format_ar, archive_read_support_format_cab,
-    archive_read_support_format_cpio, archive_read_support_format_empty,
-    archive_read_support_format_iso9660, archive_read_support_format_lha,
-    archive_read_support_format_mtree, archive_read_support_format_rar,
-    archive_read_support_format_rar5, archive_read_support_format_raw,
-    archive_read_support_format_tar, archive_read_support_format_warc,
-    archive_read_support_format_zip,
+    archive_read_new, archive_read_next_header, archive_read_support_filter_bzip2,
+    archive_read_support_filter_compress, archive_read_support_filter_gzip,
+    archive_read_support_filter_lzip, archive_read_support_filter_lzma,
+    archive_read_support_filter_rpm, archive_read_support_filter_uu,
+    archive_read_support_filter_xz, archive_read_support_filter_zstd,
+    archive_read_support_format_7zip, archive_read_support_format_ar,
+    archive_read_support_format_cab, archive_read_support_format_cpio,
+    archive_read_support_format_empty, archive_read_support_format_iso9660,
+    archive_read_support_format_lha, archive_read_support_format_mtree,
+    archive_read_support_format_rar, archive_read_support_format_rar5,
+    archive_read_support_format_raw, archive_read_support_format_tar,
+    archive_read_support_format_warc, archive_read_support_format_zip,
 };
 use sys::{
-    archive_entry_free, archive_entry_new, archive_entry_set_filetype, archive_entry_set_pathname,
-    archive_entry_set_perm, archive_entry_set_size, archive_write_add_filter_none,
-    archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
-    archive_write_header, archive_write_new, archive_write_open, archive_write_open_filename,
-    archive_write_set_bytes_in_last_block, archive_write_set_filter_option,
+    archive_entry_free, archive_entry_new2, archive_entry_set_filetype,
+    archive_entry_set_pathname_utf8, archive_entry_set_perm, archive_entry_set_size,
+    archive_write_add_filter_none, archive_write_close, archive_write_data,
+    archive_write_finish_entry, archive_write_free, archive_write_header, archive_write_new,
+    archive_write_open, archive_write_set_bytes_in_last_block, archive_write_set_filter_option,
     archive_write_set_format_7zip, archive_write_set_format_7zip_progress_callback,
     archive_write_set_format_7zip_size_hint, archive_write_set_format_option,
     archive_write_set_format_zip,
@@ -52,14 +50,17 @@ use sys::{
     archive_write_set_format_raw,
 };
 
+#[cfg(any(not(windows), test))]
+use ffi::path_to_cstring;
+#[cfg(any(not(windows), test))]
+use std::borrow::Cow;
+
 mod entries;
 mod ffi;
 mod read;
 mod write;
 
-pub(crate) use ffi::{
-    check_free_status, check_status_for_ptr, error_from_archive, path_to_cstring,
-};
+pub(crate) use ffi::{check_free_status, check_status_for_ptr, error_from_archive};
 
 pub use entries::{
     RegularArchiveEntryMetadata, RegularArchiveFileEntry, RegularArchiveProbeFormat,
@@ -488,4 +489,44 @@ mod tests {
             Ok(())
         })
     }
+    #[test]
+    fn archive_reader_preserves_distinct_unicode_normalizations() -> Result<()> {
+        run_with_large_stack("unicode-normalization", || {
+            let temp = TempDir::new("unicode-normalization")?;
+            for (format, fixture) in [("zip", NORMALIZATION_ZIP), ("7z", NORMALIZATION_7Z)] {
+                let input = temp.path().join(format!("café-normalization.{format}"));
+                fs::write(&input, fixture)?;
+                let mut reader = ReadArchive::new("Unicode reader")?;
+                reader.support_regular_archives("Unicode formats")?;
+                reader.open_filename(&input, "Unicode fixture", 4096, "Unicode open")?;
+                let mut decoded = BTreeMap::new();
+                while let Some(entry) = reader.next_entry()? {
+                    let name = match entry.pathname_utf8() {
+                        Ok(name) => name.to_owned(),
+                        Err(_) => entry.pathname_mb()?.to_string_lossy().into_owned(),
+                    };
+                    let mut bytes = Vec::new();
+                    entry.into_reader().read_to_end(&mut bytes)?;
+                    assert!(
+                        decoded.insert(name, bytes).is_none(),
+                        "duplicate decoded name in {format}"
+                    );
+                }
+                assert_eq!(
+                    decoded,
+                    BTreeMap::from([
+                        ("cafe\u{301}.bin".to_owned(), b"payload-0".to_vec()),
+                        ("café.bin".to_owned(), b"payload-1".to_vec()),
+                    ]),
+                    "exact names and bytes in {format}"
+                );
+                reader.close("Unicode close", "Unicode free")?;
+            }
+            Ok(())
+        })
+    }
+
+    const NORMALIZATION_ZIP: &[u8] = b"\x50\x4b\x03\x04\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\xc2\x54\xf8\xdd\x09\x00\x00\x00\x09\x00\x00\x00\x0a\x00\x00\x00\x63\x61\x66\x65\xcc\x81\x2e\x62\x69\x6e\x70\x61\x79\x6c\x6f\x61\x64\x2d\x30\x50\x4b\x03\x04\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\x54\x64\xff\xaa\x09\x00\x00\x00\x09\x00\x00\x00\x09\x00\x00\x00\x63\x61\x66\xc3\xa9\x2e\x62\x69\x6e\x70\x61\x79\x6c\x6f\x61\x64\x2d\x31\x50\x4b\x01\x02\x14\x03\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\xc2\x54\xf8\xdd\x09\x00\x00\x00\x09\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb4\x81\x00\x00\x00\x00\x63\x61\x66\x65\xcc\x81\x2e\x62\x69\x6e\x50\x4b\x01\x02\x14\x03\x14\x00\x00\x08\x00\x00\xd5\x14\x55\x5d\x54\x64\xff\xaa\x09\x00\x00\x00\x09\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb4\x81\x31\x00\x00\x00\x63\x61\x66\xc3\xa9\x2e\x62\x69\x6e\x50\x4b\x05\x06\x00\x00\x00\x00\x02\x00\x02\x00\x6f\x00\x00\x00\x61\x00\x00\x00\x00\x00";
+
+    const NORMALIZATION_7Z: &[u8] = b"\x37\x7a\xbc\xaf\x27\x1c\x00\x03\xd3\x81\x60\xb4\x84\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x00\x00\x00\x00\x00\x23\x80\x5a\x08\x00\x38\x18\x4b\x99\x75\x0f\x46\x08\x6a\xcf\x97\x7a\xe6\xdf\xf1\x27\xff\xfe\xde\xe8\x00\x00\x00\x81\x33\x07\xae\x0f\xcf\x5d\x2f\x0c\x07\xc8\x43\x80\x83\x81\x5b\xff\xac\x76\xcf\x78\x3f\x0e\x79\x6f\x73\xad\xac\xfd\xc5\xbb\x76\xcb\x70\xb6\xd6\xf4\xb2\x4a\x28\xf0\x2d\x5f\x91\x43\x64\x41\xec\x7d\xf2\xa4\xda\x92\xb6\x3f\x68\x78\x76\xf4\x16\x3e\x71\x93\xc9\xc2\x1d\x05\x8a\x0e\x7d\x89\x75\x58\x66\x34\x69\x23\x47\xaf\x2d\xbd\xfe\xa1\xf8\x1d\x96\x57\xa4\x47\x5f\xf3\x65\xe0\xfd\x31\xaf\xfb\xfd\x25\x02\xab\xdf\xff\xff\x87\x08\x00\x00\x17\x06\x16\x01\x09\x6e\x00\x07\x0b\x01\x00\x01\x23\x03\x01\x01\x05\x5d\x00\x00\x80\x00\x0c\x80\xa0\x0a\x01\x8c\xd2\x8a\xc4\x00\x00";
 }
