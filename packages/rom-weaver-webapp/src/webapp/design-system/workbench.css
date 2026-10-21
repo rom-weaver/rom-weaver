@@ -322,6 +322,22 @@
   inset: -4px -8px;
   content: "";
 }
+/* A finger gets a 44px-tall halo. Neighbours split the head's gap at its
+   midline: at full -8px reach they overlapped across the whole gap, and the
+   later control - Reset, after the switch - took every tap in it. The halo sits
+   2px high, inside the step head's top padding, so its bottom clears the drop
+   zone under the heading. Reset ends the row, so it keeps its full reach toward
+   the panel edge. */
+@media (pointer: coarse) {
+  .rw-app .reset-btn::after,
+  .rw-app .panel-view-toggle::after,
+  .rw-app .panel-threads-btn::after {
+    inset: -12px calc(var(--sp-m) / -2) -8px;
+  }
+  .rw-app .reset-btn::after {
+    inset-inline-end: -8px;
+  }
+}
 @media (hover: hover) {
   .rw-app .reset-btn:hover {
     color: var(--fault);
