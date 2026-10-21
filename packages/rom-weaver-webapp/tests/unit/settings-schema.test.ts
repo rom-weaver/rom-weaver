@@ -185,6 +185,18 @@ describe("validateSettingsDraft", () => {
     expect(result.messages.length).toBeGreaterThan(0);
   });
 
+  it.each(["1", "32769", "65535", "not-a-number"])("rejects invalid RVZ block size %s", (rvzBlockSize) => {
+    const result = validateSettingsDraft(validDraft({ rvzBlockSize }));
+    expect(result.invalidFields).toContain(getSettingsFieldId("rvzBlockSize"));
+    expect(result.messages.join(" ")).toContain("power of two");
+  });
+
+  it.each([32768, 65536, 1048576])("accepts RVZ block size %i", (rvzBlockSize) => {
+    const result = validateSettingsDraft(validDraft({ rvzBlockSize }));
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("rvzBlockSize"));
+    expect(result.settings.rvzBlockSize).toBe(rvzBlockSize);
+  });
+
   it("keeps `auto` worker threads and never flags them", () => {
     const result = validateSettingsDraft(validDraft({ threads: "auto" }));
     expect(result.settings.threads).toBe("auto");

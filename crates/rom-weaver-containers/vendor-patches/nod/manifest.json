@@ -263,6 +263,17 @@
         "cargo test -p rom-weaver-containers --lib",
         "cargo test -p rom-weaver-cli --test cli_smoke"
       ]
+    },
+    {
+      "file": "0021-lzma-dictionary-cap.patch",
+      "stage": "integration",
+      "reason": "Cap the WIA/RVZ LZMA decoder dictionary at the group's output size; each worker otherwise allocates the encoder preset's dictionary per group.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::util::compress::tests::"
+      ]
     }
   ],
   "materialized": true,

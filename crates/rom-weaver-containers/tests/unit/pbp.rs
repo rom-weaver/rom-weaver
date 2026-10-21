@@ -406,6 +406,7 @@ fn the_handler_describes_pbp_and_refuses_to_create_one() {
     let temp = TempDir::new("create");
     let context = test_context(temp.path());
     let request = ContainerCreateRequest {
+        rvz_block_size: None,
         archive_names: None,
         inputs: vec![temp.join("input.iso")],
         output: temp.join("output.pbp"),

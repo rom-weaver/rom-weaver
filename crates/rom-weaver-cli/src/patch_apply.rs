@@ -3977,6 +3977,7 @@ impl CliApp {
             compress_threads,
         );
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs,
             output: plan.output_path.clone(),

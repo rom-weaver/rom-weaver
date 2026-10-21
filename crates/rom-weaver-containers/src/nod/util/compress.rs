@@ -764,6 +764,13 @@ pub(crate) mod lzma_api {
         } else {
             lzma2_props_decode(props)?
         };
+        // The decode cannot produce more than `out`, so no match reaches further back. The props
+        // carry the encoder preset's dictionary (64 MiB at level 9) while a group decodes to one
+        // chunk, typically 128 KiB to 2 MiB, and every worker allocates it again per group.
+        let out_bound = u32::try_from(out.len()).unwrap_or(u32::MAX);
+        options.dict_size = options
+            .dict_size
+            .min(out_bound.max(lzma_raw::LZMA_DICT_SIZE_MIN));
         let filters = make_filters(filter_id, &mut options);
         let mut in_pos = 0usize;
         let mut out_pos = 0usize;

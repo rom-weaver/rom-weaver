@@ -105,60 +105,80 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
   }
 });
 
-test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async () => {
-  await resetRomWeaverRunner();
-  await warmupRomWeaverRunner();
-  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const source = `${WORKER_OPFS_MOUNTPOINT}/create-from-output-${runId}.rvz`;
-  const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
-  await browserRuntime.vfs.truncate(source, 0);
-  await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });
-  let extractedOutput = null;
-  let createdOutput = null;
-  try {
-    const extractResult = await browserRuntime.compression.extract?.({
-      entries: ["game.iso"],
-      format: "rvz",
-      options: {
-        threads: 1,
-      },
-      outputName: "game.iso",
-      source,
-    });
-    extractedOutput = extractResult?.output || null;
-    expect(extractedOutput?.size).toBeGreaterThan(0);
-
-    const createProgress = [];
-    const createResult = await browserRuntime.compression.create?.({
-      fileName: "game.iso",
-      format: "rvz",
-      options: {
-        onProgress: (event) => createProgress.push(event),
-        threads: 10,
-      },
-      outputName: "created-from-output.rvz",
-      romSpecific: {
-        rvz: {
-          codec: "zstd",
-          compressionLevel: 19,
+test.each([32768, 65536, 1048576])(
+  "rom-weaver runtime creates RVZ with %i-byte blocks from OPFS output",
+  async (blockSize) => {
+    await resetRomWeaverRunner();
+    await warmupRomWeaverRunner();
+    const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const source = `${WORKER_OPFS_MOUNTPOINT}/create-from-output-${runId}.rvz`;
+    const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
+    await browserRuntime.vfs.truncate(source, 0);
+    await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });
+    let extractedOutput = null;
+    let createdOutput = null;
+    let roundtripOutput = null;
+    try {
+      const extractResult = await browserRuntime.compression.extract?.({
+        entries: ["game.iso"],
+        format: "rvz",
+        options: {
+          threads: 1,
         },
-      },
-      source: extractedOutput,
-    });
-    createdOutput = createResult?.output || null;
-    expect(createdOutput?.fileName).toBe("created-from-output.rvz");
-    expect(createdOutput?.size).toBeGreaterThan(0);
-    expect(createProgress.some((event) => event.stage === "output" && event.percent === 0)).toBe(false);
-    expect(createProgress.some((event) => event.label === "finalizing `rvz` archive" && event.percent === 99)).toBe(
-      true,
-    );
-    expect(createProgress.some((event) => event.label === "finalizing `rvz` archive" && event.percent === null)).toBe(
-      false,
-    );
-    await browserRuntime.vfs.truncate(createdOutput.path, createdOutput.size);
-  } finally {
-    await createdOutput?.cleanup?.().catch(() => undefined);
-    await extractedOutput?.cleanup?.().catch(() => undefined);
-    await browserRuntime.vfs.remove(source).catch(() => undefined);
-  }
-});
+        outputName: "game.iso",
+        source,
+      });
+      extractedOutput = extractResult?.output || null;
+      expect(extractedOutput?.size).toBeGreaterThan(0);
+
+      const createProgress = [];
+      const createResult = await browserRuntime.compression.create?.({
+        fileName: "game.iso",
+        format: "rvz",
+        options: {
+          onProgress: (event) => createProgress.push(event),
+          threads: 10,
+        },
+        outputName: "created-from-output.rvz",
+        romSpecific: {
+          rvz: {
+            blockSize,
+            codec: "zstd",
+            compressionLevel: 19,
+          },
+        },
+        source: extractedOutput,
+      });
+      createdOutput = createResult?.output || null;
+      expect(createdOutput?.fileName).toBe("created-from-output.rvz");
+      expect(createdOutput?.size).toBeGreaterThan(0);
+      const compressed = await (await browserRuntime.publicOutput.getBlob(createdOutput)).arrayBuffer();
+      expect(new DataView(compressed).getUint32(84, false)).toBe(blockSize);
+      const roundtrip = await browserRuntime.compression.extract?.({
+        entries: ["roundtrip.iso"],
+        format: "rvz",
+        options: { threads: 1 },
+        outputName: "roundtrip.iso",
+        source: createdOutput,
+      });
+      roundtripOutput = roundtrip?.output || null;
+      expect(roundtripOutput?.size).toBe(extractedOutput.size);
+      const originalBytes = await (await browserRuntime.publicOutput.getBlob(extractedOutput)).arrayBuffer();
+      const roundtripBytes = await (await browserRuntime.publicOutput.getBlob(roundtripOutput)).arrayBuffer();
+      expect(new Uint8Array(roundtripBytes)).toEqual(new Uint8Array(originalBytes));
+      expect(createProgress.some((event) => event.stage === "output" && event.percent === 0)).toBe(false);
+      expect(createProgress.some((event) => event.label === "finalizing `rvz` archive" && event.percent === 99)).toBe(
+        true,
+      );
+      expect(createProgress.some((event) => event.label === "finalizing `rvz` archive" && event.percent === null)).toBe(
+        false,
+      );
+      await browserRuntime.vfs.truncate(createdOutput.path, createdOutput.size);
+    } finally {
+      await roundtripOutput?.dispose().catch(() => undefined);
+      await createdOutput?.cleanup?.().catch(() => undefined);
+      await extractedOutput?.cleanup?.().catch(() => undefined);
+      await browserRuntime.vfs.remove(source).catch(() => undefined);
+    }
+  },
+);

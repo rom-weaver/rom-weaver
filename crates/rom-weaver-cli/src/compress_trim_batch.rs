@@ -38,6 +38,7 @@ struct CompressPlan {
     archive_names: Option<Vec<String>>,
     codec: Option<String>,
     level: Option<i32>,
+    rvz_block_size: Option<u32>,
     create_threads: Option<ThreadExecution>,
 }
 
@@ -60,10 +61,12 @@ impl CliApp {
             requested_format = ?args.format,
             codec = ?args.codec,
             level = ?args.level,
+            rvz_block_size = ?args.rvz_block_size,
             threads = %args.threads,
             "starting compress command"
         );
         let CompressCommand {
+            rvz_block_size,
             input,
             entry_names,
             format,
@@ -96,6 +99,33 @@ impl CliApp {
 
         let context = self.context(threads);
         let probe_threads = context.single_thread_execution();
+        if rvz_block_size.is_some() {
+            let validation = self
+                .resolve_container_output_format(
+                    requested_format.as_deref(),
+                    &output,
+                    "--format",
+                    "",
+                )
+                .and_then(|resolution| {
+                    ContainerCreateRequest::validate_rvz_block_size(
+                        &resolution.format,
+                        rvz_block_size,
+                    )
+                });
+            if let Err(error) = validation {
+                return self.finish(
+                    "compress",
+                    OperationReport::failed_with_error(
+                        OperationFamily::Container,
+                        requested_format.clone(),
+                        "validate",
+                        error,
+                        probe_threads,
+                    ),
+                );
+            }
+        }
         if let Some(report) = self.validate_compress_paths(
             &input,
             &output,
@@ -118,6 +148,7 @@ impl CliApp {
             Err(report) => return self.finish("compress", *report),
         };
         let mut plan = plan;
+        plan.rvz_block_size = rvz_block_size;
         if let Err(error) = ensure_split_wbfs_inputs_complete(&input, &plan.resolved_format)
             .and_then(|()| ensure_compress_preserves_inputs(&input, &output, &plan.resolved_format))
         {
@@ -283,6 +314,7 @@ impl CliApp {
             archive_names: None,
             codec,
             level,
+            rvz_block_size: None,
             create_threads,
         })
     }
@@ -295,6 +327,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> OperationReport {
         let request = ContainerCreateRequest {
+            rvz_block_size: plan.rvz_block_size,
             archive_names: plan.archive_names.clone(),
             inputs: input.to_vec(),
             output: output.to_path_buf(),
@@ -328,6 +361,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> OperationReport {
         let CompressPlan {
+            rvz_block_size,
             handler,
             resolved_format,
             format_warning,
@@ -365,6 +399,7 @@ impl CliApp {
 
         let expected_output = output.clone();
         let request = ContainerCreateRequest {
+            rvz_block_size,
             archive_names: archive_names.clone(),
             inputs: input,
             output,
@@ -1306,6 +1341,7 @@ impl CliApp {
         );
 
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs,
             output: temp_output.clone(),

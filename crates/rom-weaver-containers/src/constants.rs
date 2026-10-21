@@ -5,7 +5,12 @@ pub(crate) const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 8 * 1024 * 1024;
 /// until the writer consumes it, so this bounds memory across workers and the
 /// channel backlog.
 pub(crate) const LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES: usize = 1024 * 1024;
+#[cfg(not(target_family = "wasm"))]
 pub(crate) const PARALLEL_COORDINATOR_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+/// The coordinator only parks in `pool.install`; on wasm its stack comes out of linear memory (see
+/// `DEFAULT_RAYON_STACK_SIZE_BYTES` in rom-weaver-core).
+#[cfg(target_family = "wasm")]
+pub(crate) const PARALLEL_COORDINATOR_STACK_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 const COPY_PROGRESS_DEFAULT_BUFFER_BYTES: usize = 64 * 1024;
 const COPY_PROGRESS_MIN_BUFFER_BYTES: u64 = 16 * 1024;

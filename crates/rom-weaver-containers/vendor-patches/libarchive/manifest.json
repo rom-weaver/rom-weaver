@@ -199,6 +199,18 @@
       "tests": ["cargo test -p rom-weaver-containers --test vendor_patch_queue"]
     },
     {
+      "file": "0018-7zip-dictionary-cap.patch",
+      "stage": "integration",
+      "reason": "Cap each LZMA1/LZMA2 dictionary at the folder's output size on both the SDK and liblzma decode paths; no match reaches past the output, and a larger dictionary can exceed a 1 GiB WebAssembly memory.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-cli --test cli_smoke extract_7z_with_a_dictionary_larger_than_the_address_space_limit",
+        "cargo test -p rom-weaver-cli --test cli_smoke extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits"
+      ]
+    },
+    {
       "file": "0016-wasm-tempdir.patch",
       "stage": "wasm",
       "reason": "Use an available WASI temporary directory without requiring host environment paths.",
@@ -215,6 +227,15 @@
         "status": "local"
       },
       "tests": ["mise run wasm-check"]
+    },
+    {
+      "file": "0018-7zip-folder-end-marker.patch",
+      "stage": "source",
+      "reason": "fix(7zip): read the next folder after one whose output filled the buffer before its end marker",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": ["cargo test -p rom-weaver-cli --test cli_smoke extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer"]
     }
   ],
   "materialized": false,

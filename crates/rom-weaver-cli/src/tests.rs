@@ -571,6 +571,7 @@ fn extract_payload_selection_collapses_multi_track_disc_without_prompting() {
 /// Compress `inputs` into a `zip` container at `output`, asserting the fixture build succeeds.
 fn compress_zip_fixture(app: &CliApp, inputs: &[PathBuf], output: &Path) {
     let outcome = app.run(Commands::Compress(CompressCommand {
+        rvz_block_size: None,
         input: inputs.to_vec(),
         entry_names: Vec::new(),
         format: Some("zip".to_string()),

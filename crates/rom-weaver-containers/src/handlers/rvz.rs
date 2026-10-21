@@ -393,6 +393,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        ContainerCreateRequest::validate_rvz_block_size(RVZ.name, request.rvz_block_size)?;
         let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let compression =
@@ -400,7 +401,9 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         let options = NodFormatOptions {
             format: NodFormat::Rvz,
             compression,
-            block_size: NodFormat::Rvz.default_block_size(),
+            block_size: request
+                .rvz_block_size
+                .unwrap_or_else(|| NodFormat::Rvz.default_block_size()),
         };
         let input_bytes = fs::metadata(input)?.len();
         let compression_label = normalize_codec_label(&options.compression.to_string());
@@ -414,6 +417,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             input_bytes,
             compression = %compression_label,
             block_size = options.block_size,
+            requested_block_size = ?request.rvz_block_size,
             effective_threads = execution.effective_threads,
             "rvz create start"
         );
@@ -466,6 +470,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<u64> {
+        ContainerCreateRequest::validate_rvz_block_size(RVZ.name, request.rvz_block_size)?;
         let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let compression =
@@ -473,7 +478,9 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         let options = NodFormatOptions {
             format: NodFormat::Rvz,
             compression,
-            block_size: NodFormat::Rvz.default_block_size(),
+            block_size: request
+                .rvz_block_size
+                .unwrap_or_else(|| NodFormat::Rvz.default_block_size()),
         };
 
         let mut last_emitted_percent = 0_u8;
