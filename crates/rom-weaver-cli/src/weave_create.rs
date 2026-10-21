@@ -779,6 +779,7 @@ impl CliApp {
             "creating weave weave archive"
         );
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs,
             output: weave.to_path_buf(),

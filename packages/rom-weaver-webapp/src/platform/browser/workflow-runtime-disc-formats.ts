@@ -80,6 +80,7 @@ const createBrowserDiscFormatsRuntime = (
     outputName,
     codec,
     compressionLevel,
+    blockSize,
     threads,
     logLevel,
     onLog,
@@ -98,6 +99,7 @@ const createBrowserDiscFormatsRuntime = (
           {
             codecs,
             format: "rvz",
+            rvzBlockSize: blockSize,
             inputPaths: [workerSource.filePath],
             invalidateMountCacheBeforeRun: true,
             knownInputPaths: [workerSource.filePath],

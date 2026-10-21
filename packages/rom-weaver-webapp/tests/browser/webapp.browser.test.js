@@ -615,6 +615,37 @@ test("WebappRoot reports the configured thread count before the workflow view to
   expect(threadButton.compareDocumentPosition(viewToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+test("the workflow heading sheds labels only when they would cover the step title", async () => {
+  // The heading is drawn over the first step's title row; its room depends on
+  // the locale and the switch state, so fixed breakpoints let labels land on it.
+  const clearance = () => {
+    const head = document.querySelector("#panel-patcher .workflow-panel-head");
+    const title = document.querySelector("#panel-patcher .step > .step-head > .step-title");
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const marks = [range.getBoundingClientRect(), title.nextElementSibling?.getBoundingClientRect()];
+    return head.getBoundingClientRect().left - Math.max(...marks.filter(Boolean).map((rect) => rect.right));
+  };
+  for (const [language, detailedViewEnabled] of [
+    ["de", true],
+    ["de", false],
+    ["es", true],
+  ]) {
+    mountWebappRoot({ settings: { ...getDefaultSettings(), detailedViewEnabled, language, threads: 16 } });
+    for (const width of [320, 360, 390, 430, 480, 600]) {
+      await page.viewport(width, 844);
+      await expect.poll(clearance, { timeout: 2000 }).toBeGreaterThanOrEqual(8);
+    }
+  }
+  // English fits its switch label at a common phone width, so it keeps it.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), language: "en", threads: 16 } });
+  await page.viewport(390, 844);
+  await expect.poll(clearance, { timeout: 2000 }).toBeGreaterThanOrEqual(8);
+  const toggleLabel = document.querySelector("#panel-patcher .panel-view-toggle span");
+  expect(getComputedStyle(toggleLabel).display).not.toBe("none");
+  await page.viewport(1280, 900);
+});
+
 test("the wordmark keeps its version while persistent status sits beside navigation", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });

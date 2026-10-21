@@ -204,6 +204,19 @@ const normalizeIntegerInRange = (value: IntegerInput, options: IntegerRangeOptio
   return Math.max(options.min, Math.min(options.max, parsed));
 };
 
+const parseRvzBlockSize = (value: IntegerInput): number | null => {
+  const failureMessage = "RVZ block size must be a power of two from 32768 to 1073741824 bytes.";
+  const size = parseIntegerInRange(value, {
+    allowEmpty: true,
+    failureMessage,
+    max: 2147483647,
+    min: 32768,
+    requireExactString: true,
+  });
+  if (size !== null && (size & (size - 1)) !== 0) throw new Error(failureMessage);
+  return size;
+};
+
 const getChdCodecLevelMax = (codec: string | null | undefined): number | null => {
   const normalizedCodec = String(codec || "").toLowerCase();
   return CHD_CODEC_LEVEL_MAX[normalizedCodec] ?? null;
@@ -247,4 +260,5 @@ export {
   normalizeCodecListWithFallback,
   normalizeIntegerInRange,
   parseIntegerInRange,
+  parseRvzBlockSize,
 };

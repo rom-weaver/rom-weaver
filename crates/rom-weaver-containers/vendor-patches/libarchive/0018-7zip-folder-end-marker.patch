@@ -1,0 +1,23 @@
+diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_read_support_format_7zip.c
+--- a/libarchive/archive_read_support_format_7zip.c
++++ b/libarchive/archive_read_support_format_7zip.c
+@@ -3737,7 +3737,18 @@
+ 			r = extract_pack_stream(a, 0);
+ 			if (r < 0)
+ 				return (r);
+-			return (get_uncompressed_data(a, buff, size, minimum));
++			/*
++			 * A folder whose output ended exactly on a full buffer
++			 * can leave its end marker unread. Decoding that marker
++			 * yields no data, so move on to the next pack stream
++			 * rather than return an empty read.
++			 */
++			if (zip->uncompressed_buffer_bytes_remaining > 0 ||
++			    zip->folder_outbytes_remaining > 0 ||
++			    zip->pack_stream_inbytes_remaining > 0)
++				return (get_uncompressed_data(a, buff, size,
++				    minimum));
++			read_consume(a);
+ 		} else if (zip->folder_outbytes_remaining > 0) {
+ 			/* Extract a remaining pack stream. */
+ 			r = extract_pack_stream(a, 0);

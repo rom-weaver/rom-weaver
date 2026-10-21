@@ -11,7 +11,13 @@ use crate::{Result, RomWeaverError};
 /// Fallback parallelism when the host CPU count is unavailable (notably wasm, where
 /// `available_parallelism` is not meaningful) or cannot be queried.
 const DEFAULT_THREAD_COUNT: usize = 4;
+#[cfg(not(target_family = "wasm"))]
 const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+/// wasi-threads stacks come out of the shared linear memory, which the browser may cap at 1 GiB,
+/// so every worker's reserve competes with decoder state. Workers peaked at 46 KiB across the
+/// native CLI smoke suite (debug build), and 2 MiB matches the std default other wasm threads use.
+#[cfg(target_family = "wasm")]
+const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 /// Upper bound on negotiated parallel threads under wasm. The JS host serves `thread-spawn`
 /// from a bounded WASI thread-worker pool; requesting more rayon workers than the pool can
@@ -88,6 +94,22 @@ pub fn wasm_linear_memory_used_bytes() -> u64 {
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_arch = "wasm32")))]
 pub fn physical_memory_bytes() -> Option<u64> {
     None
+}
+
+/// Memory the engine may use, in bytes. The browser runner sets it to the shared memory maximum the
+/// browser granted (1 GiB on Apple mobile WebKit, up to the 4 GiB link maximum elsewhere); a native
+/// host can set it when physical RAM overstates its share, as under a container memory limit.
+const MEMORY_LIMIT_ENV: &str = "ROM_WEAVER_MEMORY_LIMIT_BYTES";
+
+/// Bytes the concurrent decoders of one operation may hold, for capping how many run at once.
+///
+/// Three quarters of `ROM_WEAVER_MEMORY_LIMIT_BYTES`, else of [`physical_memory_bytes`], leaving
+/// room for the runtime, I/O buffers, and thread stacks that per-decoder estimates leave out.
+/// Unknown memory imposes no cap.
+pub fn decode_memory_budget_bytes() -> u64 {
+    crate::env::env_u64_opt(MEMORY_LIMIT_ENV)
+        .or_else(physical_memory_bytes)
+        .map_or(u64::MAX, |bytes| bytes / 4 * 3)
 }
 
 /// Resolves the thread count for `ThreadBudget::Auto`: the host's available parallelism on

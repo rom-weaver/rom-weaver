@@ -2808,6 +2808,55 @@ fn patch_create_candidates_drop_formats_that_cannot_shrink_the_output() {
 }
 
 #[test]
+fn patch_create_candidates_do_not_infer_shrink_from_compressed_file_sizes() {
+    for (original_name, modified_name) in [
+        ("old.zip", "new.7z"),
+        ("old.zip", "new.bin"),
+        ("old.bin", "new.7z"),
+        ("old.chd", "new.bin"),
+        ("old.bin", "new.rvz"),
+    ] {
+        let temp = setup_temp_dir();
+        let original = temp.child(original_name);
+        let modified = temp.child(modified_name);
+        fs::write(original.path(), [0; 128]).expect("fixture");
+        fs::write(modified.path(), [1; 64]).expect("fixture");
+
+        let home = temp.path().to_str().expect("home path");
+        let output = command_stdout_with_env(
+            &[
+                "patch",
+                "create",
+                "--plan",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            &[
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let candidates = &json["details"]["patch_create_format_candidates"];
+        assert_eq!(candidates["source_values"]["original"]["size"], 128);
+        assert_eq!(candidates["source_values"]["modified"]["size"], 64);
+        let formats = candidates["formats"].as_array().expect("formats array");
+        for format in ["ebp", "ppf"] {
+            assert!(
+                formats.iter().any(|value| value == format),
+                "{original_name} -> {modified_name} lost {format}: {json}"
+            );
+        }
+    }
+}
+
+#[test]
 fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");

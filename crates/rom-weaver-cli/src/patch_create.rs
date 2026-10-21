@@ -502,7 +502,10 @@ impl CliApp {
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
         let mut formats = candidates.formats.to_vec();
-        if sizes.modified < sizes.original {
+        let input_sizes_are_raw = [&input_info.original, &input_info.modified]
+            .iter()
+            .all(|source| !source.archive && !source.special_compression);
+        if input_sizes_are_raw && sizes.modified < sizes.original {
             debug!("patch create plan drops formats that cannot shrink the output");
             formats.retain(|format| !NO_SHRINK_CREATE_PATCH_FORMATS.contains(format));
         }

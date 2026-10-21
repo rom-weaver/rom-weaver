@@ -29,6 +29,8 @@ For a disc inside ZIP, 7z, or another supported container, add the container to 
 4. Select **Compress** and wait for the result.
 5. Select **Download** and save the `.rvz` file.
 
+Block size defaults to 131072 bytes. Enter a power of two from 32768 to 1073741824 bytes. Examples include 32768, 65536, and 1048576. Invalid values show an error before compression starts.
+
 If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead.
 
 Keep the page open until compression and download finish. To stop compression, use the cancel control on the progress bar.

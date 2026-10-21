@@ -38,10 +38,24 @@ typedef struct rw_lzma_dec rw_lzma_dec;
 
 /*
  * lzma2 != 0 selects LZMA2 (props is the single dictionary-size byte);
- * otherwise LZMA1 (props is the 5-byte header). Returns NULL on allocation
- * failure or malformed properties.
+ * otherwise LZMA1 (props is the 5-byte header). max_output bounds the bytes
+ * the stream decodes to (UINT64_MAX when unknown). A match only reaches back
+ * over bytes already produced, so the decoder allocates a dictionary no larger
+ * than max_output: a 100 MiB file packed with a 1.5 GiB dictionary needs
+ * 100 MiB, which decides whether it fits a 1 GiB WebAssembly memory at all.
+ * Returns NULL on allocation failure or malformed properties.
  */
-rw_lzma_dec *rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size);
+rw_lzma_dec *rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size,
+    uint64_t max_output);
+
+/*
+ * Dictionary size rw_lzma_dec_new allocates for the same arguments, before the
+ * SDK rounds it up to its allocation granularity, or 0 for malformed
+ * properties. Extraction planning uses it to fit concurrent decoders into the
+ * memory budget.
+ */
+uint64_t rw_lzma_dec_dict_size(int lzma2, const uint8_t *props,
+    size_t props_size, uint64_t max_output);
 void rw_lzma_dec_free(rw_lzma_dec *dec);
 
 /*
