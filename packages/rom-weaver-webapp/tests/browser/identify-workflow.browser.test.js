@@ -463,6 +463,83 @@ test("text that is not a checksum searches the titles, and no title is not an an
   expect(host.querySelector(".unified-drop-step--hero")).not.toBeNull();
 });
 
+test("reopening title results keeps the selected game visible", async () => {
+  searchExpectedRomTitles.mockResolvedValue({
+    status: "ok",
+    titles: Array.from({ length: 50 }, (_, index) => ({
+      name: `Game ${index}`,
+      platform: "Nintendo - Game Boy Advance",
+      slug: `game-${index}`,
+    })),
+  });
+  await mountIdentifyForm();
+  setHashInput("games");
+  submitSearch();
+  await waitFor(() => host.querySelectorAll('[role="option"]').length === 50);
+  const input = host.querySelector(".identify-search-input");
+  input.focus();
+  const press = (key) => input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+  const selectedVisible = () => {
+    const selected = host.querySelector('[role="option"][aria-selected="true"]');
+    const list = host.querySelector('[role="listbox"]');
+    if (!(selected && list)) return false;
+    const row = selected.getBoundingClientRect();
+    const viewport = list.getBoundingClientRect();
+    return row.top >= viewport.top - 1 && row.bottom <= viewport.bottom + 1;
+  };
+
+  press("ArrowUp");
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+  press("Escape");
+  await waitFor(() => !host.querySelector('[role="listbox"]'));
+  press("ArrowUp");
+  await waitFor(() => host.querySelector('[role="listbox"]'));
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+});
+
+test.each(["Pokemon Emerald", "Metroid Fusion"])(
+  "an external title handoff reopens dismissed results for %s",
+  async (nextTitle) => {
+    const renderRequest = (id, name) => {
+      searchExpectedRomByName.mockResolvedValue({ status: "matched", matches: [gbaMatch(`${name} (USA)`)] });
+      root.render(
+        createElement(
+          RomWeaverSettingsProvider,
+          { settings: { detailedViewEnabled: true } },
+          createElement(IdentifyForm, {
+            lookupRequest: {
+              id,
+              selection: {
+                kind: "title",
+                query: name,
+                title: { name, platform: "Nintendo - Game Boy Advance", slug: "nintendo-game-boy-advance" },
+              },
+            },
+          }),
+        ),
+      );
+    };
+    await mountIdentifyForm();
+    renderRequest(1, "Metroid Fusion");
+    await waitFor(() => host.querySelector('[role="option"]'));
+    const input = host.querySelector('[role="combobox"]');
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await waitFor(() => !host.querySelector('[role="listbox"]'));
+    expect(input.value).toBe("Metroid Fusion");
+    input.blur();
+
+    renderRequest(2, nextTitle);
+    await waitFor(() => searchExpectedRomByName.mock.calls.length === 2 && !host.querySelector('[aria-busy="true"]'));
+    const nextInput = host.querySelector('[role="combobox"]');
+    expect(nextInput.value).toBe(nextTitle);
+    expect(nextInput.getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector('[role="option"]').textContent).toContain(`${nextTitle} (USA)`);
+  },
+);
+
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();
   setHashInput("abc123abc123");

@@ -10,6 +10,7 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
@@ -1718,7 +1719,7 @@ export const runE2EScenario = async (name, run, report = (line) => process.stdou
         /browser has been closed|browser.*disconnected|Target crashed|ECONNRESET|ECONNREFUSED|net::ERR_CONNECTION_(?:RESET|CLOSED)/i.test(
           message,
         );
-      report(`FAIL ${name} attempt=${attempt}: ${error?.stack || message}`);
+      report(`FAIL ${name} attempt=${attempt}: ${inspect(error, { colors: false, depth: null })}`);
       if (attempt === E2E_ATTEMPTS || !infrastructureFailure) throw error;
       report(`RETRY ${name} with a fresh browser`);
     } finally {
@@ -1749,7 +1750,7 @@ const run = async () => {
 // pure helpers and must not trigger a full browser E2E run as a side effect.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   run().catch((error) => {
-    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.stderr.write(`${inspect(error, { colors: false, depth: null })}\n`);
     process.exitCode = 1;
   });
 }

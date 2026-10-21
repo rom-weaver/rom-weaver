@@ -462,7 +462,13 @@ const IdentifyForm = ({
         supported={IDENTIFY_SUPPORTED_FILES}
         afterDropZone={
           heroShown ? (
-            <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" />
+            <RomSearch
+              key={lookupRequest?.id}
+              idPrefix={containerId}
+              localizer={localizer}
+              lookup={romLookup}
+              sampleChecksum="46df91ad"
+            />
           ) : null
         }
       />
@@ -559,7 +565,13 @@ const IdentifyForm = ({
                 removeLabel="Clear the expected ROM"
               />
               {expectationCheatIdentity ? <IdentifyCheatInspection identity={expectationCheatIdentity} /> : null}
-              <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} variant="compact" />
+              <RomSearch
+                key={lookupRequest?.id}
+                idPrefix={containerId}
+                localizer={localizer}
+                lookup={romLookup}
+                variant="compact"
+              />
             </>
           }
           items={[]}

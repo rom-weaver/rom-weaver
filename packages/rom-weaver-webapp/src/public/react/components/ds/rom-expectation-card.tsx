@@ -512,6 +512,7 @@ const RomSearch = ({
 }) => {
   const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
   const [showChecksums, setShowChecksums] = useState(false);
+  const [resultsDismissed, setResultsDismissed] = useState(false);
   const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
   const resultListId = `${inputId}-results`;
@@ -556,13 +557,16 @@ const RomSearch = ({
         ? Math.min(lookup.titles.length, visibleTitleCount)
         : 0;
   const [selectedResult, setSelectedResult] = useState(0);
+  const resultsExpanded = !resultsDismissed && resultCount > 0;
+  const showTitles = !(resultsDismissed || chosen);
   const boundedSelectedResult = resultCount ? Math.min(selectedResult, resultCount - 1) : 0;
   useEffect(() => {
     setSelectedResult((index) => (resultCount ? Math.min(index, resultCount - 1) : 0));
   }, [resultCount]);
   useEffect(() => {
+    if (!resultsExpanded) return;
     resultButtonsRef.current[boundedSelectedResult]?.scrollIntoView?.({ block: "nearest" });
-  }, [boundedSelectedResult]);
+  }, [boundedSelectedResult, resultsExpanded]);
   const chooseSelectedResult = () => {
     if (resultKind === "version") {
       const match = lookup.versions[boundedSelectedResult];
@@ -571,6 +575,10 @@ const RomSearch = ({
     }
     const title = lookup.titles[boundedSelectedResult];
     if (title) void lookup.chooseTitle(title);
+  };
+  const setSearchText = (text: string, composing?: boolean) => {
+    setResultsDismissed(false);
+    lookup.setText(text, composing);
   };
   useKeepInputVisible(inputRef, formRef);
   return (
@@ -581,18 +589,28 @@ const RomSearch = ({
       onSubmit={(event) => {
         event.preventDefault();
         if (lookup.busy) return;
+        setResultsDismissed(false);
         void lookup.search();
       }}
       onKeyDown={(event) => {
+        if (event.key === "Escape" && (resultsExpanded || searching)) {
+          event.preventDefault();
+          event.stopPropagation();
+          inputRef.current?.focus();
+          setResultsDismissed(true);
+          return;
+        }
         if (event.target !== inputRef.current) return;
         if (searching || !resultCount) return;
         if (event.key === "ArrowDown") {
           event.preventDefault();
-          setSelectedResult((index) => (index + 1) % resultCount);
+          setResultsDismissed(false);
+          setSelectedResult((index) => (resultsExpanded ? (index + 1) % resultCount : 0));
         } else if (event.key === "ArrowUp") {
           event.preventDefault();
-          setSelectedResult((index) => (index <= 0 ? resultCount - 1 : index - 1));
-        } else if (event.key === "Enter") {
+          setResultsDismissed(false);
+          setSelectedResult((index) => (!resultsExpanded || index <= 0 ? resultCount - 1 : index - 1));
+        } else if (event.key === "Enter" && resultsExpanded) {
           event.preventDefault();
           chooseSelectedResult();
         }
@@ -604,18 +622,20 @@ const RomSearch = ({
       </label>
       <div className="identify-search-row">
         <input
-          aria-activedescendant={resultCount ? `${resultListId}-${boundedSelectedResult}` : undefined}
+          aria-activedescendant={resultsExpanded ? `${resultListId}-${boundedSelectedResult}` : undefined}
           aria-autocomplete="list"
-          aria-controls={resultCount ? resultListId : undefined}
-          aria-expanded={resultCount > 0}
+          aria-controls={resultsExpanded ? resultListId : undefined}
+          aria-expanded={resultsExpanded}
           aria-invalid={lookup.error ? "true" : undefined}
           autoComplete="off"
           className="input identify-search-input"
           id={inputId}
-          onChange={(event) => lookup.setText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
-          onCompositionEnd={(event) => lookup.setText(event.currentTarget.value, false)}
-          onCompositionStart={(event) => lookup.setText(event.currentTarget.value, true)}
+          onChange={(event) => setSearchText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
+          onClick={() => setResultsDismissed(false)}
+          onCompositionEnd={(event) => setSearchText(event.currentTarget.value, false)}
+          onCompositionStart={(event) => setSearchText(event.currentTarget.value, true)}
           onFocus={() => {
+            setResultsDismissed(false);
             if (!(searching || resultCount)) void lookup.search();
           }}
           enterKeyHint="search"
@@ -632,7 +652,7 @@ const RomSearch = ({
             disabled={searching}
             onClick={() => {
               inputRef.current?.focus();
-              lookup.setText(sampleChecksum);
+              setSearchText(sampleChecksum);
             }}
             ref={sampleRef}
             type="button"
@@ -652,7 +672,7 @@ const RomSearch = ({
           {lookup.error}
         </p>
       ) : null}
-      {chosen ? (
+      {!resultsDismissed && chosen ? (
         <div className="identify-search-results-head">
           <p className="identify-search-results-label">
             {localizer.message("ui.identify.versionResults", { platform: chosen.platform, title: chosen.name })}
@@ -661,12 +681,12 @@ const RomSearch = ({
             {localizer.message("ui.identify.versionsBack")}
           </button>
         </div>
-      ) : lookup.titles.length ? (
+      ) : !resultsDismissed && lookup.titles.length ? (
         <div className="identify-search-results-head">
           <p className="identify-search-results-label">{localizer.message("ui.identify.titleResults")}</p>
         </div>
       ) : null}
-      {lookup.versions.length ? (
+      {!resultsDismissed && lookup.versions.length ? (
         <label className="identify-search-checks-option">
           <input
             checked={showChecksums}
@@ -676,7 +696,7 @@ const RomSearch = ({
           {localizer.message("ui.identify.showChecksums")}
         </label>
       ) : null}
-      {lookup.versions.length ? (
+      {!resultsDismissed && lookup.versions.length ? (
         <div
           aria-label={localizer.message("ui.identify.versionResultsList")}
           className="identify-search-results"
@@ -698,7 +718,7 @@ const RomSearch = ({
           ))}
         </div>
       ) : null}
-      {!chosen && lookup.titles.length ? (
+      {showTitles && lookup.titles.length ? (
         <div
           aria-label={localizer.message("ui.identify.titleResults")}
           className="identify-search-results"
@@ -719,7 +739,7 @@ const RomSearch = ({
           ))}
         </div>
       ) : null}
-      {!chosen && lookup.titles.length > visibleTitleCount ? (
+      {showTitles && lookup.titles.length > visibleTitleCount ? (
         <button
           className="btn identify-search-more"
           onClick={() => setTitlePage({ titles: lookup.titles, count: visibleTitleCount + 50 })}

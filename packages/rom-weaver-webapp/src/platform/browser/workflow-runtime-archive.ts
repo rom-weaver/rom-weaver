@@ -260,10 +260,11 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
     const format = workflowInput.format || workflowInput.options?.compression || "7z";
     const staged = await stageBrowserCompressionEntries(workflowInput.entries, workerIo);
     try {
-      const entryNames =
-        format === "zip" && workflowInput.options?.preservePaths
-          ? staged.entryNames.map(normalizeArchiveRelativePath)
-          : undefined;
+      const entryNames = staged.entryNames.map((name) => {
+        const relativePath = normalizeArchiveRelativePath(name);
+        if (format === "zip" && workflowInput.options?.preservePaths) return relativePath;
+        return getPathBaseName(relativePath);
+      });
       const codec = format === "zip" ? workflowInput.options?.zipCodec : workflowInput.options?.sevenZipCodec;
       const level = format === "zip" ? workflowInput.options?.zipLevel : workflowInput.options?.sevenZipLevel;
       const levelProfile = toLevelProfile(level);
