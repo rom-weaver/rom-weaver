@@ -11,7 +11,13 @@ use crate::{Result, RomWeaverError};
 /// Fallback parallelism when the host CPU count is unavailable (notably wasm, where
 /// `available_parallelism` is not meaningful) or cannot be queried.
 const DEFAULT_THREAD_COUNT: usize = 4;
+#[cfg(not(target_family = "wasm"))]
 const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+/// wasi-threads stacks come out of the shared linear memory, which the browser may cap at 1 GiB,
+/// so every worker's reserve competes with decoder state. Workers peaked at 46 KiB across the
+/// native CLI smoke suite (debug build), and 2 MiB matches the std default other wasm threads use.
+#[cfg(target_family = "wasm")]
+const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 /// Upper bound on negotiated parallel threads under wasm. The JS host serves `thread-spawn`
 /// from a bounded WASI thread-worker pool; requesting more rayon workers than the pool can
