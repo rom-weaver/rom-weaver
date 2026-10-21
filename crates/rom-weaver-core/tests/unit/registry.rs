@@ -287,6 +287,7 @@ fn guard_probe_request() -> ContainerProbeRequest {
 
 fn guard_create_request() -> ContainerCreateRequest {
     ContainerCreateRequest {
+        rvz_block_size: None,
         archive_names: None,
         inputs: Vec::new(),
         output: PathBuf::from("out.guard"),
@@ -1037,4 +1038,43 @@ fn validate_via_apply_propagates_an_apply_error() {
         .map(|_| ())
         .expect_err("an apply failure must surface");
     assert_eq!(error.to_string(), "validation failed: dry-run apply failed");
+}
+
+#[test]
+fn rvz_block_size_is_rejected_by_other_registered_handlers() {
+    let handler = crate::traced_container_handler(
+        Arc::new(SentinelHandler),
+        guard_registration(CreateSupport::Supported),
+    );
+    let context = guard_context();
+    let mut request = guard_create_request();
+    request.rvz_block_size = Some(65536);
+    request.format = "rvz".to_string();
+    for result in [
+        handler.create(&request, &context).map(|_| ()),
+        handler
+            .create_with_input_overrides(&request, &[], &context)
+            .map(|_| ()),
+        handler.create_dry_run_size(&request, &context).map(|_| ()),
+    ] {
+        let error = result.expect_err("RVZ options must not reach a different handler");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires RVZ output format")),
+            "unexpected error: {error}"
+        );
+    }
+}
+
+#[test]
+fn rvz_block_size_validation_accepts_u32_power_of_two_boundaries() {
+    for size in [32768, 65536, 131072, 1048576, 1_u32 << 31] {
+        ContainerCreateRequest::validate_rvz_block_size("rvz", Some(size)).expect("valid RVZ size");
+    }
+    for size in [0, 1, 32767, 65535, u32::MAX] {
+        assert!(
+            ContainerCreateRequest::validate_rvz_block_size("rvz", Some(size)).is_err(),
+            "invalid RVZ size {size}"
+        );
+    }
+    ContainerCreateRequest::validate_rvz_block_size("zip", None).expect("no RVZ option");
 }

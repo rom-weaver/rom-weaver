@@ -82,6 +82,8 @@ Output flags remain `-o`/`--output` on commands that accept them. `patch create`
 
 Native `extract` and `compress` also accept input `-`. Their [binary pipeline options](#binary-pipelines) control stdin filenames and binary stdout.
 
+`compress --rvz-block-size BYTES` sets the RVZ block size. Values must be powers of two, from 32768 to 2147483648 bytes. The default is 131072 bytes. Other output formats reject this option.
+
 `patch apply` and `patch validate` reject a pipe or other non-regular file as `--input` because patches seek within the ROM.
 
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.

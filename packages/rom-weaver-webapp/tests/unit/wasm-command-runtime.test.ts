@@ -418,6 +418,45 @@ describe("weave runtime workers", () => {
 });
 
 describe("output-producing runtime workers", () => {
+  it.each([32768, 65536, 1048576])("dispatches an RVZ block size of %i bytes", async (rvzBlockSize) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    const input = {
+      format: "rvz",
+      inputPaths: ["/in/game.iso"],
+      outputFileName: "game.rvz",
+      rvzBlockSize: String(rvzBlockSize),
+    };
+    await invokeRomWeaverCompressionCreateWorker(input);
+    expect(lastCall()[0].args).toMatchObject({ rvz_block_size: rvzBlockSize });
+  });
+
+  it.each([undefined, null, ""])("omits the RVZ block size when unset (%s)", async (rvzBlockSize) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    const input = {
+      format: "rvz",
+      inputPaths: ["/in/game.iso"],
+      outputFileName: "game.rvz",
+      rvzBlockSize,
+    };
+    await invokeRomWeaverCompressionCreateWorker(input);
+    expect(lastCall()[0].args).not.toHaveProperty("rvz_block_size");
+  });
+
+  it.each(["not-a-number", "0", "1", "65535", "32768.5", "2147483648"])(
+    "rejects invalid RVZ block size %s before starting the worker",
+    async (rvzBlockSize) => {
+      mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+      const input = {
+        format: "rvz",
+        inputPaths: ["/in/game.iso"],
+        outputFileName: "game.rvz",
+        rvzBlockSize,
+      };
+      await expect(invokeRomWeaverCompressionCreateWorker(input)).rejects.toThrow("RVZ block size");
+      expect(mocks.runRomWeaverJson).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["cd", "dvd"] as const)("dispatches default %s codecs with Min, Medium, and Max profiles", async (mode) => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),

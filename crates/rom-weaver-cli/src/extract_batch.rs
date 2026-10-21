@@ -224,6 +224,7 @@ mod tests {
         let (reporter, prompter) = silent();
         let outcome = RomWeaverApp::run(
             Commands::Compress(CompressCommand {
+                rvz_block_size: None,
                 input: vec![input],
                 entry_names: Vec::new(),
                 format: Some("zip".to_string()),

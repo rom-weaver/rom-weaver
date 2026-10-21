@@ -949,6 +949,15 @@ describe("browser CHD runtime", () => {
 });
 
 describe("browser disc format runtimes", () => {
+  it("forwards the selected RVZ block size to the compression command", async () => {
+    const runtime = createBrowserDiscFormatsRuntime(io as never);
+    await runtime.createRvz({ source: "game.iso", fileName: "game.iso", outputName: "game.rvz", blockSize: "32768" });
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      format: "rvz",
+      rvzBlockSize: "32768",
+    });
+  });
+
   it("creates RVZ and Z3DS outputs with format-specific defaults", async () => {
     const runtime = createBrowserDiscFormatsRuntime(io as never);
     await expect(

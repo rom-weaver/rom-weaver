@@ -261,6 +261,7 @@ impl ContainerExtractRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerCreateRequest {
+    pub rvz_block_size: Option<u32>,
     pub inputs: Vec<PathBuf>,
     pub archive_names: Option<Vec<String>>,
     pub output: PathBuf,
@@ -268,6 +269,25 @@ pub struct ContainerCreateRequest {
     pub codec: Option<String>,
     pub level: Option<i32>,
     pub parent: Option<PathBuf>,
+}
+
+impl ContainerCreateRequest {
+    pub fn validate_rvz_block_size(format: &str, block_size: Option<u32>) -> Result<()> {
+        let Some(block_size) = block_size else {
+            return Ok(());
+        };
+        if !format.eq_ignore_ascii_case("rvz") {
+            return Err(RomWeaverError::Validation(
+                "--rvz-block-size requires RVZ output format".to_string(),
+            ));
+        }
+        if block_size < 32768 || !block_size.is_power_of_two() {
+            return Err(RomWeaverError::Validation(
+                "--rvz-block-size must be a power of two of at least 32768 bytes".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Where a container create handler should read one input from, when the bytes
@@ -745,6 +765,10 @@ impl ContainerHandlerOperations for TracingContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        ContainerCreateRequest::validate_rvz_block_size(
+            self.registration.descriptor.name,
+            request.rvz_block_size,
+        )?;
         let descriptor = self.registration.descriptor;
         trace!(
             family = ?descriptor.family,
@@ -754,6 +778,7 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             requested_format = %request.format,
             codec = ?request.codec,
             level = ?request.level,
+            rvz_block_size = ?request.rvz_block_size,
             parent = ?request.parent.as_ref().map(|path| path.display().to_string()),
             "container create start"
         );
@@ -778,6 +803,10 @@ impl ContainerHandlerOperations for TracingContainerHandler {
         overrides: &[CreateInputOverride],
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        ContainerCreateRequest::validate_rvz_block_size(
+            self.registration.descriptor.name,
+            request.rvz_block_size,
+        )?;
         let descriptor = self.registration.descriptor;
         trace!(
             family = ?descriptor.family,
@@ -809,6 +838,10 @@ impl ContainerHandlerOperations for TracingContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<u64> {
+        ContainerCreateRequest::validate_rvz_block_size(
+            self.registration.descriptor.name,
+            request.rvz_block_size,
+        )?;
         match &self.registration.create_support {
             CreateSupport::Supported => self.inner.create_dry_run_size(request, context),
             CreateSupport::ExtractOnly {

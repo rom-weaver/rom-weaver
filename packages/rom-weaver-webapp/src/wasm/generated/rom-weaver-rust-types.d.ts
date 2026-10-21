@@ -461,7 +461,7 @@ records: Array<CheatRecord>,
  */
 exportPatches?: boolean, };
 
-export type CompressCommand = { input: Array<string>, entry_names?: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
+export type CompressCommand = { rvz_block_size?: number, input: Array<string>, entry_names?: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
 export type TrimCommand = { input: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, filter?: Array<FilterKind>,
 /**

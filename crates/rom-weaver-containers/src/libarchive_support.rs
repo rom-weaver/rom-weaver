@@ -2724,6 +2724,7 @@ mod tests {
 
         let output = dir.join("archive.zip");
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs: archive_entries
                 .iter()

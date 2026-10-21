@@ -6,6 +6,7 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
+import { parseRvzBlockSize } from "../../platform/shared/compression-options.ts";
 import type { CompressionLevelProfile } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { getPathBaseName } from "../path-utils.ts";
@@ -48,6 +49,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     levelProfile?: string | null;
     logLevel?: LogLevel | string;
     outputFileName: string;
+    rvzBlockSize?: string | number | null;
     signal?: AbortSignal;
     totalBytes?: number | null;
     virtualFiles?: RuntimeValue[];
@@ -66,6 +68,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
   if (entryNames.length && entryNames.length !== inputPaths.length) {
     throw new Error("Compression create entry names must align with input paths");
   }
+  const rvzBlockSize = parseRvzBlockSize(input.rvzBlockSize);
   return runWithRomWeaverOutputScope(inputPaths[0] || "", input.outputFileName, inputPaths, async (outputPath) => {
     const format = String(input.format || "").trim();
     const normalizedFormat = format.toLowerCase();
@@ -91,6 +94,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
       input: inputPaths,
       level: (levelProfile || "max") as CompressionLevelProfile,
       output: outputPath,
+      ...(rvzBlockSize === null ? {} : { rvz_block_size: rvzBlockSize }),
       ...(threadArg ? { threads: threadArg } : {}),
     });
     emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress dispatch", {
