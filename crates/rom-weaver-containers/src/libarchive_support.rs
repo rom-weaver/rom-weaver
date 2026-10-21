@@ -2017,7 +2017,7 @@ mod tests {
     }
 
     #[test]
-    fn sevenz_entries_report_their_real_solid_block() {
+    fn sevenz_entries_report_their_real_solid_block_and_capped_decoder() {
         let dir = unique_temp_dir("solid-block");
         let archive_path = dir.join("solid.7z");
         let mut archive = WriteArchive::new("create test 7z").expect("allocate writer");
@@ -2070,6 +2070,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             [Some(0), Some(0)],
             "both files in the one-folder archive must expose libarchive's folder index"
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry.decoder_bytes)
+                .collect::<Vec<_>>(),
+            [Some(4096), Some(4096)],
+            "the folder's dictionary is capped at its 6-byte output, up to LZMA2's 4 KiB minimum"
         );
         fs::remove_dir_all(&dir).ok();
     }

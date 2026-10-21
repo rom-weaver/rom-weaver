@@ -2340,14 +2340,6 @@ fn extract_7z_with_a_dictionary_larger_than_the_address_space_limit() {
     let payload = pseudo_random_bytes(300_000, 0x5eed);
     let archive = temp.child("rom.7z");
     write_7z_lzma2_folders_fixture(archive.path(), &[("rom.bin", &payload)], 40);
-    let entries =
-        rom_weaver_containers::libarchive::list_regular_archive_entries(archive.path(), "7z")
-            .expect("list fixture");
-    assert_eq!(
-        entries[0].decoder_bytes,
-        Some(384 * 1024),
-        "the reported dictionary is the smallest LZMA2 size covering the 300,000-byte folder"
-    );
 
     let out_dir = temp.child("out");
     let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
@@ -2390,7 +2382,7 @@ fn extract_7z_with_a_dictionary_larger_than_the_address_space_limit() {
 
 // Every worker opens its own reader, so concurrent solid blocks each allocate their dictionary.
 // A 2,000,000-byte folder needs a 2 MiB dictionary, pricing a worker at 6 MiB; three quarters of
-// a 20 MiB limit fits two.
+// a 20 MiB limit fits two. Pricing the declared 4 GiB - 1 instead would leave one.
 #[test]
 fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
     let temp = setup_temp_dir();
