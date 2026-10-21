@@ -49,6 +49,7 @@ import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
 import { cleanupBrowserOpfsRunScratch } from "./browser-opfs-run-cleanup.ts";
 import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
 import { attachThreadWorkerCensus, readThreadWorkerCensus } from "./browser-wasi-thread-census.ts";
+import type { SharedThreadMemory } from "./browser-wasi-thread-memory.ts";
 import {
   browserThreadRequestOptions,
   createBrowserWasiThreadSpawner,
@@ -216,7 +217,7 @@ const startWasiInstance = async (input: {
 };
 
 /**
- * Two gauges sampled before teardown, so they report what the run actually held
+ * Gauges sampled before teardown, so they report what the run actually held
  * rather than what cleanup left behind. Handle `live` tracking an archive's entry
  * count is the many-small-files fan-out that kills iOS tabs (one SyncAccessHandle
  * plus its coalescing buffers per entry); it must stay bounded by concurrency. The
@@ -228,6 +229,7 @@ const traceRunResourceStats = (
   trace: (message: string) => void,
   handleStats: { live: number; opened: number; peak: number },
   threadWorkersAtRunStart: number,
+  sharedMemory: SharedThreadMemory | undefined,
 ) => {
   trace(
     `[perf] opfs proxy handles live=${handleStats.live} peak=${handleStats.peak} opened=${handleStats.opened}` +
@@ -238,6 +240,13 @@ const traceRunResourceStats = (
     `[perf] thread workers created=${threadWorkersTotal === null ? "n/a" : threadWorkersTotal - threadWorkersAtRunStart}` +
       ` total=${threadWorkersTotal ?? "n/a"}`,
   );
+  // Linear memory only grows, so its size at teardown is the run's peak.
+  if (sharedMemory) {
+    trace(
+      `[perf] wasm memory peakBytes=${sharedMemory.memory.buffer.byteLength}` +
+        ` maximumBytes=${sharedMemory.maximumBytes}`,
+    );
+  }
 };
 
 const createRunWasmMemory = (importsEnvMemory: boolean, options: BrowserOpfsCreateOptions) =>
@@ -369,8 +378,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       });
       const opfsRunId = createVfsPathId();
       env.ROM_WEAVER_OPFS_RUN_ID = opfsRunId;
+      const sharedMemory = createRunWasmMemory(importsEnvMemory, options);
+      const wasmMemory = sharedMemory?.memory;
+      // The engine plans concurrent decoders against this; it cannot read a memory's maximum itself.
+      if (sharedMemory) env.ROM_WEAVER_MEMORY_LIMIT_BYTES = String(sharedMemory.maximumBytes);
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
-      const wasmMemory = createRunWasmMemory(importsEnvMemory, options);
       const threadIdState = createThreadIdState();
       const mountHandles = {
         ...baseMountHandles,
@@ -514,7 +526,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
         return { command, error, exitCode: 1, ok: false, request, ...flushStreams() };
       } finally {
-        traceRunResourceStats(trace, opfsProxy.client.handleStats(), threadWorkersAtRunStart);
+        traceRunResourceStats(trace, opfsProxy.client.handleStats(), threadWorkersAtRunStart, sharedMemory);
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
         // pool workers release their OPFS handles before the mount handles are closed.

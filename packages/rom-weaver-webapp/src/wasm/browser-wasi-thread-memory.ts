@@ -7,6 +7,10 @@ const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 // constrained hosts (notably iOS) may refuse it - the ladder steps down until one fits.
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 65536;
 const FALLBACK_SHARED_MEMORY_MAX_PAGES = [49152, 32768, 24576, 16384, 8192, 4096];
+const WASM_PAGE_BYTES = 64 * 1024;
+
+/** A shared memory and the maximum the ladder settled on, which bounds every allocation in the run. */
+export type SharedThreadMemory = { maximumBytes: number; memory: WebAssembly.Memory };
 
 function storeThreadSpawnResult(
   wasmMemory: WebAssembly.Memory,
@@ -63,7 +67,7 @@ export function createSharedThreadMemory({
 }: {
   initialPages?: unknown;
   maximumPages?: unknown;
-} = {}): WebAssembly.Memory {
+} = {}): SharedThreadMemory {
   const initial = normalizePositiveInteger(
     initialPages,
     DEFAULT_SHARED_MEMORY_INITIAL_PAGES,
@@ -85,7 +89,8 @@ export function createSharedThreadMemory({
   let allocationError: unknown = null;
   for (const candidate of candidates) {
     try {
-      return new WebAssembly.Memory({ initial, maximum: candidate, shared: true });
+      const memory = new WebAssembly.Memory({ initial, maximum: candidate, shared: true });
+      return { maximumBytes: candidate * WASM_PAGE_BYTES, memory };
     } catch (error) {
       if (!isSharedMemoryAllocationError(error)) throw error;
       allocationError = error;

@@ -102,7 +102,7 @@ pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use suggest::{closest_name, did_you_mean_suffix};
 pub use threads::{
     SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode,
-    physical_memory_bytes,
+    decode_memory_budget_bytes, physical_memory_bytes,
 };
 #[cfg(target_arch = "wasm32")]
 pub use threads::{WASM_MEMORY_BUDGET_BYTES, wasm_linear_memory_used_bytes};

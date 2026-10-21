@@ -2368,3 +2368,110 @@ fn extract_nested_empty_psar_pbp_preserves_rom_and_extracts_disc_pbp() {
         assert_eq!(files.len(), 3, "only the PSP ROM and PS1 cue/bin leaves");
     }
 }
+
+// A 7z folder may declare a dictionary far larger than the data it holds. A 4 GiB - 1 dictionary
+// cannot be reserved under a 2 GiB address-space limit, the same wall a 1 GiB browser memory puts
+// in front of a 1.5 GiB one, so this extract only succeeds when the decoder sizes its dictionary
+// from the folder's output.
+#[cfg(target_os = "linux")]
+#[test]
+fn extract_7z_with_a_dictionary_larger_than_the_address_space_limit() {
+    use std::os::unix::process::CommandExt;
+
+    const ADDRESS_SPACE_LIMIT_BYTES: libc::rlim_t = 2 << 30;
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(300_000, 0x5eed);
+    let archive = temp.child("rom.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &[("rom.bin", &payload)], 40);
+
+    let out_dir = temp.child("out");
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
+    command.args([
+        "extract",
+        "--input",
+        archive.path().to_str().expect("path"),
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--threads",
+        "1",
+        "--json",
+    ]);
+    // SAFETY: the closure runs in the forked child before exec and only calls setrlimit, which
+    // is async-signal-safe.
+    unsafe {
+        command.pre_exec(|| {
+            let limit = libc::rlimit {
+                rlim_cur: ADDRESS_SPACE_LIMIT_BYTES,
+                rlim_max: ADDRESS_SPACE_LIMIT_BYTES,
+            };
+            if libc::setrlimit(libc::RLIMIT_AS, &limit) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        });
+    }
+    let output = command.output().expect("run extract");
+    assert!(
+        output.status.success(),
+        "extract under a 2 GiB address-space limit failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        fs::read(out_dir.child("rom.bin").path()).expect("read extracted"),
+        payload
+    );
+}
+
+// Every worker opens its own reader, so concurrent solid blocks each allocate their dictionary.
+// A 2,000,000-byte folder needs a dictionary that size, pricing a worker just under 6 MiB; three
+// quarters of a 25 MiB limit fits three. Pricing the declared 4 GiB - 1 would cap extraction at
+// one decoder, which reports the two-thread floor instead.
+#[test]
+fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
+    let temp = setup_temp_dir();
+    let payloads: Vec<Vec<u8>> = (0..4)
+        .map(|seed| pseudo_random_bytes(2_000_000, seed))
+        .collect();
+    let names = ["a.bin", "b.bin", "c.bin", "d.bin"];
+    let files: Vec<(&str, &[u8])> = names
+        .iter()
+        .zip(&payloads)
+        .map(|(name, payload)| (*name, payload.as_slice()))
+        .collect();
+    let archive = temp.child("roms.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &files, 40);
+
+    for (limit, expected_threads) in [(None, 4), (Some("26214400"), 3)] {
+        let out_dir = temp.child(format!("out-{expected_threads}"));
+        let envs: Vec<(&str, &str)> = limit
+            .map(|bytes| ("ROM_WEAVER_MEMORY_LIMIT_BYTES", bytes))
+            .into_iter()
+            .collect();
+        let events = run_json_events_with_env(
+            &[
+                "extract",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--output",
+                out_dir.path().to_str().expect("path"),
+                "--threads",
+                "4",
+                "--jsonl",
+            ],
+            &envs,
+            0,
+        );
+        let json = events.last().expect("extract terminal event");
+        assert_eq!(
+            json["effective_threads"], expected_threads,
+            "memory limit {limit:?}"
+        );
+        for (name, payload) in names.iter().zip(&payloads) {
+            assert_eq!(
+                &fs::read(out_dir.child(name).path()).expect("read extracted"),
+                payload
+            );
+        }
+    }
+}

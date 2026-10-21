@@ -1,0 +1,36 @@
+diff --git a/libarchive/archive_read_support_format_7zip.c b/libarchive/archive_read_support_format_7zip.c
+--- a/libarchive/archive_read_support_format_7zip.c
++++ b/libarchive/archive_read_support_format_7zip.c
+@@ -1355,8 +1355,11 @@ init_sdk_lzma_decoder(struct archive_read *a, struct _7zip *zip,
+     const struct _7z_coder *coder1)
+ {
+ 	free_sdk_lzma_decoder(zip);
++	/* Every caller sets folder_outbytes_remaining to this coder's whole
++	 * output before initializing it; no match reaches further back. */
+ 	zip->sdk_dec = rw_lzma_dec_new(zip->codec == _7Z_LZMA2,
+-	    coder1->properties, (size_t)coder1->propertiesSize);
++	    coder1->properties, (size_t)coder1->propertiesSize,
++	    zip->folder_outbytes_remaining);
+ 	if (zip->sdk_dec == NULL) {
+ 		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+ 		    "Couldn't initialize the LZMA decoder");
+@@ -1557,6 +1560,19 @@ init_decompression(struct archive_read *a, struct _7zip *zip,
+ 			set_error(a, r);
+ 			return (ARCHIVE_FAILED);
+ 		}
++		{
++			/* The filters in this chain preserve size, so the
++			 * folder's output also bounds the LZMA output and no
++			 * match reaches past it. */
++			lzma_options_lzma *lzma_opt = filters[fi].options;
++
++			if (zip->folder_outbytes_remaining < lzma_opt->dict_size) {
++				lzma_opt->dict_size =
++				    (uint32_t)zip->folder_outbytes_remaining;
++				if (lzma_opt->dict_size < LZMA_DICT_SIZE_MIN)
++					lzma_opt->dict_size = LZMA_DICT_SIZE_MIN;
++			}
++		}
+ 		fi++;
+ 
+ 		filters[fi].id = LZMA_VLI_UNKNOWN;

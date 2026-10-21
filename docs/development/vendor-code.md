@@ -97,9 +97,11 @@ Use the [shared patch workflow](#patch-queues-and-updates) with the `libarchive`
 
 `libarchive/build.rs` copies the pristine snapshot into `OUT_DIR`, applies common patches and project adapters, then applies WASM patches when appropriate. Feature-dependent CMake source selection remains in the build integration. The patch removing unconditional test-subdirectory calls keeps the pruned source configurable with tests disabled.
 
-The queue includes threaded bzip2, ZIP Zstd tuning, WASI zlib allocators, LZMA2 threading/progress, SDK backend integration, and gzip integrity checks. Separate gzip patches verify member CRC32/size and drain filters at archive EOF, so nested filters cannot bypass trailer validation.
+The queue includes threaded bzip2, ZIP Zstd tuning, WASI zlib allocators, LZMA2 threading/progress, SDK backend integration, LZMA dictionary caps, and gzip integrity checks. Separate gzip patches verify member CRC32/size and drain filters at archive EOF, so nested filters cannot bypass trailer validation.
 
-`libarchive/patches/7zip_solid_block.c` remains a project-owned accessor for extraction scheduling. Its append adapter is recorded in the manifest. The accessor lives in the 7zip reader's translation unit because the struct it reads is private; its declaration remains in `src/libarchive/read.rs`.
+`libarchive/patches/7zip_solid_block.c` holds project-owned accessors for extraction scheduling: an entry's solid block and the decoder memory that block declares. Its append adapter is recorded in the manifest. The accessors live in the 7zip reader's translation unit because the struct they read is private; their declarations remain in `src/libarchive/read.rs`.
+
+The dictionary-cap patch sizes each LZMA1/LZMA2 dictionary from the folder's output instead of its declared size, on both the SDK and liblzma paths. A match never reaches past the bytes already produced, so output is unchanged, and a folder that declares a dictionary larger than a 1 GiB WebAssembly memory still decodes when its data fits.
 
 ### Going back to upstream
 
