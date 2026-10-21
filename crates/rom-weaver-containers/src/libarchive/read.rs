@@ -56,7 +56,9 @@ impl ReadArchive {
                 "{context}: libarchive reader allocation returned null"
             ))
         })?;
-        Ok(Self { ptr: Some(ptr) })
+        let reader = Self { ptr: Some(ptr) };
+        ffi::configure_utf8(reader.as_ptr(), context)?;
+        Ok(reader)
     }
 
     pub fn support_raw_format(&mut self, context: &str) -> Result<()> {

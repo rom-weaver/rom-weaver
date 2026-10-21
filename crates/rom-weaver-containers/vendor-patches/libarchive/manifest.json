@@ -225,6 +225,11 @@
       "mode": "copy"
     },
     {
+      "file": "libarchive/patches/utf8_charset.c",
+      "target": "libarchive/archive_string.c",
+      "mode": "append"
+    },
+    {
       "file": "libarchive/patches/7zip_solid_block.c",
       "target": "libarchive/archive_read_support_format_7zip.c",
       "mode": "append"

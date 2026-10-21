@@ -82,6 +82,23 @@ describe("browser OPFS source references", () => {
     await reused.cleanup();
   });
 
+  it("preserves Unicode basenames while sanitizing unsafe path characters", async () => {
+    for (const name of ["café.bin.gz", "cafe\u0301.bin.gz", "ゲーム.bin.gz"]) {
+      const ref = await createBrowserOpfsSourceRef(new File(["payload"], name), "fallback.bin", options());
+      expect(ref.fileName).toBe(name);
+      expect(ref.filePath).toBe(`/work/${name}`);
+      await ref.cleanup();
+    }
+    const unsafe = await createBrowserOpfsSourceRef(
+      new File(["payload"], "../café\u0000\u0085:name?.gz"),
+      "fallback.bin",
+      options(),
+    );
+    expect(unsafe.fileName).toBe("café__name_.gz");
+    expect(unsafe.filePath).toBe("/work/café__name_.gz");
+    await unsafe.cleanup();
+  });
+
   it("supports Blob and FileSystemFileHandle sources and preserves inferred names", async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "application/octet-stream" });
     const blobRef = await createBrowserOpfsSourceRef({ blob, name: "blob.dat" }, "fallback.bin", options());

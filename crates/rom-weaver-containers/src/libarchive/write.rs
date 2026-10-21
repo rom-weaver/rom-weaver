@@ -84,11 +84,13 @@ impl WriteArchive {
                 "{context}: libarchive writer allocation returned null"
             ))
         })?;
-        Ok(Self {
+        let writer = Self {
             ptr: Some(ptr),
             codec_progress_callback_data: None,
             write_callback_data: None,
-        })
+        };
+        ffi::configure_utf8(writer.as_ptr(), context)?;
+        Ok(writer)
     }
 
     pub fn set_format(&mut self, format: WriteFormat, context: &str) -> Result<()> {
@@ -102,7 +104,11 @@ impl WriteArchive {
                 WriteFormat::Raw => archive_write_set_format_raw(self.as_ptr()),
             }
         };
-        self.check_status(status, context)
+        self.check_status(status, context)?;
+        if matches!(format, WriteFormat::Zip) {
+            self.set_format_option(Some("zip"), "hdrcharset", "UTF-8", context)?;
+        }
+        Ok(())
     }
 
     pub fn add_filter(&mut self, filter: WriteFilter, context: &str) -> Result<()> {

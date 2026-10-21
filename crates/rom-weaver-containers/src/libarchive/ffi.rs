@@ -1,5 +1,17 @@
 use super::*;
 
+// The project adapter is appended to archive_string.c to keep conversion state per archive.
+unsafe extern "C" {
+    fn rom_weaver_archive_set_utf8(archive: *mut archive) -> i32;
+}
+
+pub(crate) fn configure_utf8(archive_ptr: *mut archive, context: &str) -> Result<()> {
+    let status = unsafe { rom_weaver_archive_set_utf8(archive_ptr) };
+    check_status_for_ptr(status, archive_ptr, context)?;
+    tracing::trace!("configured libarchive UTF-8 pathname conversion");
+    Ok(())
+}
+
 pub(crate) fn check_status_for_ptr(
     status: i32,
     archive_ptr: *mut archive,
