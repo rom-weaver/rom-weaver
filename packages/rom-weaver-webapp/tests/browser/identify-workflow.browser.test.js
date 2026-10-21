@@ -463,6 +463,42 @@ test("text that is not a checksum searches the titles, and no title is not an an
   expect(host.querySelector(".unified-drop-step--hero")).not.toBeNull();
 });
 
+test("reopening title results keeps the selected game visible", async () => {
+  searchExpectedRomTitles.mockResolvedValue({
+    status: "ok",
+    titles: Array.from({ length: 50 }, (_, index) => ({
+      name: `Game ${index}`,
+      platform: "Nintendo - Game Boy Advance",
+      slug: `game-${index}`,
+    })),
+  });
+  await mountIdentifyForm();
+  setHashInput("games");
+  submitSearch();
+  await waitFor(() => host.querySelectorAll('[role="option"]').length === 50);
+  const input = host.querySelector(".identify-search-input");
+  input.focus();
+  const press = (key) => input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+  const selectedVisible = () => {
+    const selected = host.querySelector('[role="option"][aria-selected="true"]');
+    const list = host.querySelector('[role="listbox"]');
+    if (!(selected && list)) return false;
+    const row = selected.getBoundingClientRect();
+    const viewport = list.getBoundingClientRect();
+    return row.top >= viewport.top - 1 && row.bottom <= viewport.bottom + 1;
+  };
+
+  press("ArrowUp");
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+  press("Escape");
+  await waitFor(() => !host.querySelector('[role="listbox"]'));
+  press("ArrowUp");
+  await waitFor(() => host.querySelector('[role="listbox"]'));
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+});
+
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();
   setHashInput("abc123abc123");

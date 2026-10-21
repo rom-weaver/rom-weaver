@@ -564,8 +564,9 @@ const RomSearch = ({
     setSelectedResult((index) => (resultCount ? Math.min(index, resultCount - 1) : 0));
   }, [resultCount]);
   useEffect(() => {
+    if (!resultsExpanded) return;
     resultButtonsRef.current[boundedSelectedResult]?.scrollIntoView?.({ block: "nearest" });
-  }, [boundedSelectedResult]);
+  }, [boundedSelectedResult, resultsExpanded]);
   const chooseSelectedResult = () => {
     if (resultKind === "version") {
       const match = lookup.versions[boundedSelectedResult];
