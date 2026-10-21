@@ -2381,8 +2381,9 @@ fn extract_7z_with_a_dictionary_larger_than_the_address_space_limit() {
 }
 
 // Every worker opens its own reader, so concurrent solid blocks each allocate their dictionary.
-// A 2,000,000-byte folder needs a 2 MiB dictionary, pricing a worker at 6 MiB; three quarters of
-// a 20 MiB limit fits two. Pricing the declared 4 GiB - 1 instead would leave one.
+// A 2,000,000-byte folder needs a dictionary that size, pricing a worker just under 6 MiB; three
+// quarters of a 25 MiB limit fits three. Pricing the declared 4 GiB - 1 would cap extraction at
+// one decoder, which reports the two-thread floor instead.
 #[test]
 fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
     let temp = setup_temp_dir();
@@ -2398,7 +2399,7 @@ fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
     let archive = temp.child("roms.7z");
     write_7z_lzma2_folders_fixture(archive.path(), &files, 40);
 
-    for (limit, expected_threads) in [(None, 4), (Some("20971520"), 2)] {
+    for (limit, expected_threads) in [(None, 4), (Some("26214400"), 3)] {
         let out_dir = temp.child(format!("out-{expected_threads}"));
         let envs: Vec<(&str, &str)> = limit
             .map(|bytes| ("ROM_WEAVER_MEMORY_LIMIT_BYTES", bytes))

@@ -2033,8 +2033,10 @@ mod tests {
         archive
             .set_format_option(None, "threads", "1", "select one thread")
             .expect("select one thread");
+        // An overstated size hint keeps the declared dictionary far above the 6 bytes written,
+        // so only the decoder cap brings the reported size down to LZMA's 4 KiB floor.
         archive
-            .set_7zip_size_hint(6, "set test size hint")
+            .set_7zip_size_hint(16 << 20, "set test size hint")
             .expect("set size hint");
         archive
             .open_filename(&archive_path, "test output", "open test 7z")
@@ -2077,7 +2079,7 @@ mod tests {
                 .map(|entry| entry.decoder_bytes)
                 .collect::<Vec<_>>(),
             [Some(4096), Some(4096)],
-            "the folder's dictionary is capped at its 6-byte output, up to LZMA2's 4 KiB minimum"
+            "the folder's dictionary is capped at its 6-byte output, raised to LZMA's 4 KiB minimum"
         );
         fs::remove_dir_all(&dir).ok();
     }
