@@ -265,6 +265,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const selectedCheatPositionsRef = useRef<number[]>([]);
+  const selectedCheatWeavePositionsRef = useRef<number[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
@@ -1737,6 +1738,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedAssetBaseUrl,
       resolvedUiController,
       selectedCheatPositionsRef,
+      selectedCheatWeavePositionsRef,
       selectedCheatsRef,
       setCheatConflictMessage,
       setCheatNames,
@@ -1758,51 +1760,29 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     basis: patchInputBasis,
     cheats: selectedCheatsRef.current.map(({ record }) => record),
     positions: selectedCheatPositionsRef.current,
+    weavePositions: selectedCheatWeavePositionsRef.current,
   });
   const combinedReady =
     canStartApply &&
     runInput.inputs.length === 1 &&
     (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
-  const prepareCheatWeave = cheatsOn
-    ? async ({ signal, onProgress }: { signal: AbortSignal; onProgress?: (event: WorkflowProgress) => void }) => {
-        const input = getRunInput();
-        return executePatchWorkflow(
-          { ...input, options: { ...input.options, signal } },
-          async (workflow) => {
-            const rom = workflow.getWeaveExportSources().rom;
-            if (!rom) throw new Error(localizer.message("ui.combinedPatch.needsRom"));
-            const result = await workflow.createCombinedPatch({
-              format: "bps",
-              output: { compression: "none", outputName: "combined.bps" },
-            });
-            try {
-              if (!result.output.getBlob) throw new Error(localizer.message("ui.combinedPatch.unavailable"));
-              const source = new File([await result.output.getBlob()], result.output.fileName);
-              return {
-                sources: { rom, patches: [{ fileName: source.name, source, originalSource: source }] },
-                dispose: result.output.dispose,
-              };
-            } catch (error) {
-              await result.output.dispose();
-              throw error;
-            }
-          },
-          onProgress,
-        );
-      }
-    : undefined;
-
   const { weaveExport, changeWeavePackage } = useApplyWeaveExport({
-    prepareSources: prepareCheatWeave,
+    getCheats: () =>
+      selectedCheatsRef.current.flatMap((entry, index) =>
+        cheatDelivery(entry) === "rom"
+          ? [{ record: entry.record, position: selectedCheatWeavePositionsRef.current[index] ?? 0 }]
+          : [],
+      ),
+    cheatsOn,
+    getSessionSources: () =>
+      withPreparedWorkflow(getRunInput(), {}, async ({ workflow }) => workflow.getWeaveExportSources()),
     sourcesRevision: combinedRevision,
     weaveMetaById,
     weaveSourcesRef,
-    currentPatchesRef,
     defaultWeaveContents,
     defaultWeaveFormat,
     disabledPatchIds,
     getPatchIds,
-    lastInputsRef,
     mutationQueueRef,
     outputState,
     patchInputBasis,

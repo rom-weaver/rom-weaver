@@ -3259,6 +3259,11 @@ pub struct CheatCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     pub records: Vec<crate::cheats::CheatRecord>,
+    /// Include one serialized patch per supplied record in the JSON/WASM result.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(as = "Option<bool>", optional))]
+    pub export_patches: bool,
     // Native-only argv surface. `serde(skip)` keeps the JSON/WASM wire and the
     // generated TypeScript exactly as the webapp already sees them.
     #[cfg_attr(

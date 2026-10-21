@@ -55,7 +55,9 @@ Built-in checks, such as BPS checksums, cannot be edited. Add only values from t
 
 Reorder only when the patch supports that input state. Test optional combinations as described below, including dependencies.
 
-Enabled ROM cheats make the weave contain one combined patch, preserving the enabled changes' order. Recipients cannot toggle individual steps. Without cheats, the weave retains separate patches, metadata, and optional switches.
+Each enabled ROM cheat becomes a separate patch at its chosen position. Recipients can toggle each cheat independently. Original patches keep their metadata and optional switches.
+
+Cheat patches record the resolved ROM writes. Compare codes resolve against the enabled changes above them during export. Test optional combinations after reopening the archive.
 
 <a id="turn-on-bundle-output-and-download-it"></a>
 
@@ -75,7 +77,7 @@ For one patch instead, expand **Download a combined patch** on Apply or Weave.
 
 Checksums verify content; a filename mismatch alone does not block Apply.
 
-Weave creation applies changes only when combining ROM cheats. Download the patched ROM separately.
+Weave creation runs preceding enabled changes when resolving ROM cheats. Download the patched ROM separately.
 
 Files are read locally. Patch-only weaves contain ROM checksums, not ROM bytes.
 

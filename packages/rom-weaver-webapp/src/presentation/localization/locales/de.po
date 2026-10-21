@@ -5315,8 +5315,8 @@ msgstr "Aktuell"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.weaveExport.combinedCheats"
-msgstr "Dieses Weave enthält einen kombinierten Patch mit den aktivierten Patches und Cheats in ihrer aktuellen Reihenfolge."
+msgid "ui.weaveExport.cheatSteps"
+msgstr "Jeder aktivierte Cheat wird zu einem eigenen Patch. Empfänger können jeden Cheat ein- oder ausschalten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

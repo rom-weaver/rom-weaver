@@ -3,10 +3,12 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useWeaveExport } from "../../src/public/react/weave-export.tsx";
 
-const { weaveCreate, compressionCreate, saveAs } = vi.hoisted(() => ({
+const { weaveCreate, compressionCreate, saveAs, cheatRun, applyPatch } = vi.hoisted(() => ({
   weaveCreate: vi.fn(),
   compressionCreate: vi.fn(),
   saveAs: vi.fn(),
+  cheatRun: vi.fn(),
+  applyPatch: vi.fn(),
 }));
 
 vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({
@@ -14,6 +16,8 @@ vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({
     weave: { create: weaveCreate },
     compression: { create: compressionCreate },
     publicOutput: { saveAs },
+    cheat: { run: cheatRun },
+    patch: { applyPatch },
   },
 }));
 
@@ -21,7 +25,7 @@ const output = (fileName: string) => ({
   fileName,
   path: `/output/${fileName}`,
   size: 42,
-  vfs: {},
+  vfs: { normalizePath: (path: string) => path },
   dispose: vi.fn().mockResolvedValue(undefined),
 });
 
@@ -79,6 +83,10 @@ describe("useWeaveExport", () => {
     weaveCreate.mockReset();
     compressionCreate.mockReset();
     saveAs.mockReset();
+    cheatRun.mockReset();
+    applyPatch.mockReset();
+    cheatRun.mockResolvedValue({ patches: [{ bytes: [80, 65, 84, 67, 72, 69, 79, 70], format: "ips" }] });
+    applyPatch.mockResolvedValue(output("prefix.nes"));
     saveAs.mockResolvedValue(undefined);
     weaveCreate.mockResolvedValue({
       result: { weaveFileName: "my-weave.7z" },
@@ -88,58 +96,75 @@ describe("useWeaveExport", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("packages full-ROM combined patches independently of output headers and stale stack metadata", async () => {
-    const dispose = vi.fn();
-    const prepareSources = vi.fn(async () => ({
-      sources: {
-        rom: rom({ fileName: "hello-world.nes", size: 24592, checksums: { crc32: "3e30b9b3" } }),
-        patches: [patch("combined.bps")],
-      },
-      dispose,
-    }));
+  it("retains original patch metadata and inserts toggleable cheat snapshots in order", async () => {
+    const prefixOutput = output("prefix.nes");
+    applyPatch.mockResolvedValue(prefixOutput);
+    const getCheats = vi.fn(() => [
+      { record: { id: "greeting", description: "Greeting", rawCode: "AATOZA" }, position: 1 },
+    ]);
     const { result, rerender } = renderHook(
-      ({ revision }) =>
-        useWeaveExport(
-          hookOptions({
-            prepareSources,
-            sourcesRevision: revision,
-            getOutputHeader: () => "strip",
-            disabledPatchIds: new Set(["patch-1"]),
-            patchBasis: "previous",
-          }),
-        ),
+      ({ revision }) => useWeaveExport(hookOptions({ getCheats, sourcesRevision: revision, patchBasis: "previous" })),
       { initialProps: { revision: "cheat-a" } },
     );
     await act(async () => result.current.runExport());
+    expect(result.current.error).toBe("");
     expect(weaveCreate.mock.calls[0][0]).toMatchObject({
-      patchBasis: "auto",
-      outputHeader: "strip",
-      romChecksums: "crc32=3e30b9b3",
-      romSize: 24592,
-      patches: [{ fileName: "combined.bps", header: "keep" }],
+      patchBasis: "previous",
+      patches: [
+        { id: "patch-1", name: "Update", version: "1.2", author: "Author", header: "strip", basis: "base" },
+        { name: "Greeting", fileName: "cheat-1-Greeting.ips", header: "keep", basis: "previous" },
+      ],
     });
-    expect(weaveCreate.mock.calls[0][0].patches[0].name).toBeUndefined();
-    expect(weaveCreate.mock.calls[0][0].patches[0].optional).toBeUndefined();
-    expect(dispose).toHaveBeenCalledOnce();
+    expect(applyPatch.mock.calls[0][0].patches).toHaveLength(1);
+    expect(cheatRun.mock.calls[0][0]).toMatchObject({ exportPatches: true, source: { path: "/output/prefix.nes" } });
+    expect(prefixOutput.dispose).toHaveBeenCalledOnce();
     await act(async () => result.current.runExport());
-    expect(prepareSources).toHaveBeenCalledOnce();
+    expect(cheatRun).toHaveBeenCalledOnce();
     rerender({ revision: "cheat-b" });
     await waitFor(() => expect(result.current.downloadable).toBe(false));
   });
 
-  it("cleans prepared sources when weave creation fails", async () => {
-    const dispose = vi.fn();
-    weaveCreate.mockRejectedValue(new Error("archive failed"));
+  it("exports cheats alone and retains disabled original patches as optional entries", async () => {
+    const getCheats = () => [{ record: { id: "greeting", description: "Greeting" }, position: 0 }];
+    const { result } = renderHook(() =>
+      useWeaveExport(hookOptions({ getCheats, disabledPatchIds: new Set(["patch-1"]) })),
+    );
+    await act(async () => result.current.runExport());
+    expect(weaveCreate.mock.calls[0][0].patches).toMatchObject([
+      { name: "Greeting", basis: "previous" },
+      { id: "patch-1", name: "Update", optional: true, version: "1.2" },
+    ]);
+    expect(applyPatch).not.toHaveBeenCalled();
+    const alone = renderHook(() =>
+      useWeaveExport(
+        hookOptions({
+          getCheats,
+          getSessionSources: () => ({ rom: rom(), patches: [] }),
+          getStackItems: () => [],
+          getPatchIds: () => [],
+        }),
+      ),
+    );
+    await act(async () => alone.result.current.runExport());
+    expect(alone.result.current.error).toBe("");
+    expect(weaveCreate.mock.calls[1][0].patches).toHaveLength(1);
+  });
+
+  it("releases prefix ROMs when cheat classification fails", async () => {
+    const prefixOutput = output("prefix.nes");
+    applyPatch.mockResolvedValue(prefixOutput);
+    cheatRun.mockRejectedValue(new Error("compare byte no longer matches"));
     const { result } = renderHook(() =>
       useWeaveExport(
         hookOptions({
-          prepareSources: async () => ({ sources: { rom: rom(), patches: [patch("combined.bps")] }, dispose }),
+          getCheats: () => [{ record: { id: "compare", description: "Compare" }, position: 1 }],
         }),
       ),
     );
     await act(async () => result.current.runExport());
-    expect(result.current.error).toBe("archive failed");
-    expect(dispose).toHaveBeenCalledOnce();
+    expect(result.current.error).toBe("compare byte no longer matches");
+    expect(prefixOutput.dispose).toHaveBeenCalledOnce();
+    expect(weaveCreate).not.toHaveBeenCalled();
     expect(result.current.busy).toBe(false);
   });
 

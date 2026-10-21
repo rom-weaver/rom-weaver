@@ -12,6 +12,7 @@ import type { RomWeaverJsonResult } from "./wasm-command-shared.ts";
 type RomWeaverCheatResult = {
   conflicts: CheatWriteConflict[];
   records: ClassifiedCheatRecord[];
+  patches?: Array<{ bytes: number[]; format: "ips" | "ips32" }>;
 };
 
 const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatResult => {
@@ -21,13 +22,33 @@ const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatRes
   if (!(cheats && Array.isArray(cheats.records) && Array.isArray(cheats.conflicts))) {
     throw withRomWeaverFailureKind(new Error("Cheat classification result was missing or malformed"), result);
   }
+  const patches = cheats.patches;
+  if (
+    patches !== undefined &&
+    (!Array.isArray(patches) ||
+      patches.length !== cheats.records.length ||
+      patches.some((value) => {
+        const patch = asRecord(value);
+        return (
+          !patch ||
+          (patch.format !== "ips" && patch.format !== "ips32") ||
+          !Array.isArray(patch.bytes) ||
+          !patch.bytes.length ||
+          patch.bytes.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255)
+        );
+      }))
+  ) {
+    throw withRomWeaverFailureKind(new Error("Cheat patch snapshots were malformed"), result);
+  }
   return {
     conflicts: cheats.conflicts as CheatWriteConflict[],
     records: cheats.records as ClassifiedCheatRecord[],
+    ...(patches ? { patches: patches as NonNullable<RomWeaverCheatResult["patches"]> } : {}),
   };
 };
 
 const invokeRomWeaverCheatWorker = async (input: {
+  exportPatches?: boolean;
   inputPath: string;
   knownInputPaths?: string[];
   logLevel?: LogLevel | string;
@@ -37,6 +58,7 @@ const invokeRomWeaverCheatWorker = async (input: {
   const command = createRomWeaverCommand("cheat", {
     input: input.inputPath,
     records: input.records,
+    ...(input.exportPatches ? { exportPatches: true } : {}),
   });
   const result = await runRomWeaverJson(
     command,
@@ -47,7 +69,11 @@ const invokeRomWeaverCheatWorker = async (input: {
     }),
   );
   ensureRomWeaverSuccess(result, "Cheat classification failed");
-  return parseCheatCommandResult(result);
+  const parsed = parseCheatCommandResult(result);
+  if (input.exportPatches && !parsed.patches) {
+    throw new Error("The cheat worker did not return patch snapshots; rebuild the WASM runtime");
+  }
+  return parsed;
 };
 
 export { invokeRomWeaverCheatWorker };

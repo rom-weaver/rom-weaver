@@ -375,6 +375,32 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText("Libretro database")).toBeTruthy();
   });
 
+  it("publishes separate execution and weave positions from the shared stack", async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        onSelectionChange={onSelectionChange}
+        renderStack={({ controls, onOrderChange }) => (
+          <>
+            {controls}
+            <button onClick={() => onOrderChange([{ id: "cheat-1", position: 0, weavePosition: 1 }])} type="button">
+              Publish stack order
+            </button>
+          </>
+        )}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    fireEvent.click(view.getByRole("button", { name: "Publish stack order" }));
+    expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
+      "cheat-1",
+    ]);
+    expect(onSelectionChange.mock.lastCall?.slice(1)).toEqual([[0], [1]]);
+  });
+
   it("reorders cheat cards and publishes their new bake order", async () => {
     const bakeable = [records[0], pagedRecords[2]];
     const onSelectionChange = vi.fn();

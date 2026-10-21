@@ -16,6 +16,24 @@ import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { PatchCard } from "./apply-patch-card.tsx";
 import { EditableCheckRow } from "./apply-patch-check-row.tsx";
 
+type MixedEntry = { kind: "patch"; index: number } | { kind: "cheat"; id: string };
+type CheatOrder = Parameters<CheatStackRenderState["onOrderChange"]>[0];
+
+const getCheatOrder = (entries: MixedEntry[], disabledFlags?: readonly boolean[]): CheatOrder => {
+  let position = 0;
+  let weavePosition = 0;
+  const order: CheatOrder = [];
+  for (const entry of entries) {
+    if (entry.kind === "patch") {
+      weavePosition += 1;
+      if (!disabledFlags?.[entry.index]) position += 1;
+    } else {
+      order.push({ id: entry.id, position, weavePosition });
+    }
+  }
+  return order;
+};
+
 const commonPatchMetaValue = (
   weaveMeta: readonly (WeavePatchMeta | undefined)[],
   field: "author" | "version",
@@ -213,16 +231,7 @@ const ApplyPatchListStep = ({
   const visibleEntries = mixedEntries;
   const canReorder = visibleEntries.length > 1 && patches.every((item) => item.progress || item.canRemove);
   const publishCheatOrder = (entries: typeof mixedEntries) => {
-    let patchPosition = 0;
-    const nextOrder: Array<{ id: string; position: number }> = [];
-    for (const entry of entries) {
-      if (entry.kind === "patch") {
-        if (!disabledFlags?.[entry.index]) patchPosition += 1;
-      } else {
-        nextOrder.push({ id: entry.id, position: patchPosition });
-      }
-    }
-    cheats?.onOrderChange(nextOrder);
+    cheats?.onOrderChange(getCheatOrder(entries, disabledFlags));
   };
   const reorderMixed = (from: number, to: number) => {
     const next = reorder(visibleEntries, from, to);
@@ -261,16 +270,7 @@ const ApplyPatchListStep = ({
       disabledFlags?: readonly boolean[];
     };
     if (!snapshot.hasCheats) return;
-    let patchPosition = 0;
-    const order: Array<{ id: string; position: number }> = [];
-    for (const entry of snapshot.entries) {
-      if (entry.kind === "patch") {
-        if (!snapshot.disabledFlags?.[entry.index]) patchPosition += 1;
-      } else {
-        order.push({ id: entry.id, position: patchPosition });
-      }
-    }
-    cheatOrderCallbackRef.current?.(order);
+    cheatOrderCallbackRef.current?.(getCheatOrder(snapshot.entries, snapshot.disabledFlags));
   }, [cheatOrderKey]);
   const disabledCount = (disabledFlags || []).filter(Boolean).length;
   const enabledBytes = patches.reduce(

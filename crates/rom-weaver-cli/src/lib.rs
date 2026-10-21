@@ -1647,7 +1647,7 @@ mod cheat_database;
 mod cheat_resolution;
 mod cheats;
 mod cheats_apply;
-pub use cheat_command::CheatCommandResult;
+pub use cheat_command::{CheatCommandResult, CheatPatchSnapshot};
 pub use cheats::{
     CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite,
     CheatWriteConflict, ClassifiedCheatRecord,

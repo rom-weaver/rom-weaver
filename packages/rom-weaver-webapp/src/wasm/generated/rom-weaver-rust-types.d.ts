@@ -296,7 +296,9 @@ export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatReso
 
 export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
 
-export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, };
+export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, patches?: Array<CheatPatchSnapshot>, };
+
+export type CheatPatchSnapshot = { bytes: Array<number>, format: string, };
 
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
@@ -453,7 +455,11 @@ export type CheatCommand = { input: string,
  * Direct records for the JSON/WASM boundary. The native argv parser does
  * not expose this internal command.
  */
-records: Array<CheatRecord>, };
+records: Array<CheatRecord>,
+/**
+ * Include one serialized patch per supplied record in the JSON/WASM result.
+ */
+exportPatches?: boolean, };
 
 export type CompressCommand = { input: Array<string>, entry_names?: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 

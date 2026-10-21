@@ -95,7 +95,7 @@ type CheatCardProps = {
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
 };
 
-type CheatOrderEntry = { id: string; position: number };
+type CheatOrderEntry = { id: string; position: number; weavePosition?: number };
 export type CheatStackRenderState = {
   cards: ClassifiedCheatRecord[];
   controls: ReactNode;
@@ -690,7 +690,7 @@ export type CheatDatabaseSectionProps = {
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
-  onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[]) => void;
+  onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[], weavePositions?: number[]) => void;
   onPresenceChange?: (present: boolean) => void;
   /**
    * Bake the ROM cheats that are On into a standalone patch and download it.
@@ -733,6 +733,7 @@ export const CheatDatabaseSection = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
   const positionsRef = useRef(new Map<string, number>());
+  const weavePositionsRef = useRef(new Map<string, number>());
   const selectionCallback = useRef(onSelectionChange);
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
@@ -741,6 +742,7 @@ export const CheatDatabaseSection = ({
       selectionCallback.current?.(
         entries,
         entries.map(({ record }) => positionsRef.current.get(record.id) ?? positionOffset),
+        entries.map(({ record }) => weavePositionsRef.current.get(record.id) ?? positionOffset),
       );
       return;
     }
@@ -774,6 +776,7 @@ export const CheatDatabaseSection = ({
     setSelectedIds(new Set());
     setAddedIds(new Set());
     positionsRef.current.clear();
+    weavePositionsRef.current.clear();
     setManualRecords([]);
     setManualGameId("");
     setManualEntrySlug("");
@@ -786,6 +789,7 @@ export const CheatDatabaseSection = ({
       setSelectedIds(new Set());
       setAddedIds(new Set());
       positionsRef.current.clear();
+      weavePositionsRef.current.clear();
       setManualRecords([]);
       selectionCallback.current?.([]);
     }
@@ -929,6 +933,9 @@ export const CheatDatabaseSection = ({
   );
   const onOrderChange = (order: CheatOrderEntry[]) => {
     positionsRef.current = new Map(order.map(({ id, position }) => [id, position]));
+    weavePositionsRef.current = new Map(
+      order.map(({ id, position, weavePosition }) => [id, weavePosition ?? position]),
+    );
     const ids = order.map(({ id }) => id);
     setAddedIds((current) => {
       const previous = [...current];

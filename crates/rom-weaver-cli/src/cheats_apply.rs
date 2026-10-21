@@ -138,7 +138,7 @@ fn cheat_write_data(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> 
     })
 }
 
-fn serialize_cheat_patch(
+pub(super) fn serialize_cheat_patch(
     writes: &[CheatWrite],
     rom: &[u8],
     system: CheatSystem,
