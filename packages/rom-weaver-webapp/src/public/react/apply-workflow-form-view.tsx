@@ -60,6 +60,7 @@ import {
   buildRomIdentificationStates,
 } from "./apply-rom-expectations.ts";
 import { getWeaveVerificationError } from "./apply-declared-checksums.ts";
+import { canApplySelection } from "./apply-selection.ts";
 import {
   type WeaveToolsState,
   type WeaveExportState,
@@ -484,6 +485,7 @@ function ApplyWorkflowFormView({
   onPracticeDrop,
   cheats,
   cheatsOn,
+  cheatsPresent = false,
   controllers,
   emulatorOutput,
   weaveExpectedRomChecks,
@@ -522,6 +524,7 @@ function ApplyWorkflowFormView({
   }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
+  cheatsPresent?: boolean;
   controllers: {
     output: PatcherOutputController;
     patchStack: PatcherStackController;
@@ -849,12 +852,17 @@ function ApplyWorkflowFormView({
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
+      selectionEnabled={canApplySelection({
+        patchCount: patches.length,
+        enabledPatchCount,
+        cheatsPresent,
+        cheatsOn: !!cheatsOn,
+      })}
       weaveTools={weaveTools}
       weaveVerificationError={weaveVerificationError}
       cheatHeaderStripConflict={cheatHeaderStripConflict}
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
-      enabledPatchCount={enabledPatchCount}
       emulatorCore={emulatorCore}
       emulatorFileName={emulatorFileName}
       emulatorPlatform={emulatorPlatform}
@@ -864,7 +872,6 @@ function ApplyWorkflowFormView({
       noticeController={noticeController}
       onSelectView={onSelectView}
       outputState={outputState}
-      patches={patches}
       uiController={uiController}
       uiState={uiState}
     />

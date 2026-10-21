@@ -145,6 +145,8 @@ const withTargets = (item: PatchStackItemState): PatchStackItemState => ({
 const cheatsStep = <div data-testid="cheats-step">cheats</div>;
 
 const renderView = ({
+  cheatsOn,
+  cheatsPresent,
   weaveMetaById,
   weaveExpectedRomChecks,
   emulatorOutput,
@@ -164,6 +166,8 @@ const renderView = ({
   startup,
   ui,
 }: {
+  cheatsOn?: boolean;
+  cheatsPresent?: boolean;
   weaveMetaById?: Parameters<typeof ApplyWorkflowFormView>[0]["weaveMetaById"];
   weaveExpectedRomChecks?: Parameters<typeof ApplyWorkflowFormView>[0]["weaveExpectedRomChecks"];
   emulatorOutput?: unknown;
@@ -199,6 +203,8 @@ const renderView = ({
   return render(
     <RomWeaverSettingsProvider settings={resolvedSettings}>
       <ApplyWorkflowFormView
+        cheatsOn={cheatsOn}
+        cheatsPresent={cheatsPresent}
         weaveMetaById={weaveMetaById}
         cheats={({ renderStack }) =>
           renderStack({
@@ -1656,6 +1662,44 @@ describe("apply workflow view - completed output actions", () => {
 });
 
 describe("apply workflow view - patch enable toggles", () => {
+  it.each([
+    { cheatsPresent: false, cheatsOn: false, disabled: false },
+    { cheatsPresent: true, cheatsOn: false, disabled: true },
+    { cheatsPresent: true, cheatsOn: true, disabled: false },
+  ])("gates patchless Apply with cheat presence $cheatsPresent and selection $cheatsOn", (selection) => {
+    const { container } = renderView({
+      ...selection,
+      outputOverrides: { applyButton: { ...outputState().applyButton, disabled: false } },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect((container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement).disabled).toBe(
+      selection.disabled,
+    );
+  });
+
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])("gates Apply with patch %s and cheat %s", (patchEnabled, cheatsOn) => {
+    const { container } = renderView({
+      cheatsOn,
+      cheatsPresent: true,
+      outputOverrides: { applyButton: { ...outputState().applyButton, disabled: false } },
+      patchEnablement: {
+        disabledIds: new Set(patchEnabled ? [] : ["patch-1"]),
+        getPatchIds: () => ["patch-1"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("change.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect((container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement).disabled).toBe(
+      !(patchEnabled || cheatsOn),
+    );
+  });
+
   it("collapses disabled patches, surfaces the off-note, and gates the run", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({

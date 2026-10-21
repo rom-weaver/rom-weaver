@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
   clickApplyButton,
@@ -7,6 +7,7 @@ import {
   loadFixtureFile,
   mount,
   selectFileInput,
+  selectFileInputs,
   waitForApplyButtonEnabled,
   waitForApplyOutcome,
 } from "./patcher-test-shared.js";
@@ -61,4 +62,50 @@ test("changing the cheat list retires a finished apply result", async () => {
   await expect
     .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
     .not.toContain("Download");
+});
+
+test("one enabled patch or cheat allows Apply and off entries leave the output unchanged", async () => {
+  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  const rom = await loadFixtureFile(NES_ROM);
+  const original = new Uint8Array(await rom.arrayBuffer());
+  const patch = new File(
+    [new Uint8Array([0x50, 0x41, 0x54, 0x43, 0x48, 0, 0, 0xa8, 0, 1, 0x7f, 0x45, 0x4f, 0x46])],
+    "neighbor.ips",
+  );
+  const outputs = [];
+  const createObjectURL = URL.createObjectURL.bind(URL);
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    if (blob.size === original.length) outputs.push(blob);
+    return createObjectURL(blob);
+  });
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [rom, patch]);
+  await clickButtonByText("Add cheats to the patch order");
+  await addPracticeCheat("Make the greeting start with M");
+  await clickButtonByText("Close");
+  const patchToggle = () => document.querySelector('input[aria-label="Include neighbor"]');
+  const cheatToggle = () => document.querySelector('input[aria-label="Include Make the greeting start with M"]');
+  await expect.poll(() => patchToggle()?.checked).toBe(true);
+  await expect.poll(() => cheatToggle()?.checked).toBe(true);
+  patchToggle().click();
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect((await waitForApplyOutcome())?.kind).toBe("download");
+  await expect.poll(() => outputs.length).toBe(1);
+  const cheatOnly = original.slice();
+  cheatOnly[0xa7] = 0x0d;
+  expect(new Uint8Array(await outputs[0].arrayBuffer())).toEqual(cheatOnly);
+
+  cheatToggle().click();
+  await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(true);
+  expect(cheatToggle()).not.toBeNull();
+  patchToggle().click();
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect((await waitForApplyOutcome())?.kind).toBe("download");
+  await expect.poll(() => outputs.length).toBe(2);
+  const patchOnly = original.slice();
+  patchOnly[0xa8] = 0x7f;
+  expect(new Uint8Array(await outputs[1].arrayBuffer())).toEqual(patchOnly);
 });

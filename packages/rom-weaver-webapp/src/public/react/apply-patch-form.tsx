@@ -85,6 +85,7 @@ import { useApplyWeaveExport } from "./use-apply-weave-export.ts";
 import { getApplyOutputVerification, useApplyWeaveChainStatus } from "./use-apply-weave-chain-status.ts";
 import { useApplyCheats } from "./use-apply-cheats.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
+import { canApplySelection } from "./apply-selection.ts";
 import {
   type WeavePatchMeta,
   type WeaveSessionControllers,
@@ -267,6 +268,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
+  const [cheatsPresent, setCheatsPresent] = useState(false);
   const [cheatNames, setCheatNames] = useState<string[]>([]);
   const [practiceCheatSample, setPracticeCheatSample] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
@@ -1929,6 +1931,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   };
 
   const applyActionEnabled =
+    canApplySelection({ patchCount: currentPatchNames.length, enabledPatchCount, cheatsPresent, cheatsOn }) &&
     isApplyButtonActionable(outputState.applyButton) &&
     !outputState.applyButton.loading &&
     !outputState.pendingDownloadFileName;
@@ -2066,6 +2069,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             {...practiceCheatCatalog}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
+            onPresenceChange={setCheatsPresent}
             outputSummary={completedCheats}
             rom={cheatRom}
             renderStack={renderStack}
@@ -2073,6 +2077,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           />
         )}
         cheatsOn={cheatsOn}
+        cheatsPresent={cheatsPresent}
         onPracticeCheatSampleChange={setPracticeCheatSample}
         emulatorOutput={completedOutput}
         weaveExport={weaveExport}

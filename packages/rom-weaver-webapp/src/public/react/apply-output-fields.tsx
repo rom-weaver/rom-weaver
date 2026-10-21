@@ -19,7 +19,7 @@ import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import type { NoticeController, PatcherOutputController, PatcherUiController } from "./patcher-form.ts";
-import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
+import type { PatcherOutputState } from "./patcher-presentation.ts";
 import type { NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import { resolveAssetUrl } from "./asset-url.ts";
@@ -275,12 +275,12 @@ const ChecksumOverrideRow = ({
 
 export const ApplyOutputAction = ({
   applyTotalTime,
+  selectionEnabled,
   weaveTools,
   weaveVerificationError,
   cheatHeaderStripConflict,
   controllers,
   disabledPatchCount,
-  enabledPatchCount,
   emulatorCore,
   emulatorFileName,
   emulatorPlatform,
@@ -290,18 +290,17 @@ export const ApplyOutputAction = ({
   noticeController,
   onSelectView,
   outputState,
-  patches,
   uiController,
   uiState,
 }: {
   applyTotalTime: PatcherOutputState["totalTiming"];
+  selectionEnabled: boolean;
   weaveTools?: WeaveToolsState;
   weaveVerificationError: string | null;
   /** Cheats are On while a header strip is pinned - Apply stays blocked. */
   cheatHeaderStripConflict: string;
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
-  enabledPatchCount: number;
   emulatorCore?: string;
   emulatorFileName?: string;
   emulatorPlatform?: string;
@@ -311,7 +310,6 @@ export const ApplyOutputAction = ({
   localizer: ReturnType<typeof useUiLocalizer>;
   noticeController?: NoticeController;
   outputState: PatcherOutputState;
-  patches: PatchStackItemState[];
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => {
@@ -333,9 +331,7 @@ export const ApplyOutputAction = ({
       </div>
       <PatcherPrimaryAction
         controller={controllers.output}
-        disableRun={
-          (patches.length > 0 && enabledPatchCount === 0) || !!weaveVerificationError || !!cheatHeaderStripConflict
-        }
+        disableRun={!selectionEnabled || !!weaveVerificationError || !!cheatHeaderStripConflict}
         disableReason={weaveVerificationError || cheatHeaderStripConflict || undefined}
         showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
