@@ -57,6 +57,7 @@ import {
 } from "../public/react/drop-destination.ts";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
@@ -302,6 +303,17 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
       <RotateCcw aria-hidden="true" />
       <span>{localizer.message("ui.settings.reset")}</span>
     </button>
+  );
+};
+
+/** The workflow panel's heading controls, refitted to the room beside the first step's title. */
+const WorkflowPanelHead = ({ children, threads }: { children: React.ReactNode; threads: boolean }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => (ref.current ? observePanelHeadFit(ref.current) : undefined), []);
+  return (
+    <div className="workflow-panel-head" data-threads={threads ? "" : undefined} ref={ref}>
+      {children}
+    </div>
   );
 };
 
@@ -962,12 +974,7 @@ function WebappRoot({
         id={`panel-${view}`}
       >
         {view === "docs" || view === "whats-new" ? null : (
-          <div
-            className="workflow-panel-head"
-            data-threads={
-              view === "weave" || view === "patcher" || view === "creator" || view === "trim" ? "" : undefined
-            }
-          >
+          <WorkflowPanelHead threads={view === "weave" || view === "patcher" || view === "creator" || view === "trim"}>
             {view === "weave" || view === "patcher" || view === "creator" || view === "trim" ? (
               <PanelThreadCount
                 count={threadCount}
@@ -982,7 +989,7 @@ function WebappRoot({
               />
             )}
             <ResetButton onReset={actions.onReset} />
-          </div>
+          </WorkflowPanelHead>
         )}
         <div className="workflow-body">
           {/* A route that fails to load takes down only its own panel, so the others keep their staged work. */}

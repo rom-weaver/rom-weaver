@@ -322,6 +322,22 @@
   inset: -4px -8px;
   content: "";
 }
+/* A finger gets a 44px-tall halo. Neighbours split the head's gap at its
+   midline: at full -8px reach they overlapped across the whole gap, and the
+   later control - Reset, after the switch - took every tap in it. The halo sits
+   2px high, inside the step head's top padding, so its bottom clears the drop
+   zone under the heading. Reset ends the row, so it keeps its full reach toward
+   the panel edge. */
+@media (pointer: coarse) {
+  .rw-app .reset-btn::after,
+  .rw-app .panel-view-toggle::after,
+  .rw-app .panel-threads-btn::after {
+    inset: -12px calc(var(--sp-m) / -2) -8px;
+  }
+  .rw-app .reset-btn::after {
+    inset-inline-end: -8px;
+  }
+}
 @media (hover: hover) {
   .rw-app .reset-btn:hover {
     color: var(--fault);
@@ -348,8 +364,10 @@
   color: var(--thread-text);
 }
 /* Reset keeps its aria-label, so its text goes first when the heading runs out
-   of room; the switch keeps one too. Translated step titles (Eingaben,
-   Entradas) and labels (Zurücksetzen) reach the head without the thread count. */
+   of room; the switch keeps one too. These widths are the first-paint floor;
+   panel-head-fit.ts then measures the room beside the step title, which varies
+   with locale, workflow, and the switch state, and sheds labels in the same
+   order through `data-fit`. */
 @media (max-width: 419px) {
   .rw-app .workflow-panel-head .reset-btn {
     justify-content: center;
@@ -363,6 +381,24 @@
   .rw-app .workflow-panel-head .panel-view-toggle span {
     display: none;
   }
+}
+.rw-app .workflow-panel-head:is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .reset-btn {
+  justify-content: center;
+  min-inline-size: 24px;
+}
+.rw-app .workflow-panel-head:is([data-fit="1"], [data-fit="2"], [data-fit="3"]) .reset-btn span,
+.rw-app .workflow-panel-head:is([data-fit="2"], [data-fit="3"]) .panel-view-toggle span {
+  display: none;
+}
+/* the word goes last, and only from sight: it still names the button, so the
+   accessible name keeps matching the visible count */
+.rw-app .workflow-panel-head[data-fit="3"] .panel-threads-word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 /* Compress */
 .rw-app .compress-files {
