@@ -423,9 +423,15 @@ type WorkflowRuntimeBundle = {
 };
 
 type WorkflowRuntimeCheat = {
-  run: (input: { records: CheatRecord[]; signal?: AbortSignal; source: SourceRef }) => Promise<{
+  run: (input: {
+    exportPatches?: boolean;
+    records: CheatRecord[];
+    signal?: AbortSignal;
+    source: SourceRef;
+  }) => Promise<{
     conflicts: CheatWriteConflict[];
     records: ClassifiedCheatRecord[];
+    patches?: Array<{ bytes: number[]; format: "ips" | "ips32" }>;
   }>;
 };
 

@@ -47,6 +47,7 @@ test("changing the cheat list retires a finished apply result", async () => {
     }),
   );
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  await expect.poll(() => document.querySelector('[aria-label="Practice run steps"]')).not.toBeNull();
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(NES_ROM));
 
   await clickButtonByText("Add cheats to the patch order");
@@ -80,6 +81,7 @@ test("one enabled patch or cheat allows Apply and off entries leave the output u
   });
   mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  await expect.poll(() => document.querySelector('[aria-label="Practice run steps"]')).not.toBeNull();
   selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [rom, patch]);
   await clickButtonByText("Add cheats to the patch order");
   await addPracticeCheat("Make the greeting start with M");

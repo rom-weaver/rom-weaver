@@ -29,6 +29,7 @@ const romRow = { id: "rom-1", info: { crc32: "1F1C08FB", fileName: "emerald.gba"
 
 const uiState = { romInputs: [romRow] };
 const uiController = {
+  discardCompletedOutput: vi.fn(),
   getState: () => uiState,
   subscribe: () => () => undefined,
 };
@@ -44,6 +45,8 @@ const deferred = () => {
 const renderApplyCheats = () => {
   let stagedSource: Blob | undefined;
   const mutationQueueRef = { current: Promise.resolve() };
+  const selectedCheatPositionsRef = { current: [] as number[] };
+  const selectedCheatWeavePositionsRef = { current: [] as number[] };
   const workflow = { getWeaveExportSources: () => ({ rom: stagedSource ? { source: stagedSource } : null }) };
   const { result } = renderHook(() =>
     useApplyCheats({
@@ -51,7 +54,8 @@ const renderApplyCheats = () => {
       preparedWorkflowRef: { current: workflow },
       resolvedAssetBaseUrl: undefined,
       resolvedUiController: uiController,
-      selectedCheatPositionsRef: { current: [] },
+      selectedCheatPositionsRef,
+      selectedCheatWeavePositionsRef,
       selectedCheatsRef: { current: [] },
       setCheatConflictMessage: vi.fn(),
       setCheatNames: vi.fn(),
@@ -69,6 +73,8 @@ const renderApplyCheats = () => {
   return {
     queueMutation,
     result,
+    selectedCheatPositionsRef,
+    selectedCheatWeavePositionsRef,
     stage: (source: Blob) => {
       stagedSource = source;
     },
@@ -76,6 +82,18 @@ const renderApplyCheats = () => {
 };
 
 describe("useApplyCheats", () => {
+  it("stores separate execution and weave positions and clears both on reset", () => {
+    const { result, selectedCheatPositionsRef, selectedCheatWeavePositionsRef } = renderApplyCheats();
+    act(() => result.current.handleCheatSelection([], [0], [1]));
+    expect(selectedCheatPositionsRef.current).toEqual([0]);
+    expect(selectedCheatWeavePositionsRef.current).toEqual([1]);
+    act(() => result.current.handleCheatSelection([], [2]));
+    expect(selectedCheatWeavePositionsRef.current).toEqual([2]);
+    act(() => result.current.handleCheatSelection([]));
+    expect(selectedCheatPositionsRef.current).toEqual([]);
+    expect(selectedCheatWeavePositionsRef.current).toEqual([]);
+  });
+
   it("waits for queued ROM staging before classifying database cheats", async () => {
     const { queueMutation, result, stage } = renderApplyCheats();
     const staging = queueMutation();

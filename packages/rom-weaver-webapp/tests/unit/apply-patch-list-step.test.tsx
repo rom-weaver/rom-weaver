@@ -80,7 +80,7 @@ describe("ApplyPatchListStep", () => {
         </div>
       ),
     };
-    const { container } = renderList({ cheats });
+    const { container } = renderList({ cheats, disabledFlags: [true, false] });
     const cardNames = () =>
       Array.from(container.querySelector("#rom-weaver-list-patch-stack")?.children || []).map((card) =>
         card.classList.contains("cheat-test-card") ? "cheat" : "patch",
@@ -92,10 +92,10 @@ describe("ApplyPatchListStep", () => {
     expect(list?.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 3" }), { key: "ArrowUp" });
     await waitFor(() => expect(cardNames()).toEqual(["patch", "cheat", "patch"]));
-    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 1 }]);
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0, weavePosition: 1 }]);
     fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 2" }), { key: "ArrowUp" });
     await waitFor(() => expect(cardNames()).toEqual(["cheat", "patch", "patch"]));
-    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0 }]);
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0, weavePosition: 0 }]);
   });
 
   it("renders an empty stack with its supplied empty state", () => {
