@@ -1,3 +1,4 @@
+use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
 use std::os::raw::c_int;
 use tracing::trace;
@@ -261,7 +262,23 @@ impl<'a> ReadArchiveEntry<'a> {
         u64::try_from(unsafe { archive_entry_size(self.ptr.as_ptr()) }).ok()
     }
 
-    pub(crate) fn pathname_mb(&self) -> io::Result<&CStr> {
+    /// The entry name as UTF-8, decoding names stored in a legacy charset.
+    pub(crate) fn pathname(&self) -> io::Result<String> {
+        if let Ok(path) = self.pathname_utf8() {
+            return Ok(path.to_owned());
+        }
+        // libarchive's UTF-8 accessor can fail for names whose stored bytes are already UTF-8.
+        let pathname = self.pathname_mb()?;
+        if let Ok(path) = pathname.to_str() {
+            return Ok(path.to_owned());
+        }
+        Ok(decode_legacy_pathname(
+            pathname.to_bytes(),
+            self.archive.format(),
+        ))
+    }
+
+    fn pathname_mb(&self) -> io::Result<&CStr> {
         let pathname = unsafe { archive_entry_pathname(self.ptr.as_ptr()) };
         if pathname.is_null() {
             return Err(self.io_error("archive entry pathname was unavailable"));
@@ -269,7 +286,7 @@ impl<'a> ReadArchiveEntry<'a> {
         Ok(unsafe { CStr::from_ptr(pathname) })
     }
 
-    pub(crate) fn pathname_utf8(&self) -> io::Result<&str> {
+    fn pathname_utf8(&self) -> io::Result<&str> {
         let pathname = unsafe { archive_entry_pathname_utf8(self.ptr.as_ptr()) };
         if pathname.is_null() {
             return Err(self.io_error("archive entry UTF-8 pathname was unavailable"));

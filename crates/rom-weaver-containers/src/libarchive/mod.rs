@@ -57,6 +57,7 @@ use std::borrow::Cow;
 
 mod entries;
 mod ffi;
+mod legacy_pathname;
 mod read;
 mod write;
 
@@ -501,10 +502,7 @@ mod tests {
                 reader.open_filename(&input, "Unicode fixture", 4096, "Unicode open")?;
                 let mut decoded = BTreeMap::new();
                 while let Some(entry) = reader.next_entry()? {
-                    let name = match entry.pathname_utf8() {
-                        Ok(name) => name.to_owned(),
-                        Err(_) => entry.pathname_mb()?.to_string_lossy().into_owned(),
-                    };
+                    let name = entry.pathname()?;
                     let mut bytes = Vec::new();
                     entry.into_reader().read_to_end(&mut bytes)?;
                     assert!(
