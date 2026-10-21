@@ -373,6 +373,73 @@ describe("RomSearch release choices", () => {
     expect(version.expectedComponents.map((component) => component.filename)).toEqual(filenames);
   });
 
+  it.each(["title", "version"] as const)("dismisses %s results without clearing the query", (kind) => {
+    const version: ParsedIdentifyTitleMatch = {
+      algorithm: "name",
+      database: "test",
+      name: "First",
+      platform: "NES",
+      variant: "raw",
+    };
+    const title = { name: "First", platform: "NES", slug: "nes" };
+    const search = lookup({
+      text: "games",
+      titles: kind === "title" ? [title] : [],
+      versions: kind === "version" ? [version] : [],
+    });
+    const { getByRole, queryByRole } = render(
+      <RomSearch localizer={{ message: (key: string) => key } as never} lookup={search} />,
+    );
+    const input = getByRole("combobox") as HTMLInputElement;
+    const option = getByRole("option");
+    const choice = option.querySelector("button");
+    if (!choice) throw new Error("the result choice is missing");
+    choice.focus();
+    fireEvent.keyDown(choice, { key: "Escape" });
+
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+    expect(input.hasAttribute("aria-controls")).toBe(false);
+    expect(queryByRole("listbox")).toBeNull();
+    expect(input.value).toBe("games");
+    expect(document.activeElement).toBe(input);
+    expect(search.clear).not.toHaveBeenCalled();
+    expect(search.choose).not.toHaveBeenCalled();
+    expect(search.chooseTitle).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(getByRole("option").getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    if (kind === "version") expect(search.choose).toHaveBeenCalledWith(version);
+    else expect(search.chooseTitle).toHaveBeenCalledWith(title);
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.click(input);
+    expect(getByRole("listbox")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.change(input, { target: { value: "new query" } });
+    expect(search.setText).toHaveBeenCalledWith("new query", undefined);
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps late search results dismissed until the query is reopened", () => {
+    const search = lookup({ busy: true, text: "games" });
+    const form = (value: ReturnType<typeof useRomLookup>) => (
+      <RomSearch localizer={{ message: (key: string) => key } as never} lookup={value} />
+    );
+    const { getByRole, queryByRole, rerender } = render(form(search));
+    const input = getByRole("combobox");
+    fireEvent.keyDown(input, { key: "Escape" });
+    rerender(form({ ...search, busy: false, titles: [{ name: "First", platform: "NES", slug: "nes" }] }));
+
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(queryByRole("listbox")).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(getByRole("option").getAttribute("aria-selected")).toBe("true");
+  });
+
   it("starts on the first release and lets arrows move the Enter choice", () => {
     const choose = vi.fn();
     const versions: ParsedIdentifyTitleMatch[] = [
