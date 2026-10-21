@@ -322,15 +322,20 @@ describe("CheatDatabaseSection", () => {
 
   it("keeps a card when its switch goes off and drops it when removed", async () => {
     const onSelectionChange = vi.fn();
-    const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
+    const onPresenceChange = vi.fn();
+    const view = render(
+      <CheatDatabaseSection {...props} onPresenceChange={onPresenceChange} onSelectionChange={onSelectionChange} />,
+    );
     await openDialog(view);
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
 
     const toggle = view.getByRole("checkbox", { name: "Include Infinite lives" }) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(toggle);
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
     expect(view.getByText("Infinite lives")).toBeTruthy();
 
     fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
@@ -341,6 +346,19 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives from the cheat list" }));
     expect(view.queryByText("Infinite lives")).toBeNull();
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("reports no cheat cards when the section unmounts", async () => {
+    const onPresenceChange = vi.fn();
+    const view = render(<CheatDatabaseSection {...props} onPresenceChange={onPresenceChange} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
+
+    view.unmount();
+
+    expect(onPresenceChange).toHaveBeenLastCalledWith(false);
   });
 
   it("shows the cheat kind and source in the card drawer", async () => {

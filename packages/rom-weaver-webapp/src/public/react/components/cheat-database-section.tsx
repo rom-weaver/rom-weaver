@@ -691,6 +691,7 @@ export type CheatDatabaseSectionProps = {
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
   onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[]) => void;
+  onPresenceChange?: (present: boolean) => void;
   /**
    * Bake the ROM cheats that are On into a standalone patch and download it.
    * Resolves with the created file name. Absent when the workflow cannot run
@@ -713,6 +714,7 @@ export const CheatDatabaseSection = ({
   classifyManualCode,
   classifyDatabaseCheats,
   onSelectionChange,
+  onPresenceChange,
   onSaveAsPatch,
   outputSummary,
   validationMessage,
@@ -799,6 +801,11 @@ export const CheatDatabaseSection = ({
       }),
     [addedIds, records],
   );
+  const cardsPresent = cards.length > 0;
+  useEffect(() => {
+    onPresenceChange?.(cardsPresent);
+    return () => onPresenceChange?.(false);
+  }, [cardsPresent, onPresenceChange]);
   const reorderList = useListReorder({
     count: cards.length,
     disabled: cards.length < 2,
