@@ -312,6 +312,28 @@ describe("checkCssCoverage", () => {
 });
 
 describe("runE2EScenario", () => {
+  it("reports the underlying click failure when a download error wraps it", async () => {
+    const reports = [];
+    const cause = new Error("locator.click: Timeout 60000ms exceeded; Apply remained aria-disabled");
+    const failure = new Error("Download did not start", { cause });
+    let attempts = 0;
+    await assert.rejects(
+      () =>
+        runE2EScenario(
+          "combined BPS reapply",
+          async () => {
+            attempts += 1;
+            throw failure;
+          },
+          (line) => reports.push(line),
+        ),
+      (error) => error === failure,
+    );
+    assert.equal(attempts, 1);
+    assert.ok(reports.some((line) => line.includes(failure.message)));
+    assert.ok(reports.some((line) => line.includes(cause.message)));
+  });
+
   it("retries a disconnected browser without replaying completed scenarios", async () => {
     const calls = [];
     const reports = [];
