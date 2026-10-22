@@ -84,6 +84,23 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files[0]?.fileName).toBe("MyRenamedGame.bin");
   });
 
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2.bin"],
+    ["Game 2.2", "Game 2.2.bin"],
+    ["MyRenamedGame.BIN", "MyRenamedGame.BIN"],
+    ["MyRenamedGame.gba", "MyRenamedGame.gba"],
+  ])("treats requested raw output name %s as a base name", async (outputName, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.bin");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const options: ApplyWorkflowOptions = { output: { compression: "none", outputName } } as never;
+
+    const result = await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(result.files[0]?.fileName).toBe(expected);
+  });
+
   it("uses a requested output name verbatim when it already has an extension", async () => {
     const romFile = await makeFile("rom-bytes", "game.bin");
     const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");

@@ -23,6 +23,12 @@ describe("resolvePendingDownloadFileName", () => {
     );
   });
 
+  it("appends the result extension after a dotted version", () => {
+    expect(resolvePendingDownloadFileName({ requestedOutputName: "Hack v1.2", resultOutputName: "x.zip" })).toBe(
+      "Hack v1.2.zip",
+    );
+  });
+
   it("borrows the result extension when the requested name has none", () => {
     expect(resolvePendingDownloadFileName({ requestedOutputName: "rom", resultOutputName: "x.7z" })).toBe("rom.7z");
   });

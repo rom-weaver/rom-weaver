@@ -320,7 +320,7 @@ test("CHD staging emits descent trace events", async () => {
   }
 });
 
-test.each(["default", "custom", "cue extension", "reserved characters"])(
+test.each(["default", "custom", "cue extension", "reserved characters", "dotted version"])(
   "apply workflow stores direct CUE plus BIN raw output in one ZIP (%s name)",
   async (naming) => {
     const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -328,14 +328,24 @@ test.each(["default", "custom", "cue extension", "reserved characters"])(
     const outputStem = `patched-disc-${runId}`;
     // A typed name with Windows-reserved characters is sanitized for the ZIP, its entries and the CUE reference.
     const typedStem = `Zelda: Hack ${runId}`;
+    // A dotted version ("patched v1.2") is part of the base name, not an extension.
+    const dottedStem = `${outputStem} v1.2`;
     const outputName =
-      naming === "cue extension" ? `${outputStem}.cue` : naming === "reserved characters" ? typedStem : outputStem;
+      naming === "cue extension"
+        ? `${outputStem}.cue`
+        : naming === "reserved characters"
+          ? typedStem
+          : naming === "dotted version"
+            ? dottedStem
+            : outputStem;
     const expectedStem =
       naming === "default"
         ? `${inputStem} [change]`
         : naming === "reserved characters"
           ? `Zelda Hack ${runId}`
-          : outputStem;
+          : naming === "dotted version"
+            ? dottedStem
+            : outputStem;
     const workflow = new ApplyWorkflow({
       settings: {
         output: {

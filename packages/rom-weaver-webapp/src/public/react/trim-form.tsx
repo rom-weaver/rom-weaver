@@ -8,7 +8,7 @@ import {
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
-import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
+import { withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
@@ -288,8 +288,7 @@ const resolveTrimExecutionOutputName = (
 ) => {
   const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
-  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  return appendFileNameExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
+  return withOutputExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
 };
 
 const getFiniteSize = (size?: number | null) => (typeof size === "number" && Number.isFinite(size) ? size : undefined);
