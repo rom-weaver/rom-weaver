@@ -253,7 +253,8 @@ test.each([[""], [":::"]])(
       await expect.poll(() => downloadNames.at(-1)).toBe("valid-name.bin");
 
       setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), cleared);
-      await expect.poll(getAutomaticName, { timeout: 30000 }).toBe(automaticName);
+      // A cleared field shows the automatic name; a typed ":::" stays as typed.
+      await expect.poll(getAutomaticName, { timeout: 30000 }).toBe(cleared || automaticName);
       await clickApplyButton();
       await expect.poll(() => downloadNames.at(-1)).toBe(`${automaticName}.bin`);
     } finally {

@@ -479,7 +479,7 @@ const useLocalApplyPatchFormSession = ({
   useEffect(() => {
     const configuredOutputName = activeSettings.output?.outputName || "";
     setOutputName(configuredOutputName);
-    setOutputNameEdited(!!sanitizeTypedOutputName(configuredOutputName));
+    setOutputNameEdited(!!configuredOutputName.trim());
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
         resolvePendingDownloadFileName({
@@ -1331,8 +1331,9 @@ const useLocalApplyPatchFormSession = ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
       setDisplayFileName: (value: string) => {
-        // Names that sanitize to empty (cleared, ":::") are automatic, matching setApplyOutputName.
-        const nextOutputName = sanitizeTypedOutputName(value) ? getRequestedOutputName(value) : undefined;
+        // The field keeps what was typed; resolvePendingDownloadFileName treats a name that
+        // sanitizes to empty (":::") as automatic, matching setApplyOutputName.
+        const nextOutputName = getRequestedOutputName(value);
         clearDismissibleErrors();
         setOutputName(value);
         setOutputNameEdited(!!nextOutputName);
