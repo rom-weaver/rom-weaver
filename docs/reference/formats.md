@@ -110,7 +110,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 >
 > ⁵ GameCube CISO shares the `CISO` magic and `.ciso` extension with PSP CSO. The value at bytes 4..8 separates them: 24 (any version) or 0 (v1 and earlier) is PSP CSO, a non-zero multiple of 32 KiB is the GameCube block size. GameCube CISO is extract-only, decoded by the same disc reader as GCZ and WBFS; extract writes an ISO, which `compress` accepts for RVZ, ZIP, or 7z. Creating `.ciso` is not supported.
 
-Archive member names keep their exact Unicode spelling. A name that is not valid UTF-8 and carries no charset marker, as in older ZIP and tar files, is decoded as Shift-JIS when it reads as Japanese text, otherwise as CP437 for ZIP, RAR, CAB, and LHA and as Windows-1252 for tar and other Unix formats. The result is the same on every platform, regardless of the system locale or code page.
+Archive member names keep their exact Unicode spelling. A name that is not valid UTF-8 and carries no charset marker, as in older ZIP and tar files, is decoded as Shift-JIS when it reads as Japanese text, otherwise as CP437 for ZIP, RAR, CAB, and LHA and as Windows-1252 for tar and other Unix formats. For ZIP and tar, the result does not depend on the platform, locale, or code page.
 
 When `compress` creates a CHD from a `.bin` or extensionless file, it uses the CD layout only on content evidence: a whole number of 2352-byte sectors that starts with the CD sync header or has an ISO9660 descriptor at sector 16, or a whole number of 2048-byte sectors with an ISO9660 descriptor at sector 16. Other such files become a hard-disk CHD when they carry a recognized partition table or boot sector, an A/V CHD for `chav` streams, and a raw CHD otherwise.
 

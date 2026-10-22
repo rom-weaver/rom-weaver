@@ -16,6 +16,14 @@ fn decodes_shift_jis_names_in_any_format() {
 }
 
 #[test]
+fn decodes_katakana_names_whose_trail_bytes_are_ascii() {
+    // ソ is 0x83 0x5C, so its trail byte is also the backslash.
+    for name in ["ソニック.gb", "ダイナマイト.gb", "マリオ (日本).sfc"] {
+        assert_eq!(decode_legacy_pathname(&SHIFT_JIS.encode(name).0, ZIP), name);
+    }
+}
+
+#[test]
 fn decodes_half_width_katakana_shift_jis_names() {
     assert_eq!(
         decode_legacy_pathname(&SHIFT_JIS.encode("ﾛｯｸﾏﾝ.nes").0, ZIP),

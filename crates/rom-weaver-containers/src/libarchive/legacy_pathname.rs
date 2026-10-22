@@ -41,14 +41,21 @@ pub(super) fn decode_legacy_pathname(bytes: &[u8], format: i32) -> String {
 }
 
 /// Latin names often also decode as Shift-JIS, because an accented byte plus the next ASCII
-/// letter forms a valid two-byte character (CP437 `Hélène` reads as `HＭ穫e`). Such names never
-/// pair two high bytes, while nearly every kana name does, so this requires one high-byte pair
-/// and two adjacent Japanese characters.
+/// letter forms a valid two-byte character (CP437 `Hélène` reads as `HＭ穫e`, Windows-1252
+/// `Génération` as `G駭駻ation`). Those decode to fullwidth Latin or kanji, never kana, and never
+/// pair two high bytes, so this requires kana or a high-byte pair, plus two adjacent Japanese
+/// characters. Kanji-only names whose trail bytes are all ASCII therefore fall back.
 fn decode_japanese(bytes: &[u8]) -> Option<String> {
-    if !has_high_byte_pair(bytes) {
+    let name = SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes)?;
+    let has_kana = name.chars().any(|character| {
+        matches!(
+            character,
+            '\u{3041}'..='\u{30fa}' | '\u{30fc}'..='\u{30ff}' | '\u{ff66}'..='\u{ff9f}'
+        )
+    });
+    if !has_kana && !has_high_byte_pair(bytes) {
         return None;
     }
-    let name = SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes)?;
     let mut previous_japanese = false;
     for character in name.chars() {
         let japanese = matches!(
@@ -63,22 +70,18 @@ fn decode_japanese(bytes: &[u8]) -> Option<String> {
     None
 }
 
-/// Whether a Shift-JIS two-byte character has a trail byte of 0x80 or above, or two half-width
-/// katakana bytes sit together.
+/// Whether a Shift-JIS two-byte character has a trail byte of 0x80 or above.
 fn has_high_byte_pair(bytes: &[u8]) -> bool {
     let mut index = 0;
     while let Some(&byte) = bytes.get(index) {
-        let next = bytes.get(index + 1).copied().unwrap_or(0);
-        match byte {
-            0x81..=0x9f | 0xe0..=0xfc => {
-                if next >= 0x80 {
-                    return true;
-                }
-                index += 2;
-            }
-            0xa1..=0xdf if (0xa1..=0xdf).contains(&next) => return true,
-            _ => index += 1,
+        if !matches!(byte, 0x81..=0x9f | 0xe0..=0xfc) {
+            index += 1;
+            continue;
         }
+        if bytes.get(index + 1).is_some_and(|&trail| trail >= 0x80) {
+            return true;
+        }
+        index += 2;
     }
     false
 }
