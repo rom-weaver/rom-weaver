@@ -25,6 +25,7 @@ import {
 } from "./browser-opfs-proxy-channel.ts";
 import { CREATE_FLAG, WRITABLE_FLAG } from "./browser-opfs-proxy-client.ts";
 import {
+  CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT,
   OPFS_PROXY_CONTROL_AUX_HIGH_INDEX,
   OPFS_PROXY_CONTROL_AUX_LOW_INDEX,
   OPFS_PROXY_CONTROL_HANDLE_INDEX,
@@ -60,6 +61,7 @@ const ERRNO_EXIST = 20;
 const ERRNO_IO = 29;
 const ERRNO_ISDIR = 31;
 const ERRNO_NOENT = 44;
+const ERRNO_NOSPC = 51;
 const ERRNO_NOTDIR = 54;
 const ERRNO_ROFS = 69;
 
@@ -429,6 +431,10 @@ class OpfsProxyServer {
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const source = data.subarray(0, Math.min(length, data.byteLength));
     const written = entry.handle.write(source, { at: offset });
+    if (written === CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT) {
+      this.trace?.(`[browser-opfs] proxy write out of storage path=${entry.path} offset=${offset}`);
+      throw new ProxyErrno(ERRNO_NOSPC);
+    }
     validateByteCount(written, source.byteLength, "write", offset);
     this.bumpVersion(entry.id);
     return written;
@@ -442,6 +448,11 @@ class OpfsProxyServer {
     entry.handle.truncate(size);
     const actual = entry.handle.getSize();
     if (actual !== size) {
+      // Chromium grows a file only as far as origin storage allows and still returns normally.
+      if (actual < size) {
+        this.trace?.(`[browser-opfs] proxy truncate out of storage path=${entry.path} requested=${size} got=${actual}`);
+        throw new ProxyErrno(ERRNO_NOSPC);
+      }
       throw new Error(`OPFS truncate failed for ${entry.path}: requested ${size}, got ${actual}`);
     }
     this.bumpVersion(entry.id);
@@ -694,5 +705,6 @@ function errnoForError(error: unknown): number {
   if (name === "TypeMismatchError") return ERRNO_NOTDIR;
   if (name === "InvalidModificationError") return ERRNO_EXIST;
   if (name === "NoModificationAllowedError") return ERRNO_ACCES;
+  if (name === "QuotaExceededError") return ERRNO_NOSPC;
   return ERRNO_IO;
 }
