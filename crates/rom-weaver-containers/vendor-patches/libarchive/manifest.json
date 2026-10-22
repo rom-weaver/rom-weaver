@@ -261,6 +261,11 @@
       "file": "libarchive/patches/7zip_solid_block.c",
       "target": "libarchive/archive_read_support_format_7zip.c",
       "mode": "append"
+    },
+    {
+      "file": "libarchive/patches/entry_stored_pathname.c",
+      "target": "libarchive/archive_entry.c",
+      "mode": "append"
     }
   ]
 }

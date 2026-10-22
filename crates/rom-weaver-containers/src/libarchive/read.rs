@@ -1,6 +1,6 @@
 use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
-use std::os::raw::c_int;
+use std::os::raw::{c_char, c_int};
 use tracing::trace;
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
@@ -12,6 +12,8 @@ type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 unsafe extern "C" {
     fn rom_weaver_7zip_entry_solid_block(archive: *mut archive) -> i64;
     fn rom_weaver_7zip_entry_decoder_bytes(archive: *mut archive) -> i64;
+    // Appended to the staged archive_entry.c the same way.
+    fn rom_weaver_archive_entry_stored_pathname(entry: *mut archive_entry) -> *const c_char;
 }
 
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
@@ -264,6 +266,16 @@ impl<'a> ReadArchiveEntry<'a> {
 
     /// The entry name as UTF-8, decoding names stored in a legacy charset.
     pub(crate) fn pathname(&self) -> io::Result<String> {
+        // The stored bytes come first: on Windows the UTF-8 accessor widens raw legacy bytes to
+        // Latin-1 code points instead of failing.
+        let stored = unsafe { rom_weaver_archive_entry_stored_pathname(self.ptr.as_ptr()) };
+        if !stored.is_null() {
+            let stored = unsafe { CStr::from_ptr(stored) };
+            return Ok(match stored.to_str() {
+                Ok(path) => path.to_owned(),
+                Err(_) => decode_legacy_pathname(stored.to_bytes(), self.archive.format()),
+            });
+        }
         if let Ok(path) = self.pathname_utf8() {
             return Ok(path.to_owned());
         }

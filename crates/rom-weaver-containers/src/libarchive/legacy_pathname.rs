@@ -40,10 +40,14 @@ pub(super) fn decode_legacy_pathname(bytes: &[u8], format: i32) -> String {
     name
 }
 
-/// Short Latin names often also decode as Shift-JIS, because a lone accented byte plus the next
-/// letter forms a valid two-byte character. Requiring two adjacent Japanese characters rejects
-/// those while keeping real kana and kanji names.
+/// Latin names often also decode as Shift-JIS, because an accented byte plus the next ASCII
+/// letter forms a valid two-byte character (CP437 `Hélène` reads as `HＭ穫e`). Such names never
+/// pair two high bytes, while nearly every kana name does, so this requires one high-byte pair
+/// and two adjacent Japanese characters.
 fn decode_japanese(bytes: &[u8]) -> Option<String> {
+    if !has_high_byte_pair(bytes) {
+        return None;
+    }
     let name = SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes)?;
     let mut previous_japanese = false;
     for character in name.chars() {
@@ -57,6 +61,26 @@ fn decode_japanese(bytes: &[u8]) -> Option<String> {
         previous_japanese = japanese;
     }
     None
+}
+
+/// Whether a Shift-JIS two-byte character has a trail byte of 0x80 or above, or two half-width
+/// katakana bytes sit together.
+fn has_high_byte_pair(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    while let Some(&byte) = bytes.get(index) {
+        let next = bytes.get(index + 1).copied().unwrap_or(0);
+        match byte {
+            0x81..=0x9f | 0xe0..=0xfc => {
+                if next >= 0x80 {
+                    return true;
+                }
+                index += 2;
+            }
+            0xa1..=0xdf if (0xa1..=0xdf).contains(&next) => return true,
+            _ => index += 1,
+        }
+    }
+    false
 }
 
 fn cp437_char(byte: u8) -> char {

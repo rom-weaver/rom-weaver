@@ -32,6 +32,24 @@ fn zip_falls_back_to_cp437() {
 }
 
 #[test]
+fn latin_names_with_several_accents_are_not_shift_jis() {
+    // Each accent plus the next letter is a valid Shift-JIS pair, and the pairs sit together.
+    assert_eq!(decode_legacy_pathname(b"H\x82l\x8ane.gb", ZIP), "Hélène.gb");
+    assert_eq!(
+        decode_legacy_pathname(b"G\x82n\x82ration.gb", ZIP),
+        "Génération.gb"
+    );
+    assert_eq!(
+        decode_legacy_pathname(b"G\xe9n\xe9ration.gb", TAR_GNU),
+        "Génération.gb"
+    );
+    assert_eq!(
+        decode_legacy_pathname(b"H\xe9l\xe8ne.gb", TAR_GNU),
+        "Hélène.gb"
+    );
+}
+
+#[test]
 fn tar_falls_back_to_windows_1252() {
     assert_eq!(
         decode_legacy_pathname(b"Pok\xe9mon.gb", TAR_GNU),
