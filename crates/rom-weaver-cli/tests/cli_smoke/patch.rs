@@ -8038,6 +8038,118 @@ fn patch_validate_plan_accepts_declared_headerless_size() {
     assert_eq!(verdict["matched"]["variant"], "headerless");
 }
 
+/// APSGBA and DPS pin only endpoint sizes. A patch made against the headered
+/// ROM fits its raw size; the headerless sibling's different size must not
+/// turn that into an input mismatch.
+#[test]
+fn patch_validate_plan_accepts_size_only_endpoints_of_headered_nes() {
+    let temp = setup_temp_dir();
+    let payload: Vec<u8> = (0..24 * 1024).map(|index| (index * 7 + 1) as u8).collect();
+    let input = temp.child("original.nes");
+    let headered = with_nes_header(&payload);
+    fs::write(input.path(), &headered).expect("fixture");
+    let mut expected = headered.clone();
+    expected[0x10 + 300] ^= 0x5a;
+    let modified = temp.child("expected.nes");
+    fs::write(modified.path(), &expected).expect("fixture");
+    let mut wrong_content = headered.clone();
+    wrong_content[0x10 + 301] ^= 0x01;
+    let wrong_content_input = temp.child("wrong-content.nes");
+    fs::write(wrong_content_input.path(), wrong_content).expect("fixture");
+    let wrong_size_input = temp.child("wrong-size.nes");
+    fs::write(wrong_size_input.path(), &headered[..headered.len() - 1024]).expect("fixture");
+
+    let plan_verdict = |input: &std::path::Path, patch: &std::path::Path, basis: &[&str]| {
+        let args = [
+            &["patch", "validate", "--input"][..],
+            &[input.to_str().expect("path")],
+            &[
+                "--patch",
+                patch.to_str().expect("path"),
+                "--plan",
+                "--jsonl",
+            ],
+            basis,
+        ]
+        .concat();
+        let plan = parse_single_json_line(
+            &Command::cargo_bin("rom-weaver")
+                .expect("binary")
+                .args(normalize_cli_args(&args))
+                .output()
+                .expect("run")
+                .stdout,
+        );
+        plan["details"]["patch_validation"]["per_patch"][0]["input_verdict"].clone()
+    };
+
+    for format in ["apsgba", "dps"] {
+        let patch = temp.child(format!("change.{format}"));
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                input.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+
+        for basis in [&[][..], &["--patch-basis", "base"][..]] {
+            assert_eq!(
+                plan_verdict(input.path(), patch.path(), basis),
+                "passed",
+                "{format} {basis:?}"
+            );
+        }
+        assert_eq!(
+            plan_verdict(wrong_size_input.path(), patch.path(), &[]),
+            "failed",
+            "{format} wrong size"
+        );
+
+        let output = temp.child(format!("roundtrip-{format}.nes"));
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--patch-basis",
+                "base",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            expected,
+            "{format}"
+        );
+    }
+    // APSGBA's per-block crc16s still reject same-size wrong content.
+    assert_eq!(
+        plan_verdict(
+            wrong_content_input.path(),
+            temp.child("change.apsgba").path(),
+            &[]
+        ),
+        "failed"
+    );
+}
+
 #[test]
 fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
     let temp = setup_temp_dir();
