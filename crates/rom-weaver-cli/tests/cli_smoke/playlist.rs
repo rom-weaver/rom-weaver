@@ -296,56 +296,63 @@ fn playlist_lists_a_ccd_image_once_without_its_data_files() {
 }
 
 #[test]
-fn playlist_zip_finds_track_files_staged_under_ascii_names() {
-    // The browser stages `Pokémon (Disc N).bin` as `Pok_mon (Disc N).bin` but the cue text keeps the
-    // real name; the tracks must still be taken as the cue's, not listed as discs.
+fn playlist_zip_requires_the_exact_track_name() {
     let temp = setup_temp_dir();
-    for number in [1, 2] {
-        let staged = format!("Pok_mon (Disc {number})");
-        fs::write(temp.path().join(format!("{staged}.bin")), staged.as_bytes()).expect("write bin");
+    for (sheet, track) in [("Disc1.cue", "_Track.bin"), ("Disc2.cue", "Track.bin")] {
         fs::write(
-            temp.path().join(format!("{staged}.cue")),
-            format!(
-                "FILE \"Pok\u{e9}mon (Disc {number}).bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n"
-            ),
+            temp.path().join(sheet),
+            format!("FILE \"{track}\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n"),
         )
-        .expect("write cue");
+        .expect("cue");
     }
-    let mut inputs = Vec::new();
-    for name in [
-        "Pok_mon (Disc 1).cue",
-        "Pok_mon (Disc 1).bin",
-        "Pok_mon (Disc 2).cue",
-        "Pok_mon (Disc 2).bin",
-    ] {
-        inputs.push(temp.path().join(name).to_str().expect("p").to_string());
-    }
-    let input_refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
+    fs::write(temp.child("Track.bin").path(), b"B").expect("unrelated track");
+    let inputs: Vec<String> = ["Disc1.cue", "Disc2.cue", "Track.bin"]
+        .iter()
+        .map(|name| temp.path().join(name).to_str().unwrap().to_string())
+        .collect();
+    let refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
     let out = temp.child("Game.zip");
-    run_single_json_event(
-        &playlist_args(&input_refs, out.path().to_str().expect("p"), &[]),
-        0,
-    );
+    let event = run_single_json_event(&playlist_args(&refs, out.path().to_str().unwrap(), &[]), 1);
+    assert!(event.to_string().contains("_Track.bin"), "{event}");
+    assert!(event.to_string().contains("missing"), "{event}");
+    assert!(!out.path().exists());
+}
+
+#[test]
+fn playlist_zip_keeps_exact_underscore_and_unicode_track_bytes() {
+    let temp = setup_temp_dir();
+    for stem in ["_Track", "Pokémon", "日本語"] {
+        write_cue_disc(temp.path(), stem);
+    }
+    let inputs: Vec<String> = ["_Track", "Pokémon", "日本語"]
+        .iter()
+        .flat_map(|stem| [format!("{stem}.cue"), format!("{stem}.bin")])
+        .map(|name| temp.path().join(name).to_str().unwrap().to_string())
+        .collect();
+    let refs: Vec<&str> = inputs.iter().map(String::as_str).collect();
+    let out = temp.child("Game.zip");
+    run_single_json_event(&playlist_args(&refs, out.path().to_str().unwrap(), &[]), 0);
     let extracted = temp.child("unzipped");
     command_stdout(
         &[
             "extract",
             "--input",
-            out.path().to_str().expect("p"),
+            out.path().to_str().unwrap(),
             "--output",
-            extracted.path().to_str().expect("p"),
+            extracted.path().to_str().unwrap(),
             "--json",
         ],
         0,
     );
-    assert_eq!(
-        fs::read_to_string(extracted.child("Game.m3u").path()).expect("m3u"),
-        "Pok_mon (Disc 1).cue\nPok_mon (Disc 2).cue\n"
-    );
-    assert!(
-        extracted
-            .child("Pok\u{e9}mon (Disc 1).bin")
-            .path()
-            .is_file()
-    );
+    for stem in ["_Track", "Pokémon", "日本語"] {
+        assert_eq!(
+            fs::read(extracted.child(format!("{stem}.bin")).path()).unwrap(),
+            stem.as_bytes()
+        );
+    }
+    let playlist = fs::read_to_string(extracted.child("Game.m3u").path()).unwrap();
+    assert_eq!(playlist.lines().count(), 3);
+    for stem in ["_Track", "Pokémon", "日本語"] {
+        assert!(playlist.lines().any(|line| line == format!("{stem}.cue")));
+    }
 }

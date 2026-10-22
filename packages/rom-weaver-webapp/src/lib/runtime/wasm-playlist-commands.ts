@@ -17,6 +17,7 @@ import { runRomWeaverJson } from "./wasm-command-shared.ts";
 type PlaylistWorkerInput = {
   /** Staged paths of the disc files, in the order they should appear when `sort` is false. */
   discFilePaths: string[];
+  stagedPaths: Record<string, string>;
   /** Order the discs by the numbers in their names instead of keeping the given order. */
   sort: boolean;
   /** A ZIP holding the playlist and its discs; otherwise just the `.m3u`. */
@@ -42,6 +43,7 @@ const invokeRomWeaverPlaylistWorker = async (input: PlaylistWorkerInput): Promis
       input: input.discFilePaths,
       no_sort: !input.sort,
       output: outputPath,
+      staged_paths: input.stagedPaths,
     });
     emitRuntimeTrace({ logLevel: input.logLevel }, "runJson playlist dispatch", { command, outputPath });
     const result = await runRomWeaverJson(

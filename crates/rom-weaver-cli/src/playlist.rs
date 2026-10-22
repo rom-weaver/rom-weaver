@@ -100,71 +100,16 @@ fn natural_cmp(left: &str, right: &str) -> Ordering {
     }
 }
 
-/// The name the browser stages a file under: `normalizeVirtualFileName` runs
-/// twice (once building the source ref with the `disc.bin` fallback, again in
-/// `createVirtualInputPath` with `input.bin`), so `ときめき.bin` goes `_.bin` ->
-/// `bin`. Each pass turns runs of its characters into one `_` (a run of non-ASCII
-/// next to a reserved character gives `__`) and drops leading dots and edge
-/// whitespace or `_`; an empty result takes the pass's fallback. A sheet that
-/// names `Pokémon.bin` still finds the staged `Pok_mon.bin`.
-pub(crate) fn staged_file_name(name: &str) -> String {
-    let first = normalize_virtual_file_name(name, "disc.bin");
-    normalize_virtual_file_name(&first, "input.bin")
-}
-
-fn normalize_virtual_file_name(name: &str, fallback: &str) -> String {
-    let name = if name.is_empty() { fallback } else { name };
-    // Plain function pointers: one shared `replace_runs` body, not one copy per pass.
-    let passes: [fn(char) -> bool; 4] = [
-        |ch| matches!(ch, '\\' | '/'),
-        |ch| ch.is_ascii_control(),
-        |ch| !(' '..='~').contains(&ch),
-        |ch| matches!(ch, ':' | '*' | '?' | '"' | '<' | '>' | '|'),
-    ];
-    let mut out = name.to_string();
-    for pass in passes {
-        out = replace_runs(&out, pass);
-    }
-    let trimmed = out
-        .trim_start_matches('.')
-        .trim_matches(|ch: char| ch == '_' || ch.is_whitespace());
-    if trimmed.is_empty() {
-        fallback.to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
-/// Replace each maximal run of characters matching `pred` with one `_`.
-fn replace_runs(text: &str, pred: fn(char) -> bool) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut in_run = false;
-    for ch in text.chars() {
-        if pred(ch) {
-            if !in_run {
-                out.push('_');
-            }
-            in_run = true;
-        } else {
-            out.push(ch);
-            in_run = false;
-        }
-    }
-    out
-}
-
-/// A track file a sheet names, as it sits next to the sheet: under the exact
-/// name, or else under its [`staged_file_name`] form.
-fn sheet_track_path(sheet_dir: &Path, archive_name: &str) -> PathBuf {
+fn sheet_track_path(
+    sheet_dir: &Path,
+    archive_name: &str,
+    staged_paths: &BTreeMap<PathBuf, PathBuf>,
+) -> Option<PathBuf> {
     let exact = sheet_dir.join(archive_name);
-    if exact.is_file() {
-        return exact;
+    if staged_paths.is_empty() {
+        return Some(exact);
     }
-    let (folder, name) = archive_name
-        .rsplit_once('/')
-        .map_or(("", archive_name), |(folder, name)| (folder, name));
-    let staged = sheet_dir.join(folder).join(staged_file_name(name));
-    if staged.is_file() { staged } else { exact }
+    staged_paths.get(&normalize_lexically(&exact)).cloned()
 }
 
 fn file_name_of(path: &Path) -> String {
@@ -318,7 +263,12 @@ fn image_companions(input: &Path) -> Vec<(PathBuf, String)> {
 /// track file, or the data files stored with a `.ccd`/`.mds`), and collect
 /// those named files as companions. Only a ZIP reads or copies companions, so
 /// only a ZIP refuses names that point outside the sheet's folder.
-fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPlan> {
+fn plan_playlist(
+    inputs: &[PathBuf],
+    sort: bool,
+    zip: bool,
+    staged_paths: &BTreeMap<PathBuf, PathBuf>,
+) -> Result<PlaylistPlan> {
     let mut named: Vec<PathBuf> = Vec::new();
     let mut companions = Vec::new();
     for input in inputs {
@@ -341,7 +291,15 @@ fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPl
                     input.display()
                 )));
             }
-            let track_path = sheet_track_path(sheet_dir, &archive_name);
+            let Some(track_path) = sheet_track_path(sheet_dir, &archive_name, staged_paths) else {
+                if zip {
+                    return Err(RomWeaverError::Validation(format!(
+                        "`{reference}` is missing; disc sheet `{}` names it",
+                        input.display()
+                    )));
+                }
+                continue;
+            };
             named.push(track_path.clone());
             if zip {
                 companions.push((track_path, archive_name));
@@ -449,6 +407,7 @@ impl CliApp {
             &args.input,
             !args.no_sort,
             output_kind == PlaylistOutput::Zip,
+            &args.staged_paths,
         )?;
         trace!(
             discs = plan.discs.len(),

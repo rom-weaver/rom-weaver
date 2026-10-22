@@ -1,7 +1,10 @@
-use std::path::PathBuf;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use super::{
-    disc_number, natural_cmp, order_discs, relative_playlist_path, render_m3u, staged_file_name,
+    disc_number, natural_cmp, order_discs, relative_playlist_path, render_m3u, sheet_track_path,
 };
 
 fn names(paths: Vec<PathBuf>) -> Vec<String> {
@@ -148,26 +151,45 @@ fn relative_paths_use_forward_slashes_and_climb_with_dotdot() {
 }
 
 #[test]
-fn staged_file_name_matches_the_browser_staging_rules() {
-    for (name, expected) in [
-        ("Game (Disc 1).bin", "Game (Disc 1).bin"),
-        ("Pokémon (Disc 1).bin", "Pok_mon (Disc 1).bin"),
-        ("日本語 (Disc 1).bin", "(Disc 1).bin"),
-        ("A:B*C.bin", "A_B_C.bin"),
-        (".hidden.bin", "hidden.bin"),
-        // Separate passes, as in the browser: a non-ASCII run beside a reserved
-        // character gives two underscores (checked against the TS function).
-        ("Café: Disc 1.bin", "Caf__ Disc 1.bin"),
-        ("Pokémon™: Disc 1.bin", "Pok_mon__ Disc 1.bin"),
-        // The browser normalizes twice, with a `disc.bin` fallback on the first
-        // pass, so a name that is only non-ASCII becomes `disc.bin` and `é.bin`
-        // loses its dot to the second pass (checked against the TS function).
-        ("", "disc.bin"),
-        ("日本語", "disc.bin"),
-        ("é.bin", "bin"),
-        ("ときめき.bin", "bin"),
-        ("a\u{1}é.bin", "a__.bin"),
-    ] {
-        assert_eq!(staged_file_name(name), expected, "{name}");
+fn sheet_tracks_require_exact_original_names_in_the_staging_map() {
+    let staged_paths = BTreeMap::from([
+        (
+            PathBuf::from("/work/_Track.bin"),
+            PathBuf::from("/work/Track.bin"),
+        ),
+        (
+            PathBuf::from("/work/Pokémon.bin"),
+            PathBuf::from("/work/Pokémon.bin"),
+        ),
+    ]);
+    for name in ["_Track.bin", "./_Track.bin"] {
+        assert_eq!(
+            sheet_track_path(Path::new("/work"), name, &staged_paths),
+            Some(PathBuf::from("/work/Track.bin"))
+        );
     }
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "Pokémon.bin", &staged_paths),
+        Some(PathBuf::from("/work/Pokémon.bin"))
+    );
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "Track.bin", &staged_paths),
+        None
+    );
+    let unrelated = BTreeMap::from([(
+        PathBuf::from("/work/Track.bin"),
+        PathBuf::from("/work/Track.bin"),
+    )]);
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "_Track.bin", &unrelated),
+        None
+    );
+}
+
+#[test]
+fn native_sheet_tracks_keep_the_exact_reference() {
+    assert_eq!(
+        sheet_track_path(Path::new("/work"), "_Track.bin", &BTreeMap::new()),
+        Some(PathBuf::from("/work/_Track.bin"))
+    );
 }

@@ -5,10 +5,10 @@ import { buildPlaylist } from "../../src/platform/browser/browser-api.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { readRuntimeOutputBytes } from "../../src/storage/vfs/runtime-output.ts";
 import { PlaylistForm } from "../../src/webapp/components/playlist-form.tsx";
+import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 
-/* Unlike playlist-workflow.browser.test.js, nothing here is mocked: the form calls the real
-   `buildPlaylist`, which stages the files into the real WASM `playlist` command. Staging rewrites
-   non-ASCII names, so these cover the playlist keeping the names of the user's own files. */
+/* These tests MUST exercise the real browser staging and WASM playlist command so filename
+   normalization cannot silently change companion identity or playlist lines. */
 const DISC_2 = "Pokémon Stadium (Disc 2).iso";
 const DISC_1 = "Pokémon Stadium (Disc 1).iso";
 const decode = async (output) => new TextDecoder().decode(await readRuntimeOutputBytes(output));
@@ -80,7 +80,6 @@ test("a cue sheet and its track file are not split into two discs", async () => 
 });
 
 test("a non-ASCII cue sheet and its track file stay one disc", async () => {
-  // Staging rewrites `é` in the file names, but the cue text still names the real track file.
   const game = `Pokémon ${uniqueGame()}`;
   const files = [
     new File([sheet(`${game} (Disc 1).bin`)], `${game} (Disc 1).cue`),
@@ -194,6 +193,62 @@ test("playlist staging rejects ambiguous normalized track names before building 
       sort: true,
     }),
   ).rejects.toThrow(/_Track\.bin.*Track\.bin.*Rename one file.*CUE\/GDI/);
+});
+
+test("a missing companion cannot alias another supplied track's staging name", async () => {
+  for (const [missing, supplied] of [
+    ["_Track.bin", "Track.bin"],
+    ["Track.bin", "_Track.bin"],
+  ]) {
+    await expect(
+      buildPlaylist({
+        archive: true,
+        files: [
+          new File([sheet(missing)], "Disc1.cue"),
+          new File([sheet(supplied)], "Disc2.cue"),
+          new File(["B"], supplied),
+        ],
+        outputName: "missing.zip",
+        sort: true,
+      }),
+    ).rejects.toThrow(/missing/);
+  }
+});
+
+test("a ZIP resolves original underscore and Unicode companion names to their exact bytes", async () => {
+  const tracks = [
+    ["_Track.bin", "underscore"],
+    ["Pokémon.bin", "accent"],
+    ["日本語.bin", "japanese"],
+  ];
+  const files = tracks.flatMap(([name, bytes], index) => [
+    new File([sheet(name)], `Disc${index + 1}.cue`),
+    new File([bytes], name),
+  ]);
+  const built = await buildPlaylist({ archive: true, files, outputName: "originals.zip", sort: true });
+  try {
+    expect(built.discIndexes).toEqual([0, 2, 4]);
+    const extracted = await browserRuntime.compression.extract({
+      source: new File([await readRuntimeOutputBytes(built.output)], "originals.zip"),
+      entries: [],
+      extractAll: true,
+      format: "zip",
+    });
+    try {
+      expect(extracted.outputs.map((output) => output.fileName).sort()).toEqual(
+        ["originals.m3u", "Disc1.cue", "Disc2.cue", "Disc3.cue", ...tracks.map(([name]) => name)].sort(),
+      );
+      for (const [name, bytes] of tracks) {
+        const output = extracted.outputs.find((output) => output.fileName === name);
+        expect(output).toBeDefined();
+        expect(await (await browserRuntime.publicOutput.getBlob(output)).text()).toBe(bytes);
+      }
+    } finally {
+      await Promise.all(extracted.outputs.map((output) => output.dispose()));
+    }
+  } finally {
+    await built.output.dispose();
+  }
 });
 
 test("removing one cue keeps an audio track shared by the remaining cue", async () => {

@@ -3530,6 +3530,11 @@ Without :level, a codec follows the --compress-level profile."
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PlaylistCommand {
+    /// Browser inputs MUST map original logical paths to their staged paths explicitly.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub staged_paths: BTreeMap<PathBuf, PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

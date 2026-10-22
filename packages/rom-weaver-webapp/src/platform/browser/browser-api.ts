@@ -635,6 +635,13 @@ const buildPlaylistNow = async ({ archive, files, logLevel, outputName, signal, 
     const result = await invokeRomWeaverPlaylistWorker({
       archive,
       discFilePaths: staged.map((source) => source.filePath),
+      stagedPaths: Object.fromEntries(
+        staged.map((source, index) => {
+          const name = getNamedSourceFileName(files[index], { fallback: "disc.bin" });
+          const directory = source.filePath.slice(0, source.filePath.lastIndexOf("/") + 1);
+          return [`${directory}${name}`, source.filePath];
+        }),
+      ),
       logLevel,
       outputName,
       signal,
