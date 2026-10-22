@@ -293,6 +293,7 @@ test("the form shows an actionable error for normalized name collisions", async 
   pick([new File(["a"], "_Track.bin"), new File(["b"], "Track.bin")]);
   await waitFor(() => host.textContent.includes("Rename one file"));
   expect(host.textContent).toContain('same browser staging name "Track.bin"');
+  await waitFor(() => cardNames().length === 2);
   expect(cardNames()).toEqual(["_Track.bin", "Track.bin"]);
 });
 
