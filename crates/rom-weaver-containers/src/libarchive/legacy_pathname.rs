@@ -42,32 +42,38 @@ pub(super) fn decode_legacy_pathname(bytes: &[u8], format: i32) -> String {
 
 /// Latin names often also decode as Shift-JIS, because an accented byte plus the next ASCII
 /// letter forms a valid two-byte character (CP437 `Hélène` reads as `HＭ穫e`, Windows-1252
-/// `Génération` as `G駭駻ation`). Those decode to fullwidth Latin or kanji, never kana, and never
-/// pair two high bytes, so this requires kana or a high-byte pair, plus two adjacent Japanese
-/// characters. Kanji-only names whose trail bytes are all ASCII therefore fall back.
+/// `Génération` as `G駭駻ation`, `dégât` as `dＨフ`). Such pairs always have an ASCII trail byte
+/// and rarely yield two kana in a row, so a name needs two adjacent Japanese characters when it
+/// has a pair with a high trail byte, and two adjacent kana otherwise. Kanji-only names whose
+/// trail bytes are all ASCII therefore fall back.
 fn decode_japanese(bytes: &[u8]) -> Option<String> {
     let name = SHIFT_JIS.decode_without_bom_handling_and_without_replacement(bytes)?;
-    let has_kana = name.chars().any(|character| {
-        matches!(
-            character,
-            '\u{3041}'..='\u{30fa}' | '\u{30fc}'..='\u{30ff}' | '\u{ff66}'..='\u{ff9f}'
-        )
-    });
-    if !has_kana && !has_high_byte_pair(bytes) {
-        return None;
-    }
-    let mut previous_japanese = false;
-    for character in name.chars() {
-        let japanese = matches!(
-            character,
-            '\u{3000}'..='\u{30ff}' | '\u{4e00}'..='\u{9fff}' | '\u{ff01}'..='\u{ff9f}'
-        );
-        if japanese && previous_japanese {
-            return Some(name.into_owned());
-        }
-        previous_japanese = japanese;
-    }
-    None
+    let accepted = if has_high_byte_pair(bytes) {
+        has_adjacent(&name, |character| {
+            matches!(
+                character,
+                '\u{3000}'..='\u{30ff}' | '\u{4e00}'..='\u{9fff}' | '\u{ff01}'..='\u{ff9f}'
+            )
+        })
+    } else {
+        has_adjacent(&name, |character| {
+            matches!(
+                character,
+                '\u{3041}'..='\u{30fa}' | '\u{30fc}'..='\u{30ff}' | '\u{ff66}'..='\u{ff9f}'
+            )
+        })
+    };
+    accepted.then(|| name.into_owned())
+}
+
+fn has_adjacent(name: &str, matches: impl Fn(char) -> bool) -> bool {
+    let mut previous = false;
+    name.chars().any(|character| {
+        let current = matches(character);
+        let pair = previous && current;
+        previous = current;
+        pair
+    })
 }
 
 /// Whether a Shift-JIS two-byte character has a trail byte of 0x80 or above.

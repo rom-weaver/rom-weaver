@@ -68,7 +68,9 @@ pub fn list_regular_archive_file_entries(
                         "{format_name} list failed while decoding entry {index}: {error}"
                     ))
                 })?;
-                if let Some(name) = normalize_archive_name(&entry_path) {
+                // Legacy ZIP directories may still end in `\`; libarchive only rewrites flagged names.
+                let is_dir_name = entry_path.ends_with('\\');
+                if let Some(name) = normalize_archive_name(&entry_path).filter(|_| !is_dir_name) {
                     entries.push(RegularArchiveFileEntry {
                         index,
                         name,
@@ -136,7 +138,7 @@ pub fn probe_regular_archive(
             }
 
             summary.entries_total = summary.entries_total.saturating_add(1);
-            if entry.is_dir() {
+            if entry.is_dir() || entry_path.ends_with('\\') {
                 summary.directories = summary.directories.saturating_add(1);
             } else {
                 summary.files = summary.files.saturating_add(1);

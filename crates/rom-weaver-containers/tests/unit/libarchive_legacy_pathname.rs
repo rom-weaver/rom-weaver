@@ -43,6 +43,9 @@ fn zip_falls_back_to_cp437() {
 fn latin_names_with_several_accents_are_not_shift_jis() {
     // Each accent plus the next letter is a valid Shift-JIS pair, and the pairs sit together.
     assert_eq!(decode_legacy_pathname(b"H\x82l\x8ane.gb", ZIP), "Hélène.gb");
+    // CP437 `â` plus a letter is katakana: `dégât` reads as `dＨフ`.
+    assert_eq!(decode_legacy_pathname(b"d\x82g\x83t.gb", ZIP), "dégât.gb");
+    assert_eq!(decode_legacy_pathname(b"P\x83t\x82s.gb", ZIP), "Pâtés.gb");
     assert_eq!(
         decode_legacy_pathname(b"G\x82n\x82ration.gb", ZIP),
         "Génération.gb"

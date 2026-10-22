@@ -13,3 +13,15 @@ diff --git a/libarchive/archive_read_support_format_zip.c b/libarchive/archive_r
  	    (wp = archive_entry_pathname_w(entry)) != NULL) {
  		if (wcschr(wp, L'/') == NULL && wcschr(wp, L'\\') != NULL) {
  			size_t i;
+@@ -1084,7 +1088,10 @@
+ 
+ 	/* Make sure directories end in '/' */
+ 	if ((zip_entry->mode & AE_IFMT) == AE_IFDIR) {
+-		wp = archive_entry_pathname_w(entry);
++		/* rom-weaver: append to the stored bytes of names without the
++		 * UTF-8 flag, as above. */
++		wp = (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0 ?
++		    archive_entry_pathname_w(entry) : NULL;
+ 		if (wp != NULL) {
+ 			len = wcslen(wp);
+ 			if (len > 0 && wp[len - 1] != L'/') {
