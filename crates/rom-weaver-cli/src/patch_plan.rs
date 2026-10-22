@@ -530,19 +530,37 @@ fn match_embedded_base(
     allow_reverse_handler_match: bool,
 ) -> (Option<String>, bool, Option<PatchEndpointSelection>) {
     let candidates = patch.embedded_base_input_candidates(allow_reverse_handler_match);
+    match_base_candidates(
+        patch,
+        &candidates,
+        base_variants,
+        allow_reverse_handler_match,
+    )
+}
+
+/// Match `candidates` against every representation of the base. The variants
+/// are alternative views of one ROM, so a conflict with one (a headerless
+/// sibling's size) is a base conflict only when no other view is compatible.
+fn match_base_candidates(
+    patch: &PlanPatchInput,
+    candidates: &[&PlanState],
+    base_variants: &[BaseVariant],
+    allow_reverse_handler_match: bool,
+) -> (Option<String>, bool, Option<PatchEndpointSelection>) {
     let mut conflicted = false;
-    for (index, variant) in base_variants.iter().enumerate() {
-        match compare_candidates(&candidates, &variant.state) {
+    let mut compatible = false;
+    for variant in base_variants {
+        match compare_candidates(candidates, &variant.state) {
             EvidenceMatch::Match => {
                 let execution = if patch.base_executions.is_empty() {
                     matching_base_execution(patch, &variant.state, allow_reverse_handler_match)
                 } else {
                     unique_execution(&patch.base_executions)
                 };
-                return (Some(base_variants[index].name.clone()), false, execution);
+                return (Some(variant.name.clone()), false, execution);
             }
             EvidenceMatch::Conflict => conflicted = true,
-            EvidenceMatch::Disjoint => {}
+            EvidenceMatch::Disjoint => compatible = true,
         }
     }
     let handler_can_infer_base = patch.has_forward_base_execution();
@@ -554,7 +572,7 @@ fn match_embedded_base(
             unique_execution(&patch.base_executions),
         );
     }
-    (None, conflicted, None)
+    (None, conflicted && !compatible, None)
 }
 
 /// Verdict for one required state against every compatible representation of
@@ -616,31 +634,12 @@ fn match_base(
         }
     }
     let candidates = patch.base_input_candidates(allow_reverse_handler_match);
-    let mut conflicted = false;
-    for (index, variant) in base_variants.iter().enumerate() {
-        match compare_candidates(&candidates, &variant.state) {
-            EvidenceMatch::Match => {
-                let execution = if patch.base_executions.is_empty() {
-                    matching_base_execution(patch, &variant.state, allow_reverse_handler_match)
-                } else {
-                    unique_execution(&patch.base_executions)
-                };
-                return (Some(base_variants[index].name.clone()), false, execution);
-            }
-            EvidenceMatch::Conflict => conflicted = true,
-            EvidenceMatch::Disjoint => {}
-        }
-    }
-    let handler_can_infer_base = patch.has_forward_base_execution();
-    if !patch.base_executions.is_empty() && (allow_reverse_handler_match || handler_can_infer_base)
-    {
-        return (
-            Some("handler-normalized".to_string()),
-            false,
-            unique_execution(&patch.base_executions),
-        );
-    }
-    (None, conflicted, None)
+    match_base_candidates(
+        patch,
+        &candidates,
+        base_variants,
+        allow_reverse_handler_match,
+    )
 }
 
 pub(crate) fn should_resolve_base_endpoints(
@@ -1477,6 +1476,76 @@ mod tests {
                 variant: "headerless".to_string()
             }
         );
+    }
+
+    fn headered_size_only_base() -> Vec<BaseVariant> {
+        base(&[
+            ("raw", &[], Some(24_592)),
+            ("headerless", &[], Some(24_576)),
+        ])
+    }
+
+    fn size_only_patch(name: &str, input_size: u64) -> PlanPatchInput {
+        let mut sized = patch(name);
+        sized.embedded = embedded(state(&[], Some(input_size)), state(&[], Some(24_592)));
+        sized
+    }
+
+    #[test]
+    fn size_only_endpoint_fitting_raw_base_is_not_a_headerless_conflict() {
+        let plan = resolve_verification_plan(
+            &headered_size_only_base(),
+            &[size_only_patch("change.apsgba", 24_592)],
+        );
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Unknown);
+        assert_eq!(plan.per_patch[0].matched, PatchInputMatch::None);
+    }
+
+    #[test]
+    fn declared_base_size_only_endpoint_fitting_raw_base_is_not_a_conflict() {
+        let head = patch("head.ips");
+        let mut declared = size_only_patch("change.dps", 24_592);
+        declared.declared_basis = Some(PatchInputBasis::Base);
+
+        let plan = resolve_verification_plan(&headered_size_only_base(), &[head, declared]);
+
+        assert_eq!(plan.per_patch[1].basis, PatchInputBasis::Base);
+        assert_eq!(plan.per_patch[1].input_verdict, PatchInputVerdict::Unknown);
+    }
+
+    #[test]
+    fn size_only_endpoint_fitting_no_base_representation_fails() {
+        let plan = resolve_verification_plan(
+            &headered_size_only_base(),
+            &[size_only_patch("change.dps", 24_000)],
+        );
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
+    }
+
+    #[test]
+    fn no_base_representation_is_not_a_conflict() {
+        let plan = resolve_verification_plan(&[], &[size_only_patch("change.dps", 24_592)]);
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Unknown);
+    }
+
+    #[test]
+    fn checksum_conflict_on_raw_is_not_hidden_by_size_fit() {
+        let variants = base(&[
+            ("raw", &[("crc32", BASE_CRC)], Some(1024)),
+            ("headerless", &[("crc32", HEADERLESS_CRC)], Some(1008)),
+        ]);
+        let mut a = patch("a.bps");
+        a.embedded = embedded(
+            state(&[("crc32", OTHER_CRC)], Some(1024)),
+            PlanState::default(),
+        );
+
+        let plan = resolve_verification_plan(&variants, &[a]);
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
     }
 
     #[test]
