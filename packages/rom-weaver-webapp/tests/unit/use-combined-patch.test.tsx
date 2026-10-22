@@ -54,6 +54,22 @@ const options = (run: Options["run"], overrides: Partial<Options> = {}): Options
 afterEach(cleanup);
 
 describe("useCombinedPatch", () => {
+  it("sanitizes the Apply name before deriving the combined patch name", async () => {
+    const run = vi.fn<Options["run"]>(() => new Promise<BrowserCreateResult>(() => undefined));
+    const { result, rerender } = renderHook((props: Partial<Options>) => useCombinedPatch(options(run, props)), {
+      initialProps: { name: "Zelda: Hack" } as Partial<Options>,
+    });
+    await act(async () => {
+      void result.current.run();
+    });
+    expect(run.mock.calls[0][0].settings).toMatchObject({ output: { outputName: "Zelda Hack-combined.bps" } });
+    rerender({ name: ":", revision: "patch-b" });
+    await act(async () => {
+      void result.current.run();
+    });
+    expect(run.mock.calls.at(-1)?.[0].settings).toMatchObject({ output: { outputName: "combined-combined.bps" } });
+  });
+
   it("creates and downloads the patch bytes, guards duplicate clicks, and reports the result once", async () => {
     const pending = deferred<BrowserCreateResult>();
     const patch = createdPatch();

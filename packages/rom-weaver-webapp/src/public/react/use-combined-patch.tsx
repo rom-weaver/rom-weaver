@@ -77,7 +77,8 @@ const useCombinedPatch = ({
   // Preparing the run re-estimates the caller's display name, so a running job MUST keep the name it started with.
   const [runName, setRunName] = useState<string | null>(null);
   const resolvedName =
-    sanitizeTypedOutputName(fileName) || `${getFileNameWithoutExtension((runName ?? name) || "combined")}-combined`;
+    sanitizeTypedOutputName(fileName) ||
+    `${getFileNameWithoutExtension(sanitizeTypedOutputName(runName ?? name) || "combined")}-combined`;
   const executionSettings: Partial<CreateSettings> = {
     ...settings,
     format: format as CreateSettings["format"],
