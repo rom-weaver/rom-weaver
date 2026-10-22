@@ -109,6 +109,35 @@ describe("PPF Undo input replacement", () => {
     expect(mocks.undo).toHaveBeenCalledWith(expect.objectContaining({ outputName: "game-restored.bin" }));
   });
 
+  it.each([
+    ["restored.bin", "restored.bin"],
+    ["Hack v1.2", "Hack v1.2.bin"],
+  ])("gives typed name %s the ROM extension only when it lacks a known one", async (typedName, expected) => {
+    mocks.ingest.mockImplementation(async ({ fileName }) => ({
+      outputs: [],
+      patchOutputs: [],
+      result: fileName.endsWith(".ppf")
+        ? { assets: [], patches: [{ fileName, format: "ppf", isValidPatch: true }] }
+        : { assets: [{ fileName }], patches: [] },
+    }));
+    const output = { fileName: expected, saveAs: vi.fn(), dispose: vi.fn(), size: 3 };
+    mocks.undo.mockResolvedValue(output);
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ defaultCompression: "none" }}>
+        <PpfUndoForm onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    const picker = view.container.querySelector("#ppf-undo-input-picker");
+    if (!picker) throw new Error("Missing input picker");
+    fireEvent.change(picker, { target: { files: [new File(["ROM"], "game.bin"), new File(["PPF"], "valid.ppf")] } });
+    const button = await view.findByRole("button", { name: "Restore original ROM" });
+    fireEvent.change(view.getByRole("textbox", { name: "Output filename" }), { target: { value: typedName } });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(output.saveAs).toHaveBeenCalledOnce());
+    expect(mocks.undo).toHaveBeenCalledWith(expect.objectContaining({ outputName: expected }));
+  });
+
   it("sanitizes the ROM-derived name when the typed name has no usable characters", async () => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],

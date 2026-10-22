@@ -8,7 +8,7 @@ import {
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
-import { withOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { removeKnownOutputExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
@@ -272,7 +272,8 @@ const getDefaultTrimOutputName = (sourceFileName: string, identifiedBase?: strin
 const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
-  const outputBaseName = getFileNameStem(normalizedOutputName).toLowerCase();
+  // The typed name is a stem, so only a known extension ends it: `Hack v1.2` keeps its `.2`.
+  const outputBaseName = removeKnownOutputExtension(normalizedOutputName).trim().toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
     return getDefaultTrimOutputName(sourceFileName);

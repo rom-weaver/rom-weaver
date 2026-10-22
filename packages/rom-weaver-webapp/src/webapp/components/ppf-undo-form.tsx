@@ -16,7 +16,11 @@ import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registr
 import { usePpfUndoInputs } from "./ppf-undo-inputs.tsx";
 import { hasDiscImageEvidence, isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
 import { getFileNameExtension, sanitizeFileNamePart, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
-import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import {
+  getLiteralFileNameExtension,
+  getOutputExtensions,
+  withOutputExtension,
+} from "../../lib/output/output-name-validation.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../../lib/compression/container-format-registry.ts";
 import {
@@ -210,7 +214,10 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
     try {
       const { undoPpf } = await import("../../platform/browser/browser-api.ts");
       const restored = await undoPpf({
-        outputName: `${sanitizeTypedOutputName(outputName) || sanitizeFileNamePart(restoredFileName(rom.name), "restored-rom")}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
+        outputName: withOutputExtension(
+          sanitizeTypedOutputName(outputName) || sanitizeFileNamePart(restoredFileName(rom.name), "restored-rom"),
+          getFileNameExtension(preparedRom?.fileName || rom.name) || "bin",
+        ),
         onWarning: (message) => setRuntimeWarnings((previous) => [...previous, message]),
         compression,
         metadata: prepared?.metadata,
