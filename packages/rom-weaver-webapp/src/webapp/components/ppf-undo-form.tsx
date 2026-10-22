@@ -209,7 +209,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
     try {
       const { undoPpf } = await import("../../platform/browser/browser-api.ts");
       const restored = await undoPpf({
-        outputName: `${sanitizeTypedOutputName(outputName) || "restored-rom"}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
+        outputName: `${sanitizeTypedOutputName(outputName) || restoredFileName(rom.name)}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
         onWarning: (message) => setRuntimeWarnings((previous) => [...previous, message]),
         compression,
         metadata: prepared?.metadata,

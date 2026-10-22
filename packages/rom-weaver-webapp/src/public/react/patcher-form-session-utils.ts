@@ -45,7 +45,7 @@ const resolvePendingDownloadFileName = ({
   requestedOutputName?: string;
   resultOutputName?: string;
 }) => {
-  const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName) || undefined;
+  const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName);
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
   if (normalizedRequestedOutputName) {
     if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
@@ -55,9 +55,7 @@ const resolvePendingDownloadFileName = ({
   return (
     normalizedResultOutputName ||
     sanitizeTypedOutputName(automaticOutputName) ||
-    undefined ||
     sanitizeTypedOutputName(fallbackOutputName) ||
-    undefined ||
     "output"
   );
 };
