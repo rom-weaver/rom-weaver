@@ -560,6 +560,7 @@ impl CliApp {
                 format: handler.descriptor().name.to_string(),
                 codec: None,
                 level: None,
+                rvz_block_size: None,
                 parent: None,
             };
             handler.create(&request, &context).map(|_| ())
