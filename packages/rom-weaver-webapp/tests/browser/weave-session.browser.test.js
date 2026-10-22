@@ -439,11 +439,11 @@ const SAMPLE_PATCHES = [
   ipsFile("world-to-weaver.ips", [...IPS_HEADER, 0, 0, 0xaf, 0, 5, 0x05, 0x01, 0x16, 0x05, 0x12, ...IPS_EOF]),
 ];
 
-const buildSampleWeave = async ({ patches } = {}) => {
+const buildSampleWeave = async ({ outputName = "rom-weaver.nes", patches } = {}) => {
   const weaveFile = new File(
     [
       JSON.stringify({
-        output: { name: "rom-weaver.nes" },
+        output: { name: outputName },
         patches: patches || [
           { basis: "base", name: "Hello to ROM", path: "hello-to-rom.ips" },
           { basis: "base", name: "World to WEAVER", path: "world-to-weaver.ips" },
@@ -525,6 +525,94 @@ test("sample weave rejects a wrong ROM until the override is checked", async () 
     applySpy.mockRestore();
   }
 });
+
+// Woven output of the two sample patches (scripts/first-sample-assets.mjs `wovenRom`).
+const SAMPLE_WOVEN_SHA256 = "7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e";
+const sha256Hex = async (blob) =>
+  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+/** Records each download anchor's file name with the blob its object URL points at. */
+const captureDownloads = () => {
+  const blobsByUrl = new Map();
+  const createObjectUrl = URL.createObjectURL.bind(URL);
+  const urlSpy = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    const url = createObjectUrl(blob);
+    blobsByUrl.set(url, blob);
+    return url;
+  });
+  // Calls through; `mock.contexts` holds each clicked anchor.
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click");
+  return {
+    getDownloads: () =>
+      clickSpy.mock.contexts
+        .filter((anchor) => anchor.download)
+        .map((anchor) => ({ blob: blobsByUrl.get(anchor.href), name: anchor.download })),
+    restore: () => {
+      clickSpy.mockRestore();
+      urlSpy.mockRestore();
+    },
+  };
+};
+
+const applyDottedSampleWeave = async ({
+  compression,
+  typedName,
+  weaveOutputName = "Practice 3.5.1.nes",
+  expectedFieldName = "Practice 3.5.1",
+}) => {
+  const capture = captureDownloads();
+  try {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({ outputName: weaveOutputName }),
+      loadFixtureFile(SAMPLE_ROM),
+    ]);
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    // The name field carries the stem; the manifest's `.nes` belongs to the format.
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe(expectedFieldName);
+    if (typedName) setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), typedName);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind, outcome && "errorText" in outcome ? outcome.errorText : "").toBe("download");
+    await expect.poll(() => capture.getDownloads().length, { timeout: 30000 }).toBeGreaterThan(0);
+    return capture.getDownloads().at(-1);
+  } finally {
+    capture.restore();
+  }
+};
+
+test("weave output name with a dotted version stem keeps its .nes extension", async () => {
+  const download = await applyDottedSampleWeave({ compression: "none" });
+  expect(download?.name).toBe("Practice 3.5.1.nes");
+  expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
+});
+
+test("compressed weave output with a dotted version stem names the archive entry with .nes", async () => {
+  const download = await applyDottedSampleWeave({ compression: "zip" });
+  expect(download?.name).toBe("Practice 3.5.1.zip");
+  // A ZIP stores entry names as plain bytes in its headers.
+  expect(new TextDecoder("latin1").decode(await download.blob.arrayBuffer())).toContain("Practice 3.5.1.nes");
+});
+
+for (const [typedName, expectedName] of [
+  ["Typed 2.0", "Typed 2.0.nes"],
+  ["Typed.nes", "Typed.nes"],
+  ["Typed.sfc", "Typed.sfc"],
+  ["Kaizo Mario #2.nes", "Kaizo Mario #2.nes"],
+]) {
+  test(`typed name "${typedName}" overrides the weave output name`, async () => {
+    const download = await applyDottedSampleWeave({ compression: "none", typedName });
+    expect(download?.name).toBe(expectedName);
+    expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
+  });
+}
 
 for (const romKind of ["matching", "wrong"]) {
   test(`expected-ROM checks follow an optional first patch switched on (${romKind} ROM)`, async () => {
@@ -2032,4 +2120,14 @@ test("a malformed weave drop shows an on-page error instead of silently emptying
       .not.toBe("");
     expect(getPatchStackFileNames()).toEqual([]);
   }
+});
+
+test("weave output name with a literal # keeps its whole stem and .nes extension", async () => {
+  const download = await applyDottedSampleWeave({
+    compression: "none",
+    expectedFieldName: "Hack.v2#2",
+    weaveOutputName: "Hack.v2#2.nes",
+  });
+  expect(download?.name).toBe("Hack.v2#2.nes");
+  expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
 });

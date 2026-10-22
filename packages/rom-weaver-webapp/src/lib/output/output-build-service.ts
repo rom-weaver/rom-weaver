@@ -28,7 +28,7 @@ import {
   isLazyExternalPatchFile,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { getFileNameWithoutExtension, replaceFileNameExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
@@ -44,6 +44,7 @@ import {
   createArchivePatchFileOutput,
   createPatchFileFromRuntimeOutput,
 } from "./archive-output-service.ts";
+import { withOutputExtension } from "./output-name-validation.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
 type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
@@ -374,11 +375,8 @@ const getOutputBaseName = (assets: InputAsset[]) => {
   return getFileNameWithoutExtension(name) || "patched";
 };
 
-const resolveRawRequestedOutputName = (outputName: string, source: PatchFileInstance) => {
-  if (hasFileNameExtension(outputName)) return outputName;
-  const sourceExtension = typeof source.getExtension === "function" ? source.getExtension() : "";
-  return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
-};
+const resolveRawRequestedOutputName = (outputName: string, source: PatchFileInstance) =>
+  withOutputExtension(outputName, typeof source.getExtension === "function" ? source.getExtension() : "");
 
 const createArchiveEntryFromPatchFile = (
   asset: InputAsset,

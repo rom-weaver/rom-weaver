@@ -5,6 +5,7 @@ import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
+import { removeKnownOutputExtension } from "../../lib/output/output-name-validation.ts";
 import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
@@ -105,10 +106,13 @@ const restoreWeavePatchMetadata = (
   }
 };
 
-/** The output name field carries the name WITHOUT an extension (the format select owns it). */
+/**
+ * The output name field carries the name WITHOUT an extension (the format select owns it). Only a
+ * known extension is removed, so a versioned stem such as `Practice 3.5.1` stays whole.
+ */
 const stripOutputNameExtension = (name: string): string => {
-  const stripped = name.replace(/\.[a-z0-9]{1,5}$/i, "").trim();
-  return stripped || name.trim();
+  const trimmed = name.trim();
+  return removeKnownOutputExtension(trimmed).trim() || trimmed;
 };
 
 /**

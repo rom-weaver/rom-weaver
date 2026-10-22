@@ -1,9 +1,6 @@
 import type { SetStateAction } from "react";
-import {
-  getFileNameExtension as getSharedFileNameExtension,
-  hasFileNameExtension,
-  sanitizeTypedOutputName,
-} from "../../lib/path-utils.ts";
+import { getLiteralFileNameExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -31,9 +28,6 @@ const getRequestedOutputName = (outputName: string): string | undefined => {
   return normalizedOutputName || undefined;
 };
 
-const getFileNameExtension = (fileName: string | null | undefined) =>
-  getSharedFileNameExtension(fileName, { includeDot: true });
-
 const resolvePendingDownloadFileName = ({
   automaticOutputName,
   fallbackOutputName,
@@ -47,11 +41,8 @@ const resolvePendingDownloadFileName = ({
 }) => {
   const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName);
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
-  if (normalizedRequestedOutputName) {
-    if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
-    const resultExtension = getFileNameExtension(normalizedResultOutputName);
-    return resultExtension ? `${normalizedRequestedOutputName}${resultExtension}` : normalizedRequestedOutputName;
-  }
+  if (normalizedRequestedOutputName)
+    return withOutputExtension(normalizedRequestedOutputName, getLiteralFileNameExtension(normalizedResultOutputName));
   return (
     normalizedResultOutputName ||
     sanitizeTypedOutputName(automaticOutputName) ||

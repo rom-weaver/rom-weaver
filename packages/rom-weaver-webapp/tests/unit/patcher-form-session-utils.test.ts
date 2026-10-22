@@ -27,6 +27,24 @@ describe("resolvePendingDownloadFileName", () => {
     expect(resolvePendingDownloadFileName({ requestedOutputName: "rom", resultOutputName: "x.7z" })).toBe("rom.7z");
   });
 
+  it("treats a version segment as part of the requested stem", () => {
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Practice 3.5.1", resultOutputName: "Practice 3.5.1.nes" }),
+    ).toBe("Practice 3.5.1.nes");
+    expect(resolvePendingDownloadFileName({ requestedOutputName: "Typed.sfc", resultOutputName: "x.nes" })).toBe(
+      "Typed.sfc",
+    );
+  });
+
+  it("borrows the literal result extension after a hash character", () => {
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Hack.v2#2", resultOutputName: "Hack.v2#2.nes" }),
+    ).toBe("Hack.v2#2.nes");
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Kaizo Mario #2", resultOutputName: "Kaizo Mario #2.nes" }),
+    ).toBe("Kaizo Mario #2.nes");
+  });
+
   it("falls back through result, automatic, fallback, then 'output'", () => {
     expect(resolvePendingDownloadFileName({ resultOutputName: "x.7z" })).toBe("x.7z");
     expect(resolvePendingDownloadFileName({ automaticOutputName: "auto.zip" })).toBe("auto.zip");
