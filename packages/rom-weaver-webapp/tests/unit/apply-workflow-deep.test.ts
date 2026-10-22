@@ -503,4 +503,34 @@ describe("runApplyWorkflow recovery and multi-asset paths", () => {
     });
     expect(result.inputs).toHaveLength(2);
   });
+
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2.sfc"],
+    ["game.sfc", "game.sfc"],
+    ["GAME.SFC", "GAME.SFC"],
+  ])("treats typed output name %s as a base name for the worker", async (typedName, expectedName) => {
+    const runtime = makeRuntime();
+    const input = asset("one", "one.sfc", 5);
+    input.file.getExtension = () => "sfc";
+    const patch = patchFile("fix.ips");
+    const parsed = parsedPatch("ips");
+    mocks.resolvePatchTargets.mockResolvedValue([input]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 0 });
+    mocks.parsePatchForApply.mockResolvedValue(parsed);
+    await runApplyWorkflow(
+      {
+        inputs: [sourceRef("one.sfc", 5)],
+        options: { output: { outputName: typedName } },
+        patches: [sourceRef("fix.ips", 4)],
+        preparedInputAssets: [input],
+        preparedPatchFiles: [patch],
+        parsedPatches: [parsed],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch.mock.calls[0]?.[0]).toMatchObject({
+      options: expect.objectContaining({ outputName: expectedName }),
+    });
+  });
 });

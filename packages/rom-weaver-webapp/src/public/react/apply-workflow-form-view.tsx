@@ -2,6 +2,7 @@ import type { useCombinedPatch } from "./use-combined-patch.tsx";
 import { SecondaryOutputJob } from "./apply-output-fields.tsx";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
 import type { WeaveRomExpectation } from "../../lib/weave/weave-session-model.ts";
 import { validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
@@ -906,6 +907,16 @@ function ApplyWorkflowFormView({
     fileNameId: "rom-weaver-input-output-file-name",
     fileNamePlaceholder: localizer.message("ui.apply.outputFilename"),
     format: outputState.compressionFormat,
+    // A header strip or restore swaps the ROM extension (smc/sfc), so either one is a real output name.
+    outputExtensions: getOutputExtensions(
+      [
+        ...romInputs.map((row) => getLiteralFileNameExtension(row.info.fileName)),
+        header.headeredExtension,
+        header.headerlessExtension,
+      ],
+      outputState.compressionFormat,
+      { inputFileName: romInputs[0]?.info.fileName },
+    ),
     formatPending: outputState.formatPending,
     formatId: "rom-weaver-select-output-format",
     formatOptions: outputState.options,

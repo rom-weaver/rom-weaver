@@ -2,6 +2,8 @@ import {
   CREATE_ARCHIVE_COMPRESSION_FORMATS,
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
   getCompressionOutputExtension,
+  isArchiveCompressionFormat,
+  isCompressionFormat,
 } from "../compression/container-format-registry.ts";
 import { isZ3dsCompressedExtension } from "../compression/z3ds-subtypes.ts";
 import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
@@ -84,9 +86,52 @@ const withOutputExtension = (fileName: string, sourceExtension: string | null | 
     ? appendFileNameExtension(fileName, sourceExtension)
     : fileName;
 
+/**
+ * The trailing extension of a typed `outputName` when it is a supported
+ * extension that none of `outputExtensions` (what the output is saved as)
+ * matches, such as `game.gba` for an SFC output. Returns the typed extension
+ * (lower-cased, no dot) for the warning, else null.
+ */
+const detectMismatchedExtension = (
+  outputName: string | null | undefined,
+  outputExtensions: readonly string[] | null | undefined,
+): string | null => {
+  const name = sanitizeTypedOutputName(outputName);
+  if (!hasKnownOutputExtension(name)) return null;
+  const expected = (outputExtensions || [])
+    .map((extension) => stripLeadingExtensionDot(extension).toLowerCase())
+    .filter((extension) => !!extension);
+  if (!expected.length) return null;
+  const extension = getLiteralFileNameExtension(name);
+  return expected.includes(extension) ? null : extension;
+};
+
+/**
+ * The extensions an output is saved with, for `detectMismatchedExtension`:
+ * the content extensions, plus the compression extension when compressed. An
+ * archive keeps the content extension on its entry, so that stays first
+ * (`sfc`, `zip`); a disc container replaces it, so the container comes first
+ * (`chd`, `iso`).
+ */
+const getOutputExtensions = (
+  contentExtensions: readonly (string | null | undefined)[],
+  compression?: string | null,
+  context: Parameters<typeof getCompressionOutputExtension>[1] = {},
+): string[] => {
+  const content = contentExtensions
+    .map((extension) => stripLeadingExtensionDot(extension).toLowerCase())
+    .filter((extension) => !!extension);
+  if (!isCompressionFormat(compression) || compression === "none") return content;
+  const compressed = stripLeadingExtensionDot(getCompressionOutputExtension(compression, context)).toLowerCase();
+  if (!compressed) return content;
+  return isArchiveCompressionFormat(compression) ? [...content, compressed] : [compressed, ...content];
+};
+
 export {
+  detectMismatchedExtension,
   detectOutputLikeExtension,
   getLiteralFileNameExtension,
+  getOutputExtensions,
   hasKnownOutputExtension,
   removeKnownOutputExtension,
   requireOutputName,

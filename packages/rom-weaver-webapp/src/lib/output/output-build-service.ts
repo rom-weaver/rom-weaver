@@ -28,7 +28,7 @@ import {
   isLazyExternalPatchFile,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { getFileNameWithoutExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { appendFileNameExtension, getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
@@ -44,7 +44,7 @@ import {
   createArchivePatchFileOutput,
   createPatchFileFromRuntimeOutput,
 } from "./archive-output-service.ts";
-import { withOutputExtension } from "./output-name-validation.ts";
+import { removeKnownOutputExtension, withOutputExtension } from "./output-name-validation.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
 type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
@@ -415,8 +415,10 @@ const createArchiveEntriesFromOutputAssets = (
   if (cueOutput && trackOutput && trackOutputs.length === 1) {
     const trackExtension = getArchiveTrackExtension(trackOutput.file, trackOutput.asset.fileName);
     if (trackExtension.toLowerCase() !== "bin") return createDefaultEntries();
-    const trackFileName = replaceFileNameExtension(baseName, trackExtension);
-    const cueFileName = replaceFileNameExtension(baseName, "cue");
+    // baseName may be a typed base name: keep a dotted version and drop only a known extension.
+    const discBaseName = removeKnownOutputExtension(baseName) || baseName;
+    const trackFileName = appendFileNameExtension(discBaseName, trackExtension);
+    const cueFileName = appendFileNameExtension(discBaseName, "cue");
     let cueText: string;
     try {
       cueText = replaceCuePatchFileName(
@@ -477,7 +479,7 @@ const buildSessionOutputFiles = async (
     const onlyFile = onlyOutput.file;
     if (requestedOutputName)
       onlyFile.fileName =
-        compression === "none"
+        compression === "none" || !isArchiveCompressionFormat(compression)
           ? resolveRawRequestedOutputName(requestedOutputName, onlyOutput.asset.file)
           : requestedOutputName;
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };

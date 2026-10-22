@@ -84,6 +84,27 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files[0]?.fileName).toBe("MyRenamedGame.bin");
   });
 
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2.bin"],
+    ["Game 2.2", "Game 2.2.bin"],
+    ["MyRenamedGame.BIN", "MyRenamedGame.BIN"],
+    ["MyRenamedGame.gba", "MyRenamedGame.gba"],
+    ["Hack v1.2b", "Hack v1.2b.bin"],
+    ["Hack v1.0-beta", "Hack v1.0-beta.bin"],
+    ["Game (USA) (v1.1)", "Game (USA) (v1.1).bin"],
+    ["Mario.Bros", "Mario.Bros.bin"],
+  ])("treats requested raw output name %s as a base name", async (outputName, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.bin");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const options: ApplyWorkflowOptions = { output: { compression: "none", outputName } } as never;
+
+    const result = await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(result.files[0]?.fileName).toBe(expected);
+  });
+
   it("uses a requested output name verbatim when it already has an extension", async () => {
     const romFile = await makeFile("rom-bytes", "game.bin");
     const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
@@ -96,6 +117,38 @@ describe("buildSessionOutputFiles", () => {
     const result = await buildSessionOutputFiles(assets, patchedById, options);
 
     expect(result.files[0]?.fileName).toBe("MyRenamedGame.gba");
+  });
+
+  it("keeps a dotted version in a typed name and appends the ROM extension to the ZIP entry", async () => {
+    const romFile = await makeFile("rom-bytes", "game.sfc");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.sfc");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+    const options: ApplyWorkflowOptions = { output: { compression: "zip", outputName: "Zelda Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile).mock.calls[0]?.[1]).toBe("Zelda Hack v1.2.sfc");
+  });
+
+  it.each([
+    ["chd", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2.rvz"],
+  ])("appends the %s extension to a typed dotted-version name for a single ISO", async (compression, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.iso");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.iso");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+    const options: ApplyWorkflowOptions = { output: { compression, outputName: "Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options, {
+      compression: { create },
+    } as unknown as WorkflowRuntime);
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe(expected);
   });
 
   it("routes a single patched asset through archive compression and returns the compressed output", async () => {
@@ -265,6 +318,25 @@ describe("buildSessionOutputFiles", () => {
     expect(new TextDecoder().decode(entries[0]?.data)).toContain('FILE "renamed.bin" BINARY');
   });
 
+  it.each([
+    ["x.cue", "x"],
+    ["Foo.gba", "Foo"],
+    ["Hack v1.2b", "Hack v1.2b"],
+    ["Mario.Bros", "Mario.Bros"],
+  ])("names a single BIN track and CUE for typed name %s", async (outputName, base) => {
+    const cueText = 'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\n';
+    const cueFile = await makeFile(cueText, "original.cue");
+    cueFile.metadata = { cueText };
+    const trackFile = await makeFile("track-bytes", "disc.bin");
+    const assets = [makeAsset("cue", "cue", cueFile, "group"), makeAsset("track", "track", trackFile, "group")];
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+
+    await buildSessionOutputFiles(assets, new Map(), { output: { compression: "zip", outputName } } as never);
+
+    const entries = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0].entries as Array<{ filename?: string }>;
+    expect(entries.map((entry) => entry.filename)).toEqual([`${base}.cue`, `${base}.bin`]);
+  });
+
   it("routes a seven-zip multi-asset output through the archive writer and cleans files once", async () => {
     const first = await makeFile("first", "first.bin");
     const second = await makeFile("second", "second.bin");
@@ -324,6 +396,29 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(request.romSpecific.chd.compressionProfile).toBe("min");
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
+  });
+
+  it.each([
+    ["chd", "Hack v1.2", "game.iso", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2", "game.iso", "Hack v1.2.rvz"],
+    ["chd", "Game (USA) (v1.1)", "game.iso", "Game (USA) (v1.1).chd"],
+    ["chd", "Hack.iso", "game.iso", "Hack.chd"],
+    ["chd", "Hack.chd", "game.iso", "Hack.chd"],
+  ])("names a typed %s output %s from %s as %s", async (compression, outputName, sourceName, expected) => {
+    const outputFile = await makeFile("rom-bytes", sourceName);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+
+    await createSingleFileRomSpecificOutput({
+      compression: compression as "chd" | "rvz",
+      options: { output: { outputName } } as never,
+      outputFile,
+      runtime: { compression: { create } } as unknown as WorkflowRuntime,
+    });
+
+    const request = create.mock.calls[0]?.[0];
+    expect(request.outputName).toBe(expected);
+    expect(request.fileName).toBe(outputName.endsWith(".chd") ? "Hack.iso" : `${outputName.replace(/\.iso$/, "")}.iso`);
   });
 
   it("passes configured RVZ settings through the shared output plan", async () => {
