@@ -223,7 +223,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (stage.state.status !== "ready" || !stage.state.selectedCandidateId)
         throw new RomWeaverError("AMBIGUOUS_SELECTION", "Trim source requires candidate selection");
       this.getOutputCompression();
-      const outputName = this.normalizeOutputName(this.outputName) || this.buildAutomaticOutputName();
+      const outputName = this.normalizeOutputName(this.outputName);
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await runTrimWorkflow(this.createTrimInput(stage), this.runtime);
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
