@@ -262,10 +262,24 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
           // Only the sheet's own folder can hold its tracks: a same-named track of another
           // disc's folder (Disc 2/Track 01.bin) is that disc's.
           const listed = new Set(probe.discIndexes);
+          const remaining = orderedRef.current.filter((file) => file !== disc);
+          let unclaimed = new Set(candidates.map((_, index) => index));
+          if (remaining.length) {
+            const remainingProbe = await buildPlaylist({
+              archive: false,
+              files: [...remaining, ...candidates].map((file) => file.source),
+              outputName: "order.m3u",
+              sort: false,
+            });
+            void remainingProbe.output.dispose();
+            unclaimed = new Set(remainingProbe.discIndexes.map((index) => index - remaining.length));
+          }
           const folder = folderOf(disc);
           gone = [
             disc,
-            ...candidates.filter((file, index) => !listed.has(index + 1) && isWithinFolder(folderOf(file), folder)),
+            ...candidates.filter(
+              (file, index) => !listed.has(index + 1) && unclaimed.has(index) && isWithinFolder(folderOf(file), folder),
+            ),
           ];
         } catch {
           // Fall back to removing just the chosen disc.

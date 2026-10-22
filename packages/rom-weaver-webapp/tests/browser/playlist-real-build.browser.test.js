@@ -179,3 +179,65 @@ test("removing or adding a disc keeps the order the user set with up/down", asyn
   await waitFor(() => !host.querySelector("[role='status']"));
   expect(cardNames()).toEqual([names[2], names[0], added]);
 });
+
+test("playlist staging rejects ambiguous normalized track names before building a ZIP", async () => {
+  await expect(
+    buildPlaylist({
+      archive: true,
+      files: [
+        new File([sheet("_Track.bin")], "Disc1.cue"),
+        new File(["A"], "_Track.bin"),
+        new File([sheet("Track.bin")], "Disc2.cue"),
+        new File(["B"], "Track.bin"),
+      ],
+      outputName: "collision.zip",
+      sort: true,
+    }),
+  ).rejects.toThrow(/_Track\.bin.*Track\.bin.*Rename one file.*CUE\/GDI/);
+});
+
+test("removing one cue keeps an audio track shared by the remaining cue", async () => {
+  const game = uniqueGame();
+  const sharedName = `${game} Shared.wav`;
+  await mount();
+  pick([
+    new File([sheet(sharedName)], `${game} Disc1.cue`),
+    new File([sheet(sharedName)], `${game} Disc2.cue`),
+    new File(["audio"], sharedName),
+  ]);
+  await waitFor(() => cardNames().length === 2);
+  expect(host.querySelector(".playlist-extras").textContent).toContain(sharedName);
+  host.querySelector(`[aria-label='Remove ${game} Disc1.cue']`).click();
+  await waitFor(() => cardNames().length === 1);
+  await waitFor(() => !host.querySelector("[role='status']"));
+  expect(cardNames()).toEqual([`${game} Disc2.cue`]);
+  expect(host.querySelector(".playlist-extras").textContent).toContain(sharedName);
+});
+
+test("the form shows an actionable error for normalized name collisions", async () => {
+  await mount();
+  pick([new File(["a"], "_Track.bin"), new File(["b"], "Track.bin")]);
+  await waitFor(() => host.textContent.includes("Rename one file"));
+  expect(host.textContent).toContain('same browser staging name "Track.bin"');
+  expect(cardNames()).toEqual(["_Track.bin", "Track.bin"]);
+});
+
+test("fresh cue inputs can reuse the previous playlist's names immediately", async () => {
+  const game = uniqueGame();
+  const cueName = `${game}.cue`;
+  const trackName = `${game}.bin`;
+  for (const contents of ["A", "B"]) {
+    const result = await buildPlaylist({
+      archive: false,
+      files: [new File([sheet(trackName)], cueName), new File([contents], trackName)],
+      outputName: "repeated.m3u",
+      sort: true,
+    });
+    try {
+      expect(result.entries).toEqual([cueName]);
+      expect(result.discIndexes).toEqual([0]);
+    } finally {
+      await result.output.dispose();
+    }
+  }
+});

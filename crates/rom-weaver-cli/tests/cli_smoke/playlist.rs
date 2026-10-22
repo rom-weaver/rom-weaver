@@ -54,6 +54,42 @@ fn playlist_orders_discs_given_out_of_order_with_relative_paths() {
 }
 
 #[test]
+fn playlist_keeps_an_unrelated_disc_with_a_companion_basename() {
+    let temp = setup_temp_dir();
+    let a = temp.child("a");
+    let b = temp.child("b");
+    fs::create_dir_all(a.path()).expect("a folder");
+    fs::create_dir_all(b.path()).expect("b folder");
+    let cue = a.child("Disc1.cue");
+    let track = a.child("Track.bin");
+    let independent = b.child("Track.bin");
+    fs::write(
+        cue.path(),
+        b"FILE \"Track.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue");
+    fs::write(track.path(), b"companion").expect("track");
+    fs::write(independent.path(), b"independent disc").expect("disc");
+    let out = temp.child("Game.m3u");
+    run_single_json_event(
+        &playlist_args(
+            &[
+                cue.path().to_str().expect("p"),
+                track.path().to_str().expect("p"),
+                independent.path().to_str().expect("p"),
+            ],
+            out.path().to_str().expect("p"),
+            &["--no-sort"],
+        ),
+        0,
+    );
+    assert_eq!(
+        fs::read_to_string(out.path()).expect("m3u"),
+        "a/Disc1.cue\nb/Track.bin\n"
+    );
+}
+
+#[test]
 fn playlist_no_sort_keeps_the_given_order() {
     let temp = setup_temp_dir();
     for stem in ["Game (Disc 2)", "Game (Disc 1)"] {

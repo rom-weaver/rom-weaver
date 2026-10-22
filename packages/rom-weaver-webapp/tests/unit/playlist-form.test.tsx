@@ -118,6 +118,32 @@ describe("Playlist form", () => {
     view.unmount();
   });
 
+  it("keeps a shared audio track when either of its cue sheets is removed", async () => {
+    mocks.build.mockImplementation(async ({ files }) => {
+      const names = files.map((file: File) => file.name);
+      const hasSheet = names.some((name: string) => name.endsWith(".cue"));
+      const discIndexes = names.flatMap((name: string, index: number) =>
+        name.endsWith(".cue") || !hasSheet ? [index] : [],
+      );
+      return { discIndexes, entries: discIndexes.map((i: number) => names[i]), output: output("order.m3u") };
+    });
+    const view = render(<PlaylistForm />);
+    const shared = new File(["audio"], "Shared.wav");
+    pick(view.container, [new File(["cue1"], "Disc1.cue"), new File(["cue2"], "Disc2.cue"), shared]);
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Disc1.cue", "Disc2.cue"]));
+    fireEvent.click(view.getByLabelText("Remove Disc1.cue"));
+    await waitFor(() => expect(cardNames(view.container)).toEqual(["Disc2.cue"]));
+    expect(view.container.querySelector(".playlist-extras")?.textContent).toContain("Shared.wav");
+    fireEvent.click(view.getByRole("button", { name: /Build playlist/ }));
+    await waitFor(() =>
+      expect(mocks.build.mock.calls.at(-1)?.[0].files).toEqual([
+        expect.objectContaining({ name: "Disc2.cue" }),
+        shared,
+      ]),
+    );
+    view.unmount();
+  });
+
   it("refuses a different file that shares a name, and ignores the same file dropped again", async () => {
     mocks.build.mockImplementation(async ({ files }) => ({
       discIndexes: files.map((_: File, index: number) => index),

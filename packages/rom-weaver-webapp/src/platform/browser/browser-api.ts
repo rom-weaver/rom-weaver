@@ -14,6 +14,8 @@ import { createSingleFileRomSpecificOutput } from "../../lib/output/output-build
 import { toPublicOutput } from "../../lib/apply/patch-apply-service.ts";
 import type { RomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { createArchiveOutput, createPatchFileFromRuntimeOutput } from "../../lib/output/archive-output-service.ts";
+import { getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
+import { normalizeVirtualFileName } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { matchPlaylistLines, realPlaylistLines, renamePlaylistText } from "../../lib/playlist-names.ts";
 import { createRuntimeOutputFromBytes, readRuntimeOutputBytes } from "../../storage/vfs/runtime-output.ts";
@@ -596,6 +598,19 @@ const undoPpf = async ({
 const buildPlaylistNow = async ({ archive, files, logLevel, outputName, signal, sort }: BrowserPlaylistInput) => {
   // Outputs another tool keeps alive are already runtime-owned; only caller-supplied files need validating.
   assertPublicSources(files.filter((source): source is BrowserSourceRef => source instanceof Blob));
+  const names = new Map<string, string>();
+  for (const source of files) {
+    if (!(source instanceof Blob)) continue;
+    const name = getNamedSourceFileName(source, { fallback: "disc.bin" });
+    const normalized = normalizeVirtualFileName(normalizeVirtualFileName(name, "disc.bin"));
+    const previous = names.get(normalized);
+    if (previous !== undefined && previous !== name) {
+      throw new Error(
+        `Playlist files "${previous}" and "${name}" use the same browser staging name "${normalized}". Rename one file and update its CUE/GDI references before adding them again.`,
+      );
+    }
+    names.set(normalized, name);
+  }
   const staged = await browserRuntime.workerIo.stageSources(
     files.map((source) => ({
       fallbackFileName: "disc.bin",
@@ -606,6 +621,17 @@ const buildPlaylistNow = async ({ archive, files, logLevel, outputName, signal, 
     })),
   );
   try {
+    for (const [index, source] of files.entries()) {
+      if (!(source instanceof Blob)) continue;
+      const name = getNamedSourceFileName(source, { fallback: "disc.bin" });
+      const normalized = normalizeVirtualFileName(normalizeVirtualFileName(name, "disc.bin"));
+      const stagedSource = staged[index];
+      if (stagedSource && getPathBaseName(stagedSource.filePath, stagedSource.fileName) !== normalized) {
+        throw new Error(
+          `Playlist file "${name}" could not keep its browser staging name "${normalized}". Rename the file and update its CUE/GDI references, or finish other running operations before trying again.`,
+        );
+      }
+    }
     const result = await invokeRomWeaverPlaylistWorker({
       archive,
       discFilePaths: staged.map((source) => source.filePath),
@@ -646,6 +672,7 @@ const buildPlaylistNow = async ({ archive, files, logLevel, outputName, signal, 
     }
   } finally {
     await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
+    await browserRuntime.workerIo.releaseSources?.(files.filter((source) => source instanceof Blob));
   }
 };
 

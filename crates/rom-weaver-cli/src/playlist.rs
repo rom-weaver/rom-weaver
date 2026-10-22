@@ -319,11 +319,11 @@ fn image_companions(input: &Path) -> Vec<(PathBuf, String)> {
 /// those named files as companions. Only a ZIP reads or copies companions, so
 /// only a ZIP refuses names that point outside the sheet's folder.
 fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPlan> {
-    let mut named: Vec<String> = Vec::new();
+    let mut named: Vec<PathBuf> = Vec::new();
     let mut companions = Vec::new();
     for input in inputs {
         for (path, name) in image_companions(input) {
-            named.push(name.to_ascii_lowercase());
+            named.push(path.clone());
             companions.push((path, name));
         }
         if detect_disc_sheet(input).is_none() {
@@ -341,18 +341,20 @@ fn plan_playlist(inputs: &[PathBuf], sort: bool, zip: bool) -> Result<PlaylistPl
                     input.display()
                 )));
             }
-            let track_name = file_name_of(Path::new(&archive_name));
-            named.push(track_name.to_ascii_lowercase());
-            named.push(staged_file_name(&track_name).to_ascii_lowercase());
+            let track_path = sheet_track_path(sheet_dir, &archive_name);
+            named.push(track_path.clone());
             if zip {
-                companions.push((sheet_track_path(sheet_dir, &archive_name), archive_name));
+                companions.push((track_path, archive_name));
             }
         }
     }
     let mut discs = Vec::new();
     for input in inputs {
-        let name = file_name_of(input).to_ascii_lowercase();
-        if detect_disc_sheet(input).is_none() && named.contains(&name) {
+        if detect_disc_sheet(input).is_none()
+            && named
+                .iter()
+                .any(|track| super::patch_apply::paths_refer_to_same_file(input, track))
+        {
             trace!(input = %input.display(), "playlist input is a track file of a given sheet");
             continue;
         }
