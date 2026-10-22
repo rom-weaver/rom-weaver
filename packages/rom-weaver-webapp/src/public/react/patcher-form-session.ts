@@ -177,6 +177,8 @@ const useLocalApplyPatchFormSession = ({
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
+  // Whether the pending result was produced under a manual name, noted when it is first seen.
+  const pendingResultManualNameRef = useRef<{ manual: boolean; result: ApplyWorkflowResult } | null>(null);
   const patchChangePendingRef = useRef(false);
   const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
@@ -329,8 +331,18 @@ const useLocalApplyPatchFormSession = ({
     identifiedOutputBase,
   );
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
+  // Noted when a result is first seen, before the name can be cleared. A manually named
+  // run's resolved/result name must not leak back in as the automatic name afterwards.
+  const pendingDownloadResult = pendingDownloadResultRef.current;
+  if (pendingDownloadResult && pendingResultManualNameRef.current?.result !== pendingDownloadResult) {
+    pendingResultManualNameRef.current = { manual: !!requestedOutputName, result: pendingDownloadResult };
+  }
+  const isPendingResultManuallyNamed = !!pendingDownloadResult && !!pendingResultManualNameRef.current?.manual;
   const currentResolvedOutputName =
-    outputPatches.length && resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
+    outputPatches.length &&
+    resolvedOutputName &&
+    !isPendingResultManuallyNamed &&
+    (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
       ? resolvedOutputName
       : "";
   const automaticResolvedOutputName = effectiveInputs.length
@@ -467,11 +479,12 @@ const useLocalApplyPatchFormSession = ({
   useEffect(() => {
     const configuredOutputName = activeSettings.output?.outputName || "";
     setOutputName(configuredOutputName);
-    setOutputNameEdited(!!configuredOutputName.trim());
+    setOutputNameEdited(!!sanitizeTypedOutputName(configuredOutputName));
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
         resolvePendingDownloadFileName({
           automaticOutputName: automaticResolvedOutputName,
+          preferAutomaticName: isPendingResultManuallyNamed,
           requestedOutputName: configuredOutputName,
           resultOutputName: pendingDownloadResultRef.current.output.fileName,
         }),
@@ -481,6 +494,7 @@ const useLocalApplyPatchFormSession = ({
     activeSettings.output?.outputName,
     automaticResolvedOutputName,
     hasPendingDownload,
+    isPendingResultManuallyNamed,
     setPendingDownloadReadyFileName,
     setOutputName,
     setOutputNameEdited,
@@ -1317,7 +1331,8 @@ const useLocalApplyPatchFormSession = ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
       setDisplayFileName: (value: string) => {
-        const nextOutputName = getRequestedOutputName(value);
+        // Names that sanitize to empty (cleared, ":::") are automatic, matching setApplyOutputName.
+        const nextOutputName = sanitizeTypedOutputName(value) ? getRequestedOutputName(value) : undefined;
         clearDismissibleErrors();
         setOutputName(value);
         setOutputNameEdited(!!nextOutputName);
@@ -1326,6 +1341,7 @@ const useLocalApplyPatchFormSession = ({
             resolvePendingDownloadFileName({
               automaticOutputName: automaticResolvedOutputName,
               fallbackOutputName: effectiveResolvedOutputName,
+              preferAutomaticName: isPendingResultManuallyNamed,
               requestedOutputName: nextOutputName,
               resultOutputName: pendingDownloadResultRef.current.output.fileName,
             }),
@@ -1385,6 +1401,7 @@ const useLocalApplyPatchFormSession = ({
       commitSettings,
       effectiveResolvedOutputName,
       hasPendingDownload,
+      isPendingResultManuallyNamed,
       localOutputStoreController,
       setPendingDownloadReadyFileName,
       setOutputName,

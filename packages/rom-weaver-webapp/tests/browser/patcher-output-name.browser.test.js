@@ -225,3 +225,39 @@ test("warns when a typed output name ends in a different supported extension", a
     await expect.poll(warning).toBeNull();
   }
 });
+
+test.each([[""], [":::"]])(
+  "clearing the output name (%j) after a run with a typed name restores the automatic name",
+  async (cleared) => {
+    const downloadNames = [];
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+      downloadNames.push(this.download || "");
+    });
+    try {
+      mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+      await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+      selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+      selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
+      await waitForApplyButtonEnabled();
+      const getAutomaticName = () => document.getElementById("rom-weaver-input-output-file-name")?.value || "";
+      await expect.poll(getAutomaticName, { timeout: 30000 }).not.toBe("");
+      const automaticName = getAutomaticName();
+      setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), "valid-name");
+      await clickApplyButton();
+      const applyState = await waitForApplyOutcome();
+      expect(applyState?.kind).toBe("download");
+      await expect
+        .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+        .toContain("Download");
+      await clickApplyButton();
+      await expect.poll(() => downloadNames.at(-1)).toBe("valid-name.bin");
+
+      setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), cleared);
+      await expect.poll(getAutomaticName, { timeout: 30000 }).toBe(automaticName);
+      await clickApplyButton();
+      await expect.poll(() => downloadNames.at(-1)).toBe(`${automaticName}.bin`);
+    } finally {
+      clickSpy.mockRestore();
+    }
+  },
+);
