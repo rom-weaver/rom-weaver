@@ -206,3 +206,22 @@ test("editing output name after download is ready keeps the prepared output", as
     URL.createObjectURL = originalCreateObjectUrl;
   }
 });
+
+test("warns when a typed output name ends in a different supported extension", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  await expect
+    .poll(() => document.getElementById("rom-weaver-input-output-file-name"), { timeout: 30000 })
+    .not.toBeNull();
+  const warning = () => document.querySelector(".apply-output .outname-ext-warn")?.textContent || null;
+
+  setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), "custom.gba");
+  await expect.poll(warning).toBe("The name ends in .gba, but the output is .bin.");
+
+  for (const name of ["custom.bin", "Hack v1.2", "custom"]) {
+    setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), name);
+    await expect.poll(warning).toBeNull();
+  }
+});

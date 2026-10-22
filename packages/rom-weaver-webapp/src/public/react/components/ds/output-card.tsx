@@ -1,6 +1,7 @@
 import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
+import { detectMismatchedExtension, detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
+import { stripLeadingExtensionDot } from "../../../../lib/path-utils.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer } from "./drawer.tsx";
@@ -51,6 +52,12 @@ type OutputCardProps = {
    * input file. Absent when the ROM carries no single confident title.
    */
   nameSource?: { identifiedName: string; on: boolean; onChange: (on: boolean) => void } | null;
+  /**
+   * Extensions the output is saved with, the content extension first (`sfc`,
+   * then `zip` for a zipped ROM). Set it to warn when the name ends in a
+   * different supported extension (`game.gba` for an SFC output).
+   */
+  outputExtensions?: readonly string[] | null;
 };
 
 /** One labeled control field inside the output options grid. */
@@ -93,6 +100,7 @@ const OutputCard = ({
   disabled,
   action,
   nameSource,
+  outputExtensions,
 }: OutputCardProps) => {
   const localizer = useUiLocalizer();
   const resolvedFileNameLabel = fileNameLabel || localizer.message("ui.output.filename");
@@ -101,6 +109,7 @@ const OutputCard = ({
   // The format selector appends the extension, so a name that already ends in
   // an output-looking extension would be saved doubled (`game.zip.zip`).
   const doubledExtension = detectOutputLikeExtension(fileName);
+  const mismatchedExtension = doubledExtension ? null : detectMismatchedExtension(fileName, outputExtensions);
   const compressionFields =
     compress?.formatOptions?.length && compress.onFormatChange ? (
       <OutputField label={resolvedCompressionFormatLabel} labelInfo={compress.formatInfo}>
@@ -128,6 +137,16 @@ const OutputCard = ({
           <span>
             {localizer.message("ui.output.doubledExtension.before")} <code>.{doubledExtension}</code>
             {localizer.message("ui.output.doubledExtension.after")}
+          </span>
+        </p>
+      ) : mismatchedExtension ? (
+        <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <span>
+            {localizer.message("ui.output.extensionMismatch", {
+              expected: stripLeadingExtensionDot(outputExtensions?.[0]).toLowerCase(),
+              extension: mismatchedExtension,
+            })}
           </span>
         </p>
       ) : null}

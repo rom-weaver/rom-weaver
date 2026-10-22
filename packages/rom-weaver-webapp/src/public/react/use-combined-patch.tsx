@@ -169,6 +169,7 @@ const useCombinedPatch = ({
     fileNameLabel: localizer.message("ui.combinedPatch.filename"),
     onFileNameChange: setFileName,
     format,
+    outputExtensions: [format],
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
     formatOptions: createCreatePatchFormatOptions({

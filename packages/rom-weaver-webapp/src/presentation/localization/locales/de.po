@@ -5105,6 +5105,11 @@ msgstr "Der Name endet auf"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.extensionMismatch"
+msgstr "Der Name endet auf .{extension}, aber die Ausgabe ist .{expected}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.disabledDesc"
 msgstr "Der Service Worker ist aus, sodass rom-weaver bei jedem Besuch das Netz braucht. Das Patchen läuft trotzdem komplett auf diesem Gerät."
 

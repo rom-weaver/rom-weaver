@@ -2,7 +2,8 @@ import { Download, FileArchive } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
-import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
+import { getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import { getFileNameExtension, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -360,6 +361,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           fileName={name}
           fileNameLabel={localizer.message("ui.apply.outputFilename")}
           format={format}
+          // Compress saves the container itself, so its extension leads the warning.
+          outputExtensions={[
+            ...getOutputExtensions([], format, { inputFileName: files[0]?.name }),
+            ...files.map((file) => getFileNameExtension(file.name)),
+          ]}
           formatOptions={formatOptions}
           meta={<span className="rb mono">{formatByteSize(totalSize)}</span>}
           num="0x02"

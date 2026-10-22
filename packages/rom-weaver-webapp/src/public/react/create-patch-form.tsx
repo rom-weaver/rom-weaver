@@ -6,6 +6,7 @@ import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { Download, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
+import { getOutputExtensions } from "../../lib/output/output-name-validation.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import type {
   BrowserCreateResult,
@@ -1364,6 +1365,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       fileNameId: "patch-builder-output-file",
       fileNamePlaceholder: "Patch filename",
       format: patchType,
+      outputExtensions: getOutputExtensions([patchType], createCompression),
       formatId: "patch-builder-select-patch-type",
       formatOptions: patchFormatOptions,
       id: "patch-builder-row-output",

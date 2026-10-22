@@ -96,6 +96,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: ", an output extension. The format selector adds the extension; remove it to avoid a doubled name.",
   }),
   "ui.output.doubledExtension.before": msg({ id: "ui.output.doubledExtension.before", message: "The name ends in" }),
+  "ui.output.extensionMismatch": msg({
+    id: "ui.output.extensionMismatch",
+    message: "The name ends in .{extension}, but the output is .{expected}.",
+  }),
   "ui.output.filename": msg({ id: "ui.output.filename", message: "Output filename" }),
   "ui.output.format": msg({ id: "ui.output.format", message: "Output format" }),
   "ui.output.nameFromIdentified": msg({ id: "ui.output.nameFromIdentified", message: "Name from identified title" }),

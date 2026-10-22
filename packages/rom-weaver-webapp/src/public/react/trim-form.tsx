@@ -1228,6 +1228,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     fileNameId: "trim-builder-output-file",
     fileNamePlaceholder: "Trimmed filename (no extension)",
     format: resolvedOutputFormat,
+    outputExtensions: [
+      getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings),
+      getSourceExtension(resolvedSourceFileName),
+    ],
     formatId: "trim-builder-select-output-format",
     formatOptions,
     info: (

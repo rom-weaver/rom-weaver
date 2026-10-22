@@ -5105,6 +5105,11 @@ msgstr "The name ends in"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.output.extensionMismatch"
+msgstr "The name ends in .{extension}, but the output is .{expected}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.disabledDesc"
 msgstr "The offline copy is off, so rom-weaver needs the network on each visit. Patching still runs on this device."
 

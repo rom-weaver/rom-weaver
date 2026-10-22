@@ -2,6 +2,8 @@ import type { useCombinedPatch } from "./use-combined-patch.tsx";
 import { SecondaryOutputJob } from "./apply-output-fields.tsx";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import { getFileNameExtension } from "../../lib/path-utils.ts";
 import type { WeaveRomExpectation } from "../../lib/weave/weave-session-model.ts";
 import { validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
@@ -906,6 +908,11 @@ function ApplyWorkflowFormView({
     fileNameId: "rom-weaver-input-output-file-name",
     fileNamePlaceholder: localizer.message("ui.apply.outputFilename"),
     format: outputState.compressionFormat,
+    outputExtensions: getOutputExtensions(
+      romInputs.map((row) => getFileNameExtension(row.info.fileName)),
+      outputState.compressionFormat,
+      { inputFileName: romInputs[0]?.info.fileName },
+    ),
     formatPending: outputState.formatPending,
     formatId: "rom-weaver-select-output-format",
     formatOptions: outputState.options,
