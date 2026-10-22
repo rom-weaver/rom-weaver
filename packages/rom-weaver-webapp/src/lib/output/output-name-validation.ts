@@ -4,7 +4,9 @@ import {
   getCompressionOutputExtension,
 } from "../compression/container-format-registry.ts";
 import { isZ3dsCompressedExtension } from "../compression/z3ds-subtypes.ts";
-import { getFileNameExtension, sanitizeTypedOutputName } from "../path-utils.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import { appendFileNameExtension } from "../input/path-utils.ts";
+import { getFileNameExtension, sanitizeTypedOutputName, stripLeadingExtensionDot } from "../path-utils.ts";
 
 const normalizeRequiredOutputName = (outputName: string | null | undefined) => sanitizeTypedOutputName(outputName);
 
@@ -37,4 +39,30 @@ const detectOutputLikeExtension = (outputName: string | null | undefined): strin
   return null;
 };
 
-export { detectOutputLikeExtension, requireOutputName };
+// Every extension the app reads or writes, lower-cased without the dot.
+const KNOWN_FILE_EXTENSIONS: ReadonlySet<string> = new Set(
+  [
+    ...ROM_WEAVER_FILE_FILTERS.romExtensions,
+    ...ROM_WEAVER_FILE_FILTERS.containerExtensions,
+    ...ROM_WEAVER_FILE_FILTERS.patchExtensions,
+  ].map((extension) => stripLeadingExtensionDot(extension).toLowerCase()),
+);
+
+/**
+ * Whether `fileName` already ends in a real file extension: the source's own
+ * or one the app knows. The last dot alone is not enough - in a versioned stem
+ * such as `Practice 3.5.1`, `.1` belongs to the name.
+ */
+const hasKnownOutputExtension = (fileName: string, sourceExtension?: string | null): boolean => {
+  const extension = getFileNameExtension(fileName);
+  if (!extension) return false;
+  return extension === stripLeadingExtensionDot(sourceExtension).toLowerCase() || KNOWN_FILE_EXTENSIONS.has(extension);
+};
+
+/** `fileName` with `sourceExtension` appended unless it already ends in a known extension. */
+const withOutputExtension = (fileName: string, sourceExtension: string | null | undefined): string =>
+  sourceExtension && !hasKnownOutputExtension(fileName, sourceExtension)
+    ? appendFileNameExtension(fileName, sourceExtension)
+    : fileName;
+
+export { detectOutputLikeExtension, hasKnownOutputExtension, requireOutputName, withOutputExtension };

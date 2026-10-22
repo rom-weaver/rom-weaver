@@ -6,7 +6,7 @@ import {
   prepareInputAssets,
   prepareMultipleDirectInputAssets,
 } from "../../lib/input/input-preparation-service.ts";
-import { getBaseFileName, hasFileNameExtension, replaceFileNameExtension } from "../../lib/input/path-utils.ts";
+import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   applySidecarPatchOutputLabel,
@@ -14,7 +14,7 @@ import {
   resolveSidecarPatchEntries,
 } from "../../lib/input/sidecar-patch-resolution.ts";
 import { buildSessionOutputFiles } from "../../lib/output/output-build-service.ts";
-import { requireOutputName } from "../../lib/output/output-name-validation.ts";
+import { requireOutputName, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
 import { copyRuntimeOutputToPath } from "../../storage/vfs/runtime-output.ts";
@@ -140,9 +140,7 @@ const getInputAssetExtension = (asset: InputAsset): string => {
 const resolveWorkerApplyOutputName = (options: PatchInput["options"], asset: InputAsset): string | undefined => {
   const outputName = sanitizeTypedOutputName(options?.output?.outputName);
   if (!outputName) return undefined;
-  if (hasFileNameExtension(outputName)) return outputName;
-  const sourceExtension = getInputAssetExtension(asset);
-  return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
+  return withOutputExtension(outputName, getInputAssetExtension(asset));
 };
 
 const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: string) => ({

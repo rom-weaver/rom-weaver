@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { detectOutputLikeExtension, requireOutputName } from "../../src/lib/output/output-name-validation.ts";
+import {
+  detectOutputLikeExtension,
+  hasKnownOutputExtension,
+  requireOutputName,
+  withOutputExtension,
+} from "../../src/lib/output/output-name-validation.ts";
 
 describe("detectOutputLikeExtension", () => {
   it("flags archive output extensions", () => {
@@ -37,5 +42,30 @@ describe("requireOutputName", () => {
 
   it("throws when empty", () => {
     expect(() => requireOutputName("   ")).toThrow("output.outputName is required");
+  });
+});
+
+describe("withOutputExtension", () => {
+  it("appends the source extension after a version segment", () => {
+    expect(withOutputExtension("Practice 3.5.1", "nes")).toBe("Practice 3.5.1.nes");
+    expect(withOutputExtension("Rev.A", ".nes")).toBe("Rev.A.nes");
+  });
+
+  it("keeps the source extension or another known one", () => {
+    expect(withOutputExtension("Practice 3.5.1.NES", "nes")).toBe("Practice 3.5.1.NES");
+    expect(withOutputExtension("game.sfc", "nes")).toBe("game.sfc");
+    expect(withOutputExtension("game.custom", "custom")).toBe("game.custom");
+  });
+
+  it("leaves the name alone without a source extension", () => {
+    expect(withOutputExtension("Practice 3.5.1", "")).toBe("Practice 3.5.1");
+  });
+});
+
+describe("hasKnownOutputExtension", () => {
+  it("does not treat a version segment as an extension", () => {
+    expect(hasKnownOutputExtension("Practice 3.5.1")).toBe(false);
+    expect(hasKnownOutputExtension("Practice 3.5.1.nes")).toBe(true);
+    expect(hasKnownOutputExtension("Practice")).toBe(false);
   });
 });
