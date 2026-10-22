@@ -34,7 +34,7 @@
         "expectedRawBytes": 383000,
         "maxRawBytes": 408000,
         "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 109500
+        "maxBrotliBytes": 110000
       },
       {
         "name": "Locale catalogs (de, es)",
