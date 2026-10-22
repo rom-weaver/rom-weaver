@@ -718,6 +718,43 @@ describe("page-level drag and drop", () => {
     expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(false);
   });
 
+  it("sends a save dropped alone on the landing page to Test", async () => {
+    const { called } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["save"], "game.sav")]));
+    });
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("test"));
+  });
+
+  it("opens Saves & storage for a save backup dropped on the landing page", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["{}"], "game.rw-emulator-save.json")]));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
+  });
+
+  it("opens Saves & storage for a save backup dropped on another workflow", async () => {
+    const { called, container } = await renderRoot({ currentView: "test" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["{}"], "game.rw-emulator-save.json")]));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+  });
+
   it("lets the veil go without naming a workflow when a landing-page drop needs a choice", async () => {
     const { called, container } = await renderRoot({ currentView: "home" });
 

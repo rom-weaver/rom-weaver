@@ -80,6 +80,24 @@ const getEmulatorJsCore = (platform?: string, fileName?: string): string | undef
   return match ? EXTENSION_CORES[match[0]] : undefined;
 };
 
+/** Save extensions only one system writes; `.sav` and `.srm` are shared by many, so they name no core. */
+const SAVE_EXTENSION_CORES: Readonly<Record<string, string>> = {
+  ".eep": "n64",
+  ".fla": "n64",
+  ".mcd": "psx",
+  ".mcr": "psx",
+  ".mpk": "n64",
+  ".sra": "n64",
+};
+
+const getSaveFileCore = (fileName: string): string | undefined => {
+  const match = fileName
+    .trim()
+    .toLowerCase()
+    .match(/\.[^./]+$/);
+  return match ? SAVE_EXTENSION_CORES[match[0]] : undefined;
+};
+
 /**
  * Famicom Disk System images run on the nes core (fceumm), which needs the
  * FDS BIOS (`disksys.rom`) the site does not supply. Without it the core
@@ -116,6 +134,7 @@ export {
   coreReadsChd,
   getEmulatorJsAspectRatio,
   getEmulatorJsCore,
+  getSaveFileCore,
   hasFdsDiskSignature,
   requiresUnsuppliedBios,
 };

@@ -20,9 +20,11 @@ const logger = createLogger("drop-destination");
 /** The workflows a drop can be sent to. Ids match `WebappView`. */
 type DropDestination = "creator" | "patcher" | "test" | "weave";
 
-type DropFileKind = "patch" | "rom" | "save" | "unknown";
+type DropFileKind = "backup" | "patch" | "rom" | "save" | "unknown";
 
 type DropCounts = {
+  /** Exported Saves & storage backups, which belong to no workflow and count toward none of the others. */
+  backups: number;
   patches: number;
   weaves: number;
   /** Files with a known ROM or container name, cue/gdi tracks folded into their sheet. */
@@ -63,6 +65,11 @@ type DropRedirect = {
 
 /** Matches the raw saves the Save editor reads; wrapped formats need its conversion first. */
 const SAVE_NAME = /\.(?:sav|srm|sra|eep|fla|mpk|mcr|mcd)$/i;
+/**
+ * The backups Saves & storage exports; `getCompressedFileName` turns the JSON name into the ZIP one. Browsers
+ * download a repeat export as `name (1).zip`, so a counter MAY follow the marker.
+ */
+const EMULATOR_SAVE_EXPORT_NAME = /\.rw-emulator-save(?: ?\(\d+\))?\.(?:json|zip)$/i;
 const SHEET_NAME = /\.(?:cue|gdi)$/i;
 const TRACK_NAME = /\.(?:bin|raw)$/i;
 
@@ -73,7 +80,10 @@ const isPatchArchiveName = (name: string) => isPatchFileName(baseName(name).repl
 
 const isSaveFileName = (name: string) => SAVE_NAME.test(name);
 
+const isEmulatorSaveExportName = (name: string) => EMULATOR_SAVE_EXPORT_NAME.test(name);
+
 const classifyDropEntry = (entry: DropEntry): DropFileKind => {
+  if (isEmulatorSaveExportName(entry.name)) return "backup";
   if (entry.weave || isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
   if (isArchiveFileName(entry.name)) {
     if (entry.archiveBucket) return entry.archiveBucket;
@@ -88,12 +98,13 @@ const classifyDropEntry = (entry: DropEntry): DropFileKind => {
  * is one ROM, so `.bin`/`.raw` tracks stop counting once a sheet is present.
  */
 const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
-  const counts: DropCounts = { patches: 0, weaves: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
+  const counts: DropCounts = { backups: 0, patches: 0, weaves: 0, roms: 0, saves: 0, unknown: 0, unlistedArchives: 0 };
   const hasSheet = entries.some((entry) => SHEET_NAME.test(entry.name));
   for (const entry of entries) {
     if (entry.weave || isWeaveFileName(entry.name)) counts.weaves += 1;
     const kind = classifyDropEntry(entry);
-    if (kind === "patch") counts.patches += 1;
+    if (kind === "backup") counts.backups += 1;
+    else if (kind === "patch") counts.patches += 1;
     else if (kind === "save") counts.saves += 1;
     else if (kind === "unknown") counts.unknown += 1;
     else if (!(hasSheet && TRACK_NAME.test(entry.name) && !isArchiveFileName(entry.name))) counts.roms += 1;
@@ -110,6 +121,7 @@ const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
  * - a weave, with or without companion files → Apply or Weave
  * - patches only, or one ROM with patches → Apply
  * - one ROM with a save → Test, which loads the save with it
+ * - saves only → Test, which holds the save for the next ROM
  * - one ROM → Apply or Test
  * - two or more ROMs → Create
  * - two or more ROMs with patches → Create or Apply, flagged as mixed
@@ -118,7 +130,8 @@ const planDropDestinations = ({ patches, weaves, roms, saves, unknown }: DropCou
   const inputs = roms + unknown;
   let plan: DropPlan;
   if (weaves > 0) plan = { destinations: ["patcher", "weave"], mixed: false };
-  else if (inputs === 0) plan = { destinations: patches ? ["patcher"] : [], mixed: false };
+  else if (inputs === 0 && patches === 0) plan = { destinations: saves ? ["test"] : [], mixed: false };
+  else if (inputs === 0) plan = { destinations: ["patcher"], mixed: false };
   else if (inputs === 1 && patches === 0 && saves > 0) plan = { destinations: ["test"], mixed: false };
   else if (inputs === 1) plan = { destinations: patches ? ["patcher"] : ["patcher", "test"], mixed: false };
   else if (patches === 0) plan = { destinations: ["creator"], mixed: false };
@@ -191,6 +204,7 @@ const readDropEntries = (
 export {
   classifyDropEntry,
   countDropEntries,
+  isEmulatorSaveExportName,
   isSaveFileName,
   isUsableDropFile,
   planDropDestinations,

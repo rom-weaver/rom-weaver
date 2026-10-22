@@ -26,7 +26,9 @@ vi.mock("../../../src/public/react/emulator-audio-context.ts", () => emulatorAud
 const loadRomMock = vi.hoisted(() => vi.fn());
 const pendingSaveMocks = vi.hoisted(() => ({
   clearPendingTestSave: vi.fn(),
+  loadDroppedSram: vi.fn(),
   readPendingTestSave: vi.fn(),
+  stagePendingTestSave: vi.fn(),
 }));
 
 vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
@@ -36,7 +38,12 @@ vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
 vi.mock("../../../src/storage/browser/emulator-saves.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/storage/browser/emulator-saves.ts")>()),
   clearPendingTestSave: pendingSaveMocks.clearPendingTestSave,
-  readPendingTestSave: pendingSaveMocks.readPendingTestSave,
+  loadDroppedSram: pendingSaveMocks.loadDroppedSram,
+  readPendingTestSaves: async () => {
+    const held = await pendingSaveMocks.readPendingTestSave();
+    return held ? [held] : [];
+  },
+  stagePendingTestSave: pendingSaveMocks.stagePendingTestSave,
 }));
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
@@ -78,6 +85,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   pendingSaveMocks.readPendingTestSave.mockResolvedValue(undefined);
   pendingSaveMocks.clearPendingTestSave.mockResolvedValue(undefined);
+  pendingSaveMocks.loadDroppedSram.mockResolvedValue("stored");
   loadRomMock.mockReset();
   loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
     blob,
@@ -156,19 +164,191 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Save loaded and game restarted. Check the game's Continue menu.")).toBeTruthy();
     expect(screen.queryByText("zelda.srm")).toBeNull();
   });
+  it("holds a save dropped without a ROM for the next ROM", async () => {
+    const save = new File([new Uint8Array([7])], "zelda.srm");
+    pendingSaveMocks.stagePendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [save], id: 1 }} />));
+
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    expect(pendingSaveMocks.stagePendingTestSave).toHaveBeenCalledWith({
+      data: save,
+      fileName: "zelda.srm",
+      slot: "dropped",
+    });
+    expect(loadRomMock).not.toHaveBeenCalled();
+  });
+
+  it("warns that a held save is lost on reload while save storage is off", async () => {
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "zelda.srm",
+      memoryOnly: true,
+      updatedAt: 1,
+    });
+
+    const view = render(withSettings(<EmulatorTestView />));
+
+    expect(await screen.findByText(/reloading or closing this page loses this save/)).toBeTruthy();
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+    view.unmount();
+    render(withSettings(<EmulatorTestView />));
+    await screen.findByText("zelda.srm");
+    expect(screen.queryByText(/reloading or closing this page loses this save/)).toBeNull();
+  });
+
+  it("stores a held dropped save for whichever ROM opens next", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const bytes = new Uint8Array([1, 2]);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({ bytes, fileName: "zelda.srm", updatedAt: 1 });
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "zelda.sfc",
+      platform: "snes",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "zelda.sfc")] },
+    });
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), bytes, "zelda.sfc"),
+    );
+    expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1);
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1);
+    await waitFor(() => expect(screen.queryByText("zelda.srm")).toBeNull());
+  });
+
+  it("keeps a held save when a save arrives with the ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "mario.nes"), new File([new Uint8Array([4, 5])], "mario.sav")], id: 1 }}
+        />,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith(
+        "b".repeat(40),
+        new Uint8Array([4, 5]),
+        "mario.nes",
+      ),
+    );
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(screen.getByText("zelda.srm")).toBeTruthy();
+  });
+
+  it("loads nothing when a save dropped with its ROM is empty", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+
+    render(
+      withSettings(
+        <EmulatorTestView pageDrop={{ files: [new File(["rom"], "game.nes"), new File([], "game.sav")], id: 1 }} />,
+      ),
+    );
+
+    expect(await screen.findByText(/The uploaded emulator save is empty/)).toBeTruthy();
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(getEmulatorSessionState().entries).toHaveLength(0);
+  });
+
+  it("loads nothing when a save dropped with its ROM cannot be read", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const save = new File([new Uint8Array([4])], "game.sav");
+    vi.spyOn(save, "arrayBuffer").mockRejectedValue(new DOMException("File changed", "NotReadableError"));
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [new File(["rom"], "game.nes"), save], id: 1 }} />));
+
+    expect(await screen.findByText(/Could not load game.nes/)).toBeTruthy();
+    expect(getEmulatorSessionState().entries).toHaveLength(0);
+  });
+
+  it("loads a save dropped beside the ROM instead of a Save editor hand-off and keeps the hand-off held", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([7]),
+      fileName: "edited.srm",
+      gameId: "zelda",
+      platform: "snes",
+      slot: "handoff",
+      updatedAt: 1,
+    });
+    loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName,
+      platform: "snes",
+    }));
+    const save = new File([new Uint8Array([4])], "zelda.srm");
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [new File(["rom"], "zelda.sfc"), save], id: 1 }} />));
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), new Uint8Array([4]), "zelda.sfc"),
+    );
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1);
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(screen.getByText("edited.srm")).toBeTruthy();
+  });
+
+  it("stores a save dropped together with its ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "game.nes"), new File([new Uint8Array([4])], "game.sav")], id: 1 }}
+        />,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), new Uint8Array([4]), "game.nes"),
+    );
+    expect(loadRomMock).toHaveBeenCalledWith(expect.any(File), "game.nes", expect.anything());
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1);
+  });
+
   it("discards a staged save from its tray", async () => {
     pendingSaveMocks.readPendingTestSave.mockResolvedValue({
       bytes: new Uint8Array([1, 2, 3, 4]),
       fileName: "zelda.srm",
       gameId: "zelda-a-link-to-the-past",
       platform: "snes",
+      slot: "handoff",
       updatedAt: 1,
     });
     render(withSettings(<EmulatorTestView />));
     expect(await screen.findByText("Save to load")).toBeTruthy();
     expect(screen.getByText("Add the ROM of the game that made this save.")).toBeTruthy();
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Discard save" }));
-    await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledWith("handoff"));
     await waitFor(() => expect(screen.queryByText("zelda.srm")).toBeNull());
   });
   it("keeps a staged save when the uploaded ROM uses another system", async () => {
@@ -277,6 +457,34 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "A game is loaded" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
+  });
+
+  it("leaves a held save for the visitor's own ROM when the guided sample loads", async () => {
+    stubObjectUrls();
+    stubReducedMotion();
+    stubUserActivation(true);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "zelda.srm",
+      updatedAt: 1,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({ blob: () => Promise.resolve(new Blob(["sample"])), ok: true, status: 200 } as Response),
+    );
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Play a practice ROM/ }));
+    fireEvent.click(screen.getByRole("link", { name: "Start a practice run" }));
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(screen.queryByText(/does not match/)).toBeNull();
   });
 
   it("copies the game name and SHA-1 from the player header", async () => {
@@ -582,6 +790,130 @@ describe("EmulatorTestView", () => {
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
     expect(screen.getByRole("heading", { level: 1, name: "Test your ROM online." })).toBeTruthy();
+  });
+
+  it("does not store a save dropped beside the ROM after Stop is pressed", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    let finishLoad: ((value: { blob: Blob; checksum: string; fileName: string }) => void) | undefined;
+    loadRomMock.mockImplementation(
+      async () =>
+        new Promise<{ blob: Blob; checksum: string; fileName: string }>((resolve) => {
+          finishLoad = resolve;
+        }),
+    );
+    addEntry(entry());
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "new.nes"), new File([new Uint8Array([4])], "new.sav")], id: 1 }}
+        />,
+      ),
+    );
+    await waitFor(() => expect(loadRomMock).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: "Stop and unload game" }));
+    await act(async () => finishLoad?.({ blob: new Blob(["new"]), checksum: "c".repeat(40), fileName: "new.nes" }));
+
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
+  });
+
+  it("stores the dropped save before the player mounts so the game boots once", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    let entriesWhenStored = -1;
+    pendingSaveMocks.loadDroppedSram.mockImplementation(async () => {
+      entriesWhenStored = getEmulatorSessionState().entries.length;
+      return "stored";
+    });
+
+    render(
+      withSettings(
+        <EmulatorTestView
+          pageDrop={{ files: [new File(["rom"], "game.nes"), new File([new Uint8Array([4])], "game.sav")], id: 1 }}
+        />,
+      ),
+    );
+
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1));
+    expect(entriesWhenStored).toBe(0);
+  });
+
+  it("keeps a held save for another system out of the ROM", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1]),
+      fileName: "mario64.eep",
+      slot: "dropped",
+      updatedAt: 1,
+    });
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "mario.nes",
+      platform: "Nintendo Entertainment System",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("mario64.eep")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "mario.nes")] },
+    });
+
+    expect(await screen.findByText(/mario.nes does not match mario64.eep/)).toBeTruthy();
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+  });
+
+  it("plays a save dropped alone in the game that is already loaded", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry());
+    const save = new File([new Uint8Array([4, 5])], "game.srm");
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [save], id: 1 }} />));
+
+    await waitFor(() =>
+      expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("a".repeat(40), new Uint8Array([4, 5]), "game.nes"),
+    );
+    await waitFor(() => expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBe(1));
+    expect(pendingSaveMocks.stagePendingTestSave).not.toHaveBeenCalled();
+  });
+
+  it("holds a save dropped alone for the next ROM when it belongs to another system", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry());
+    const save = new File([new Uint8Array([4])], "mario64.eep");
+    pendingSaveMocks.stagePendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([4]),
+      fileName: "mario64.eep",
+      slot: "dropped",
+      updatedAt: 1,
+    });
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files: [save], id: 1 }} />));
+
+    expect(await screen.findByText("mario64.eep")).toBeTruthy();
+    expect(pendingSaveMocks.loadDroppedSram).not.toHaveBeenCalled();
+  });
+
+  it("names the saves it ignored when several are dropped", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const files = [
+      new File(["rom"], "game.nes"),
+      new File([new Uint8Array([4])], "a.sav"),
+      new File([new Uint8Array([5])], "b.sav"),
+    ];
+
+    render(withSettings(<EmulatorTestView pageDrop={{ files, id: 1 }} />));
+
+    expect(await screen.findByText(/Only one save loads at a time/)).toBeTruthy();
+    expect(screen.getByText(/ignored b.sav/)).toBeTruthy();
+    expect(pendingSaveMocks.loadDroppedSram).toHaveBeenCalledWith("b".repeat(40), new Uint8Array([4]), "game.nes");
   });
 
   it("keeps a WebGL 2 error visible and blocks the player", async () => {

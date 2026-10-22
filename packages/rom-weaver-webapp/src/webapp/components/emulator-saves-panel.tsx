@@ -11,6 +11,8 @@ import {
   importEmulatorSave,
   importEmulatorSavePart,
   listEmulatorSaves,
+  parseEmulatorSaveFile,
+  readEmulatorSave,
   type EmulatorSaveRecord,
 } from "../../storage/browser/emulator-saves.ts";
 import { compressEmulatorSaveExport, extractEmulatorSaveExport } from "../../storage/browser/emulator-save-export.ts";
@@ -24,19 +26,59 @@ type ReadyEmulatorSaveExport = {
   gameId: string;
 };
 
-const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
+/** Save backups dropped elsewhere on the page; `id` tells two drops of the same files apart. */
+type EmulatorSaveImportRequest = {
+  files: File[];
+  id: number;
+};
+
+type ImportKind = "combined" | "sram" | "state";
+
+type PendingImport = {
+  file: File;
+  kind: ImportKind;
+};
+
+const isZipFile = (file: File) => /\.zip$/i.test(file.name) || file.type === "application/zip";
+
+const readSaveBackup = async (file: File) => (isZipFile(file) ? extractEmulatorSaveExport(file) : file);
+
+const importSaveBackup = async (file: File) => importEmulatorSave(await readSaveBackup(file));
+
+/** The stored save an import would overwrite, so the form can say what is lost before it happens. */
+const findReplacedSave = async ({ file, kind }: PendingImport, sha1: string) => {
+  if (kind === "combined") return readEmulatorSave((await parseEmulatorSaveFile(await readSaveBackup(file))).gameId);
+  const gameId = sha1.trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(gameId)) return undefined;
+  const existing = await readEmulatorSave(gameId);
+  return existing?.[kind] ? existing : undefined;
+};
+
+const EmulatorSavesPanel = ({
+  active = true,
+  importRequest = null,
+  onImportStarted,
+}: {
+  active?: boolean;
+  importRequest?: EmulatorSaveImportRequest | null;
+  /** Called once the request is taken, so a remounted panel does not import it again. */
+  onImportStarted?: () => void;
+}) => {
   const localizer = useUiLocalizer();
   const inputRef = useRef<HTMLInputElement>(null);
+  const handledImportIdRef = useRef<number | null>(null);
+  const importingRef = useRef(false);
+  const [importing, setImporting] = useState(false);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [readyExport, setReadyExport] = useState<ReadyEmulatorSaveExport | null>(null);
-  const [pendingImport, setPendingImport] = useState<{
-    file: File;
-    kind: "combined" | "sram" | "state";
-  } | null>(null);
+  // Dropped backups queue here so each one waits for its own Import click.
+  const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
+  const pendingImport = pendingImports[0];
   const [importSha1, setImportSha1] = useState("");
+  const [replacedSave, setReplacedSave] = useState<EmulatorSaveRecord>();
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -51,6 +93,27 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   useEffect(() => {
     if (active) void refresh();
   }, [active, refresh]);
+  useEffect(() => {
+    if (!importRequest || handledImportIdRef.current === importRequest.id) return;
+    handledImportIdRef.current = importRequest.id;
+    onImportStarted?.();
+    const dropped = importRequest.files.map((file): PendingImport => ({ file, kind: "combined" }));
+    setPendingImports((current) => [...current, ...dropped]);
+  }, [importRequest, onImportStarted]);
+  useEffect(() => {
+    setReplacedSave(undefined);
+    if (!pendingImport) return;
+    let current = true;
+    // A file that cannot be read shows its error on Import, so the lookup stays quiet here.
+    void findReplacedSave(pendingImport, importSha1)
+      .then((existing) => {
+        if (current) setReplacedSave(existing);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [pendingImport, importSha1]);
 
   const reportActionError = (reason: unknown) => {
     setError(reason instanceof Error ? reason.message : String(reason));
@@ -81,31 +144,37 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   };
 
   const importSelectedFile = (file: File) => {
-    let kind: "combined" | "sram" | "state" = "sram";
+    if (importingRef.current) return;
+    let kind: ImportKind = "sram";
     if (/\.(json|zip)$/i.test(file.name) || file.type === "application/zip") kind = "combined";
     else if (/\.(state|ss\d*|savestate)$/i.test(file.name)) kind = "state";
     setImportSha1("");
-    setPendingImport({ file, kind });
+    setPendingImports([{ file, kind }]);
+  };
+
+  const finishPendingImport = (completed: PendingImport) => {
+    setPendingImports((current) => (current[0] === completed ? current.slice(1) : current));
+    setImportSha1("");
   };
 
   const submitImport = async () => {
-    if (!pendingImport) return;
+    if (!pendingImport || importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
     setError("");
     try {
       if (pendingImport.kind === "combined") {
-        const source =
-          /\.zip$/i.test(pendingImport.file.name) || pendingImport.file.type === "application/zip"
-            ? await extractEmulatorSaveExport(pendingImport.file)
-            : pendingImport.file;
-        await importEmulatorSave(source);
+        await importSaveBackup(pendingImport.file);
       } else {
         await importEmulatorSavePart({ data: pendingImport.file, part: pendingImport.kind, sha1: importSha1 });
       }
-      setPendingImport(null);
-      setImportSha1("");
+      finishPendingImport(pendingImport);
       await refresh();
     } catch (reason) {
       reportActionError(reason);
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
     }
   };
 
@@ -127,12 +196,13 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           >
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
           </button>
-          <button className="btn slim ghost" onClick={beginImport} type="button">
+          <button className="btn slim ghost" disabled={importing} onClick={beginImport} type="button">
             <Upload aria-hidden="true" /> {localizer.message("ui.saves.emulator.importSave")}
           </button>
           <input
             accept="application/json,application/zip,.json,.zip,*/*"
             hidden
+            disabled={importing}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
@@ -150,6 +220,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
       ) : null}
       {pendingImport ? (
         <form
+          aria-busy={importing}
           className="emulator-save-import-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -164,10 +235,12 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           <DropdownSelect
             className="select"
             id="emulator-save-import-kind"
+            disabled={importing}
             onChange={(event) => {
               // Read the value during dispatch because currentTarget is cleared before a deferred state updater runs.
-              const kind = event.currentTarget.value as "combined" | "sram" | "state";
-              setPendingImport((current) => (current ? { ...current, kind } : current));
+              if (importingRef.current) return;
+              const kind = event.currentTarget.value as ImportKind;
+              setPendingImports(([first, ...rest]) => (first ? [{ ...first, kind }, ...rest] : rest));
             }}
             value={pendingImport.kind}
           >
@@ -182,25 +255,34 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
                 autoComplete="off"
                 className="input mono"
                 id="emulator-save-import-sha1"
+                disabled={importing}
                 onChange={(event) => setImportSha1(event.currentTarget.value)}
                 spellCheck="false"
                 value={importSha1}
               />
             </>
           )}
+          {replacedSave ? (
+            <p className="emulator-saves-error">
+              {localizer.message("ui.saves.emulator.importReplaces", {
+                date: new Date(replacedSave.updatedAt).toLocaleString(localizer.locale),
+                label: replacedSave.label,
+              })}
+            </p>
+          ) : null}
           <div className="emulator-save-import-actions">
             <button
               className="btn slim primary"
-              disabled={pendingImport.kind !== "combined" && !importSha1.trim()}
+              disabled={importing || (pendingImport.kind !== "combined" && !importSha1.trim())}
               type="submit"
             >
               {localizer.message("ui.saves.emulator.import")}
             </button>
             <button
               className="btn slim ghost"
+              disabled={importing}
               onClick={() => {
-                setPendingImport(null);
-                setImportSha1("");
+                if (!importingRef.current) finishPendingImport(pendingImport);
               }}
               type="button"
             >
@@ -260,4 +342,4 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
   );
 };
 
-export { EmulatorSavesPanel };
+export { EmulatorSavesPanel, type EmulatorSaveImportRequest };

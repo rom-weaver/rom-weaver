@@ -9,8 +9,10 @@ import {
   importEmulatorSavePart,
   registerEmulatorSaveBridge,
   listEmulatorSaves,
+  loadDroppedSram,
   parseSerializedEmulatorSave,
   readPendingTestSave,
+  readPendingTestSaves,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
   stagePendingTestSave,
@@ -278,6 +280,168 @@ describe("emulator saves", () => {
     if (!read) throw new Error("Expected a staged pending test save.");
     read.bytes[2] = 9;
     expect((await readPendingTestSave())?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("stages a dropped save that names no game", async () => {
+    const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+    expect(staged).not.toHaveProperty("platform");
+    expect(staged).not.toHaveProperty("gameId");
+    expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), fileName: "game.sav" });
+    await expect(
+      stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", platform: "nes" }),
+    ).rejects.toThrow("requires a game ID");
+  });
+
+  it("stores a dropped SRAM only when its ROM has none stored", async () => {
+    expect(await loadDroppedSram(sha1.toUpperCase(), new Uint8Array([1, 2]), "game.nes")).toBe("stored");
+    expect(await loadDroppedSram(sha1, new Uint8Array([3]), "game.nes")).toBe("preview");
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toMatchObject({
+      label: "game.nes",
+      sram: new Uint8Array([1, 2]),
+    });
+    clearEmulatorSavePreview(sha1);
+  });
+
+  it("previews a dropped SRAM when storage cannot keep it", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      clearEmulatorSavePreview(sha1);
+    }
+  });
+
+  it("only previews a dropped SRAM while save storage is off", async () => {
+    configureEmulatorSaveStorage(false);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      configureEmulatorSaveStorage(true);
+      clearEmulatorSavePreview(sha1);
+    }
+    expect(await listEmulatorSaves()).toEqual([]);
+  });
+
+  it("keeps a held save only in this page while save storage is off", async () => {
+    await stagePendingTestSave({ data: new Uint8Array([4]), fileName: "older.sav" });
+    configureEmulatorSaveStorage(false);
+    try {
+      const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+      expect(staged.memoryOnly).toBe(true);
+      expect(await readPendingTestSave()).toMatchObject({ fileName: "game.sav", memoryOnly: true });
+      vi.resetModules();
+      const reloaded = await import("../../src/storage/browser/emulator-saves.ts");
+      expect(await reloaded.readPendingTestSave()).toBeUndefined();
+    } finally {
+      configureEmulatorSaveStorage(true);
+    }
+    await clearPendingTestSave();
+    expect(await readPendingTestSave()).toBeUndefined();
+  });
+
+  it("holds a save in memory while storage is off even when IndexedDB is missing", async () => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+      expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), memoryOnly: true });
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
+  it.each(["missing", "denied"])("consumes a memory-only held save when IndexedDB is %s", async (availability) => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal(
+      "indexedDB",
+      availability === "missing"
+        ? undefined
+        : {
+            open: () => {
+              throw new Error("IndexedDB denied");
+            },
+          },
+    );
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", slot: "dropped" });
+      await expect(clearPendingTestSave("dropped")).resolves.toBeUndefined();
+      expect(await readPendingTestSaves()).toEqual([]);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
+  it("keeps a replacement save when an earlier discard finishes", async () => {
+    const database = new FakeDatabase();
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    configureEmulatorSaveStorage(false);
+    let releaseDeletion: () => void = vi.fn();
+    let deletionReached: () => void = vi.fn();
+    const deletionPending = new Promise<void>((resolve) => {
+      deletionReached = resolve;
+    });
+    const originalTransaction = database.transaction.bind(database);
+    let holdNextWrite = false;
+    const transactionSpy = vi.spyOn(database, "transaction").mockImplementation((name, mode) => {
+      const transaction = originalTransaction(name, mode);
+      if (mode === "readwrite" && holdNextWrite) {
+        holdNextWrite = false;
+        let oncomplete: (() => void) | null = null;
+        Object.defineProperty(transaction, "oncomplete", {
+          get: () => () => {
+            releaseDeletion = () => oncomplete?.();
+            deletionReached();
+          },
+          set: (callback: (() => void) | null) => {
+            oncomplete = callback;
+          },
+        });
+      }
+      return transaction;
+    });
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([65]), fileName: "A.sav", slot: "dropped" });
+      holdNextWrite = true;
+      const discard = clearPendingTestSave("dropped");
+      await deletionPending;
+      await stagePendingTestSave({ data: new Uint8Array([66]), fileName: "B.sav", slot: "dropped" });
+      releaseDeletion();
+      await discard;
+      expect(await readPendingTestSaves()).toMatchObject([{ fileName: "B.sav", bytes: new Uint8Array([66]) }]);
+    } finally {
+      releaseDeletion();
+      transactionSpy.mockRestore();
+      configureEmulatorSaveStorage(true);
+      await clearPendingTestSave();
+    }
+  });
+
+  it("keeps a dropped save and a Save editor hand-off in separate slots, newest first", async () => {
+    const now = vi.spyOn(Date, "now");
+    try {
+      now.mockReturnValue(10);
+      await stagePendingTestSave({ data: new Uint8Array([1]), fileName: "edit.sav", gameId: "g", platform: "gba" });
+      now.mockReturnValue(20);
+      await stagePendingTestSave({ data: new Uint8Array([2]), fileName: "drop.srm", slot: "dropped" });
+      expect((await readPendingTestSaves()).map((save) => [save.fileName, save.slot])).toEqual([
+        ["drop.srm", "dropped"],
+        ["edit.sav", "handoff"],
+      ]);
+
+      await clearPendingTestSave("handoff");
+      expect((await readPendingTestSaves()).map((save) => save.fileName)).toEqual(["drop.srm"]);
+      await clearPendingTestSave();
+      expect(await readPendingTestSaves()).toEqual([]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("replaces and clears the fixed pending test save", async () => {

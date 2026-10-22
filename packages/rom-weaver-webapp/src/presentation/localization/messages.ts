@@ -2265,6 +2265,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.saves.emulator.importHint",
     message: "Choose the file type. Raw saves also need the ROM SHA-1.",
   }),
+  "ui.saves.emulator.importReplaces": msg({
+    id: "ui.saves.emulator.importReplaces",
+    message: "Importing replaces the stored save for {label}, last changed {date}. Export it first to keep it.",
+  }),
   "ui.saves.emulator.fileType": msg({ id: "ui.saves.emulator.fileType", message: "File type" }),
   "ui.saves.emulator.kindCombined": msg({ id: "ui.saves.emulator.kindCombined", message: "rom-weaver exported save" }),
   "ui.saves.emulator.kindState": msg({ id: "ui.saves.emulator.kindState", message: "Save state" }),

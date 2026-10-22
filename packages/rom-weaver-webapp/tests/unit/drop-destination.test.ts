@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyDropEntry,
   countDropEntries,
+  isEmulatorSaveExportName,
   isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
@@ -24,6 +25,25 @@ describe("classifyDropEntry", () => {
     expect(classifyDropEntry({ name: "game.zip" })).toBe("rom");
     expect(classifyDropEntry({ name: "hack.bps.zip" })).toBe("patch");
     expect(classifyDropEntry({ archiveBucket: "patch", name: "release.7z" })).toBe("patch");
+  });
+});
+
+describe("isEmulatorSaveExportName", () => {
+  it("matches the backups Saves & storage exports, compressed or not", () => {
+    expect(isEmulatorSaveExportName("Zelda.rw-emulator-save.zip")).toBe(true);
+    expect(isEmulatorSaveExportName("Zelda.RW-EMULATOR-SAVE.json")).toBe(true);
+    expect(isEmulatorSaveExportName("Zelda.rw-emulator-save (1).zip")).toBe(true);
+    expect(isEmulatorSaveExportName("Zelda.rw-emulator-save(12).json")).toBe(true);
+    expect(isEmulatorSaveExportName("game.zip")).toBe(false);
+    expect(isEmulatorSaveExportName("rom-weaver-weave.json")).toBe(false);
+  });
+});
+
+describe("save backups", () => {
+  it("classify as backups, which count toward no workflow", () => {
+    expect(classifyDropEntry({ name: "Zelda.rw-emulator-save.zip" })).toBe("backup");
+    expect(counts("Zelda.rw-emulator-save.zip", "game.nes")).toMatchObject({ backups: 1, roms: 1, unknown: 0 });
+    expect(plan("Zelda.rw-emulator-save.json")).toEqual({ destinations: [], mixed: false });
   });
 });
 
@@ -53,6 +73,11 @@ describe("planDropDestinations", () => {
 
   it("sends a ROM with its save to Test", () => {
     expect(plan("Pokemon Red.gb", "Pokemon Red.sav")).toEqual({ destinations: ["test"], mixed: false });
+  });
+
+  it("sends a save alone to Test, and saves with patches to Apply", () => {
+    expect(plan("Pokemon Red.sav")).toEqual({ destinations: ["test"], mixed: false });
+    expect(plan("Pokemon Red.sav", "fix.ips")).toEqual({ destinations: ["patcher"], mixed: false });
   });
 
   it("sends two ROMs to Create and a disc to Apply or Test", () => {

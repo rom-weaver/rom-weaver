@@ -1200,6 +1200,11 @@ msgstr "ROM wählen und testen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.importReplaces"
+msgstr "Der Import ersetzt den gespeicherten Spielstand für {label}, zuletzt geändert am {date}. Exportiere ihn vorher, um ihn zu behalten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.importHint"
 msgstr "Wähle den Dateityp. Rohe Spielstände benötigen zusätzlich die SHA-1 der ROM."
 
