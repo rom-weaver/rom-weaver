@@ -67,6 +67,8 @@ const EmulatorSavesPanel = ({
   const localizer = useUiLocalizer();
   const inputRef = useRef<HTMLInputElement>(null);
   const handledImportIdRef = useRef<number | null>(null);
+  const importingRef = useRef(false);
+  const [importing, setImporting] = useState(false);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -142,6 +144,7 @@ const EmulatorSavesPanel = ({
   };
 
   const importSelectedFile = (file: File) => {
+    if (importingRef.current) return;
     let kind: ImportKind = "sram";
     if (/\.(json|zip)$/i.test(file.name) || file.type === "application/zip") kind = "combined";
     else if (/\.(state|ss\d*|savestate)$/i.test(file.name)) kind = "state";
@@ -149,13 +152,15 @@ const EmulatorSavesPanel = ({
     setPendingImports([{ file, kind }]);
   };
 
-  const finishPendingImport = () => {
-    setPendingImports((current) => current.slice(1));
+  const finishPendingImport = (completed: PendingImport) => {
+    setPendingImports((current) => (current[0] === completed ? current.slice(1) : current));
     setImportSha1("");
   };
 
   const submitImport = async () => {
-    if (!pendingImport) return;
+    if (!pendingImport || importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
     setError("");
     try {
       if (pendingImport.kind === "combined") {
@@ -163,10 +168,13 @@ const EmulatorSavesPanel = ({
       } else {
         await importEmulatorSavePart({ data: pendingImport.file, part: pendingImport.kind, sha1: importSha1 });
       }
-      finishPendingImport();
+      finishPendingImport(pendingImport);
       await refresh();
     } catch (reason) {
       reportActionError(reason);
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
     }
   };
 
@@ -188,12 +196,13 @@ const EmulatorSavesPanel = ({
           >
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
           </button>
-          <button className="btn slim ghost" onClick={beginImport} type="button">
+          <button className="btn slim ghost" disabled={importing} onClick={beginImport} type="button">
             <Upload aria-hidden="true" /> {localizer.message("ui.saves.emulator.importSave")}
           </button>
           <input
             accept="application/json,application/zip,.json,.zip,*/*"
             hidden
+            disabled={importing}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
@@ -211,6 +220,7 @@ const EmulatorSavesPanel = ({
       ) : null}
       {pendingImport ? (
         <form
+          aria-busy={importing}
           className="emulator-save-import-form"
           onSubmit={(event) => {
             event.preventDefault();
@@ -225,8 +235,10 @@ const EmulatorSavesPanel = ({
           <DropdownSelect
             className="select"
             id="emulator-save-import-kind"
+            disabled={importing}
             onChange={(event) => {
               // Read the value during dispatch because currentTarget is cleared before a deferred state updater runs.
+              if (importingRef.current) return;
               const kind = event.currentTarget.value as ImportKind;
               setPendingImports(([first, ...rest]) => (first ? [{ ...first, kind }, ...rest] : rest));
             }}
@@ -243,6 +255,7 @@ const EmulatorSavesPanel = ({
                 autoComplete="off"
                 className="input mono"
                 id="emulator-save-import-sha1"
+                disabled={importing}
                 onChange={(event) => setImportSha1(event.currentTarget.value)}
                 spellCheck="false"
                 value={importSha1}
@@ -260,12 +273,19 @@ const EmulatorSavesPanel = ({
           <div className="emulator-save-import-actions">
             <button
               className="btn slim primary"
-              disabled={pendingImport.kind !== "combined" && !importSha1.trim()}
+              disabled={importing || (pendingImport.kind !== "combined" && !importSha1.trim())}
               type="submit"
             >
               {localizer.message("ui.saves.emulator.import")}
             </button>
-            <button className="btn slim ghost" onClick={finishPendingImport} type="button">
+            <button
+              className="btn slim ghost"
+              disabled={importing}
+              onClick={() => {
+                if (!importingRef.current) finishPendingImport(pendingImport);
+              }}
+              type="button"
+            >
               {localizer.message("ui.common.cancel")}
             </button>
           </div>

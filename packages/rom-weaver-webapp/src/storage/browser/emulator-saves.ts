@@ -766,9 +766,9 @@ const readPendingTestSaves = async (): Promise<PendingTestSave[]> => {
     (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]).map(readPendingSlot),
   );
   const held = results.flatMap((result) => (result.status === "fulfilled" && result.value ? [result.value] : []));
-  // A save held in this page survives storage that cannot be read; with nothing held, the failure surfaces.
+  // Memory-held saves survive unreadable storage. An enabled store surfaces failures when nothing is held.
   const failure = results.find((result) => result.status === "rejected");
-  if (failure && !held.length) throw failure.reason;
+  if (failure && !held.length && saveStorageEnabled) throw failure.reason;
   return held.sort((left, right) => right.updatedAt - left.updatedAt);
 };
 
@@ -777,14 +777,23 @@ const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => (a
 /** Clears one slot, or both when none is named. */
 const clearPendingTestSave = async (slot?: PendingSaveSlot): Promise<void> => {
   const slots = slot ? [slot] : (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]);
+  const memoryOnly = slots.every((name) => memoryPendingTestSaves.has(name));
+  try {
+    await runTransaction(
+      "readwrite",
+      (store) => {
+        for (const name of slots) store.delete(PENDING_TEST_SAVE_KEYS[name]);
+      },
+      PENDING_TEST_SAVE_STORE_NAME,
+    );
+  } catch (error) {
+    if (!memoryOnly) throw error;
+    logger.warn("could not clear the stored held save", {
+      message: error instanceof Error ? error.message : String(error),
+      slots,
+    });
+  }
   for (const name of slots) memoryPendingTestSaves.delete(name);
-  await runTransaction(
-    "readwrite",
-    (store) => {
-      for (const name of slots) store.delete(PENDING_TEST_SAVE_KEYS[name]);
-    },
-    PENDING_TEST_SAVE_STORE_NAME,
-  );
 };
 
 const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {

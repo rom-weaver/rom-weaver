@@ -203,6 +203,30 @@ describe("EmulatorSavesPanel dropped backups", () => {
     expect(screen.queryByLabelText("File type")).toBeNull();
   });
 
+  it("keeps the next backup queued during overlapping import actions", async () => {
+    let complete!: (save: EmulatorSaveRecord) => void;
+    const pending = new Promise<EmulatorSaveRecord>((resolve) => {
+      complete = resolve;
+    });
+    mocks.importEmulatorSave.mockReturnValue(pending);
+    const first = new File(["{}"], "first.rw-emulator-save.json");
+    const second = new File(["{}"], "second.rw-emulator-save.json");
+    render(<EmulatorSavesPanel importRequest={{ files: [first, second], id: 1 }} />);
+    await screen.findByText("Import first.rw-emulator-save.json");
+    try {
+      submitImportForm();
+      submitImportForm();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(1));
+      expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      complete(SAVE);
+    }
+    await screen.findByText("Import second.rw-emulator-save.json");
+    expect(mocks.importEmulatorSave).toHaveBeenCalledWith(first);
+    expect(mocks.importEmulatorSave).toHaveBeenCalledTimes(1);
+  });
+
   it("names the stored save a dropped backup would replace", async () => {
     mocks.readEmulatorSave.mockResolvedValue({ ...SAVE, label: "Stored Game" });
     const json = new File(["{}"], "b.rw-emulator-save.json");

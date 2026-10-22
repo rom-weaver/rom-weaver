@@ -354,6 +354,30 @@ describe("emulator saves", () => {
     }
   });
 
+  it.each(["missing", "denied"])("consumes a memory-only held save when IndexedDB is %s", async (availability) => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal(
+      "indexedDB",
+      availability === "missing"
+        ? undefined
+        : {
+            open: () => {
+              throw new Error("IndexedDB denied");
+            },
+          },
+    );
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", slot: "dropped" });
+      await expect(clearPendingTestSave("dropped")).resolves.toBeUndefined();
+      expect(await readPendingTestSaves()).toEqual([]);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
   it("keeps a dropped save and a Save editor hand-off in separate slots, newest first", async () => {
     const now = vi.spyOn(Date, "now");
     try {
