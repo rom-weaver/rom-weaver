@@ -112,7 +112,8 @@ describe("PPF Undo input replacement", () => {
   it.each([
     ["restored.bin", "restored.bin"],
     ["Hack v1.2", "Hack v1.2.bin"],
-  ])("gives typed name %s the ROM extension only when it lacks a known one", async (typedName, expected) => {
+    ["restored.chd", "restored.bin"],
+  ])("gives typed name %s the ROM's own extension", async (typedName, expected) => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],
       patchOutputs: [],
@@ -136,6 +137,55 @@ describe("PPF Undo input replacement", () => {
     fireEvent.click(button);
     await waitFor(() => expect(output.saveAs).toHaveBeenCalledOnce());
     expect(mocks.undo).toHaveBeenCalledWith(expect.objectContaining({ outputName: expected }));
+  });
+
+  it("restores a disc sheet to a .cue path whatever known extension is typed", async () => {
+    const stored = (path: string, content: string) => ({
+      path,
+      fileName: path.split("/").pop(),
+      dispose: vi.fn(),
+      vfs: { getFile: async () => new File([content], "stored") },
+    });
+    const sheet = stored("/disc.cue", 'FILE "track.bin" BINARY');
+    const track = stored("/track.bin", "track");
+    mocks.ingest.mockImplementation(async ({ fileName }) =>
+      fileName.endsWith(".ppf")
+        ? {
+            outputs: [],
+            patchOutputs: [],
+            result: { assets: [], patches: [{ fileName, format: "ppf", isValidPatch: true }] },
+          }
+        : {
+            outputs: [sheet, track],
+            patchOutputs: [],
+            result: {
+              assets: [
+                { path: sheet.path, fileName: sheet.fileName, kind: "cue", discGroupId: "disc", discFormat: "CD" },
+                { path: track.path, fileName: track.fileName, kind: "bin", discGroupId: "disc", discFormat: "CD" },
+              ],
+              patches: [],
+            },
+          },
+    );
+    const output = { fileName: "restored.cue", saveAs: vi.fn(), dispose: vi.fn(), size: 3 };
+    mocks.undo.mockResolvedValue(output);
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ defaultCompression: "none" }}>
+        <PpfUndoForm onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    const picker = view.container.querySelector("#ppf-undo-input-picker");
+    if (!picker) throw new Error("Missing input picker");
+    fireEvent.change(picker, { target: { files: [new File(["ROM"], "disc.zip"), new File(["PPF"], "valid.ppf")] } });
+    const button = await view.findByRole("button", { name: "Restore original ROM" });
+    const nameField = view.getByRole("textbox", { name: "Output filename" });
+    fireEvent.change(nameField, { target: { value: "restored.cue" } });
+    await waitFor(() => expect(view.container.querySelector(".outname-ext-warn")).toBeNull());
+    fireEvent.change(nameField, { target: { value: "restored.bin" } });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(output.saveAs).toHaveBeenCalledOnce());
+    expect(mocks.undo).toHaveBeenCalledWith(expect.objectContaining({ outputName: "restored.cue" }));
   });
 
   it("sanitizes the ROM-derived name when the typed name has no usable characters", async () => {
