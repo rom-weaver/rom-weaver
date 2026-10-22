@@ -16,7 +16,7 @@ import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registr
 import { usePpfUndoInputs } from "./ppf-undo-inputs.tsx";
 import { hasDiscImageEvidence, isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
 import { getFileNameExtension, sanitizeFileNamePart, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
-import { getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../../lib/compression/container-format-registry.ts";
 import {
@@ -344,7 +344,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
                 setOutputName(value);
               }}
               format={compression}
-              outputExtensions={getOutputExtensions([getFileNameExtension(rom?.name)], compression, {
+              outputExtensions={getOutputExtensions([getLiteralFileNameExtension(rom?.name)], compression, {
                 inputFileName: rom?.name,
               })}
               formatId="ppf-undo-output-compression"
