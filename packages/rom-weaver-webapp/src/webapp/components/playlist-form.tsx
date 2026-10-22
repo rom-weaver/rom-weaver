@@ -466,7 +466,6 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
             <OutputCard
               action={
                 <RunButton
-                  ariaLabel={output ? `Download ${output.fileName}` : undefined}
                   disabled={busy || !(output || canRun)}
                   download={
                     output

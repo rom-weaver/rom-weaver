@@ -1,3 +1,4 @@
+import axe from "axe-core";
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -99,6 +100,11 @@ test("drops discs out of order, shows them ordered, reorders and downloads the M
 
   button(/Build playlist/).click();
   await waitFor(() => saved.length === 1);
+  await waitFor(() => host.querySelector(".download-btn"));
+  const accessibility = await axe.run(host, {
+    runOnly: { type: "rule", values: ["label-content-name-mismatch"] },
+  });
+  expect(accessibility.violations).toEqual([]);
   expect(saved[0]).toBe("Game (Disc 3).cue\nGame (Disc 1).cue\nGame (Disc 2).cue\n");
   const final = buildPlaylist.mock.calls.at(-1)[0];
   expect(final).toMatchObject({ archive: false, outputName: "Game.m3u", sort: false });
