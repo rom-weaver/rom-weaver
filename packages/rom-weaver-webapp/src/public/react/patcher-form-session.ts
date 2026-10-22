@@ -335,22 +335,22 @@ const useLocalApplyPatchFormSession = ({
   // run's resolved/result name must not leak back in as the automatic name afterwards.
   const pendingDownloadResult = pendingDownloadResultRef.current;
   if (pendingDownloadResult && pendingResultManualNameRef.current?.result !== pendingDownloadResult) {
-    pendingResultManualNameRef.current = { manual: !!requestedOutputName, result: pendingDownloadResult };
+    pendingResultManualNameRef.current = {
+      manual: !!sanitizeTypedOutputName(requestedOutputName),
+      result: pendingDownloadResult,
+    };
   }
   const isPendingResultManuallyNamed = !!pendingDownloadResult && !!pendingResultManualNameRef.current?.manual;
   const currentResolvedOutputName =
-    outputPatches.length &&
-    resolvedOutputName &&
-    !isPendingResultManuallyNamed &&
-    (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
+    outputPatches.length && resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
       ? resolvedOutputName
       : "";
   const automaticResolvedOutputName = effectiveInputs.length
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
-  const effectiveResolvedOutputName =
-    requestedOutputName || buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const automaticDisplayOutputName = buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const effectiveResolvedOutputName = requestedOutputName || automaticDisplayOutputName;
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({
@@ -483,7 +483,7 @@ const useLocalApplyPatchFormSession = ({
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
         resolvePendingDownloadFileName({
-          automaticOutputName: automaticResolvedOutputName,
+          automaticOutputName: automaticDisplayOutputName,
           preferAutomaticName: isPendingResultManuallyNamed,
           requestedOutputName: configuredOutputName,
           resultOutputName: pendingDownloadResultRef.current.output.fileName,
@@ -492,7 +492,7 @@ const useLocalApplyPatchFormSession = ({
     }
   }, [
     activeSettings.output?.outputName,
-    automaticResolvedOutputName,
+    automaticDisplayOutputName,
     hasPendingDownload,
     isPendingResultManuallyNamed,
     setPendingDownloadReadyFileName,
@@ -1340,7 +1340,7 @@ const useLocalApplyPatchFormSession = ({
         if (pendingDownloadResultRef.current && hasPendingDownload) {
           setPendingDownloadReadyFileName(
             resolvePendingDownloadFileName({
-              automaticOutputName: automaticResolvedOutputName,
+              automaticOutputName: automaticDisplayOutputName,
               fallbackOutputName: effectiveResolvedOutputName,
               preferAutomaticName: isPendingResultManuallyNamed,
               requestedOutputName: nextOutputName,
@@ -1397,7 +1397,7 @@ const useLocalApplyPatchFormSession = ({
     [
       activeSettings,
       applyDownloadOrchestration,
-      automaticResolvedOutputName,
+      automaticDisplayOutputName,
       clearDismissibleErrors,
       commitSettings,
       effectiveResolvedOutputName,
