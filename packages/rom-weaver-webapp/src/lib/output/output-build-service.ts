@@ -285,6 +285,17 @@ const createRuntimeRomSpecificOutputFiles = async (
   return [await createPatchFileFromRuntimeOutput(output, outputPlan.finalOutputFileName)];
 };
 
+// A typed name is a base name, so a dotted version ("Hack v1.2") is not its extension:
+// give it the source extension first so the container extension replaces that, not ".2".
+const getSingleFileRomSpecificOutputName = (
+  options: OutputWorkflowOptions | undefined,
+  outputFile: PatchFileInstance,
+) => {
+  const requestedOutputName = getRequestedOutputName(options);
+  if (!requestedOutputName) return outputFile.fileName || "output.bin";
+  return ensureFileNameExtension(requestedOutputName, getPatchFileExtension(outputFile));
+};
+
 const createSingleFileRomSpecificOutput = async ({
   compression,
   outputFile,
@@ -299,7 +310,7 @@ const createSingleFileRomSpecificOutput = async ({
   const outputPlan = createOutputPlan({
     compression,
     options,
-    patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
+    patchedFileName: getSingleFileRomSpecificOutputName(options, outputFile),
     romFile: outputFile,
   });
   const outputs = await createRuntimeRomSpecificOutputFiles(compression, outputFile, outputPlan, options, runtime);

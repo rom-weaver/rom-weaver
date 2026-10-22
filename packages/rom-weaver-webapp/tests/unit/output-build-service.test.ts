@@ -151,6 +151,38 @@ describe("buildSessionOutputFiles", () => {
     expect(create.mock.calls[0]?.[0].outputName).toBe(expected);
   });
 
+  it("keeps a dotted version in a typed name and appends the ROM extension to the ZIP entry", async () => {
+    const romFile = await makeFile("rom-bytes", "game.sfc");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.sfc");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+    const options: ApplyWorkflowOptions = { output: { compression: "zip", outputName: "Zelda Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile).mock.calls[0]?.[1]).toBe("Zelda Hack v1.2.sfc");
+  });
+
+  it.each([
+    ["chd", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2.rvz"],
+  ])("appends the %s extension to a typed dotted-version name for a single ISO", async (compression, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.iso");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.iso");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+    const options: ApplyWorkflowOptions = { output: { compression, outputName: "Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options, {
+      compression: { create },
+    } as unknown as WorkflowRuntime);
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe(expected);
+  });
+
   it("routes a single patched asset through archive compression and returns the compressed output", async () => {
     const romFile = await makeFile("rom-bytes", "game.bin");
     const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
