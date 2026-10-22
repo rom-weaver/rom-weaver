@@ -70,6 +70,19 @@ describe("useCombinedPatch", () => {
     expect(run.mock.calls.at(-1)?.[0].settings).toMatchObject({ output: { outputName: "combined-combined.bps" } });
   });
 
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2-combined.bps"],
+    ["Zelda [Hack v1.2]", "Zelda [Hack v1.2]-combined.bps"],
+    ["game.sfc", "game-combined.bps"],
+  ])("keeps a dotted version in the Apply name %s", async (name, expected) => {
+    const run = vi.fn<Options["run"]>(() => new Promise<BrowserCreateResult>(() => undefined));
+    const { result } = renderHook(() => useCombinedPatch(options(run, { name })));
+    await act(async () => {
+      void result.current.run();
+    });
+    expect(run.mock.calls[0][0].settings).toMatchObject({ output: { outputName: expected } });
+  });
+
   it("creates and downloads the patch bytes, guards duplicate clicks, and reports the result once", async () => {
     const pending = deferred<BrowserCreateResult>();
     const patch = createdPatch();

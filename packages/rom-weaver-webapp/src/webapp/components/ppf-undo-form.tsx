@@ -16,7 +16,12 @@ import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registr
 import { usePpfUndoInputs } from "./ppf-undo-inputs.tsx";
 import { hasDiscImageEvidence, isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
 import { getFileNameExtension, sanitizeFileNamePart, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
-import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import {
+  getLiteralFileNameExtension,
+  getOutputExtensions,
+  removeKnownOutputExtension,
+} from "../../lib/output/output-name-validation.ts";
+import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../../lib/compression/container-format-registry.ts";
 import {
@@ -31,6 +36,14 @@ import { buildCompressPanel } from "../../public/react/compress-options.ts";
 import { createOutputOptions } from "../../public/react/output-view-model.ts";
 
 const PPF_UNDO_ACTIVITY_KEY = "ppf-undo";
+
+// The worker writes the raw restored image, so it MUST carry the prepared input's own extension: a disc
+// sheet needs a .cue/.gdi path, and a later container step reads the raw extension. A typed known
+// extension is replaced; any other trailing segment (`v1.2`) stays part of the name.
+const resolveRestoredOutputName = (name: string, extension: string) =>
+  getLiteralFileNameExtension(name) === extension.toLowerCase()
+    ? name
+    : appendFileNameExtension(removeKnownOutputExtension(name) || name, extension);
 
 const restoredFileName = (name: string) => {
   const dot = name.lastIndexOf(".");
@@ -166,6 +179,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
   const ActionIcon = output ? Download : RotateCcw;
   const prepared = getPrepared(rom);
   const preparedRom = prepared?.output;
+  const restoredExtension = getLiteralFileNameExtension(preparedRom?.fileName || rom?.name) || "bin";
   const compressionSource = rom
     ? {
         fileName: preparedRom?.fileName || rom.name,
@@ -210,7 +224,10 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
     try {
       const { undoPpf } = await import("../../platform/browser/browser-api.ts");
       const restored = await undoPpf({
-        outputName: `${sanitizeTypedOutputName(outputName) || sanitizeFileNamePart(restoredFileName(rom.name), "restored-rom")}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
+        outputName: resolveRestoredOutputName(
+          sanitizeTypedOutputName(outputName) || sanitizeFileNamePart(restoredFileName(rom.name), "restored-rom"),
+          restoredExtension,
+        ),
         onWarning: (message) => setRuntimeWarnings((previous) => [...previous, message]),
         compression,
         metadata: prepared?.metadata,
@@ -344,7 +361,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
                 setOutputName(value);
               }}
               format={compression}
-              outputExtensions={getOutputExtensions([getLiteralFileNameExtension(rom?.name)], compression, {
+              outputExtensions={getOutputExtensions([restoredExtension], compression, {
                 inputFileName: rom?.name,
               })}
               formatId="ppf-undo-output-compression"

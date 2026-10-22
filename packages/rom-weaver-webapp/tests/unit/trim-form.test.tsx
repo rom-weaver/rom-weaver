@@ -373,4 +373,19 @@ describe("TrimPatchForm", () => {
 
     expect(await runWithTypedName("Hack v1.2")).toBe("Hack v1.2.zip");
   });
+
+  it("keeps a typed dotted version that extends the source name", async () => {
+    const file = new File(["rom"], "Hack v1.nds", { type: "application/octet-stream" });
+    const { container } = renderForm();
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-output-file")).toBeTruthy());
+    const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+    fireEvent.change(nameField, { target: { value: "Hack v1.2" } });
+
+    expect((container.querySelector("#trim-builder-output-file") as HTMLInputElement).value).toBe("Hack v1.2");
+  });
 });

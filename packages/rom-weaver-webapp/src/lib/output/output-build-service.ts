@@ -521,6 +521,8 @@ const buildSessionOutputFiles = async (
     };
   }
   if (archiveCompression === "chd") {
+    // The CHD replaces the disc sheet, so a typed `x.cue` names `x.chd`, not `x.cue.chd`.
+    const chdFileName = appendFileNameExtension(removeKnownOutputExtension(baseName) || baseName, "chd");
     const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue" || asset.kind === "gdi");
     const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
     if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a disc sheet group with tracks");
@@ -556,7 +558,7 @@ const buildSessionOutputFiles = async (
         signal: options?.signal,
         threads: getThreads(options),
       },
-      outputName: `${baseName}.chd`,
+      outputName: chdFileName,
       romSpecific: {
         chd: {
           compressionCodecs: getChdCompressionCodecs(mode, options),
@@ -568,7 +570,7 @@ const buildSessionOutputFiles = async (
       source,
     });
     const output = "output" in result ? result.output : result;
-    const file = await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`);
+    const file = await createPatchFileFromRuntimeOutput(output, chdFileName);
     await runPatchFileCleanups(outputAssetCleanups);
     return {
       compressionTimeMs: getPatchFileRuntimeTimingMs(file),

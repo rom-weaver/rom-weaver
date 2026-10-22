@@ -297,6 +297,29 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files).toEqual([chdOutputFile]);
   });
 
+  it("drops a typed disc extension from a multi-track CHD name", async () => {
+    const cueFile = await makeFile('FILE "t1.bin" BINARY', "disc.cue");
+    const trackA = await makeFile("track-a-bytes", "t1.bin");
+    const trackB = await makeFile("track-b-bytes", "t2.bin");
+    const assets = [
+      makeAsset("cue", "cue", cueFile, "group"),
+      makeAsset("t1", "track", trackA, "group"),
+      makeAsset("t2", "track", trackB, "group"),
+    ];
+    const create = vi.fn(async () => ({ output: { fileName: "x.chd" } }));
+    const runtime = { compression: { create } } as unknown as WorkflowRuntime;
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("chd-bytes", "x.chd"));
+
+    await buildSessionOutputFiles(
+      assets,
+      new Map(),
+      { output: { compression: "chd", outputName: "My Hack.cue" } } as never,
+      runtime,
+    );
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe("My Hack.chd");
+  });
+
   it("renames a single BIN track and its CUE entry to the requested base name", async () => {
     const cueText = 'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\n';
     const cueFile = await makeFile(cueText, "original.cue");
