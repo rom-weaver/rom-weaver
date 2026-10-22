@@ -556,11 +556,16 @@ const captureDownloads = () => {
   };
 };
 
-const applyDottedSampleWeave = async ({ compression, typedName }) => {
+const applyDottedSampleWeave = async ({
+  compression,
+  typedName,
+  weaveOutputName = "Practice 3.5.1.nes",
+  expectedFieldName = "Practice 3.5.1",
+}) => {
   const capture = captureDownloads();
   try {
     const [weaveArchive, romFile] = await Promise.all([
-      buildSampleWeave({ outputName: "Practice 3.5.1.nes" }),
+      buildSampleWeave({ outputName: weaveOutputName }),
       loadFixtureFile(SAMPLE_ROM),
     ]);
     mount(
@@ -570,7 +575,7 @@ const applyDottedSampleWeave = async ({ compression, typedName }) => {
       }),
     );
     // The name field carries the stem; the manifest's `.nes` belongs to the format.
-    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("Practice 3.5.1");
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe(expectedFieldName);
     if (typedName) setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), typedName);
     await waitForApplyButtonEnabled();
     await clickApplyButton();
@@ -600,6 +605,7 @@ for (const [typedName, expectedName] of [
   ["Typed 2.0", "Typed 2.0.nes"],
   ["Typed.nes", "Typed.nes"],
   ["Typed.sfc", "Typed.sfc"],
+  ["Kaizo Mario #2.nes", "Kaizo Mario #2.nes"],
 ]) {
   test(`typed name "${typedName}" overrides the weave output name`, async () => {
     const download = await applyDottedSampleWeave({ compression: "none", typedName });
@@ -2114,4 +2120,14 @@ test("a malformed weave drop shows an on-page error instead of silently emptying
       .not.toBe("");
     expect(getPatchStackFileNames()).toEqual([]);
   }
+});
+
+test("weave output name with a literal # keeps its whole stem and .nes extension", async () => {
+  const download = await applyDottedSampleWeave({
+    compression: "none",
+    expectedFieldName: "Hack.v2#2",
+    weaveOutputName: "Hack.v2#2.nes",
+  });
+  expect(download?.name).toBe("Hack.v2#2.nes");
+  expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
 });

@@ -1,9 +1,6 @@
 import type { SetStateAction } from "react";
-import { withOutputExtension } from "../../lib/output/output-name-validation.ts";
-import {
-  getFileNameExtension,
-  sanitizeTypedOutputName,
-} from "../../lib/path-utils.ts";
+import { getLiteralFileNameExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -45,7 +42,7 @@ const resolvePendingDownloadFileName = ({
   const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName);
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
   if (normalizedRequestedOutputName)
-    return withOutputExtension(normalizedRequestedOutputName, getFileNameExtension(normalizedResultOutputName));
+    return withOutputExtension(normalizedRequestedOutputName, getLiteralFileNameExtension(normalizedResultOutputName));
   return (
     normalizedResultOutputName ||
     sanitizeTypedOutputName(automaticOutputName) ||

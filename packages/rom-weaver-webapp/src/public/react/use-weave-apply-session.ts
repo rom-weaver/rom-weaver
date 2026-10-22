@@ -5,8 +5,7 @@ import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { weaveCheckTokens } from "../../lib/weave/weave-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
-import { hasKnownOutputExtension } from "../../lib/output/output-name-validation.ts";
-import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
+import { removeKnownOutputExtension } from "../../lib/output/output-name-validation.ts";
 import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
@@ -113,8 +112,7 @@ const restoreWeavePatchMetadata = (
  */
 const stripOutputNameExtension = (name: string): string => {
   const trimmed = name.trim();
-  if (!hasKnownOutputExtension(trimmed)) return trimmed;
-  return getFileNameWithoutExtension(trimmed).trim() || trimmed;
+  return removeKnownOutputExtension(trimmed).trim() || trimmed;
 };
 
 /**

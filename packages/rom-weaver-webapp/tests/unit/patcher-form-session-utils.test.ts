@@ -36,6 +36,15 @@ describe("resolvePendingDownloadFileName", () => {
     );
   });
 
+  it("borrows the literal result extension after a hash character", () => {
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Hack.v2#2", resultOutputName: "Hack.v2#2.nes" }),
+    ).toBe("Hack.v2#2.nes");
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Kaizo Mario #2", resultOutputName: "Kaizo Mario #2.nes" }),
+    ).toBe("Kaizo Mario #2.nes");
+  });
+
   it("falls back through result, automatic, fallback, then 'output'", () => {
     expect(resolvePendingDownloadFileName({ resultOutputName: "x.7z" })).toBe("x.7z");
     expect(resolvePendingDownloadFileName({ automaticOutputName: "auto.zip" })).toBe("auto.zip");
