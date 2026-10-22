@@ -199,6 +199,8 @@ test("a missing companion cannot alias another supplied track's staging name", a
   for (const [missing, supplied] of [
     ["_Track.bin", "Track.bin"],
     ["Track.bin", "_Track.bin"],
+    ["Track.bin", " Track.bin"],
+    ["Track.bin", "Track.bin "],
   ]) {
     await expect(
       buildPlaylist({
@@ -227,7 +229,7 @@ test("a ZIP resolves original underscore and Unicode companion names to their ex
   ]);
   const built = await buildPlaylist({ archive: true, files, outputName: "originals.zip", sort: true });
   try {
-    expect(built.discIndexes).toEqual([0, 2, 4]);
+    expect(built.discIndexes).toEqual(tracks.map((_, index) => index * 2));
     const extracted = await browserRuntime.compression.extract({
       source: new File([await readRuntimeOutputBytes(built.output)], "originals.zip"),
       entries: [],
@@ -236,7 +238,7 @@ test("a ZIP resolves original underscore and Unicode companion names to their ex
     });
     try {
       expect(extracted.outputs.map((output) => output.fileName).sort()).toEqual(
-        ["originals.m3u", "Disc1.cue", "Disc2.cue", "Disc3.cue", ...tracks.map(([name]) => name)].sort(),
+        ["originals.m3u", ...tracks.map((_, index) => `Disc${index + 1}.cue`), ...tracks.map(([name]) => name)].sort(),
       );
       for (const [name, bytes] of tracks) {
         const output = extracted.outputs.find((output) => output.fileName === name);
@@ -248,6 +250,23 @@ test("a ZIP resolves original underscore and Unicode companion names to their ex
     }
   } finally {
     await built.output.dispose();
+  }
+});
+
+test("leading and trailing whitespace companions stay with their disc in a ZIP", async () => {
+  for (const name of [" Leading.bin", "Trailing.bin "]) {
+    const built = await buildPlaylist({
+      archive: true,
+      files: [new File([sheet(name)], "Space.cue"), new File(["track"], name)],
+      outputName: "spaces.zip",
+      sort: true,
+    });
+    try {
+      expect(built.discIndexes).toEqual([0]);
+      expect(built.output.size).toBeGreaterThan(0);
+    } finally {
+      await built.output.dispose();
+    }
   }
 });
 
