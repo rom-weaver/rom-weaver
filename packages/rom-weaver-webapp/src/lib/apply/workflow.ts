@@ -7,6 +7,7 @@ import {
   prepareMultipleDirectInputAssets,
 } from "../../lib/input/input-preparation-service.ts";
 import { getBaseFileName, hasFileNameExtension, replaceFileNameExtension } from "../../lib/input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   applySidecarPatchOutputLabel,
   getSidecarPatchOutputLabel,
@@ -137,7 +138,7 @@ const getInputAssetExtension = (asset: InputAsset): string => {
 };
 
 const resolveWorkerApplyOutputName = (options: PatchInput["options"], asset: InputAsset): string | undefined => {
-  const outputName = typeof options?.output?.outputName === "string" ? options.output.outputName.trim() : "";
+  const outputName = sanitizeTypedOutputName(options?.output?.outputName);
   if (!outputName) return undefined;
   if (hasFileNameExtension(outputName)) return outputName;
   const sourceExtension = getInputAssetExtension(asset);

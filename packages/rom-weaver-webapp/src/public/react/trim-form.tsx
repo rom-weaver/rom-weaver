@@ -9,6 +9,7 @@ import {
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
   BrowserSaveDestination,
@@ -285,7 +286,7 @@ const resolveTrimExecutionOutputName = (
   sourceFileName: string,
   settings?: TrimPatchFormSettings,
 ) => {
-  const normalizedOutputName = outputName.trim();
+  const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
   if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
   return appendFileNameExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
@@ -663,12 +664,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
   const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName);
-  const executionOutputName = resolveTrimExecutionOutputName(
-    resolvedOutputName,
-    resolvedOutputFormat,
-    resolvedSourceFileName,
-    settings,
-  );
+  const executionOutputName =
+    resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings) ||
+    resolveTrimExecutionOutputName(generatedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings);
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({

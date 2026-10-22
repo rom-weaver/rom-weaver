@@ -3,7 +3,7 @@ import { FileDiff } from "lucide-react";
 import type { BrowserCreateResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { CreateSettings } from "../../types/settings.ts";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
-import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
+import { getFileNameWithoutExtension, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { Notice } from "./components/ds/feedback.tsx";
 import type { OutputCardProps } from "./components/ds/output-card.tsx";
@@ -76,7 +76,9 @@ const useCombinedPatch = ({
   const generation = useRef<{ revision: string; settingsSignature: string } | null>(null);
   // Preparing the run re-estimates the caller's display name, so a running job MUST keep the name it started with.
   const [runName, setRunName] = useState<string | null>(null);
-  const resolvedName = fileName.trim() || `${getFileNameWithoutExtension((runName ?? name) || "combined")}-combined`;
+  const resolvedName =
+    sanitizeTypedOutputName(fileName) ||
+    `${getFileNameWithoutExtension(sanitizeTypedOutputName(runName ?? name) || "combined")}-combined`;
   const executionSettings: Partial<CreateSettings> = {
     ...settings,
     format: format as CreateSettings["format"],

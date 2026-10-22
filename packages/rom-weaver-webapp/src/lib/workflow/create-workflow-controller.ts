@@ -14,6 +14,7 @@ import { runCreateWorkflow } from "../create/workflow.ts";
 import { RomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
@@ -141,9 +142,9 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       getSourceId: (role, index) => `${role}-${index + 1}`,
     });
     this.patchType = this.settings.format;
-    if (typeof this.settings.output?.outputName === "string") {
+    if (sanitizeTypedOutputName(this.settings.output?.outputName)) {
       this.manualOutputName = true;
-      this.outputName = this.settings.output.outputName;
+      this.outputName = this.settings.output?.outputName ?? "";
     }
     if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
   }
@@ -206,7 +207,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   async setOutputName(name: string): Promise<void> {
     return this.mutate("setOutputName", async () => {
-      const normalizedName = name.trim();
+      const normalizedName = sanitizeTypedOutputName(name);
       this.manualOutputName = !!normalizedName;
       this.outputName = this.manualOutputName ? name : this.buildAutomaticOutputName();
     });
@@ -216,9 +217,9 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     return this.mutate("setSettings", async () => {
       this.settings = cloneValue(settings || {});
       if (this.settings.format) this.patchType = this.settings.format;
-      if (typeof this.settings.output?.outputName === "string" && this.settings.output.outputName.trim()) {
+      if (sanitizeTypedOutputName(this.settings.output?.outputName)) {
         this.manualOutputName = true;
-        this.outputName = this.settings.output.outputName;
+        this.outputName = this.settings.output?.outputName ?? "";
       } else if (!this.manualOutputName) {
         this.outputName = this.buildAutomaticOutputName();
       }
@@ -440,7 +441,9 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       output: {
         ...cloneValue(this.settings.output || {}),
         compression: this.getOutputCompression(),
-        outputName: this.outputName || this.settings.output?.outputName,
+        outputName:
+          (this.manualOutputName ? sanitizeTypedOutputName(this.outputName) : this.outputName) ||
+          this.buildAutomaticOutputName(),
       },
       patch: this.settings.patch?.metadata ? { metadata: cloneValue(this.settings.patch.metadata) } : undefined,
       signal: this.abortController.signal,

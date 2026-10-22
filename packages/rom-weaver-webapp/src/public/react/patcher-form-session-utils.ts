@@ -1,5 +1,9 @@
 import type { SetStateAction } from "react";
-import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
+import {
+  getFileNameExtension as getSharedFileNameExtension,
+  hasFileNameExtension,
+  sanitizeTypedOutputName,
+} from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -41,7 +45,7 @@ const resolvePendingDownloadFileName = ({
   requestedOutputName?: string;
   resultOutputName?: string;
 }) => {
-  const normalizedRequestedOutputName = requestedOutputName ? getRequestedOutputName(requestedOutputName) : undefined;
+  const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName);
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
   if (normalizedRequestedOutputName) {
     if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
@@ -50,8 +54,8 @@ const resolvePendingDownloadFileName = ({
   }
   return (
     normalizedResultOutputName ||
-    (automaticOutputName ? getRequestedOutputName(automaticOutputName) : undefined) ||
-    (fallbackOutputName ? getRequestedOutputName(fallbackOutputName) : undefined) ||
+    sanitizeTypedOutputName(automaticOutputName) ||
+    sanitizeTypedOutputName(fallbackOutputName) ||
     "output"
   );
 };

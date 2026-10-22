@@ -29,6 +29,7 @@ import {
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
   getChdAutoCreateMode,
@@ -70,8 +71,7 @@ const getLogLevel = (options: OutputWorkflowOptions | undefined) => options?.log
 const getContainerSettings = (options: OutputWorkflowOptions | undefined): OutputContainerSettings =>
   options?.output?.container || {};
 const getRequestedOutputName = (options: OutputWorkflowOptions | undefined) => {
-  const outputName = options?.output?.outputName;
-  return typeof outputName === "string" ? outputName.trim() : "";
+  return sanitizeTypedOutputName(options?.output?.outputName);
 };
 
 const traceOutputName = (

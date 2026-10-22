@@ -6,6 +6,7 @@ import OutputCompressionManager from "../../lib/compression/output-compression-m
 import { getSelectableCreatePatchFormats } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
+import { sanitizeFileNamePart, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 
 type OutputOption = {
@@ -46,17 +47,6 @@ const getBaseFileName = (fileName: string) =>
   String(fileName || "")
     .split(FILE_NAME_SEPARATOR_REGEX)
     .pop() || "";
-
-const sanitizeFileNamePart = (value: string | null | undefined, fallback: string) => {
-  const withoutControlCharacters = Array.from(String(value || ""))
-    .filter((char) => char.charCodeAt(0) >= 32)
-    .join("");
-  const sanitized = withoutControlCharacters
-    .replace(/[<>:"/\\|?*]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return sanitized || fallback;
-};
 
 const getFileName = (source: GeneratedOutputSource, fallback: string) => {
   if (source && typeof source === "object" && "name" in source && typeof source.name === "string") return source.name;
@@ -102,7 +92,8 @@ const generatePatchedFileName = (
   settings: OutputNameSettings,
   identifiedBase?: string | null,
 ) => {
-  if (settings.outputName) return settings.outputName;
+  const typedOutputName = sanitizeTypedOutputName(settings.outputName);
+  if (typedOutputName) return typedOutputName;
   const baseName = identifiedBase || getFileNameWithoutExtension(romFileName);
   if (settings.suffix) {
     const romName = sanitizeFileNamePart(baseName, "patched");
@@ -126,7 +117,8 @@ const getGeneratedOutputName = (
   settings: OutputNameSettings,
   identifiedBase?: string | null,
 ) => {
-  if (settings.outputName) return settings.outputName;
+  const typedOutputName = sanitizeTypedOutputName(settings.outputName);
+  if (typedOutputName) return typedOutputName;
 
   const sourceFileName = getGeneratedOutputSourceFileName(inputSource, "");
   if (!sourceFileName) return "";

@@ -4,10 +4,9 @@ import {
   getCompressionOutputExtension,
 } from "../compression/container-format-registry.ts";
 import { isZ3dsCompressedExtension } from "../compression/z3ds-subtypes.ts";
-import { getFileNameExtension } from "../path-utils.ts";
+import { getFileNameExtension, sanitizeTypedOutputName } from "../path-utils.ts";
 
-const normalizeRequiredOutputName = (outputName: string | null | undefined) =>
-  typeof outputName === "string" ? outputName.trim() : "";
+const normalizeRequiredOutputName = (outputName: string | null | undefined) => sanitizeTypedOutputName(outputName);
 
 const requireOutputName = (outputName: string | null | undefined) => {
   const normalized = normalizeRequiredOutputName(outputName);

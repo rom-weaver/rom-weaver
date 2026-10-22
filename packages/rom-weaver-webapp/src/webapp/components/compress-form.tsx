@@ -2,6 +2,7 @@ import { Download, FileArchive } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -171,7 +172,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         files,
         {
           ...options,
-          output: { ...options.output, compression: format, outputName: name },
+          output: {
+            ...options.output,
+            compression: format,
+            outputName: sanitizeTypedOutputName(name) || generatedName,
+          },
           signal: abort.signal,
           onLog: options.logging?.sink,
           onProgress: (event) => {
