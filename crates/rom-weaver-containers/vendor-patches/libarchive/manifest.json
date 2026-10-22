@@ -243,6 +243,13 @@
       "reason": "Preserve exact Unicode normalization sequences across UTF-8 archive boundaries.",
       "upstream": { "status": "local" },
       "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
+    },
+    {
+      "file": "0020-zip-keep-legacy-name-bytes.patch",
+      "stage": "source",
+      "reason": "Keep the stored bytes of ZIP names without the UTF-8 flag so the caller can decode legacy charsets; skip the locale-dependent wide-form backslash rewrite for them.",
+      "upstream": { "status": "local" },
+      "tests": ["cargo test -p rom-weaver-cli --test unicode_extract"]
     }
   ],
   "materialized": false,
@@ -260,6 +267,11 @@
     {
       "file": "libarchive/patches/7zip_solid_block.c",
       "target": "libarchive/archive_read_support_format_7zip.c",
+      "mode": "append"
+    },
+    {
+      "file": "libarchive/patches/entry_stored_pathname.c",
+      "target": "libarchive/archive_entry.c",
       "mode": "append"
     }
   ]

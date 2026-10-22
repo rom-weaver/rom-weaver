@@ -1,0 +1,27 @@
+diff --git a/libarchive/archive_read_support_format_zip.c b/libarchive/archive_read_support_format_zip.c
+--- a/libarchive/archive_read_support_format_zip.c
++++ b/libarchive/archive_read_support_format_zip.c
+@@ -1041,7 +1041,11 @@
+ 
+ 	/* Windows archivers sometimes use backslash as the directory
+ 	 * separator. Normalize to slash. */
++	/* rom-weaver: names without the UTF-8 flag MUST keep their stored
++	 * bytes: the wide form widens them by locale, and a Shift-JIS trail
++	 * byte can be 0x5C. The caller decodes them and normalizes slashes. */
+ 	if (zip_entry->system == 0 &&
++	    (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0 &&
+ 	    (wp = archive_entry_pathname_w(entry)) != NULL) {
+ 		if (wcschr(wp, L'/') == NULL && wcschr(wp, L'\\') != NULL) {
+ 			size_t i;
+@@ -1084,7 +1088,10 @@
+ 
+ 	/* Make sure directories end in '/' */
+ 	if ((zip_entry->mode & AE_IFMT) == AE_IFDIR) {
+-		wp = archive_entry_pathname_w(entry);
++		/* rom-weaver: append to the stored bytes of names without the
++		 * UTF-8 flag, as above. */
++		wp = (zip_entry->zip_flags & ZIP_UTF8_NAME) != 0 ?
++		    archive_entry_pathname_w(entry) : NULL;
+ 		if (wp != NULL) {
+ 			len = wcslen(wp);
+ 			if (len > 0 && wp[len - 1] != L'/') {

@@ -63,18 +63,14 @@ pub fn list_regular_archive_file_entries(
             ))
         })? {
             if entry.is_file() {
-                let entry_path = match entry.pathname_utf8() {
-                    Ok(path) => path.to_owned(),
-                    Err(_) => entry
-                        .pathname_mb()
-                        .map(|path| path.to_string_lossy().into_owned())
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "{format_name} list failed while decoding entry {index}: {error}"
-                            ))
-                        })?,
-                };
-                if let Some(name) = normalize_archive_name(&entry_path) {
+                let entry_path = entry.pathname().map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} list failed while decoding entry {index}: {error}"
+                    ))
+                })?;
+                // Legacy ZIP directories may still end in `\`; libarchive only rewrites flagged names.
+                let is_dir_name = entry_path.ends_with('\\');
+                if let Some(name) = normalize_archive_name(&entry_path).filter(|_| !is_dir_name) {
                     entries.push(RegularArchiveFileEntry {
                         index,
                         name,
@@ -131,24 +127,18 @@ pub fn probe_regular_archive(
                 "{format_name} probe failed while reading entry {index}: {error}"
             ))
         })? {
-            let entry_path = match entry.pathname_utf8() {
-                Ok(path) => path.to_owned(),
-                Err(_) => entry
-                    .pathname_mb()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} probe failed while decoding entry {index}: {error}"
-                        ))
-                    })?,
-            };
+            let entry_path = entry.pathname().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} probe failed while decoding entry {index}: {error}"
+                ))
+            })?;
             if normalize_archive_name_relaxed(&entry_path).is_empty() {
                 index = index.saturating_add(1);
                 continue;
             }
 
             summary.entries_total = summary.entries_total.saturating_add(1);
-            if entry.is_dir() {
+            if entry.is_dir() || entry_path.ends_with('\\') {
                 summary.directories = summary.directories.saturating_add(1);
             } else {
                 summary.files = summary.files.saturating_add(1);
@@ -197,17 +187,11 @@ pub fn list_regular_archive_entries(
                 "{format_name} list failed while reading entry {index}: {error}"
             ))
         })? {
-            let entry_path = match entry.pathname_utf8() {
-                Ok(path) => path.to_owned(),
-                Err(_) => entry
-                    .pathname_mb()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} list failed while decoding entry {index}: {error}"
-                        ))
-                    })?,
-            };
+            let entry_path = entry.pathname().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} list failed while decoding entry {index}: {error}"
+                ))
+            })?;
             entries.push(RegularArchiveEntryMetadata {
                 index,
                 is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
@@ -283,17 +267,11 @@ where
                 continue;
             }
 
-            let entry_path = match entry.pathname_utf8() {
-                Ok(path) => path.to_owned(),
-                Err(_) => entry
-                    .pathname_mb()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} extract failed while decoding entry {index}: {error}"
-                        ))
-                    })?,
-            };
+            let entry_path = entry.pathname().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} extract failed while decoding entry {index}: {error}"
+                ))
+            })?;
             let entry_info = RegularArchiveEntryMetadata {
                 index,
                 is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
@@ -368,17 +346,11 @@ where
                 )));
             }
 
-            let entry_path = match entry.pathname_utf8() {
-                Ok(path) => path.to_owned(),
-                Err(_) => entry
-                    .pathname_mb()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} read failed while decoding entry {index}: {error}"
-                        ))
-                    })?,
-            };
+            let entry_path = entry.pathname().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} read failed while decoding entry {index}: {error}"
+                ))
+            })?;
             let entry_name = normalize_archive_name(&entry_path).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
                     "{format_name} read failed because entry {index} could not be normalized"
