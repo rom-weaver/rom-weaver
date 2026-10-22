@@ -15,7 +15,7 @@ import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { usePpfUndoInputs } from "./ppf-undo-inputs.tsx";
 import { hasDiscImageEvidence, isLikelyDiscImageSource } from "../../lib/compression/disc-image-policy.ts";
-import { getFileNameExtension } from "../../lib/path-utils.ts";
+import { getFileNameExtension, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../../lib/compression/container-format-registry.ts";
 import {
@@ -209,7 +209,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
     try {
       const { undoPpf } = await import("../../platform/browser/browser-api.ts");
       const restored = await undoPpf({
-        outputName: `${outputName.trim()}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
+        outputName: `${sanitizeTypedOutputName(outputName) || "restored-rom"}.${getFileNameExtension(preparedRom?.fileName || rom.name) || "bin"}`,
         onWarning: (message) => setRuntimeWarnings((previous) => [...previous, message]),
         compression,
         metadata: prepared?.metadata,

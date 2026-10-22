@@ -11,6 +11,7 @@ import type { InputAsset } from "../lib/input/input-assets.ts";
 import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../lib/output/output-build-service.ts";
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
 import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../lib/path-utils.ts";
 import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
@@ -406,7 +407,8 @@ const compressFiles = async (
     throw new Error("Compress requires a concrete output format");
   }
   if (isArchiveCompressionFormat(compression)) {
-    const baseName = options.output?.outputName?.trim() || getFileNameWithoutExtension(files[0]?.name || "archive");
+    const baseName =
+      sanitizeTypedOutputName(options.output?.outputName) || getFileNameWithoutExtension(files[0]?.name || "archive");
     return createArchiveOutput({
       compression,
       entries: files.map((file) => ({ file, filename: file.name })),

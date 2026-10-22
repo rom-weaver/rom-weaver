@@ -16,6 +16,7 @@ import { RomWeaverError } from "../errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
@@ -146,9 +147,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     if (isCompressionFormat(configuredCompression)) {
       this.outputFormat = configuredCompression;
     }
-    if (typeof this.settings.output?.outputName === "string" && this.settings.output.outputName.trim()) {
+    if (sanitizeTypedOutputName(this.settings.output?.outputName)) {
       this.manualOutputName = true;
-      this.outputName = this.settings.output.outputName;
+      this.outputName = this.settings.output?.outputName ?? "";
     } else {
       this.outputName = this.buildAutomaticOutputName();
     }
@@ -202,7 +203,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
 
   async setOutputName(name: string): Promise<void> {
     return this.mutate("setOutputName", async () => {
-      const normalizedName = name.trim();
+      const normalizedName = sanitizeTypedOutputName(name);
       this.manualOutputName = !!normalizedName;
       this.outputName = this.manualOutputName ? this.normalizeOutputName(name) : this.buildAutomaticOutputName();
     });
@@ -222,7 +223,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (stage.state.status !== "ready" || !stage.state.selectedCandidateId)
         throw new RomWeaverError("AMBIGUOUS_SELECTION", "Trim source requires candidate selection");
       this.getOutputCompression();
-      const outputName = this.outputName.trim();
+      const outputName = this.normalizeOutputName(this.outputName) || this.buildAutomaticOutputName();
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await runTrimWorkflow(this.createTrimInput(stage), this.runtime);
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
@@ -375,7 +376,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 
   private normalizeOutputName(name: string) {
-    const normalizedName = name.trim();
+    const normalizedName = sanitizeTypedOutputName(name);
     const input = this.getInput();
     if (!(normalizedName && input?.fileName)) return normalizedName;
     const outputBaseName = getFileNameWithoutExtension(normalizedName).trim().toLowerCase();
@@ -393,7 +394,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       output: {
         ...cloneValue(this.settings.output || {}),
         compression: this.getOutputCompression(),
-        outputName: this.normalizeOutputName(this.outputName || this.settings.output?.outputName || ""),
+        outputName:
+          this.normalizeOutputName(this.outputName || this.settings.output?.outputName || "") ||
+          this.buildAutomaticOutputName(),
       },
       signal: this.abortController.signal,
       workers: cloneValue(this.settings.workers || {}),

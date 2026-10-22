@@ -1,3 +1,4 @@
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import type { BrowserSaveDestination, RuntimePatchCreateFormatCandidates } from "../../platform/browser/browser-api.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -16,7 +17,7 @@ import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
  */
 
 const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
-  const normalizedOutputName = outputName.trim();
+  const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
   // Ensure the name ends with the real patch extension, not just any dotted
   // segment: a version like "Game 2.2" reads as extension ".2" to a generic

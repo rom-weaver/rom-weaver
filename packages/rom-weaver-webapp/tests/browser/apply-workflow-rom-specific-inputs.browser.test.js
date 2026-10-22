@@ -320,14 +320,22 @@ test("CHD staging emits descent trace events", async () => {
   }
 });
 
-test.each(["default", "custom", "cue extension"])(
+test.each(["default", "custom", "cue extension", "reserved characters"])(
   "apply workflow stores direct CUE plus BIN raw output in one ZIP (%s name)",
   async (naming) => {
     const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const inputStem = `direct-disc-${runId}`;
     const outputStem = `patched-disc-${runId}`;
-    const outputName = naming === "cue extension" ? `${outputStem}.cue` : outputStem;
-    const expectedStem = naming === "default" ? `${inputStem} [change]` : outputStem;
+    // A typed name with Windows-reserved characters is sanitized for the ZIP, its entries and the CUE reference.
+    const typedStem = `Zelda: Hack ${runId}`;
+    const outputName =
+      naming === "cue extension" ? `${outputStem}.cue` : naming === "reserved characters" ? typedStem : outputStem;
+    const expectedStem =
+      naming === "default"
+        ? `${inputStem} [change]`
+        : naming === "reserved characters"
+          ? `Zelda Hack ${runId}`
+          : outputStem;
     const workflow = new ApplyWorkflow({
       settings: {
         output: {
@@ -356,7 +364,9 @@ test.each(["default", "custom", "cue extension"])(
       const result = await workflow.run();
       try {
         expect(result.outputs).toHaveLength(1);
-        expect(result.output.fileName).toBe(`${naming === "default" ? `${expectedStem}.cue` : outputName}.zip`);
+        expect(result.output.fileName).toBe(
+          `${naming === "default" ? `${expectedStem}.cue` : naming === "reserved characters" ? expectedStem : outputName}.zip`,
+        );
         expect(result.sizeSummary?.rawSize).toBeGreaterThan(rawInput.size);
 
         const blob = await result.output.getBlob?.();

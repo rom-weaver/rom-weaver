@@ -1,3 +1,4 @@
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
@@ -1051,7 +1052,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const original = assets[0];
       const originalSource = getPatchFileExternalSource(original.file, original.fileName);
       if (!originalSource) throw new RomWeaverError("INVALID_INPUT", "The prepared original ROM is not readable");
-      const outputName = settings.output?.outputName?.trim();
+      const outputName = sanitizeTypedOutputName(settings.output?.outputName);
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const applyPatch = this.runtime.patch.applyPatch;
       const createPatch = this.runtime.patch.createPatch;

@@ -18,6 +18,7 @@ import { createSingleFileArchiveOutput, hasArchiveFileName } from "../output/arc
 import { createSingleFileRomSpecificOutput } from "../output/output-build-service.ts";
 import { getCompressionIntermediateFileName } from "../output/output-files.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import {
@@ -34,7 +35,8 @@ type OutputCompressionSource = Parameters<typeof OutputCompressionManager.resolv
 const getTrimLogLevel = (options: TrimWorkflowOptions | undefined) => options?.logging?.level;
 const getTrimThreads = (options: TrimWorkflowOptions | undefined) => options?.workers?.threads;
 const getTrimCompression = (options: TrimWorkflowOptions | undefined) => options?.output?.compression;
-const getTrimOutputName = (options: TrimWorkflowOptions | undefined) => options?.output?.outputName;
+const getTrimOutputName = (options: TrimWorkflowOptions | undefined) =>
+  sanitizeTypedOutputName(options?.output?.outputName);
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("trim");
 
 const getTrimOutputCompression = (

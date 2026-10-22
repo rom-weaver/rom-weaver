@@ -4,6 +4,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -281,7 +282,7 @@ const useLocalApplyPatchFormSession = ({
   const hasPendingDownload = !!pendingDownloadFileName;
   const setPendingDownloadReadyFileName = useCallback(
     (fileName: string) => {
-      const normalizedFileName = getRequestedOutputName(fileName) || "output";
+      const normalizedFileName = sanitizeTypedOutputName(fileName) || "output";
       pendingDownloadFileNameRef.current = normalizedFileName;
       setPendingDownloadFileName(normalizedFileName);
     },

@@ -9,7 +9,7 @@ import { hasDiscImageEvidence } from "../compression/disc-image-policy.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../input/path-utils.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { buildCheatOutputBaseName, buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
-import { getFileNameExtension } from "../path-utils.ts";
+import { getFileNameExtension, sanitizeTypedOutputName } from "../path-utils.ts";
 import type { InputSession } from "./apply-workflow-state.ts";
 import { getSourceFileName, getSourceSize } from "./controller-utils.ts";
 
@@ -68,7 +68,7 @@ const applyOutputSettings = (
   state.outputFormat = state.manualOutputFormat
     ? (initialCompression as CompressionFormat)
     : resolveAutomaticFormat(inputSession, settings);
-  state.manualOutputName = typeof output.outputName === "string" && !!output.outputName.trim();
+  state.manualOutputName = !!sanitizeTypedOutputName(output.outputName);
   state.outputName = state.manualOutputName ? output.outputName || "" : "";
 };
 
@@ -78,7 +78,7 @@ const setApplyOutputName = (
   name: string,
   recompute: () => void,
 ): void => {
-  const normalizedName = name.trim();
+  const normalizedName = sanitizeTypedOutputName(name);
   state.manualOutputName = !!normalizedName;
   if (state.manualOutputName) {
     state.outputName = name;
@@ -193,7 +193,8 @@ const getApplyExecutionOutputName = (
   settings: Partial<ApplySettings>,
   inputFileName: string | undefined,
 ): string => {
-  const outputName = state.outputName || settings.output?.outputName || "";
+  const rawOutputName = state.outputName || settings.output?.outputName || "";
+  const outputName = state.manualOutputName ? sanitizeTypedOutputName(rawOutputName) : rawOutputName;
   if (state.manualOutputName || !outputName) return outputName;
   if (state.outputFormat === "none") {
     const extension = getCompressionExtension(state.outputFormat, inputFileName, settings);

@@ -521,7 +521,9 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     (useIdentifiedOutputName ? identifiedOutputTitle : null) ||
     getDefaultCreateOutputName(generatedOutputSource);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
-  const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
+  const executionOutputName =
+    resolveCreateExecutionOutputName(resolvedOutputName, patchType) ||
+    resolveCreateExecutionOutputName(generatedOutputName, patchType);
   const createCompression = (() => {
     const normalized = String(
       settings.output?.compression || getDefaultCompressionArchive(getBareDefaultCompressionMode(settings)),
