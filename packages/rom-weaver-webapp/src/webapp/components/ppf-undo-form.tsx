@@ -41,7 +41,9 @@ const PPF_UNDO_ACTIVITY_KEY = "ppf-undo";
 // sheet needs a .cue/.gdi path, and a later container step reads the raw extension. A typed known
 // extension is replaced; any other trailing segment (`v1.2`) stays part of the name.
 const resolveRestoredOutputName = (name: string, extension: string) =>
-  appendFileNameExtension(removeKnownOutputExtension(name) || name, extension);
+  getLiteralFileNameExtension(name) === extension.toLowerCase()
+    ? name
+    : appendFileNameExtension(removeKnownOutputExtension(name) || name, extension);
 
 const restoredFileName = (name: string) => {
   const dot = name.lastIndexOf(".");

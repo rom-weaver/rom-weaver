@@ -110,10 +110,11 @@ describe("PPF Undo input replacement", () => {
   });
 
   it.each([
-    ["restored.bin", "restored.bin"],
-    ["Hack v1.2", "Hack v1.2.bin"],
-    ["restored.chd", "restored.bin"],
-  ])("gives typed name %s the ROM's own extension", async (typedName, expected) => {
+    ["restored.bin", "game.bin", "restored.bin"],
+    ["Hack v1.2", "game.bin", "Hack v1.2.bin"],
+    ["restored.chd", "game.bin", "restored.bin"],
+    ["restored.mdf", "game.mdf", "restored.mdf"],
+  ])("gives typed name %s the ROM's own extension (%s)", async (typedName, romName, expected) => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],
       patchOutputs: [],
@@ -130,7 +131,7 @@ describe("PPF Undo input replacement", () => {
     );
     const picker = view.container.querySelector("#ppf-undo-input-picker");
     if (!picker) throw new Error("Missing input picker");
-    fireEvent.change(picker, { target: { files: [new File(["ROM"], "game.bin"), new File(["PPF"], "valid.ppf")] } });
+    fireEvent.change(picker, { target: { files: [new File(["ROM"], romName), new File(["PPF"], "valid.ppf")] } });
     const button = await view.findByRole("button", { name: "Restore original ROM" });
     fireEvent.change(view.getByRole("textbox", { name: "Output filename" }), { target: { value: typedName } });
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
