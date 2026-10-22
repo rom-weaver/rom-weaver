@@ -11,10 +11,15 @@ import {
   z3dsUnderlyingExtensionForCompressedExtension,
   z3dsUnderlyingExtensionForMagic,
 } from "../compression/z3ds-subtypes.ts";
-import { appendFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { appendFileNameExtension } from "../input/path-utils.ts";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
-import { CHD_EXTENSION_REGEX, getFileNameExtension } from "../path-utils.ts";
-import { hasKnownOutputExtension, withOutputExtension } from "./output-name-validation.ts";
+import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
+import {
+  getLiteralFileNameExtension,
+  hasKnownOutputExtension,
+  removeKnownOutputExtension,
+  withOutputExtension,
+} from "./output-name-validation.ts";
 
 const RVZ_EXTENSION_REGEX = createRomSpecificExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
 const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip)$/i;
@@ -90,8 +95,8 @@ const getChdIntermediateFileName = (
   if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
   if (CHD_EXTENSION_REGEX.test(fileName)) {
     const sourceExtension = getSourceExtension(source, chdOutputMode === "cd" ? "bin" : "iso");
-    return replaceFileNameExtension(
-      fileName,
+    return appendFileNameExtension(
+      removeKnownOutputExtension(fileName),
       sourceExtension || (chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso"),
     );
   }
@@ -102,7 +107,8 @@ const getArchiveIntermediateFileName = (fileName: string, source: SourceFileLike
   if (!source) return fileName;
   const defaultExtension = getSourceExtension(source, "bin");
   if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
-  if (ARCHIVE_EXTENSION_REGEX.test(fileName)) return replaceFileNameExtension(fileName, defaultExtension);
+  if (ARCHIVE_EXTENSION_REGEX.test(fileName))
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), defaultExtension);
   return fileName;
 };
 
@@ -112,7 +118,8 @@ const getRvzIntermediateFileName = (fileName: string, source: SourceFileLike | n
     extension && hasRomSpecificExtension(RVZ_DECOMPRESSION_INPUT_EXTENSIONS, extension) ? "iso" : extension;
   const defaultExtension = normalizeRvzSourceExtension(getSourceExtension(source, "iso"));
   if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
-  if (RVZ_EXTENSION_REGEX.test(fileName)) return replaceFileNameExtension(fileName, defaultExtension || "iso");
+  if (RVZ_EXTENSION_REGEX.test(fileName))
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), defaultExtension || "iso");
   return fileName;
 };
 
@@ -129,8 +136,8 @@ const getZ3dsIntermediateFileName = (fileName: string, source: SourceFileLike | 
   if (!source) return fileName;
   const sourceExtension = getZ3dsDecompressedSourceExtension(source);
   if (!hasKnownOutputExtension(fileName, sourceExtension)) return appendFileNameExtension(fileName, sourceExtension);
-  if (isZ3dsCompressedExtension((getFileNameExtension(fileName) ?? "").toLowerCase())) {
-    return replaceFileNameExtension(fileName, sourceExtension);
+  if (isZ3dsCompressedExtension(getLiteralFileNameExtension(fileName))) {
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), sourceExtension);
   }
   return fileName;
 };
