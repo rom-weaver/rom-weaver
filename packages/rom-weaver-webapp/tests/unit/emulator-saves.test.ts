@@ -378,6 +378,51 @@ describe("emulator saves", () => {
     }
   });
 
+  it("keeps a replacement save when an earlier discard finishes", async () => {
+    const database = new FakeDatabase();
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    configureEmulatorSaveStorage(false);
+    let releaseDeletion: () => void = vi.fn();
+    let deletionReached: () => void = vi.fn();
+    const deletionPending = new Promise<void>((resolve) => {
+      deletionReached = resolve;
+    });
+    const originalTransaction = database.transaction.bind(database);
+    let holdNextWrite = false;
+    const transactionSpy = vi.spyOn(database, "transaction").mockImplementation((name, mode) => {
+      const transaction = originalTransaction(name, mode);
+      if (mode === "readwrite" && holdNextWrite) {
+        holdNextWrite = false;
+        let oncomplete: (() => void) | null = null;
+        Object.defineProperty(transaction, "oncomplete", {
+          get: () => () => {
+            releaseDeletion = () => oncomplete?.();
+            deletionReached();
+          },
+          set: (callback: (() => void) | null) => {
+            oncomplete = callback;
+          },
+        });
+      }
+      return transaction;
+    });
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([65]), fileName: "A.sav", slot: "dropped" });
+      holdNextWrite = true;
+      const discard = clearPendingTestSave("dropped");
+      await deletionPending;
+      await stagePendingTestSave({ data: new Uint8Array([66]), fileName: "B.sav", slot: "dropped" });
+      releaseDeletion();
+      await discard;
+      expect(await readPendingTestSaves()).toMatchObject([{ fileName: "B.sav", bytes: new Uint8Array([66]) }]);
+    } finally {
+      releaseDeletion();
+      transactionSpy.mockRestore();
+      configureEmulatorSaveStorage(true);
+      await clearPendingTestSave();
+    }
+  });
+
   it("keeps a dropped save and a Save editor hand-off in separate slots, newest first", async () => {
     const now = vi.spyOn(Date, "now");
     try {

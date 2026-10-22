@@ -777,7 +777,8 @@ const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => (a
 /** Clears one slot, or both when none is named. */
 const clearPendingTestSave = async (slot?: PendingSaveSlot): Promise<void> => {
   const slots = slot ? [slot] : (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]);
-  const memoryOnly = slots.every((name) => memoryPendingTestSaves.has(name));
+  const pendingMemory = new Map(slots.map((name) => [name, memoryPendingTestSaves.get(name)]));
+  const memoryOnly = slots.every((name) => pendingMemory.get(name) !== undefined);
   try {
     await runTransaction(
       "readwrite",
@@ -793,7 +794,9 @@ const clearPendingTestSave = async (slot?: PendingSaveSlot): Promise<void> => {
       slots,
     });
   }
-  for (const name of slots) memoryPendingTestSaves.delete(name);
+  for (const name of slots) {
+    if (memoryPendingTestSaves.get(name) === pendingMemory.get(name)) memoryPendingTestSaves.delete(name);
+  }
 };
 
 const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {
