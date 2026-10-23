@@ -391,6 +391,21 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     togglePatchEnabled,
   } = useApplyPatchEnablement();
 
+  const [invalidDraftPatchErrors, setInvalidDraftPatchErrors] = useState<ReadonlyMap<string, string>>(new Map());
+  const onDraftValidityChange = useCallback((id: string, error: string | null) => {
+    setInvalidDraftPatchErrors((previous) => {
+      if ((previous.get(id) || null) === error) return previous;
+      const next = new Map(previous);
+      if (error) next.set(id, error);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const applyValidationError = getPatchIds()
+    .filter((id) => !disabledPatchIds.has(id))
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
+
   // A `?weave=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
   // Controllers are created further down, so the hook reads them through a ref.
@@ -1729,6 +1744,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     applyPatches,
     applyReady: applyReady && !weaveDefaultsPending,
     applyDisabled: weaveDefaultsPending,
+    applyValidationError,
     defaultPatchBasis: patchInputBasis,
     disabledPatchIds,
     downloadOutput,
@@ -2107,6 +2123,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setWeavePackage: changeWeavePackage,
         }}
         onWeaveMetaChange={updateWeaveMetaImmediately}
+        onDraftValidityChange={onDraftValidityChange}
+        applyValidationError={applyValidationError}
         onWeaveMetaBulkChange={updateWeaveMetaForIdsImmediately}
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}

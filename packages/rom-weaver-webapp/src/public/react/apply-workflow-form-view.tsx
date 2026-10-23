@@ -496,6 +496,8 @@ function ApplyWorkflowFormView({
   weaveRomExpectation,
   weaveTools,
   onWeaveMetaChange,
+  onDraftValidityChange,
+  applyValidationError,
   onWeaveMetaBulkChange,
   onSelectTab,
   onSelectView,
@@ -546,6 +548,8 @@ function ApplyWorkflowFormView({
   /** Shown while the weave session waits for the user to supply the expected ROM. */
   weaveRomExpectation?: WeaveRomExpectation;
   onWeaveMetaChange?: (id: string, updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (id: string, error: string | null) => void;
+  applyValidationError?: string;
   onWeaveMetaBulkChange?: (ids: readonly string[], updates: Partial<WeavePatchMeta>) => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
@@ -622,6 +626,7 @@ function ApplyWorkflowFormView({
     return id ? { id, ...metadata } : metadata;
   });
   const weaveVerificationError =
+    applyValidationError ||
     getWeaveVerificationError(weaveMeta, patches, localizer) ||
     validatePatchDependencies(
       weaveMeta.map((meta, index) => ({
@@ -1114,6 +1119,10 @@ function ApplyWorkflowFormView({
                 disabledFlags={disabledPatchFlags}
                 emptyState={patchesNeedsInput}
                 fault={applyFailed}
+                onDraftValidityChange={(index, error) => {
+                  const id = patchIds[index];
+                  if (id) onDraftValidityChange?.(id, error);
+                }}
                 onWeaveMetaChange={(index, updates) => {
                   const id = patchIds[index];
                   if (id) onWeaveMetaChange?.(id, updates);

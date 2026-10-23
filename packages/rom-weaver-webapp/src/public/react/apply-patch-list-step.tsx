@@ -155,6 +155,7 @@ const ApplyPatchListStep = ({
   fault,
   weaveMeta,
   onWeaveMetaChange,
+  onDraftValidityChange,
   onWeaveMetaBulkChange,
   onTogglePatch,
   notice,
@@ -185,6 +186,7 @@ const ApplyPatchListStep = ({
   /** Per-index editable weave metadata. */
   weaveMeta?: readonly (WeavePatchMeta | undefined)[];
   onWeaveMetaChange?: (index: number, updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (index: number, error: string | null) => void;
   onWeaveMetaBulkChange?: (updates: Partial<WeavePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
@@ -411,6 +413,7 @@ const ApplyPatchListStep = ({
               key={item.key ?? `${index}:${item.fileName}`}
               meta={weaveMeta?.[index]}
               onBasisChange={(basis) => onPatchInputBasisChange?.(index, basis)}
+              onDraftValidityChange={(error) => onDraftValidityChange?.(index, error)}
               onMetaChange={onWeaveMetaChange ? (updates) => onWeaveMetaChange(index, updates) : undefined}
               onReorder={reorderMixed}
               onTogglePatch={onTogglePatch}
