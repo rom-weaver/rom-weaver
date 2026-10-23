@@ -39,6 +39,7 @@ import {
 } from "../../src/wasm/browser-wasi-thread-protocol.ts";
 
 const ERRNO_ACCES = 2;
+const ERRNO_NOSPC = 51;
 
 // Minimal in-memory OPFS mock (a focused copy of the one in opfs-proxy-channel.test.ts). A MockFile can
 // report a synthetic, arbitrarily large size so the 64-bit SIZE encoding can be exercised without
@@ -51,6 +52,7 @@ class MockFile {
   closeError: Error | null = null;
   readResult: number | null = null;
   writeResult: number | null = null;
+  writeError: Error | null = null;
   ignoreTruncate = false;
 }
 
@@ -72,6 +74,7 @@ class MockSyncAccessHandle {
     return n;
   }
   write(buffer: Uint8Array, options?: { at?: number }): number {
+    if (this.file.writeError) throw this.file.writeError;
     if (this.file.writeResult !== null) return this.file.writeResult;
     const at = options?.at ?? 0;
     const end = at + buffer.byteLength;
@@ -224,8 +227,12 @@ describe("opfs proxy SIZE 64-bit encoding", () => {
         handle: opened.result,
         opcode: OPFS_PROXY_OP_TRUNCATE,
       });
-      expect(truncated.status).toBe(OPFS_PROXY_STATUS_EIO);
+      expect(truncated.status).toBe(ERRNO_NOSPC);
       expect(file.bytes.byteLength).toBe(0);
+
+      file.bytes = new Uint8Array(32);
+      const shrunk = await request(channel, { auxLow: 8, handle: opened.result, opcode: OPFS_PROXY_OP_TRUNCATE });
+      expect(shrunk.status).toBe(OPFS_PROXY_STATUS_EIO);
     } finally {
       server.stop();
       await server.done;
@@ -479,7 +486,8 @@ describe("opfs proxy native byte counts", () => {
         const file = root.files.get("count.bin")?.file;
         expect(file).toBeDefined();
         if (!file) throw new Error("proxy did not create count.bin");
-        for (const invalid of [4294967288, -8, NaN, 1.5]) {
+        const oversized = opcode === OPFS_PROXY_OP_READ ? 4294967288 : 17;
+        for (const invalid of [oversized, -8, NaN, 1.5]) {
           if (opcode === OPFS_PROXY_OP_READ) file.readResult = invalid;
           else file.writeResult = invalid;
           const response = await request(channel, { handle: opened.result, length: 16, opcode });
@@ -492,4 +500,27 @@ describe("opfs proxy native byte counts", () => {
       }
     },
   );
+
+  it.each([
+    ["Chromium's out-of-storage count", (file: MockFile) => (file.writeResult = 4294967288)],
+    ["QuotaExceededError", (file: MockFile) => (file.writeError = namedError("QuotaExceededError"))],
+  ])("reports %s on write as ENOSPC", async (_label, exhaust) => {
+    const root = new MockDirectoryHandle();
+    const { channel, server } = startServer(root, ["/work"]);
+    try {
+      const opened = await request(channel, {
+        auxLow: CREATE_FLAG | WRITABLE_FLAG,
+        opcode: OPFS_PROXY_OP_OPEN,
+        path: "/work/full.bin",
+      });
+      const file = root.files.get("full.bin")?.file;
+      if (!file) throw new Error("proxy did not create full.bin");
+      exhaust(file);
+      const response = await request(channel, { handle: opened.result, length: 16, opcode: OPFS_PROXY_OP_WRITE });
+      expect(response.status).toBe(ERRNO_NOSPC);
+    } finally {
+      server.stop();
+      await server.done;
+    }
+  });
 });
