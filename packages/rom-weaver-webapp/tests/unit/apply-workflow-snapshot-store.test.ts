@@ -214,7 +214,10 @@ describe("Apply workflow snapshot store", () => {
 
   it("skips disabled patches only while the staged patches line up with the slots", () => {
     const sizes = [64_000_000, 8_000_000];
-    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set()).patchTargetSize).toBe(64_000_000);
+    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set())).toEqual({
+      maxKnownTargetSize: 64_000_000,
+      patchTargetSize: 8_000_000,
+    });
     expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set(["slot-1"])).patchTargetSize).toBe(
       8_000_000,
     );
@@ -237,12 +240,14 @@ describe("Apply workflow snapshot store", () => {
         originalSize: 4096,
         modifiedSize: getEnabledPatchTargetSizes(sizes, ["ips", "empty"], disabled).patchTargetSize,
       });
-    expect(formats(new Set())).toEqual(expect.arrayContaining(["ebp", "ppf"]));
+    expect(formats(new Set())).not.toContain("ebp");
+    expect(formats(new Set())).not.toContain("ppf");
     expect(formats(new Set(["ips"]))).not.toContain("ebp");
     expect(formats(new Set(["ips"]))).not.toContain("ppf");
-    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set()).patchTargetSize).toBeUndefined();
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set()).patchTargetSize).toBe(0);
     expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["ips"])).patchTargetSize).toBe(0);
     expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();
+    expect(formats(new Set(["empty"]))).toEqual(expect.arrayContaining(["ebp", "ppf"]));
     expect(getEnabledPatchTargetSizes([4096, undefined], ["bps", "ips"], new Set()).patchTargetSize).toBeUndefined();
     expect(getEnabledPatchTargetSizes([undefined], ["bps", "ips"], new Set(["ips"])).patchTargetSize).toBeUndefined();
     expect(getEnabledPatchTargetSizes([0], ["empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();

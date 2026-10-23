@@ -275,6 +275,24 @@ describe("useCombinedPatch", () => {
     expect(formats()).toEqual(expect.arrayContaining(["ips", "ebp", "ppf"]));
   });
 
+  it("uses the final declared target after an unknown intermediate size", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: {
+        romSize: 4096,
+        ...getEnabledPatchTargetSizes([undefined, 2048], ["ips", "bps"], new Set()),
+      },
+    });
+    const formats = () => result.current.outputProps.formatOptions?.map((option) => option.value);
+    expect(formats()).not.toContain("ebp");
+    expect(formats()).not.toContain("ppf");
+    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([undefined, 0], ["ips", "bps"], new Set()) });
+    expect(formats()).not.toContain("ebp");
+    expect(formats()).not.toContain("ppf");
+    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([2048, undefined], ["bps", "ips"], new Set()) });
+    expect(formats()).toEqual(expect.arrayContaining(["ebp", "ppf"]));
+  });
+
   it("keeps a running job's sizes while preparing the run clears them", async () => {
     const pending = deferred<BrowserCreateResult>();
     const patch = createdPatch();

@@ -45,7 +45,8 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.romSize === right.romSize;
 
 /**
- * Unknown enabled sizes MUST prevent a shrinking classification. Outside a run the workflow
+ * The final enabled patch determines the target size; an unknown intermediate MUST NOT erase it.
+ * The largest known target independently constrains format size limits. Outside a run the workflow
  * stages disabled patches too, lined up with the slots; a filtered run stages
  * only enabled ones, so a list of another length has nothing to skip.
  */
@@ -56,13 +57,13 @@ const getEnabledPatchTargetSizes = (
 ) => {
   const aligned = sizes.length === slotIds.length;
   let maxKnownTargetSize: number | undefined;
-  let hasUnknownTargetSize = false;
+  let patchTargetSize: number | undefined;
   for (const [index, size] of sizes.entries()) {
     if (aligned && disabled.has(slotIds[index] || "")) continue;
-    if (size === undefined) hasUnknownTargetSize = true;
-    else maxKnownTargetSize = Math.max(maxKnownTargetSize ?? 0, size);
+    patchTargetSize = size;
+    if (size !== undefined) maxKnownTargetSize = Math.max(maxKnownTargetSize ?? 0, size);
   }
-  return { maxKnownTargetSize, patchTargetSize: hasUnknownTargetSize ? undefined : maxKnownTargetSize };
+  return { maxKnownTargetSize, patchTargetSize };
 };
 
 const createApplyWorkflowSnapshotStore = () => {
