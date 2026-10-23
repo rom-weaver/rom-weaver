@@ -556,6 +556,50 @@ test.each(["crc32", "bytes"])("malformed %s edits preserve committed metadata", 
   expect(onMetaChange).not.toHaveBeenCalled();
 });
 
+test.each(["input", "output"])("malformed %s draft remains editable when embedded checks arrive", async (side) => {
+  const onDraftValidityChange = vi.fn();
+  const Harness = () => {
+    const [staged, setStaged] = useState(false);
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "button",
+        { id: "finish-staging", type: "button", onClick: () => setStaged(true) },
+        "Finish staging",
+      ),
+      createElement(PatchChecksDrawer, {
+        basisChoice: "base",
+        index: 0,
+        item: {
+          key: "patch-1",
+          fileName: "change.bps",
+          format: "bps",
+          validationValues: staged ? [`${side === "input" ? "in" : "out"} crc32=deadbeef`] : [],
+        },
+        onMetaChange: () => undefined,
+        onDraftValidityChange,
+        patchStack: {},
+      }),
+    );
+  };
+  mount(createElement(Harness));
+  (await waitForState(() => document.querySelector(".patch-checks .cks-head"))).click();
+  const add = await waitForState(() => document.getElementById(`rom-weaver-patch-${side}-add-check-0`));
+  add.value = "crc32";
+  add.dispatchEvent(new Event("change", { bubbles: true }));
+  const inputId = `rom-weaver-patch-${side}-crc32-0`;
+  const input = await waitForState(() => document.getElementById(inputId));
+  setFormControlValue(input, "not-a-hash");
+  await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toEqual(expect.any(String));
+  document.getElementById("finish-staging").click();
+  await expect.poll(() => document.querySelector(".patch-checks")?.textContent).toContain("deadbeef");
+  await expect.poll(() => document.getElementById(inputId)?.value).toBe("not-a-hash");
+  expect(onDraftValidityChange.mock.lastCall?.[0]).toEqual(expect.any(String));
+  document.getElementById(inputId).closest(".verification-row").querySelector(".ck-remove").click();
+  await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toBe(null);
+});
+
 test("malformed draft follows its patch when reordered and clears when removed", async () => {
   mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();

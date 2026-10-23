@@ -161,7 +161,10 @@ const PatchChecksDrawer = ({
       return userChecks[field] || "";
     };
     const editableFields = CHECK_FIELDS_PAIRED.filter(
-      (field) => !embedded[field] && (!!userValue(field) || !!draftFields[`${side}:${field}`]),
+      (field) =>
+        !!draftFields[`${side}:${field}`] ||
+        !!invalidChecks[`${side}:${field}`] ||
+        (!embedded[field] && !!userValue(field)),
     );
     const addableFields = CHECK_FIELDS_PAIRED.filter((field) => !(embedded[field] || editableFields.includes(field)));
     // Only the chain-input side's checks describe the ROM we actually hold, so
