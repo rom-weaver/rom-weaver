@@ -171,8 +171,9 @@ const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
 // full-changelog link instead.
 const RELEASE_NOTES_LIMIT = 5;
 // Line-anchored: an unanchored search would also match the string inside a
-// section body or a deeper heading.
-const RELEASE_HEADING_REGEX = /^## \[([^\]]+)\]/gm;
+// section body or a deeper heading. release-please follows the version link with
+// the release date, `(YYYY-MM-DD)`; a heading without one still parses.
+const RELEASE_HEADING_REGEX = /^## \[([^\]]+)\](?:\([^)]*\))?(?: +\((\d{4}-\d{2}-\d{2})\))?/gm;
 const GROUP_HEADING_REGEX = /^### +(.+?) *$/;
 // release-please's entry shape. Everything after the summary is optional: a
 // hand-written `BREAKING CHANGES` line carries no links at all, and a squashed
@@ -193,6 +194,7 @@ const readChangelogSections = (sourcePath) => {
     const nextHeading = headings[index + 1];
     return {
       body: changelog.slice(bodyStart, nextHeading ? nextHeading.index : undefined).trim(),
+      date: heading[2],
       version: heading[1],
     };
   });
@@ -262,7 +264,7 @@ const readReleaseNotes = (version, sourcePath = changelogPath) => {
   if (start < 0) return undefined;
   const notes = sections
     .slice(start, start + RELEASE_NOTES_LIMIT)
-    .map((section) => ({ groups: parseEntryGroups(section.body), version: section.version }))
+    .map((section) => ({ date: section.date, groups: parseEntryGroups(section.body), version: section.version }))
     .filter((note) => note.groups.length);
   if (!notes.length) return undefined;
   return {
