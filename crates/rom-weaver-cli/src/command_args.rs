@@ -3529,6 +3529,58 @@ Without :level, a codec follows the --compress-level profile."
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PlaylistCommand {
+    /// Browser inputs MUST map original logical paths to their staged paths explicitly.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub staged_paths: BTreeMap<PathBuf, PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'i',
+            long = "input",
+            value_name = "DISC",
+            required = true,
+            help = "A disc file of the game (.cue, .gdi, .chd, .iso, .pbp, ...). Repeat for each disc"
+        )
+    )]
+    pub input: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short,
+            long,
+            value_name = "PATH",
+            help = "Where to write the playlist: a .m3u file, or a .zip holding the playlist and its discs"
+        )
+    )]
+    pub output: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "List the discs in the order given instead of ordering them by disc number"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_sort: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Write each disc as its bare file name, for a playlist saved in the same folder as the discs"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub flat: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveListGamesCommand {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

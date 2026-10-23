@@ -1,5 +1,6 @@
-import { RotateCcw } from "lucide-react";
+import { ListMusic, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { hasSeveralDiscs, isPlaylistFile, setPlaylistHandoff } from "../../lib/playlist-handoff.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { InlineProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -12,7 +13,7 @@ import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
-type ExtractFormProps = { pageDrop?: PageFileDrop | null };
+type ExtractFormProps = { onSelectTab?: (id: string) => void; pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
 
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
@@ -75,7 +76,7 @@ const toSelectionItem = (output: PublicOutput): SelectionItem => {
   };
 };
 
-const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
+const ExtractForm = ({ onSelectTab, pageDrop }: ExtractFormProps) => {
   const [source, setSource] = useState<File | null>(null);
   const [companionFiles, setCompanionFiles] = useState<File[]>([]);
   const [outputs, setOutputs] = useState<PublicOutput[]>([]);
@@ -416,6 +417,21 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
                 submitLabel={(count) => (count === 1 ? "Download 1 file" : `Download ${count} files as ZIP`)}
               />
             </>
+          ) : null}
+          {onSelectTab && hasSeveralDiscs(outputs.map((output) => output.fileName)) ? (
+            <RunButton
+              icon={<ListMusic aria-hidden="true" />}
+              onClick={() => {
+                setPlaylistHandoff(
+                  outputs
+                    .filter((output) => isPlaylistFile(output.fileName))
+                    .map((output) => ({ name: output.fileName, size: output.size, source: output })),
+                );
+                onSelectTab("playlist");
+              }}
+            >
+              Make M3U playlist
+            </RunButton>
           ) : null}
           {canRetry ? (
             <RunButton

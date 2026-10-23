@@ -93,6 +93,7 @@ describe("groupDocNavigationRoutes", () => {
       "Patching & weaves",
       "ROM checks",
       "Conversion & files",
+      "Disc images & playlists",
       "Saves",
       "Cheats",
       "Setup & offline",
@@ -103,7 +104,7 @@ describe("groupDocNavigationRoutes", () => {
       "Development",
       "Legal",
     ]);
-    expect(shelves.slice(2, 9).every((shelf) => shelf.routes.length <= 9)).toBe(true);
+    expect(shelves.slice(2, 10).every((shelf) => shelf.routes.length <= 9)).toBe(true);
     expect(shelves.some((shelf) => shelf.title === "How-to guides")).toBe(false);
   });
 
@@ -115,6 +116,7 @@ describe("groupDocNavigationRoutes", () => {
           "Patching & weaves",
           "ROM checks",
           "Conversion & files",
+          "Disc images & playlists",
           "Saves",
           "Cheats",
           "Setup & offline",

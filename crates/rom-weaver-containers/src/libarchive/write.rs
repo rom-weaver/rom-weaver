@@ -289,6 +289,9 @@ impl WriteArchive {
     pub fn start_entry(&mut self, spec: EntrySpec<'_>, context: &str) -> Result<()> {
         let entry = ArchiveEntry::new(self.as_ptr(), context)?;
         let pathname = cstring(spec.pathname, "archive entry name", context)?;
+        // Windows passes the wide form below; the cstring above still rejects interior NULs.
+        #[cfg(windows)]
+        let _ = &pathname;
         let size = i64::try_from(spec.size).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{context}: input length exceeded libarchive entry size range"
@@ -296,7 +299,24 @@ impl WriteArchive {
         })?;
 
         unsafe {
-            archive_entry_set_pathname_utf8(entry.as_ptr(), pathname.as_ptr());
+            // Windows: hand libarchive the UTF-16 (wide) form. The multibyte form is read
+            // as the ANSI code page, and a UTF-8-only entry is converted through the C
+            // locale by the 7z writer, which fails for characters above U+00FF and leaves
+            // an empty entry name. The zip writer also gets `hdrcharset=UTF-8`. Elsewhere
+            // (including WASI's C locale) a UTF-8 -> locale conversion fails for
+            // non-ASCII names and leaves the entry without a pathname, so pass the
+            // bytes through as the multibyte form, which is already UTF-8.
+            #[cfg(windows)]
+            {
+                let wide: Vec<_> = spec
+                    .pathname
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+                archive_entry_copy_pathname_w(entry.as_ptr(), wide.as_ptr().cast());
+            }
+            #[cfg(not(windows))]
+            archive_entry_set_pathname(entry.as_ptr(), pathname.as_ptr());
             archive_entry_set_filetype(entry.as_ptr(), spec.file_type.libarchive_mode() as _);
             archive_entry_set_perm(entry.as_ptr(), spec.perm as _);
             archive_entry_set_size(entry.as_ptr(), size);

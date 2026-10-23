@@ -449,6 +449,7 @@ const PRERENDERED_VIEWS = new Set<WebappView>([
   "home",
   "identify",
   "patcher",
+  "playlist",
   "ppf-undo",
   "save-editor",
   "extract",

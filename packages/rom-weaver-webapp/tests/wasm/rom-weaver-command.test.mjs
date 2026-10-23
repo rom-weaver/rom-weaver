@@ -19,6 +19,7 @@ describe("rom-weaver command boundary helpers", () => {
       "checksum",
       "identify",
       "ingest",
+      "playlist",
       "cheat",
       "compress",
       "trim",
@@ -76,6 +77,17 @@ describe("rom-weaver command boundary helpers", () => {
     });
     expect(getRomWeaverCommandLabel(command)).toBe("save-set");
     expect(collectRomWeaverRunInputPaths(command)).toEqual(["/work/game.sav"]);
+  });
+
+  it("builds playlist commands and collects the disc paths without a thread budget", () => {
+    const command = createRomWeaverCommand("playlist", {
+      input: ["/work/Game (Disc 1).cue", "/work/Game (Disc 2).cue"],
+      output: "/work/Game.m3u",
+    });
+
+    expect(getRomWeaverCommandLabel(command)).toBe("playlist");
+    expect(collectRomWeaverRunInputPaths(command)).toEqual(["/work/Game (Disc 1).cue", "/work/Game (Disc 2).cue"]);
+    expect(readRomWeaverRequestedThreadCount(command)).toBeNull();
   });
 
   it("builds cheat commands and collects only the local ROM path", () => {

@@ -7,6 +7,7 @@ export const KNOWN_COMMAND_TYPES = [
   "checksum",
   "identify",
   "ingest",
+  "playlist",
   "cheat",
   "compress",
   "trim",

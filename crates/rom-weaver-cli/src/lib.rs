@@ -212,6 +212,26 @@ unpacking, use `probe`."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            about = "Write an .m3u playlist for a multi-disc game",
+            long_about = "\
+Write an .m3u playlist for a multi-disc game, so an emulator such as RetroArch
+can change discs.
+
+Repeat --input for each disc (.cue, .gdi, .chd, .iso, .pbp, ...). Discs are
+ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`;
+--no-sort keeps the order given instead. Each playlist line is a path
+relative to the playlist.
+
+  rom-weaver playlist -i Game.disc02.cue -i Game.disc01.cue -o Game.m3u
+
+A .zip --output holds the playlist and its discs (with the files each .cue or
+.gdi names) side by side. An existing output is never overwritten."
+        )
+    )]
+    Playlist(PlaylistCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
             about = "List the cheat database's entries for a ROM",
             long_about = "\
 List the cheat database's entries for a ROM.
@@ -1600,6 +1620,9 @@ mod identify_builtin;
 #[path = "identify_database.rs"]
 mod identify_database;
 
+#[path = "playlist.rs"]
+mod playlist;
+
 #[path = "ingest_command.rs"]
 mod ingest_command;
 pub use ingest_command::{IngestKind, IngestResult, IngestRomAsset, PatchDescriptor};
@@ -1728,9 +1751,9 @@ pub use command_args::{
     IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
     IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
     PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
-    PpfUndoCommand, ProbeCommand, SaveCreateCommand, SaveExportSchemaCommand, SaveGetCommand,
-    SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand, SetupCommand,
-    TrimCommand, WeaveCreateCommand, WeaveCreatePatchSpec, WeaveParseCommand,
+    PlaylistCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand, SaveExportSchemaCommand,
+    SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand,
+    SetupCommand, TrimCommand, WeaveCreateCommand, WeaveCreatePatchSpec, WeaveParseCommand,
 };
 
 mod expect_tokens;

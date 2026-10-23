@@ -512,6 +512,12 @@ export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "
 
 export type PpfUndoCommand = { rom: string, patch: string, output: string, target?: string, select?: Array<string>, patch_select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, threads?: ThreadBudget, };
 
+export type PlaylistCommand = {
+/**
+ * Browser inputs MUST map original logical paths to their staged paths explicitly.
+ */
+staged_paths?: { [key in string]: string }, input: Array<string>, output: string, no_sort?: boolean, flat?: boolean, };
+
 export type ToolsCommands = { "type": "ppf-undo", "args": PpfUndoCommand };
 
 export type SaveGameIdentity = { id: string, name: string, family: string, };
@@ -838,7 +844,7 @@ export type WeaveCommands = { "type": "create", "args": WeaveCreateCommand } | {
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand } | { type: "bundle"; args: BundleCommands };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "playlist", "args": PlaylistCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand } | { type: "bundle"; args: BundleCommands };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**
