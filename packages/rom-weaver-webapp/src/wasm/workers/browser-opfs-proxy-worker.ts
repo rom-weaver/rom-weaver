@@ -1,3 +1,4 @@
+import { getManagedOpfsFileHandle } from "../../workers/protocol/opfs-path.ts";
 // This dedicated worker owns the runner's OPFS handles and resolves mount paths from the OPFS root.
 // File I/O uses the shared channel; bootstrap, Blob registration, tracing, and shutdown use postMessage.
 
@@ -33,7 +34,34 @@ interface ProxyUnregisterBlobMessage {
   path: string;
 }
 
+interface ProxyReadPrefixMessage {
+  type: "read-prefix";
+  filePath: string;
+  length: number;
+  requestId: string;
+}
+
+const readPrefix = async (data: ProxyReadPrefixMessage): Promise<void> => {
+  try {
+    if (!Number.isInteger(data.length) || data.length < 0 || data.length > 16 * 2352 + 22)
+      throw new Error("OPFS prefix length must be an integer between 0 and 37654");
+    if (typeof data.filePath !== "string" || !data.filePath.trim()) throw new Error("OPFS prefix path is required");
+    const handle = await getManagedOpfsFileHandle(data.filePath, { create: false });
+    if (!handle) throw new Error(`OPFS prefix file not found: ${data.filePath}`);
+    const file = await handle.getFile();
+    const bytes = new Uint8Array(await file.slice(0, data.length).arrayBuffer());
+    workerScope.postMessage({ type: "read-prefix-complete", requestId: data.requestId, bytes }, [bytes.buffer]);
+  } catch (error) {
+    workerScope.postMessage({
+      type: "read-prefix-error",
+      requestId: data.requestId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 type ProxyWorkerMessage =
+  | ProxyReadPrefixMessage
   | ProxyBootstrapMessage
   | ProxyStopMessage
   | ProxyRegisterBlobMessage
@@ -78,6 +106,10 @@ const bootstrap = async (data: ProxyBootstrapMessage): Promise<void> => {
 workerScope.onmessage = (event: MessageEvent<ProxyWorkerMessage>) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
+  if (data.type === "read-prefix") {
+    void readPrefix(data);
+    return;
+  }
   if (data.type === "bootstrap") {
     void bootstrap(data);
     return;

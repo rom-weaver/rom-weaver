@@ -1,3 +1,5 @@
+import { createBinaryObjectReader } from "../../storage/shared/binary/binary-source-utils.ts";
+import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import {
   createCompressionProgressLabel,
   getProgressEventPercent,
@@ -117,7 +119,32 @@ const getRvzOptions = (
   return options;
 };
 
-const createOutputPlan = ({
+const getOutputChdAutoMode = async (
+  file: PatchFileInstance,
+  options: OutputWorkflowOptions | undefined,
+): Promise<string> => {
+  const mode = getChdAutoCreateMode(file);
+  if (mode !== "raw" || !isLazyExternalPatchFile(file)) return mode;
+  const size = file.fileSize;
+  if (!(size > 0 && (size % 2048 === 0 || size % 2352 === 0))) return mode;
+  if (!/\.bin$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
+  const sourceRef = getPatchFileExternalSource(file, file.fileName);
+  if (!sourceRef) return mode;
+  options?.signal?.throwIfAborted();
+  const length = Math.min(size, 16 * 2352 + 22);
+  let prefix: Uint8Array;
+  if (sourceRef.source instanceof Blob) {
+    prefix = await createBinaryObjectReader(sourceRef.source).readRange(0, length);
+  } else {
+    const sourcePath = isVfsFileRef(sourceRef.source) ? sourceRef.source.path : file.filePath;
+    if (!sourcePath) return mode;
+    prefix = await readBrowserOpfsPrefix(sourcePath, length, options?.signal);
+  }
+  options?.signal?.throwIfAborted();
+  return getChdAutoCreateMode({ _u8array: prefix, fileName: file.fileName, fileSize: size, metadata: file.metadata });
+};
+
+const createOutputPlan = async ({
   compression,
   options,
   patchedFileName,
@@ -129,7 +156,7 @@ const createOutputPlan = ({
   patchedFileName: string;
   romFile: PatchFileInstance;
   chdAutoModeFile?: PatchFileInstance;
-}): PatchedOutputPlan => {
+}): Promise<PatchedOutputPlan> => {
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
     compressionProfile: String(getCompressionProfile(options)),
@@ -141,13 +168,16 @@ const createOutputPlan = ({
     zipCodec: archiveSettings.zipCodec as string | null | undefined,
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
+  const chdAutoMode =
+    compression === "chd" && (!archiveSettings.chdOutputMode || archiveSettings.chdOutputMode === "auto")
+      ? await getOutputChdAutoMode(chdAutoModeFile, options)
+      : "raw";
   return createPatchedOutputPlan({
     chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName,
-    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
-      mode === "auto" ? getChdAutoCreateMode(chdAutoModeFile) : mode,
+    resolveChdCodecMode: (_fileName: string, mode: string | null) => (mode === "auto" ? chdAutoMode : mode),
     resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile,
     rvzOptions: getRvzOptions(archiveSettings, levels),
@@ -296,7 +326,7 @@ const createSingleFileRomSpecificOutput = async ({
   options: OutputWorkflowOptions | undefined;
   runtime?: WorkflowRuntime;
 }): Promise<PatchFileInstance | null> => {
-  const outputPlan = createOutputPlan({
+  const outputPlan = await createOutputPlan({
     compression,
     options,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
@@ -320,7 +350,7 @@ const buildOutputFiles = async (
   });
   if (compression === "none") return [patchedRom];
 
-  const outputPlan = createOutputPlan({
+  const outputPlan = await createOutputPlan({
     compression,
     options,
     patchedFileName: patchedRom.fileName,
