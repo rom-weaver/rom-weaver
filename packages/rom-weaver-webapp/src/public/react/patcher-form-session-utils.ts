@@ -1,4 +1,5 @@
 import type { SetStateAction } from "react";
+import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import { getLiteralFileNameExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -51,7 +52,9 @@ const resolvePendingDownloadFileName = ({
   // supplies the real extension (.bin, .zip, ...).
   const automaticBaseName = sanitizeTypedOutputName(automaticOutputName) || sanitizeTypedOutputName(fallbackOutputName);
   if (preferAutomaticName && automaticBaseName) {
-    return withOutputExtension(automaticBaseName, getLiteralFileNameExtension(normalizedResultOutputName));
+    const resultExtension = getLiteralFileNameExtension(normalizedResultOutputName);
+    if (getLiteralFileNameExtension(automaticBaseName) === resultExtension) return automaticBaseName;
+    return appendFileNameExtension(automaticBaseName, resultExtension);
   }
   return normalizedResultOutputName || automaticBaseName || "output";
 };

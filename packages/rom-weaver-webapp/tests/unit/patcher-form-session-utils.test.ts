@@ -75,6 +75,16 @@ describe("resolvePendingDownloadFileName", () => {
     ).toBe("game [change].bin");
   });
 
+  it("keeps a recognized extension in the automatic stem before the result extension", () => {
+    expect(
+      resolvePendingDownloadFileName({
+        automaticOutputName: "Game.gba",
+        preferAutomaticName: true,
+        resultOutputName: "custom.bin",
+      }),
+    ).toBe("Game.gba.bin");
+  });
+
   it("does not duplicate the extension and falls back to the result name without an automatic name", () => {
     expect(
       resolvePendingDownloadFileName({
