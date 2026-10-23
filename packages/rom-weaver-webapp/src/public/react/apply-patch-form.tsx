@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { throwIfAborted } from "../../lib/errors.ts";
 import type {
   ApplyWorkflow,
@@ -284,8 +285,31 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const queuedInputsRef = useRef<BinarySource[]>([]);
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
+  const { onSettingsChange } = props;
+  const handleSettingsChange = useCallback(
+    (nextSettings: Parameters<NonNullable<ApplyPatchFormProps["onSettingsChange"]>>[0]) => {
+      onSettingsChange?.(nextSettings);
+      // Prepare/run sync the workflow's name, but clearing the field must hand naming back to the
+      // workflow now, or its stale manual name keeps resolving as the "automatic" name.
+      const workflow = workflowHandle.peek();
+      const previous = JSON.parse(workflowOutputOverridesKeyRef.current || "{}") as {
+        compression?: string;
+        outputName?: string;
+      };
+      if (sanitizeTypedOutputName(nextSettings.output?.outputName) || !previous.outputName) return;
+      if (!workflow) return;
+      workflowOutputOverridesKeyRef.current = JSON.stringify({ ...previous, outputName: "" });
+      const run = mutationQueueRef.current.catch(() => undefined).then(() => workflow.setOutputName(""));
+      mutationQueueRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+    },
+    [onSettingsChange, workflowHandle],
+  );
   const propsWithSettings = {
     ...props,
+    onSettingsChange: handleSettingsChange,
     defaultSettings: props.defaultSettings || providerSettings,
     settings: props.settings,
   };
@@ -720,7 +744,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       typeof snapshot.options.output?.outputName === "string" && snapshot.options.output.outputName.trim()
         ? snapshot.options.output.outputName
         : "";
-    if (manualOutputName) await workflow.setOutputName(manualOutputName);
+    // An empty name hands naming back to the workflow's automatic name (cheats, archive names).
+    await workflow.setOutputName(manualOutputName);
     const compressionMode = snapshot.options.output?.compression || "auto";
     if (compressionMode !== "auto") await workflow.setOutputFormat(compressionMode);
   }, []);
