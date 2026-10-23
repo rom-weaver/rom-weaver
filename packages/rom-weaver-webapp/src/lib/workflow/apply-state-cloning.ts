@@ -180,6 +180,7 @@ const cloneResolvedInputAssetState = (
 ): ApplyWorkflowResolvedInput => {
   const checksums = getInputAssetChecksums(asset);
   return {
+    chdCodecMode: asset.chdCodecMode ?? null,
     chdMode: chdModeFromMetadata(asset.file.metadata) ?? (asset.file.metadata?.cuePath ? "cd" : undefined),
     checksums: checksums ? cloneValue(checksums) : undefined,
     checksumTimeMs: asset.checksumTimeMs,

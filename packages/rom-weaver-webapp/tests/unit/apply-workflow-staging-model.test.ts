@@ -48,6 +48,25 @@ describe("apply workflow staging model", () => {
     expect(toStagedInputInfos(input, []).map((row) => row.checksumTiming)).toEqual(["291ms", "291ms"]);
   });
 
+  it("keeps generic codec hints scoped to each resolved archive asset", () => {
+    const input: ApplyWorkflowInputState = {
+      candidates: [],
+      id: "archive",
+      parentCompressions: [],
+      status: "ready",
+      warnings: [],
+      resolvedInputs: [
+        { id: "cd", fileName: "cd.bin", chdMode: "cd", parentCompressions: [], selected: true },
+        { id: "hd", fileName: "hd.bin", chdCodecMode: "dvd", parentCompressions: [], selected: true },
+      ],
+    };
+    const rows = toStagedInputInfos(input, []);
+    expect(rows[0]?.chdCodecMode).toBeNull();
+    expect(rows[0]?.chdMode).toBe("cd");
+    expect(rows[1]?.chdCodecMode).toBe("dvd");
+    expect(rows[1]?.chdMode).toBeUndefined();
+  });
+
   it("shows the identified ROM title on the staged input row", () => {
     const input: ApplyWorkflowInputState = {
       candidates: [],

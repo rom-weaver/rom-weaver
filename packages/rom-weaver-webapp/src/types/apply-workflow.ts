@@ -65,6 +65,7 @@ type ApplyWorkflowResolvedInput = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   splitBinAvailable?: boolean;
   cueText?: string;
   gdiText?: string;
@@ -88,6 +89,7 @@ type ApplyWorkflowInputState = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];

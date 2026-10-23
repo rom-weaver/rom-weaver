@@ -747,6 +747,8 @@ const useLocalApplyPatchFormSession = ({
           archivePathEntries: info.parentCompressions?.length
             ? info.parentCompressions
             : ((patch as Partial<RomInputRowState>).archivePathEntries ?? existing.archivePathEntries),
+          chdCodecMode:
+            info.chdCodecMode === undefined ? (patch.chdCodecMode ?? existing.chdCodecMode) : info.chdCodecMode,
           chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           cueText: info.cueText ?? patch.cueText ?? existing.cueText,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,

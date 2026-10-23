@@ -127,6 +127,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
   return {
     archiveName: getArchiveNameFromProgressDetails(details),
     checksumVariantPlan: getVariantPlanFromProgressDetails(details),
+    chdCodecMode: details.chdCodecMode === "dvd" ? "dvd" : undefined,
     chdMode: typeof details.chdMode === "string" ? details.chdMode : undefined,
     decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
     fileName: getInputDisplayFileName(fileName, isPreparedFileName),

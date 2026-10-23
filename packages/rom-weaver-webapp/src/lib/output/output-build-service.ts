@@ -35,6 +35,7 @@ import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
   getChdAutoCreateMode,
+  isLooseChdAutoSource,
   replaceCuePatchFileName,
 } from "../input/rom-specific-file-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
@@ -124,9 +125,9 @@ const getOutputChdAutoMode = async (
   options: OutputWorkflowOptions | undefined,
 ): Promise<string> => {
   const mode = getChdAutoCreateMode(file);
-  if (mode !== "raw" || !isLazyExternalPatchFile(file)) return mode;
+  if (!(isLooseChdAutoSource(file) && isLazyExternalPatchFile(file))) return mode;
   const size = file.fileSize;
-  if (!(size > 0 && (size % 2048 === 0 || size % 2352 === 0))) return mode;
+  if (!(size > 0)) return mode;
   if (!/\.bin$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
   const sourceRef = getPatchFileExternalSource(file, file.fileName);
   if (!sourceRef) return mode;
@@ -141,7 +142,7 @@ const getOutputChdAutoMode = async (
     prefix = await readBrowserOpfsPrefix(sourcePath, length, options?.signal);
   }
   options?.signal?.throwIfAborted();
-  return getChdAutoCreateMode({ _u8array: prefix, fileName: file.fileName, fileSize: size, metadata: file.metadata });
+  return getChdAutoCreateMode({ _u8array: prefix, fileName: file.fileName, fileSize: size });
 };
 
 const createOutputPlan = async ({

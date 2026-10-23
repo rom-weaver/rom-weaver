@@ -44,6 +44,7 @@ type StagedInputInfo = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   splitBinAvailable?: boolean;
   cueText?: string;
   gdiText?: string;

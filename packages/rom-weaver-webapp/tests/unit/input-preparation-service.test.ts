@@ -7,6 +7,8 @@ import {
   prepareInputFile,
   prepareMultipleDirectInputAssets,
 } from "../../src/lib/input/input-preparation-service.ts";
+import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
+import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 import type { SourceRef } from "../../src/types/source.ts";
 
 const makeFile = (contents: string, fileName: string, type = "application/octet-stream") =>
@@ -101,6 +103,45 @@ describe("prepareMultipleDirectInputAssets", () => {
 
 describe("prepareInputAssets", () => {
   const runtime = { name: "browser" as const, sidecars: {} };
+
+  it("publishes a UI-only generic codec hint for an MBR/CD hybrid", async () => {
+    const bytes = new Uint8Array(204800);
+    bytes.set(new TextEncoder().encode("CD001"), 32769);
+    bytes.set([0x55, 0xaa], 510);
+    bytes[450] = 0x83;
+    const view = new DataView(bytes.buffer);
+    view.setUint32(454, 1, true);
+    view.setUint32(458, 399, true);
+    const onProgress = vi.fn();
+    const assets = await prepareInputAssets(
+      new File([bytes], "hybrid.bin"),
+      {
+        ...NO_CONTAINER_OPTIONS,
+        onProgress,
+      },
+      0,
+      runtime,
+    );
+    const event = onProgress.mock.calls.map(([event]) => event).find((event) => event.details?.chdCodecMode);
+    expect(event).toBeDefined();
+    const staged = getProgressStagedInputInfo(event);
+    expect(staged.chdCodecMode).toBe("dvd");
+    expect(staged.chdMode).toBeUndefined();
+    expect(assets[0]?.file.metadata?.mode).toBeUndefined();
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      {
+        fileName: "hybrid.bin",
+        size: bytes.length,
+        chdCodecMode: staged.chdCodecMode,
+        metadata: { format: "CD" },
+      },
+    );
+    expect(panel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(panel?.fields[0]?.value).toBe("zstd");
+    expect(panel?.note).toBeUndefined();
+  });
 
   it("throws a descriptive error when the source is not path/blob backed", async () => {
     const source = { fileName: "orphan.bin", source: new Uint8Array([1, 2, 3]) } as unknown as SourceRef;

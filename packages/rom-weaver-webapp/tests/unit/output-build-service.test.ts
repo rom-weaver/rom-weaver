@@ -502,18 +502,29 @@ describe("lazy CHD output codec planning", () => {
     ["blob", "sync", "raw"],
     ["vfs", "sync", "raw"],
     ["blob", "iso2048", "raw"],
+    ["blob", "hybrid", "raw"],
+    ["vfs", "hybrid", "raw"],
     ["vfs", "iso2352", "raw"],
     ["blob", "iso2352", "raw"],
     ["blob", "raw", "sync"],
     ["vfs", "raw", "sync"],
   ])("uses patched %s %s bytes instead of original %s bytes", async (storage, signature, originalSignature) => {
-    const sectorSize = signature === "iso2048" ? 2048 : 2352;
+    const sectorSize = signature === "iso2048" || signature === "hybrid" ? 2048 : 2352;
     const bytes = new Uint8Array(100 * sectorSize);
     if (signature === "sync") bytes.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
     if (signature.startsWith("iso")) bytes.set([67, 68, 48, 48, 49], 16 * sectorSize + (sectorSize === 2048 ? 1 : 17));
+    if (signature === "hybrid") {
+      bytes.set([67, 68, 48, 48, 49], 32769);
+      bytes.set([0x55, 0xaa], 510);
+      bytes[450] = 0x83;
+      const view = new DataView(bytes.buffer);
+      view.setUint32(454, 1, true);
+      view.setUint32(458, 399, true);
+    }
     const originalBytes = new Uint8Array(bytes.length);
     if (originalSignature === "sync") originalBytes.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
     const original = await createPatchFile({ data: originalBytes, fileName: "game.bin" }, "game.bin");
+    original.metadata = { format: "CD" };
     const blob = new Blob([bytes]);
     const slice = vi.spyOn(blob, "slice");
     const read = vi.fn();
@@ -525,6 +536,7 @@ describe("lazy CHD output codec planning", () => {
       "patched.bin",
       { materializeBlob: false },
     );
+    patched.metadata = { format: "CD" };
     const materialize = vi.spyOn(patched, "materialize");
     const probe = vi
       .mocked(readBrowserOpfsPrefix)
@@ -541,8 +553,10 @@ describe("lazy CHD output codec planning", () => {
       { compression: { create, probe } } as unknown as WorkflowRuntime,
     );
     expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(
-      signature === "raw" ? "lzma" : "cdzl",
+      signature === "raw" || signature === "hybrid" ? "lzma" : "cdzl",
     );
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.mode).toBe("auto");
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.sourceMode).toBeUndefined();
     expect(materialize).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();
     if (storage === "vfs") {
