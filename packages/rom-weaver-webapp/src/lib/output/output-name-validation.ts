@@ -27,11 +27,15 @@ const KNOWN_OUTPUT_EXTENSIONS: ReadonlySet<string> = new Set(
   ),
 );
 
+const WHITESPACE_REGEX = /\s/;
+
 // Index of the last dot in a typed or manifest file name, or -1. Unlike the URL-aware
-// path helpers, `#` and `?` are literal here: `Kaizo Mario #2.sfc` ends in `.sfc`.
+// path helpers, `#` and `?` are literal here: `Kaizo Mario #2.sfc` ends in `.sfc`. A tail with
+// whitespace is never an extension (`Super Mario Bros. 3`).
 const findLiteralExtensionDotIndex = (fileName: string): number => {
   const dotIndex = fileName.lastIndexOf(".");
-  return dotIndex >= 0 && dotIndex < fileName.length - 1 ? dotIndex : -1;
+  if (dotIndex < 0 || dotIndex === fileName.length - 1) return -1;
+  return WHITESPACE_REGEX.test(fileName.slice(dotIndex + 1)) ? -1 : dotIndex;
 };
 
 const getLiteralFileNameExtension = (fileName: string | null | undefined): string => {

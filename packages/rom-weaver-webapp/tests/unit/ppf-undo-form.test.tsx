@@ -114,6 +114,7 @@ describe("PPF Undo input replacement", () => {
     ["Hack v1.2", "game.bin", "Hack v1.2.bin"],
     ["restored.chd", "game.bin", "restored.bin"],
     ["restored.mdf", "game.mdf", "restored.mdf"],
+    ["Mario", "Super Mario Bros. 3", "Mario.bin"],
   ])("gives typed name %s the ROM's own extension (%s)", async (typedName, romName, expected) => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],

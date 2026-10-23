@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   detectMismatchedExtension,
   detectOutputLikeExtension,
+  getLiteralFileNameExtension,
   hasKnownOutputExtension,
   removeKnownOutputExtension,
   getOutputExtensions,
@@ -78,6 +79,12 @@ describe("getOutputExtensions", () => {
   it("reads # and ? as literal filename characters", () => {
     expect(detectOutputLikeExtension("Kaizo Mario #2.zip")).toBe("zip");
     expect(detectOutputLikeExtension("Why?.7z")).toBe("7z");
+  });
+
+  it("never reads a dotted segment with whitespace as an extension", () => {
+    expect(getLiteralFileNameExtension("Super Mario Bros. 3")).toBe("");
+    expect(getLiteralFileNameExtension("Dr. Mario (USA)")).toBe("");
+    expect(getLiteralFileNameExtension("Dr. Mario (USA).nes")).toBe("nes");
   });
 });
 
