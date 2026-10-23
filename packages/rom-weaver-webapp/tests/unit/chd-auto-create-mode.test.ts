@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
 import { discFormatToChdMode, getChdAutoCreateMode } from "../../src/lib/input/rom-specific-file-utils.ts";
 
 describe("discFormatToChdMode", () => {
@@ -36,9 +37,38 @@ describe("getChdAutoCreateMode", () => {
     expect(getChdAutoCreateMode({ fileName: "track01.bin", metadata: { format: "DVD" } })).toBe("dvd");
   });
 
+  it.each([13, 4096, 32768, 2352, 2352 * 20])("keeps an unrecognized %i-byte BIN raw", (size) => {
+    expect(getChdAutoCreateMode({ fileName: "game.bin", size, _u8array: new Uint8Array(size) })).toBe("raw");
+  });
+
+  it("recognizes a raw-sector CD by its sync header", () => {
+    const bytes = new Uint8Array(2352);
+    bytes.fill(255, 1, 11);
+    expect(getChdAutoCreateMode({ fileName: "track.bin", size: bytes.length, _u8array: bytes })).toBe("cd");
+  });
+
+  it("recognizes cooked CD sectors by their ISO9660 descriptor", () => {
+    const bytes = new Uint8Array(2048 * 20);
+    bytes.set(new TextEncoder().encode("CD001"), 16 * 2048 + 1);
+    expect(getChdAutoCreateMode({ fileName: "track.bin", size: bytes.length, _u8array: bytes })).toBe("cd");
+  });
+
+  it("preserves a GD-ROM sheet", () => {
+    expect(getChdAutoCreateMode({ fileName: "disc.gdi" })).toBe("cd");
+  });
+
   it("falls back to the filename only when no engine verdict exists", () => {
     expect(getChdAutoCreateMode({ fileName: "disc.cue" })).toBe("cd");
-    expect(getChdAutoCreateMode({ fileName: "track01.bin" })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "track01.bin" })).toBe("raw");
     expect(getChdAutoCreateMode({ fileName: "game.iso" })).toBe("dvd");
+  });
+});
+
+describe("raw CHD codec defaults", () => {
+  it("uses the generic codec settings while preserving explicit overrides", () => {
+    const settings = { chdCreateCdCodecs: "cdlz,cdzl,cdfl", chdCreateDvdCodecs: "zstd:7" };
+    expect(OutputCompressionManager.getChdCodecsForMode("raw", settings)).toBe("zstd:7");
+    expect(OutputCompressionManager.getChdCodecsForMode("cd", settings)).toContain("cdlz");
+    expect(OutputCompressionManager.getChdCodecsForMode("dvd", settings)).toBe("zstd:7");
   });
 });

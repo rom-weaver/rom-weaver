@@ -283,7 +283,7 @@ const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "
   if (configuredMode === "cd" || configuredMode === "dvd") return configuredMode;
   if (!source) return null;
   const resolvedMode = getChdAutoCreateMode(source as SourceLike);
-  return resolvedMode === "cd" || resolvedMode === "dvd" ? resolvedMode : null;
+  return resolvedMode === "cd" ? "cd" : "dvd";
 };
 
 const buildCompressPanel = (format: string, settings: SettingsLike, source?: unknown): CompressPanelModel | null => {

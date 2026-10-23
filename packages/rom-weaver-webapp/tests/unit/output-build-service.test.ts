@@ -428,8 +428,8 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(result).toBeNull();
   });
 
-  it("builds a CHD single-file request, cleans up the source, and returns the compressed output", async () => {
-    const outputFile = await makeFile("rom-bytes", "game.bin");
+  it.each([13, 4096, 32768])("builds a raw %i-byte CHD request with generic default codecs", async (size) => {
+    const outputFile = await makeFile("x".repeat(size), "game.bin");
     const cleanup = vi.fn();
     (outputFile as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     const compressed = await makeFile("chd-bytes", "game.chd");
@@ -449,6 +449,8 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(request.format).toBe("chd");
     expect(request.fileName).toBe("game.bin");
     expect(request.romSpecific.chd.compressionProfile).toBe("min");
+    expect(request.romSpecific.chd.compressionCodecs).toContain("lzma");
+    expect(request.romSpecific.chd.compressionCodecs).not.toMatch(/cd(lz|zl|fl|zs)/);
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
   });

@@ -73,7 +73,15 @@ const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> =>
         size: files[0]?.size || 0,
         ...(/\.(bin|iso)$/i.test(files[0]?.name || "")
           ? {
-              metadata: { mode: getChdAutoCreateMode({ fileName: files[0]?.name, size: files[0]?.size }) },
+              metadata: {
+                mode: getChdAutoCreateMode({
+                  fileName: files[0]?.name,
+                  size: files[0]?.size,
+                  _u8array: /\.bin$/i.test(files[0]?.name || "")
+                    ? new Uint8Array(await (files[0] as File).slice(0, 16 * 2352 + 22).arrayBuffer())
+                    : undefined,
+                }),
+              },
             }
           : {}),
       },

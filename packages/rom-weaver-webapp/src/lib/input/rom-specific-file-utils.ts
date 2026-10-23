@@ -2,7 +2,6 @@ import type { SourceMetadata } from "../../types/workflow-source.ts";
 import { parseCueFile, replaceCuePatchFileName } from "../../workers/protocol/cue-file-utils.ts";
 
 const BIN_EXTENSION_REGEX = /\.bin$/i;
-const CUE_EXTENSION_REGEX = /\.cue$/i;
 
 // Map the engine's `disc_format` verdict (Rust `rom_identity::DiscFormat::label()`
 // - "CD"/"GD-ROM"/"DVD") to the optical-media label the CHD output panel shows.
@@ -46,6 +45,7 @@ const chdModeFromMetadata = (metadata: SourceMetadata | null | undefined): ChdCo
 
 type ByteProbeableSource = {
   _u8array?: Uint8Array;
+  _browserFileBacked?: boolean;
   fileName?: string;
   fileSize?: number;
   size?: number;
@@ -53,24 +53,39 @@ type ByteProbeableSource = {
   readIntoAt?: (buffer: Uint8Array, bufferOffset?: number, len?: number, fileOffset?: number) => number | undefined;
 };
 
+const matchesSourceBytes = (source: ByteProbeableSource, offset: number, expected: readonly number[]): boolean => {
+  if (source._u8array) return expected.every((byte, index) => source._u8array?.[offset + index] === byte);
+  if (source._browserFileBacked || !source.readIntoAt) return false;
+  const bytes = new Uint8Array(expected.length);
+  try {
+    source.readIntoAt(bytes, 0, bytes.length, offset);
+    return expected.every((byte, index) => bytes[index] === byte);
+  } catch {
+    return false;
+  }
+};
+
 const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceMetadata }): string => {
-  // Prefer the coarse codec mode (available pre-identity) then the Rust identity verdict over a
-  // filename guess; the regex below is a last resort for inputs that never went through identity.
   const mode = chdModeFromMetadata(source.metadata);
   if (mode) return mode;
   if (source.metadata?.cuePath) return "cd";
   const fileName = String(source.fileName || "");
+  if (/\.(cue|gdi)$/i.test(fileName)) return "cd";
   const size = source.fileSize ?? source.size;
-  // The fallback MUST match ChdContainerHandler::infer_create_kind in crates/rom-weaver-containers/src/chd/infer.rs.
-  if (
-    /\.iso$/i.test(fileName) &&
-    typeof size === "number" &&
-    size > 0 &&
-    size <= 450_000 * 2048 &&
-    (size % 2048 === 0 || size % 2352 === 0)
-  )
-    return "cd";
-  return CUE_EXTENSION_REGEX.test(fileName) || BIN_EXTENSION_REGEX.test(fileName) ? "cd" : "dvd";
+  const sectorSized = typeof size === "number" && size > 0 && (size % 2048 === 0 || size % 2352 === 0);
+  if (/\.iso$/i.test(fileName)) return sectorSized && size <= 450_000 * 2048 ? "cd" : "dvd";
+  // Ambiguous inputs MUST carry the same CD signatures used by the native CHD inference.
+  if (sectorSized && (BIN_EXTENSION_REGEX.test(fileName) || !/\.[^./\\]+$/.test(fileName))) {
+    const isoId = [67, 68, 48, 48, 49];
+    if (
+      (size % 2352 === 0 &&
+        (matchesSourceBytes(source, 0, [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]) ||
+          matchesSourceBytes(source, 16 * 2352 + 17, isoId))) ||
+      (size % 2048 === 0 && matchesSourceBytes(source, 16 * 2048 + 1, isoId))
+    )
+      return "cd";
+  }
+  return "raw";
 };
 
 export {
