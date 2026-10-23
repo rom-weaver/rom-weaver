@@ -528,6 +528,30 @@ describe("ChangelogPanel after an update", () => {
     ]);
   });
 
+  it("dates each release from its changelog heading, skipping a missing or malformed date", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          { ...noteOf("9.9.9", [{ summary: "dated" }]), date: "2026-10-18" },
+          { ...noteOf("9.8.0", [{ summary: "malformed" }]), date: "October" },
+          noteOf("9.7.0", [{ summary: "undated" }]),
+        ]),
+        subject: "release",
+      },
+    ]);
+    const { container } = render(withSettings(<UpdatingPanel />));
+    await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+
+    const dates = [...container.querySelectorAll(".rel")].map((section) => section.querySelector("time.rel-date"));
+    expect(dates.map((time) => time?.getAttribute("datetime") ?? null)).toEqual(["2026-10-18", null, null]);
+    // A calendar day, so no time zone may move it to the 17th.
+    expect(dates[0]?.textContent).toMatch(/18.*2026|2026.*18/);
+    const update = container.querySelector(".changelog-update") as HTMLElement;
+    expect(update.querySelector("time.release-changelog-date")?.getAttribute("datetime")).toBe("2026-10-18");
+  });
+
   it("marks nothing without an update", async () => {
     mockReleases();
 

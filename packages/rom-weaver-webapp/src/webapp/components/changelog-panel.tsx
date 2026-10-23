@@ -9,6 +9,7 @@ import {
   type ReleaseNote,
   commitGroups,
   fetchChangelog,
+  ReleaseDate,
   ReleaseGroups,
   type ReleaseChangelog,
   releaseTagUrl,
@@ -43,19 +44,24 @@ const previousNoteRange = (notes: ReleaseNote[], index: number): CompareRange | 
 
 const ReleaseSection = ({
   compare,
+  date,
   defaultOpen,
   groups,
   isNew = false,
+  locale,
   note,
   repositoryUrl,
   title,
   versionHref,
 }: {
   compare?: CompareRange;
+  /** The release day, `YYYY-MM-DD`; unreleased sections have none. */
+  date?: string;
   defaultOpen: boolean;
   groups: ReturnType<typeof commitGroups>;
   /** Arrived with the update this page load brought a returning visitor. */
   isNew?: boolean;
+  locale: string;
   /** Trails the title where it says something the title does not. */
   note?: string;
   repositoryUrl: string;
@@ -65,6 +71,7 @@ const ReleaseSection = ({
   <details className={isNew ? "rel is-new" : "rel"} open={defaultOpen}>
     <summary className="rel-summary">
       <h2 className="mono">{title}</h2>
+      <ReleaseDate className="rel-date" date={date} locale={locale} />
       {isNew ? <span className="rel-new">New</span> : null}
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
@@ -150,6 +157,7 @@ const ChangelogPanel = ({
         <ReleaseSection
           defaultOpen
           groups={commitGroups(unreleased)}
+          locale={localizer.locale}
           note={`since v${APP_VERSION}`}
           repositoryUrl={repositoryUrl}
           title={`Unreleased · +${AHEAD_COUNT}`}
@@ -160,10 +168,12 @@ const ChangelogPanel = ({
         return (
           <ReleaseSection
             compare={previousNoteRange(notes, index)}
+            date={note.date}
             defaultOpen={isNew || (!unreleased.length && index === 0)}
             groups={note.groups}
             isNew={isNew}
             key={note.version}
+            locale={localizer.locale}
             note={note.version === APP_VERSION ? "running" : undefined}
             repositoryUrl={repositoryUrl}
             title={`v${note.version}`}
@@ -175,6 +185,7 @@ const ChangelogPanel = ({
         <ReleaseSection
           defaultOpen={false}
           groups={commitGroups(earlier)}
+          locale={localizer.locale}
           note="already released"
           repositoryUrl={repositoryUrl}
           title="Earlier"

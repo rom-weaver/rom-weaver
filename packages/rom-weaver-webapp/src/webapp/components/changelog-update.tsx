@@ -6,6 +6,7 @@ import {
   commitGroups,
   type ReleaseChangelog,
   type ReleaseNote,
+  ReleaseDate,
   ReleaseGroups,
   releaseTagUrl,
   REPOSITORY_URL,
@@ -132,7 +133,7 @@ const UpdateHeader = ({ meta, title }: { meta: HeaderMeta; title: string }) => (
   </div>
 );
 
-const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseChangelog }) => {
+const ReleaseNotes = ({ locale, moreUrl, release }: { locale: string; moreUrl: string; release: ReleaseChangelog }) => {
   const { notes, truncated } = releaseNotesSince(release);
   return (
     <>
@@ -145,7 +146,8 @@ const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseC
             <h3 className="release-changelog-heading">
               <a href={releaseTagUrl(release.repositoryUrl, note.version)} rel="noreferrer" target="_blank">
                 v{note.version}
-              </a>
+              </a>{" "}
+              <ReleaseDate className="release-changelog-date" date={note.date} locale={locale} />
             </h3>
             <ReleaseGroups
               compare={previous ? { from: previous.version, to: note.version } : undefined}
@@ -203,7 +205,7 @@ const ChangelogUpdate = ({
     <section className="changelog-update">
       <UpdateHeader meta={meta} title={localizer.message("ui.update.whatsNew")} />
       {release && release.version !== APP_VERSION ? (
-        <ReleaseNotes moreUrl={meta.moreUrl} release={release} />
+        <ReleaseNotes locale={localizer.locale} moreUrl={meta.moreUrl} release={release} />
       ) : (
         // A dev build has no embedded release payload, so fall back to the
         // constants baked in here.
