@@ -541,15 +541,23 @@ describe("ChangelogPanel after an update", () => {
         subject: "release",
       },
     ]);
-    const { container } = render(withSettings(<UpdatingPanel />));
-    await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+    // A calendar day, so no time zone may move it to the 17th. CI runs in UTC,
+    // where that cannot happen, so render west of UTC.
+    const timeZone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      const { container } = render(withSettings(<UpdatingPanel />));
+      await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
 
-    const dates = [...container.querySelectorAll(".rel")].map((section) => section.querySelector("time.rel-date"));
-    expect(dates.map((time) => time?.getAttribute("datetime") ?? null)).toEqual(["2026-10-18", null, null]);
-    // A calendar day, so no time zone may move it to the 17th.
-    expect(dates[0]?.textContent).toMatch(/18.*2026|2026.*18/);
-    const update = container.querySelector(".changelog-update") as HTMLElement;
-    expect(update.querySelector("time.release-changelog-date")?.getAttribute("datetime")).toBe("2026-10-18");
+      const dates = [...container.querySelectorAll(".rel")].map((section) => section.querySelector("time.rel-date"));
+      expect(dates.map((time) => time?.getAttribute("datetime") ?? null)).toEqual(["2026-10-18", null, null]);
+      expect(dates[0]?.textContent).toMatch(/18.*2026|2026.*18/);
+      const update = container.querySelector(".changelog-update") as HTMLElement;
+      expect(update.querySelector("time.release-changelog-date")?.getAttribute("datetime")).toBe("2026-10-18");
+    } finally {
+      if (timeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = timeZone;
+    }
   });
 
   it("marks nothing without an update", async () => {
