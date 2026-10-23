@@ -2,6 +2,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserCreateResult } from "../../src/platform/browser/browser-api.ts";
+import { getEnabledPatchTargetSizes } from "../../src/public/react/apply-workflow-snapshot-store.ts";
 import { useCombinedPatch } from "../../src/public/react/use-combined-patch.tsx";
 
 vi.mock("../../src/public/react/settings-context.tsx", () => ({
@@ -251,6 +252,27 @@ describe("useCombinedPatch", () => {
     rerender({ patchType: "bps", romSize: 300 * 1024 * 1024 });
     expect(formatValues(result.current)).toEqual(["xdelta", "ppf"]);
     expect(result.current.outputProps.format).toBe("xdelta");
+  });
+
+  it("keeps known growth limits when another enabled target size is unknown", () => {
+    const run = vi.fn<Options["run"]>();
+    const summary = getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set());
+    const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {
+      initialProps: { romSize: 4096, ...summary },
+    });
+    const formats = () => result.current.outputProps.formatOptions?.map((option) => option.value);
+    expect(formats()).not.toContain("ips");
+    expect(formats()).toContain("ppf");
+    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set()) });
+    expect(formats()).toEqual(expect.arrayContaining(["ebp", "ppf"]));
+    rerender({ romSize: 4096, ...getEnabledPatchTargetSizes([0, undefined], ["empty", "ips"], new Set(["ips"])) });
+    expect(formats()).not.toContain("ebp");
+    expect(formats()).not.toContain("ppf");
+    rerender({
+      romSize: 4096,
+      ...getEnabledPatchTargetSizes([20 * 1024 * 1024, undefined], ["bps", "ips"], new Set(["bps"])),
+    });
+    expect(formats()).toEqual(expect.arrayContaining(["ips", "ebp", "ppf"]));
   });
 
   it("keeps a running job's sizes while preparing the run clears them", async () => {
