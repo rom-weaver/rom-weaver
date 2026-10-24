@@ -151,7 +151,14 @@ describe("prepareInputAssets", () => {
     bytes.set([1, ...new TextEncoder().encode("CD001")], 16 * 2048);
     if (udf) bytes.set([0, ...new TextEncoder().encode("NSR02")], 18 * 2048);
     const onProgress = vi.fn();
-    await prepareInputAssets(new File([bytes], "disc.iso"), { ...NO_CONTAINER_OPTIONS, onProgress }, 0, runtime);
+    const assets = await prepareInputAssets(
+      new File([bytes], "disc.iso"),
+      { ...NO_CONTAINER_OPTIONS, onProgress },
+      0,
+      runtime,
+    );
+    // The asset loop serves archive members; the progress hint serves direct files.
+    expect(assets[0]?.chdCodecMode).toBe(udf ? "dvd" : undefined);
     const event = onProgress.mock.calls.map(([event]) => event).find((event) => event.details?.chdCodecMode);
     expect(Boolean(event)).toBe(udf);
     const panel = buildCompressPanel(
@@ -164,6 +171,19 @@ describe("prepareInputAssets", () => {
       },
     );
     expect(panel?.fields[0]?.key).toBe(key);
+  });
+
+  it.each([
+    ["DVD", "DVD"],
+    ["CD", undefined],
+  ])("keeps a %s identity note only when it agrees with the staged DVD hint", (format, note) => {
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      { fileName: "game.iso", chdCodecMode: "dvd", metadata: { format } },
+    );
+    expect(panel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(panel?.note).toBe(note);
   });
 
   it("throws a descriptive error when the source is not path/blob backed", async () => {
