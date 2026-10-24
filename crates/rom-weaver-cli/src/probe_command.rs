@@ -25,14 +25,17 @@ impl CliApp {
                 );
             }
         };
-        let rom_filter = args.rom_filter();
-        let patch_filter = args.patch_filter();
+        let rom_filter = args.selection.rom_filter();
+        let patch_filter = args.selection.patch_filter();
         let ProbeCommand {
             input: source,
-            select,
-            filter: _,
-            no_extract,
-            no_ignore,
+            selection:
+                ArchiveSelectionArgs {
+                    select,
+                    filter: _,
+                    no_extract,
+                    no_ignore,
+                },
             split_bin,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
@@ -163,6 +166,7 @@ impl CliApp {
                     kind_filter,
                     stop_on_single_payload_codec: true,
                 },
+                false,
             )
         } else {
             Ok(ResolvedChecksumSource {

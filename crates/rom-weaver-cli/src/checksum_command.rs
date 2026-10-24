@@ -120,6 +120,7 @@ impl CliApp {
                 kind_filter,
                 stop_on_single_payload_codec: false,
             },
+            false,
         ) {
             Ok(resolved) => resolved,
             Err(error) => {

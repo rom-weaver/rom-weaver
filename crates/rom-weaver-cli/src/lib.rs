@@ -1722,15 +1722,16 @@ pub use parse_weave_for_fuzzing as parse_bundle_for_fuzzing;
 
 mod command_args;
 pub use command_args::{
-    CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand, CompressCommand,
-    ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
-    IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand,
-    IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
-    IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
-    PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
-    PpfUndoCommand, ProbeCommand, SaveCreateCommand, SaveExportSchemaCommand, SaveGetCommand,
-    SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand, SetupCommand,
-    TrimCommand, WeaveCreateCommand, WeaveCreatePatchSpec, WeaveParseCommand,
+    ArchiveSelectionArgs, CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand,
+    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
+    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
+    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
+    SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
+    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand, WeaveCreateCommand,
+    WeaveCreatePatchSpec, WeaveParseCommand,
 };
 
 mod expect_tokens;
