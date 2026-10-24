@@ -188,6 +188,25 @@ test("Rust test-only changes select Rust alone", () => {
   );
 });
 
+test("shared Rust/TypeScript case tables select both suites", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json",
+    "crates/rom-weaver-containers/tests/fixtures/chd-hard-disk-headers.json",
+  ]) {
+    const result = classify(path);
+    assert.equal(result.rust, "true", path);
+    assert.equal(result.webapp, "true", path);
+    // No WASM browser test reads them, and they are not compiler inputs.
+    assert.equal(result.wasm_runtime, "false", path);
+    assert.equal(classifyFor("pull_request", path).lighthouse, "false", path);
+  }
+  // Fixture trees below the top level stay Rust-only.
+  assert.equal(
+    classify("crates/rom-weaver-containers/tests/fixtures/archives/manifest.json").webapp,
+    "false",
+  );
+});
+
 test("embedded compiler assets select release stacks", () => {
   const result = classify("crates/rom-weaver-checksum/src/platform-names.json");
   assert.equal(result.rust, "true");
