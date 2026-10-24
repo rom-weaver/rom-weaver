@@ -58,9 +58,12 @@ const buildFinalRomInputRow = ({
   const id = info.id || getInputKey(inputs[index] as BinarySource, inputs);
   const byId = new Map(current.map((entry) => [entry.id, entry]));
   const existing = byId.get(id) || current.find((entry) => entry.order === (info.order ?? index));
+  let chdCodecMode = info.chdCodecMode;
+  if (chdCodecMode === undefined) chdCodecMode = finalized ? null : existing?.chdCodecMode;
   return createRomInputRow({
     ...existing,
     archivePathEntries: info.parentCompressions ?? existing?.archivePathEntries,
+    chdCodecMode,
     chdMode: info.chdMode ?? existing?.chdMode,
     cueText: info.cueText ?? existing?.cueText,
     gdiText: info.gdiText ?? existing?.gdiText,

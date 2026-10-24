@@ -522,6 +522,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       : resolvedFileName;
     return {
       archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
+      chdCodecMode: resolved.chdCodecMode ?? null,
       chdMode: resolved.chdMode ?? input.chdMode,
       checksums: resolved.checksums || undefined,
       checksumTiming: formatChecksumTiming(

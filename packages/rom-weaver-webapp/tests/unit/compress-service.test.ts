@@ -109,11 +109,21 @@ describe("compress service", () => {
   });
 
   it("compresses a single CD .bin to CHD on the runtime's header evidence", async () => {
-    const source = file("disc.bin", new Uint8Array(2352 * 20));
+    const bytes = new Uint8Array(2352 * 20);
+    bytes.fill(255, 1, 11);
+    const source = file("disc.bin", bytes);
     const { create, runtime } = makeRuntime();
     Object.assign(runtime.compression, { probe: async () => ({ entries: [], discFormat: "CD" }) });
     await compressFiles([source], options("chd"), runtime);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ source, format: "chd" }));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source,
+        format: "chd",
+        romSpecific: {
+          chd: expect.objectContaining({ mode: "cd", compressionCodecs: expect.stringContaining("cdlz") }),
+        },
+      }),
+    );
   });
 
   it("keeps CD codecs, output metadata, and lazy bytes consistent for a small ISO", async () => {

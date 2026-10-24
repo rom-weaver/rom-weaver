@@ -115,6 +115,23 @@ pub trait DiscSectorSource {
     fn read_sectors(&self, lba: u64, count: u32) -> io::Result<Vec<u8>>;
 }
 
+/// Volume descriptors scanned from LBA 16 for the ECMA-167 (UDF) recognition sequence.
+pub const UDF_VRS_SCAN_SECTORS: u32 = 16;
+
+/// True when one 2048-byte volume descriptor is a UDF `NSR02`/`NSR03` descriptor.
+pub fn is_udf_nsr_descriptor(sector: &[u8]) -> bool {
+    sector.len() >= 6 && sector[0] == 0 && matches!(&sector[1..6], b"NSR02" | b"NSR03")
+}
+
+/// True when the volume recognition sequence from LBA 16 announces UDF. DVD media carry
+/// UDF (often bridged with ISO 9660); CD-ROM game discs carry ISO 9660 alone, so this
+/// separates cooked 2048-byte DVD images from CD images of the same sector size.
+pub fn has_udf_descriptor(source: &dyn DiscSectorSource) -> bool {
+    source
+        .read_sectors(PVD_LBA, UDF_VRS_SCAN_SECTORS)
+        .is_ok_and(|bytes| bytes.chunks(SECTOR_BYTES).any(is_udf_nsr_descriptor))
+}
+
 /// True when the ISO 9660 PVD names the PlayStation family in its system
 /// identifier - "PLAYSTATION" on both PS1 and PS2 discs. A routing fallback for
 /// when SYSTEM.CNF (whose BOOT/BOOT2 line separates the two) lies beyond a

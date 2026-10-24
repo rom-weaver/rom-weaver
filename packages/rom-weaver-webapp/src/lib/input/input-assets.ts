@@ -33,6 +33,8 @@ type InputAsset = {
   fileName: string;
   kind: "rom" | "cue" | "gdi" | "track";
   size: number;
+  // This panel-only hint MUST NOT become metadata.mode: native create still infers the hard-disk geometry.
+  chdCodecMode?: "dvd" | null;
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;

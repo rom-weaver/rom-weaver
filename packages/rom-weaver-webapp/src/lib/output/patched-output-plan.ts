@@ -1,6 +1,6 @@
 import type { ChdCompressionCodecs, CompressionOptionValue } from "../../types/workflow-compression.ts";
 import type { WorkflowRomFileLike as RomFileLike } from "../../types/workflow-source.ts";
-import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
+import { chdModeFromMetadata, isLooseChdAutoSource } from "../input/rom-specific-file-utils.ts";
 import { getCompressionIntermediateFileName } from "./output-files.ts";
 import { createPatchedRomSavePlan } from "./output-save-plan.ts";
 
@@ -46,6 +46,7 @@ const resolveChdCreateMode = (
   romFile: RomFileLike | null | undefined,
   chdOutputMode: string | null | undefined,
 ): string | null => {
+  if (isLooseChdAutoSource(romFile || {})) return chdOutputMode || "auto";
   const mode = chdModeFromMetadata(romFile?.metadata);
   if (chdOutputMode === "auto" && mode) return mode;
   return chdOutputMode || "auto";
@@ -95,7 +96,7 @@ const createPatchedOutputPlan = ({
         typeof resolveChdCompressionCodecs === "function" ? resolveChdCompressionCodecs(codecMode) : null,
       chdCreateMode: createMode,
       chdCuePath: romFile?.metadata?.cuePath,
-      chdSourceMode: chdModeFromMetadata(romFile?.metadata),
+      chdSourceMode: isLooseChdAutoSource(romFile || {}) ? undefined : chdModeFromMetadata(romFile?.metadata),
       inputFileName: inputFileName,
     });
   }

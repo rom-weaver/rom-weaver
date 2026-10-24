@@ -22,7 +22,10 @@ import {
   createSourceAccessFromSource,
   decodeUtf8,
   getPatchFileBytes,
+  getPatchFileBlob,
 } from "./binary-service.ts";
+import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
+import { hasChdHardDiskHeader } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
   attachInputPreparationMetrics,
@@ -67,7 +70,11 @@ const MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH = Math.max(
 const MAX_ARCHIVE_MAGIC_PREFIX_LENGTH = Math.max(
   ...MAGIC_SIGNATURES.map((entry) => (entry.offset || 0) + entry.bytes.length),
 );
-const MAX_LAZY_BROWSER_PREFIX_LENGTH = Math.max(MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH, MAX_ARCHIVE_MAGIC_PREFIX_LENGTH);
+const MAX_LAZY_BROWSER_PREFIX_LENGTH = Math.max(
+  1024,
+  MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH,
+  MAX_ARCHIVE_MAGIC_PREFIX_LENGTH,
+);
 
 type LazyBrowserSource = {
   blob: Blob;
@@ -127,9 +134,15 @@ const getRomSpecificMagicExtension = (bytes: Uint8Array) => {
 
 const replaceFileExtension = (fileName: string, extension: string) => replaceFileNameExtension(fileName, extension);
 
+const blobPrefixes = new WeakMap<Blob, Uint8Array>();
+
 const readBlobPrefix = async (blob: Blob, length: number) => {
+  const cached = blobPrefixes.get(blob);
+  if (cached && cached.byteLength >= Math.min(length, blob.size)) return cached.subarray(0, length);
   const buffer = await blob.slice(0, length).arrayBuffer();
-  return new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength));
+  const prefix = new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength));
+  blobPrefixes.set(blob, prefix);
+  return prefix;
 };
 
 const getLazyBrowserSource = async (
@@ -213,6 +226,19 @@ const getLazyBrowserSource = async (
       reason: "archive-magic-without-extension",
     });
     return null;
+  }
+  const sourceMetadata = (source as { metadata?: { mode?: string; cuePath?: string } }).metadata;
+  if (
+    !(sourceMetadata?.mode || sourceMetadata?.cuePath) &&
+    (/\.bin$/i.test(fileName) || !/\.[^./\\]+$/.test(fileName)) &&
+    hasChdHardDiskHeader(archiveHeader, blob.size)
+  ) {
+    options?.onProgress?.({
+      details: { chdCodecMode: "dvd" },
+      stage: "input",
+      percent: null,
+      label: `Preparing ${fileName}`,
+    });
   }
   emitInputPreparationTrace(options, "lazy browser source accepted", {
     fileName,
@@ -441,6 +467,30 @@ const prepareInputAssets = async (
     selectedEntryName,
   });
   const assets = await resolveCompressedInputAssets(file, options, runtime, sourceIndex, selectedEntryName);
+  for (const asset of assets) {
+    const preparedFile = asset.file;
+    const metadata = preparedFile.metadata;
+    if (asset.kind !== "rom" || metadata?.mode || metadata?.cuePath || /\.(cue|gdi)$/i.test(preparedFile.fileName))
+      continue;
+    if (/\.[^./\\]+$/.test(preparedFile.fileName) && !/\.bin$/i.test(preparedFile.fileName)) continue;
+    if (preparedFile.fileSize < 512 || preparedFile.fileSize % 512 !== 0) continue;
+    options?.signal?.throwIfAborted();
+    const blob = getPatchFileBlob(preparedFile);
+    let prefix = preparedFile._u8array?.subarray(0, 1024);
+    if (!prefix && blob) prefix = await readBlobPrefix(blob, 1024);
+    else if (!prefix && preparedFile.filePath)
+      prefix = await readBrowserOpfsPrefix(preparedFile.filePath, 1024, options?.signal);
+    options?.signal?.throwIfAborted();
+    if (!(prefix && hasChdHardDiskHeader(prefix, preparedFile.fileSize))) continue;
+    asset.chdCodecMode = "dvd";
+    if (assets.length !== 1) continue;
+    options?.onProgress?.({
+      details: { chdCodecMode: "dvd" },
+      stage: "input",
+      percent: null,
+      label: `Prepared ${preparedFile.fileName}`,
+    });
+  }
   emitInputPreparationTrace(options, "input.assets.prepare.finish", {
     assetCount: assets.length,
     fileName: file.fileName,

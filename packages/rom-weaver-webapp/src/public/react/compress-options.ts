@@ -34,6 +34,7 @@ type SettingsLike = Record<string, unknown>;
 // ingest/checksum identity pass; it drives the CHD output-panel disc label (no TS regex).
 type SourceLike = {
   metadata?: SourceMetadata;
+  chdCodecMode?: "dvd" | null;
   fileName?: string;
   getExtension?: () => string;
 };
@@ -282,8 +283,13 @@ const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "
   const configuredMode = str(settings, "chdOutputMode", "auto").toLowerCase();
   if (configuredMode === "cd" || configuredMode === "dvd") return configuredMode;
   if (!source) return null;
+  const panelSource = source as SourceLike;
+  const explicitMode = panelSource.metadata?.mode;
+  if (explicitMode === "cd" || explicitMode === "dvd") return explicitMode;
+  if (panelSource.metadata?.cuePath || /\.(cue|gdi)$/i.test(panelSource.fileName || "")) return "cd";
+  if (panelSource.chdCodecMode === "dvd") return "dvd";
   const resolvedMode = getChdAutoCreateMode(source as SourceLike);
-  return resolvedMode === "cd" || resolvedMode === "dvd" ? resolvedMode : null;
+  return resolvedMode === "cd" ? "cd" : "dvd";
 };
 
 const buildCompressPanel = (format: string, settings: SettingsLike, source?: unknown): CompressPanelModel | null => {
@@ -367,7 +373,10 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     // so the output reflects the GD-vs-CD media the create will actually produce.
     // The verdict comes from the Rust ingest/checksum identity pass (`metadata.format`),
     // not a TS regex over the cue text / file name.
-    const discLabel = source ? getDiscFormatLabel((source as SourceLike).metadata?.format) : null;
+    const discLabel =
+      source && !(source as SourceLike).chdCodecMode
+        ? getDiscFormatLabel((source as SourceLike).metadata?.format)
+        : null;
     const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
     const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";
