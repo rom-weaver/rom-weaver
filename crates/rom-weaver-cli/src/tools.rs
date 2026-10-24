@@ -37,7 +37,7 @@ impl CliApp {
             ) {
                 return self.finish(command, report);
             }
-            if super::patch_apply::paths_refer_to_same_file(path, &args.output) {
+            if super::path_access::paths_refer_to_same_file(path, &args.output) {
                 return self.finish(
                     command,
                     OperationReport::failed(
@@ -189,7 +189,7 @@ impl CliApp {
         }
         for destination in &outputs {
             for source in &sources {
-                if super::patch_apply::paths_refer_to_same_file(source, destination) {
+                if super::path_access::paths_refer_to_same_file(source, destination) {
                     return Err(RomWeaverError::Validation(format!(
                         "PPF undo output and source `{}` resolve to the same file; choose a different --output path",
                         source.display()

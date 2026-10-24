@@ -598,7 +598,7 @@ impl CliApp {
             .chain(additional_sources);
         for source in sources {
             for destination in &outputs {
-                if super::patch_apply::paths_refer_to_same_file(source, destination) {
+                if crate::path_access::paths_refer_to_same_file(source, destination) {
                     return Err(RomWeaverError::Validation(format!(
                         "disc output `{}` and source `{}` resolve to the same file; choose a different --output directory",
                         destination.display(),
@@ -611,7 +611,7 @@ impl CliApp {
             if outputs[..index]
                 .iter()
                 .any(|other| {
-                    super::patch_apply::paths_refer_to_same_file(other, destination)
+                    crate::path_access::paths_refer_to_same_file(other, destination)
                         // Disc reference enumeration is ASCII-case-insensitive;
                         // keep emitted names unambiguous on every host too.
                         // Components normalize Windows' interchangeable path

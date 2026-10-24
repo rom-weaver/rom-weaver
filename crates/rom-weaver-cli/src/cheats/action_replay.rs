@@ -27,24 +27,15 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
 }
 
 fn parse_hex(slice: &str, raw: &str) -> Result<u32> {
-    u32::from_str_radix(slice, 16).map_err(|_| {
-        coded(
-            "cheat_bad_code",
-            "Pro Action Replay code is not valid hexadecimal",
-            raw,
-        )
-    })
+    super::parse_hex(
+        slice,
+        raw,
+        "Pro Action Replay code is not valid hexadecimal",
+    )
 }
 
 fn require_hex(code: &str, raw: &str) -> Result<()> {
-    if code.is_empty() || !code.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(coded(
-            "cheat_bad_code",
-            "Pro Action Replay code must be hexadecimal",
-            raw,
-        ));
-    }
-    Ok(())
+    super::require_hex(code, raw, "Pro Action Replay code must be hexadecimal")
 }
 
 /// NES Pro Action Replay: `AAAAVV` (address+value) or `AAAAVVCC` (with compare).

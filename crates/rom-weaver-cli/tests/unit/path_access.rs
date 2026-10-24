@@ -2,7 +2,9 @@ use std::fs;
 
 use assert_fs::prelude::*;
 
-use super::{PathAccessError, check_readable, check_writable_dir};
+use super::{
+    PathAccessError, check_readable, check_writable_dir, path_basename, paths_refer_to_same_file,
+};
 
 /// Root ignores the permission bits these tests set, so the denial cases would
 /// spuriously pass. Skip them there rather than assert something untrue.
@@ -150,4 +152,26 @@ fn read_only_output_dir_is_denied() {
         "message must name the operation: {message}"
     );
     assert_eq!(error.permission_denied_path(), Some(output.path()));
+}
+
+#[cfg(unix)]
+#[test]
+fn hard_linked_paths_refer_to_the_same_file() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let original = temp.child("save.sav");
+    original.write_binary(b"data").expect("write save");
+    let linked = temp.child("linked.sav");
+    fs::hard_link(original.path(), linked.path()).expect("hard link");
+    let other = temp.child("other.sav");
+    other.write_binary(b"data").expect("write other");
+
+    assert!(paths_refer_to_same_file(original.path(), linked.path()));
+    assert!(!paths_refer_to_same_file(original.path(), other.path()));
+}
+
+#[test]
+fn path_basename_splits_on_both_separators() {
+    assert_eq!(path_basename("a/b\\c.bin"), "c.bin");
+    assert_eq!(path_basename("c.bin"), "c.bin");
+    assert_eq!(path_basename("dir/"), "");
 }

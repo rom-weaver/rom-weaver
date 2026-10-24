@@ -343,6 +343,19 @@ fn coded(code: &'static str, message: &'static str, offending: &str) -> RomWeave
     )
 }
 
+/// Parse a hexadecimal slice, reporting `message` under `cheat_bad_code`.
+fn parse_hex(slice: &str, raw: &str, message: &'static str) -> Result<u32> {
+    u32::from_str_radix(slice, 16).map_err(|_| coded("cheat_bad_code", message, raw))
+}
+
+/// Require a non-empty all-hexadecimal code, reporting `message` under `cheat_bad_code`.
+fn require_hex(code: &str, raw: &str, message: &'static str) -> Result<()> {
+    if code.is_empty() || !code.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(coded("cheat_bad_code", message, raw));
+    }
+    Ok(())
+}
+
 /// Decode a single code with an explicit scheme.
 pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<DecodedCode> {
     let normalized = normalize(code);
