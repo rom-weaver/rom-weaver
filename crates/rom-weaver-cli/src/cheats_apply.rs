@@ -390,33 +390,21 @@ impl CliApp {
 }
 
 /// Count individual codes after splitting `+`/comma/space-joined `--code` values.
-/// The webapp's `splitCheatCodes` must split the same way; both run the cases in
-/// `tests/fixtures/cheat-code-splits.json`.
+/// Runs the cases in `tests/fixtures/cheat-code-splits.json`; the webapp reads the
+/// same `cheats::split_for_kind` answer from the `cheat` command.
 fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<String> {
-    if CheatKind::parse(kind_id).is_some_and(CheatKind::is_gba_action_replay) {
+    let kind = CheatKind::parse(kind_id);
+    if kind.is_some_and(CheatKind::is_gba_action_replay) {
         return codes
             .iter()
             .filter(|code| !code.trim().is_empty())
             .cloned()
             .collect();
     }
-    let use_xploder = CheatKind::parse(kind_id) == Some(CheatKind::Xploder)
-        || (kind_id.eq_ignore_ascii_case("auto")
-            && matches!(
-                system,
-                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
-            ));
-    if use_xploder {
-        codes
-            .iter()
-            .flat_map(|code| cheats::split_xploder_codes(code))
-            .collect()
-    } else {
-        codes
-            .iter()
-            .flat_map(|code| cheats::split_codes(code).into_iter().map(str::to_owned))
-            .collect()
-    }
+    codes
+        .iter()
+        .flat_map(|code| cheats::split_for_kind(code, system, kind))
+        .collect()
 }
 
 fn count_codes(codes: &[String], system: CheatSystem, kind_id: &str) -> usize {
@@ -453,8 +441,9 @@ mod tests {
         codes: Vec<String>,
     }
 
-    /// The webapp's `splitCheatCodes` runs the same cases, so a code the UI
-    /// shows as one entry is one code to the engine.
+    /// The same cases run through `split_for_kind`, which the `cheat` command
+    /// returns to the webapp, so a code the UI shows as one entry is one code to
+    /// the engine.
     #[test]
     fn code_splits_match_the_shared_cases() {
         let cases: Vec<CodeSplitCase> =

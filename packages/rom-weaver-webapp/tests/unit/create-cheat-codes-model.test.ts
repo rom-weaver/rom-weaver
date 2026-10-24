@@ -8,11 +8,11 @@ import {
   getCheatCodesValidationMessage,
   getCheatCodeWrites,
   getCheatCompareLabel,
-  splitCheatCodes,
+  getClassifiedCheatCodes,
+  splitPlainCheatCodes,
   type CreateCheatCodeEntry,
 } from "../../src/public/react/create-cheat-codes-model.ts";
 import type { ClassifiedCheatRecord } from "../../src/lib/cheats/index.ts";
-import codeSplitCases from "../../../../crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json";
 
 const record = (
   overrides: Partial<ClassifiedCheatRecord> & { resolution: ClassifiedCheatRecord["resolution"] },
@@ -40,21 +40,36 @@ const entry = (overrides: Partial<CreateCheatCodeEntry> = {}): CreateCheatCodeEn
   ...overrides,
 });
 
-// The engine's `codes_for_kind` runs the same cases, so a code the UI shows as
-// one entry is one code to the engine.
-describe("splitCheatCodes", () => {
-  it.each(codeSplitCases)("$name", ({ codes, kind, system, text }) => {
-    expect(splitCheatCodes(text, system, kind)).toEqual(codes);
-  });
-
-  it("uses the plain split before a system is known", () => {
-    expect(splitCheatCodes("SXIOPO+AEEPYZ, GXNENV\n004-BCE-E66")).toEqual([
+// The Xploder and GBA pairing rules live in Rust (`cheats::split_for_kind`, run
+// against crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json); the UI
+// reads the engine's `codes` and only falls back to the plain split.
+describe("splitPlainCheatCodes", () => {
+  it("splits on +, commas, semicolons, whitespace, keeping intra-code separators", () => {
+    expect(splitPlainCheatCodes("SXIOPO+AEEPYZ, GXNENV;004-BCE-E66\nAAAAAA")).toEqual([
       "SXIOPO",
       "AEEPYZ",
       "GXNENV",
       "004-BCE-E66",
+      "AAAAAA",
     ]);
-    expect(splitCheatCodes("  \n + , ")).toEqual([]);
+    expect(splitPlainCheatCodes("  \n + , ")).toEqual([]);
+  });
+});
+
+describe("getClassifiedCheatCodes", () => {
+  it("returns the engine's split codes untouched", () => {
+    const classified = record({
+      codes: ["800B4CD40063"],
+      resolution: { type: "unsupported", reason: "x" },
+    });
+    classified.record.rawCode = "800B4CD4 0063";
+    expect(getClassifiedCheatCodes(classified)).toEqual(["800B4CD40063"]);
+  });
+
+  it("falls back to the plain split when the record carries no codes", () => {
+    const classified = record({ resolution: { type: "unsupported", reason: "x" } });
+    classified.record.rawCode = "AAA+BBB";
+    expect(getClassifiedCheatCodes(classified)).toEqual(["AAA", "BBB"]);
   });
 });
 
