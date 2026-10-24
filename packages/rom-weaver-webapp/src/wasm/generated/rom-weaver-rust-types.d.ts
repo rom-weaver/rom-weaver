@@ -298,7 +298,12 @@ export type CheatRecord = { id: string, system: CheatSystem, gameId: string, des
 
 export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "unsupported", reason: string, };
 
-export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
+export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null,
+/**
+ * The record's raw code split into individual codes by [`split_for_kind`],
+ * so the webapp never re-implements the splitting rules.
+ */
+codes?: Array<string>, };
 
 export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
 

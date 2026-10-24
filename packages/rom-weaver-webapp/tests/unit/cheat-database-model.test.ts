@@ -5,6 +5,7 @@ import {
   isCheatManualSystem,
   isUnsupportedCheatSystem,
   matchCheatGame,
+  normalizeCheatText,
   reconcileSelectedCheatIds,
   resolveCheatDatabaseEntry,
   resolveManualOnlyCheatSystem,
@@ -16,6 +17,7 @@ import {
   type CheatRecord,
   type ClassifiedCheatRecord,
 } from "../../src/lib/cheats/index.ts";
+import titleCases from "../../../../crates/rom-weaver-cli/tests/fixtures/cheat-title-normalization.json";
 
 const raw = (id: string, description: string): CheatDatabaseRecord => ({
   id,
@@ -116,6 +118,29 @@ const catalog = {
     },
   ],
 };
+
+// The CLI's `normalize_text` runs the same cases, so a title matches the same
+// game in the browser and on the command line.
+describe("normalizeCheatText", () => {
+  it.each(titleCases)("$name", ({ input, normalized }) => {
+    expect(normalizeCheatText(input)).toBe(normalized);
+  });
+
+  it("matches an accented ROM name to its accented shard title", () => {
+    const accented: CheatSystemShard = {
+      ...shard,
+      games: shard.games.map((game) => ({
+        ...game,
+        id: "pokemon",
+        normalizedTitle: "pokémon red",
+        title: "Pokémon Red",
+      })),
+    };
+    expect(
+      matchCheatGame({ key: "rom-a", platform: snesEntry.platform, fileName: "Pokemon Red.sfc" }, snesEntry, accented),
+    ).toMatchObject({ kind: "title", game: { id: "pokemon" } });
+  });
+});
 
 describe("cheat database catalog", () => {
   it("matches a known checksum before it considers the title", () => {
@@ -225,6 +250,18 @@ describe("cheat database catalog", () => {
     expect(filterCheats(classified, "health").map(({ record }) => record.id)).toEqual(["ram"]);
     expect(filterCheats(classified, "").map(({ record }) => record.id)).toEqual(["rom", "ram"]);
     expect(filterCheats(classified, "c2b4").map(({ record }) => record.id)).toEqual(["rom", "ram"]);
+  });
+
+  it("keeps the raw code searchable after an unclosed bracket in the description", () => {
+    const [template] = classified;
+    if (!template) throw new Error("fixture missing");
+    const cheat = {
+      ...template,
+      record: { ...template.record, id: "open", description: "Infinite Health (P1", rawCode: "8009C6E4 03E7" },
+    };
+    expect(filterCheats([cheat], "8009C6E4").map(({ record }) => record.id)).toEqual(["open"]);
+    expect(filterCheats([cheat], "(p1").map(({ record }) => record.id)).toEqual(["open"]);
+    expect(filterCheats([cheat], "zzz")).toEqual([]);
   });
 
   it("keeps only selections that exist after records change", () => {

@@ -110,14 +110,40 @@ export const isUnsupportedCheatSystem = (
   !resolveCheatDatabaseEntry(index, catalog, identity) &&
   !resolveManualOnlyCheatSystem(catalog, identity);
 
-const normalizeText = (value: string): string =>
+/** Accent-fold and lower-case only, so free text keeps bracketed words and raw codes. */
+const foldCheatSearchText = (value: string): string =>
   value
     .normalize("NFKD")
     .toLocaleLowerCase("en-US")
-    .replace(/\.[a-z0-9]{1,8}$/u, "")
-    .replace(/\([^)]*\)|\[[^\]]*\]/gu, " ")
+    .replace(/\p{M}+/gu, "");
+
+const normalizeCheatSearchText = (value: string): string =>
+  foldCheatSearchText(value)
     .replace(/[^a-z0-9]+/gu, " ")
     .trim();
+
+/**
+ * Fold a title, file name, or search query into its comparison form: accents
+ * folded to their base letter, lower-case, extension dropped, bracketed
+ * region/revision tags dropped (nested brackets included), and every run of
+ * non-alphanumerics collapsed to one space. Mirrors Rust `normalize_text` in
+ * `cheat_database.rs`; both run the cases in
+ * `crates/rom-weaver-cli/tests/fixtures/cheat-title-normalization.json`. That
+ * Rust module is native-only, so the browser keeps this copy.
+ */
+export const normalizeCheatText = (value: string): string => {
+  const folded = foldCheatSearchText(value).replace(/\.[a-z0-9]{1,8}$/u, "");
+  let depth = 0;
+  let stripped = "";
+  for (const character of folded) {
+    if (character === "(" || character === "[") depth += 1;
+    else if (character === ")" || character === "]") {
+      depth = Math.max(0, depth - 1);
+      stripped += " ";
+    } else if (depth === 0) stripped += character;
+  }
+  return stripped.replace(/[^a-z0-9]+/gu, " ").trim();
+};
 
 const checksumValues = (game: CheatGameRecord): Array<[string, string]> =>
   game.checksums.flatMap((release) =>
@@ -149,10 +175,10 @@ export const matchCheatGame = (
   );
   if (exact) return { kind: "exact", game: exact };
 
-  const title = normalizeText(identity.title || identity.fileName || "");
+  const title = normalizeCheatText(identity.title || identity.fileName || "");
   if (!title) return { kind: "none" };
   const probable = shard.games.find((game) =>
-    [game.title, game.normalizedTitle].some((candidate) => normalizeText(candidate) === title),
+    [game.title, game.normalizedTitle].some((candidate) => normalizeCheatText(candidate) === title),
   );
   return probable ? { kind: "title", game: probable } : { kind: "none" };
 };
@@ -163,10 +189,10 @@ export const selectManualGame = (shard: CheatSystemShard | undefined, gameId: st
 };
 
 export const filterCheats = (cheats: ClassifiedCheatRecord[], query: string): ClassifiedCheatRecord[] => {
-  const needle = normalizeText(query);
+  const needle = normalizeCheatSearchText(query);
   if (!needle) return cheats;
   return cheats.filter((cheat) =>
-    normalizeText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle),
+    normalizeCheatSearchText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle),
   );
 };
 

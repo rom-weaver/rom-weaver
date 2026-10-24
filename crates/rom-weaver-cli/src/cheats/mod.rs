@@ -228,6 +228,11 @@ pub struct ClassifiedCheatRecord {
     pub record: CheatRecord,
     pub resolution: CheatResolution,
     pub detected_kind: Option<CheatKind>,
+    /// The record's raw code split into individual codes by [`split_for_kind`],
+    /// so the webapp never re-implements the splitting rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub codes: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -310,6 +315,34 @@ pub fn split_xploder_codes(input: &str) -> Vec<String> {
         index += 1;
     }
     codes
+}
+
+/// Split one raw block into its individual codes the way the engine reads it:
+/// GBA Action Replay / GameShark blocks stay whole (their words decode as one
+/// stream), Xploder codes re-join their word pairs, and everything else splits
+/// on `+`, `,`, `;`, and whitespace. `kind` is the explicit or hinted code kind;
+/// `None` means auto-detect, which follows the system. The webapp reads this
+/// answer from the `cheat` command instead of splitting on its own.
+pub fn split_for_kind(raw: &str, system: CheatSystem, kind: Option<CheatKind>) -> Vec<String> {
+    if kind.is_some_and(CheatKind::is_gba_action_replay) {
+        let block = raw.trim();
+        return if block.is_empty() {
+            Vec::new()
+        } else {
+            vec![block.to_owned()]
+        };
+    }
+    let use_xploder = kind == Some(CheatKind::Xploder)
+        || (kind.is_none()
+            && matches!(
+                system,
+                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+            ));
+    if use_xploder {
+        split_xploder_codes(raw)
+    } else {
+        split_codes(raw).into_iter().map(str::to_owned).collect()
+    }
 }
 
 fn is_gba_rom_patch_word(token: &str) -> bool {
@@ -721,12 +754,23 @@ fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
 /// cartridge ROM writes is unsupported: the subcodes can depend on each other,
 /// so a partial bake would change the cheat's meaning.
 pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecord {
+    let mut classified = classify_record_resolution(rom, record);
+    classified.codes = Some(split_for_kind(
+        record.raw_code.as_deref().unwrap_or_default(),
+        record.system,
+        record.code_kind.or_else(|| record_kind_hint(record)),
+    ));
+    classified
+}
+
+fn classify_record_resolution(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecord {
     let unsupported = |reason: &str, detected_kind: Option<CheatKind>| ClassifiedCheatRecord {
         record: record.clone(),
         resolution: CheatResolution::Unsupported {
             reason: reason.to_string(),
         },
         detected_kind,
+        codes: None,
     };
     if has_parameterized_executable_field(record)
         || record
@@ -762,23 +806,12 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
                 record: record.clone(),
                 resolution: CheatResolution::RomBakeable { writes },
                 detected_kind: Some(kind),
+                codes: None,
             },
             Err(error) => unsupported(&error.to_string(), Some(kind)),
         };
     }
-    let codes = if record_kind == Some(CheatKind::Xploder)
-        || (record_kind.is_none()
-            && matches!(
-                record.system,
-                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
-            )) {
-        split_xploder_codes(raw_code)
-    } else {
-        split_codes(raw_code)
-            .into_iter()
-            .map(str::to_owned)
-            .collect()
-    };
+    let codes = split_for_kind(raw_code, record.system, record_kind);
     if codes.is_empty() {
         return unsupported("the entry has an empty native code", None);
     }
@@ -895,6 +928,7 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
         record: record.clone(),
         resolution,
         detected_kind,
+        codes: None,
     }
 }
 
