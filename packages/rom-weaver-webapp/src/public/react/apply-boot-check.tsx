@@ -11,6 +11,7 @@ import {
 } from "./boot-check-audio.ts";
 import { runEmulatorBootCheck, type BootCheckOutcome } from "./components/emulator-boot-check.ts";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
+import { hasFdsDiskSignature, hasWebgl2, requiresUnsuppliedBios } from "./components/emulatorjs.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import { setVerifyBootAfterApplyOverride, useVerifyBootAfterApplyValue } from "./use-apply-download-orchestration.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
@@ -35,7 +36,12 @@ const isAbort = (error: unknown, signal: AbortSignal) =>
   signal.aborted || (error instanceof Error && error.name === "AbortError");
 
 /** Boot the output once, and cancel the check when the output goes away. */
-const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyOutput | null | undefined) => {
+const useBootCheck = (
+  core: string | undefined,
+  enabled: boolean,
+  output: ApplyOutput | null | undefined,
+  platform: string | undefined,
+) => {
   // A ref, because a language change MUST NOT boot the output again.
   const localizerRef = useLatestRef(useUiLocalizer());
   const [state, setState] = useState<BootCheckState | null>(null);
@@ -50,7 +56,9 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
       setState(null);
       return undefined;
     }
-    if (!core) {
+    // Check only what the Test player would start: the FDS core crashes the
+    // tab without the BIOS, and no core starts without WebGL 2.
+    if (!(core && hasWebgl2()) || requiresUnsuppliedBios({ fileName: output.fileName, platform })) {
       releaseBootCheckAudioContext();
       setState(null);
       return undefined;
@@ -71,10 +79,13 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
     const controller = new AbortController();
     const { signal } = controller;
     let handedToPlayer = false;
-    setState({ status: "checking" });
-    const run = async (): Promise<BootCheckResult> => {
+    setState(null);
+    const run = async (): Promise<BootCheckResult | null> => {
       const blob = await output.getBlob?.();
       if (!blob) throw new Error(localizerRef.current.message("ui.apply.emulator.unavailableOutput"));
+      // A headerless FDS image can have any name, so its bytes decide too.
+      if (await hasFdsDiskSignature(blob)) return null;
+      if (!signal.aborted) setState({ status: "checking" });
       const loaded = await loadEmulatorRom(blob, output.fileName, { signal });
       handedToPlayer = true;
       return runEmulatorBootCheck({
@@ -90,6 +101,10 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
     };
     void run()
       .then((result) => {
+        if (!result) {
+          logger.debug("Boot check skipped: FDS image", { core, fileName: output.fileName });
+          return;
+        }
         logger.debug("Boot check finished", { core, fileName: output.fileName, status: result.status });
         finishedChecks.set(output, result);
         if (!signal.aborted) setState(result);
@@ -113,7 +128,7 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
         if (audioContext) closeBootCheckAudioContext(audioContext);
       });
     return () => controller.abort();
-  }, [core, enabled, localizerRef, output]);
+  }, [core, enabled, localizerRef, output, platform]);
   return state;
 };
 
@@ -183,13 +198,15 @@ export const BootCheckStatus = ({
   core,
   enabled,
   output,
+  platform,
 }: {
   core: string | undefined;
   enabled: boolean;
   output?: ApplyOutput | null;
+  platform?: string;
 }) => {
   const localizer = useUiLocalizer();
-  const state = useBootCheck(core, enabled, output);
+  const state = useBootCheck(core, enabled, output, platform);
   if (!state) return null;
   const { label, note } = describeResult(state, localizer);
   const Icon = STATUS_ICONS[state.status];

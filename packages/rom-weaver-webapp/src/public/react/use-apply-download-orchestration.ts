@@ -446,11 +446,13 @@ const runPostApplyActions = async ({
 /**
  * Whether the boot check can have a core for this ROM, judged at the Apply
  * click. The ROM's name and identified platform decide the core the same way
- * after Apply. A ROM without either is still loading, so its core is unknown
- * and the click prepares for a check anyway.
+ * after Apply. A ROM that is still loading shows a placeholder name, such as
+ * its archive's, so its core is unknown and the click prepares for a check
+ * anyway: a queued Apply starts later, without the click WebKit needs.
  */
 const mayHaveEmulatorCore = (romInput: RomInputRowState | undefined): boolean => {
-  const fileName = romInput?.info.fileName || romInput?.info.archiveName;
+  if (!romInput || romInput.loading) return true;
+  const fileName = romInput.info.fileName || romInput.info.archiveName;
   const platform = romInput?.info.romType?.platform;
   if (!(fileName || platform)) return true;
   return !!getEmulatorJsCore(platform, fileName);

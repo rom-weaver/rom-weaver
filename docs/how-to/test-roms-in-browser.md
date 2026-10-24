@@ -92,7 +92,7 @@ The check starts the result in a hidden emulator and looks at its frames. It doe
 
 If you select the option under an Apply result that is already finished, the check runs on that result.
 
-The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. A change in Settings applies from the next Apply. Platforms without a bundled core show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
+The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. A change in Settings applies from the next Apply. Platforms that Test cannot start show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
 
 ## Switch games or stop
 

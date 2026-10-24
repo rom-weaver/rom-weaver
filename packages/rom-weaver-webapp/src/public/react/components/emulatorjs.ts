@@ -129,6 +129,16 @@ const hasFdsDiskSignature = async (blob: Blob): Promise<boolean> => {
   return matchesAt(0) || matchesAt(FDS_HEADER_BYTES);
 };
 
+/** Only WebGL 2 core builds are vendored, so no core starts without it. */
+const hasWebgl2 = () => {
+  if (typeof document === "undefined") return true;
+  try {
+    return Boolean(document.createElement("canvas").getContext("webgl2"));
+  } catch {
+    return false;
+  }
+};
+
 export {
   FDS_BIOS_ISSUE_URL,
   coreReadsChd,
@@ -136,5 +146,6 @@ export {
   getEmulatorJsCore,
   getSaveFileCore,
   hasFdsDiskSignature,
+  hasWebgl2,
   requiresUnsuppliedBios,
 };

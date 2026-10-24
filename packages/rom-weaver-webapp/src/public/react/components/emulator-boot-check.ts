@@ -269,7 +269,7 @@ const runEmulatorBootCheck = async ({
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }: BootCheckOptions): Promise<BootCheckOutcome> => {
   if (signal?.aborted) throw abortError();
-  const { gameId, gameName } = createEmulatorGameIdentity({ checksum, fileName });
+  const { gameId, gameName } = createEmulatorGameIdentity({ checksum, core, fileName });
   const gameUrl = URL.createObjectURL(rom);
   const iframe = createHiddenFrame();
   const deadline = Date.now() + timeoutMs;

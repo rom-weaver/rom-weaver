@@ -353,7 +353,7 @@ export const ApplyOutputAction = ({
         platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
       />
-      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} />
+      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} platform={emulatorPlatform} />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
       {weaveTools?.outputVerification ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-output-unverified">
