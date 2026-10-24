@@ -41,6 +41,30 @@ fn verify_ecc(sector: &mut [u8; CD_MAX_SECTOR_DATA as usize]) -> bool {
     sector.verify_ecc()
 }
 
+/// Known-answer P/Q parity (bytes 0x81c..0x930) for `mode1_sector_with_ecc()`,
+/// computed independently of chd_rs from the ECMA-130 Annex A definition
+/// (GF(2^8) with polynomial 0x11d; P over 86 columns of 24 bytes, Q over 52
+/// diagonals of 43 bytes including P), so a wrong chd_rs table entry fails here.
+const MODE1_SECTOR_P_PARITY_HEX: &str = "3edcdd22e3cd2df9b58ad5a692e7c0498fbdab99d967e8bbc414b0e6cef051a1055fb27d43671e3bc8eef19a5ea7d0744ea5216804937ba7b5e013f11f2cbde97000c1d79371aa1b0db38a0a07408c66fcf95b526ecafa718b1cdbcd15c9ed2a1d767a0728b987dd28347eda4beefbca4e24142677f3b4cc03e2d2f4ff37e4e2ddae6a930fb5ad64c699f7996999abda31a7b28b305ae58f243f73896af3fd2bea726728cc3ecc31fbface52";
+const MODE1_SECTOR_Q_PARITY_HEX: &str = "4c3f271c197053de2091bfdaa7d92aeeaa2bc0963e3392a4781bb837ccedcd8609c74203412e5e471406a32fbcbd3924465714d6a160eb5e3d38f5e924c3fce916676b4163ffb5e1fc72c7857c173c63f81bc27b8f111e63ee1d57832e32afeccaff86f02b377e14";
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).expect("hex digit pair"))
+        .collect()
+}
+
+#[test]
+fn cd_sector_ecc_matches_known_answer_parity() {
+    let sector = mode1_sector_with_ecc();
+    assert_eq!(
+        &sector[0x81c..0x81c + 172],
+        hex_bytes(MODE1_SECTOR_P_PARITY_HEX)
+    );
+    assert_eq!(&sector[0x81c + 172..], hex_bytes(MODE1_SECTOR_Q_PARITY_HEX));
+}
+
 #[test]
 fn cd_sector_ecc_round_trips_through_verification() {
     let mut sector = mode1_sector_with_ecc();
