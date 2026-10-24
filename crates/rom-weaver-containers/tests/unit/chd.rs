@@ -6,6 +6,8 @@
 //! regression fails here instead of as a deep round-trip parity mismatch.
 
 use super::*;
+use crate::chd_rs::cdrom::CD_MAX_SECTOR_DATA;
+use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
 
 #[test]
 fn split_checksum_workers_share_the_operation_thread_budget() {
@@ -23,24 +25,26 @@ const SYNC_HEADER: [u8; 12] = [
 
 /// Build a Mode 1 raw sector with a deterministic data payload and freshly
 /// generated P/Q ECC so it round-trips through verification.
-fn mode1_sector_with_ecc() -> Vec<u8> {
-    let mut sector = vec![0_u8; ChdContainerHandler::CD_SECTOR_DATA_BYTES];
+fn mode1_sector_with_ecc() -> [u8; CD_MAX_SECTOR_DATA as usize] {
+    let mut sector = [0_u8; CD_MAX_SECTOR_DATA as usize];
     sector[..12].copy_from_slice(&SYNC_HEADER);
     sector[0x0f] = 1; // Mode 1.
     for (index, byte) in sector.iter_mut().enumerate().skip(16) {
         *byte = (index % 251) as u8;
     }
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+    (&mut sector).generate_ecc();
     sector
+}
+
+/// `ErrorCorrectedSector` is implemented for `&mut` sectors only.
+fn verify_ecc(sector: &mut [u8; CD_MAX_SECTOR_DATA as usize]) -> bool {
+    sector.verify_ecc()
 }
 
 #[test]
 fn cd_sector_ecc_round_trips_through_verification() {
-    let sector = mode1_sector_with_ecc();
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    let mut sector = mode1_sector_with_ecc();
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
@@ -48,48 +52,27 @@ fn cd_sector_ecc_rejects_corrupted_payload() {
     let mut sector = mode1_sector_with_ecc();
     // Flip a byte inside the ECC-covered data region.
     sector[100] ^= 0xff;
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(!verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_ecc_rejects_missing_sync_header() {
+fn cd_sector_ecc_ignores_sync_header() {
     let mut sector = mode1_sector_with_ecc();
-    // ECC is still valid, but a cleared sync header means it is not a
-    // reconstructable sector.
+    // ECC covers only the bytes after the sync header, so clearing it leaves
+    // the ECC valid; callers check the header separately.
     sector[1] = 0;
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_clear_sync_and_ecc_zeroes_only_sync_and_ecc() {
+fn cd_sector_clear_ecc_zeroes_only_ecc() {
     let mut sector = mode1_sector_with_ecc();
-    let data_before = sector[12..0x81c].to_vec();
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut sector);
-    assert!(sector[..12].iter().all(|byte| *byte == 0));
+    let before = sector;
+    (&mut sector).clear_ecc();
     assert!(sector[0x81c..].iter().all(|byte| *byte == 0));
-    // The user-data region between the sync header and the ECC block is left
-    // intact so the sector can be rebuilt on extract.
-    assert_eq!(&sector[12..0x81c], data_before.as_slice());
-}
-
-#[test]
-fn cd_sector_ecc_helpers_reject_wrong_length() {
-    let mut short = vec![0_u8; 100];
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&short));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &short
-    ));
-    // Generation and clearing are no-ops at the wrong length.
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
+    // Sync header and user data are left intact.
+    assert_eq!(&sector[..0x81c], &before[..0x81c]);
+    assert!(!verify_ecc(&mut sector));
 }
 
 // --- V5 compressed-map CRC and integer writers -----------------------------

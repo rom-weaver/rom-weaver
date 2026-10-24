@@ -89,9 +89,9 @@
 mod error;
 
 mod block_hash;
-mod cdrom;
+pub(crate) mod cdrom;
 mod chdfile;
-mod compression;
+pub(crate) mod compression;
 
 /// cbindgen:ignore
 mod huffman;
