@@ -1,21 +1,6 @@
 use super::super::rules::{Check, Condition, ReadValue, Scalar, Store};
 use super::*;
 
-fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = u32::MAX;
-    for byte in bytes {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
-}
-
 fn check(slot: usize) -> Check {
     Check {
         when: None,
