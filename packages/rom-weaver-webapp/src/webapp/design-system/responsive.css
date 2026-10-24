@@ -335,11 +335,17 @@
   display: contents;
 }
 /* A codec cell grows by about 0.5rem per character of its list, plus room for
-   the arrow, so a long list takes a row of its own instead of clipping. */
+   the arrow, so a long list takes a row of its own instead of clipping. Every
+   cell also grows by about 0.42rem per bold label character, plus 16px for the
+   insets, or 44px with the gap and info button, so the label is not cut off. */
 .apply-output .ofld {
+  --ofld-label-basis: calc(var(--ofld-label-ch, 0) * 0.42rem + 16px);
   position: relative;
-  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px));
+  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px), var(--ofld-label-basis));
   background: var(--plate);
+}
+.apply-output .ofld-has-info {
+  --ofld-label-basis: calc(var(--ofld-label-ch, 0) * 0.42rem + 44px);
 }
 .apply-output .ofld-l {
   position: absolute;
@@ -375,10 +381,10 @@
   flex-wrap: wrap;
   gap: 1px;
 }
-/* Wide enough for "Download after patching", so a narrow card stacks the pair
-   instead of clipping the label. */
+/* Wide enough for "Download after patching" or a longer translated label, so a
+   narrow card stacks the pair instead of clipping the label. */
 .post-apply-fields > .ofld {
-  flex-basis: 156px;
+  flex-basis: max(156px, var(--ofld-label-basis));
 }
 /* The identified title gets its own line under the label so it wraps whole. */
 .apply-output .outname-source {
