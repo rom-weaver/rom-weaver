@@ -109,9 +109,9 @@ impl CliApp {
     /// ROM carries in that order.
     fn n64_order_candidates(source: N64ByteOrder) -> [N64OrderCandidate; N64_ORDER_CANDIDATES] {
         N64_ORDERS.map(|target| N64OrderCandidate {
-            label: target.label(),
+            label: target.id(),
             word_map: Self::n64_candidate_word_map(source, target),
-            magic: n64_magic(target),
+            magic: target.magic(),
         })
     }
 
@@ -125,8 +125,8 @@ impl CliApp {
     /// copies of a 64 MiB ROM.
     fn n64_candidate_word_map(source: N64ByteOrder, target: N64ByteOrder) -> [usize; 4] {
         let mut tags = [0_u8, 1, 2, 3];
-        Self::transform_n64_word(&mut tags, source);
-        Self::transform_n64_word(&mut tags, target);
+        source.transform_word(&mut tags);
+        target.transform_word(&mut tags);
         tags.map(usize::from)
     }
 
@@ -345,15 +345,6 @@ struct N64OrderApplyScore<'a> {
     input: &'a Path,
     source: N64ByteOrder,
     target: N64ByteOrder,
-}
-
-/// The four bytes a valid N64 ROM starts with in `order`.
-const fn n64_magic(order: N64ByteOrder) -> [u8; 4] {
-    match order {
-        N64ByteOrder::BigEndian => N64_BIG_ENDIAN_MAGIC,
-        N64ByteOrder::LittleEndian => N64_LITTLE_ENDIAN_MAGIC,
-        N64ByteOrder::ByteSwapped => N64_BYTE_SWAPPED_MAGIC,
-    }
 }
 
 #[cfg(test)]

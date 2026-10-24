@@ -7,9 +7,9 @@ use std::{
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    FormatDescriptor, N64_BIG_ENDIAN_MAGIC, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 use crate::checksum_validation_suffix;
@@ -859,7 +859,7 @@ fn detect_n64_header(original_path: &Path, original: &[u8]) -> Option<DetectedN6
     if original.len() < (APS_N64_CART_ID_OFFSET as usize + 3) || original.len() < 0x18 {
         return None;
     }
-    if !original.starts_with(&[0x80, 0x37, 0x12, 0x40]) {
+    if !original.starts_with(&N64_BIG_ENDIAN_MAGIC) {
         return None;
     }
 
@@ -891,7 +891,7 @@ fn detect_n64_header_from_path(
     let mut original = File::open(original_path)?;
     let mut magic = [0u8; 4];
     original.read_exact(&mut magic)?;
-    if magic != [0x80, 0x37, 0x12, 0x40] {
+    if magic != N64_BIG_ENDIAN_MAGIC {
         return Ok(None);
     }
     original.seek(SeekFrom::Start(APS_N64_CART_ID_OFFSET))?;

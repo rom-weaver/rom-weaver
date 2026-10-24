@@ -41,8 +41,7 @@ use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::rom_headers::{
     A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
-    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
-    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
+    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, NGP_COPYRIGHT_MAGIC,
     PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
     SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
     detect_known_rom_header_from_prefix as detect_known_header_from_prefix,
@@ -51,26 +50,28 @@ use rom_weaver_checksum::rom_headers::{
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
     VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
-    supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
+    n64_byte_order_from_row_id, supported_algorithms, unsupported_checksum_algorithm,
+    unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
     extract_only_create_validation_message, is_ambiguous_disc_image_extension,
     unregistered_output_format_message,
 };
+pub use rom_weaver_core::N64ByteOrder;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
     OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
-    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchInputN64ByteOrder,
-    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
-    Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
-    ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
-    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
-    enumerate_disc_sheet_refs, env_u64, is_dcp_patch_name, is_patch_filter_candidate_name,
-    is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
-    process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
+    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchValidateRequest,
+    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
+    SelectionMatcher, SelectionPrompter, SolidPatchMetadata, ThreadBudget, ThreadCapability,
+    ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet,
+    emit_variant_plan, ensure_output_available, enumerate_disc_sheet_refs, env_u64,
+    is_dcp_patch_name, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
+    normalize_archive_name, operation_report_details, process_cancellation_token,
+    should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -1453,34 +1454,6 @@ enum HeaderRepairStatus {
     NotMatched,
     MatchedNoChange,
     Repaired,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(rename_all = "kebab-case")]
-pub enum N64ByteOrder {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
-}
-
-impl N64ByteOrder {
-    const fn id(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
-
-    const fn label(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
 }
 
 /// Which N64 byte order a patch should see. `Auto` matches the patch's required
