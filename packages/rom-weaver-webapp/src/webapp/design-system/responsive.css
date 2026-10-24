@@ -335,10 +335,12 @@
   display: contents;
 }
 /* A codec cell grows by about 0.5rem per character of its list, plus room for
-   the arrow, so a long list takes a row of its own instead of clipping. */
+   the arrow, so a long list takes a row of its own instead of clipping. Every
+   cell also grows by about 0.4rem per character of its label, plus room for
+   the info button, so the label is not cut off. */
 .apply-output .ofld {
   position: relative;
-  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px));
+  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px), calc(var(--ofld-label-ch, 0) * 0.4rem + 36px));
   background: var(--plate);
 }
 .apply-output .ofld-l {
