@@ -433,6 +433,8 @@ impl ChdContainerHandler {
             || self.has_valid_exfat_boot_sector(sector, logical_bytes)
     }
 
+    /// The webapp's `hasChdHardDiskHeader` must agree; both run the cases in
+    /// `tests/fixtures/chd-hard-disk-headers.json`.
     pub(super) fn should_auto_infer_hard_disk(&self, input: &Path, logical_bytes: u64) -> bool {
         if logical_bytes < u64::from(Self::HD_SECTOR_BYTES)
             || !logical_bytes.is_multiple_of(u64::from(Self::HD_SECTOR_BYTES))

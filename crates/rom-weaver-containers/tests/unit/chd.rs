@@ -923,6 +923,42 @@ fn has_known_volume_boot_sector_recognizes_each_filesystem() {
     assert!(!handler.has_known_volume_boot_sector(&signed_sector(), HD_VOLUME_BYTES));
 }
 
+/// The webapp's `hasChdHardDiskHeader` runs the same cases on the same prefix,
+/// so a loose image the UI treats as a hard disk is one `chd create` makes a
+/// hard-disk CHD from.
+#[test]
+fn hard_disk_headers_match_the_shared_cases() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/chd-hard-disk-headers.json"))
+            .expect("hard-disk header cases");
+    let handler = ChdContainerHandler;
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
+        "rw-chd-unit-{}-hard-disk-header.img",
+        std::process::id()
+    )));
+    for case in cases.as_array().expect("cases") {
+        let name = case["name"].as_str().expect("name");
+        let size = case["size"].as_u64().expect("size");
+        let mut prefix = vec![0_u8; 1024];
+        for write in case["writes"].as_array().expect("writes") {
+            let at = usize::try_from(write["at"].as_u64().expect("at")).expect("offset");
+            let hex = write["hex"].as_str().expect("hex");
+            for (index, pair) in hex.as_bytes().chunks(2).enumerate() {
+                let pair = std::str::from_utf8(pair).expect("ascii hex");
+                prefix[at + index] = u8::from_str_radix(pair, 16).expect("hex byte");
+            }
+        }
+        // The webapp reads at most the first two sectors of the image.
+        prefix.truncate(usize::try_from(size.min(1024)).expect("prefix length"));
+        std::fs::write(&path, &prefix).expect("write prefix");
+        assert_eq!(
+            handler.should_auto_infer_hard_disk(&path, size),
+            case["hardDisk"].as_bool().expect("hardDisk"),
+            "{name}"
+        );
+    }
+}
+
 #[test]
 fn should_auto_infer_single_track_cd_keys_on_extension() {
     let handler = ChdContainerHandler;

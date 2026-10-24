@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
-import { discFormatToChdMode, getChdAutoCreateMode } from "../../src/lib/input/rom-specific-file-utils.ts";
+import {
+  discFormatToChdMode,
+  getChdAutoCreateMode,
+  hasChdHardDiskHeader,
+} from "../../src/lib/input/rom-specific-file-utils.ts";
+import hardDiskHeaderCases from "../../../../crates/rom-weaver-containers/tests/fixtures/chd-hard-disk-headers.json";
 
 describe("discFormatToChdMode", () => {
   it("maps the engine disc_format verdict to a CHD mode", () => {
@@ -9,6 +14,20 @@ describe("discFormatToChdMode", () => {
     expect(discFormatToChdMode("GD-ROM")).toBe("cd");
     expect(discFormatToChdMode(undefined)).toBeUndefined();
     expect(discFormatToChdMode("")).toBeUndefined();
+  });
+});
+
+const hexBytes = (hex: string): Uint8Array =>
+  Uint8Array.from({ length: hex.length / 2 }, (_, index) => Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16));
+
+// The engine's `should_auto_infer_hard_disk` runs the same cases, so a loose
+// image the UI treats as a hard disk is one `chd create` makes a hard-disk CHD from.
+describe("hasChdHardDiskHeader", () => {
+  it.each(hardDiskHeaderCases)("$name", ({ hardDisk, size, writes }) => {
+    const prefix = new Uint8Array(1024);
+    for (const { at, hex } of writes) prefix.set(hexBytes(hex), at);
+    // Callers read at most the first two sectors of the image.
+    expect(hasChdHardDiskHeader(prefix.subarray(0, Math.min(size, 1024)), size)).toBe(hardDisk);
   });
 });
 

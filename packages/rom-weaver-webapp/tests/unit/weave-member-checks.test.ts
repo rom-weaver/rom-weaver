@@ -7,6 +7,7 @@ import {
 } from "../../src/lib/weave/weave-member-checks.ts";
 import type { WeaveApplySession } from "../../src/lib/weave/weave-session-model.ts";
 import type { ParsedIdentifyExpectedComponent, ParsedIdentifyResolution } from "../../src/types/identify.ts";
+import memberLaneCases from "../../../../crates/rom-weaver-cli/tests/fixtures/weave-member-lanes.json";
 
 const component = (overrides: Partial<ParsedIdentifyExpectedComponent> = {}): ParsedIdentifyExpectedComponent => ({
   ordinal: 0,
@@ -76,6 +77,20 @@ describe("memberComponent", () => {
 
   it("matches nothing when the member names no track and no file", () => {
     expect(memberComponent(components, "data.bin")).toBeUndefined();
+  });
+});
+
+// The CLI's `member_track_number` and `member_component` run the same cases, so
+// both sides fill the same member lanes.
+describe("shared member lane cases", () => {
+  it.each(memberLaneCases.trackNumbers)("reads track $track from $name", ({ name, track }) => {
+    expect(memberTrackNumber(name)).toBe(track ?? undefined);
+  });
+
+  const components = memberLaneCases.components.map((entry, ordinal) => component({ ...entry, ordinal }));
+  it.each(memberLaneCases.memberMatches)("matches $member to component $component", ({ member, component: index }) => {
+    const found = memberComponent(components, member);
+    expect(found ? components.indexOf(found) : null).toBe(index);
   });
 });
 
