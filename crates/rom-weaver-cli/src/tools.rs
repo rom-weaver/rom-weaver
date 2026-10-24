@@ -104,13 +104,7 @@ impl CliApp {
                 true,
             ),
         ] {
-            let resolve = if rom_filter {
-                Self::resolve_ppf_undo_rom_source
-            } else {
-                Self::resolve_source_with_auto_extract
-            };
-            let resolved = resolve(
-                self,
+            let resolved = self.resolve_source_with_auto_extract(
                 source,
                 select,
                 context,
@@ -127,6 +121,7 @@ impl CliApp {
                     kind_filter: Self::archive_entry_kind_filter(rom_filter, patch_filter),
                     stop_on_single_payload_codec: false,
                 },
+                rom_filter,
             )?;
             temp_paths.extend(resolved.cleanup_paths);
             if resolved.extracted_archives > 0 {

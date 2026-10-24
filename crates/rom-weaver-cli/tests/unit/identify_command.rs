@@ -184,10 +184,7 @@ fn identify_args(input: Option<PathBuf>, database: Vec<PathBuf>) -> IdentifyComm
         database_dir: None,
         exhaustive_database_search: false,
         subcommand: None,
-        select: Vec::new(),
-        filter: Vec::new(),
-        no_extract: false,
-        no_ignore: false,
+        selection: ArchiveSelectionArgs::default(),
         no_trim_fix: false,
         threads: ThreadBudget::Fixed(1),
     }

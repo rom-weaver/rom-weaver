@@ -634,6 +634,7 @@ impl CliApp {
                             kind_filter: run.input_kind_filter,
                             stop_on_single_payload_codec: false,
                         },
+                        false,
                     )
                     .map_err(|error| run.fail_error("prepare", error))?;
                 let ResolvedChecksumSource {
