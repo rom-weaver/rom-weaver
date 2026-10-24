@@ -130,6 +130,12 @@ disc_format?: string | null,
  */
 recommended_format?: string | null,
 /**
+ * Create mode (`cd`/`dvd`/`hd`/`raw`) the native `chd` auto-inference picks for a loose
+ * `.bin`/`.iso`/extensionless asset, read from the file's bytes. `None` for other extensions
+ * or when inference fails. Hosts read this instead of re-deriving it from a byte prefix.
+ */
+chd_create_mode?: string | null,
+/**
  * Disc-group id shared by a `.cue`/`.gdi` sheet and its tracks (multi-track disc grouping).
  */
 disc_group_id?: string | null,

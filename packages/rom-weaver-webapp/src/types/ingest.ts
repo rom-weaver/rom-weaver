@@ -23,6 +23,7 @@ export interface ParsedIngestRomAsset {
   platform?: string;
   discFormat?: string;
   recommendedFormat?: string;
+  chdCreateMode?: string;
   discGroupId?: string;
   trackNumber?: number;
   cueText?: string;
