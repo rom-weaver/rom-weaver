@@ -275,6 +275,21 @@ describe("useCombinedPatch", () => {
     expect(formats()).toEqual(expect.arrayContaining(["ips", "ebp", "ppf"]));
   });
 
+  it("orders formats by the largest known target when the final size is unknown", () => {
+    const run = vi.fn<Options["run"]>();
+    const { result } = renderHook(() =>
+      useCombinedPatch(
+        options(run, {
+          patchType: "ips",
+          romSize: 20 * 1024 * 1024,
+          ...getEnabledPatchTargetSizes([200 * 1024 * 1024, undefined], ["bps", "ips"], new Set()),
+        }),
+      ),
+    );
+    expect(result.current.outputProps.formatOptions?.[0]?.value).toBe("xdelta");
+    expect(result.current.outputProps.format).toBe("xdelta");
+  });
+
   it("uses the final declared target after an unknown intermediate size", () => {
     const run = vi.fn<Options["run"]>();
     const { result, rerender } = renderHook((sizes: Partial<Options>) => useCombinedPatch(options(run, sizes)), {

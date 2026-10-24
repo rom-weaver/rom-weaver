@@ -66,11 +66,15 @@ const useCombinedPatch = ({
   } | null>(null);
   const formatSizes = runSizes ?? { patchTargetSize, maxKnownTargetSize, romSize };
   // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
-  const knownTargetFormats = getSelectableCreatePatchFormats({ modifiedSize: formatSizes.maxKnownTargetSize });
-  const candidateFormats = getSelectableCreatePatchFormats({
+  // The largest known size also sets the best-first order, so the fallback matches its size bucket.
+  const knownTargetFormats = getSelectableCreatePatchFormats({
+    modifiedSize: Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0),
+  });
+  const finalTargetFormats = getSelectableCreatePatchFormats({
     originalSize: formatSizes.romSize,
     modifiedSize: formatSizes.patchTargetSize,
-  }).filter((value) => knownTargetFormats.includes(value));
+  });
+  const candidateFormats = knownTargetFormats.filter((value) => finalTargetFormats.includes(value));
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
