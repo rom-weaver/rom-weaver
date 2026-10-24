@@ -1,5 +1,5 @@
-use super::patch_apply::paths_refer_to_same_file;
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 
 struct TrimBatchConfig<'a> {
     explicit_output: Option<&'a Path>,
