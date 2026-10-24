@@ -22,7 +22,11 @@ pub(crate) fn utc_today() -> (i32, u32, u32) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-    civil_from_days((now.as_secs() / 86_400) as i64)
+    civil_date_from_unix_secs(now.as_secs())
+}
+
+fn civil_date_from_unix_secs(secs: u64) -> (i32, u32, u32) {
+    civil_from_days((secs / 86_400) as i64)
 }
 
 pub(crate) fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
@@ -43,7 +47,30 @@ pub(crate) fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::civil_from_days;
+    use super::{civil_date_from_unix_secs, civil_from_days, utc_today};
+
+    #[test]
+    fn unix_seconds_map_to_the_containing_utc_day() {
+        assert_eq!(civil_date_from_unix_secs(0), (1970, 1, 1));
+        assert_eq!(civil_date_from_unix_secs(86_399), (1970, 1, 1));
+        assert_eq!(civil_date_from_unix_secs(86_400), (1970, 1, 2));
+        assert_eq!(civil_date_from_unix_secs(1_700_000_000), (2023, 11, 14));
+    }
+
+    #[test]
+    fn utc_today_reads_the_current_clock() {
+        let (year, month, day) = utc_today();
+        assert!(year >= 2024, "year {year}");
+        assert!((1..=12).contains(&month));
+        assert!((1..=31).contains(&day));
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let expected = civil_date_from_unix_secs(secs);
+        // Tolerate a midnight rollover between the two clock reads.
+        assert!(expected == (year, month, day) || expected.2 != day);
+    }
 
     #[test]
     fn civil_date_tracks_the_unix_epoch() {

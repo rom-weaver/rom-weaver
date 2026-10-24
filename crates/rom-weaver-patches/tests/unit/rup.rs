@@ -16,11 +16,11 @@ use super::{
     SMD_BLOCK_SIZE, SNES_BANK_SIZE, apply_rup_prepared_records, apply_xor_records_in_place,
     build_rup_prepared_tasks, build_xor_records, collect_rup_chunk_records,
     collect_rup_records_parallel, copy_exact_bytes, copy_unif_payload_chunks,
-    create_rup_patch_bytes, create_rup_patch_parallel, deinterleave_smd_block,
-    deinterleave_snes_payload, encode_rup_patch, format_md5_hex, is_unif_payload_chunk, md5_bytes,
-    normalize_rup_input, parallel_chunked_capability, parse_rup_bytes, prepare_rup_write_task,
-    push_vlv, read_unif_chunk_header, read_xor_suffix, rebuild_unif_payload,
-    snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
+    create_rup_patch_bytes, create_rup_patch_parallel, current_utc_yyyymmdd,
+    deinterleave_smd_block, deinterleave_snes_payload, encode_rup_patch, format_md5_hex,
+    is_unif_payload_chunk, md5_bytes, normalize_rup_input, parallel_chunked_capability,
+    parse_rup_bytes, prepare_rup_write_task, push_vlv, read_unif_chunk_header, read_xor_suffix,
+    rebuild_unif_payload, snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
     write_n64_big_endian_to_temp, write_smd_deinterleaved_to_temp,
 };
 use crate::{
@@ -2582,4 +2582,14 @@ fn collect_rup_chunk_records_reads_zero_past_the_end_of_the_source() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].offset, 4);
     assert_eq!(records[0].xor, b"efgh".to_vec());
+}
+
+#[test]
+fn current_utc_date_is_an_eight_digit_yyyymmdd_string() {
+    let date = current_utc_yyyymmdd();
+    assert_eq!(date.len(), 8, "{date}");
+    assert!(date.bytes().all(|byte| byte.is_ascii_digit()), "{date}");
+    assert!(date.as_str() >= "20240101", "{date}");
+    assert!((1..=12).contains(&date[4..6].parse::<u32>().unwrap()));
+    assert!((1..=31).contains(&date[6..8].parse::<u32>().unwrap()));
 }
