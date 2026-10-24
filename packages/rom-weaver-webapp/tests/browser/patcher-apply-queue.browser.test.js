@@ -277,3 +277,98 @@ test("apply queued run cancels when staged patch validation fails", async () => 
     resolvePatchStaging();
   }
 });
+
+for (const clickTiming of ["before mismatch", "during mismatch"]) {
+  for (const finalMismatch of [false, true]) {
+    test(`queued Apply ${clickTiming} waits for checksum validation (final mismatch: ${finalMismatch})`, async () => {
+      const inputs = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin")];
+      const patches = [new File(["BPS1"], "chain-step-a.bps"), new File(["BPS1"], "chain-step-b.bps")];
+      let finishInput;
+      let finishPatches;
+      let finishValidation;
+      const inputStaging = new Promise((resolve) => {
+        finishInput = () => resolve([]);
+      });
+      const patchStaging = new Promise((resolve) => {
+        finishPatches = resolve;
+      });
+      const validation = new Promise((resolve) => {
+        finishValidation = resolve;
+      });
+      const mismatchInfos = patches.map((patch) => ({
+        fileName: patch.name,
+        checksumPreflightMismatch: true,
+        validationState: "invalid",
+        validationMessage: "Source requirements mismatch",
+      }));
+      const applyPatches = vi.fn(async () => createMockApplyResult());
+      const validatePatches = vi.fn(async () => validation);
+      const Harness = () => {
+        const { localNoticeController, localOutputController, localStackController, localUiController } =
+          useLocalApplyPatchFormSession({
+            applyPatches,
+            applyReady: true,
+            defaultSettings: { validation: { requireInputChecksumMatch: true } },
+            downloadOutput: () => undefined,
+            inputs,
+            patches,
+            stageInput: async () => inputStaging,
+            stagePatches: async () => patchStaging,
+            validatePatches,
+          });
+        return createElement(ApplyWorkflowFormView, {
+          controllers: {
+            notice: localNoticeController,
+            output: localOutputController,
+            patchStack: localStackController,
+            ui: localUiController,
+          },
+        });
+      };
+      const clickApply = () => {
+        const button = document.getElementById("rom-weaver-button-apply");
+        expect(button).toBeInstanceOf(HTMLButtonElement);
+        expect(button.disabled).toBe(false);
+        button.click();
+      };
+      try {
+        mount(createElement(Harness));
+        await waitForStagingProgress("rom");
+        if (clickTiming === "before mismatch") clickApply();
+        finishPatches(mismatchInfos);
+        await expect.poll(() => document.getElementById("rom-weaver-checkbox-checksum-override")).not.toBeNull();
+        if (clickTiming === "during mismatch") clickApply();
+        await expect
+          .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+          .toContain("Waiting for other actions");
+        expect(applyPatches).not.toHaveBeenCalled();
+        finishInput();
+        await expect.poll(() => document.querySelector(`[id^="rom-weaver-progress-rom"]`)).toBeNull();
+        expect(validatePatches).toHaveBeenCalled();
+        expect(applyPatches).not.toHaveBeenCalled();
+        finishValidation(
+          finalMismatch
+            ? mismatchInfos
+            : patches.map((patch) => ({
+                fileName: patch.name,
+                checksumPreflightMismatch: false,
+                validationState: "valid",
+              })),
+        );
+        if (finalMismatch) {
+          await expect.poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "").toBe("");
+          expect(applyPatches).not.toHaveBeenCalled();
+          expect(document.getElementById("rom-weaver-checkbox-checksum-override")?.checked).toBe(false);
+        } else {
+          await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+          expect(applyPatches.mock.calls[0][0].patches).toEqual(patches);
+          expect(applyPatches.mock.calls[0][0].options.validation.requireInputChecksumMatch).toBe(true);
+        }
+      } finally {
+        finishInput();
+        finishPatches([]);
+        finishValidation([]);
+      }
+    });
+  }
+}
