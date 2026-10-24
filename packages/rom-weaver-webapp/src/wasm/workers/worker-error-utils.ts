@@ -35,7 +35,7 @@ export function resolveWorkerErrorKind(
 ): RomWeaverWorkerErrorKind {
   // Prefer the typed kind the Rust core attached to the error (the generated
   // RomWeaverErrorKind, propagated from a failed event's `error_kind`). This is
-  // the canonical classification; the message-prefix regex below is only a
+  // the canonical classification; the message-prefix table below is only a
   // fallback for errors that arrive without it (worker/panic strings, or
   // messages wrapped in extra context).
   const explicit = normalizeWorkerErrorKind(readOptionalRecord(error)?.kind);
