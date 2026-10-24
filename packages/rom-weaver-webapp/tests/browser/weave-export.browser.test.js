@@ -1,4 +1,3 @@
-import { resolveWeaveChecks } from "../../src/lib/weave/weave-targets.ts";
 import { createElement, useState } from "react";
 import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
@@ -16,6 +15,11 @@ import {
   waitForApplyOutcome,
   waitForState,
 } from "./patcher-test-shared.js";
+
+// Look one check state up in a created weave; the app resolves references through Rust's
+// `weave parse`, so the lookup lives with this test that reads the raw create output.
+const resolveWeaveChecks = (weave, inline, reference) =>
+  reference ? weave.checkStates?.find((state) => state.id === reference)?.checks : inline;
 
 installPatcherTestHooks();
 

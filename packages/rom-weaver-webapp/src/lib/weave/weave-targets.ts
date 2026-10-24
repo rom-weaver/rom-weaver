@@ -1,4 +1,4 @@
-import type { ParsedWeave, ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
+import type { ParsedWeaveChecks, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { SelectionCandidate, SelectionChoice } from "../../types/selection.ts";
 
 const selectWeaveMembers = (
@@ -35,18 +35,6 @@ const weaveCheckTokens = (checks: ParsedWeaveChecks | undefined): string | undef
   const tokens = Object.entries(checks?.checksums || {}).map(([algorithm, hex]) => `${algorithm}=${hex}`);
   if (checks?.size !== undefined) tokens.push(`size=${checks.size}`);
   return tokens.length ? tokens.join(",") : undefined;
-};
-
-const resolveWeaveChecks = (
-  weave: ParsedWeave,
-  inline: ParsedWeaveChecks | undefined,
-  reference: string | undefined,
-): ParsedWeaveChecks | undefined => {
-  if (!reference) return inline;
-  if (inline) throw new Error(`Weave checks cannot declare both values and a reference: ${reference}`);
-  const states = weave.checkStates?.filter((state) => state.id === reference) || [];
-  if (states.length !== 1) throw new Error(`Weave check state is missing or duplicated: ${reference}`);
-  return states[0]?.checks;
 };
 
 type PatchDependency = {
@@ -191,7 +179,6 @@ export {
   gateWeaveChainChecks,
   readsWeaveRootRom,
   weaveCheckTokens,
-  resolveWeaveChecks,
   selectWeaveMembers,
   validatePatchDependencies,
 };
