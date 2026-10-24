@@ -600,6 +600,53 @@ test.each(["input", "output"])("malformed %s draft remains editable when embedde
   await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toBe(null);
 });
 
+test.each(["input", "output"])(
+  "an edited committed %s check stays editable when embedded checks arrive",
+  async (side) => {
+    const onMetaChange = vi.fn();
+    const metaField = side === "input" ? "inputChecks" : "outputChecks";
+    const Harness = () => {
+      const [staged, setStaged] = useState(false);
+      return createElement(
+        "div",
+        null,
+        createElement(
+          "button",
+          { id: "finish-staging", type: "button", onClick: () => setStaged(true) },
+          "Finish staging",
+        ),
+        createElement(PatchChecksDrawer, {
+          basisChoice: "base",
+          index: 0,
+          item: {
+            key: "patch-1",
+            fileName: "change.bps",
+            format: "bps",
+            validationValues: staged ? [`${side === "input" ? "in" : "out"} crc32=deadbeef`] : [],
+          },
+          meta: { [metaField]: { checksums: { crc32: "c6fb1252" } } },
+          onMetaChange,
+          patchStack: {},
+        }),
+      );
+    };
+    mount(createElement(Harness));
+    (await waitForState(() => document.querySelector(".patch-checks .cks-head"))).click();
+    const inputId = `rom-weaver-patch-${side}-crc32-0`;
+    const open = await waitForState(() => document.getElementById(`${inputId}-open`));
+    open.click();
+    const input = await waitForState(() => document.getElementById(inputId));
+    setFormControlValue(input, "0bad");
+    document.getElementById("finish-staging").click();
+    await expect.poll(() => document.querySelector(".patch-checks")?.textContent).toContain("deadbeef");
+    expect(document.getElementById(inputId)).toBe(input);
+    setFormControlValue(input, "0badf00d");
+    expect(document.getElementById(inputId)).toBe(input);
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await expect.poll(() => onMetaChange).toHaveBeenCalledWith({ [metaField]: { checksums: { crc32: "0badf00d" } } });
+  },
+);
+
 test("malformed draft follows its patch when reordered and clears when removed", async () => {
   mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();

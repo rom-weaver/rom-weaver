@@ -281,7 +281,12 @@ const PatchChecksDrawer = ({
                   invalid={!!invalidChecks[`${side}:${field}`]}
                   key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
                   mark={markFor(field)}
-                  onDraftChange={(raw) => validateDraft(side, field, raw)}
+                  onDraftChange={(raw) => {
+                    // Typing keeps the row an editor when its embedded value arrives mid-edit.
+                    const key = `${side}:${field}`;
+                    setDraftFields((previous) => (previous[key] ? previous : { ...previous, [key]: true }));
+                    validateDraft(side, field, raw);
+                  }}
                   onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
                   onRemove={() => removeCheck(side, field)}
                   value={userValue(field)}
