@@ -157,9 +157,10 @@ const formatRomIdentification = (identification: ParsedIdentifyResolution | unde
   return `Possible titles: ${names.join("; ")}`;
 };
 
-// The engine's dry run only knows the checksums embedded in the patch; the cheap preflight also knows
-// the file-name `[crc32:..]` token (the engine never sees it), so a preflight mismatch outranks a
-// passing dry run (only the first patch's token reaches the preflight). Other deep verdicts (invalid, deferred, unknown, pending) keep winning.
+// The engine's plan-mode dry run also honors file-name checksum tokens (`[crc32:..]`, `[md5:..]`, `[sha1:..]`,
+// `[size:..]`, `(bytes=..)`) for every patch, like native. The cheap preflight only covers the first patch's
+// crc32 token, so a preflight file-name mismatch still outranks a passing dry run as a guard. Other deep
+// verdicts (invalid, deferred, unknown, pending) keep winning.
 const isPreflightMismatchOverridingDeep = (patch: ApplyWorkflowPatchState): boolean =>
   patch.checksumPreflight?.status === "invalid" &&
   !!patch.checksumPreflight.requiredCrc32FromFilename &&

@@ -2,19 +2,6 @@ use super::*;
 
 use std::collections::BTreeMap;
 
-/// Expected hex length for a supported checksum algorithm, or `None` when the
-/// algorithm is unknown.
-pub(crate) fn checksum_hex_len(algorithm: &str) -> Option<usize> {
-    match algorithm {
-        "crc16" => Some(4),
-        "crc32" | "crc32c" | "adler32" => Some(8),
-        "md5" => Some(32),
-        "sha1" => Some(40),
-        "sha256" | "blake3" => Some(64),
-        _ => None,
-    }
-}
-
 /// A single parsed `--expect-in`/`--expect-out`/`--assume-in` token.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExpectToken {
@@ -75,7 +62,7 @@ pub fn parse_expect_token(raw: &str) -> std::result::Result<ExpectToken, String>
                     "`{trimmed}` is invalid; checksum must be hexadecimal"
                 ));
             }
-            let Some(expected_len) = checksum_hex_len(algo) else {
+            let Some(expected_len) = rom_weaver_checksum::checksum_hex_len(algo) else {
                 return Err(unsupported_checksum_algorithm_message(key_raw.trim()));
             };
             if hex.len() != expected_len {
