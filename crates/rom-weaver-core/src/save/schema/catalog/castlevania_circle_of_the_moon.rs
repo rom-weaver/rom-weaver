@@ -74,10 +74,9 @@ fn slot_group(slot: usize) -> layout::Group {
         predicates: vec![rules::Condition::new(move |bytes| {
             Ok(bytes[base + 0x10] != 0)
         })],
-        checksums: vec![checksum.clone()],
-        repairs: vec![layout::Repair::Checksum { checksum }],
         ..Default::default()
-    };
+    }
+    .with_checksum(checksum);
     layout::Group {
         id: format!("slot_{}", slot + 1),
         logical_offset: base + 0x10,
