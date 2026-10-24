@@ -1,6 +1,7 @@
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import {
+  ROM_WEAVER_CHECKSUM_ALGORITHMS,
   ROM_WEAVER_CONTAINER_FORMATS,
   ROM_WEAVER_PATCH_FORMATS,
 } from "../../wasm/generated/rom-weaver-format-metadata.ts";
@@ -22,7 +23,7 @@ const CONTAINER_EXTENSIONS: readonly string[] = ROM_WEAVER_CONTAINER_FORMATS.fla
   format.capabilities.extract ? format.extensions.slice(0, 1) : [],
 );
 /** Matches the algorithm list in docs/reference/formats.md#checksum-support. */
-const CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32"] as const;
+const CHECKSUM_ALGORITHMS = ROM_WEAVER_CHECKSUM_ALGORITHMS.map((algorithm) => algorithm.id);
 
 type HomeRoute = {
   body: MessageId;

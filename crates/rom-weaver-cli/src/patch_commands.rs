@@ -670,7 +670,7 @@ impl CliApp {
                     "{flag_name} value `{trimmed}` is invalid; checksum must be hexadecimal"
                 )));
             }
-            let Some(expected_hex_len) = super::expect_tokens::checksum_hex_len(&algorithm) else {
+            let Some(expected_hex_len) = rom_weaver_checksum::checksum_hex_len(&algorithm) else {
                 return Err(RomWeaverError::Validation(format!(
                     "{flag_name} uses {}",
                     unsupported_checksum_algorithm_message(algorithm_raw.trim())

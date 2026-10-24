@@ -2275,6 +2275,55 @@ export const ROM_WEAVER_Z3DS_SUBTYPES = [
   }
 ] as const;
 
+export const ROM_WEAVER_CHECKSUM_ALGORITHMS = [
+  {
+    "hexLength": 8,
+    "id": "crc32",
+    "label": "CRC32"
+  },
+  {
+    "hexLength": 32,
+    "id": "md5",
+    "label": "MD5"
+  },
+  {
+    "hexLength": 40,
+    "id": "sha1",
+    "label": "SHA-1"
+  },
+  {
+    "hexLength": 64,
+    "id": "sha256",
+    "label": "SHA-256"
+  },
+  {
+    "hexLength": 64,
+    "id": "blake3",
+    "label": "BLAKE3"
+  },
+  {
+    "hexLength": 8,
+    "id": "crc32c",
+    "label": "CRC32C"
+  },
+  {
+    "hexLength": 4,
+    "id": "crc16",
+    "label": "CRC16"
+  },
+  {
+    "hexLength": 8,
+    "id": "adler32",
+    "label": "Adler-32"
+  }
+] as const;
+
+export const ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS = [
+  "crc32",
+  "md5",
+  "sha1"
+] as const;
+
 export const ROM_WEAVER_ERROR_KIND_PREFIXES = [
   {
     "kind": "validation",

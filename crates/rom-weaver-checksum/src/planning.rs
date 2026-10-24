@@ -64,38 +64,16 @@ where
 }
 
 pub(super) fn plan_checksum(algorithms: &[Algorithm], range: &ResolvedRange) -> ChecksumPlan {
-    if algorithms == [Algorithm::Crc32] && range.len >= CRC32_PARALLEL_THRESHOLD {
-        let max_threads = parallel_crc32_max_threads(range.len);
+    if let [algorithm] = algorithms
+        && let Some(entry) = PARALLEL_SINGLE_ALGORITHM_TABLE
+            .iter()
+            .find(|entry| entry.algorithm == *algorithm)
+        && range.len >= entry.threshold
+    {
+        let max_threads =
+            parallel_max_threads(range.len, entry.min_bytes_per_thread, entry.max_threads);
         if max_threads > 1 {
-            return ChecksumPlan::parallel(ChecksumMode::ParallelCrc32, max_threads);
-        }
-    }
-
-    if algorithms == [Algorithm::Crc32c] && range.len >= CRC32C_PARALLEL_THRESHOLD {
-        let max_threads = parallel_crc32c_max_threads(range.len);
-        if max_threads > 1 {
-            return ChecksumPlan::parallel(ChecksumMode::ParallelCrc32c, max_threads);
-        }
-    }
-
-    if algorithms == [Algorithm::Crc16] && range.len >= CRC16_PARALLEL_THRESHOLD {
-        let max_threads = parallel_crc16_max_threads(range.len);
-        if max_threads > 1 {
-            return ChecksumPlan::parallel(ChecksumMode::ParallelCrc16, max_threads);
-        }
-    }
-
-    if algorithms == [Algorithm::Adler32] && range.len >= ADLER32_PARALLEL_THRESHOLD {
-        let max_threads = parallel_adler32_max_threads(range.len);
-        if max_threads > 1 {
-            return ChecksumPlan::parallel(ChecksumMode::ParallelAdler32, max_threads);
-        }
-    }
-
-    if algorithms == [Algorithm::Blake3] && range.len >= BLAKE3_PARALLEL_THRESHOLD {
-        let max_threads = parallel_blake3_max_threads(range.len);
-        if max_threads > 1 {
-            return ChecksumPlan::parallel(ChecksumMode::ParallelBlake3, max_threads);
+            return ChecksumPlan::parallel(entry.mode, max_threads);
         }
     }
 
