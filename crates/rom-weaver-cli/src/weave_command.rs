@@ -345,6 +345,7 @@ impl CliApp {
                     patch.descriptor = Some(self.build_patch_descriptor(
                         Path::new(extracted_path),
                         None,
+                        None,
                         context,
                     )?);
                 }

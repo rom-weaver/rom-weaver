@@ -340,3 +340,24 @@ test.each([
   expect(includeRom.checked).toBe(true);
   expect(document.getElementById("rom-weaver-weave-export-format").value).toBe("7z");
 });
+
+test("weave create keeps `:` file names exportable by naming the archive member without it", async () => {
+  const [romFile, patchBytes] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    loadFixtureFile(RAW_PATCH).then((file) => file.arrayBuffer()),
+  ]);
+  const patchName = "hack [crc32:1a2b3c4d].ips";
+  const created = await browserRuntime.weave.create?.({
+    noWeaveRom: true,
+    patches: [{ fileName: patchName, source: new File([patchBytes], patchName) }],
+    rom: { fileName: romFile.name, source: romFile },
+    weaveFileName: "colon-names.zip",
+  });
+  if (!created) throw new Error("Weave create is unavailable");
+  try {
+    expect(created.result.weave.patches[0].path).toBe("hack [crc32_1a2b3c4d].ips");
+  } finally {
+    await created.weaveOutput.dispose().catch(() => undefined);
+    await created.archiveOutput?.dispose().catch(() => undefined);
+  }
+});

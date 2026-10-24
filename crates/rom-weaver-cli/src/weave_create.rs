@@ -996,6 +996,9 @@ fn assign_weave_member_paths(
 ) -> Result<()> {
     let mut members: Vec<(String, PathBuf)> = Vec::new();
     let mut assign = |source: &Path, preferred: String| -> Result<String> {
+        // Weave paths may never contain `:` (weave_parse rejects it), but input names can,
+        // e.g. `hack [crc32:1a2b3c4d].ips`; the member name inside the archive is ours to pick.
+        let preferred = preferred.replace(':', "_");
         if let Some((member, _)) = members
             .iter()
             .find(|(_, existing)| same_weave_payload(existing, source))
