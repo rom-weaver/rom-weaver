@@ -1,7 +1,8 @@
 import type { SourceMetadata } from "../../types/workflow-source.ts";
 import { parseCueFile, replaceCuePatchFileName } from "../../workers/protocol/cue-file-utils.ts";
 
-// Header checks MUST match crates/rom-weaver-containers/src/chd/infer.rs before CD inference.
+// Header checks MUST match crates/rom-weaver-containers/src/chd/infer.rs before CD inference;
+// both run the cases in crates/rom-weaver-containers/tests/fixtures/chd-hard-disk-headers.json.
 const hasChdHardDiskHeader = (bytes: Uint8Array, size: number): boolean => {
   if (size < 512 || size % 512 !== 0 || bytes.length < 512) return false;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
