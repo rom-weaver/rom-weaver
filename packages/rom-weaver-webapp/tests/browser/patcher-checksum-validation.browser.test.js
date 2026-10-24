@@ -522,11 +522,15 @@ test("malformed output check draft disables Download weave until corrected", asy
   toggle.click();
   await expect.poll(() => toggle.checked).toBe(false);
   await expect.poll(() => exportButton()?.disabled).toBe(true);
+  // The reason sits beside the action, so it stays visible with the drawer collapsed.
+  const exportNotice = () => exportButton()?.parentElement?.querySelector(".notice.error");
+  await expect.poll(() => exportNotice()?.textContent).toContain("40");
   toggle.click();
   await expect.poll(() => toggle.checked).toBe(true);
   setFormControlValue(input, "");
   input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   await expect.poll(() => exportButton()?.disabled).toBe(false);
+  expect(exportNotice()).toBeNull();
 });
 
 test.each(["9007199254740992", "9".repeat(310)])("unsafe byte count %s cannot replace exact metadata", async (raw) => {

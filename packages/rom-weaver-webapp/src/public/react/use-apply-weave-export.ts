@@ -84,6 +84,7 @@ const useApplyWeaveExport = ({
     initialWeaveRom: defaultWeaveContents === "rom",
     initialFormat: defaultWeaveFormat,
     ready: weaveExportReady && !weaveValidationError,
+    blockedReason: weaveValidationError || undefined,
     onComplete: (result) => {
       props.onWeaveExportComplete?.(result);
       props.onBundleExportComplete?.(toBundleCreateResult(result));

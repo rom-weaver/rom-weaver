@@ -2024,7 +2024,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               weaveRom: weaveExport.weaveRom,
               busy: weaveExport.busy,
               downloadable: weaveExport.downloadable,
-              error: weaveExport.error || null,
+              error: weaveExport.error || weaveExport.blockedReason || null,
               format: weaveExport.format,
               progress: weaveExport.progress,
               ready: weaveExport.ready,
