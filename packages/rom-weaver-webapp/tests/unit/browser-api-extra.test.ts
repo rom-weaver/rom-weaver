@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   readBrowserOpfsPrefix: vi.fn(),
   scheduleBrowserRuntimeWarmupExtraction: vi.fn(),
   runtime: {
-    compression: { create: vi.fn() },
+    compression: { create: vi.fn(), probe: vi.fn() },
     output: { createSource: vi.fn() },
     ingest: { run: vi.fn() },
     patch: { createPatchCandidates: vi.fn() },
@@ -249,7 +249,8 @@ describe("browser runtime helpers", () => {
     mocks.runtime.workerIo.createWorkerOutput.mockResolvedValue(raw);
     mocks.runtime.compression.create.mockResolvedValue({ output: compressed });
     mocks.runtime.output.createSource.mockResolvedValue(compressed);
-    mocks.readBrowserOpfsPrefix.mockResolvedValue(new Uint8Array(2048));
+    // The engine reports the create mode native `chd` auto-inference picks for the restored bytes.
+    mocks.runtime.compression.probe.mockResolvedValue({ chdCreateMode: "dvd", entries: [] });
     await api.undoPpf({
       rom: blob("game.bin"),
       patch: blob("undo.ppf"),
@@ -266,9 +267,9 @@ describe("browser runtime helpers", () => {
       }),
     );
     if (genuine) {
-      expect(mocks.readBrowserOpfsPrefix).not.toHaveBeenCalled();
+      expect(mocks.runtime.compression.probe).not.toHaveBeenCalled();
     } else {
-      expect(mocks.readBrowserOpfsPrefix).toHaveBeenCalledExactlyOnceWith(raw.path, 2048, undefined);
+      expect(mocks.runtime.compression.probe).toHaveBeenCalledOnce();
       expect(mocks.runtime.compression.create.mock.calls[0]?.[0].romSpecific.chd.sourceMode).toBeUndefined();
     }
     expect(vfs.getFile).not.toHaveBeenCalled();

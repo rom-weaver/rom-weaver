@@ -713,6 +713,7 @@ const attachBareRomIngestMetadata = async (
       discFormat: asset.discFormat,
       platform: asset.platform,
       recommendedFormat: asset.recommendedFormat,
+      chdCreateMode: asset.chdCreateMode,
     });
     if (romType) (file as { romType?: typeof romType }).romType = romType;
     // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike

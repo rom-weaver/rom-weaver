@@ -113,7 +113,7 @@ describe("compress service", () => {
     bytes.fill(255, 1, 11);
     const source = file("disc.bin", bytes);
     const { create, runtime } = makeRuntime();
-    Object.assign(runtime.compression, { probe: async () => ({ entries: [], discFormat: "CD" }) });
+    Object.assign(runtime.compression, { probe: async () => ({ entries: [], discFormat: "CD", chdCreateMode: "cd" }) });
     await compressFiles([source], options("chd"), runtime);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -130,7 +130,9 @@ describe("compress service", () => {
     const source = file("disc.iso", new Uint8Array(2048));
     const read = vi.spyOn(source, "arrayBuffer");
     const { create, cleanup, runtime } = makeRuntime();
-    expect((await getCompressSource([source]))?.metadata).toMatchObject({ mode: "cd" });
+    // The engine probe reports the create mode native `chd` auto-inference picks from the bytes.
+    Object.assign(runtime.compression, { probe: async () => ({ entries: [], chdCreateMode: "cd" }) });
+    expect((await getCompressSource([source], async () => runtime))?.metadata).toMatchObject({ mode: "cd" });
     const output = await compressFiles([source], options("chd"), runtime);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({

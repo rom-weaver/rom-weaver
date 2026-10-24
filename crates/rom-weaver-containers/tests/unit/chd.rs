@@ -923,9 +923,7 @@ fn has_known_volume_boot_sector_recognizes_each_filesystem() {
     assert!(!handler.has_known_volume_boot_sector(&signed_sector(), HD_VOLUME_BYTES));
 }
 
-/// The webapp's `hasChdHardDiskHeader` runs the same cases on the same prefix,
-/// so a loose image the UI treats as a hard disk is one `chd create` makes a
-/// hard-disk CHD from.
+/// Runs the shared cases on the same prefix the webapp used to check itself.
 #[test]
 fn hard_disk_headers_match_the_shared_cases() {
     let cases: serde_json::Value =
@@ -957,6 +955,94 @@ fn hard_disk_headers_match_the_shared_cases() {
             "{name}"
         );
     }
+}
+
+/// Writes `bytes` to a scratch file named `name` and returns the auto-inferred create mode.
+fn auto_create_mode(name: &str, bytes: &[u8]) -> Option<&'static str> {
+    let path = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-auto-{name}", std::process::id())),
+    );
+    std::fs::write(&path, bytes).expect("write image");
+    ChdContainerHandler.infer_auto_create_mode_label(&path)
+}
+
+fn cooked_image(sectors: usize, descriptors: &[(usize, u8, &[u8])]) -> Vec<u8> {
+    let mut bytes = vec![0_u8; sectors * 2048];
+    for (sector, kind, id) in descriptors {
+        bytes[sector * 2048] = *kind;
+        bytes[sector * 2048 + 1..sector * 2048 + 1 + id.len()].copy_from_slice(id);
+    }
+    bytes
+}
+
+#[test]
+fn auto_create_mode_label_follows_native_cooked_image_rules() {
+    let bridge = cooked_image(
+        40,
+        &[
+            (16, 1, b"CD001"),
+            (17, 255, b"CD001"),
+            (18, 0, b"BEA01"),
+            (19, 0, b"NSR02"),
+        ],
+    );
+    for name in ["bridge.bin", "bridge.iso", "bridge"] {
+        assert_eq!(auto_create_mode(name, &bridge), Some("dvd"), "{name}");
+    }
+    let udf = cooked_image(40, &[(16, 0, b"BEA01"), (17, 0, b"NSR03")]);
+    assert_eq!(auto_create_mode("udf.bin", &udf), Some("dvd"));
+    let plain = cooked_image(
+        40,
+        &[(16, 1, b"CD001"), (17, 0, b"BEA01"), (18, 1, b"NSR02")],
+    );
+    assert_eq!(auto_create_mode("plain.bin", &plain), Some("cd"));
+    assert_eq!(auto_create_mode("plain.iso", &plain), Some("cd"));
+    // UDF announced past the scanned volume recognition window is not UDF evidence.
+    let late = cooked_image(40, &[(16, 1, b"CD001"), (32, 0, b"NSR02")]);
+    assert_eq!(auto_create_mode("late.bin", &late), Some("cd"));
+    // A ragged tail is not whole sectors, so there is no CD evidence.
+    let mut ragged = bridge.clone();
+    ragged.push(0);
+    assert_eq!(auto_create_mode("ragged.bin", &ragged), Some("raw"));
+}
+
+#[test]
+fn auto_create_mode_label_recognizes_raw_cd_and_unrecognized_bins() {
+    let mut raw = vec![0_u8; 40 * 2352];
+    raw[1..11].fill(255);
+    assert_eq!(auto_create_mode("raw.bin", &raw), Some("cd"));
+    for size in [13_usize, 4096, 32768, 2352, 2352 * 20] {
+        assert_eq!(
+            auto_create_mode("blank.bin", &vec![0_u8; size]),
+            Some("raw"),
+            "{size}-byte blank bin"
+        );
+    }
+    // A cooked ISO without an ISO9660 descriptor is still a CD-sized single track.
+    assert_eq!(auto_create_mode("disc.iso", &vec![0_u8; 2048]), Some("cd"));
+}
+
+#[test]
+fn auto_create_mode_label_prefers_hard_disk_headers_over_cd_evidence() {
+    let mut bytes = vec![0_u8; 204_800];
+    bytes[32_769..32_774].copy_from_slice(b"CD001");
+    // A boot signature alone is not hard-disk evidence.
+    bytes[510] = 0x55;
+    bytes[511] = 0xaa;
+    assert_eq!(auto_create_mode("hybrid.bin", &bytes), Some("cd"));
+    // One valid MBR partition entry makes it a hard disk.
+    bytes[450] = 0x83;
+    bytes[454..458].copy_from_slice(&1_u32.to_le_bytes());
+    bytes[458..462].copy_from_slice(&399_u32.to_le_bytes());
+    for name in ["hybrid.bin", "hybrid"] {
+        assert_eq!(auto_create_mode(name, &bytes), Some("hd"), "{name}");
+    }
+}
+
+#[test]
+fn auto_create_mode_label_skips_other_extensions() {
+    assert_eq!(auto_create_mode("game.nes", &[0_u8; 4096]), None);
+    assert_eq!(auto_create_mode("game.cue", &[0_u8; 4096]), None);
 }
 
 #[test]

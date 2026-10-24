@@ -349,6 +349,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
                 discFormat: asset.discFormat,
                 platform: asset.platform,
                 recommendedFormat: asset.recommendedFormat,
+                chdCreateMode: asset.chdCreateMode,
               }),
               size: asset.sizeBytes,
               ...(typeof asset.trackNumber === "number" ? { trackNumber: asset.trackNumber } : {}),
