@@ -1,4 +1,3 @@
-import { readBrowserOpfsPrefix } from "../../src/workers/protocol/browser-opfs-worker-client.ts";
 import { createPatchFileFromPublicOutput } from "../../src/lib/runtime/public-output-bin-file.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,14 +46,11 @@ import {
   createPatchFileFromRuntimeOutput,
 } from "../../src/lib/output/archive-output-service.ts";
 
-vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ readBrowserOpfsPrefix: vi.fn() }));
-
 const mockCreateArchivePatchFileOutput = vi.mocked(createArchivePatchFileOutput);
 const mockCreatePatchFileFromRuntimeOutput = vi.mocked(createPatchFileFromRuntimeOutput);
 
 describe("buildSessionOutputFiles", () => {
   beforeEach(() => {
-    vi.mocked(readBrowserOpfsPrefix).mockReset();
     mockCreateArchivePatchFileOutput.mockReset();
     mockCreatePatchFileFromRuntimeOutput.mockReset();
     vi.mocked(createArchiveEntryInputFromPatchFile).mockClear();
@@ -443,32 +439,51 @@ describe("lazy CHD output codec planning", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it.each(["unreadable source", "aborted"])("propagates %s probe failures before compression", async (message) => {
+  it("propagates an abort raised while the engine probes the output bytes", async () => {
     const blob = new Blob([new Uint8Array(2352)]);
     const file = await createPatchFileFromPublicOutput(
-      {
-        fileName: "disc.bin",
-        path: "/disc.bin",
-        size: blob.size,
-        vfs: { normalizePath: (path: string) => path },
-      } as never,
+      { fileName: "disc.bin", size: blob.size, blob } as never,
       "disc.bin",
       { materializeBlob: false },
     );
-    const error = new Error(message);
-    const probe = vi.mocked(readBrowserOpfsPrefix).mockRejectedValue(error);
+    const controller = new AbortController();
+    const reason = new Error("aborted");
+    const probe = vi.fn(async () => {
+      controller.abort(reason);
+      throw new Error("probe interrupted");
+    });
     const create = vi.fn();
-    const signal = new AbortController().signal;
     await expect(
       createSingleFileRomSpecificOutput({
         compression: "chd",
         outputFile: file,
-        options: { signal } as never,
+        options: { signal: controller.signal } as never,
         runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
       }),
-    ).rejects.toBe(error);
-    expect(probe.mock.calls[0]?.[2]).toBe(signal);
+    ).rejects.toBe(reason);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the generic raw codecs when the engine cannot probe the output bytes", async () => {
+    const blob = new Blob([new Uint8Array(2352)]);
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.bin", size: blob.size, blob } as never,
+      "disc.bin",
+      { materializeBlob: false },
+    );
+    const probe = vi.fn(async () => {
+      throw new Error("no registered handler matched");
+    });
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
+      runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+    });
+    expect(probe).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe("lzma");
   });
 
   it.each(["cd", "dvd"])("preserves explicit %s mode and codecs without probing", async (mode) => {
@@ -479,7 +494,7 @@ describe("lazy CHD output codec planning", () => {
       "disc.bin",
       { materializeBlob: false },
     );
-    const probe = vi.mocked(readBrowserOpfsPrefix).mockReset();
+    const probe = vi.fn();
     const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
     mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
     await createSingleFileRomSpecificOutput({
@@ -499,60 +514,48 @@ describe("lazy CHD output codec planning", () => {
   });
 
   it.each([
-    [true, undefined, "lzma"],
-    [false, undefined, "cdzl"],
-    [true, { mode: "cd" }, "cdzl"],
-  ])("probes an unidentified lazy ISO for UDF (udf=%s, metadata=%o)", async (udf, metadata, codec) => {
-    const bytes = new Uint8Array(100 * 2048);
-    bytes.set([1, 67, 68, 48, 48, 49], 16 * 2048);
-    if (udf) bytes.set([0, 78, 83, 82, 48, 50], 17 * 2048);
-    const blob = new Blob([bytes]);
-    const slice = vi.spyOn(blob, "slice");
-    const file = await createPatchFileFromPublicOutput(
-      { fileName: "disc.iso", size: blob.size, blob } as never,
-      "disc.iso",
-      { materializeBlob: false },
-    );
-    if (metadata) file.metadata = metadata as never;
-    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
-    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
-    await createSingleFileRomSpecificOutput({
-      compression: "chd",
-      outputFile: file,
-      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
-      runtime: { compression: { create, probe: vi.fn() } } as unknown as WorkflowRuntime,
-    });
-    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
-    if (metadata) expect(slice).not.toHaveBeenCalled();
-    else expect(slice).toHaveBeenCalledExactlyOnceWith(0, 32 * 2048);
-  });
+    ["dvd", undefined, "lzma"],
+    ["cd", undefined, "cdzl"],
+    ["dvd", { mode: "cd" }, "cdzl"],
+  ])(
+    "asks the engine for an unidentified lazy ISO's create mode (verdict=%s, metadata=%o)",
+    async (verdict, metadata, codec) => {
+      const blob = new Blob([new Uint8Array(100 * 2048)]);
+      const slice = vi.spyOn(blob, "slice");
+      const file = await createPatchFileFromPublicOutput(
+        { fileName: "disc.iso", size: blob.size, blob } as never,
+        "disc.iso",
+        { materializeBlob: false },
+      );
+      if (metadata) file.metadata = metadata as never;
+      const probe = vi.fn(async () => ({ chdCreateMode: verdict, entries: [] }));
+      const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+      mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+      await createSingleFileRomSpecificOutput({
+        compression: "chd",
+        outputFile: file,
+        options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
+        runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+      });
+      expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
+      // An identified source keeps its metadata mode; only an unidentified one needs the engine verdict.
+      expect(probe).toHaveBeenCalledTimes(metadata ? 0 : 1);
+      expect(slice).not.toHaveBeenCalled();
+    },
+  );
 
+  // The Rust verdict (native `chd` auto-inference over the patched bytes) picks the codec set; the
+  // original ROM's identity metadata does not.
   it.each([
-    ["blob", "sync", "raw"],
-    ["vfs", "sync", "raw"],
-    ["blob", "iso2048", "raw"],
-    ["blob", "hybrid", "raw"],
-    ["vfs", "hybrid", "raw"],
-    ["vfs", "iso2352", "raw"],
-    ["blob", "iso2352", "raw"],
-    ["blob", "raw", "sync"],
-    ["vfs", "raw", "sync"],
-  ])("uses patched %s %s bytes instead of original %s bytes", async (storage, signature, originalSignature) => {
-    const sectorSize = signature === "iso2048" || signature === "hybrid" ? 2048 : 2352;
-    const bytes = new Uint8Array(100 * sectorSize);
-    if (signature === "sync") bytes.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
-    if (signature.startsWith("iso")) bytes.set([67, 68, 48, 48, 49], 16 * sectorSize + (sectorSize === 2048 ? 1 : 17));
-    if (signature === "hybrid") {
-      bytes.set([67, 68, 48, 48, 49], 32769);
-      bytes.set([0x55, 0xaa], 510);
-      bytes[450] = 0x83;
-      const view = new DataView(bytes.buffer);
-      view.setUint32(454, 1, true);
-      view.setUint32(458, 399, true);
-    }
-    const originalBytes = new Uint8Array(bytes.length);
-    if (originalSignature === "sync") originalBytes.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
-    const original = await createPatchFile({ data: originalBytes, fileName: "game.bin" }, "game.bin");
+    ["blob", "cd", "cdzl"],
+    ["vfs", "cd", "cdzl"],
+    ["blob", "dvd", "lzma"],
+    ["vfs", "hd", "lzma"],
+    ["blob", "raw", "lzma"],
+    ["vfs", "raw", "lzma"],
+  ])("uses the engine verdict for patched %s bytes (%s)", async (storage, verdict, codec) => {
+    const bytes = new Uint8Array(100 * 2352);
+    const original = await createPatchFile({ data: new Uint8Array(bytes.length), fileName: "game.bin" }, "game.bin");
     original.metadata = { format: "CD" };
     const blob = new Blob([bytes]);
     const slice = vi.spyOn(blob, "slice");
@@ -567,10 +570,7 @@ describe("lazy CHD output codec planning", () => {
     );
     patched.metadata = { format: "CD" };
     const materialize = vi.spyOn(patched, "materialize");
-    const probe = vi
-      .mocked(readBrowserOpfsPrefix)
-      .mockReset()
-      .mockResolvedValue(bytes.subarray(0, 32 * 2048));
+    const probe = vi.fn(async () => ({ chdCreateMode: verdict, entries: [] }));
     const create = vi.fn(async () => ({ output: { fileName: "patched.chd" } }));
     mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "patched.chd"));
     await buildSessionOutputFiles(
@@ -581,20 +581,16 @@ describe("lazy CHD output codec planning", () => {
       } as never,
       { compression: { create, probe } } as unknown as WorkflowRuntime,
     );
-    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(
-      signature === "raw" || signature === "hybrid" ? "lzma" : "cdzl",
-    );
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
     expect(create.mock.calls[0]?.[0].romSpecific.chd.mode).toBe("auto");
     expect(create.mock.calls[0]?.[0].romSpecific.chd.sourceMode).toBeUndefined();
     expect(materialize).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();
-    if (storage === "vfs") {
-      expect(probe).toHaveBeenCalledExactlyOnceWith("/patched.bin", 32 * 2048, undefined);
-      expect(slice).not.toHaveBeenCalled();
-    } else {
-      expect(probe).not.toHaveBeenCalled();
-      expect(slice).toHaveBeenCalledExactlyOnceWith(0, 32 * 2048);
-    }
+    expect(slice).not.toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledOnce();
+    const probed = (probe.mock.calls[0] as unknown as [{ source: unknown }])[0].source;
+    if (storage === "vfs") expect(JSON.stringify(probed)).toContain("/patched.bin");
+    else expect(probed).toBeInstanceOf(Blob);
   });
 });
 

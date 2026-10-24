@@ -1,5 +1,3 @@
-import { createBinaryObjectReader } from "../../storage/shared/binary/binary-source-utils.ts";
-import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import {
   createCompressionProgressLabel,
   getProgressEventPercent,
@@ -33,7 +31,6 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
-  CHD_MEDIA_PROBE_BYTES,
   chdModeFromMetadata,
   getChdAutoCreateMode,
   isLooseChdAutoSource,
@@ -124,29 +121,28 @@ const getRvzOptions = (
 const getOutputChdAutoMode = async (
   file: PatchFileInstance,
   options: OutputWorkflowOptions | undefined,
+  runtime: WorkflowRuntime | undefined,
 ): Promise<string> => {
   const mode = getChdAutoCreateMode(file);
   // An unidentified `.iso` also needs its bytes: native `auto` reads UDF to pick DVD.
   const unidentifiedIso =
     /\.iso$/i.test(file.fileName) && !chdModeFromMetadata(file.metadata) && !file.metadata?.cuePath;
-  if (!((isLooseChdAutoSource(file) || unidentifiedIso) && isLazyExternalPatchFile(file))) return mode;
-  const size = file.fileSize;
-  if (!(size > 0)) return mode;
+  if (!(isLooseChdAutoSource(file) || unidentifiedIso)) return mode;
+  if (!(file.fileSize > 0)) return mode;
   if (!/\.(bin|iso)$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
-  const sourceRef = getPatchFileExternalSource(file, file.fileName);
-  if (!sourceRef) return mode;
+  // The patched bytes are new, so ask the engine which create mode native `auto` picks for them. A probe
+  // failure (opaque bytes) keeps the structural/metadata mode.
   options?.signal?.throwIfAborted();
-  const length = Math.min(size, CHD_MEDIA_PROBE_BYTES);
-  let prefix: Uint8Array;
-  if (sourceRef.source instanceof Blob) {
-    prefix = await createBinaryObjectReader(sourceRef.source).readRange(0, length);
-  } else {
-    const sourcePath = isVfsFileRef(sourceRef.source) ? sourceRef.source.path : file.filePath;
-    if (!sourcePath) return mode;
-    prefix = await readBrowserOpfsPrefix(sourcePath, length, options?.signal);
+  try {
+    const result = await runtime?.compression.probe?.({
+      source: createRuntimeSourceFromPatchFile(file, file.fileName),
+    });
+    return result?.chdCreateMode || mode;
+  } catch (error) {
+    options?.signal?.throwIfAborted();
+    traceOutputName(options, "output.chd.auto-mode.probe-failed", { error: String(error), fileName: file.fileName });
+    return mode;
   }
-  options?.signal?.throwIfAborted();
-  return getChdAutoCreateMode({ _u8array: prefix, fileName: file.fileName, fileSize: size });
 };
 
 const createOutputPlan = async ({
@@ -155,12 +151,14 @@ const createOutputPlan = async ({
   patchedFileName,
   romFile,
   chdAutoModeFile = romFile,
+  runtime,
 }: {
   compression: string;
   options: OutputWorkflowOptions | undefined;
   patchedFileName: string;
   romFile: PatchFileInstance;
   chdAutoModeFile?: PatchFileInstance;
+  runtime?: WorkflowRuntime;
 }): Promise<PatchedOutputPlan> => {
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
@@ -175,7 +173,7 @@ const createOutputPlan = async ({
   });
   const chdAutoMode =
     compression === "chd" && (!archiveSettings.chdOutputMode || archiveSettings.chdOutputMode === "auto")
-      ? await getOutputChdAutoMode(chdAutoModeFile, options)
+      ? await getOutputChdAutoMode(chdAutoModeFile, options, runtime)
       : "raw";
   return createPatchedOutputPlan({
     chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
@@ -336,6 +334,7 @@ const createSingleFileRomSpecificOutput = async ({
     options,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
     romFile: outputFile,
+    runtime,
   });
   const outputs = await createRuntimeRomSpecificOutputFiles(compression, outputFile, outputPlan, options, runtime);
   if (!outputs?.[0]) return null;
@@ -361,6 +360,7 @@ const buildOutputFiles = async (
     patchedFileName: patchedRom.fileName,
     romFile,
     chdAutoModeFile: patchedRom,
+    runtime,
   });
   if (isArchiveCompressionFormat(compression)) {
     const archiveEntryFileName =
