@@ -344,7 +344,7 @@ fn run_staged(
     {
         let mut source = File::open(input)?;
         let mut output = File::create_new(&payload)?;
-        copy_cancelable(&mut source, &mut output)?;
+        copy_cancelable(&mut source, &mut output, &process_cancellation_token())?;
     }
     let fallback_files = fallback.map(|path| vec![serde_json::json!({ "path": path })]);
     let files = terminal
@@ -384,7 +384,11 @@ fn run_staged(
     }
     trace!(path = %path.display(), "copying completed binary output to stdout");
     let mut source = File::open(path)?;
-    match copy_cancelable(&mut source, &mut stdout_writer()) {
+    match copy_cancelable(
+        &mut source,
+        &mut stdout_writer(),
+        &process_cancellation_token(),
+    ) {
         Ok(_) => Ok(ExitCode::SUCCESS),
         Err(RomWeaverError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe => {
             Ok(ExitCode::SUCCESS)

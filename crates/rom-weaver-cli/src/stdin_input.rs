@@ -67,7 +67,11 @@ mod native {
         rom_weaver_core::register_live_temp_dir(&path);
         let spool = StdinSpool { path: path.clone() };
         let copied = (|| -> crate::Result<u64> {
-            let bytes = rom_weaver_core::copy_cancelable(reader, &mut file)?;
+            let bytes = rom_weaver_core::copy_cancelable(
+                reader,
+                &mut file,
+                &rom_weaver_core::process_cancellation_token(),
+            )?;
             file.flush()?;
             Ok(bytes)
         })();
@@ -79,7 +83,11 @@ mod native {
     }
 
     pub(crate) fn copy_stdin(output: &mut impl Write) -> crate::Result<u64> {
-        rom_weaver_core::copy_cancelable(&mut stdin_reader(), output)
+        rom_weaver_core::copy_cancelable(
+            &mut stdin_reader(),
+            output,
+            &rom_weaver_core::process_cancellation_token(),
+        )
     }
 
     #[cfg(not(unix))]

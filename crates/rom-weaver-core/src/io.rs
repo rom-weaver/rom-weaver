@@ -199,15 +199,15 @@ pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
     retry_interrupted(|| std::io::copy(reader, writer)).map(drop)
 }
 
-/// Copy `reader` to `writer` in 64 KiB blocks, checking the process cancellation token
+/// Copy `reader` to `writer` in 64 KiB blocks, checking `token`
 /// around every block, and flush at EOF. Returns the bytes copied. A cancellation that
 /// lands during a write wins over that write's error, so Ctrl-C is not reported as a
 /// broken pipe.
 pub fn copy_cancelable<R: Read + ?Sized, W: Write + ?Sized>(
     reader: &mut R,
     writer: &mut W,
+    token: &crate::CancellationToken,
 ) -> Result<u64> {
-    let token = crate::process_cancellation_token();
     let mut buffer = [0; 64 * 1024];
     let mut bytes = 0_u64;
     loop {
