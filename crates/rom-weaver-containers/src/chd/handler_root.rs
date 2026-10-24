@@ -569,9 +569,6 @@ fn split_token(text: &str) -> Option<(&str, &str)> {
     }
 }
 
-#[cfg(test)]
-#[path = "cd_sector_ecc.rs"]
-mod cd_sector_ecc;
 #[path = "core.rs"]
 mod core;
 #[path = "create_pipeline.rs"]

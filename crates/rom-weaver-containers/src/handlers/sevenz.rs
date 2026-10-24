@@ -447,23 +447,7 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         self.descriptor
     }
 
-    fn probe(&self, source: &Path) -> ProbeConfidence {
-        probe_regular_archive_with_libarchive(
-            source,
-            self.descriptor.name,
-            LibarchiveProbeFormat::SevenZ,
-        )
-    }
-
-    fn probe_details(
-        &self,
-        request: &ContainerProbeRequest,
-        _context: &OperationContext,
-    ) -> Result<OperationReport> {
-        regular_archive_probe_report(request, self.descriptor.name, true)
-    }
-
-    regular_archive_read_operations!();
+    regular_archive_read_operations!(SevenZ, true);
 
     fn create(
         &self,

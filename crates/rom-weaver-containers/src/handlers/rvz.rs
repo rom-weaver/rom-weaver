@@ -192,7 +192,7 @@ impl RvzContainerHandler {
         let mut checksum = if checksum_algorithm_count == 0 {
             None
         } else {
-            create_extract_checksum(context)?
+            create_extract_checksum(context, true)?
         };
         if first_bytes_read > 0
             && let Some(checksum) = checksum.as_mut()
@@ -382,6 +382,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
                     variants: Vec::new(),
                     timing: None,
                     rom_identity,
+                    track_values: Vec::new(),
                 }],
             ),
             None => report,
