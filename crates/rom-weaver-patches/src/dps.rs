@@ -46,6 +46,61 @@ impl DpsPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
+
+    /// Shared apply/validate prologue: parse the patch per the check scopes, then verify the
+    /// source size and convert source/output lengths to addressable `usize`s.
+    fn prepare_input(
+        &self,
+        patch_path: &Path,
+        input: &Path,
+        context: &OperationContext,
+    ) -> Result<(ParsedDpsPatch, bool, usize, usize)> {
+        let scopes = context.patch_check_scopes();
+        let validate_source_size = scopes.source;
+        let parse_mode = if scopes.patch_integrity {
+            DpsParseMode::Strict
+        } else {
+            DpsParseMode::WarnAndStopOnMalformedRecord
+        };
+        let parsed = parse_dps_file(patch_path, parse_mode)?;
+        let source_len_u64 = fs::metadata(input)?.len();
+        let source_len = usize::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS source input exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64),
+            )
+        })?;
+        let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
+                    .with_message("DPS source input exceeded maximum supported size")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64)
+                    .with_field("max_supported", u32::MAX),
+            )
+        })?;
+        if validate_source_size && source_len_u32 != parsed.source_size {
+            return Err(RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_SIZE_MISMATCH")
+                    .with_message("DPS source size mismatch")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("expected", parsed.source_size)
+                    .with_field("actual", source_len_u32),
+            ));
+        }
+
+        let output_len = usize::try_from(parsed.output_size).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS output size exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("output_size", parsed.output_size),
+            )
+        })?;
+        Ok((parsed, validate_source_size, source_len, output_len))
+    }
 }
 
 impl PatchHandler for DpsPatchHandler {
@@ -97,50 +152,8 @@ impl PatchHandler for DpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let scopes = context.patch_check_scopes();
-        let validate_source_size = scopes.source;
-        let parse_mode = if scopes.patch_integrity {
-            DpsParseMode::Strict
-        } else {
-            DpsParseMode::WarnAndStopOnMalformedRecord
-        };
-        let parsed = parse_dps_file(patch_path, parse_mode)?;
-        let source_len_u64 = fs::metadata(&request.input)?.len();
-        let source_len = usize::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_ADDRESSABLE_MEMORY")
-                    .with_message("DPS source input exceeded addressable memory")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("source_len", source_len_u64),
-            )
-        })?;
-        let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
-                    .with_message("DPS source input exceeded maximum supported size")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("source_len", source_len_u64)
-                    .with_field("max_supported", u32::MAX),
-            )
-        })?;
-        if validate_source_size && source_len_u32 != parsed.source_size {
-            return Err(RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_SIZE_MISMATCH")
-                    .with_message("DPS source size mismatch")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("expected", parsed.source_size)
-                    .with_field("actual", source_len_u32),
-            ));
-        }
-
-        let output_len = usize::try_from(parsed.output_size).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
-                    .with_message("DPS output size exceeded addressable memory")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("output_size", parsed.output_size),
-            )
-        })?;
+        let (parsed, validate_source_size, source_len, output_len) =
+            self.prepare_input(patch_path, &request.input, context)?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -216,49 +229,8 @@ impl PatchHandler for DpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let scopes = context.patch_check_scopes();
-        let validate_source_size = scopes.source;
-        let parse_mode = if scopes.patch_integrity {
-            DpsParseMode::Strict
-        } else {
-            DpsParseMode::WarnAndStopOnMalformedRecord
-        };
-        let parsed = parse_dps_file(patch_path, parse_mode)?;
-        let source_len_u64 = fs::metadata(&request.input)?.len();
-        let source_len = usize::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_ADDRESSABLE_MEMORY")
-                    .with_message("DPS source input exceeded addressable memory")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("source_len", source_len_u64),
-            )
-        })?;
-        let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
-                    .with_message("DPS source input exceeded maximum supported size")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("source_len", source_len_u64)
-                    .with_field("max_supported", u32::MAX),
-            )
-        })?;
-        if validate_source_size && source_len_u32 != parsed.source_size {
-            return Err(RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_SOURCE_SIZE_MISMATCH")
-                    .with_message("DPS source size mismatch")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("expected", parsed.source_size)
-                    .with_field("actual", source_len_u32),
-            ));
-        }
-        let output_len = usize::try_from(parsed.output_size).map_err(|_| {
-            RomWeaverError::ValidationCode(
-                dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
-                    .with_message("DPS output size exceeded addressable memory")
-                    .with_field("format", self.descriptor.name)
-                    .with_field("output_size", parsed.output_size),
-            )
-        })?;
+        let (parsed, validate_source_size, source_len, output_len) =
+            self.prepare_input(patch_path, &request.input, context)?;
         validate_dps_record_ranges(&parsed.records, source_len, output_len)?;
 
         let checksum_suffix = if validate_source_size {

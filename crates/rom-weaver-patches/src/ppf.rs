@@ -13,6 +13,9 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
+#[cfg(test)]
+use crate::shared::checked::read_u16_le;
+use crate::shared::checked::read_u32_le;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
     PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
@@ -1721,30 +1724,6 @@ fn prepare_ppf_writes_parallel(
 }
 
 #[cfg(test)]
-fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
-    let end = offset
-        .checked_add(2)
-        .ok_or_else(|| RomWeaverError::Validation("u16 read overflowed".into()))?;
-    let slice = bytes
-        .get(offset..end)
-        .ok_or_else(|| RomWeaverError::Validation("u16 read exceeded patch bounds".into()))?;
-    let mut buf = [0u8; 2];
-    buf.copy_from_slice(slice);
-    Ok(u16::from_le_bytes(buf))
-}
-
-fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| RomWeaverError::Validation("u32 read overflowed".into()))?;
-    let slice = bytes
-        .get(offset..end)
-        .ok_or_else(|| RomWeaverError::Validation("u32 read exceeded patch bounds".into()))?;
-    let mut buf = [0u8; 4];
-    buf.copy_from_slice(slice);
-    Ok(u32::from_le_bytes(buf))
-}
-
 #[cfg(test)]
 fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64> {
     let end = offset

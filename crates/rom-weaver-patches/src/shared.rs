@@ -1,9 +1,29 @@
+pub(crate) mod checked;
 pub(crate) mod checksum_io;
 pub(crate) mod endpoints;
 pub(crate) mod labeled_parser;
 pub(crate) mod labels;
 pub(crate) mod runs;
 pub(crate) mod threading;
+
+/// Lower-case hex encoding of `bytes`.
+pub(crate) fn hex_encode(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        output.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    output
+}
+
+/// Current UTC calendar date as `(year, month, day)`; clock errors before the epoch read as 1970-01-01.
+pub(crate) fn utc_today() -> (i32, u32, u32) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
+    civil_from_days((now.as_secs() / 86_400) as i64)
+}
 
 pub(crate) fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
     let z = days_since_epoch + 719_468;
