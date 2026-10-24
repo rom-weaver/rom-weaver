@@ -61,8 +61,16 @@ algorithm_table![
 ];
 
 /// The algorithms computed by default (also the ones patch headers and weave
-/// manifests record). Each id is in `ALGORITHM_TABLE`.
+/// manifests record). Each id is in `ALGORITHM_TABLE`. Some call sites still
+/// spell this list out by hand. Do not reuse this set for filename inference;
+/// see `BARE_FILENAME_ALGORITHMS`.
 pub const STANDARD_ALGORITHMS: &[&str] = &["crc32", "md5", "sha1"];
+
+/// Algorithms inferred from a bare hex digest in a patch filename. Only widths
+/// with a single dominant convention belong here: sha256 and blake3 are both 64
+/// hex, so neither may be added. Kept separate from `STANDARD_ALGORITHMS` so
+/// growing the default set never changes filename inference.
+pub const BARE_FILENAME_ALGORITHMS: &[&str] = &["crc32", "md5", "sha1"];
 
 /// Expected hex digest length for an algorithm id, or `None` when unknown.
 pub fn checksum_hex_len(algorithm: &str) -> Option<usize> {
@@ -72,10 +80,10 @@ pub fn checksum_hex_len(algorithm: &str) -> Option<usize> {
         .map(|info| info.hex_len)
 }
 
-/// The standard algorithm whose digest is exactly `hex_len` hex characters, or
-/// `None` when no standard algorithm has that width.
+/// The bare-filename algorithm whose digest is exactly `hex_len` hex characters,
+/// or `None` when none has that width.
 pub fn standard_algorithm_for_hex_len(hex_len: usize) -> Option<&'static str> {
-    STANDARD_ALGORITHMS
+    BARE_FILENAME_ALGORITHMS
         .iter()
         .copied()
         .find(|id| checksum_hex_len(id) == Some(hex_len))

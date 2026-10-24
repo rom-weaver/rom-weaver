@@ -7,10 +7,6 @@ import type {
 } from "../../lib/workflow/checksum-workflow-controller.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { ChecksumWorkflow as BrowserChecksumWorkflow } from "../../platform/browser/browser-api.ts";
-import {
-  ROM_WEAVER_CHECKSUM_ALGORITHMS,
-  ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS,
-} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
@@ -46,6 +42,10 @@ import {
   toWorkflowFileProgressProps,
   useWorkflowProgressState,
 } from "../../public/react/workflow-run-hooks.ts";
+import {
+  ROM_WEAVER_CHECKSUM_ALGORITHMS,
+  ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 const logger = createLogger("checksum-form");
 
