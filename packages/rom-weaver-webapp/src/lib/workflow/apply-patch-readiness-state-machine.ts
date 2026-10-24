@@ -204,7 +204,7 @@ const createApplyPatchChecksumPreflight = <TSource>(
     requiredCrc32,
     requiredSize,
   });
-  // Only a file-name token (never the engine's view) may outrank a passing dry run in the staging model.
+  // Marks a crc32 that came from the file-name token so the staging model can let it outrank a passing dry run.
   const requiredFromFilename = !toNormalizedCrc32(requirements?.sourceCrc32) && !!toNormalizedCrc32(filenameCrc32);
   return requiredFromFilename ? { ...verdict, requiredCrc32FromFilename: true } : verdict;
 };
