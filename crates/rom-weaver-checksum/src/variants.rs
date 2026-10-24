@@ -1154,6 +1154,23 @@ mod tests {
     use super::*;
     use rom_weaver_core::{N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC};
 
+    #[test]
+    fn n64_byte_order_row_id_round_trips() {
+        for order in N64ByteOrder::ALL {
+            let id = n64_byte_order_row_id(order);
+            assert_eq!(id, format!("n64-byte-order:{}", order.id()));
+            assert_eq!(n64_byte_order_from_row_id(&id), Some(order));
+        }
+        for bad in [
+            "n64-byte-order:",
+            "n64-byte-order:z64",
+            "remove-header",
+            "big-endian",
+        ] {
+            assert_eq!(n64_byte_order_from_row_id(bad), None, "{bad}");
+        }
+    }
+
     fn algorithms() -> Vec<String> {
         vec!["crc32".to_string(), "sha1".to_string()]
     }
@@ -1241,6 +1258,34 @@ mod tests {
             final_ids.insert(deferred.id.clone());
         }
         (plan_ids, final_ids)
+    }
+
+    #[test]
+    fn streamed_rows_hash_the_raw_and_byte_order_converted_bytes() {
+        let big = build_n64_rom();
+        let mut little = big.clone();
+        for word in little.chunks_exact_mut(4) {
+            word.reverse();
+        }
+        let crc = |bytes: &[u8]| format!("{:08x}", crc32fast::hash(bytes));
+        let algorithms = algorithms();
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, little.len() as u64, Some("game.n64"), 1)
+                .expect("engine");
+        for chunk in little.chunks(4099) {
+            engine.update(chunk).expect("update");
+        }
+        let output = engine.finalize().expect("finalize");
+        let crc_of = |id: &str| {
+            output
+                .rows
+                .iter()
+                .find(|row| row.id == id)
+                .and_then(|row| row.checksums.get("crc32").cloned())
+        };
+        assert_eq!(crc_of("raw"), Some(crc(&little)));
+        assert_eq!(crc_of("n64-byte-order:big-endian"), Some(crc(&big)));
+        assert_eq!(crc_of("n64-byte-order:little-endian"), Some(crc(&little)));
     }
 
     #[test]

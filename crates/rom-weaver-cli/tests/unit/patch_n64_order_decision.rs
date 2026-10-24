@@ -3,11 +3,7 @@ use std::{env, fs};
 use super::*;
 use rom_weaver_core::{N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC};
 
-const ORDERS: [N64ByteOrder; 3] = [
-    N64ByteOrder::BigEndian,
-    N64ByteOrder::LittleEndian,
-    N64ByteOrder::ByteSwapped,
-];
+const ORDERS: [N64ByteOrder; 3] = N64ByteOrder::ALL;
 
 fn scratch_dir(label: &str) -> std::path::PathBuf {
     let dir = env::temp_dir().join(format!(

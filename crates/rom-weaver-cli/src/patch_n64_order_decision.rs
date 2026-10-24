@@ -29,11 +29,7 @@ use super::patch_basis_decision::{basis_temp_path, probe_step};
 
 /// Every N64 byte order, in the order the probe scores them. The probe reports a
 /// candidate index into this array.
-const N64_ORDERS: [N64ByteOrder; N64_ORDER_CANDIDATES] = [
-    N64ByteOrder::BigEndian,
-    N64ByteOrder::LittleEndian,
-    N64ByteOrder::ByteSwapped,
-];
+const N64_ORDERS: [N64ByteOrder; N64_ORDER_CANDIDATES] = N64ByteOrder::ALL;
 
 /// Cap input size to limit work from three speculative applies.
 const MAX_N64_TIEBREAK_INPUT_BYTES: u64 = 64 * 1024 * 1024;

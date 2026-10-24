@@ -76,3 +76,7 @@ impl N64ByteOrder {
         bytes
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/n64.rs"]
+mod tests;
