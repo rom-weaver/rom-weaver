@@ -1620,6 +1620,9 @@ mod selection_resolution;
 #[path = "output_details.rs"]
 mod output_details;
 
+mod command_result_details;
+pub use command_result_details::CommandResultDetails;
+
 #[path = "extract_progress.rs"]
 mod extract_progress;
 use extract_progress::*;

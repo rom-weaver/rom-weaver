@@ -844,6 +844,26 @@ export type WeaveCommands = { "type": "create", "args": WeaveCreateCommand } | {
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
+export type CommandResultDetails = { ingest?: IngestResult | null, identify?: IdentifyResult | null, identifyTitles?: IdentifyTitleSearchResult | null, cheats?: CheatCommandResult | null,
+/**
+ * `weave parse` output under its legacy name, carrying both `bundle`
+ * and `weave`.
+ */
+bundle?: WeaveParseResult & BundleParseResult,
+/**
+ * The same `weave parse` output as `bundle`.
+ */
+weave?: WeaveParseResult & BundleParseResult,
+/**
+ * `weave create` output under its legacy name, carrying both the
+ * `bundle` and `weave` field names.
+ */
+bundle_create?: WeaveCreateResult & BundleCreateResult,
+/**
+ * The same `weave create` output as `bundle_create`.
+ */
+weave_create?: WeaveCreateResult & BundleCreateResult, };
+
 export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand } | { type: "bundle"; args: BundleCommands };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,

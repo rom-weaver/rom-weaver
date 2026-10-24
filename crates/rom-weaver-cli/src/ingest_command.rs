@@ -1594,8 +1594,12 @@ impl CliApp {
             Some(100.0),
             thread_execution,
         );
-        match serde_json::to_value(&result) {
-            Ok(value) => report.details = Some(json!({ "ingest": value })),
+        let details = CommandResultDetails {
+            ingest: Some(result),
+            ..CommandResultDetails::default()
+        };
+        match serde_json::to_value(&details) {
+            Ok(value) => report.details = Some(value),
             Err(error) => {
                 return Ok(OperationReport::failed(
                     OperationFamily::Command,

@@ -1239,7 +1239,13 @@ impl CliApp {
             Some(100.0),
             None,
         );
-        report.details = Some(json!({ "identify": result }));
+        report.details = Some(
+            CommandResultDetails {
+                identify: Some(result),
+                ..CommandResultDetails::default()
+            }
+            .into_value(),
+        );
         self.finish("identify", report)
     }
 
@@ -1352,7 +1358,13 @@ impl CliApp {
             Some(100.0),
             None,
         );
-        report.details = Some(json!({ "identify": result }));
+        report.details = Some(
+            CommandResultDetails {
+                identify: Some(result),
+                ..CommandResultDetails::default()
+            }
+            .into_value(),
+        );
         Ok(report)
     }
 
@@ -1882,7 +1894,13 @@ fn identify_input_report(
         Some(100.0),
         thread_execution,
     );
-    report.details = Some(json!({ "identify": result }));
+    report.details = Some(
+        CommandResultDetails {
+            identify: Some(result),
+            ..CommandResultDetails::default()
+        }
+        .into_value(),
+    );
     report
 }
 
