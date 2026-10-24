@@ -14,10 +14,10 @@ use rayon::prelude::*;
 use rom_weaver_checksum::md5_bytes;
 use rom_weaver_checksum::{checksum_reader_values_with_progress, md5_file};
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyDirection,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchEndpointSelection, PatchHandler,
-    PatchInputN64ByteOrder, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, UnsupportedOp,
+    FormatDescriptor, N64ByteOrder, OperationContext, OperationFamily, OperationReport,
+    PatchApplyDirection, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
+    PatchEndpointSelection, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
+    RomWeaverError, SharedThreadPool, UnsupportedOp,
 };
 
 use crate::checksum_validation_suffix;
@@ -937,20 +937,13 @@ fn normalize_n64_input(
 ) -> Result<RupNormalizedInput> {
     let order = match context.patch_input_n64_byte_order() {
         Some(order) => Some(order),
-        None => match read_bytes_at(input_path, 0, 4)?.as_deref() {
-            Some([0x80, 0x37, 0x12, 0x40]) => Some(PatchInputN64ByteOrder::BigEndian),
-            Some([0x40, 0x12, 0x37, 0x80]) => Some(PatchInputN64ByteOrder::LittleEndian),
-            Some([0x37, 0x80, 0x40, 0x12]) => Some(PatchInputN64ByteOrder::ByteSwapped),
-            _ => None,
-        },
+        None => read_bytes_at(input_path, 0, 4)?
+            .as_deref()
+            .and_then(N64ByteOrder::detect),
     };
     match order {
-        Some(PatchInputN64ByteOrder::BigEndian) => {
-            Ok(RupNormalizedInput::n64_big_endian(input_path))
-        }
-        Some(
-            order @ (PatchInputN64ByteOrder::LittleEndian | PatchInputN64ByteOrder::ByteSwapped),
-        ) => {
+        Some(N64ByteOrder::BigEndian) => Ok(RupNormalizedInput::n64_big_endian(input_path)),
+        Some(order @ (N64ByteOrder::LittleEndian | N64ByteOrder::ByteSwapped)) => {
             let path = write_n64_big_endian_to_temp(input_path, context, order)?;
             Ok(RupNormalizedInput::n64_normalized(path))
         }
@@ -1311,13 +1304,13 @@ fn deinterleave_snes_payload(payload: &[u8]) -> Vec<u8> {
 fn write_n64_big_endian_to_temp(
     input_path: &Path,
     context: &OperationContext,
-    order: PatchInputN64ByteOrder,
+    order: N64ByteOrder,
 ) -> Result<PathBuf> {
     write_normalization_temp(context, "rup-n64-native", |output_path| {
         let unit = match order {
-            PatchInputN64ByteOrder::LittleEndian => 4,
-            PatchInputN64ByteOrder::ByteSwapped => 2,
-            PatchInputN64ByteOrder::BigEndian => 1,
+            N64ByteOrder::LittleEndian => 4,
+            N64ByteOrder::ByteSwapped => 2,
+            N64ByteOrder::BigEndian => 1,
         };
         let input_len = fs::metadata(input_path)?.len();
         if !input_len.is_multiple_of(unit) {

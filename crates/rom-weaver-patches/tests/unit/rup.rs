@@ -4,9 +4,9 @@ use std::{
 };
 
 use rom_weaver_core::{
-    CancellationToken, PatchApplyDirection, PatchApplyRequest, PatchCheckScopes,
+    CancellationToken, N64ByteOrder, PatchApplyDirection, PatchApplyRequest, PatchCheckScopes,
     PatchChecksumValidation, PatchCreateRequest, PatchEndpointSelection, PatchHandler,
-    PatchInputN64ByteOrder, PatchValidateRequest,
+    PatchValidateRequest,
 };
 
 use super::{
@@ -883,7 +883,7 @@ fn selected_n64_endpoint_uses_planned_order_after_magic_changes() {
             variant: 0,
             direction: PatchApplyDirection::Forward,
         })
-        .with_patch_input_n64_byte_order(PatchInputN64ByteOrder::ByteSwapped);
+        .with_patch_input_n64_byte_order(N64ByteOrder::ByteSwapped);
     let report = RupPatchHandler::new(&RUP)
         .apply(
             &PatchApplyRequest {
@@ -2025,7 +2025,7 @@ fn n64_normalization_requires_a_length_that_matches_the_byte_order_unit() {
     let temp = TestDir::new();
     let path = sized_fixture(&temp, "odd.n64", 6);
     let context = test_context_with_threads(&temp, 1)
-        .with_patch_input_n64_byte_order(PatchInputN64ByteOrder::LittleEndian);
+        .with_patch_input_n64_byte_order(N64ByteOrder::LittleEndian);
 
     let error = normalize_rup_input(&path, &rup_file_of_type(4), &context)
         .expect_err("a 6-byte little-endian image is not word aligned");
@@ -2044,8 +2044,7 @@ fn n64_big_endian_rewrite_copies_the_input_byte_for_byte() {
     let context = test_context_with_threads(&temp, 1);
 
     let rewritten =
-        write_n64_big_endian_to_temp(&path, &context, PatchInputN64ByteOrder::BigEndian)
-            .expect("rewrite");
+        write_n64_big_endian_to_temp(&path, &context, N64ByteOrder::BigEndian).expect("rewrite");
     assert_eq!(
         fs::read(&rewritten).expect("rewritten"),
         fs::read(&path).expect("source")

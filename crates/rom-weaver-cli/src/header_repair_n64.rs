@@ -18,26 +18,7 @@ impl CliApp {
             return Ok(None);
         }
         let magic = read_vec_at(file, 0, 4)?;
-        if magic == N64_BIG_ENDIAN_MAGIC {
-            Ok(Some(N64ByteOrder::BigEndian))
-        } else if magic == N64_LITTLE_ENDIAN_MAGIC {
-            Ok(Some(N64ByteOrder::LittleEndian))
-        } else if magic == N64_BYTE_SWAPPED_MAGIC {
-            Ok(Some(N64ByteOrder::ByteSwapped))
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub(super) fn transform_n64_word(bytes: &mut [u8; 4], order: N64ByteOrder) {
-        match order {
-            N64ByteOrder::BigEndian => {}
-            N64ByteOrder::LittleEndian => bytes.reverse(),
-            N64ByteOrder::ByteSwapped => {
-                bytes.swap(0, 1);
-                bytes.swap(2, 3);
-            }
-        }
+        Ok(N64ByteOrder::detect(&magic))
     }
 
     pub(super) fn read_n64_word_normalized(
@@ -47,8 +28,7 @@ impl CliApp {
     ) -> Result<u32> {
         let mut bytes = [0u8; 4];
         read_exact_at(file, offset, &mut bytes)?;
-        Self::transform_n64_word(&mut bytes, order);
-        Ok(u32::from_be_bytes(bytes))
+        Ok(order.word_normalized(bytes))
     }
 
     pub(super) fn write_n64_word_original_order(
@@ -57,9 +37,7 @@ impl CliApp {
         value: u32,
         order: N64ByteOrder,
     ) -> Result<()> {
-        let mut bytes = value.to_be_bytes();
-        Self::transform_n64_word(&mut bytes, order);
-        write_all_at(file, offset, &bytes)
+        write_all_at(file, offset, &order.word_original_order(value))
     }
 
     pub(super) fn detect_n64_byte_order_path(path: &Path) -> Result<Option<N64ByteOrder>> {
@@ -90,8 +68,8 @@ impl CliApp {
         loop {
             match reader.read_exact(&mut word) {
                 Ok(()) => {
-                    Self::transform_n64_word(&mut word, from);
-                    Self::transform_n64_word(&mut word, to);
+                    from.transform_word(&mut word);
+                    to.transform_word(&mut word);
                     writer.write_all(&word)?;
                 }
                 Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
@@ -131,9 +109,35 @@ impl CliApp {
         if algorithms.is_empty() {
             return Ok(None);
         }
+        let matches = Self::hash_n64_byte_order_rows(input, &algorithms, file_len, context)?
+            .into_iter()
+            .filter(|(_, row)| {
+                required.iter().any(|state| {
+                    patch_plan::compare_states(
+                        state,
+                        &patch_plan::PlanState {
+                            checksums: row.checksums.clone(),
+                            size: Some(file_len),
+                        },
+                    ) == patch_plan::EvidenceMatch::Match
+                })
+            })
+            .map(|(order, _)| order)
+            .collect::<Vec<_>>();
+        Ok((matches.len() == 1).then(|| matches[0]))
+    }
+
+    /// Hash `input` once through the shared variant engine and return its
+    /// N64 byte-order variant rows keyed by the order each row represents.
+    pub(super) fn hash_n64_byte_order_rows(
+        input: &Path,
+        algorithms: &[String],
+        file_len: u64,
+        context: &OperationContext,
+    ) -> Result<Vec<(N64ByteOrder, VariantRow)>> {
         let name_hint = input.file_name().and_then(|name| name.to_str());
         let mut engine = StreamingVariantChecksums::new(
-            &algorithms,
+            algorithms,
             file_len,
             name_hint,
             context.variant_hash_execution().effective_threads,
@@ -148,30 +152,11 @@ impl CliApp {
             }
             engine.update(&buffer[..read])?;
         }
-
-        let matches = engine
+        Ok(engine
             .finalize()?
             .rows
             .into_iter()
-            .filter(|row| {
-                row.id.starts_with("n64-byte-order:")
-                    && required.iter().any(|state| {
-                        patch_plan::compare_states(
-                            state,
-                            &patch_plan::PlanState {
-                                checksums: row.checksums.clone(),
-                                size: Some(file_len),
-                            },
-                        ) == patch_plan::EvidenceMatch::Match
-                    })
-            })
-            .filter_map(|row| match row.id.as_str() {
-                "n64-byte-order:big-endian" => Some(N64ByteOrder::BigEndian),
-                "n64-byte-order:little-endian" => Some(N64ByteOrder::LittleEndian),
-                "n64-byte-order:byte-swapped" => Some(N64ByteOrder::ByteSwapped),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        Ok((matches.len() == 1).then(|| matches[0]))
+            .filter_map(|row| Some((n64_byte_order_from_row_id(&row.id)?, row)))
+            .collect())
     }
 }
