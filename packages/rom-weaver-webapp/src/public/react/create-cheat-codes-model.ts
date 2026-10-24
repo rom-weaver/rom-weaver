@@ -115,6 +115,9 @@ const GBA_BLOCK_KINDS = new Set(["game-shark-v1", "game-shark-v1-raw", "action-r
  * joined with `+`, newlines, commas, semicolons or spaces, and each piece is one
  * code - except for Xploder codes, whose words are re-joined by
  * `splitXploderCodes`. Intra-code separators (`-`, `:`) are left alone.
+ * `crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json` holds the
+ * cases both this and the engine's `codes_for_kind` must pass; add a case there
+ * when either side changes.
  */
 const splitCheatCodes = (text: string, system?: string, kind?: string): string[] => {
   const block = String(text || "").trim();

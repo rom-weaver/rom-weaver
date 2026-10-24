@@ -12,6 +12,7 @@ import {
   type CreateCheatCodeEntry,
 } from "../../src/public/react/create-cheat-codes-model.ts";
 import type { ClassifiedCheatRecord } from "../../src/lib/cheats/index.ts";
+import codeSplitCases from "../../../../crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json";
 
 const record = (
   overrides: Partial<ClassifiedCheatRecord> & { resolution: ClassifiedCheatRecord["resolution"] },
@@ -39,49 +40,21 @@ const entry = (overrides: Partial<CreateCheatCodeEntry> = {}): CreateCheatCodeEn
   ...overrides,
 });
 
+// The engine's `codes_for_kind` runs the same cases, so a code the UI shows as
+// one entry is one code to the engine.
 describe("splitCheatCodes", () => {
-  it("splits on +, commas, newlines and spaces, keeping intra-code separators", () => {
+  it.each(codeSplitCases)("$name", ({ codes, kind, system, text }) => {
+    expect(splitCheatCodes(text, system, kind)).toEqual(codes);
+  });
+
+  it("uses the plain split before a system is known", () => {
     expect(splitCheatCodes("SXIOPO+AEEPYZ, GXNENV\n004-BCE-E66")).toEqual([
       "SXIOPO",
       "AEEPYZ",
       "GXNENV",
       "004-BCE-E66",
     ]);
-  });
-
-  it("returns nothing for blank input", () => {
     expect(splitCheatCodes("  \n + , ")).toEqual([]);
-  });
-
-  // An Xploder address/value pair MUST remain one code when splitting input text.
-  it("keeps an 8+4 Xploder pair together for PlayStation", () => {
-    expect(splitCheatCodes("800B4CD4 0063", "playstation")).toEqual(["800B4CD40063"]);
-  });
-
-  it("keeps a four-word GBA ROM patch together", () => {
-    expect(splitCheatCodes("00000000 1801F2E0 00000063 00000000", "gameboyadvance")).toEqual([
-      "000000001801F2E00000006300000000",
-    ]);
-  });
-
-  it("uses the Xploder splitter when the kind override says so, whatever the system", () => {
-    expect(splitCheatCodes("800B4CD4 0063", "nes", "xploder")).toEqual(["800B4CD40063"]);
-  });
-
-  it("keeps the plain split for systems whose codes are single words", () => {
-    expect(splitCheatCodes("SXIOPO AEEPYZ", "nes")).toEqual(["SXIOPO", "AEEPYZ"]);
-  });
-
-  it.each(["game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"])(
-    "keeps an entire multiline GBA %s block together",
-    (kind) => {
-      const block = "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000";
-      expect(splitCheatCodes(block, "gameboyadvance", kind)).toEqual([block]);
-    },
-  );
-
-  it("splits on semicolons the way the engine does", () => {
-    expect(splitCheatCodes("SXIOPO;AEEPYZ", "nes")).toEqual(["SXIOPO", "AEEPYZ"]);
   });
 });
 

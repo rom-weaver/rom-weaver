@@ -390,6 +390,8 @@ impl CliApp {
 }
 
 /// Count individual codes after splitting `+`/comma/space-joined `--code` values.
+/// The webapp's `splitCheatCodes` must split the same way; both run the cases in
+/// `tests/fixtures/cheat-code-splits.json`.
 fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<String> {
     if CheatKind::parse(kind_id).is_some_and(CheatKind::is_gba_action_replay) {
         return codes
@@ -441,6 +443,33 @@ fn is_playstation_executable(path: &Path) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(serde::Deserialize)]
+    struct CodeSplitCase {
+        name: String,
+        text: String,
+        system: String,
+        kind: String,
+        codes: Vec<String>,
+    }
+
+    /// The webapp's `splitCheatCodes` runs the same cases, so a code the UI
+    /// shows as one entry is one code to the engine.
+    #[test]
+    fn code_splits_match_the_shared_cases() {
+        let cases: Vec<CodeSplitCase> =
+            serde_json::from_str(include_str!("../tests/fixtures/cheat-code-splits.json"))
+                .expect("cheat code split cases");
+        for case in cases {
+            let system = CheatSystem::parse(&case.system).expect("known cheat system");
+            assert_eq!(
+                codes_for_kind(&[case.text], system, &case.kind),
+                case.codes,
+                "{}",
+                case.name
+            );
+        }
+    }
 
     #[test]
     fn gba_code_values_decrypt_with_their_own_seeds() {
