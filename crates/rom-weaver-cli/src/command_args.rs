@@ -20,7 +20,7 @@ macro_rules! filter_accessors {
     };
 }
 
-filter_accessors!(ProbeCommand);
+filter_accessors!(ArchiveSelectionArgs);
 filter_accessors!(ExtractCommand);
 filter_accessors!(ChecksumCommand);
 filter_accessors!(PatchApplyCommand);
@@ -315,20 +315,13 @@ fn default_code_kind() -> String {
     "auto".to_string()
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Archive-selection flags shared by `probe` and `identify`: which archive
+/// member to use and how to filter members. Flattened into both commands so
+/// the CLI flags and the wasm JSON shape stay identical.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct ProbeCommand {
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            short = 'i',
-            long = "input",
-            value_name = "INPUT",
-            help = "File to identify. Use - to read from stdin"
-        )
-    )]
-    pub input: PathBuf,
+pub struct ArchiveSelectionArgs {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -363,6 +356,26 @@ pub struct ProbeCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct ProbeCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'i',
+            long = "input",
+            value_name = "INPUT",
+            help = "File to identify. Use - to read from stdin"
+        )
+    )]
+    pub input: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(flatten)]
+    #[cfg_attr(feature = "typescript-types", ts(flatten))]
+    pub selection: ArchiveSelectionArgs,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -760,28 +773,10 @@ pub struct IdentifyCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub subcommand: Option<IdentifySubcommands>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(short = 's', long = "select", help = SELECT_HELP))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub select: Vec<String>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(long = "filter", value_enum, value_delimiter = ',', help = FILTER_HELP)
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub filter: Vec<FilterKind>,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(long, help = "Do not look inside archives; identify the file itself")
-    )]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_extract: bool,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_ignore: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(flatten)]
+    #[cfg_attr(feature = "typescript-types", ts(flatten))]
+    pub selection: ArchiveSelectionArgs,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
