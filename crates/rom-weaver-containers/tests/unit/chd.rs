@@ -1008,6 +1008,28 @@ fn parse_create_mode_override_maps_known_modes() {
     assert!(handler.parse_create_mode_override("chd-xyz").is_err());
 }
 
+#[test]
+fn create_mode_table_entries_parse_and_resolve_to_canonical_modes() {
+    let handler = ChdContainerHandler;
+    for (mode, canonical) in CHD_CREATE_MODES {
+        let parsed = handler
+            .parse_create_mode_override(&format!("chd-{mode}"))
+            .unwrap_or_else(|error| panic!("chd-{mode} must parse: {error}"));
+        let canonical_parsed = handler
+            .parse_create_mode_override(&format!("chd-{canonical}"))
+            .expect("canonical mode parses");
+        assert!(parsed.is_some(), "chd-{mode}");
+        assert_eq!(
+            parsed, canonical_parsed,
+            "chd-{mode} aliases chd-{canonical}"
+        );
+        assert!(
+            CHD_CREATE_MODES.contains(&(*canonical, *canonical)),
+            "{canonical} must map to itself"
+        );
+    }
+}
+
 // --- Create-kind / media mapping -------------------------------------------
 
 #[test]

@@ -23,6 +23,7 @@ import {
   getBrowserVirtualFileSource,
   updateBrowserVirtualFileSource,
 } from "../../workers/protocol/browser-virtual-files.ts";
+import { ROM_WEAVER_CHD_CREATE_MODES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { parseCueFile, replaceCueFileReferences } from "../../workers/protocol/cue-file-utils.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
@@ -76,16 +77,15 @@ const getChdExtractedOutputName = ({
   return normalizedFileName || entry.fileName || directOutputFileName || fileName;
 };
 
+// `chd-<mode>` for a known mode (or a `chd-` prefixed one); aliases such as `ld` resolve to their
+// canonical mode from the Rust table, and anything else is the auto-detecting `chd`.
+const CHD_MODE_PREFIX = "chd-";
 const getChdCreateFormat = (requestedMode: string): string => {
-  if (requestedMode === "cd" || requestedMode === "chd-cd") return "chd-cd";
-  if (requestedMode === "gd" || requestedMode === "chd-gd") return "chd-gd";
-  if (requestedMode === "dvd" || requestedMode === "chd-dvd") return "chd-dvd";
-  if (requestedMode === "raw" || requestedMode === "chd-raw") return "chd-raw";
-  if (requestedMode === "hd" || requestedMode === "chd-hd") return "chd-hd";
-  if (requestedMode === "av" || requestedMode === "ld" || requestedMode === "chd-av" || requestedMode === "chd-ld") {
-    return "chd-av";
-  }
-  return "chd";
+  const mode = requestedMode.startsWith(CHD_MODE_PREFIX) ? requestedMode.slice(CHD_MODE_PREFIX.length) : requestedMode;
+  const canonical = Object.hasOwn(ROM_WEAVER_CHD_CREATE_MODES, mode)
+    ? ROM_WEAVER_CHD_CREATE_MODES[mode as keyof typeof ROM_WEAVER_CHD_CREATE_MODES]
+    : undefined;
+  return canonical ? `${CHD_MODE_PREFIX}${canonical}` : "chd";
 };
 
 // Read a staged input's text whether it lives on OPFS or as an in-memory virtual file. File/Blob cue

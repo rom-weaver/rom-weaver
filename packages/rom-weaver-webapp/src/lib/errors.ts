@@ -67,7 +67,6 @@ const WORKFLOW_ERROR_CODES = new Set<RomWeaverErrorCode>([
 
 const getSimpleErrorCode = (lower: string): RomWeaverErrorCode | undefined => {
   if (lower.includes("abort") || lower.includes("cancel")) return "CANCELLED";
-  if (lower.includes("archive nesting") || lower.includes("archive depth")) return "ARCHIVE_DEPTH_EXCEEDED";
   if (lower.includes("multiple") && lower.includes("candidate")) return "AMBIGUOUS_SELECTION";
   if (lower.includes("target was not found")) return "PATCH_TARGET_MISMATCH";
   return undefined;

@@ -545,13 +545,17 @@ impl ChdContainerHandler {
             )));
         };
 
-        match mode {
-            "cd" => Ok(Some(ChdCreateModeOverride::Cd)),
-            "gd" => Ok(Some(ChdCreateModeOverride::Gd)),
-            "dvd" => Ok(Some(ChdCreateModeOverride::Dvd)),
-            "raw" => Ok(Some(ChdCreateModeOverride::Raw)),
-            "hd" => Ok(Some(ChdCreateModeOverride::HardDisk)),
-            "av" | "ld" => Ok(Some(ChdCreateModeOverride::Av)),
+        let canonical = CHD_CREATE_MODES
+            .iter()
+            .find(|(name, _)| *name == mode)
+            .map(|(_, canonical)| *canonical);
+        match canonical {
+            Some("cd") => Ok(Some(ChdCreateModeOverride::Cd)),
+            Some("gd") => Ok(Some(ChdCreateModeOverride::Gd)),
+            Some("dvd") => Ok(Some(ChdCreateModeOverride::Dvd)),
+            Some("raw") => Ok(Some(ChdCreateModeOverride::Raw)),
+            Some("hd") => Ok(Some(ChdCreateModeOverride::HardDisk)),
+            Some("av") => Ok(Some(ChdCreateModeOverride::Av)),
             _ => Err(RomWeaverError::Validation(format!(
                 "unsupported chd mode `{mode}` in `{format}`; expected one of: cd, gd, dvd, raw, hd, av, ld"
             ))),
