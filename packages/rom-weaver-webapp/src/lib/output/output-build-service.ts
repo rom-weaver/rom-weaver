@@ -131,7 +131,8 @@ const getOutputChdAutoMode = async (
   if (!(file.fileSize > 0)) return mode;
   if (!/\.(bin|iso)$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
   // The patched bytes are new, so ask the engine which create mode native `auto` picks for them. A probe
-  // failure (opaque bytes) keeps the structural/metadata mode.
+  // failure (opaque bytes) keeps the structural/metadata mode, except for an unidentified `.iso`: the
+  // engine may still infer CD from its size, so no codec set is sent (mode "auto") and native picks one.
   options?.signal?.throwIfAborted();
   try {
     const result = await runtime?.compression.probe?.({
@@ -141,7 +142,7 @@ const getOutputChdAutoMode = async (
   } catch (error) {
     options?.signal?.throwIfAborted();
     traceOutputName(options, "output.chd.auto-mode.probe-failed", { error: String(error), fileName: file.fileName });
-    return mode;
+    return unidentifiedIso ? "auto" : mode;
   }
 };
 

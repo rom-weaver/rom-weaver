@@ -486,6 +486,28 @@ describe("lazy CHD output codec planning", () => {
     expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe("lzma");
   });
 
+  it("sends no codec set for an unidentified .iso the engine cannot probe", async () => {
+    const blob = new Blob([new Uint8Array(40 * 2048)]);
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.iso", size: blob.size, blob } as never,
+      "disc.iso",
+      { materializeBlob: false },
+    );
+    const probe = vi.fn(async () => {
+      throw new Error("no registered handler matched");
+    });
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma,huff" } } } as never,
+      runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+    });
+    expect(probe).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs).toBeFalsy();
+  });
+
   it.each(["cd", "dvd"])("preserves explicit %s mode and codecs without probing", async (mode) => {
     const blob = new Blob([new Uint8Array(100 * 2352)]);
     const slice = vi.spyOn(blob, "slice");
