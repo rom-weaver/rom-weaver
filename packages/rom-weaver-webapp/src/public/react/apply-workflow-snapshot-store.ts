@@ -11,8 +11,8 @@ type ApplyWorkflowFormSnapshot = {
   outputNameRevision: number;
   outputSourceKey: string;
   patchCount: number;
-  /** Output size each staged patch declares, or 0 for one that declares none. */
-  patchTargetSizes: readonly number[];
+  /** Unknown declared output sizes MUST remain distinct from zero-length targets. */
+  patchTargetSizes: readonly (number | undefined)[];
   ready: boolean;
   /** Staged ROM size, or 0 before the input is ready. */
   romSize: number;
@@ -45,20 +45,25 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.romSize === right.romSize;
 
 /**
- * The largest output size an enabled patch declares. Outside a run the workflow
+ * The final enabled patch determines the target size; an unknown intermediate MUST NOT erase it.
+ * The largest known target independently constrains format size limits. Outside a run the workflow
  * stages disabled patches too, lined up with the slots; a filtered run stages
  * only enabled ones, so a list of another length has nothing to skip.
  */
-const getEnabledPatchTargetSize = (
-  sizes: readonly number[],
+const getEnabledPatchTargetSizes = (
+  sizes: readonly (number | undefined)[],
   slotIds: readonly string[],
   disabled: ReadonlySet<string>,
 ) => {
   const aligned = sizes.length === slotIds.length;
-  return sizes.reduce(
-    (max, size, index) => (aligned && disabled.has(slotIds[index] || "") ? max : Math.max(max, size)),
-    0,
-  );
+  let maxKnownTargetSize: number | undefined;
+  let patchTargetSize: number | undefined;
+  for (const [index, size] of sizes.entries()) {
+    if (aligned && disabled.has(slotIds[index] || "")) continue;
+    patchTargetSize = size;
+    if (size !== undefined) maxKnownTargetSize = Math.max(maxKnownTargetSize ?? 0, size);
+  }
+  return { maxKnownTargetSize, patchTargetSize };
 };
 
 const createApplyWorkflowSnapshotStore = () => {
@@ -83,7 +88,7 @@ const createApplyWorkflowSnapshotStore = () => {
       outputNameRevision,
       outputSourceKey,
       patchCount: current.patches.length,
-      patchTargetSizes: current.patches.map((patch) => patch.requirements?.targetSize || 0),
+      patchTargetSizes: current.patches.map((patch) => patch.requirements?.targetSize),
       ready: current.ready,
       // A loading input still reports the dropped file's size, such as a ZIP's.
       romSize: inputReady ? current.input?.size || 0 : 0,
@@ -128,4 +133,4 @@ const createApplyWorkflowSnapshotStore = () => {
   };
 };
 
-export { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize };
+export { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSizes };
