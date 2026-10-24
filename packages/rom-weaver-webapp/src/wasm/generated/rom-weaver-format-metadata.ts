@@ -2275,6 +2275,33 @@ export const ROM_WEAVER_Z3DS_SUBTYPES = [
   }
 ] as const;
 
+export const ROM_WEAVER_ERROR_KIND_PREFIXES = [
+  {
+    "kind": "validation",
+    "prefix": "validation failed:"
+  },
+  {
+    "kind": "unknown_format",
+    "prefix": "unknown format for path"
+  },
+  {
+    "kind": "unsupported",
+    "prefix": "unsupported operation:"
+  },
+  {
+    "kind": "cancelled",
+    "prefix": "operation cancelled"
+  },
+  {
+    "kind": "io",
+    "prefix": "i/o error:"
+  },
+  {
+    "kind": "thread_pool_build",
+    "prefix": "thread pool build failed:"
+  }
+] as const;
+
 export const ROM_WEAVER_FORMAT_METADATA = {
   archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,
   compression: ROM_WEAVER_COMPRESSION_METADATA,
