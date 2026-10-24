@@ -308,6 +308,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
           ...(select?.length ? { select } : identifySelection.length ? { select: identifySelection } : {}),
           ...(typeof interactiveSelectionEnabled === "boolean" ? { interactiveSelectionEnabled } : {}),
           ...(typeof splitBin === "boolean" ? { splitBin } : {}),
+          inputName: stagedSource.fileName,
           knownInputPaths: staged.map((entry) => entry.filePath),
           logLevel,
           outDirPath: outputScope.rootPath,
