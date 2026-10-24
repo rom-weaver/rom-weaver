@@ -1,0 +1,29 @@
+diff --git a/mod.rs b/mod.rs
+index a00d233c7..66c7d4f00 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -89,9 +89,9 @@
+ mod error;
+ 
+ mod block_hash;
+-mod cdrom;
++pub(crate) mod cdrom;
+ mod chdfile;
+-mod compression;
++pub(crate) mod compression;
+ 
+ /// cbindgen:ignore
+ mod huffman;
+diff --git a/compression/mod.rs b/compression/mod.rs
+index d7a302c9f..f9328f28d 100644
+--- a/compression/mod.rs
++++ b/compression/mod.rs
+@@ -4,7 +4,7 @@ use std::ops::{Add, AddAssign};
+ 
+ mod avhuff;
+ mod cdrom;
+-mod ecc;
++pub(crate) mod ecc;
+ mod flac;
+ mod huff;
+ mod lzma;

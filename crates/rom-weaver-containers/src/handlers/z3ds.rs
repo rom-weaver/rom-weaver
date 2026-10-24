@@ -1051,6 +1051,27 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         // Write frames in order as they finish so peak memory depends on the
         // read-ahead window and worker contexts, not the compressed image size;
         // the output guard removes a partial file on error.
+        let report_chunk_progress = |task_len: u64| {
+            if input_size > 0 {
+                let completed = create_progress_bytes
+                    .fetch_add(task_len, Ordering::Relaxed)
+                    .saturating_add(task_len)
+                    .min(input_size);
+                maybe_emit_container_byte_progress(
+                    context,
+                    completed,
+                    input_size,
+                    ContainerByteProgress {
+                        command: "compress",
+                        format: Z3DS.name,
+                        stage: "create",
+                        label: &create_progress_label,
+                        thread_execution: Some(&execution),
+                        emitted_progress_bucket: create_progress_bucket.as_ref(),
+                    },
+                );
+            }
+        };
         let build: Result<()> = (|| {
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
@@ -1073,8 +1094,6 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             if execution.used_parallelism {
                 // Read frames on the caller and hand bounded buffers to workers, keeping output ordered and
                 // the worker count at `effective_threads`.
-                let create_progress_bytes = Arc::clone(&create_progress_bytes);
-                let create_progress_bucket = Arc::clone(&create_progress_bucket);
                 let mut input = BufReader::new(File::open(input_path)?);
                 input.seek(SeekFrom::Start(0))?;
 
@@ -1094,25 +1113,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                         })?;
                         let mut data = vec![0_u8; read_len];
                         input.read_exact(&mut data)?;
-                        if input_size > 0 {
-                            let completed = create_progress_bytes
-                                .fetch_add(task.len, Ordering::Relaxed)
-                                .saturating_add(task.len)
-                                .min(input_size);
-                            maybe_emit_container_byte_progress(
-                                context,
-                                completed,
-                                input_size,
-                                ContainerByteProgress {
-                                    command: "compress",
-                                    format: Z3DS.name,
-                                    stage: "create",
-                                    label: &create_progress_label,
-                                    thread_execution: Some(&execution),
-                                    emitted_progress_bucket: create_progress_bucket.as_ref(),
-                                },
-                            );
-                        }
+                        report_chunk_progress(task.len);
                         Ok((task.index, task.len, data))
                     },
                     || (),
@@ -1131,25 +1132,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             } else {
                 for task in &create_tasks {
                     let frame = self.compress_create_task(&source, level, task)?;
-                    if input_size > 0 {
-                        let completed = create_progress_bytes
-                            .fetch_add(task.len, Ordering::Relaxed)
-                            .saturating_add(task.len)
-                            .min(input_size);
-                        maybe_emit_container_byte_progress(
-                            context,
-                            completed,
-                            input_size,
-                            ContainerByteProgress {
-                                command: "compress",
-                                format: Z3DS.name,
-                                stage: "create",
-                                label: &create_progress_label,
-                                thread_execution: Some(&execution),
-                                emitted_progress_bucket: create_progress_bucket.as_ref(),
-                            },
-                        );
-                    }
+                    report_chunk_progress(task.len);
                     self.write_create_frame(&mut output, &mut seek_table, &mut totals, frame)?;
                 }
             }

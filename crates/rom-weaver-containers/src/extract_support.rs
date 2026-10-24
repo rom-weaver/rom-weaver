@@ -261,6 +261,17 @@ pub(crate) struct ExtractedFileChecksum {
     /// Every producing path captures this via [`IdentityPrefix`] (or the variant
     /// engine), so it is always populated; empty when nothing matched.
     pub(crate) rom_identity: RomIdentity,
+    /// Per-track checksums streamed during a merged single-bin CD extract, so a
+    /// multi-track disc can still fingerprint against per-track database
+    /// entries when no per-track files exist. Empty on every other path.
+    pub(crate) track_values: Vec<ExtractedTrackChecksum>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ExtractedTrackChecksum {
+    pub(crate) number: u32,
+    pub(crate) size_bytes: u64,
+    pub(crate) values: BTreeMap<String, String>,
 }
 
 /// The wall-time split for one extracted entry, in milliseconds, surfaced to the UI.
@@ -277,10 +288,17 @@ pub(crate) struct ExtractTiming {
     pub(crate) workers: usize,
 }
 
+/// Build the extract checksum hasher; `allow_parallelism = false` hashes inline
+/// instead of on the operation's worker pool.
 pub(crate) fn create_extract_checksum(
     context: &OperationContext,
+    allow_parallelism: bool,
 ) -> Result<Option<StreamingChecksum>> {
-    StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+    if allow_parallelism {
+        StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+    } else {
+        StreamingChecksum::new(context.extract_checksum_algorithms())
+    }
 }
 
 /// Timing from [`ExtractHasher::finish_timed`] for the plain checksum or the
@@ -345,7 +363,7 @@ impl ExtractHasher {
             }
         }
         let Some(total_len) = total_len else {
-            return Ok(match create_extract_checksum(context)? {
+            return Ok(match create_extract_checksum(context, true)? {
                 Some(checksum) => Self::Plain {
                     checksum,
                     identity: IdentityPrefix::new(),
@@ -467,6 +485,7 @@ impl ExtractHasher {
                         variants: Vec::new(),
                         timing: None,
                         rom_identity,
+                        track_values: Vec::new(),
                     }),
                     ExtractChecksumTiming {
                         threaded: timing.threaded,
@@ -507,6 +526,7 @@ impl ExtractHasher {
                         variants: rows,
                         timing: None,
                         rom_identity,
+                        track_values: Vec::new(),
                     }),
                     ExtractChecksumTiming {
                         threaded: raw_timing.threaded,
@@ -538,6 +558,7 @@ pub(crate) fn attach_extract_checksum_details(
                 entry.variants,
                 entry.timing,
                 entry.rom_identity,
+                entry.track_values,
             )
         })
         .collect::<Vec<_>>();
@@ -555,12 +576,26 @@ fn build_extract_checksum_emitted_file_detail(
     variants: Vec<VariantRow>,
     timing: Option<ExtractTiming>,
     rom_identity: RomIdentity,
+    track_values: Vec<ExtractedTrackChecksum>,
 ) -> Option<Value> {
     if checksums.is_empty() {
         return None;
     }
     let mut entry = build_known_emitted_file_detail(path, size_bytes)?;
     entry.insert("checksums".to_string(), json!(checksums));
+    if !track_values.is_empty() {
+        let tracks = track_values
+            .into_iter()
+            .map(|track| {
+                json!({
+                    "track_number": track.number,
+                    "size_bytes": track.size_bytes,
+                    "checksums": track.values,
+                })
+            })
+            .collect::<Vec<_>>();
+        entry.insert("track_checksums".to_string(), Value::Array(tracks));
+    }
     // Identity detected from the streamed output by the producing path - no extra read here.
     rom_identity.write_into(&mut entry);
     if let Some(timing) = timing {
@@ -656,7 +691,7 @@ impl<'a> ExtractChunkWriter<'a> {
             BufWriter::new(create_extract_output_file(output_path, overwrite)?),
             bounded_items_for_threads(execution.effective_threads),
         )?;
-        let checksum = create_extract_checksum(context)?;
+        let checksum = create_extract_checksum(context, true)?;
         Ok(Self {
             context,
             execution,
@@ -747,6 +782,7 @@ impl<'a> ExtractChunkWriter<'a> {
                 variants: Vec::new(),
                 timing: None,
                 rom_identity,
+                track_values: Vec::new(),
             });
         }
         Ok(checksums)
@@ -1034,6 +1070,7 @@ mod tests {
                 workers: 2,
             }),
             rom_identity: RomIdentity::default(),
+            track_values: Vec::new(),
         };
 
         let succeeded = OperationReport::succeeded(
@@ -1085,6 +1122,7 @@ mod tests {
                 Vec::new(),
                 None,
                 RomIdentity::default(),
+                Vec::new(),
             )
             .is_none()
         );
@@ -1096,6 +1134,7 @@ mod tests {
             Vec::new(),
             None,
             RomIdentity::default(),
+            Vec::new(),
         )
         .expect("detail");
         assert!(detail.get("checksums").is_some());

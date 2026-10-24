@@ -4680,7 +4680,7 @@ mod tests {
         }
         sector[0x0f] = 1;
         sector[0x81c..].fill(0);
-        ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+        crate::chd_rs::compression::ecc::ErrorCorrectedSector::generate_ecc(&mut (&mut sector));
         sector
     }
 
