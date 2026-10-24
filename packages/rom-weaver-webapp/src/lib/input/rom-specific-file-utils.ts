@@ -186,7 +186,6 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
       }
     }
     if (header && hasChdHardDiskHeader(header, size)) return "raw";
-    if (mode) return mode;
     const isoId = [67, 68, 48, 48, 49];
     if (
       (sectorSized &&
@@ -196,6 +195,8 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
       (sectorSized && size % 2048 === 0 && matchesSourceBytes(source, 16 * 2048 + 1, isoId))
     )
       return "cd";
+    // Readable bytes decide, as native `auto` does; advisory identity applies only when unreadable.
+    if (header) return "raw";
   }
   return mode || "raw";
 };

@@ -37,6 +37,15 @@ describe("getChdAutoCreateMode", () => {
     expect(getChdAutoCreateMode({ fileName: "track01.bin", metadata: { format: "DVD" } })).toBe("dvd");
   });
 
+  it("lets readable loose BIN bytes override advisory identity like native auto", () => {
+    const bytes = new Uint8Array(17 * 2048);
+    const raw = { fileName: "game.bin", size: bytes.length, _u8array: bytes };
+    expect(getChdAutoCreateMode({ ...raw, metadata: { format: "CD" } })).toBe("raw");
+    const iso = bytes.slice();
+    iso.set([67, 68, 48, 48, 49], 16 * 2048 + 1);
+    expect(getChdAutoCreateMode({ ...raw, _u8array: iso, metadata: { format: "DVD" } })).toBe("cd");
+  });
+
   it.each([13, 4096, 32768, 2352, 2352 * 20])("keeps an unrecognized %i-byte BIN raw", (size) => {
     expect(getChdAutoCreateMode({ fileName: "game.bin", size, _u8array: new Uint8Array(size) })).toBe("raw");
   });
