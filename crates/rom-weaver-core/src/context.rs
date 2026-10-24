@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    CancellationToken, ProgressEvent, ProgressSink, Result, RomWeaverError, SharedThreadPool,
-    TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
+    CancellationToken, N64ByteOrder, ProgressEvent, ProgressSink, Result, RomWeaverError,
+    SharedThreadPool, TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
 };
 use serde::{Deserialize, Serialize};
 use tracing::trace;
@@ -20,16 +20,6 @@ use ts_rs::TS;
 pub enum PatchChecksumValidation {
     Strict,
     Ignore,
-}
-
-/// Planner-proven physical N64 byte order for the input passed to one patch
-/// handler. Unlike file-magic detection, this remains valid when an earlier
-/// chain step edits the ROM header.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PatchInputN64ByteOrder {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
 }
 
 /// Exact embedded endpoint a reversible patch should use. Most handlers infer
@@ -137,7 +127,7 @@ pub struct PatchPolicy {
     pub patch_endpoint_selection: Option<PatchEndpointSelection>,
     /// Planner-proven physical N64 order for this step's input. Patch handlers
     /// that normalize typed N64 inputs may use it instead of mutable ROM magic.
-    pub patch_input_n64_byte_order: Option<PatchInputN64ByteOrder>,
+    pub patch_input_n64_byte_order: Option<N64ByteOrder>,
     /// Secondary-compression mode for xdelta/vcdiff patch create.
     pub xdelta_secondary_mode: XdeltaSecondaryMode,
     /// Per-operation override for the patch-apply in-memory size cap (bytes). `None` uses the
@@ -372,11 +362,11 @@ impl OperationContext {
         self
     }
 
-    pub fn patch_input_n64_byte_order(&self) -> Option<PatchInputN64ByteOrder> {
+    pub fn patch_input_n64_byte_order(&self) -> Option<N64ByteOrder> {
         self.patch_policy.patch_input_n64_byte_order
     }
 
-    pub fn with_patch_input_n64_byte_order(mut self, order: PatchInputN64ByteOrder) -> Self {
+    pub fn with_patch_input_n64_byte_order(mut self, order: N64ByteOrder) -> Self {
         self.patch_policy.patch_input_n64_byte_order = Some(order);
         self
     }

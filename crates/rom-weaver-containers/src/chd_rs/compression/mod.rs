@@ -4,7 +4,7 @@ use std::ops::{Add, AddAssign};
 
 mod avhuff;
 mod cdrom;
-mod ecc;
+pub(crate) mod ecc;
 mod flac;
 mod huff;
 mod lzma;

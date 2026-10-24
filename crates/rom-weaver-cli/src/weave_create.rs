@@ -3,9 +3,13 @@
 
 use flate2::{Compression as GzCompression, write::GzEncoder};
 
-use super::weave_parse::{is_weave_json_candidate, parse_weave_bytes, weave_file_name_codec};
+use super::weave_parse::{
+    BUNDLE_BASE_FILE_NAME, WEAVE_BASE_FILE_NAME, is_weave_json_candidate, parse_weave_bytes,
+    weave_file_name_codec,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use super::weave_schema::WEAVE_JSON_SCHEMA_V1_URL;
+use super::weave_schema::cheat_entry_count_label;
 use super::*;
 
 const WEAVE_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
@@ -38,10 +42,10 @@ pub struct WeaveCreateResult {
 /// The `; N cheat entr(y|ies)` clause of the create label; empty when the
 /// weave records none.
 fn cheat_entry_summary(count: usize) -> String {
-    match count {
-        0 => String::new(),
-        1 => "; 1 cheat entry".to_string(),
-        many => format!("; {many} cheat entries"),
+    if count == 0 {
+        String::new()
+    } else {
+        format!("; {}", cheat_entry_count_label(count))
     }
 }
 
@@ -216,8 +220,11 @@ impl CliApp {
                 args.rom_member = rom.member.clone();
             }
             if args.assume_in.is_empty()
-                && let Some(checks) =
-                    resolve_spec_checks(&spec, rom.checks.as_ref(), rom.checks_ref.as_deref())?
+                && let Some(checks) = super::weave_apply::resolve_weave_checks(
+                    &spec,
+                    rom.checks.as_ref(),
+                    rom.checks_ref.as_deref(),
+                )?
             {
                 args.assume_in = checks_tokens(&checks);
             }
@@ -231,7 +238,7 @@ impl CliApp {
                 args.output_header = output.header;
             }
             if args.output_check.is_empty()
-                && let Some(checks) = resolve_spec_checks(
+                && let Some(checks) = super::weave_apply::resolve_weave_checks(
                     &spec,
                     output.checks.as_ref(),
                     output.checks_ref.as_deref(),
@@ -279,7 +286,7 @@ impl CliApp {
                     basis: entry.basis,
                     input: entry.input.clone(),
                     target: entry.target.clone(),
-                    input_checks: resolve_spec_checks(
+                    input_checks: super::weave_apply::resolve_weave_checks(
                         &spec,
                         entry.input_checks.as_ref(),
                         entry.input_checks_ref.as_deref(),
@@ -288,7 +295,7 @@ impl CliApp {
                     .map(checks_tokens)
                     .unwrap_or_default(),
                     input_checks_ref: entry.input_checks_ref.clone(),
-                    output_checks: resolve_spec_checks(
+                    output_checks: super::weave_apply::resolve_weave_checks(
                         &spec,
                         entry.output_checks.as_ref(),
                         entry.output_checks_ref.as_deref(),
@@ -725,9 +732,9 @@ impl CliApp {
     ) -> Result<PathBuf> {
         let staging = context.temp_paths().next_path("weave-weave", None);
         fs::create_dir_all(&staging)?;
-        let bundle_path = staging.join("rom-weaver-weave.json");
+        let bundle_path = staging.join(WEAVE_BASE_FILE_NAME);
         fs::write(&bundle_path, weave_bytes)?;
-        let legacy_path = staging.join("rom-weaver-bundle.json");
+        let legacy_path = staging.join(BUNDLE_BASE_FILE_NAME);
         fs::write(&legacy_path, weave_bytes)?;
         let mut inputs = vec![bundle_path, legacy_path];
         if let (Some(rom), Some(member)) = (
@@ -797,30 +804,6 @@ impl CliApp {
         handler.create(&request, context)?;
         Ok(weave.to_path_buf())
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn resolve_spec_checks(
-    spec: &RomWeaverWeave,
-    inline: Option<&WeaveChecks>,
-    reference: Option<&str>,
-) -> Result<Option<WeaveChecks>> {
-    if let Some(checks) = inline {
-        return Ok(Some(checks.clone()));
-    }
-    let Some(reference) = reference else {
-        return Ok(None);
-    };
-    spec.check_states
-        .iter()
-        .find(|state| state.id == reference)
-        .map(|state| state.checks.clone())
-        .map(Some)
-        .ok_or_else(|| {
-            RomWeaverError::Validation(format!(
-                "--from: checks reference `{reference}` does not exist in checkStates"
-            ))
-        })
 }
 
 fn weave_create_algorithms(args: &WeaveCreateCommand) -> Result<Vec<String>> {
@@ -1002,6 +985,9 @@ fn assign_weave_member_paths(
 ) -> Result<()> {
     let mut members: Vec<(String, PathBuf)> = Vec::new();
     let mut assign = |source: &Path, preferred: String| -> Result<String> {
+        // Weave paths may never contain `:` (weave_parse rejects it), but input names can,
+        // e.g. `hack [crc32:1a2b3c4d].ips`; the member name inside the archive is ours to pick.
+        let preferred = preferred.replace(':', "_");
         if let Some((member, _)) = members
             .iter()
             .find(|(_, existing)| same_weave_payload(existing, source))
@@ -1298,7 +1284,7 @@ fn required_base_name(path: &Path, what: &str) -> Result<String> {
 }
 
 fn weave_create_outputs_alias(left: &Path, right: &Path) -> bool {
-    left == right || native_file_identity_matches(left, right)
+    left == right || super::path_access::native_file_identity_matches(left, right)
 }
 
 fn weave_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> bool {
@@ -1318,16 +1304,6 @@ fn output_path_identity(path: &Path) -> Option<PathBuf> {
     fs::canonicalize(parent)
         .ok()
         .map(|parent| parent.join(name))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
-    same_file::is_same_file(left, right).unwrap_or(false)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
-    false
 }
 
 /// Write weave bytes honoring the output name's codec extension: plain

@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{self, IsTerminal, Read, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::{
@@ -10,7 +10,8 @@ use std::{
 };
 
 use rom_weaver_core::{
-    OperationStatus, ProgressEvent, ProgressSink, SelectionPrompter, process_cancellation_token,
+    OperationStatus, ProgressEvent, ProgressSink, SelectionPrompter, copy_cancelable,
+    process_cancellation_token,
 };
 use tracing::trace;
 
@@ -343,7 +344,7 @@ fn run_staged(
     {
         let mut source = File::open(input)?;
         let mut output = File::create_new(&payload)?;
-        copy_cancelable(&mut source, &mut output)?;
+        copy_cancelable(&mut source, &mut output, &process_cancellation_token())?;
     }
     let fallback_files = fallback.map(|path| vec![serde_json::json!({ "path": path })]);
     let files = terminal
@@ -383,31 +384,16 @@ fn run_staged(
     }
     trace!(path = %path.display(), "copying completed binary output to stdout");
     let mut source = File::open(path)?;
-    match copy_cancelable(&mut source, &mut stdout_writer()) {
-        Ok(()) => Ok(ExitCode::SUCCESS),
+    match copy_cancelable(
+        &mut source,
+        &mut stdout_writer(),
+        &process_cancellation_token(),
+    ) {
+        Ok(_) => Ok(ExitCode::SUCCESS),
         Err(RomWeaverError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe => {
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => Err(error),
-    }
-}
-
-fn copy_cancelable(input: &mut impl Read, output: &mut impl Write) -> Result<()> {
-    let token = process_cancellation_token();
-    let mut buffer = [0; 64 * 1024];
-    loop {
-        token.check()?;
-        let count = match input.read(&mut buffer) {
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            result => result?,
-        };
-        if count == 0 {
-            output.flush()?;
-            return Ok(());
-        }
-        let written = output.write_all(&buffer[..count]);
-        token.check()?;
-        written?;
     }
 }
 

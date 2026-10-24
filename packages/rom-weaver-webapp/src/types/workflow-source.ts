@@ -36,6 +36,9 @@ type SourceMetadata = {
   // Rust ingest identity verdict: content-detected container (chd/rvz/z3ds) - works on a bare .iso,
   // so it drives the auto output format ahead of extension heuristics.
   recommendedFormat?: string;
+  // Rust ingest/probe verdict of the create mode native `chd` auto-inference picks for the source's
+  // bytes (`cd`/`dvd`/`hd`/`raw`); TS never re-derives it from a byte prefix.
+  chdCreateMode?: string;
 };
 
 type WorkflowRomFileLike = WorkflowBinaryBackedFileLike & WorkflowExtensionFileLike & { metadata?: SourceMetadata };

@@ -339,6 +339,8 @@ type CompressionProbeResult = {
   discFormat?: string;
   /** Rom-specific container the engine recommends from the file's header bytes (e.g. `chd` for a CD image). */
   recommendedFormat?: string;
+  /** Create mode (`cd`/`dvd`/`hd`/`raw`) native `chd` auto-inference picks for a loose `.bin`/`.iso`. */
+  chdCreateMode?: string;
   /** Digests read from a CHD header, without decompressing the payload. */
   chd?: { rawSha1?: string; sha1?: string };
 };

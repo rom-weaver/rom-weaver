@@ -56,6 +56,15 @@ impl RomWeaverErrorKind {
     }
 }
 
+/// Code of the validation error for an extract source no registered container
+/// recognizes. The webapp matches this code (surfaced via typegen) instead of
+/// the message text.
+pub const VALIDATION_CODE_EXTRACT_NO_CONTAINER: &str = "extract.no_container";
+
+/// Code of the validation error for a WBFS file or split set whose total size
+/// differs from its header's. Carries `actual` and `expected` byte fields.
+pub const VALIDATION_CODE_WBFS_SIZE_MISMATCH: &str = "wbfs.size_mismatch";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationCodeError {
     code: Cow<'static, str>,

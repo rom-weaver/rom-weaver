@@ -130,6 +130,12 @@ disc_format?: string | null,
  */
 recommended_format?: string | null,
 /**
+ * Create mode (`cd`/`dvd`/`hd`/`raw`) the native `chd` auto-inference picks for a loose
+ * `.bin`/`.iso`/extensionless asset, read from the file's bytes. `None` for other extensions
+ * or when inference fails. Hosts read this instead of re-deriving it from a byte prefix.
+ */
+chd_create_mode?: string | null,
+/**
  * Disc-group id shared by a `.cue`/`.gdi` sheet and its tracks (multi-track disc grouping).
  */
 disc_group_id?: string | null,
@@ -292,7 +298,12 @@ export type CheatRecord = { id: string, system: CheatSystem, gameId: string, des
 
 export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "unsupported", reason: string, };
 
-export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
+export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null,
+/**
+ * The record's raw code split into individual codes by [`split_for_kind`],
+ * so the webapp never re-implements the splitting rules.
+ */
+codes?: Array<string>, };
 
 export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
 
@@ -345,7 +356,7 @@ export type OutputEnforceableEntry = { patch_index: number, source: string, chec
 
 export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
 
-export type ProbeCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, split_bin?: boolean, };
+export type ProbeCommand = { input: string, split_bin?: boolean, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
 
 export type ExtractCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, output: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, force?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
@@ -441,7 +452,7 @@ export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabas
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 
-export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, title_index?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, title_index?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, no_trim_fix?: boolean, threads?: ThreadBudget, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**
@@ -775,7 +786,15 @@ export type WeavePatchSource = { source: WeaveSourceRef,
  * archive (spares the host a second describe round-trip). `None` for
  * URL / unresolved-path entries.
  */
-descriptor?: PatchDescriptor | null, };
+descriptor?: PatchDescriptor | null,
+/**
+ * The entry's input checks with any `inputChecksRef` resolved against `checkStates`.
+ */
+input_checks?: WeaveChecks | null,
+/**
+ * The entry's output checks with any `outputChecksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null, };
 
 export type WeaveParseResult = {
 /**
@@ -796,6 +815,14 @@ rom_source?: WeaveSourceRef | null,
  * Index-aligned with `weave.patches`.
  */
 patch_sources: Array<WeavePatchSource>,
+/**
+ * `weave.rom` checks with any `checksRef` resolved against `checkStates`.
+ */
+rom_checks?: WeaveChecks | null,
+/**
+ * `weave.output` checks with any `checksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null,
 /**
  * Non-fatal issues (ignored members, extra weaves, …).
  */

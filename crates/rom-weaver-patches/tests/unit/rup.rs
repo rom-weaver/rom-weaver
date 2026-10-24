@@ -4,9 +4,9 @@ use std::{
 };
 
 use rom_weaver_core::{
-    CancellationToken, PatchApplyDirection, PatchApplyRequest, PatchCheckScopes,
+    CancellationToken, N64ByteOrder, PatchApplyDirection, PatchApplyRequest, PatchCheckScopes,
     PatchChecksumValidation, PatchCreateRequest, PatchEndpointSelection, PatchHandler,
-    PatchInputN64ByteOrder, PatchValidateRequest,
+    PatchValidateRequest,
 };
 
 use super::{
@@ -16,10 +16,10 @@ use super::{
     SMD_BLOCK_SIZE, SNES_BANK_SIZE, apply_rup_prepared_records, apply_xor_records_in_place,
     build_rup_prepared_tasks, build_xor_records, collect_rup_chunk_records,
     collect_rup_records_parallel, copy_exact_bytes, copy_unif_payload_chunks,
-    create_rup_patch_bytes, create_rup_patch_parallel, deinterleave_smd_block,
-    deinterleave_snes_payload, encode_rup_patch, format_md5_hex, is_unif_payload_chunk, md5_bytes,
-    nibble_to_hex, normalize_rup_input, parallel_chunked_capability, parse_rup_bytes,
-    prepare_rup_write_task, push_vlv, read_unif_chunk_header, read_xor_suffix,
+    create_rup_patch_bytes, create_rup_patch_parallel, current_utc_yyyymmdd,
+    deinterleave_smd_block, deinterleave_snes_payload, encode_rup_patch, format_md5_hex,
+    is_unif_payload_chunk, md5_bytes, normalize_rup_input, parallel_chunked_capability,
+    parse_rup_bytes, prepare_rup_write_task, push_vlv, read_unif_chunk_header, read_xor_suffix,
     rebuild_unif_payload, snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
     write_n64_big_endian_to_temp, write_smd_deinterleaved_to_temp,
 };
@@ -883,7 +883,7 @@ fn selected_n64_endpoint_uses_planned_order_after_magic_changes() {
             variant: 0,
             direction: PatchApplyDirection::Forward,
         })
-        .with_patch_input_n64_byte_order(PatchInputN64ByteOrder::ByteSwapped);
+        .with_patch_input_n64_byte_order(N64ByteOrder::ByteSwapped);
     let report = RupPatchHandler::new(&RUP)
         .apply(
             &PatchApplyRequest {
@@ -2025,7 +2025,7 @@ fn n64_normalization_requires_a_length_that_matches_the_byte_order_unit() {
     let temp = TestDir::new();
     let path = sized_fixture(&temp, "odd.n64", 6);
     let context = test_context_with_threads(&temp, 1)
-        .with_patch_input_n64_byte_order(PatchInputN64ByteOrder::LittleEndian);
+        .with_patch_input_n64_byte_order(N64ByteOrder::LittleEndian);
 
     let error = normalize_rup_input(&path, &rup_file_of_type(4), &context)
         .expect_err("a 6-byte little-endian image is not word aligned");
@@ -2044,8 +2044,7 @@ fn n64_big_endian_rewrite_copies_the_input_byte_for_byte() {
     let context = test_context_with_threads(&temp, 1);
 
     let rewritten =
-        write_n64_big_endian_to_temp(&path, &context, PatchInputN64ByteOrder::BigEndian)
-            .expect("rewrite");
+        write_n64_big_endian_to_temp(&path, &context, N64ByteOrder::BigEndian).expect("rewrite");
     assert_eq!(
         fs::read(&rewritten).expect("rewritten"),
         fs::read(&path).expect("source")
@@ -2555,7 +2554,7 @@ fn fixed_strings_are_truncated_and_nul_padded_to_their_field_width() {
 }
 
 #[test]
-fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
+fn md5_hex_formats_every_nibble() {
     let mut value = [0u8; 16];
     value[0] = 0x0f;
     value[15] = 0xa5;
@@ -2563,7 +2562,7 @@ fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
 
     assert!(hex.starts_with("0f"));
     assert!(hex.ends_with("a5"));
-    assert_eq!(nibble_to_hex(16), '0');
+    assert_eq!(format_md5_hex([0xff; 16]), "ff".repeat(16));
 }
 
 #[test]
@@ -2582,4 +2581,14 @@ fn collect_rup_chunk_records_reads_zero_past_the_end_of_the_source() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].offset, 4);
     assert_eq!(records[0].xor, b"efgh".to_vec());
+}
+
+#[test]
+fn current_utc_date_is_an_eight_digit_yyyymmdd_string() {
+    let date = current_utc_yyyymmdd();
+    assert_eq!(date.len(), 8, "{date}");
+    assert!(date.bytes().all(|byte| byte.is_ascii_digit()), "{date}");
+    assert!(date.as_str() >= "20240101", "{date}");
+    assert!((1..=12).contains(&date[4..6].parse::<u32>().unwrap()));
+    assert!((1..=31).contains(&date[6..8].parse::<u32>().unwrap()));
 }

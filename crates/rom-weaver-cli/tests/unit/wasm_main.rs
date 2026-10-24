@@ -96,3 +96,30 @@ fn well_formed_json_with_an_unknown_command_type_reports_an_invalid_json_error()
         "unexpected error message: {error}"
     );
 }
+
+#[test]
+fn probe_and_identify_requests_keep_flattened_selection_keys() {
+    let request = parse_wasm_run_request(
+        r#"{"command":{"type":"probe","args":{"input":"game.zip","select":["a.bin"],"filter":["rom"],"no_extract":true,"no_ignore":true}}}"#,
+    )
+    .expect("probe request with selection keys should parse");
+    let rom_weaver_app::Commands::Probe(args) = request.command else {
+        panic!("expected probe command");
+    };
+    assert_eq!(args.selection.select, ["a.bin"]);
+    assert_eq!(args.selection.filter, [rom_weaver_app::FilterKind::Rom]);
+    assert!(args.selection.no_extract);
+    assert!(args.selection.no_ignore);
+
+    let request = parse_wasm_run_request(
+        r#"{"command":{"type":"identify","args":{"input":"game.zip","select":["a.bin"],"filter":["rom"],"no_extract":true,"no_ignore":true}}}"#,
+    )
+    .expect("identify request with selection keys should parse");
+    let rom_weaver_app::Commands::Identify(args) = request.command else {
+        panic!("expected identify command");
+    };
+    assert_eq!(args.selection.select, ["a.bin"]);
+    assert_eq!(args.selection.filter, [rom_weaver_app::FilterKind::Rom]);
+    assert!(args.selection.no_extract);
+    assert!(args.selection.no_ignore);
+}

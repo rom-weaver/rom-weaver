@@ -111,7 +111,10 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   useEffect(() => {
     let current = true;
     if (!files.length) return;
-    void Promise.all([getCompressSource(files), getCompressFormats(files, loadBrowserRuntime)]).then(
+    void Promise.all([
+      getCompressSource(files, loadBrowserRuntime),
+      getCompressFormats(files, loadBrowserRuntime),
+    ]).then(
       ([nextSource, nextFormats]) => {
         if (current) setInputInfo({ files, formats: nextFormats, source: nextSource });
       },

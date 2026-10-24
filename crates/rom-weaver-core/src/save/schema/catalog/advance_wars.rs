@@ -61,14 +61,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                         other_count < count || (other_count == count && other_record >= record)
                     }))
                 })],
-                repairs: checksums
-                    .iter()
-                    .cloned()
-                    .map(|checksum| layout::Repair::Checksum { checksum })
-                    .collect(),
-                checksums,
                 ..Default::default()
             }
+            .with_checksums(checksums)
         })
         .collect();
     game.runtime.layout = Some(layout::Layout {

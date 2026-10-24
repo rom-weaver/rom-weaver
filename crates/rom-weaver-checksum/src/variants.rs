@@ -11,14 +11,13 @@
 use std::collections::BTreeMap;
 use std::io::Read;
 
-use rom_weaver_core::{Result, RomWeaverError};
+use rom_weaver_core::{N64ByteOrder, Result, RomWeaverError};
 use serde_json::{Value, json};
 use tracing::{trace, warn};
 
 use crate::rom_headers::{
-    GBA_HEADER_MAGIC, KnownRomHeaderMatch, N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC,
-    N64_LITTLE_ENDIAN_MAGIC, ROM_HEADER_SCAN_BYTES, detect_strippable_rom_header_from_prefix,
-    header_has_nsrt_metadata,
+    GBA_HEADER_MAGIC, KnownRomHeaderMatch, ROM_HEADER_SCAN_BYTES,
+    detect_strippable_rom_header_from_prefix, header_has_nsrt_metadata,
 };
 use crate::{StreamingChecksum, StreamingChecksumTiming};
 
@@ -53,6 +52,23 @@ impl VariantRow {
     }
 }
 
+const N64_BYTE_ORDER_ROW_PREFIX: &str = "n64-byte-order:";
+
+/// Variant row id for the N64 byte-order variant `order` (`n64-byte-order:<id>`).
+#[must_use]
+pub fn n64_byte_order_row_id(order: N64ByteOrder) -> String {
+    format!("{N64_BYTE_ORDER_ROW_PREFIX}{}", order.id())
+}
+
+/// Inverse of [`n64_byte_order_row_id`]; `None` for any other row id.
+#[must_use]
+pub fn n64_byte_order_from_row_id(id: &str) -> Option<N64ByteOrder> {
+    let suffix = id.strip_prefix(N64_BYTE_ORDER_ROW_PREFIX)?;
+    N64ByteOrder::ALL
+        .into_iter()
+        .find(|order| order.id() == suffix)
+}
+
 /// A `fix-header` variant that exceeded [`FIX_HEADER_PREFIX_CAP`]: its repair
 /// patches are known, but the caller must apply them in a separate read to
 /// produce the digest (e.g. via [`overlay_checksums`]).
@@ -81,63 +97,6 @@ pub struct VariantOutput {
     pub raw_timing: StreamingChecksumTiming,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum N64Order {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
-}
-
-impl N64Order {
-    const ALL: [Self; 3] = [Self::BigEndian, Self::LittleEndian, Self::ByteSwapped];
-
-    fn id(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
-
-    fn detect(prefix: &[u8]) -> Option<Self> {
-        if prefix.len() < 4 {
-            return None;
-        }
-        match &prefix[..4] {
-            magic if magic == N64_BIG_ENDIAN_MAGIC => Some(Self::BigEndian),
-            magic if magic == N64_LITTLE_ENDIAN_MAGIC => Some(Self::LittleEndian),
-            magic if magic == N64_BYTE_SWAPPED_MAGIC => Some(Self::ByteSwapped),
-            _ => None,
-        }
-    }
-
-    fn transform(self, bytes: &mut [u8; 4]) {
-        match self {
-            Self::BigEndian => {}
-            Self::LittleEndian => bytes.reverse(),
-            Self::ByteSwapped => {
-                bytes.swap(0, 1);
-                bytes.swap(2, 3);
-            }
-        }
-    }
-
-    /// Read a 4-byte word stored in `bytes` (original on-disk order) as a
-    /// big-endian value after normalizing for this byte order.
-    fn word_normalized(self, bytes: [u8; 4]) -> u32 {
-        let mut bytes = bytes;
-        self.transform(&mut bytes);
-        u32::from_be_bytes(bytes)
-    }
-
-    /// Re-encode a big-endian value into this byte order's on-disk layout.
-    fn word_original_order(self, value: u32) -> [u8; 4] {
-        let mut bytes = value.to_be_bytes();
-        self.transform(&mut bytes);
-        bytes
-    }
-}
-
 /// Per-variant transform applied to each chunk before hashing.
 enum Transform {
     Raw,
@@ -145,8 +104,8 @@ enum Transform {
         stripped: u64,
     },
     N64ByteOrder {
-        source: N64Order,
-        target: N64Order,
+        source: N64ByteOrder,
+        target: N64ByteOrder,
         carry: Vec<u8>,
     },
 }
@@ -190,8 +149,8 @@ impl VariantHasher {
                 let mut transformed = Vec::with_capacity(full);
                 for word in buffer[..full].chunks_exact(4) {
                     let mut bytes = [word[0], word[1], word[2], word[3]];
-                    source.transform(&mut bytes);
-                    target.transform(&mut bytes);
+                    source.transform_word(&mut bytes);
+                    target.transform_word(&mut bytes);
                     transformed.extend_from_slice(&bytes);
                 }
                 *carry = buffer[full..].to_vec();
@@ -250,7 +209,7 @@ impl SegaAccumulator {
 
 /// Running accumulator for the N64 boot-code CRC pair over `[start, end)`.
 struct N64Accumulator {
-    order: N64Order,
+    order: N64ByteOrder,
     start: u64,
     end: u64,
     word: Vec<u8>,
@@ -263,7 +222,7 @@ struct N64Accumulator {
 }
 
 impl N64Accumulator {
-    fn new(order: N64Order, start: u64, end: u64) -> Self {
+    fn new(order: N64ByteOrder, start: u64, end: u64) -> Self {
         let seed = 0xF8CA_4DDCu32;
         Self {
             order,
@@ -876,16 +835,16 @@ impl StreamingVariantChecksums {
         if !self.total_len.is_multiple_of(4) {
             return Ok(Vec::new());
         }
-        let Some(source) = N64Order::detect(header) else {
+        let Some(source) = N64ByteOrder::detect(header) else {
             return Ok(Vec::new());
         };
-        let mut variants = Vec::with_capacity(N64Order::ALL.len());
-        for target in N64Order::ALL {
+        let mut variants = Vec::with_capacity(N64ByteOrder::ALL.len());
+        for target in N64ByteOrder::ALL {
             let Some(checksum) = StreamingChecksum::new(&self.algorithms)? else {
                 continue;
             };
             variants.push(VariantHasher {
-                id: format!("n64-byte-order:{}", target.id()),
+                id: n64_byte_order_row_id(target),
                 label: format!("N64 byte order: {}", target.id()),
                 apply_compatibility: json!({
                     "n64ByteOrder": target.id(),
@@ -1009,7 +968,7 @@ fn plan_n64_repair(header: &[u8], total_len: u64) -> Option<N64Repair> {
     if total_len < 0x101000 || header.len() < 0x18 {
         return None;
     }
-    let order = N64Order::detect(header)?;
+    let order = N64ByteOrder::detect(header)?;
     // The streamed CRC pair implements only the CIC-6101/6102 seed and round
     // function; 6103/6105/6106 use a different seed (6105 also a different round
     // and final combine), so running it on them would emit a wrong digest and a
@@ -1067,7 +1026,7 @@ impl N64Cic {
 /// Identify the N64 boot chip from the IPL3 bootcode `[0x40, 0x1000)`. Returns
 /// `None` when the bootcode is unavailable or matches no known chip (treated as
 /// the 6101/6102 default by the caller).
-fn detect_n64_cic(header: &[u8], order: N64Order) -> Option<N64Cic> {
+fn detect_n64_cic(header: &[u8], order: N64ByteOrder) -> Option<N64Cic> {
     const BOOTCODE_START: usize = 0x40;
     const BOOTCODE_END: usize = 0x1000;
     if header.len() < BOOTCODE_END {
@@ -1193,6 +1152,24 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+    use rom_weaver_core::{N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC};
+
+    #[test]
+    fn n64_byte_order_row_id_round_trips() {
+        for order in N64ByteOrder::ALL {
+            let id = n64_byte_order_row_id(order);
+            assert_eq!(id, format!("n64-byte-order:{}", order.id()));
+            assert_eq!(n64_byte_order_from_row_id(&id), Some(order));
+        }
+        for bad in [
+            "n64-byte-order:",
+            "n64-byte-order:z64",
+            "remove-header",
+            "big-endian",
+        ] {
+            assert_eq!(n64_byte_order_from_row_id(bad), None, "{bad}");
+        }
+    }
 
     fn algorithms() -> Vec<String> {
         vec!["crc32".to_string(), "sha1".to_string()]
@@ -1246,7 +1223,7 @@ mod tests {
         // An all-zero IPL3 bootcode matches no known CIC, so the engine keeps the
         // 6101/6102 default rather than dropping the variant.
         let rom = build_n64_rom();
-        assert!(detect_n64_cic(&rom, N64Order::BigEndian).is_none());
+        assert!(detect_n64_cic(&rom, N64ByteOrder::BigEndian).is_none());
         assert!(plan_n64_repair(&rom, rom.len() as u64).is_some());
     }
 
@@ -1281,6 +1258,34 @@ mod tests {
             final_ids.insert(deferred.id.clone());
         }
         (plan_ids, final_ids)
+    }
+
+    #[test]
+    fn streamed_rows_hash_the_raw_and_byte_order_converted_bytes() {
+        let big = build_n64_rom();
+        let mut little = big.clone();
+        for word in little.chunks_exact_mut(4) {
+            word.reverse();
+        }
+        let crc = |bytes: &[u8]| format!("{:08x}", crc32fast::hash(bytes));
+        let algorithms = algorithms();
+        let mut engine =
+            StreamingVariantChecksums::new(&algorithms, little.len() as u64, Some("game.n64"), 1)
+                .expect("engine");
+        for chunk in little.chunks(4099) {
+            engine.update(chunk).expect("update");
+        }
+        let output = engine.finalize().expect("finalize");
+        let crc_of = |id: &str| {
+            output
+                .rows
+                .iter()
+                .find(|row| row.id == id)
+                .and_then(|row| row.checksums.get("crc32").cloned())
+        };
+        assert_eq!(crc_of("raw"), Some(crc(&little)));
+        assert_eq!(crc_of("n64-byte-order:big-endian"), Some(crc(&big)));
+        assert_eq!(crc_of("n64-byte-order:little-endian"), Some(crc(&little)));
     }
 
     #[test]
@@ -1459,26 +1464,26 @@ mod tests {
 
     #[test]
     fn n64_order_detection_needs_a_full_four_byte_magic() {
-        assert!(N64Order::detect(&[]).is_none());
-        assert!(N64Order::detect(&[0x80, 0x37, 0x12]).is_none());
-        assert!(N64Order::detect(&[0x00, 0x11, 0x22, 0x33]).is_none());
+        assert!(N64ByteOrder::detect(&[]).is_none());
+        assert!(N64ByteOrder::detect(&[0x80, 0x37, 0x12]).is_none());
+        assert!(N64ByteOrder::detect(&[0x00, 0x11, 0x22, 0x33]).is_none());
 
         for (magic, order, label) in [
-            (N64_BIG_ENDIAN_MAGIC, N64Order::BigEndian, "big-endian"),
+            (N64_BIG_ENDIAN_MAGIC, N64ByteOrder::BigEndian, "big-endian"),
             (
                 N64_LITTLE_ENDIAN_MAGIC,
-                N64Order::LittleEndian,
+                N64ByteOrder::LittleEndian,
                 "little-endian",
             ),
             (
                 N64_BYTE_SWAPPED_MAGIC,
-                N64Order::ByteSwapped,
+                N64ByteOrder::ByteSwapped,
                 "byte-swapped",
             ),
         ] {
             let mut prefix = magic.to_vec();
             prefix.extend_from_slice(&[0u8; 8]);
-            let detected = N64Order::detect(&prefix).expect("magic must be recognized");
+            let detected = N64ByteOrder::detect(&prefix).expect("magic must be recognized");
             assert!(detected == order);
             assert_eq!(detected.id(), label);
         }

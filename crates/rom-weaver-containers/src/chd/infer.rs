@@ -433,8 +433,7 @@ impl ChdContainerHandler {
             || self.has_valid_exfat_boot_sector(sector, logical_bytes)
     }
 
-    /// The webapp's `hasChdHardDiskHeader` must agree; both run the cases in
-    /// `tests/fixtures/chd-hard-disk-headers.json`.
+    /// Runs the cases in `tests/fixtures/chd-hard-disk-headers.json`.
     pub(super) fn should_auto_infer_hard_disk(&self, input: &Path, logical_bytes: u64) -> bool {
         if logical_bytes < u64::from(Self::HD_SECTOR_BYTES)
             || !logical_bytes.is_multiple_of(u64::from(Self::HD_SECTOR_BYTES))
@@ -545,16 +544,27 @@ impl ChdContainerHandler {
             )));
         };
 
-        match mode {
-            "cd" => Ok(Some(ChdCreateModeOverride::Cd)),
-            "gd" => Ok(Some(ChdCreateModeOverride::Gd)),
-            "dvd" => Ok(Some(ChdCreateModeOverride::Dvd)),
-            "raw" => Ok(Some(ChdCreateModeOverride::Raw)),
-            "hd" => Ok(Some(ChdCreateModeOverride::HardDisk)),
-            "av" | "ld" => Ok(Some(ChdCreateModeOverride::Av)),
-            _ => Err(RomWeaverError::Validation(format!(
-                "unsupported chd mode `{mode}` in `{format}`; expected one of: cd, gd, dvd, raw, hd, av, ld"
-            ))),
+        let canonical = CHD_CREATE_MODES
+            .iter()
+            .find(|(name, _)| *name == mode)
+            .map(|(_, canonical)| *canonical);
+        match canonical {
+            Some("cd") => Ok(Some(ChdCreateModeOverride::Cd)),
+            Some("gd") => Ok(Some(ChdCreateModeOverride::Gd)),
+            Some("dvd") => Ok(Some(ChdCreateModeOverride::Dvd)),
+            Some("raw") => Ok(Some(ChdCreateModeOverride::Raw)),
+            Some("hd") => Ok(Some(ChdCreateModeOverride::HardDisk)),
+            Some("av") => Ok(Some(ChdCreateModeOverride::Av)),
+            _ => {
+                let accepted = CHD_CREATE_MODES
+                    .iter()
+                    .map(|(name, _)| *name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(RomWeaverError::Validation(format!(
+                    "unsupported chd mode `{mode}` in `{format}`; expected one of: {accepted}"
+                )))
+            }
         }
     }
 
@@ -649,7 +659,11 @@ impl ChdContainerHandler {
         } else {
             self.infer_create_kind(input, logical_bytes)?
         };
-        Ok(match create_kind {
+        Ok(Self::create_kind_label(&create_kind))
+    }
+
+    fn create_kind_label(create_kind: &ChdCreateKind) -> &'static str {
+        match create_kind {
             ChdCreateKind::Raw => "raw",
             ChdCreateKind::HardDisk(_) => "hd",
             ChdCreateKind::Dvd => "dvd",
@@ -658,7 +672,24 @@ impl ChdContainerHandler {
                 DiscKind::GdRom => "gd",
             },
             ChdCreateKind::Av(_) => "av",
-        })
+        }
+    }
+
+    /// The create mode (`cd`/`dvd`/`hd`/`raw`/...) native `chd` auto-inference would pick for a
+    /// loose `.bin`/`.iso`/extensionless image, so hosts read the verdict instead of re-deriving it
+    /// from bytes. `None` for any other extension or when inference fails (unreadable, or an
+    /// `.iso` that is not whole 2048-byte sectors).
+    pub fn infer_auto_create_mode_label(&self, input: &Path) -> Option<&'static str> {
+        let loose =
+            Self::is_extension(input, "iso") || self.should_auto_infer_single_track_cd(input);
+        if !loose {
+            return None;
+        }
+        let logical_bytes = std::fs::metadata(input).ok()?.len();
+        let create_kind = self.infer_create_kind(input, logical_bytes).ok()?;
+        let label = Self::create_kind_label(&create_kind);
+        trace!(input = %input.display(), label, "chd infer: auto create mode");
+        Some(label)
     }
 
     pub(super) fn unit_bytes(&self, create_kind: &ChdCreateKind) -> u32 {

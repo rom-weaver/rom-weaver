@@ -102,3 +102,11 @@ fn extra_mario_world_slots_preserve_other_files_and_match_full_profile_edits() {
         assert_eq!(actual.bytes, expected.bytes);
     }
 }
+
+#[test]
+fn shared_crc_helpers_match_check_values() {
+    assert_eq!(super::crc32(b"123456789"), 0xcbf4_3926);
+    assert_eq!(super::crc32(b""), 0);
+    assert_eq!(super::crc16_ccitt_false(*b"123456789"), 0x29b1);
+    assert_eq!(super::crc16_ccitt_false([]), 0xffff);
+}

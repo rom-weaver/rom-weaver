@@ -1,9 +1,9 @@
-use std::{env, fs, path::Path};
+use std::{collections::BTreeMap, env, fs, path::Path};
 
 use rom_weaver_app::{
-    CheatCommand, CheatCommandResult, CheatKind, CheatPatchSnapshot, CheatRecord, CheatResolution,
-    CheatSystem, CheatTarget, CheatWrite, CheatWriteConflict, ChecksumCommand,
-    ClassifiedCheatRecord, CommandResultDetails, Commands, CompressCommand,
+    BUNDLE_BASE_FILE_NAME, CheatCommand, CheatCommandResult, CheatKind, CheatPatchSnapshot,
+    CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite, CheatWriteConflict,
+    ChecksumCommand, ClassifiedCheatRecord, CommandResultDetails, Commands, CompressCommand,
     CompressionLevelProfile, ExtractCommand, ExtractStepDetails, ExtractedFileEntry, FilterKind,
     IdentifyCommand, IdentifyComponent, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
     IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInfo,
@@ -18,11 +18,16 @@ use rom_weaver_app::{
     PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, RomWeaverRunOutputOptions,
     RomWeaverRunRequest, RomWeaverWeave, SaveCommands, SaveCreateCommand, SaveExportSchemaCommand,
     SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand,
-    ToolsCommands, TrimCommand, WeaveCheatEntry, WeaveCheckState, WeaveChecks, WeaveCommands,
-    WeaveCreateCommand, WeaveCreateResult, WeaveOutput, WeaveParseCommand, WeaveParseResult,
-    WeavePatchEntry, WeavePatchInput, WeavePatchSource, WeaveRom, WeaveSourceKind, WeaveSourceRef,
-    compression_metadata, patch_create_format_policy_metadata,
+    ToolsCommands, TrimCommand, WEAVE_BASE_FILE_NAME, WeaveCheatEntry, WeaveCheckState,
+    WeaveChecks, WeaveCommands, WeaveCreateCommand, WeaveCreateResult, WeaveOutput,
+    WeaveParseCommand, WeaveParseResult, WeavePatchEntry, WeavePatchInput, WeavePatchSource,
+    WeaveRom, WeaveSourceKind, WeaveSourceRef, cli_command, compression_metadata,
+    patch_create_format_policy_metadata, trim_input_extensions,
 };
+use rom_weaver_checksum::identify_catalog::{
+    CARTRIDGE_EXTENSION_PACK_SLUGS, NINTENDO_3DS_PACK_SLUG, PLATFORM_SIBLING_PACK_SLUGS,
+};
+use rom_weaver_containers::chd::CHD_CREATE_MODES;
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerThreadCapabilityMetadata,
@@ -32,11 +37,13 @@ use rom_weaver_containers::{
 use rom_weaver_core::{
     CONTAINER_FILTER_FILE_EXTENSIONS, OperationFamily, OperationStatus,
     PATCH_FILTER_FILE_EXTENSIONS, PatchApplyDirection, PatchEndpointSelection, ProgressEvent,
-    ROM_FILTER_FILE_EXTENSIONS, RomWeaverErrorKind, SaveChangePreview, SaveConstraint,
-    SaveDocument, SaveEdit, SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind,
-    SaveGameCandidate, SaveGameDefinition, SaveGameIdentity, SaveIntegrity, SaveIntegrityIssue,
-    SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence, SaveRecognitionOutcome,
-    SaveRecognitionReason, SaveSection, SaveValue, ThreadBudget, ThreadExecution, ThreadMode,
+    RAW_SAVE_FILE_EXTENSIONS, ROM_FILTER_FILE_EXTENSIONS, RomWeaverErrorKind, SaveChangePreview,
+    SaveConstraint, SaveContainerKind, SaveDocument, SaveEdit, SaveEditResult, SaveField,
+    SaveFieldChange, SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameIdentity,
+    SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState, SaveRecognition,
+    SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
+    SaveValue, ThreadBudget, ThreadExecution, ThreadMode, VALIDATION_CODE_EXTRACT_NO_CONTAINER,
+    VALIDATION_CODE_WBFS_SIZE_MISMATCH,
 };
 use rom_weaver_patches::PatchRegistry;
 use serde_json::{Map, Value, json};
@@ -344,7 +351,7 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
@@ -371,6 +378,27 @@ fn render_metadata() -> String {
             "ROM_WEAVER_ERROR_KIND_PREFIXES",
             error_kind_prefixes_value()
         ),
+        render_ts_const(
+            "ROM_WEAVER_IDENTIFY_PACK_SLUGS",
+            identify_pack_slugs_value()
+        ),
+        render_ts_const(
+            "ROM_WEAVER_TRIM_INPUT_EXTENSIONS",
+            Value::Array(string_values(
+                trim_input_extensions()
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            ))
+        ),
+        render_ts_const("ROM_WEAVER_THREADED_COMMANDS", threaded_commands_value()),
+        render_ts_const("ROM_WEAVER_CHD_CREATE_MODES", chd_create_modes_value()),
+        render_ts_const(
+            "ROM_WEAVER_SAVE_FILE_EXTENSIONS",
+            save_file_extensions_value()
+        ),
+        render_ts_const("ROM_WEAVER_WEAVE_FILE_NAMES", weave_file_names_value()),
+        render_ts_const("ROM_WEAVER_VALIDATION_CODES", validation_codes_value()),
         "export const ROM_WEAVER_FORMAT_METADATA = {\n  archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,\n  compression: ROM_WEAVER_COMPRESSION_METADATA,\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  discImagePolicy: ROM_WEAVER_DISC_IMAGE_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n  z3dsSubtypes: ROM_WEAVER_Z3DS_SUBTYPES,\n} as const;",
     )
 }
@@ -690,6 +718,99 @@ fn z3ds_subtypes_value() -> Value {
             })
             .collect(),
     )
+}
+
+/// Identify pack routing: extension to pack slugs (3DS rows come from the z3ds
+/// subtype table) and the sibling slugs header detection cannot separate.
+fn identify_pack_slugs_value() -> Value {
+    let mut extensions: BTreeMap<String, Vec<&'static str>> = BTreeMap::new();
+    for (extension, slug) in CARTRIDGE_EXTENSION_PACK_SLUGS {
+        extensions
+            .entry((*extension).to_string())
+            .or_default()
+            .push(slug);
+    }
+    for subtype in z3ds_subtype_metadata() {
+        for extension in [subtype.underlying_extension, subtype.compressed_extension] {
+            extensions
+                .entry(extension.to_string())
+                .or_default()
+                .push(NINTENDO_3DS_PACK_SLUG);
+        }
+    }
+    let siblings: BTreeMap<&str, &[&str]> = PLATFORM_SIBLING_PACK_SLUGS.iter().copied().collect();
+    json!({
+        "extensionSlugs": extensions,
+        "siblingSlugs": siblings,
+    })
+}
+
+/// Command paths whose arguments take `threads`, read from the CLI definition so
+/// the browser clamps and injects budgets for exactly the commands that accept one.
+fn threaded_commands_value() -> Value {
+    fn takes_threads(command: &clap::Command) -> bool {
+        command.get_arguments().any(|arg| arg.get_id() == "threads")
+    }
+    let config = ts_rs::Config::default();
+    let root = cli_command();
+    let nested: [(&str, Vec<String>); 4] = [
+        ("patch", tagged_enum_type_literals::<PatchCommands>(&config)),
+        ("weave", tagged_enum_type_literals::<WeaveCommands>(&config)),
+        ("tools", tagged_enum_type_literals::<ToolsCommands>(&config)),
+        ("save", tagged_enum_type_literals::<SaveCommands>(&config)),
+    ];
+    let mut paths = Vec::new();
+    for name in tagged_enum_type_literals::<Commands>(&config) {
+        // Pure planning: its `threads` field is the budget to plan for, not a worker spawn.
+        if name == "plan-extract-batch" {
+            continue;
+        }
+        let command = root
+            .find_subcommand(&name)
+            .unwrap_or_else(|| panic!("command tag `{name}` has no clap subcommand"));
+        if takes_threads(command) {
+            paths.push(name);
+        } else if let Some((_, subtypes)) = nested.iter().find(|(family, _)| *family == name) {
+            for subtype in subtypes {
+                let subcommand = command.find_subcommand(subtype).unwrap_or_else(|| {
+                    panic!("command tag `{name}/{subtype}` has no clap subcommand")
+                });
+                if takes_threads(subcommand) {
+                    paths.push(format!("{name}/{subtype}"));
+                }
+            }
+        }
+    }
+    paths.sort();
+    Value::Array(string_values(paths))
+}
+
+fn chd_create_modes_value() -> Value {
+    alias_map(CHD_CREATE_MODES)
+}
+
+fn save_file_extensions_value() -> Value {
+    json!({
+        "raw": RAW_SAVE_FILE_EXTENSIONS,
+        "containers": SaveContainerKind::ALL
+            .iter()
+            .map(|kind| json!({ "id": kind.id(), "extensions": kind.file_extensions() }))
+            .collect::<Vec<_>>(),
+    })
+}
+
+fn weave_file_names_value() -> Value {
+    json!({
+        "weave": WEAVE_BASE_FILE_NAME,
+        "bundle": BUNDLE_BASE_FILE_NAME,
+    })
+}
+
+fn validation_codes_value() -> Value {
+    json!({
+        "extractNoContainer": VALIDATION_CODE_EXTRACT_NO_CONTAINER,
+        "wbfsSizeMismatch": VALIDATION_CODE_WBFS_SIZE_MISMATCH,
+    })
 }
 
 fn error_kind_prefixes_value() -> Value {

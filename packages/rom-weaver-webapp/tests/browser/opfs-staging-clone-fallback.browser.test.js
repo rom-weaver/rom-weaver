@@ -124,3 +124,15 @@ test("browser OPFS source refs register 7z files as virtual WASI inputs", async 
   }
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
+
+test("browser OPFS virtual staging keeps ':' so Rust reads filename checksum tokens", async () => {
+  const sourceName = "hack [md5:0123456789abcdef0123456789abcdef].ips";
+  const sourceFile = new File([new Uint8Array([1, 2, 3, 4])], sourceName, { type: "application/octet-stream" });
+  const { createBrowserOpfsSourceRef } = await import("../../src/workers/protocol/browser-opfs-source-ref.ts");
+  const staged = await createBrowserOpfsSourceRef(sourceFile, sourceName, { bucket: "input", mountPoint: "/work" });
+  try {
+    expect(staged.filePath.endsWith(`/${sourceName}`)).toBe(true);
+  } finally {
+    await staged.cleanup();
+  }
+});

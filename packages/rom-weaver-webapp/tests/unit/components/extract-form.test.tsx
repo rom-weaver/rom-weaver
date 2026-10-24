@@ -93,7 +93,7 @@ describe("ExtractForm", () => {
   ])("explains a WBFS of %i bytes against a 4 MiB header instead of the raw size error", async (size, text) => {
     runtime.extract.mockRejectedValue(
       new Error(
-        `failed to open wbfs source \`/work/Game.wbfs\`: Invalid WBFS file size: 2097152, expected 4194304; path fallback failed: disc format error: Invalid WBFS file size: ${size}, expected 4194304`,
+        `failed to open wbfs source \`/work/Game.wbfs\`: Invalid WBFS file size: 2097152, expected 4194304; path fallback failed: disc format error: Invalid WBFS file size: ${size}, expected 4194304 [wbfs.size_mismatch] (actual=${size}, expected=4194304)`,
       ),
     );
     render(<ExtractForm />);
@@ -122,7 +122,9 @@ describe("ExtractForm", () => {
   });
 
   it("names a file that is not an archive instead of the internal storage path", async () => {
-    runtime.extract.mockRejectedValue(new Error("no registered container matched `/work/notes.txt`"));
+    runtime.extract.mockRejectedValue(
+      new Error("no registered container matched `/work/notes.txt` [extract.no_container]"),
+    );
     const view = render(<ExtractForm />);
 
     addFile(new File(["hello"], "notes.txt"));

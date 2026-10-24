@@ -37,7 +37,7 @@ impl CliApp {
             ) {
                 return self.finish(command, report);
             }
-            if super::patch_apply::paths_refer_to_same_file(path, &args.output) {
+            if super::path_access::paths_refer_to_same_file(path, &args.output) {
                 return self.finish(
                     command,
                     OperationReport::failed(
@@ -104,13 +104,7 @@ impl CliApp {
                 true,
             ),
         ] {
-            let resolve = if rom_filter {
-                Self::resolve_ppf_undo_rom_source
-            } else {
-                Self::resolve_source_with_auto_extract
-            };
-            let resolved = resolve(
-                self,
+            let resolved = self.resolve_source_with_auto_extract(
                 source,
                 select,
                 context,
@@ -127,6 +121,7 @@ impl CliApp {
                     kind_filter: Self::archive_entry_kind_filter(rom_filter, patch_filter),
                     stop_on_single_payload_codec: false,
                 },
+                rom_filter,
             )?;
             temp_paths.extend(resolved.cleanup_paths);
             if resolved.extracted_archives > 0 {
@@ -189,7 +184,7 @@ impl CliApp {
         }
         for destination in &outputs {
             for source in &sources {
-                if super::patch_apply::paths_refer_to_same_file(source, destination) {
+                if super::path_access::paths_refer_to_same_file(source, destination) {
                     return Err(RomWeaverError::Validation(format!(
                         "PPF undo output and source `{}` resolve to the same file; choose a different --output path",
                         source.display()

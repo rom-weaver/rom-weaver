@@ -32,6 +32,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
+import { ROM_WEAVER_TRIM_INPUT_EXTENSIONS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
@@ -85,11 +86,11 @@ import {
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
-/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-convert
- * candidates), listed in the 0x01 info popover - not the full ROM registry. */
+/** Trim-eligible formats only (generated from Rust's trim extension tables), listed in
+ * the 0x01 info popover - not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
   {
-    extensions: ["nds", "dsi", "srl", "gba", "3ds", "xiso", "xiso.iso", "iso", "gcm", "wbfs", "rvz"],
+    extensions: ROM_WEAVER_TRIM_INPUT_EXTENSIONS,
     label: "Trimmable ROMs",
   },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },

@@ -9,21 +9,13 @@ use super::patch_commands::{
 };
 use super::weave_apply::WeaveApplyResolution;
 use super::weave_parse::{normalized_member_path, weave_validation};
+use crate::path_access::paths_refer_to_same_file;
 
 use rom_weaver_patches::basis_probe::PatchBasis;
 
 mod chain_loop;
 mod run;
 mod step_plan;
-
-pub(super) fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
-    left == right
-        || matches!(
-            (fs::canonicalize(left), fs::canonicalize(right)),
-            (Ok(left), Ok(right)) if left == right
-        )
-        || native_file_identity_matches(left, right)
-}
 
 #[cfg(test)]
 mod cheat_ordering_tests {
@@ -538,21 +530,6 @@ pub(super) fn warn_on_rom_name_mismatch(
     Some(format!(
         "weave ROM name mismatch: expected `{expected}`, found `{actual}`; file-name checks are advisory"
     ))
-}
-
-// same-file compares dev/inode on Unix and volume serial + file index on
-// Windows. The Windows half cannot be written against std on stable: the
-// MetadataExt equivalents are still unstable behind `windows_by_handle`
-// (rust-lang/rust#63010), which is why the previous hand-rolled cfg(windows)
-// branch never compiled.
-#[cfg(not(target_arch = "wasm32"))]
-fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
-    same_file::is_same_file(left, right).unwrap_or(false)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
-    false
 }
 
 /// Snapshot of a resolved apply, captured before `args` moves into the run, so
@@ -2394,7 +2371,7 @@ impl CliApp {
                     order,
                     Some(format!(
                         "patch N64 byte order taken as {} (the weave ROM checks match that form of the ROM)",
-                        order.label()
+                        order.id()
                     )),
                 );
             }
@@ -2403,7 +2380,7 @@ impl CliApp {
         };
         let note = format!(
             "patch N64 byte order inferred as {} ({reason})",
-            target.label()
+            target.id()
         );
         (target, Some(note))
     }
@@ -2416,7 +2393,7 @@ impl CliApp {
         }
         Some(format!(
             "warning=N64 byte order could not be determined from the patch; assuming {} (the input's order). If the output is wrong, rerun with --n64-byte-order set to the order the patch was made for",
-            source.label()
+            source.id()
         ))
     }
 
@@ -2884,6 +2861,7 @@ impl CliApp {
                     temp_prefix,
                 },
                 flags,
+                false,
             )?;
             if resolved_patch_extracted_archives > 0 {
                 let note = if patches.len() == 1 {
@@ -4118,10 +4096,7 @@ impl CliApp {
                             format: None,
                         },
                         "compat",
-                        format!(
-                            "transforming N64 input byte order to {}",
-                            target_order.label()
-                        ),
+                        format!("transforming N64 input byte order to {}", target_order.id()),
                         None,
                         context.single_thread_execution(),
                     );

@@ -1,5 +1,8 @@
 import { createLogger } from "../../lib/logging.ts";
-import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import {
+  ROM_WEAVER_FILE_FILTERS,
+  ROM_WEAVER_WEAVE_FILE_NAMES,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 /**
  * Single source of truth for classifying a dropped file by name into a patch,
@@ -40,8 +43,13 @@ const isRomFileName = (fileName: string) => hasKnownExtension(fileName, ROM_FILE
 
 // The canonical name is the trusted fast-path: it marks a weave by name
 // alone, and its parse errors surface. `rom-weaver-weave.json[.codec]`.
-const isWeaveFileName = (name: string) =>
-  /^rom-weaver-(?:weave|bundle)\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
+const WEAVE_FILE_NAME_REGEX = new RegExp(
+  `^(?:${Object.values(ROM_WEAVER_WEAVE_FILE_NAMES)
+    .map((name) => name.replaceAll(".", "\\."))
+    .join("|")})(?:\\.[^.]+)?$`,
+  "i",
+);
+const isWeaveFileName = (name: string) => WEAVE_FILE_NAME_REGEX.test(name.split(/[\\/]/).pop() || "");
 
 /**
  * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-weave verdict

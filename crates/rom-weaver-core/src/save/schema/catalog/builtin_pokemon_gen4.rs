@@ -1,29 +1,5 @@
 use super::*;
 
-fn extend_fields(
-    fields: &mut Vec<FieldDefinition>,
-    scope: &FieldScope,
-    repetition: Repetition,
-    build: fn(&FieldScope) -> Vec<FieldDefinition>,
-) {
-    for item in 0..repetition.count {
-        let number = item + repetition.start;
-        let index = format!("{number:0width$}", width = repetition.width);
-        let mut child = FieldScope {
-            base: scope.base + scope.bits / 8 + repetition.base,
-            bits: item * repetition.stride,
-            bit_stride: repetition.bit_stride,
-            index,
-            ordinal: item + 1,
-            prefix: String::new(),
-            group: scope.group.clone(),
-            guards: scope.guards.clone(),
-        };
-        child.prefix = scope.id(repetition.prefix);
-        fields.extend(build(&child));
-    }
-}
-
 fn gender() -> Vec<FieldChoice> {
     choices(&[("male", 0), ("female", 1)])
 }
@@ -594,34 +570,6 @@ fn default() -> GameDefinition {
  physical_offset: 0,
  length: 262144 }
 ],
- checksums: vec![ChecksumDefinition {
- start: Some(0),
- length: Some(49392),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 49406) }
-,
- ChecksumDefinition {
- start: Some(49408),
- length: Some(74192),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 123614) }
-],
- repairs: vec![layout::Repair::Checksum {
- checksum: ChecksumDefinition {
- start: Some(0),
- length: Some(49392),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 49406) }
- }
-,
- layout::Repair::Checksum {
- checksum: ChecksumDefinition {
- start: Some(49408),
- length: Some(74192),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 123614) }
- }
-],
  predicates: vec![rules::Condition::new(move |bytes| Ok((rules::Scalar {
  offset: 49396,
  storage: Storage::U32Le,
@@ -706,41 +654,24 @@ fn default() -> GameDefinition {
  storage: Storage::U32Le,
  mask: None }
 ),
- ..Default::default() }
+ ..Default::default() }.with_checksums(vec![ChecksumDefinition {
+ start: Some(0),
+ length: Some(49392),
+ ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
+ 49406) }
+,
+ ChecksumDefinition {
+ start: Some(49408),
+ length: Some(74192),
+ ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
+ 123614) }
+])
 ,
  layout::Candidate {
  spans: vec![layout::Span {
  logical_offset: 0,
  physical_offset: 262144,
  length: 262144 }
-],
- checksums: vec![ChecksumDefinition {
- start: Some(262144),
- length: Some(49392),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 311550) }
-,
- ChecksumDefinition {
- start: Some(311552),
- length: Some(74192),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 385758) }
-],
- repairs: vec![layout::Repair::Checksum {
- checksum: ChecksumDefinition {
- start: Some(262144),
- length: Some(49392),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 311550) }
- }
-,
- layout::Repair::Checksum {
- checksum: ChecksumDefinition {
- start: Some(311552),
- length: Some(74192),
- ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
- 385758) }
- }
 ],
  predicates: vec![rules::Condition::new(move |bytes| Ok((rules::Scalar {
  offset: 311540,
@@ -826,7 +757,18 @@ fn default() -> GameDefinition {
  storage: Storage::U32Le,
  mask: None }
 ),
- ..Default::default() }
+ ..Default::default() }.with_checksums(vec![ChecksumDefinition {
+ start: Some(262144),
+ length: Some(49392),
+ ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
+ 311550) }
+,
+ ChecksumDefinition {
+ start: Some(311552),
+ length: Some(74192),
+ ..ChecksumDefinition::new(ChecksumAlgorithm::Crc16CcittFalseLe,
+ 385758) }
+])
 ] }
 ,
  selection: layout::Selection::NewestCounterMaxToZero,
@@ -1004,46 +946,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(0),
-                                            length: Some(53020),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                53034,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(53036),
-                                            length: Some(74196),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                127246,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(0),
-                                                length: Some(53020),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    53034,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(53036),
-                                                length: Some(74196),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    127246,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1166,53 +1068,31 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(0),
+                                        length: Some(53020),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            53034,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(53036),
+                                        length: Some(74196),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            127246,
+                                        )
+                                    },
+                                ]),
                                 layout::Candidate {
                                     spans: vec![layout::Span {
                                         logical_offset: 0,
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(262144),
-                                            length: Some(53020),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                315178,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(315180),
-                                            length: Some(74196),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                389390,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(262144),
-                                                length: Some(53020),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    315178,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(315180),
-                                                length: Some(74196),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    389390,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1335,7 +1215,25 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(262144),
+                                        length: Some(53020),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            315178,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(315180),
+                                        length: Some(74196),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            389390,
+                                        )
+                                    },
+                                ]),
                             ],
                         },
                         selection: layout::Selection::NewestCounterMaxToZero,
@@ -1463,46 +1361,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(0),
-                                            length: Some(63000),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                63014,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(63232),
-                                            length: Some(74496),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                137742,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(0),
-                                                length: Some(63000),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    63014,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(63232),
-                                                length: Some(74496),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    137742,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1625,53 +1483,31 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(0),
+                                        length: Some(63000),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            63014,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(63232),
+                                        length: Some(74496),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            137742,
+                                        )
+                                    },
+                                ]),
                                 layout::Candidate {
                                     spans: vec![layout::Span {
                                         logical_offset: 0,
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(262144),
-                                            length: Some(63000),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                325158,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(325376),
-                                            length: Some(74496),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                399886,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(262144),
-                                                length: Some(63000),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    325158,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(325376),
-                                                length: Some(74496),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    399886,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1794,7 +1630,25 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(262144),
+                                        length: Some(63000),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            325158,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(325376),
+                                        length: Some(74496),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            399886,
+                                        )
+                                    },
+                                ]),
                             ],
                         },
                         selection: layout::Selection::NewestCounterMaxToZero,
@@ -1965,46 +1819,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(0),
-                                            length: Some(63000),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                63014,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(63232),
-                                            length: Some(74496),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                137742,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(0),
-                                                length: Some(63000),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    63014,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(63232),
-                                                length: Some(74496),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    137742,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -2127,53 +1941,31 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(0),
+                                        length: Some(63000),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            63014,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(63232),
+                                        length: Some(74496),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            137742,
+                                        )
+                                    },
+                                ]),
                                 layout::Candidate {
                                     spans: vec![layout::Span {
                                         logical_offset: 0,
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-                                    checksums: vec![
-                                        ChecksumDefinition {
-                                            start: Some(262144),
-                                            length: Some(63000),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                325158,
-                                            )
-                                        },
-                                        ChecksumDefinition {
-                                            start: Some(325376),
-                                            length: Some(74496),
-                                            ..ChecksumDefinition::new(
-                                                ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                399886,
-                                            )
-                                        },
-                                    ],
-                                    repairs: vec![
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(262144),
-                                                length: Some(63000),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    325158,
-                                                )
-                                            },
-                                        },
-                                        layout::Repair::Checksum {
-                                            checksum: ChecksumDefinition {
-                                                start: Some(325376),
-                                                length: Some(74496),
-                                                ..ChecksumDefinition::new(
-                                                    ChecksumAlgorithm::Crc16CcittFalseLe,
-                                                    399886,
-                                                )
-                                            },
-                                        },
-                                    ],
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -2296,7 +2088,25 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         mask: None,
                                     }),
                                     ..Default::default()
-                                },
+                                }
+                                .with_checksums(vec![
+                                    ChecksumDefinition {
+                                        start: Some(262144),
+                                        length: Some(63000),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            325158,
+                                        )
+                                    },
+                                    ChecksumDefinition {
+                                        start: Some(325376),
+                                        length: Some(74496),
+                                        ..ChecksumDefinition::new(
+                                            ChecksumAlgorithm::Crc16CcittFalseLe,
+                                            399886,
+                                        )
+                                    },
+                                ]),
                             ],
                         },
                         selection: layout::Selection::NewestCounterMaxToZero,

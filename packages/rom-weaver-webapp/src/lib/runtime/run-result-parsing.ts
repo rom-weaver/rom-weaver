@@ -203,16 +203,18 @@ const parseChecksumVariants = (details: unknown): ChecksumVariant[] | undefined 
 };
 
 const romTypeFromEmittedFile = (
-  entry: { platform?: string; discFormat?: string; recommendedFormat?: string } | undefined,
+  entry: { platform?: string; discFormat?: string; recommendedFormat?: string; chdCreateMode?: string } | undefined,
 ): RomTypeTag | undefined => {
   const platform = entry?.platform?.trim() ? entry.platform.trim() : undefined;
   const discFormat = entry?.discFormat?.trim() ? entry.discFormat.trim() : undefined;
   const recommendedFormat = entry?.recommendedFormat?.trim() ? entry.recommendedFormat.trim() : undefined;
-  if (!(platform || discFormat || recommendedFormat)) return undefined;
+  const chdCreateMode = entry?.chdCreateMode?.trim() ? entry.chdCreateMode.trim() : undefined;
+  if (!(platform || discFormat || recommendedFormat || chdCreateMode)) return undefined;
   return {
     ...(platform ? { platform } : {}),
     ...(discFormat ? { discFormat } : {}),
     ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
   };
 };
 

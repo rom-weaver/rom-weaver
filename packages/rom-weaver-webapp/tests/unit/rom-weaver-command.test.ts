@@ -431,6 +431,16 @@ describe("romWeaverCommandSupportsThreads", () => {
     }
   });
 
+  it("follows the Rust CLI definition for the legacy bundle spelling and thread-less subcommands", () => {
+    for (const type of ["parse", "create"] as const) {
+      expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type }, type: "bundle" }))).toBe(true);
+    }
+    // Every `save` subcommand takes no thread budget in the CLI.
+    expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type: "inspect" }, type: "save" }))).toBe(
+      false,
+    );
+  });
+
   it("refuses a branch it does not know", () => {
     expect(() => romWeaverCommandSupportsThreads(asCommand({ args: {}, type: "explode" }))).toThrow(
       /Unhandled rom-weaver command shape/,

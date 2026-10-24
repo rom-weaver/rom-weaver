@@ -2069,6 +2069,64 @@ mod tests {
     }
 
     #[test]
+    fn wbfs_extract_reports_size_mismatch_as_a_validation_code() {
+        let temp_dir = temp_dir_path("wbfs-size-code");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let wbfs = temp_dir.join("disc.wbfs");
+        fs::write(&input_iso, build_test_gamecube_iso(0x8000)).expect("write source fixture");
+        write_test_wbfs(&input_iso, &wbfs);
+        let written = fs::metadata(&wbfs).expect("wbfs metadata").len();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&wbfs)
+            .expect("open wbfs for append")
+            .write_all(&[0; 512])
+            .expect("grow wbfs");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let error = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: wbfs,
+                    out_dir: temp_dir.join("out"),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect_err("oversized wbfs must be rejected");
+
+        let rom_weaver_core::RomWeaverError::ValidationCode(coded) = &error else {
+            panic!("expected a validation code, got {error}");
+        };
+        assert_eq!(
+            coded.code(),
+            rom_weaver_core::VALIDATION_CODE_WBFS_SIZE_MISMATCH
+        );
+        let field = |key: &str| {
+            coded
+                .fields()
+                .iter()
+                .find(|field| field.key == key)
+                .map(|field| field.value.to_string())
+        };
+        assert_eq!(field("actual"), Some((written + 512).to_string()));
+        assert!(
+            error.to_string().contains("Invalid WBFS file size"),
+            "{error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn gamecube_ciso_routes_to_nod_and_extracts_byte_exact_iso() {
         let temp_dir = temp_dir_path("gc-ciso-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -4680,7 +4738,7 @@ mod tests {
         }
         sector[0x0f] = 1;
         sector[0x81c..].fill(0);
-        ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+        crate::chd_rs::compression::ecc::ErrorCorrectedSector::generate_ecc(&mut (&mut sector));
         sector
     }
 

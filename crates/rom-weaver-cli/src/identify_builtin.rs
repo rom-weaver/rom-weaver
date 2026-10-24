@@ -281,7 +281,7 @@ struct PackGroup {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn sha256(bytes: &[u8]) -> String {
+pub(super) fn sha256(bytes: &[u8]) -> String {
     let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
         .expect("sha256 setup")
         .expect("sha256 support");
@@ -609,17 +609,6 @@ fn merged_metadata(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn write_group_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let part = path.with_extension("part");
-    fs::write(&part, bytes).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to write `{}`: {error}", part.display()))
-    })?;
-    fs::rename(&part, path).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to finalize `{}`: {error}", path.display()))
-    })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 struct GroupArchiveEntries {
     packs: Vec<PackIndexEntry>,
     cheats: Vec<CheatIndexEntry>,
@@ -840,23 +829,26 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
             fs::create_dir_all(&install)?;
         }
         for (slug, pack) in &packs {
-            write_group_atomic(&install.join(format!("{slug}.pack")), pack)?;
+            super::path_access::write_atomic(&install.join(format!("{slug}.pack")), pack)?;
         }
         let license = stage.join(LIBRETRO_LICENSE_FILE);
         if license.is_file() {
-            write_group_atomic(&install.join(LIBRETRO_LICENSE_FILE), &fs::read(&license)?)?;
+            super::path_access::write_atomic(
+                &install.join(LIBRETRO_LICENSE_FILE),
+                &fs::read(&license)?,
+            )?;
         }
         if !cheats.is_empty() {
             fs::create_dir_all(install.join("cheats"))?;
         }
         for (slug, shard) in &cheats {
-            write_group_atomic(
+            super::path_access::write_atomic(
                 &install.join("cheats").join(format!("{slug}.json.br")),
                 shard,
             )?;
         }
-        write_group_atomic(&install.join("index.json"), &index_bytes)?;
-        write_group_atomic(&install.join("catalog.json"), &catalog_bytes)?;
+        super::path_access::write_atomic(&install.join("index.json"), &index_bytes)?;
+        super::path_access::write_atomic(&install.join("catalog.json"), &catalog_bytes)?;
         Ok(())
     })();
     if let Err(error) = prepare {
@@ -2082,13 +2074,13 @@ mod tests {
     fn group_atomic_writes_replace_the_target_and_report_a_bad_path() {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
         let path = temp.path().join("index.json");
-        write_group_atomic(&path, b"first").expect("atomic write");
-        write_group_atomic(&path, b"second").expect("atomic overwrite");
+        crate::path_access::write_atomic(&path, b"first").expect("atomic write");
+        crate::path_access::write_atomic(&path, b"second").expect("atomic overwrite");
         assert_eq!(fs::read(&path).expect("written file"), b"second");
         assert!(!temp.path().join("index.part").exists());
 
         assert!(
-            error_text(write_group_atomic(
+            error_text(crate::path_access::write_atomic(
                 &temp.path().join("absent").join("index.json"),
                 b"payload"
             ))

@@ -314,7 +314,8 @@ const OutputCompressionManager = (() => {
   const _getChdCodecsForMode = (mode: "cd" | "dvd" | string | null | undefined, options?: OutputCompressionOptions) => {
     options = options || {};
     if (mode === "cd") return _materializeChdCodecLevels(options.chdCreateCdCodecs, options);
-    if (mode === "dvd" || mode === "raw") return _materializeChdCodecLevels(options.chdCreateDvdCodecs, options);
+    if (mode === "dvd" || mode === "hd" || mode === "raw")
+      return _materializeChdCodecLevels(options.chdCreateDvdCodecs, options);
     return "";
   };
 

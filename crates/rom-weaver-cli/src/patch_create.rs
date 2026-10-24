@@ -761,8 +761,8 @@ impl CliApp {
             }
         }
 
-        if super::patch_apply::paths_refer_to_same_file(&args.original, &create_output)
-            || super::patch_apply::paths_refer_to_same_file(modified, &create_output)
+        if crate::path_access::paths_refer_to_same_file(&args.original, &create_output)
+            || crate::path_access::paths_refer_to_same_file(modified, &create_output)
         {
             return Err(fail_error(RomWeaverError::Validation(
                 "patch create input and output resolve to the same file; choose a different --output path"

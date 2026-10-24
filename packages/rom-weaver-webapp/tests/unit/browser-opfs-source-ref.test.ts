@@ -68,11 +68,11 @@ describe("browser OPFS source references", () => {
     expect(state.registrations).toEqual([]);
   });
 
-  it("registers a normalized virtual File and releases its visible path on cleanup", async () => {
+  it("registers a normalized virtual File keeping colons and releases its visible path on cleanup", async () => {
     const file = new File(["bytes"], "../bad:name?.bin", { type: "application/octet-stream", lastModified: 17 });
     const ref = await createBrowserOpfsSourceRef(file, "fallback.bin", options({ pathPrefixInPath: true }));
-    expect(ref).toMatchObject({ fileName: "bad_name_.bin", virtual: true, size: 5 });
-    expect(ref.filePath).toMatch(/\/work\/session_input\/bad_name_.bin$/u);
+    expect(ref).toMatchObject({ fileName: "bad:name_.bin", virtual: true, size: 5 });
+    expect(ref.filePath).toMatch(/\/work\/session_input\/bad:name_.bin$/u);
     expect(state.registrations[0]).toMatchObject({ path: ref.filePath, useProxyHandle: false });
     await ref.cleanup();
     expect(state.unregisters[0]).toHaveBeenCalledTimes(1);
@@ -94,8 +94,8 @@ describe("browser OPFS source references", () => {
       "fallback.bin",
       options(),
     );
-    expect(unsafe.fileName).toBe("café__name_.gz");
-    expect(unsafe.filePath).toBe("/work/café__name_.gz");
+    expect(unsafe.fileName).toBe("café_:name_.gz");
+    expect(unsafe.filePath).toBe("/work/café_:name_.gz");
     await unsafe.cleanup();
   });
 

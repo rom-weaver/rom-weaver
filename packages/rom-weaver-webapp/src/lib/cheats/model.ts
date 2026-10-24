@@ -78,6 +78,8 @@ export type ClassifiedCheatRecord = {
   record: CheatRecord;
   resolution: CheatResolution;
   detectedKind: CheatCodeKind | null;
+  /** The raw code split into individual codes by the Rust engine (`split_for_kind`). */
+  codes?: string[];
 };
 
 export type CheatGameRecord = {

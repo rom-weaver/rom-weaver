@@ -828,6 +828,22 @@ fn validate_spans(
 }
 
 impl Candidate {
+    /// Validates and repairs one checksum, so catalogs state each definition once.
+    pub(super) fn with_checksum(mut self, checksum: ChecksumDefinition) -> Self {
+        self.checksums.push(checksum.clone());
+        self.repairs.push(Repair::Checksum { checksum });
+        self
+    }
+
+    pub(super) fn with_checksums(
+        self,
+        checksums: impl IntoIterator<Item = ChecksumDefinition>,
+    ) -> Self {
+        checksums.into_iter().fold(self, |candidate, checksum| {
+            candidate.with_checksum(checksum)
+        })
+    }
+
     /// Blocks own the candidate's checksums, repairs, and sections, so their
     /// repair order and section IDs never interleave with explicit entries.
     fn expand_blocks(&mut self, blocks: ChecksumBlocks) -> Result<()> {

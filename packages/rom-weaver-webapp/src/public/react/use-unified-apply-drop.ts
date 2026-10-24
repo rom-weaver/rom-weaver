@@ -18,6 +18,7 @@ import {
   isRomFileName,
   isWeaveFileName,
 } from "./file-classification.ts";
+import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -97,7 +98,9 @@ const routeUnifiedDrop = async (
   );
   if (signal?.aborted || isCancelled?.()) return;
   const weaveArchives = archives.filter((_archive, index) =>
-    archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rom-weaver-weave.json"),
+    archiveEntries[index]?.some(
+      (name) => normalizeArchivePath(name).toLowerCase() === ROM_WEAVER_WEAVE_FILE_NAMES.weave,
+    ),
   );
   const archiveBuckets = archives.map((archive, index) => classifyArchiveBucket(archive, archiveEntries[index] || []));
   archives.forEach((archive, index) => {

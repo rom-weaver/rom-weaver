@@ -1,5 +1,6 @@
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
+use rom_weaver_core::{VALIDATION_CODE_EXTRACT_NO_CONTAINER, ValidationCodeError};
 
 pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub format_name: &'a str,
@@ -198,7 +199,12 @@ impl CliApp {
                 OperationFamily::Container,
                 None,
                 "probe",
-                format!("no registered container matched `{}`", source.display()),
+                ValidationCodeError::new(VALIDATION_CODE_EXTRACT_NO_CONTAINER)
+                    .with_message(format!(
+                        "no registered container matched `{}`",
+                        source.display()
+                    ))
+                    .to_string(),
                 probe_threads,
             ))
         })
