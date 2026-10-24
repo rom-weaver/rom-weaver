@@ -517,6 +517,13 @@ test("malformed output check draft disables Download weave until corrected", asy
   const input = await waitForState(() => document.getElementById("rom-weaver-patch-output-sha1-0"), 30000);
   setFormControlValue(input, "a".repeat(41));
   await expect.poll(() => exportButton()?.disabled).toBe(true);
+  // A disabled patch still exports as an optional entry with its checks.
+  const toggle = document.querySelector("#rom-weaver-list-patch-stack .patch-enable input");
+  toggle.click();
+  await expect.poll(() => toggle.checked).toBe(false);
+  await expect.poll(() => exportButton()?.disabled).toBe(true);
+  toggle.click();
+  await expect.poll(() => toggle.checked).toBe(true);
   setFormControlValue(input, "");
   input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   await expect.poll(() => exportButton()?.disabled).toBe(false);

@@ -405,6 +405,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     .filter((id) => !disabledPatchIds.has(id))
     .map((id) => invalidDraftPatchErrors.get(id))
     .find(Boolean);
+  // Weave export still writes disabled patches (as optional entries with their
+  // checks), so a malformed draft on any patch blocks it.
+  const weaveValidationError = getPatchIds()
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
 
   // A `?weave=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
@@ -1808,7 +1813,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     runInput.inputs.length === 1 &&
     (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
   const { weaveExport, changeWeavePackage } = useApplyWeaveExport({
-    applyValidationError,
+    weaveValidationError,
     getCheats: () =>
       selectedCheatsRef.current.flatMap((entry, index) =>
         cheatDelivery(entry) === "rom"
