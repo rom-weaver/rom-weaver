@@ -2555,7 +2555,7 @@ fn fixed_strings_are_truncated_and_nul_padded_to_their_field_width() {
 }
 
 #[test]
-fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
+fn md5_hex_formats_every_nibble() {
     let mut value = [0u8; 16];
     value[0] = 0x0f;
     value[15] = 0xa5;

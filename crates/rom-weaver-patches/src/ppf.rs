@@ -1724,7 +1724,6 @@ fn prepare_ppf_writes_parallel(
 }
 
 #[cfg(test)]
-#[cfg(test)]
 fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64> {
     let end = offset
         .checked_add(8)
