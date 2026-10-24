@@ -25,7 +25,7 @@ import {
   getPatchFileBlob,
 } from "./binary-service.ts";
 import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
-import { hasChdHardDiskHeader } from "./rom-specific-file-utils.ts";
+import { CHD_MEDIA_PROBE_BYTES, hasChdHardDiskHeader, hasChdUdfDescriptor } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
   attachInputPreparationMetrics,
@@ -228,10 +228,13 @@ const getLazyBrowserSource = async (
     return null;
   }
   const sourceMetadata = (source as { metadata?: { mode?: string; cuePath?: string } }).metadata;
+  const unidentified = !(sourceMetadata?.mode || sourceMetadata?.cuePath);
   if (
-    !(sourceMetadata?.mode || sourceMetadata?.cuePath) &&
-    (/\.bin$/i.test(fileName) || !/\.[^./\\]+$/.test(fileName)) &&
-    hasChdHardDiskHeader(archiveHeader, blob.size)
+    unidentified &&
+    (((/\.bin$/i.test(fileName) || !/\.[^./\\]+$/.test(fileName)) && hasChdHardDiskHeader(archiveHeader, blob.size)) ||
+      (/\.iso$/i.test(fileName) &&
+        blob.size % 2048 === 0 &&
+        hasChdUdfDescriptor(await readBlobPrefix(blob, CHD_MEDIA_PROBE_BYTES), blob.size)))
   ) {
     options?.onProgress?.({
       details: { chdCodecMode: "dvd" },
@@ -472,16 +475,29 @@ const prepareInputAssets = async (
     const metadata = preparedFile.metadata;
     if (asset.kind !== "rom" || metadata?.mode || metadata?.cuePath || /\.(cue|gdi)$/i.test(preparedFile.fileName))
       continue;
-    if (/\.[^./\\]+$/.test(preparedFile.fileName) && !/\.bin$/i.test(preparedFile.fileName)) continue;
-    if (preparedFile.fileSize < 512 || preparedFile.fileSize % 512 !== 0) continue;
+    // An unidentified `.iso` gets the DVD codec field when UDF marks it as DVD media.
+    const iso = /\.iso$/i.test(preparedFile.fileName);
+    if (/\.[^./\\]+$/.test(preparedFile.fileName) && !/\.bin$/i.test(preparedFile.fileName) && !iso) continue;
+    if (preparedFile.fileSize < 512 || preparedFile.fileSize % (iso ? 2048 : 512) !== 0) continue;
     options?.signal?.throwIfAborted();
+    const length = iso ? CHD_MEDIA_PROBE_BYTES : 1024;
     const blob = getPatchFileBlob(preparedFile);
-    let prefix = preparedFile._u8array?.subarray(0, 1024);
-    if (!prefix && blob) prefix = await readBlobPrefix(blob, 1024);
+    let prefix = preparedFile._u8array?.subarray(0, length);
+    if (!prefix && blob) prefix = await readBlobPrefix(blob, length);
     else if (!prefix && preparedFile.filePath)
-      prefix = await readBrowserOpfsPrefix(preparedFile.filePath, 1024, options?.signal);
+      prefix = await readBrowserOpfsPrefix(
+        preparedFile.filePath,
+        Math.min(length, preparedFile.fileSize),
+        options?.signal,
+      );
     options?.signal?.throwIfAborted();
-    if (!(prefix && hasChdHardDiskHeader(prefix, preparedFile.fileSize))) continue;
+    if (
+      !(
+        prefix &&
+        (iso ? hasChdUdfDescriptor(prefix, preparedFile.fileSize) : hasChdHardDiskHeader(prefix, preparedFile.fileSize))
+      )
+    )
+      continue;
     asset.chdCodecMode = "dvd";
     if (assets.length !== 1) continue;
     options?.onProgress?.({

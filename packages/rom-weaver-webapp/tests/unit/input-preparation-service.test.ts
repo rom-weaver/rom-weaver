@@ -143,6 +143,29 @@ describe("prepareInputAssets", () => {
     expect(panel?.note).toBeUndefined();
   });
 
+  it.each([
+    [true, "chdCreateDvdCodecs"],
+    [false, "chdCreateCdCodecs"],
+  ])("shows the codec field native CHD inference uses for an unidentified ISO (udf=%s)", async (udf, key) => {
+    const bytes = new Uint8Array(100 * 2048);
+    bytes.set([1, ...new TextEncoder().encode("CD001")], 16 * 2048);
+    if (udf) bytes.set([0, ...new TextEncoder().encode("NSR02")], 18 * 2048);
+    const onProgress = vi.fn();
+    await prepareInputAssets(new File([bytes], "disc.iso"), { ...NO_CONTAINER_OPTIONS, onProgress }, 0, runtime);
+    const event = onProgress.mock.calls.map(([event]) => event).find((event) => event.details?.chdCodecMode);
+    expect(Boolean(event)).toBe(udf);
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      {
+        fileName: "disc.iso",
+        size: bytes.length,
+        chdCodecMode: event ? getProgressStagedInputInfo(event).chdCodecMode : undefined,
+      },
+    );
+    expect(panel?.fields[0]?.key).toBe(key);
+  });
+
   it("throws a descriptive error when the source is not path/blob backed", async () => {
     const source = { fileName: "orphan.bin", source: new Uint8Array([1, 2, 3]) } as unknown as SourceRef;
 
