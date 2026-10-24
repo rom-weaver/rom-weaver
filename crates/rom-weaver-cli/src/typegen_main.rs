@@ -27,8 +27,8 @@ use rom_weaver_app::{
 use rom_weaver_checksum::identify_catalog::{
     CARTRIDGE_EXTENSION_PACK_SLUGS, NINTENDO_3DS_PACK_SLUG, PLATFORM_SIBLING_PACK_SLUGS,
 };
-use rom_weaver_containers::chd::CHD_CREATE_MODES;
 use rom_weaver_checksum::{ALGORITHM_TABLE, STANDARD_ALGORITHMS};
+use rom_weaver_containers::chd::CHD_CREATE_MODES;
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerThreadCapabilityMetadata,
@@ -351,7 +351,7 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
