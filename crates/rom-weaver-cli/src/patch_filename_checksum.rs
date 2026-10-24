@@ -53,19 +53,6 @@ impl RequirementAccumulator {
     }
 }
 
-/// Map a bare (unlabelled) hex run length to the algorithm it unambiguously
-/// represents. Bare detection is intentionally conservative: only lengths with a
-/// single dominant convention are inferred, and only when bracketed (see
-/// [`collect_enclosed_bare_checksums`]).
-fn inferred_algorithm_for_hex_len(hex_len: usize) -> Option<&'static str> {
-    match hex_len {
-        8 => Some("crc32"),
-        32 => Some("md5"),
-        40 => Some("sha1"),
-        _ => None,
-    }
-}
-
 /// Collect `<algo>:<hex>`, `<algo>=<hex>`, `bytes:<n>` and `size:<n>` tokens that
 /// carry an explicit label. Labelled tokens may be surrounded by any delimiters.
 fn collect_labeled(file_name: &str, bytes: &[u8], accumulator: &mut RequirementAccumulator) {
@@ -85,7 +72,7 @@ fn collect_labeled(file_name: &str, bytes: &[u8], accumulator: &mut RequirementA
         }
         let label = file_name[label_start..index].to_ascii_lowercase();
 
-        if let Some(expected_hex_len) = super::expect_tokens::checksum_hex_len(&label) {
+        if let Some(expected_hex_len) = rom_weaver_checksum::checksum_hex_len(&label) {
             let mut hex_end = index + 1;
             while hex_end < bytes.len() && bytes[hex_end].is_ascii_hexdigit() {
                 hex_end += 1;
@@ -138,7 +125,8 @@ fn collect_enclosed_bare_checksums(
         }
         if run_end > index + 1 && run_end < bytes.len() && bytes[run_end] == closing {
             let hex = file_name[index + 1..run_end].to_ascii_lowercase();
-            if let Some(algorithm) = inferred_algorithm_for_hex_len(hex.len()) {
+            if let Some(algorithm) = rom_weaver_checksum::standard_algorithm_for_hex_len(hex.len())
+            {
                 accumulator.record_checksum(algorithm.to_string(), hex);
             }
             index = run_end + 1;

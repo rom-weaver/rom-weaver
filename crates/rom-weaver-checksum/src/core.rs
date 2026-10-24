@@ -31,9 +31,63 @@ use sha1::Sha1;
 use sha2::Sha256;
 use tracing::trace;
 
-pub(super) const SUPPORTED_ALGORITHMS: &[&str] = &[
-    "crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32",
+/// Static facts about one checksum algorithm: its id, the hex digest width and a
+/// display label. `ALGORITHM_TABLE` is the one list every consumer derives from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChecksumAlgorithmInfo {
+    pub id: &'static str,
+    pub hex_len: usize,
+    pub label: &'static str,
+}
+
+macro_rules! algorithm_table {
+    ($(($id:literal, $hex_len:literal, $label:literal)),+ $(,)?) => {
+        pub const ALGORITHM_TABLE: &[ChecksumAlgorithmInfo] = &[
+            $(ChecksumAlgorithmInfo { id: $id, hex_len: $hex_len, label: $label }),+
+        ];
+        pub(super) const SUPPORTED_ALGORITHMS: &[&str] = &[$($id),+];
+    };
+}
+
+algorithm_table![
+    ("crc32", 8, "CRC32"),
+    ("md5", 32, "MD5"),
+    ("sha1", 40, "SHA-1"),
+    ("sha256", 64, "SHA-256"),
+    ("blake3", 64, "BLAKE3"),
+    ("crc32c", 8, "CRC32C"),
+    ("crc16", 4, "CRC16"),
+    ("adler32", 8, "Adler-32"),
 ];
+
+/// The algorithms computed by default (also the ones patch headers and weave
+/// manifests record). Each id is in `ALGORITHM_TABLE`. Some call sites still
+/// spell this list out by hand. Do not reuse this set for filename inference;
+/// see `BARE_FILENAME_ALGORITHMS`.
+pub const STANDARD_ALGORITHMS: &[&str] = &["crc32", "md5", "sha1"];
+
+/// Algorithms inferred from a bare hex digest in a patch filename. Only widths
+/// with a single dominant convention belong here: sha256 and blake3 are both 64
+/// hex, so neither may be added. Kept separate from `STANDARD_ALGORITHMS` so
+/// growing the default set never changes filename inference.
+pub const BARE_FILENAME_ALGORITHMS: &[&str] = &["crc32", "md5", "sha1"];
+
+/// Expected hex digest length for an algorithm id, or `None` when unknown.
+pub fn checksum_hex_len(algorithm: &str) -> Option<usize> {
+    ALGORITHM_TABLE
+        .iter()
+        .find(|info| info.id == algorithm)
+        .map(|info| info.hex_len)
+}
+
+/// The bare-filename algorithm whose digest is exactly `hex_len` hex characters,
+/// or `None` when none has that width.
+pub fn standard_algorithm_for_hex_len(hex_len: usize) -> Option<&'static str> {
+    BARE_FILENAME_ALGORITHMS
+        .iter()
+        .copied()
+        .find(|id| checksum_hex_len(id) == Some(hex_len))
+}
 pub(super) const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
 pub(super) const MIN_CHUNK_SIZE: usize = 256 * 1024;
 pub(super) const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
@@ -54,6 +108,54 @@ pub(super) const ADLER32_PARALLEL_MAX_THREADS: usize = 4;
 pub(super) const BLAKE3_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
 pub(super) const BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
 pub(super) const BLAKE3_PARALLEL_MAX_THREADS: usize = 8;
+/// One single-algorithm parallel strategy: the sole algorithm it applies to, the
+/// plan mode it selects, and the size/thread tuning that gates it.
+pub(super) struct ParallelSingleAlgorithm {
+    pub(super) algorithm: Algorithm,
+    pub(super) mode: ChecksumMode,
+    pub(super) threshold: u64,
+    pub(super) min_bytes_per_thread: u64,
+    pub(super) max_threads: usize,
+}
+
+/// Plan selection order is irrelevant: each entry matches a distinct algorithm.
+pub(super) const PARALLEL_SINGLE_ALGORITHM_TABLE: &[ParallelSingleAlgorithm] = &[
+    ParallelSingleAlgorithm {
+        algorithm: Algorithm::Crc32,
+        mode: ChecksumMode::ParallelCrc32,
+        threshold: CRC32_PARALLEL_THRESHOLD,
+        min_bytes_per_thread: CRC32_PARALLEL_MIN_BYTES_PER_THREAD,
+        max_threads: CRC32_PARALLEL_MAX_THREADS,
+    },
+    ParallelSingleAlgorithm {
+        algorithm: Algorithm::Crc32c,
+        mode: ChecksumMode::ParallelCrc32c,
+        threshold: CRC32C_PARALLEL_THRESHOLD,
+        min_bytes_per_thread: CRC32C_PARALLEL_MIN_BYTES_PER_THREAD,
+        max_threads: CRC32C_PARALLEL_MAX_THREADS,
+    },
+    ParallelSingleAlgorithm {
+        algorithm: Algorithm::Crc16,
+        mode: ChecksumMode::ParallelCrc16,
+        threshold: CRC16_PARALLEL_THRESHOLD,
+        min_bytes_per_thread: CRC16_PARALLEL_MIN_BYTES_PER_THREAD,
+        max_threads: CRC16_PARALLEL_MAX_THREADS,
+    },
+    ParallelSingleAlgorithm {
+        algorithm: Algorithm::Adler32,
+        mode: ChecksumMode::ParallelAdler32,
+        threshold: ADLER32_PARALLEL_THRESHOLD,
+        min_bytes_per_thread: ADLER32_PARALLEL_MIN_BYTES_PER_THREAD,
+        max_threads: ADLER32_PARALLEL_MAX_THREADS,
+    },
+    ParallelSingleAlgorithm {
+        algorithm: Algorithm::Blake3,
+        mode: ChecksumMode::ParallelBlake3,
+        threshold: BLAKE3_PARALLEL_THRESHOLD,
+        min_bytes_per_thread: BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD,
+        max_threads: BLAKE3_PARALLEL_MAX_THREADS,
+    },
+];
 pub(super) const ADLER32_MODULO: u64 = 65_521;
 pub(super) const CRC16_GF2_DIM: usize = 16;
 pub(super) const CRC16_ARC_REFLECTED_POLY: u16 = 0xA001;
