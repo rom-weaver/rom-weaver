@@ -27,6 +27,7 @@ const EditableCheckRow = ({
   invalid,
   mark,
   onCommit,
+  onDraftChange,
   onRemove,
   value,
 }: {
@@ -40,6 +41,7 @@ const EditableCheckRow = ({
    * when there is nothing to compare against yet. */
   mark?: "bad" | "ok";
   onCommit: (raw: string) => void;
+  onDraftChange?: (raw: string) => void;
   onRemove: () => void;
   value: string;
 }) => {
@@ -70,7 +72,6 @@ const EditableCheckRow = ({
         isHalfRowField(field) && "ck-half",
         isHashRowField(field) && "ck-hash",
       )}
-      key={`${id}:${value}`}
     >
       {showField ? (
         <label className="ofld-l" htmlFor={id}>
@@ -86,6 +87,10 @@ const EditableCheckRow = ({
           className="input mono popt-input"
           defaultValue={value}
           id={id}
+          onChange={(event) => {
+            setEditing(true);
+            onDraftChange?.(event.currentTarget.value);
+          }}
           onBlur={(event) => {
             const raw = event.currentTarget.value;
             /* Keep an unfillable row open rather than collapsing to a blank button. */

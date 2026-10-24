@@ -109,6 +109,7 @@ const useLocalApplyPatchFormSession = ({
   applyPatches,
   applyReady = false,
   applyDisabled = false,
+  applyValidationError,
   downloadOutput,
   defaultPatchBasis = "auto",
   resolvedOutputCompression,
@@ -416,7 +417,6 @@ const useLocalApplyPatchFormSession = ({
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
-  const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
@@ -431,11 +431,17 @@ const useLocalApplyPatchFormSession = ({
     !!patchProgress ||
     Object.keys(patchProgressByKey).length > 0 ||
     romInputs.some((entry) => entry.loading || !!entry.progress);
+  const strictInputChecksumBlocked =
+    hasStrictInputChecksumMismatch && !checksumOverrideChecked && !applyPreparationPending;
   const patchValidationBlocked = stagedPatchInfos.some(
     (info) => info.validationState === "invalid" && info.checksumPreflightMismatch !== true,
   );
   const applyQueueBlocked =
-    !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
+    !!applyValidationError ||
+    !!failureMessage ||
+    !!outputErrorMessage ||
+    strictInputChecksumBlocked ||
+    patchValidationBlocked;
   const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
@@ -577,7 +583,7 @@ const useLocalApplyPatchFormSession = ({
     () =>
       buildOutputViewState({
         activeSettings,
-        applyBlocked: strictInputChecksumBlocked || patchValidationBlocked,
+        applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
@@ -602,6 +608,7 @@ const useLocalApplyPatchFormSession = ({
     [
       applyQueued,
       applyDisabled,
+      applyValidationError,
       activeSettings,
       strictInputChecksumBlocked,
       patchValidationBlocked,

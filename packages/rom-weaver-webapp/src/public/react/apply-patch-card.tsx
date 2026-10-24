@@ -53,6 +53,7 @@ const PatchCard = ({
   meta,
   onBasisChange,
   onMetaChange,
+  onDraftValidityChange,
   onReorder,
   onTogglePatch,
   outputCheckHint,
@@ -86,6 +87,7 @@ const PatchCard = ({
   meta?: WeavePatchMeta;
   onBasisChange?: (basis: PatchInputBasis) => void;
   onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (error: string | null) => void;
   onReorder: (from: number, to: number) => void;
   onTogglePatch?: (index: number) => void;
   outputCheckHint?: boolean;
@@ -315,6 +317,7 @@ const PatchCard = ({
             item={item}
             meta={meta}
             onMetaChange={onMetaChange}
+            onDraftValidityChange={onDraftValidityChange}
             outputCheckHint={outputCheckHint}
             patchType={detailedViewEnabled ? undefined : item.format?.trim().toUpperCase() || undefined}
             patchStack={patchStack}

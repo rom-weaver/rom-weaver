@@ -1,7 +1,8 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { expect, onTestFinished, test, vi } from "vitest";
 // Real design system, so the disabled look is asserted from computed style.
 import "../../src/webapp/design-system/index.css";
+import { PatchChecksDrawer } from "../../src/public/react/apply-patch-checks-drawer.tsx";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-form-session.ts";
@@ -429,6 +430,204 @@ test("requirement-less patch passes without requirement rows", async () => {
   expect(validation.textContent).not.toContain("VALIDATION");
 });
 
+test("draft validation blocks imperative dispatch and cancels queued replay", async () => {
+  const applyPatches = vi.fn();
+  const rom = new File([new Uint8Array([1, 2, 3])], "game.bin");
+  const patch = new File([new Uint8Array([1])], "change.ips");
+  let session;
+  let update;
+  const Harness = () => {
+    const [state, setState] = useState({ ready: false, error: undefined });
+    update = setState;
+    session = useLocalApplyPatchFormSession({
+      defaultInputs: [rom],
+      defaultPatches: [patch],
+      applyPatches,
+      applyReady: state.ready,
+      applyValidationError: state.error,
+      downloadOutput: () => undefined,
+    });
+    return createElement("span", { id: "draft-session-ready" }, state.error || String(session.canStartApply));
+  };
+  mount(createElement(Harness));
+  await expect.poll(() => session).toBeDefined();
+  await session.localOutputController.runPrimaryAction();
+  update({ ready: true, error: "Expected 8 hex characters" });
+  await expect
+    .poll(() => document.getElementById("draft-session-ready")?.textContent)
+    .toBe("Expected 8 hex characters");
+  await session.localOutputController.runPrimaryAction();
+  expect(applyPatches).not.toHaveBeenCalled();
+  update({ ready: true, error: undefined });
+  await expect.poll(() => document.getElementById("draft-session-ready")?.textContent).toBe("true");
+  expect(applyPatches).not.toHaveBeenCalled();
+});
+
+test.each(["input", "output"].flatMap((side) => ["crc32", "md5", "sha1", "bytes"].map((field) => [side, field])))(
+  "malformed %s %s drafts block Apply until removed",
+  async (side, field) => {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true }, output: { compression: "none" } },
+      }),
+    );
+    await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+    selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+    const patch = await loadFixtureFile(RAW_PATCH);
+    selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [patch, new File([patch], "spare.ips")]);
+    await waitForApplyButtonEnabled();
+    await expect.poll(() => document.querySelector("#rom-weaver-combined-patch-job .run")?.disabled).toBe(false);
+    document.querySelector("#rom-weaver-list-patch-stack .patch-checks .cks-head")?.click();
+    const add = await waitForState(() => document.getElementById(`rom-weaver-patch-${side}-add-check-0`), 30000);
+    add.value = field;
+    add.dispatchEvent(new Event("change", { bubbles: true }));
+    const input = await waitForState(() => document.getElementById(`rom-weaver-patch-${side}-${field}-0`), 30000);
+    setFormControlValue(input, field === "bytes" ? "-1" : "not-a-hash");
+    await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(true);
+    await expect.poll(() => document.querySelector("#rom-weaver-combined-patch-job .run")?.disabled).toBe(true);
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await expect.poll(() => input.getAttribute("aria-invalid")).toBe("true");
+    const toggle = document.querySelector("#rom-weaver-list-patch-stack .patch-enable input");
+    toggle.click();
+    await waitForApplyButtonEnabled();
+    toggle.click();
+    await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(true);
+    setFormControlValue(input, "");
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    await waitForApplyButtonEnabled();
+    setFormControlValue(input, field === "bytes" ? "-1" : "not-a-hash");
+    await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(true);
+    input.closest(".verification-row").querySelector(".ck-remove").click();
+    await waitForApplyButtonEnabled();
+  },
+);
+
+test.each(["9007199254740992", "9".repeat(310)])("unsafe byte count %s cannot replace exact metadata", async (raw) => {
+  const onMetaChange = vi.fn();
+  const onDraftValidityChange = vi.fn();
+  mount(
+    createElement(PatchChecksDrawer, {
+      basisChoice: "base",
+      index: 0,
+      item: { fileName: "change.ips", format: "ips", validationValues: [] },
+      meta: { outputChecks: { size: 4096 } },
+      onMetaChange,
+      onDraftValidityChange,
+      patchStack: {},
+    }),
+  );
+  const open = await waitForState(() => document.getElementById("rom-weaver-patch-output-bytes-0-open"));
+  open.click();
+  const input = await waitForState(() => document.getElementById("rom-weaver-patch-output-bytes-0"));
+  setFormControlValue(input, raw);
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await expect.poll(() => input.getAttribute("aria-invalid")).toBe("true");
+  expect(onMetaChange).not.toHaveBeenCalled();
+  expect(onDraftValidityChange).toHaveBeenLastCalledWith(expect.any(String));
+});
+
+test.each(["crc32", "bytes"])("malformed %s edits preserve committed metadata", async (field) => {
+  const onMetaChange = vi.fn();
+  const onDraftValidityChange = vi.fn();
+  const committed = field === "bytes" ? "4096" : "c6fb1252";
+  const meta = { inputChecks: field === "bytes" ? { size: 4096 } : { checksums: { crc32: committed } } };
+  mount(
+    createElement(PatchChecksDrawer, {
+      basisChoice: "base",
+      index: 0,
+      item: { fileName: "change.ips", format: "ips", validationValues: [] },
+      meta,
+      onMetaChange,
+      onDraftValidityChange,
+      patchStack: {},
+    }),
+  );
+  const open = await waitForState(() => document.getElementById(`rom-weaver-patch-input-${field}-0-open`));
+  open.click();
+  const input = await waitForState(() => document.getElementById(`rom-weaver-patch-input-${field}-0`));
+  setFormControlValue(input, field === "bytes" ? "-1" : "not-a-hash");
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await expect.poll(() => input.getAttribute("aria-invalid")).toBe("true");
+  expect(onMetaChange).not.toHaveBeenCalled();
+  expect(onDraftValidityChange).toHaveBeenLastCalledWith(expect.any(String));
+  setFormControlValue(input, committed);
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toBe(null);
+  expect(onMetaChange).not.toHaveBeenCalled();
+});
+
+test.each(["input", "output"])("malformed %s draft remains editable when embedded checks arrive", async (side) => {
+  const onDraftValidityChange = vi.fn();
+  const Harness = () => {
+    const [staged, setStaged] = useState(false);
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "button",
+        { id: "finish-staging", type: "button", onClick: () => setStaged(true) },
+        "Finish staging",
+      ),
+      createElement(PatchChecksDrawer, {
+        basisChoice: "base",
+        index: 0,
+        item: {
+          key: "patch-1",
+          fileName: "change.bps",
+          format: "bps",
+          validationValues: staged ? [`${side === "input" ? "in" : "out"} crc32=deadbeef`] : [],
+        },
+        onMetaChange: () => undefined,
+        onDraftValidityChange,
+        patchStack: {},
+      }),
+    );
+  };
+  mount(createElement(Harness));
+  (await waitForState(() => document.querySelector(".patch-checks .cks-head"))).click();
+  const add = await waitForState(() => document.getElementById(`rom-weaver-patch-${side}-add-check-0`));
+  add.value = "crc32";
+  add.dispatchEvent(new Event("change", { bubbles: true }));
+  const inputId = `rom-weaver-patch-${side}-crc32-0`;
+  const input = await waitForState(() => document.getElementById(inputId));
+  setFormControlValue(input, "not-a-hash");
+  await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toEqual(expect.any(String));
+  document.getElementById("finish-staging").click();
+  await expect.poll(() => document.querySelector(".patch-checks")?.textContent).toContain("deadbeef");
+  await expect.poll(() => document.getElementById(inputId)?.value).toBe("not-a-hash");
+  expect(onDraftValidityChange.mock.lastCall?.[0]).toEqual(expect.any(String));
+  document.getElementById(inputId).closest(".verification-row").querySelector(".ck-remove").click();
+  await expect.poll(() => onDraftValidityChange.mock.lastCall?.[0]).toBe(null);
+});
+
+test("malformed draft follows its patch when reordered and clears when removed", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const patch = await loadFixtureFile(RAW_PATCH);
+  selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [
+    await loadFixtureFile(RAW_ROM),
+    patch,
+    new File([patch], "second.ips"),
+  ]);
+  await waitForApplyButtonEnabled();
+  document.querySelector("#rom-weaver-list-patch-stack .patch-checks .cks-head").click();
+  const add = document.getElementById("rom-weaver-patch-output-add-check-0");
+  add.value = "bytes";
+  add.dispatchEvent(new Event("change", { bubbles: true }));
+  const input = await waitForState(() => document.getElementById("rom-weaver-patch-output-bytes-0"));
+  setFormControlValue(input, "-1");
+  await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(true);
+  document.getElementById("rom-weaver-patch-menu-0").click();
+  await expect.poll(() => document.getElementById("rom-weaver-patch-move-down-0")).not.toBeNull();
+  document.getElementById("rom-weaver-patch-move-down-0").click();
+  await expect.poll(() => document.getElementById("rom-weaver-patch-output-bytes-1")?.value).toBe("-1");
+  expect(document.getElementById("rom-weaver-button-apply").disabled).toBe(true);
+  document.getElementById("rom-weaver-patch-menu-1").click();
+  await expect.poll(() => document.getElementById("rom-weaver-patch-menu-remove-1")).not.toBeNull();
+  document.getElementById("rom-weaver-patch-menu-remove-1").click();
+  await waitForApplyButtonEnabled();
+});
+
 test("typed input checksum is format-validated and re-verifies the ROM", async () => {
   mount(
     createElement(ApplyPatchForm, {
@@ -447,7 +646,7 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
 
   // The Checks drawer starts collapsed for a requirement-less patch: open it
   // and add an input CRC32 check.
-  document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
+  document.querySelector("#rom-weaver-list-patch-stack .patch-checks .cks-head")?.click();
   const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"), 30000);
   addCheck.value = "crc32";
   addCheck.dispatchEvent(new Event("change", { bubbles: true }));
