@@ -199,7 +199,18 @@ test("shared Rust/TypeScript case tables select both suites", () => {
     // No WASM browser test reads them, and they are not compiler inputs.
     assert.equal(result.wasm_runtime, "false", path);
     assert.equal(classifyFor("pull_request", path).lighthouse, "false", path);
+    // Only the unit suite reads them, so browser and WebKit E2E jobs stay off.
+    assert.equal(classifyFor("pull_request", path).webapp_browser, "false", path);
   }
+  assert.equal(
+    classifyFor(
+      "pull_request",
+      "crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json",
+      "packages/rom-weaver-webapp/src/index.tsx",
+    ).webapp_browser,
+    "true",
+    "another webapp input still selects the browser jobs",
+  );
   // Fixture trees below the top level stay Rust-only.
   assert.equal(
     classify("crates/rom-weaver-containers/tests/fixtures/archives/manifest.json").webapp,
