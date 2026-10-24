@@ -81,6 +81,58 @@ fn weave_parse_plain_json_resolves_refs_verbatim() {
 }
 
 #[test]
+fn weave_parse_returns_checks_with_references_resolved() {
+    let temp = setup_temp_dir();
+    let weave = temp.child("rom-weaver-weave.json");
+    fs::write(
+        weave.path(),
+        r#"{
+            "version": 2,
+            "patchBasis": "auto",
+            "checkStates": [
+                { "id": "base", "checks": { "checksums": { "crc32": "12345678" }, "size": 42 } },
+                { "id": "done", "checks": { "checksums": { "sha1": "0123456789abcdef0123456789abcdef01234567" } } }
+            ],
+            "rom": { "url": "https://example.test/game.sfc", "checksRef": "base" },
+            "patches": [
+                { "id": "a", "path": "a.ips", "input": { "rom": true }, "inputChecksRef": "base",
+                  "outputChecks": { "checksums": { "crc32": "aabbccdd" } } },
+                { "id": "b", "path": "b.ips", "input": { "patch": "a" } }
+            ],
+            "output": { "checksRef": "done" }
+        }"#,
+    )
+    .expect("weave fixture");
+    let events = run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            weave.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let result = &events.last().expect("terminal event")["details"]["weave"];
+    assert_eq!(result["rom_checks"]["checksums"]["crc32"], "12345678");
+    assert_eq!(result["rom_checks"]["size"], 42);
+    assert_eq!(
+        result["output_checks"]["checksums"]["sha1"],
+        "0123456789abcdef0123456789abcdef01234567"
+    );
+    assert_eq!(
+        result["patch_sources"][0]["input_checks"]["checksums"]["crc32"], "12345678",
+        "a referenced state resolves for the consuming patch"
+    );
+    assert_eq!(
+        result["patch_sources"][0]["output_checks"]["checksums"]["crc32"], "aabbccdd",
+        "inline checks pass through"
+    );
+    assert!(result["patch_sources"][1].get("input_checks").is_none());
+    assert!(result["patch_sources"][1].get("output_checks").is_none());
+}
+
+#[test]
 fn weave_parse_reads_gzipped_weave() {
     let temp = setup_temp_dir();
     let weave = temp.child("rom-weaver-weave.json.gz");

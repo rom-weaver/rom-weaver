@@ -4,6 +4,7 @@ import {
   buildWeavePatchInputs,
   preparePackagedRom,
   resolveWeaveArchiveFormat,
+  validateWeaveRows,
 } from "../../src/public/react/weave-export.tsx";
 
 const createCompressionOutput = () => ({
@@ -240,5 +241,29 @@ describe("weave execution targets", () => {
       inputChecks: "size=0",
       outputChecks: "size=42",
     });
+  });
+});
+
+describe("validateWeaveRows", () => {
+  const row = (overrides: { checks?: string; outputChecks?: string }) =>
+    ({ checks: "", description: "", default: true, fileName: "a.ips", outputChecks: "", ...overrides }) as never;
+  const sha256 = "a".repeat(64);
+
+  it("accepts every checksum algorithm the Rust expect-token parser accepts", () => {
+    const rows = [row({ checks: `SHA256=${sha256}, blake3=${"b".repeat(64)}`, outputChecks: "crc16=abcd,size=12" })];
+    validateWeaveRows(rows, [{} as never]);
+    expect(rows[0]).toMatchObject({
+      checks: `sha256=${sha256},blake3=${"b".repeat(64)}`,
+      outputChecks: "crc16=abcd,size=12",
+    });
+  });
+
+  it("still rejects an authored check that contradicts the checksum built into the patch", () => {
+    const item = { validationValues: ["in crc32=11111111"] } as never;
+    expect(() => validateWeaveRows([row({ checks: "crc32=22222222" })], [item])).toThrow(/conflicts/);
+  });
+
+  it("rejects a malformed entry shape", () => {
+    expect(() => validateWeaveRows([row({ checks: "crc32" })], [{} as never])).toThrow(/invalid checksum entry/);
   });
 });

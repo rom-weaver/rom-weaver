@@ -205,6 +205,42 @@ mod tests {
     }
 
     #[test]
+    fn reads_crc32_from_the_cases_the_webapp_used_to_mirror() {
+        let crc32 = |name: &str| {
+            parse_filename_requirements(name)
+                .checksums
+                .get("crc32")
+                .cloned()
+        };
+        assert_eq!(crc32("Game [1a2b3c4d].ips").as_deref(), Some("1a2b3c4d"));
+        assert_eq!(crc32("Game {1A2B3C4D}.ips").as_deref(), Some("1a2b3c4d"));
+        assert_eq!(
+            crc32("hack [crc32:11111111] crc32:11111111.ips").as_deref(),
+            Some("11111111")
+        );
+        // Unicode letters that case-fold onto ASCII are not part of the label.
+        assert_eq!(
+            crc32("hack \u{17f}crc32:1a2b3c4d.ips").as_deref(),
+            Some("1a2b3c4d")
+        );
+        assert_eq!(
+            crc32("hack \u{212a}crc32:1a2b3c4d.ips").as_deref(),
+            Some("1a2b3c4d")
+        );
+        for name in [
+            "MyHack 20231015.ips",
+            "hack [crc32:1a2b3c].ips",
+            "hack [crc32:1a2b3c4d5].ips",
+            "notcrc32:1a2b3c4d.ips",
+            "hack [crc32:11111111][crc32:22222222].ips",
+            "hack [crc32_1a2b3c4d].ips",
+            "",
+        ] {
+            assert_eq!(crc32(name), None, "{name:?}");
+        }
+    }
+
+    #[test]
     fn parses_equals_separator_and_lowercases_value() {
         let parsed = parse_filename_requirements("hack (crc32=AABBCCDD).bps");
         assert_eq!(

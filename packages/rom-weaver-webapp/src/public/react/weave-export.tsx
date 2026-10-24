@@ -83,13 +83,19 @@ const reportWeaveExportError = (aborted: boolean, error: unknown, setError: (mes
 };
 
 type WeaveExportProgress = ProgressViewModel;
+/** Algorithms a patch embeds in its own header, which an authored check must not contradict. */
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
-const CHECK_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
 
 const disposeWeaveOutput = (output: PublicOutput | null | undefined) => {
   if (output) void output.dispose().catch(() => undefined);
 };
 
+/**
+ * Split a check field into `algorithm=value` entries without judging them: which algorithms exist,
+ * their hex lengths, and the size rules belong to Rust's `parse_expect_tokens`, which the weave
+ * create command runs on every entry. Only the shape is checked here so the conflict check below
+ * can compare entries by algorithm.
+ */
 const parseChecks = (value: string, label: string): Record<string, string> => {
   const checks: Record<string, string> = {};
   for (const token of value
@@ -99,30 +105,15 @@ const parseChecks = (value: string, label: string): Record<string, string> => {
     const [rawAlgorithm, rawValue, ...extra] = token.split("=");
     const algorithm = rawAlgorithm?.trim().toLowerCase().replace("sha-1", "sha1");
     const checksum = rawValue?.trim().toLowerCase();
-    if (algorithm === "size" && checksum && !extra.length) {
-      const size = Number(checksum);
-      if (!(/^\d+$/.test(checksum) && Number.isSafeInteger(size)) || size < 0) {
-        throw new Error(`${label} size must be a nonnegative safe integer`);
-      }
-      checks.size = String(size);
-      continue;
-    }
-    if (extra.length || !algorithm || !checksum || !CHECK_ALGORITHMS.includes(algorithm as never)) {
-      throw new Error(`${label} contains an invalid checksum entry`);
-    }
-    const expectedLength = CHECK_LENGTHS[algorithm as keyof typeof CHECK_LENGTHS];
-    if (!new RegExp(`^[0-9a-f]{${expectedLength}}$`).test(checksum)) {
-      throw new Error(`${label} ${algorithm.toUpperCase()} must be ${expectedLength} hexadecimal characters`);
-    }
+    if (extra.length || !algorithm || !checksum) throw new Error(`${label} contains an invalid checksum entry`);
     checks[algorithm] = checksum;
   }
   return checks;
 };
 
 const formatChecks = (checks: Record<string, string>) =>
-  [...CHECK_ALGORITHMS, "size"]
-    .map((algorithm) => (checks[algorithm] ? `${algorithm}=${checks[algorithm]}` : ""))
-    .filter(Boolean)
+  Object.entries(checks)
+    .map(([algorithm, value]) => `${algorithm}=${value}`)
     .join(",");
 
 const embeddedChecks = (item: PatchStackItemState | undefined, side: "in" | "out"): Record<string, string> => {
@@ -635,4 +626,11 @@ const useWeaveExport = ({
   };
 };
 
-export { buildWeaveExportRows, buildWeavePatchInputs, preparePackagedRom, resolveWeaveArchiveFormat, useWeaveExport };
+export {
+  buildWeaveExportRows,
+  buildWeavePatchInputs,
+  preparePackagedRom,
+  resolveWeaveArchiveFormat,
+  useWeaveExport,
+  validateWeaveRows,
+};

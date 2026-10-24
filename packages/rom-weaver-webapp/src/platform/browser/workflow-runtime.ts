@@ -312,6 +312,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
           logLevel,
           outDirPath: outputScope.rootPath,
           signal,
+          sourceName: fileName,
           sourcePath: stagedSource.filePath,
         },
         onProgress,

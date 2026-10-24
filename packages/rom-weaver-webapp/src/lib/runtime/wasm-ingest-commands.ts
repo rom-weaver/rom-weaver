@@ -85,6 +85,9 @@ const invokeRomWeaverIngestWorker = async (
     select?: string[];
     signal?: AbortSignal;
     sourcePath: string;
+    // Original name of the source when staging mounted it under a sanitized one (`:` becomes `_`),
+    // so Rust reads a patch's file-name checksum/size tokens from the name the author wrote.
+    sourceName?: string;
     // For a multi-track CHD CD: force per-track split BIN (true) or a single merged BIN (false).
     // Omit to let the ingest command ask the host interactively when the disc offers the choice.
     splitBin?: boolean;
@@ -104,6 +107,7 @@ const invokeRomWeaverIngestWorker = async (
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
     input: sourcePath,
+    ...(input.sourceName ? { source_name: input.sourceName } : {}),
     ...(database.length ? { database } : {}),
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
