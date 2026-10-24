@@ -8,6 +8,7 @@ examine_globs = [
   "crates/rom-weaver-core/src/cancel.rs",
   "crates/rom-weaver-core/src/concurrency.rs",
   "crates/rom-weaver-core/src/disc_sheet.rs",
+  "crates/rom-weaver-core/src/n64.rs",
   "crates/rom-weaver-core/src/selection.rs",
   "crates/rom-weaver-core/src/prompt.rs",
 ]

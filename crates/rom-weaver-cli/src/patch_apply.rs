@@ -2371,7 +2371,7 @@ impl CliApp {
                     order,
                     Some(format!(
                         "patch N64 byte order taken as {} (the weave ROM checks match that form of the ROM)",
-                        order.label()
+                        order.id()
                     )),
                 );
             }
@@ -2380,7 +2380,7 @@ impl CliApp {
         };
         let note = format!(
             "patch N64 byte order inferred as {} ({reason})",
-            target.label()
+            target.id()
         );
         (target, Some(note))
     }
@@ -2393,7 +2393,7 @@ impl CliApp {
         }
         Some(format!(
             "warning=N64 byte order could not be determined from the patch; assuming {} (the input's order). If the output is wrong, rerun with --n64-byte-order set to the order the patch was made for",
-            source.label()
+            source.id()
         ))
     }
 
@@ -4096,10 +4096,7 @@ impl CliApp {
                             format: None,
                         },
                         "compat",
-                        format!(
-                            "transforming N64 input byte order to {}",
-                            target_order.label()
-                        ),
+                        format!("transforming N64 input byte order to {}", target_order.id()),
                         None,
                         context.single_thread_execution(),
                     );

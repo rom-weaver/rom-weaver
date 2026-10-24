@@ -119,11 +119,10 @@ fn with_patch_endpoint_selection_round_trips() {
 
 #[test]
 fn with_patch_input_n64_byte_order_round_trips() {
-    let context =
-        test_context().with_patch_input_n64_byte_order(PatchInputN64ByteOrder::ByteSwapped);
+    let context = test_context().with_patch_input_n64_byte_order(N64ByteOrder::ByteSwapped);
     assert_eq!(
         context.patch_input_n64_byte_order(),
-        Some(PatchInputN64ByteOrder::ByteSwapped)
+        Some(N64ByteOrder::ByteSwapped)
     );
 }
 
