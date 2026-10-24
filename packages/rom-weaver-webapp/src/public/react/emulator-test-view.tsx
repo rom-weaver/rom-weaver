@@ -10,9 +10,12 @@ import {
 import {
   clearPendingTestSave,
   configureEmulatorSaveStorage,
-  ensureEmulatorSaveBridge,
-  readPendingTestSave,
+  loadDroppedSram,
+  registerEmulatorSaveBridge,
+  readImportBytes,
+  readPendingTestSaves,
   setEmulatorSavePreview,
+  stagePendingTestSave,
   type PendingTestSave,
 } from "../../storage/browser/emulator-saves.ts";
 import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-client.ts";
@@ -23,6 +26,7 @@ import {
   prepareEntry,
   restartCurrentGameWithSave,
   useEmulatorSession,
+  type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { join } from "./components/ds/cx.ts";
@@ -39,7 +43,15 @@ import {
 } from "./components/ds/sample-tutorial.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
-import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
+import {
+  FDS_BIOS_ISSUE_URL,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  getSaveFileCore,
+  hasFdsDiskSignature,
+  requiresUnsuppliedBios,
+} from "./components/emulatorjs.ts";
+import { isSaveFileName } from "./drop-destination.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import {
@@ -49,6 +61,8 @@ import {
 } from "./emulator-audio-context.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import type { PageFileDrop } from "./public-types.ts";
+import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
@@ -110,9 +124,11 @@ const hasActiveUserGesture = () => typeof navigator !== "undefined" && navigator
 type EmulatorTestViewProps = {
   /** False while another workflow tab is shown; the running game pauses until the view returns. */
   active?: boolean;
+  /** Files dropped on the page or routed here from another tab. */
+  pageDrop?: PageFileDrop | null;
 };
 
-const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
+const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
@@ -131,6 +147,9 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [pendingSave, setPendingSave] = useState<PendingTestSave>();
+  // The game whose dropped save plays as a preview, so its in-game progress is not stored.
+  const [previewOnlyGameId, setPreviewOnlyGameId] = useState<string>();
+  const [ignoredSaves, setIgnoredSaves] = useState<{ names: string[]; used: string }>();
   const [saveLoadResult, setSaveLoadResult] = useState<{
     gameName: string;
     revision: number;
@@ -144,17 +163,34 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       currentGame?.checksum
         ? createEmulatorGameIdentity({
             checksum: currentGame.checksum,
+            core: currentGame.core,
             fileName: currentGame.fileName,
           })
         : null,
     [currentGame],
+  );
+  const saveId = currentIdentity?.saveId;
+  const loadedGameRef = useRef<
+    { game: EmulatorSessionEntry; identity: NonNullable<typeof currentIdentity> } | undefined
+  >(undefined);
+  loadedGameRef.current = currentGame && currentIdentity ? { game: currentGame, identity: currentIdentity } : undefined;
+  const registerPlayerFrame = useCallback(
+    (frame: HTMLIFrameElement | null) => {
+      iframeRef.current = frame;
+      if (!(frame && saveId)) return undefined;
+      const unregister = registerEmulatorSaveBridge(frame, saveId);
+      return () => {
+        unregister();
+        iframeRef.current = null;
+      };
+    },
+    [saveId],
   );
   const currentGameName = currentIdentity?.gameName;
   const dataUrl =
     typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
 
   useEffect(() => {
-    ensureEmulatorSaveBridge();
     // The test view is about to pull EmulatorJS assets; move them to the front
     // of the offline warm-up so its low-priority queue works for, not against,
     // this session.
@@ -165,8 +201,8 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     if (!active) return;
     let current = true;
     const revision = pendingReadRevisionRef.current;
-    void readPendingTestSave()
-      .then((save) => {
+    void readPendingTestSaves()
+      .then(([save]) => {
         if (current && revision === pendingReadRevisionRef.current) setPendingSave(save);
       })
       .catch((reason) => {
@@ -207,7 +243,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     if (!currentIdentity) return undefined;
     const sendVisibility = (kind: "visibility-pause" | "visibility-resume") => {
       iframeRef.current?.contentWindow?.postMessage(
-        { gameId: currentIdentity.gameName, kind, source: "rom-weaver-emulator" },
+        { gameId: currentIdentity.saveId, kind, source: "rom-weaver-emulator" },
         "*",
       );
     };
@@ -242,7 +278,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (!event.data || typeof event.data !== "object") return;
       const message = event.data as { source?: unknown; gameId?: unknown; kind?: unknown };
-      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.gameName) return;
+      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.saveId) return;
       if (message.kind !== "sram-loaded" && message.kind !== "sram-load-failed") return;
       setSaveLoadResult({
         gameName: currentIdentity.gameName,
@@ -259,7 +295,10 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       : undefined;
   let saveLoadMessage = "Waiting for EmulatorJS to load the save bytes.";
   if (saveLoadStatus === "loaded") {
-    saveLoadMessage = "Save loaded and game restarted. Check the game's Continue menu.";
+    saveLoadMessage =
+      previewOnlyGameId === currentGame?.id
+        ? "Save loaded and game restarted as a preview: progress in it is not stored. Import it in Saves & storage to keep it."
+        : "Save loaded and game restarted. Check the game's Continue menu.";
   } else if (saveLoadStatus === "failed") {
     saveLoadMessage = "EmulatorJS could not load the save bytes. Try a save made by this game.";
   }
@@ -302,19 +341,6 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, [currentGame]);
 
   useEffect(() => {
-    const dialog = fullscreenDialogRef.current;
-    if (!dialog || typeof dialog.showModal !== "function") return undefined;
-    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
-    // player is clipped away by it. The dialog wraps the player at all times so
-    // opening it never reparents the iframe, which would reload the game.
-    if (pseudoFullscreen && !dialog.open) dialog.showModal();
-    if (!pseudoFullscreen && dialog.open) dialog.close();
-    const handleClose = () => setPseudoFullscreen(false);
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [pseudoFullscreen]);
-
-  useEffect(() => {
     if (typeof document === "undefined" || !pseudoFullscreen) return undefined;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -353,7 +379,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, []);
 
   const handleFiles = useCallback(
-    async (files: File[], prepareAudio = true): Promise<boolean> => {
+    async (files: File[], prepareAudio = true, save?: File, keepHeldSave = false): Promise<boolean> => {
       const file = files[0];
       if (!file || busy) return false;
       if (!hasWebgl2()) {
@@ -390,8 +416,18 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           signal: abortController.signal,
         });
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
+        if (loaded.blob.size === 0) {
+          if (currentGameId) disposeEntry(currentGameId);
+          setError({
+            detail: "The file is empty (0 bytes). Choose a ROM that has data.",
+            summary: `Cannot play ${loaded.fileName}.`,
+          });
+          return false;
+        }
         const core = getEmulatorJsCore(loaded.platform, loaded.fileName);
         if (!core) {
+          // The new pick replaces the session even when it cannot play, so drop the previous game's player.
+          if (currentGameId) disposeEntry(currentGameId);
           setError({
             detail: "No emulator core is available for this file. Choose a supported ROM.",
             summary: `Cannot play ${loaded.fileName}.`,
@@ -408,26 +444,58 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           sizeBytes: loaded.blob.size,
           source: "local" as const,
         };
-        const staged = await readPendingTestSave();
+        const cancelled = () => abortController.signal.aborted || loadAbortControllerRef.current !== abortController;
+        const held = await readPendingTestSaves();
+        if (cancelled()) return false;
         pendingReadRevisionRef.current += 1;
-        setPendingSave(staged);
-        const stagedMatches =
-          !!staged &&
-          getEmulatorJsCore(staged.platform) === core &&
-          (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
-        if (stagedMatches) await clearPendingTestSave();
-        if (prepareAudio) prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
-        addEntry(entry);
-        if (staged && stagedMatches) {
-          setEmulatorSavePreview(loaded.checksum, staged.bytes);
-          restartCurrentGameWithSave(entry.id);
-          setPendingSave(undefined);
-        } else if (staged) {
+        setPendingSave(held[0]);
+        // A held save names its system by platform (Save editor) or, for a raw drop, by file extension. One that
+        // names neither yields to a save dropped with this ROM and to the guided sample.
+        const heldFits = (candidate: PendingTestSave) => {
+          const heldCore = candidate.platform
+            ? getEmulatorJsCore(candidate.platform)
+            : getSaveFileCore(candidate.fileName);
+          const systemFits = heldCore ? heldCore === core : !(candidate.platform || save || keepHeldSave);
+          return (
+            systemFits && (!candidate.romSha1 || candidate.romSha1.toLowerCase() === loaded.checksum.toLowerCase())
+          );
+        };
+        // A save dropped with the ROM wins; a fitting held save then stays held for a later load.
+        const matched = save ? undefined : held.find(heldFits);
+        // A save the visitor dropped is theirs to keep, so it is stored. The Save editor's copy stays a
+        // preview: it is a test of an edit, not a replacement. The file is read before anything changes, so
+        // an unreadable save fails the load without losing the held save.
+        let droppedBytes: Uint8Array | undefined;
+        if (matched) droppedBytes = matched.platform ? undefined : matched.bytes;
+        else if (save) droppedBytes = await readImportBytes(save);
+        if (cancelled()) return false;
+        const identity = createEmulatorGameIdentity(entry);
+        // Stored before the player mounts so it boots once, with the save already in place.
+        const droppedOutcome = droppedBytes
+          ? await loadDroppedSram(identity.saveId, droppedBytes, loaded.fileName)
+          : undefined;
+        if (cancelled()) return false;
+        if (matched) await clearPendingTestSave(matched.slot);
+        if (cancelled()) return false;
+        if (prepareAudio) prepareEmulatorAudioContext(identity.gameName);
+        const previewBytes =
+          droppedOutcome === "preview" ? droppedBytes : matched?.platform ? matched.bytes : undefined;
+        addEntry({ ...entry, ...(droppedBytes || previewBytes ? { savePreviewRevision: 1 } : {}) });
+        // Replacing the current game with the same ROM clears that ROM's preview, so it is set after addEntry.
+        if (previewBytes) setEmulatorSavePreview(identity.saveId, previewBytes);
+        setPreviewOnlyGameId(droppedOutcome === "preview" ? entry.id : undefined);
+        const remaining = held.find((candidate) => candidate !== matched);
+        setPendingSave(remaining);
+        const shown = held[0];
+        const shownCore = shown?.platform
+          ? getEmulatorJsCore(shown.platform)
+          : shown && getSaveFileCore(shown.fileName);
+        if (shown && shown !== matched && shownCore && !save) {
           setError({
-            detail: staged.romSha1
+            detail: shown.romSha1
               ? "Choose the ROM linked to the uploaded save."
               : "Choose a ROM for the save's game system.",
-            summary: `${loaded.fileName} does not match ${staged.fileName}.`,
+            summary: `${loaded.fileName} does not match ${shown.fileName}.`,
           });
         }
         return true;
@@ -446,8 +514,58 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         }
       }
     },
+    [busy, currentGameId],
+  );
+  // A drop can carry a ROM and its battery save together; the save rides along with the ROM.
+  // A save dropped alone waits for the next ROM, like a save the Save editor hands over. It survives a
+  // reload only while save storage is on.
+  const applySaveToCurrentGame = useCallback(
+    async (save: File): Promise<boolean> => {
+      const game = loadedGameRef.current?.game;
+      const identity = loadedGameRef.current?.identity;
+      if (!(game?.core && identity) || busy) return false;
+      const saveCore = getSaveFileCore(save.name);
+      if (saveCore && saveCore !== game.core) return false;
+      const bytes = await readImportBytes(save);
+      const outcome = await loadDroppedSram(identity.saveId, bytes, game.fileName);
+      if (loadedGameRef.current?.game.id !== game.id) return true;
+      setPreviewOnlyGameId(outcome === "preview" ? game.id : undefined);
+      restartCurrentGameWithSave(game.id);
+      return true;
+    },
     [busy],
   );
+  const handleDroppedFiles = useCallback(
+    (files: File[]) => {
+      const saves = files.filter((file) => isSaveFileName(file.name));
+      const [save] = saves;
+      const roms = files.filter((file) => !isSaveFileName(file.name));
+      setIgnoredSaves(
+        save && saves.length > 1 ? { names: saves.slice(1).map((file) => file.name), used: save.name } : undefined,
+      );
+      if (save && !roms.length) {
+        // A save dropped alone plays in the game already loaded when it fits; otherwise it waits for the next ROM.
+        void (async () => {
+          try {
+            if (await applySaveToCurrentGame(save)) return;
+            const staged = await stagePendingTestSave({ data: save, fileName: save.name, slot: "dropped" });
+            pendingReadRevisionRef.current += 1;
+            setPendingSave(staged);
+          } catch (reason) {
+            setError({
+              detail: errorDetail(reason, "The save could not be loaded."),
+              summary: `Could not load ${save.name}.`,
+            });
+          }
+        })();
+        return;
+      }
+      void handleFiles(roms, true, save);
+    },
+    [applySaveToCurrentGame, handleFiles],
+  );
+  const handledPageDropIdRef = useRef<number | null>(null);
+  usePageDropForwarder(pageDrop, handleDroppedFiles, handledPageDropIdRef);
 
   const cancelSampleLoad = useCallback(() => {
     const sampleAbortController = sampleAbortControllerRef.current;
@@ -476,13 +594,13 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const file = new File([await response.blob()], TEST_SAMPLE_ASSET, { type: "application/octet-stream" });
         if (abortController.signal.aborted || sampleAbortControllerRef.current !== abortController) return;
-        const playable = await handleFiles([file], prepareAudio);
+        const playable = await handleFiles([file], prepareAudio, undefined, true);
         if (abortController.signal.aborted) return;
         if (!playable) setSampleTutorialActive(false);
       } catch {
         if (abortController.signal.aborted) return;
         setSampleTutorialActive(false);
-        setSampleError("Could not load the sample. Try again.");
+        setSampleError("Couldn't load the practice files. Check your connection and try again.");
       } finally {
         if (sampleAbortControllerRef.current === abortController) {
           sampleAbortControllerRef.current = null;
@@ -511,7 +629,49 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     ? currentGame.core || getEmulatorJsCore(currentGame.platform, currentGame.fileName)
     : null;
   const webglBlocked = error?.blocksPlayer === true;
-  const canPlay = Boolean(currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked);
+  // Every route into Test ends at currentGame, so this one check covers pickers, archives, URL sessions and Apply.
+  // Apply can hand over a headerless FDS image under any output name, so the bytes decide as well.
+  const [fdsBytes, setFdsBytes] = useState<{ blob: Blob; isFds: boolean } | null>(null);
+  useEffect(() => {
+    if (!currentBlob) {
+      setFdsBytes(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void hasFdsDiskSignature(currentBlob)
+      .catch(() => false)
+      .then((isFds) => {
+        if (!cancelled) setFdsBytes({ blob: currentBlob, isFds });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBlob]);
+  const fdsChecking = Boolean(currentBlob && fdsBytes?.blob !== currentBlob);
+  const missingBios = Boolean(
+    currentGame && (requiresUnsuppliedBios(currentGame) || (fdsBytes?.blob === currentBlob && fdsBytes?.isFds)),
+  );
+  const canPlay = Boolean(
+    currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked && !missingBios && !fdsChecking,
+  );
+  useEffect(() => {
+    if (missingBios) {
+      setPseudoFullscreen(false);
+      return undefined;
+    }
+    if (!canPlay) return undefined;
+    const dialog = fullscreenDialogRef.current;
+    if (!dialog || typeof dialog.showModal !== "function") return undefined;
+    // The top layer is what escapes the panel's `overflow: clip`; a plain fixed
+    // player is clipped away by it. The dialog wraps the player at all times so
+    // opening it never reparents the iframe, which would reload the game.
+    if (pseudoFullscreen && !dialog.open) dialog.showModal();
+    if (!pseudoFullscreen && dialog.open) dialog.close();
+    const handleClose = () => setPseudoFullscreen(false);
+    dialog.addEventListener("close", handleClose);
+    return () => dialog.removeEventListener("close", handleClose);
+  }, [canPlay, missingBios, pseudoFullscreen]);
+
   const workflowEmpty = !(currentGame || busy);
   const showPlayer = Boolean(currentGame);
   const sampleTutorialReady = !sampleLoading && currentGame?.fileName === TEST_SAMPLE_ASSET;
@@ -566,9 +726,10 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   const discardPendingSave = async () => {
     try {
-      await clearPendingTestSave();
+      await clearPendingTestSave(pendingSave?.slot);
       pendingReadRevisionRef.current += 1;
-      setPendingSave(undefined);
+      // A save held in the other slot becomes the one shown.
+      setPendingSave((await readPendingTestSaves())[0]);
     } catch (reason) {
       setError({
         detail: errorDetail(reason, "The saved upload could not be removed."),
@@ -596,6 +757,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       error,
       progress: loadProgress,
       canPlay,
+      missingBios,
       player: getAgentPlayerState(),
       pendingSave: pendingSave ? { present: true } : null,
       saveLoadStatus,
@@ -658,6 +820,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       </button>
                     </span>
                     <p className="save-status">Add the ROM of the game that made this save.</p>
+                    {pendingSave.memoryOnly ? (
+                      <p className="save-status is-failed">
+                        Save storage is off, so reloading or closing this page loses this save.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -675,14 +842,33 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           </>
         }
         beforeDropZone={
-          error ? (
-            <Notice
-              id="emulator-test-error"
-              level="error"
-              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
-            >
-              <b>{error.summary}</b> {error.detail}
-            </Notice>
+          error || ignoredSaves || (currentGame && missingBios) ? (
+            <>
+              {ignoredSaves ? (
+                <Notice id="emulator-test-ignored-saves" level="warn" onDismiss={() => setIgnoredSaves(undefined)}>
+                  <b>Only one save loads at a time.</b> Used {ignoredSaves.used}; ignored{" "}
+                  {ignoredSaves.names.join(", ")}.
+                </Notice>
+              ) : null}
+              {error ? (
+                <Notice
+                  id="emulator-test-error"
+                  level="error"
+                  onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+                >
+                  <b>{error.summary}</b> {error.detail}
+                </Notice>
+              ) : null}
+              {currentGame && missingBios ? (
+                <Notice id="emulator-test-bios" level="error">
+                  <b>{localizer.message("ui.test.fdsBios.summary", { fileName: currentGame.fileName })}</b>{" "}
+                  {localizer.message("ui.test.fdsBios.detail")}{" "}
+                  <a href={FDS_BIOS_ISSUE_URL} rel="noreferrer" target="_blank">
+                    {localizer.message("ui.test.fdsBios.link")}
+                  </a>
+                </Notice>
+              ) : null}
+            </>
           ) : undefined
         }
         big={workflowEmpty}
@@ -693,14 +879,15 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         id="emulator-test-input"
         info={<p>Choosing another ROM stops and replaces the current game.</p>}
         inputId="emulator-test-file-input"
-        lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2", description: "ui.hero.testDescription" }}
+        lead={{ line1: "ui.hero.testThesis", description: "ui.hero.testDescription" }}
         multiple={false}
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}
-        onFiles={(files) => void handleFiles(files)}
+        onFiles={handleDroppedFiles}
         onboarding={
           loadProgress ? null : (
             <SampleTutorialStart
+              chipLabel={localizer.message("ui.tutorial.tryTest")}
               documentation={{
                 href: resolveAssetUrl(assetBaseUrl, WORKFLOW_GUIDES.test.path),
                 label: localizer.message(WORKFLOW_GUIDES.test.label),
@@ -710,7 +897,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
               downloadName={TEST_SAMPLE_ASSET}
               error={sampleError}
               guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
-              label="Start guided Test"
+              label="Start a practice run"
               loading={sampleLoading}
               onStart={startTestSample}
               startAction="play"
@@ -737,7 +924,13 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 <button aria-label="Stop and unload game" className="btn ghost slim" onClick={stopGame} type="button">
                   Stop
                 </button>
-                {canPlay ? (
+                {currentGame &&
+                currentCore &&
+                gameUrl &&
+                currentIdentity &&
+                !webglBlocked &&
+                !missingBios &&
+                !fdsChecking ? (
                   <>
                     <button
                       aria-label={fullscreen || pseudoFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
@@ -781,7 +974,13 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   {saveLoadMessage}
                 </p>
               ) : null}
-              {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
+              {currentGame &&
+              currentCore &&
+              gameUrl &&
+              currentIdentity &&
+              !webglBlocked &&
+              !missingBios &&
+              !fdsChecking ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
                     className={
@@ -794,10 +993,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       allow="autoplay; fullscreen; gamepad"
                       allowFullScreen
                       key={`${currentGame.id}:${gameUrl}:${currentGame.savePreviewRevision ?? 0}`}
-                      ref={iframeRef}
+                      ref={registerPlayerFrame}
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
                         gameId: currentIdentity.gameId,
+                        saveId: currentIdentity.saveId,
                         gameLabel: currentGame.fileName,
                       })}
                       title={`EmulatorJS test for ${currentGame.fileName}`}
@@ -814,11 +1014,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     ) : null}
                   </div>
                 </dialog>
-              ) : currentGame && currentCore && preparing ? (
+              ) : currentGame && currentCore && preparing && !missingBios ? (
                 <div className="emulator-player-loading">
                   <FileProgress indeterminate label="Preparing the ROM..." value="working" />
                 </div>
-              ) : currentGame && !webglBlocked ? (
+              ) : currentGame && !webglBlocked && !missingBios ? (
                 <div className="emulator-player-loading" />
               ) : null}
             </div>

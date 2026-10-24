@@ -1,7 +1,11 @@
+import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
+import { COMPRESSION_DEFAULTS } from "../../src/lib/compression/compression-metadata.ts";
+import { createBrowserChdRuntime } from "../../src/platform/browser/workflow-runtime-chd.ts";
+import { createSharedCompressionRuntime } from "../../src/lib/runtime/workflow-runtime-core.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  invokeRomWeaverBundleCreateWorker,
-  invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverWeaveCreateWorker,
+  invokeRomWeaverWeaveParseWorker,
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractAllWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
@@ -341,37 +345,37 @@ describe("invokeRomWeaverIngestWorker", () => {
   });
 });
 
-describe("bundle runtime workers", () => {
-  it("parses a bundle and forwards an optional extraction directory", async () => {
+describe("weave runtime workers", () => {
+  it("parses a weave and forwards an optional extraction directory", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
-      succeededResult({ bundle: { bundle: { patches: [], version: 1 }, patch_sources: [], source_kind: "json" } }),
+      succeededResult({ weave: { weave: { patches: [], version: 1 }, patch_sources: [], source_kind: "json" } }),
     );
 
     await expect(
-      invokeRomWeaverBundleParseWorker({ extractDirPath: " /out ", sourcePath: " bundle.json " }),
-    ).resolves.toMatchObject({ bundle: { version: 1 }, patchSources: [], sourceKind: "json" });
+      invokeRomWeaverWeaveParseWorker({ extractDirPath: " /out ", sourcePath: " weave.json " }),
+    ).resolves.toMatchObject({ weave: { version: 1 }, patchSources: [], sourceKind: "json" });
     expect(lastCall()[0]).toEqual({
-      args: { args: { input: "bundle.json", output: "/out" }, type: "parse" },
-      type: "bundle",
+      args: { args: { input: "weave.json", output: "/out" }, type: "parse" },
+      type: "weave",
     });
   });
 
-  it("creates a bundle with aligned metadata and expected checks", async () => {
+  it("creates a weave with aligned metadata and expected checks", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({
-        bundle_create: { bundle: { patches: [], version: 1 }, bundle_path: "/out/bundle.json", warnings: [] },
+        weave_create: { weave: { patches: [], version: 1 }, weave_path: "/out/weave.json", warnings: [] },
       }),
     );
 
     await expect(
-      invokeRomWeaverBundleCreateWorker({
-        bundlePath: " /bundle.zip ",
-        bundleRomPath: " /rom.sfc ",
-        noBundleRom: true,
+      invokeRomWeaverWeaveCreateWorker({
+        weavePath: " /weave.zip ",
+        weaveRomPath: " /rom.sfc ",
+        noWeaveRom: true,
         outputCheck: " sha1=abc ",
         outputHeader: "strip",
         outputName: "patched.sfc",
-        outputPath: " /out/bundle.json ",
+        outputPath: " /out/weave.json ",
         patchAuthors: [" Author "],
         patchBases: ["auto", "previous"],
         patchHeaders: ["auto", "keep"],
@@ -384,15 +388,15 @@ describe("bundle runtime workers", () => {
         romPath: " /input.sfc ",
         romSize: 100,
       }),
-    ).resolves.toMatchObject({ bundlePath: "/out/bundle.json" });
+    ).resolves.toMatchObject({ weavePath: "/out/weave.json" });
     expect(lastCall()[0]).toEqual({
       args: {
         args: {
           assume_in: ["crc32=1234", "sha1=abcd", "size=100"],
-          bundle: "/bundle.zip",
-          bundle_rom: "/rom.sfc",
-          no_bundle_rom: true,
-          output: "/out/bundle.json",
+          weave: "/weave.zip",
+          weave_rom: "/rom.sfc",
+          no_weave_rom: true,
+          output: "/out/weave.json",
           output_check: ["sha1=abc"],
           output_header: "strip",
           output_name: "patched.sfc",
@@ -408,12 +412,96 @@ describe("bundle runtime workers", () => {
         },
         type: "create",
       },
-      type: "bundle",
+      type: "weave",
     });
   });
 });
 
 describe("output-producing runtime workers", () => {
+  it.each([32768, 65536, 1048576])("dispatches an RVZ block size of %i bytes", async (rvzBlockSize) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    const input = {
+      format: "rvz",
+      inputPaths: ["/in/game.iso"],
+      outputFileName: "game.rvz",
+      rvzBlockSize: String(rvzBlockSize),
+    };
+    await invokeRomWeaverCompressionCreateWorker(input);
+    expect(lastCall()[0].args).toMatchObject({ rvz_block_size: rvzBlockSize });
+  });
+
+  it.each([undefined, null, ""])("omits the RVZ block size when unset (%s)", async (rvzBlockSize) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    const input = {
+      format: "rvz",
+      inputPaths: ["/in/game.iso"],
+      outputFileName: "game.rvz",
+      rvzBlockSize,
+    };
+    await invokeRomWeaverCompressionCreateWorker(input);
+    expect(lastCall()[0].args).not.toHaveProperty("rvz_block_size");
+  });
+
+  it.each(["not-a-number", "0", "1", "65535", "32768.5", "2147483648"])(
+    "rejects invalid RVZ block size %s before starting the worker",
+    async (rvzBlockSize) => {
+      mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+      const input = {
+        format: "rvz",
+        inputPaths: ["/in/game.iso"],
+        outputFileName: "game.rvz",
+        rvzBlockSize,
+      };
+      await expect(invokeRomWeaverCompressionCreateWorker(input)).rejects.toThrow("RVZ block size");
+      expect(mocks.runRomWeaverJson).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["cd", "dvd"] as const)("dispatches default %s codecs with Min, Medium, and Max profiles", async (mode) => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),
+    );
+    const chdRuntime = createBrowserChdRuntime({
+      stageSource: async () => ({ filePath: "/in/game.bin", cleanup: async () => undefined }),
+      createWorkerOutput: async (result: unknown) => result,
+    } as never);
+    const runtime = createSharedCompressionRuntime({}, chdRuntime);
+    for (const compressionProfile of ["min", "medium", "max"] as const) {
+      const codecs = OutputCompressionManager.getChdCodecsForMode(mode, {
+        chdCreateCdCodecs: COMPRESSION_DEFAULTS.chdCreateCdCodecs,
+        chdCreateDvdCodecs: COMPRESSION_DEFAULTS.chdCreateDvdCodecs,
+        compressionProfile,
+      });
+      await runtime.create?.({
+        source: { fileName: "game.bin" },
+        fileName: "game.bin",
+        outputName: "game.chd",
+        format: "chd",
+        romSpecific: { chd: { mode, compressionCodecs: codecs, compressionProfile } },
+      } as never);
+      expect(lastCall()[0].args).toMatchObject({
+        format: `chd-${mode}`,
+        level: compressionProfile,
+        codec:
+          compressionProfile === "medium"
+            ? codecs.split(",")
+            : COMPRESSION_DEFAULTS[mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs"].split(","),
+      });
+    }
+  });
+
+  it("retains a single explicit CHD codec level with a selected profile", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    await invokeRomWeaverCompressionCreateWorker({
+      codecs: ["cdzl:1"],
+      format: "chd-cd",
+      levelProfile: "max",
+      inputPaths: ["/in/game.bin"],
+      outputFileName: "game.chd",
+    });
+    expect(lastCall()[0].args).toMatchObject({ codec: ["cdzl:1"], level: "max" });
+  });
+
   it("creates a compressed output and strips conflicting CHD codec levels", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),
@@ -508,6 +596,31 @@ describe("output-producing runtime workers", () => {
     });
   });
 
+  it("rejects unsupported trim inputs before resolving an output", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ processed: 0, trimmed: 0, already_target: 0, skipped_unsupported: 1 }),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ outputName: "trimmed.bin", sourceFilePath: "/unsupported.bin" }),
+    ).rejects.toThrow("This input does not support trimming");
+  });
+
+  it("retains the output of an already trimmed ROM", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        processed: 1,
+        trimmed: 0,
+        already_target: 1,
+        skipped_unsupported: 0,
+        emitted_files: [{ path: "/out/game.nds", size_bytes: 12288 }],
+      }),
+    );
+    await expect(invokeRomWeaverTrimWorker({ sourceFilePath: "/game.nds" })).resolves.toMatchObject({
+      filePath: "/out/game.nds",
+      size: 12288,
+    });
+  });
+
   it("names a lossless disc trim by its actual format and retains logical size metadata", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({
@@ -572,6 +685,8 @@ describe("output-producing runtime workers", () => {
     expect(lastCall()[0]).toEqual({
       args: {
         args: {
+          no_extract: true,
+          no_compress: true,
           output: expect.any(String),
           patch: "/patch.ppf",
           rom: "/game.sfc",
@@ -580,6 +695,42 @@ describe("output-producing runtime workers", () => {
       },
       type: "tools",
     });
+  });
+
+  it("passes PPF disc targets and thread settings, retains emitted companions, and relays report warnings", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        warnings: ["Disc warning"],
+        emitted_files: [
+          { path: "/out/restored.cue", size_bytes: 17 },
+          { path: "/out/track.bin", size_bytes: 32 },
+        ],
+      }),
+    );
+    const onWarning = vi.fn();
+    await expect(
+      invokeRomWeaverPpfUndoWorker({
+        outputName: "restored.cue",
+        romFilePath: "/disc.cue",
+        patchFilePath: "/undo.ppf",
+        target: "track.bin",
+        onWarning,
+        settings: { workers: { threads: 2 }, output: { container: { profile: "high", zipCodec: "store" } } },
+      }),
+    ).resolves.toMatchObject({
+      fileName: "restored.cue",
+      filePath: "/out/restored.cue",
+      files: expect.arrayContaining([expect.objectContaining({ path: "/out/track.bin" })]),
+    });
+    expect(lastCall()[0].args.args).toMatchObject({
+      no_extract: true,
+      no_compress: true,
+      threads: 2,
+      target: "track.bin",
+      rom: "/disc.cue",
+      patch: "/undo.ppf",
+    });
+    expect(onWarning).toHaveBeenCalledWith("Disc warning");
   });
 });
 
@@ -702,6 +853,53 @@ describe("invokeRomWeaverPatchValidateWorker", () => {
 
     mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ valid: true }));
     expect((await invokeRomWeaverPatchValidateWorker(validateInput())).perPatch).toBeUndefined();
+  });
+});
+
+describe("handler warnings", () => {
+  it("returns create warnings from details.warnings", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        emitted_files: [{ path: "/out/p.ips", size_bytes: 7 }],
+        warnings: ["IPS create input is larger than modified output; double check file order"],
+      }),
+    );
+
+    const output = await invokeRomWeaverCreatePatchWorker({
+      format: "ips",
+      modifiedFilePath: "/new.sfc",
+      originalFilePath: "/old.sfc",
+      outputName: "p.ips",
+    });
+
+    expect(output.warnings).toEqual(["IPS create input is larger than modified output; double check file order"]);
+  });
+
+  it("returns apply warnings in the apply summary", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue({
+      events: [
+        {
+          details: {
+            emitted_files: [{ path: "/out/rom.bin", size_bytes: 4 }],
+            warnings: ["IPS patch did not change output; input may already be patched"],
+          },
+          label: "applied IPS patch; warning=IPS patch did not change output; input may already be patched",
+          status: "succeeded",
+        },
+      ],
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+    });
+
+    const result = await invokeRomWeaverPatchApplyWorker({
+      outputName: "rom.bin",
+      patchFiles: [{ patchFileName: "a.ips", patchFilePath: "/a.ips" }],
+      romFileName: "rom.sfc",
+      romFilePath: "/rom.sfc",
+    } as Parameters<typeof invokeRomWeaverPatchApplyWorker>[0]);
+
+    expect(result.applySummary.warnings).toEqual(["IPS patch did not change output; input may already be patched"]);
   });
 });
 

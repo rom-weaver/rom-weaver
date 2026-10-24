@@ -12,10 +12,10 @@ struct ChainLoopState {
     current_input: PathBuf,
     initial_output: ProducedPatchOutput,
     producer_outputs: BTreeMap<String, ProducedPatchOutput>,
-    target_outputs: BTreeMap<BundlePatchInput, ProducedPatchOutput>,
-    lane_seeds: BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput>,
+    target_outputs: BTreeMap<WeavePatchInput, ProducedPatchOutput>,
+    lane_seeds: BTreeMap<Option<WeavePatchInput>, ProducedPatchOutput>,
     lane_plans:
-        BTreeMap<Option<BundlePatchInput>, BTreeMap<usize, patch_plan::PatchStepVerification>>,
+        BTreeMap<Option<WeavePatchInput>, BTreeMap<usize, patch_plan::PatchStepVerification>>,
     legacy_output: ProducedPatchOutput,
     applied_formats: Vec<&'static str>,
     disc_track_replacements: BTreeMap<PathBuf, PathBuf>,
@@ -27,8 +27,8 @@ struct ChainLoopState {
 struct ChainStep<'s> {
     index: usize,
     apply_step: &'s PatchApplyStep,
-    target: Option<&'s BundlePatchInput>,
-    explicit_input: Option<&'s BundlePatchInput>,
+    target: Option<&'s WeavePatchInput>,
+    explicit_input: Option<&'s WeavePatchInput>,
     lane_position: usize,
     verification: Option<patch_plan::PatchStepVerification>,
     handler: Arc<dyn rom_weaver_core::PatchHandler>,
@@ -58,6 +58,7 @@ impl CliApp {
     ) -> std::result::Result<PatchApplyLoopOutcome, Box<OperationReport>> {
         let mut state = Self::start_chain_loop(&mut inputs)?;
         let steps = inputs.steps;
+        let mut handler_warnings: Vec<String> = Vec::new();
         for (index, apply_step) in steps.iter().enumerate() {
             self.apply_positioned_cheat_stage(&mut inputs, &mut state, index)?;
             let step = self.select_chain_step(&mut inputs, &mut state, index, apply_step)?;
@@ -86,10 +87,13 @@ impl CliApp {
                 None,
             );
             self.execute_chain_step(&mut inputs, &mut state, &step, &apply_output)?;
+            Self::lift_handler_label_warnings(&mut state.report);
+            handler_warnings.extend(Self::report_warnings(&state.report));
             self.record_chain_step_output(&mut inputs, &mut state, &step, is_last, apply_output)?;
             state.stage_index += 1;
         }
         self.apply_trailing_cheat_stage(&mut inputs, &mut state)?;
+        Self::append_report_warnings(&mut state.report, handler_warnings);
 
         Ok(PatchApplyLoopOutcome {
             report: state.report,
@@ -435,6 +439,8 @@ impl CliApp {
             && verification.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
         Self::verify_chain_step_input(context, state, step, step_is_base)?;
 
+        // A forced overwrite targets an existing file; a failure must leave it, not delete it.
+        let output_existed = apply_output.exists();
         let request = PatchApplyRequest {
             input: std::mem::take(&mut state.current_input),
             patches: vec![step.apply_step.patch.resolved.clone()],
@@ -489,11 +495,7 @@ impl CliApp {
                     .and_then(|representation| representation.n64_byte_order)
             })
         {
-            patch_context = patch_context.with_patch_input_n64_byte_order(match order {
-                N64ByteOrder::BigEndian => PatchInputN64ByteOrder::BigEndian,
-                N64ByteOrder::LittleEndian => PatchInputN64ByteOrder::LittleEndian,
-                N64ByteOrder::ByteSwapped => PatchInputN64ByteOrder::ByteSwapped,
-            });
+            patch_context = patch_context.with_patch_input_n64_byte_order(order);
         }
         let report = match step.handler.apply(&request, &patch_context) {
             Ok(report) => report,
@@ -513,6 +515,11 @@ impl CliApp {
             ),
         };
         if report.status != OperationStatus::Succeeded {
+            // A handler that failed mid-write MUST NOT leave a partial output behind.
+            if !output_existed && apply_output.exists() {
+                debug!(output = %apply_output.display(), "removing partial output of a failed patch step");
+                let _ = fs::remove_file(apply_output);
+            }
             let mut report = report;
             if patch_count > 1 {
                 report.label = format!(
@@ -587,28 +594,31 @@ impl CliApp {
         let member_lane_start = step.lane_position == 0
             && matches!(
                 step.target,
-                Some(BundlePatchInput::Rom {
+                Some(WeavePatchInput::Rom {
                     member: Some(_),
                     ..
                 })
             )
             && verification.is_some_and(|step| step.is_chain_prefix || step.lane_source_input);
-        // An unbased bundle input check still describes the real
+        // An unbased weave input check still describes the real
         // intermediate even when embedded evidence independently infers
         // Base. Only an explicit Base declaration verifies once up front.
         if context.strict_patch_checksums()
             && !(step_declares_base && step.explicit_input.is_none())
-            && (step.lane_position > 0 || step.explicit_input.is_some() || member_lane_start)
+            && (verification.is_some_and(|step| step.enforce_declared_checks)
+                || step.lane_position > 0
+                || step.explicit_input.is_some()
+                || member_lane_start)
             && let Some(declared) = verification.and_then(|step| step.declared_input.as_ref())
             && let Err(error) =
-                Self::verify_chain_step_state(&state.current_input, declared, context)
+                Self::verify_chain_step_state(&state.current_input, "input", declared, context)
         {
             let mut coded = ValidationCodeError::new("patch.chain.input_mismatch")
-                .with_message("chain step input does not match the patch's declared input checks")
+                .with_message("chain step input does not match the patch's declared input checks (--patch-input-check or weave inputChecks)")
                 .with_field("patch_index", step.index as u64)
                 .with_field("patch", step.patch_path().display().to_string())
                 .with_field("detail", error.to_string());
-            super::super::bundle_apply::describe_expected_state(
+            super::super::weave_apply::describe_expected_state(
                 &declared.checksums,
                 declared.size,
                 &mut coded,
@@ -647,8 +657,13 @@ impl CliApp {
             &apply_output,
         )
         .map_err(|error| {
+            if is_last {
+                // The final step wrote straight into the staged output, so a
+                // failed check MUST NOT leave that file behind.
+                let _ = fs::remove_file(&apply_output);
+            }
             let mut coded = ValidationCodeError::new("patch.chain.output_mismatch")
-                .with_message("chain step output does not match the patch's declared output checks")
+                .with_message("chain step output does not match the patch's declared output checks (--patch-output-check or weave outputChecks)")
                 .with_field("patch_index", step.index as u64)
                 .with_field("patch", step.patch_path().display().to_string())
                 .with_field("detail", error.to_string());
@@ -656,7 +671,7 @@ impl CliApp {
                 .verification()
                 .and_then(|step| step.declared_output.as_ref())
             {
-                super::super::bundle_apply::describe_expected_state(
+                super::super::weave_apply::describe_expected_state(
                     &declared.checksums,
                     declared.size,
                     &mut coded,

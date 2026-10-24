@@ -287,7 +287,7 @@ describe("createOperationScheduler - I/O lane (Rust plan)", () => {
     waves: [{ jobs: sizes.map((_, index) => index), threadsPerJob: Math.max(1, Math.floor(budget / sizes.length)) }],
   });
 
-  it("admits an I/O wave the planner groups together, even when the jobs arrive staggered", async () => {
+  it("preserves running thread reservations when another drop arrives", async () => {
     const scheduler = createOperationScheduler({
       maxConcurrency: 4,
       planBatch: planAllTogether(4),
@@ -299,11 +299,66 @@ describe("createOperationScheduler - I/O lane (Rust plan)", () => {
     await tick();
     const pb = scheduler.schedule(io(100), () => b.promise);
     await tick();
-    expect(scheduler.inFlightCount).toBe(2);
+    expect(scheduler.inFlightCount).toBe(1);
     a.resolve("a");
+    await pa;
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
     b.resolve("b");
     expect(await pa).toBe("a");
     expect(await pb).toBe("b");
+  });
+
+  it("rechecks thread reservations after an asynchronous plan", async () => {
+    const planned = deferred<{ waves: { jobs: number[]; threadsPerJob: number }[] }>();
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 4,
+      planBatch: () => planned.promise,
+      totalThreadBudget: 4,
+    });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    const pa = scheduler.schedule(io(100), () => a.promise);
+    const pb = scheduler.schedule({ paths: new Set(), threads: 4 }, () => b.promise);
+    planned.resolve({ waves: [{ jobs: [0], threadsPerJob: 4 }] });
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    b.resolve("b");
+    await pb;
+    await tick();
+    expect(scheduler.inFlightCount).toBe(1);
+    a.resolve("a");
+    await pa;
+  });
+
+  it.each([
+    { bytes: 700, exclusive: false },
+    { bytes: 0, exclusive: true },
+  ])("rechecks active memory and exclusivity after planning: %j", async (reservation) => {
+    const planned = deferred<{ waves: { jobs: number[]; threadsPerJob: number }[] }>();
+    const scheduler = createOperationScheduler({
+      maxConcurrency: 4,
+      memoryCeiling: 1000,
+      planBatch: () => planned.promise,
+      totalThreadBudget: 4,
+    });
+    const a = deferred<string>();
+    const b = deferred<string>();
+    let ioStarted = false;
+    const pa = scheduler.schedule(io(100), () => {
+      ioStarted = true;
+      return a.promise;
+    });
+    const pb = scheduler.schedule({ ...reservation, paths: new Set(), threads: 0 }, () => b.promise);
+    planned.resolve({ waves: [{ jobs: [0], threadsPerJob: 1 }] });
+    await tick();
+    expect(ioStarted).toBe(false);
+    b.resolve("b");
+    await pb;
+    await tick();
+    expect(ioStarted).toBe(true);
+    a.resolve("a");
+    await pa;
   });
 
   it("plans a noted simultaneous drop as one batch so the first job's threads reflect the whole drop", async () => {

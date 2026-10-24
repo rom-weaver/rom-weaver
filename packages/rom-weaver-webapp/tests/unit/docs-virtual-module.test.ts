@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { docsVirtualModule } from "../../scripts/docs-virtual-module.mjs";
 import { createDocsSearchIndex, searchDocs } from "../../src/webapp/docs-search.mjs";
+import { readDocRoutes } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 
 const METADATA_ID = "\0virtual:rom-weaver-docs";
@@ -63,7 +64,7 @@ describe("docs virtual module escaping", () => {
 describe("docs virtual search module", () => {
   const sampleRoute = {
     description: "Patch a ROM safely",
-    html: '<h1>Guide</h1><p>Start here.</p><h2 id="checks">Checks</h2><p>Verify CRC32 &amp; SHA-256 before applying.</p>',
+    html: '<h1>Guide</h1><p>Start here.</p><h2 id="checks">Safety checks</h2><p>Verify CRC32 &amp; SHA-256 before applying.</p>',
     label: "Guide",
     sections: [{ id: "checks", label: "Checks" }],
     slug: "docs/guide",
@@ -80,6 +81,10 @@ describe("docs virtual search module", () => {
       Object.fromEntries(createDocsSearchIndex(manyRoutes).map((r) => [r.slug, r.searchEntries])),
     );
     expect(Buffer.byteLength(sourceFor(manyRoutes))).toBeLessThan(Buffer.byteLength(plain) * 0.9);
+  });
+
+  it("stores a repeated entry label only once", () => {
+    expect(sourceFor().split(sampleRoute.title)).toHaveLength(2);
   });
 
   it("preserves all entries and search results after loading", async () => {
@@ -99,5 +104,114 @@ describe("docs virtual search module", () => {
       const index = createDocsSearchIndex(input);
       expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
     }
+  });
+
+  it("preserves text when the section label differs from its heading", async () => {
+    const input = [{ ...sampleRoute, sections: [{ id: "checks", label: "Verification" }] }];
+    const loaded = await import(`data:text/javascript,${encodeURIComponent(sourceFor(input))}`);
+    const index = createDocsSearchIndex(input);
+    expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
+  });
+});
+
+describe("docs virtual payload round trips", () => {
+  const load = (source: string) => import(`data:text/javascript,${encodeURIComponent(source)}`);
+
+  it("preserves every published route's metadata and search entry", async () => {
+    const routes = readDocRoutes();
+    const plugin = docsVirtualModule(routes);
+    const metadata = await load(plugin.load.handler.call(null, METADATA_ID) as string);
+    expect(metadata.DOC_ROUTES).toStrictEqual(routes.map(({ html: _html, ...entry }) => entry));
+    const search = await load(plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-search") as string);
+    expect(search.SEARCH_ENTRIES).toEqual(
+      Object.fromEntries(createDocsSearchIndex(routes).map((entry) => [entry.slug, entry.searchEntries])),
+    );
+  });
+
+  it("preserves every published page's HTML with the shared icon", async () => {
+    const routes = readDocRoutes();
+    const plugin = docsVirtualModule(routes);
+    const iconSource = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const iconUrl = `data:text/javascript,${encodeURIComponent(iconSource)}`;
+    for (const entry of routes) {
+      const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}${entry.slug}`) as string;
+      const loaded = await load(source.replace('"virtual:rom-weaver-docs-html"', JSON.stringify(iconUrl)));
+      expect(loaded.html, entry.slug).toBe(entry.html);
+    }
+  });
+
+  it("preserves custom IDs, duplicate heading IDs, punctuation and Unicode labels", async () => {
+    const labels = ["Simple heading", "Simple heading", 'Quotes " & < >', "日本語", "", "  Leading and trailing  "];
+    const sections = labels.map((label, index) => ({
+      id: ["simple-heading", "simple-heading-1", "custom", "unicode", "empty", "leading-and-trailing"][index],
+      label,
+    }));
+    const entry = {
+      ...route("docs/adversarial"),
+      description: "Description",
+      label: "Guide",
+      sections,
+      html: sections.map(({ id, label }) => `<h2 id="${id}">${label}</h2><p>$& $' \\ \u2028 \u2029</p>`).join(""),
+    };
+    const plugin = docsVirtualModule([entry]);
+    const metadata = await load(plugin.load.handler.call(null, METADATA_ID) as string);
+    expect(metadata.DOC_ROUTES[0].sections).toEqual(sections);
+    const search = await load(plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-search") as string);
+    expect(search.SEARCH_ENTRIES[entry.slug]).toEqual(createDocsSearchIndex([entry])[0].searchEntries);
+  });
+
+  it("preserves shared table and code markup among literal token-like text", async () => {
+    const table = '<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0">';
+    const code = '<div class="docs-code-block" data-docs-copy-container>';
+    const html = `0${table}$& $' 1</div>${code}2 \\ \u2028 \u2029</div>${table}3</div>`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const shared = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("docs-table-scroll");
+    expect(source).not.toContain("docs-code-block");
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(shared)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
+  it("preserves heading and document links with literal token-like title text", async () => {
+    const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
+    const title = "0 $& $' \\ \u2028 \u2029 日本語";
+    const html = `<h2 id="heading"><a class="docs-section-link" href="/docs/guide#heading">${icon}<span class="docs-section-title">${title}</span></a></h2><p><a href="/docs/other?q=1#part">1</a></p>`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const shared = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("docs-section-link");
+    expect(source).not.toContain("/docs/");
+    const sharedModule = await load(shared);
+    expect(sharedModule.icon).toBe(icon);
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(shared)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
+  it("splits exact icon occurrences without interpreting surrounding literals", async () => {
+    const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
+    const html = `${icon}$& $' \\ \u2028 \u2029 \${placeholder}</script>${icon}<svg class="other">different</svg>${icon}`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const iconSource = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("<");
+    expect(source).not.toContain(">");
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(iconSource)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
   });
 });

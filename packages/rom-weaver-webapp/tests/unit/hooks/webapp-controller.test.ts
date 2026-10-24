@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getDefaultSettings } from "../../../src/webapp/settings/settings-schema.ts";
+import { setThemePreference } from "../../../src/webapp/theme.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "../../../src/webapp/webapp-controller.ts";
 
 const createStorage = () => {
@@ -71,6 +73,7 @@ describe("createWebappRootController over the vanilla store", () => {
   it("keeps Identify available while gating beta workflows", () => {
     const controller = createController();
     expect(controller.selectView("identify")).toBe("identify");
+    expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(controller.selectView("trim")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
@@ -87,7 +90,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.selectView("trim")).toBe("patcher");
   });
 
-  it("keeps a direct beta route in the initial path", () => {
+  it("keeps the legacy tools route pointing to PPF undo", () => {
     window.history.replaceState({}, "", "/tools");
     const controller = createController();
     expect(controller.getState().currentView).toBe("ppf-undo");
@@ -116,11 +119,11 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("loads the create workflow from its path", () => {
-    window.history.replaceState({}, "", "/create-patch");
+    window.history.replaceState({}, "", "/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     expect(readWorkflowViewFromPath()).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
   });
 
   it("loads the identify workflow from its path", () => {
@@ -153,13 +156,13 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("resolves a candidate URL without changing the current browser path", () => {
     expect(readWorkflowViewFromPath("/docs/apply-rom-patches")).toBe("docs");
-    expect(readWorkflowViewFromPath("/create-patch")).toBe("creator");
+    expect(readWorkflowViewFromPath("/create-rom-patch")).toBe("creator");
     expect(readWorkflowViewFromPath("/identify-rom")).toBe("identify");
     expect(window.location.pathname).toBe("/");
   });
 
   it("preserves a self-hosted subpath while switching workflows", () => {
-    window.history.replaceState({}, "", "/rom-weaver/create-patch/");
+    window.history.replaceState({}, "", "/rom-weaver/create-rom-patch/");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
@@ -168,11 +171,22 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("normalizes a static-host index page to its clean route", () => {
     window.history.replaceState({}, "", "/rom-weaver/weave/index.html");
-    expect(readWorkflowViewFromPath()).toBe("patcher");
+    expect(readWorkflowViewFromPath()).toBe("weave");
     const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
+    expect(controller.getState().currentView).toBe("weave");
+    expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
   });
+
+  it.each(["bundle", "bundle-patches", "bundle.html", "bundle-patches/index.html"])(
+    "canonicalizes the legacy route %s and preserves its query",
+    (route) => {
+      window.history.replaceState({}, "", `/rom-weaver/${route}?bundle=old.json`);
+      const controller = createController();
+      expect(controller.getState().currentView).toBe("weave");
+      expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
+      expect(window.location.search).toBe("?bundle=old.json");
+    },
+  );
 
   it("keeps nested docs routes and returns to the app root", () => {
     window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
@@ -182,15 +196,15 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/rom-weaver/docs/apply-rom-patches");
 
     controller.selectView("creator");
-    expect(window.location.pathname).toBe("/rom-weaver/create-patch");
+    expect(window.location.pathname).toBe("/rom-weaver/create-rom-patch");
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
-    window.history.replaceState({}, "", "/apply-patch?bundle=first-weave.zip");
+    window.history.replaceState({}, "", "/apply-patch?weave=first-weave.zip");
     const controller = createController();
     controller.selectView("creator");
-    expect(window.location.pathname).toBe("/create-patch");
-    expect(window.location.search).toBe("?bundle=first-weave.zip");
+    expect(window.location.pathname).toBe("/create-rom-patch");
+    expect(window.location.search).toBe("?weave=first-weave.zip");
     expect(window.location.hash).toBe("");
   });
 
@@ -202,10 +216,8 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("routes and tracks the PPF undo workflow", () => {
+  it("routes and tracks the PPF undo workflow without beta tools", () => {
     const controller = createController();
-    controller.updateDraftSetting("betaToolsEnabled", true);
-    expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(window.location.pathname).toBe("/ppf-undo");
     controller.setPpfUndoSessionState(true);
@@ -284,7 +296,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().settings.accent).toBe("woad");
   });
 
-  it("commits and persists the bundle package selection from the output card", () => {
+  it("restores the theme and accent immediately along with the staged defaults", () => {
     const storage = createStorage();
     const controller = createWebappRootController({
       onApplySettings: vi.fn(),
@@ -293,13 +305,32 @@ describe("createWebappRootController over the vanilla store", () => {
       onLocalizationChange: vi.fn(),
       storage,
     });
-    controller.setBundlePackage("rom");
-    expect(controller.getState().settings.bundlePackage).toBe("rom");
-    expect(controller.getState().draftSettings.bundlePackage).toBe("rom");
-    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").apply?.output?.bundlePackage).toBe("rom");
+    setThemePreference("dark");
+    controller.setAccent("woad");
+    controller.restoreDefaults();
+    expect(localStorage.getItem("rom-weaver-theme")).toBe("auto");
+    expect(document.documentElement.getAttribute("data-theme-preference")).toBe("auto");
+    expect(controller.getState().settings.accent).toBe(getDefaultSettings().accent);
+    expect(controller.getState().draftSettings.accent).toBe(getDefaultSettings().accent);
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common?.accent).not.toBe("woad");
+  });
+
+  it("commits and persists the weave package selection from the output card", () => {
+    const storage = createStorage();
+    const controller = createWebappRootController({
+      onApplySettings: vi.fn(),
+      onCreatorViewRequested: vi.fn(() => true),
+      onFocusField: vi.fn(),
+      onLocalizationChange: vi.fn(),
+      storage,
+    });
+    controller.setWeavePackage("rom");
+    expect(controller.getState().settings.weavePackage).toBe("rom");
+    expect(controller.getState().draftSettings.weavePackage).toBe("rom");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").apply?.output?.weavePackage).toBe("rom");
     // An unknown package is rejected rather than persisted.
-    controller.setBundlePackage("tar:rom");
-    expect(controller.getState().settings.bundlePackage).toBe("rom");
+    controller.setWeavePackage("tar:rom");
+    expect(controller.getState().settings.weavePackage).toBe("rom");
   });
 
   it("notifies subscribers on a state mutation and stops after unsubscribe", () => {

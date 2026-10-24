@@ -636,6 +636,62 @@ describe("offline warm-up client", () => {
     expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump"]);
   });
 
+  it("restricts an automatic data-saver pump to the bumped identify groups", async () => {
+    const { controller, messages } = createFakeController([
+      progressReply({ unit: "identify-group:optional-computers" }),
+      progressReply({ unit: null }),
+    ]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    bumpOfflineWarmupPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
+    await flush();
+    const pumps = messages.filter((message) => message.action === "offline-warmup-pump");
+    expect(pumps).toEqual([{ action: "offline-warmup-pump", identifyGroupIds: ["optional-computers"] }]);
+  });
+
+  it("finishes both independently bumped groups before stopping on data saver", async () => {
+    const { controller, messages } = createFakeController([
+      progressReply({ unit: "identify-group:first" }),
+      progressReply({ unit: "identify-group:second" }),
+    ]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    bumpOfflineWarmupPriority({ groupIds: ["first"], kind: "identify-groups" });
+    bumpOfflineWarmupPriority({ groupIds: ["second"], kind: "identify-groups" });
+    await flush();
+    expect(messages.filter((message) => message.action === "offline-warmup-pump")).toEqual([
+      { action: "offline-warmup-pump", identifyGroupIds: ["first", "second"] },
+      { action: "offline-warmup-pump", identifyGroupIds: ["second"] },
+    ]);
+  });
+
+  it.each(["identify-group:first", null])("preserves a new group bumped during an in-flight %s reply", async (unit) => {
+    const messages: Reply[] = [];
+    let firstPort: MessagePort | undefined;
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
+        messages.push(message);
+        if (message.action !== "offline-warmup-pump") return;
+        const port = transfer?.[0] as MessagePort;
+        if (firstPort) setTimeout(() => port.postMessage(progressReply({ unit: "identify-group:second" })), 0);
+        else firstPort = port;
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    bumpOfflineWarmupPriority({ groupIds: ["first"], kind: "identify-groups" });
+    await flush();
+    expect(firstPort).toBeDefined();
+    bumpOfflineWarmupPriority({ groupIds: ["second"], kind: "identify-groups" });
+    firstPort?.postMessage(progressReply({ unit }));
+    await flush();
+    expect(messages.filter((message) => message.action === "offline-warmup-pump")).toEqual([
+      { action: "offline-warmup-pump", identifyGroupIds: ["first"] },
+      { action: "offline-warmup-pump", identifyGroupIds: ["second"] },
+    ]);
+  });
+
   it("posts an identify-group bump and pumps immediately, even on data saver", async () => {
     const { controller, messages } = createFakeController([
       progressReply({ unit: "identify-group:optional-computers" }),

@@ -13,6 +13,7 @@ import {
   hasArchiveFileName,
 } from "../output/archive-output-service.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import {
@@ -33,7 +34,8 @@ const getCreateThreads = (options: CreatePatchInput["options"]) => options?.work
 const getCreateMetadata = (options: CreatePatchInput["options"]): JsonObject =>
   (options?.patch?.metadata || {}) as JsonObject;
 const getCreateCompression = (options: CreatePatchInput["options"]) => options?.output?.compression;
-const getCreateOutputName = (options: CreatePatchInput["options"]) => options?.output?.outputName;
+const getCreateOutputName = (options: CreatePatchInput["options"]) =>
+  sanitizeTypedOutputName(options?.output?.outputName);
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("create");
 
 const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRuntime): Promise<CreatePatchResult> => {
@@ -166,6 +168,7 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
     return {
       format,
       output,
+      ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       sizeSummary: {
         ...result.sizeSummary,
         ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),

@@ -18,6 +18,7 @@ import {
   type ManualCheatKindOverride,
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
+import type { Localizer } from "../../../presentation/localization/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
 import {
   CHEAT_KIND_OPTIONS,
@@ -25,7 +26,8 @@ import {
   getCheatCodeWrites,
   getCheatCompareLabel,
 } from "../create-cheat-codes-model.ts";
-import { CheatGameSearch, countLabel, getCheatGameSearchStep } from "./cheat-game-search.tsx";
+import { useUiLocalizer } from "../settings-context.tsx";
+import { CheatGameSearch, getCheatGameSearchStep } from "./cheat-game-search.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
 import { DropdownSelect } from "./ds/dropdown-select.tsx";
@@ -45,10 +47,21 @@ const MANUAL_ONLY_SYSTEMS: Record<CheatManualOnlySystem, { label: string }> = {
 /** Rows per page in the add-cheats dialog list. */
 export const DIALOG_PAGE_SIZE = 20;
 
-const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: string; text: string } =>
+const deliveryCopy = (
+  record: ClassifiedCheatRecord,
+  localizer: Localizer,
+): { badge: string; short: string; text: string } =>
   cheatDelivery(record) === "rom"
-    ? { badge: "ROM cheat", short: "ROM", text: "Baked into output" }
-    : { badge: "Unsupported", short: "N/A", text: "Cannot be baked into the ROM" };
+    ? {
+        badge: localizer.message("ui.cheats.badge.rom"),
+        short: localizer.message("ui.step.rom"),
+        text: localizer.message("ui.cheats.delivery.rom"),
+      }
+    : {
+        badge: localizer.message("ui.runtime.headerUnsupported"),
+        short: localizer.message("ui.cheats.short.unsupported"),
+        text: localizer.message("ui.cheats.delivery.unsupported"),
+      };
 
 const CHEAT_KIND_LABELS = Object.fromEntries(CHEAT_KIND_OPTIONS.map(({ value, label }) => [value, label])) as Record<
   NonNullable<ClassifiedCheatRecord["detectedKind"]>,
@@ -64,8 +77,10 @@ const isClassifiedCheat = (record: ClassifiedCheatRecord | CheatDatabaseRecord):
   "record" in record;
 
 /** Why cheats are off for a ROM whose platform no shard and no decoder covers. */
-export const getUnsupportedCheatSystemMessage = (platform: string | undefined): string =>
-  `Cheats are not supported for ${platform || "this ROM's system"} yet.`;
+const getUnsupportedCheatSystemMessage = (platform: string | undefined, localizer: Localizer): string =>
+  platform
+    ? localizer.message("ui.cheats.unsupportedSystem", { platform })
+    : localizer.message("ui.cheats.unsupportedSystemUnknown");
 
 type CheatCardProps = {
   record: ClassifiedCheatRecord;
@@ -80,7 +95,7 @@ type CheatCardProps = {
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
 };
 
-type CheatOrderEntry = { id: string; position: number };
+type CheatOrderEntry = { id: string; position: number; weavePosition?: number };
 export type CheatStackRenderState = {
   cards: ClassifiedCheatRecord[];
   controls: ReactNode;
@@ -106,7 +121,8 @@ const CheatCard = ({
   handleProps,
   rowProps,
 }: CheatCardProps) => {
-  const delivery = deliveryCopy(record);
+  const localizer = useUiLocalizer();
+  const delivery = deliveryCopy(record, localizer);
   const source = record.record;
   const selectable = isSelectableCheat(record);
   const kind = record.detectedKind ?? source.codeKind;
@@ -118,10 +134,14 @@ const CheatCard = ({
       handle={
         <button
           {...handleProps}
-          aria-label={canReorder ? `Cheat ${position}. Drag or use arrow keys to reorder.` : `Cheat ${position}`}
+          aria-label={
+            canReorder
+              ? localizer.message("ui.cheats.positionReorder", { position })
+              : localizer.message("ui.cheats.position", { position })
+          }
           className="handle phandle"
           disabled={!canReorder}
-          title={canReorder ? "Reorder cheat" : "Cheat position"}
+          title={canReorder ? localizer.message("ui.cheats.reorder") : localizer.message("ui.cheats.positionTitle")}
           type="button"
         >
           <span aria-hidden="true" className="phandle-number mono">
@@ -133,15 +153,15 @@ const CheatCard = ({
         <>
           <label className="patch-enable">
             <input
-              aria-label={`Include ${source.description}`}
+              aria-label={localizer.message("ui.patch.include", { name: source.description })}
               checked={selected}
               disabled={!selectable}
               onChange={onToggle}
               type="checkbox"
             />
             <span aria-hidden="true" className="switch-state">
-              <b className="on">On</b>
-              <b className="off">Off</b>
+              <b className="on">{localizer.message("ui.patch.on")}</b>
+              <b className="off">{localizer.message("ui.patch.off")}</b>
             </span>
           </label>
           <span className="rb">{delivery.badge}</span>
@@ -151,7 +171,10 @@ const CheatCard = ({
       menu={
         onSaveAsPatch ? (
           <details className="patch-menu cheat-download-menu">
-            <summary aria-label={`Download ${source.description}`} className="rm patch-menu-btn">
+            <summary
+              aria-label={localizer.message("ui.output.downloadFile", { name: source.description })}
+              className="rm patch-menu-btn"
+            >
               <Download aria-hidden="true" />
             </summary>
             <div className="patch-menu-list">
@@ -165,7 +188,9 @@ const CheatCard = ({
                 type="button"
               >
                 <Download aria-hidden="true" />
-                {savingPatch ? "Creating patch…" : "Save as patch"}
+                {savingPatch
+                  ? localizer.message("ui.cheats.creatingPatch")
+                  : localizer.message("ui.cheats.saveAsPatch")}
               </button>
             </div>
           </details>
@@ -173,25 +198,33 @@ const CheatCard = ({
       }
       onRemove={onRemove}
       patch
-      removeLabel={`Remove ${source.description} from the cheat stack`}
+      removeLabel={localizer.message("ui.cheats.removeFromStack", { name: source.description })}
       state="ok"
     >
-      <Drawer className="cheat-details" label="Cheat details" labelIcon={<WandSparkles aria-hidden="true" />}>
+      <Drawer
+        className="cheat-details"
+        label={localizer.message("ui.cheats.details")}
+        labelIcon={<WandSparkles aria-hidden="true" />}
+      >
         {kind ? (
           <div className="ck">
-            <span className="ck-k">Type</span>
+            <span className="ck-k">{localizer.message("ui.output.type")}</span>
             <span className="ck-v">{CHEAT_KIND_LABELS[kind]}</span>
           </div>
         ) : null}
         {source.rawCode ? (
           <div className="ck mono">
-            <span className="ck-k">Code</span>
+            <span className="ck-k">{localizer.message("ui.cheats.code")}</span>
             <span className="ck-v">{source.rawCode}</span>
           </div>
         ) : null}
         <div className="ck">
-          <span className="ck-k">Source</span>
-          <span className="ck-v">{source.sourceFile === "manual" ? "Manual entry" : "Libretro database"}</span>
+          <span className="ck-k">{localizer.message("ui.identifyDrawer.source")}</span>
+          <span className="ck-v">
+            {source.sourceFile === "manual"
+              ? localizer.message("ui.cheats.sourceManual")
+              : localizer.message("ui.cheats.sourceLibretro")}
+          </span>
         </div>
       </Drawer>
     </FileCard>
@@ -206,9 +239,10 @@ type ManualCodeFormProps = {
 };
 
 const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCodeFormProps) => {
+  const localizer = useUiLocalizer();
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
-  const [description, setDescription] = useState("Manual cheat");
+  const [description, setDescription] = useState(() => localizer.message("ui.cheats.manualDescription"));
   const [system, setSystem] = useState<CheatManualSystem>(defaultSystem);
   const [kind, setKind] = useState<ManualCheatKindOverride>("auto");
   const [result, setResult] = useState<ManualCheatResult>();
@@ -238,13 +272,18 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
     setBusy(true);
     setError("");
     setResult(undefined);
-    void classifier({ code: code.trim(), description: description.trim() || "Manual cheat", system, kind })
+    void classifier({
+      code: code.trim(),
+      description: description.trim() || localizer.message("ui.cheats.manualDescription"),
+      system,
+      kind,
+    })
       .then((nextResult) => {
         if (classificationSequence.current === sequence) setResult(nextResult);
       })
       .catch((reason: unknown) => {
         if (classificationSequence.current === sequence) {
-          setError(reason instanceof Error ? reason.message : "The code could not be classified.");
+          setError(reason instanceof Error ? reason.message : localizer.message("ui.cheats.classifyFailed"));
         }
       })
       .finally(() => {
@@ -261,12 +300,12 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
         type="button"
       >
         <Plus aria-hidden="true" />
-        Add code manually
+        {localizer.message("ui.cheats.addManually")}
       </button>
       {open ? (
         <form onSubmit={submit}>
           <label>
-            <span>Description</span>
+            <span>{localizer.message("ui.patch.description")}</span>
             <input
               className="input"
               maxLength={200}
@@ -278,7 +317,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             />
           </label>
           <label>
-            <span>Cheat code</span>
+            <span>{localizer.message("ui.cheats.cheatCode")}</span>
             <textarea
               autoCapitalize="characters"
               className="input mono"
@@ -294,7 +333,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
           </label>
           <div className="manual-cheat-options">
             <label htmlFor="rom-weaver-manual-cheat-system">
-              <span>System</span>
+              <span>{localizer.message("ui.identifyDrawer.system")}</span>
               <DropdownSelect
                 className="select"
                 id="rom-weaver-manual-cheat-system"
@@ -312,7 +351,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
               </DropdownSelect>
             </label>
             <label htmlFor="rom-weaver-manual-cheat-kind">
-              <span>Code type</span>
+              <span>{localizer.message("ui.cheats.codeType")}</span>
               <DropdownSelect
                 className="select"
                 id="rom-weaver-manual-cheat-kind"
@@ -322,7 +361,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                 }}
                 value={kind}
               >
-                <option value="auto">Detect automatically</option>
+                <option value="auto">{localizer.message("ui.cheats.detectAuto")}</option>
                 {CHEAT_KIND_OPTIONS.map(({ value, label }) => (
                   <option key={value} value={value}>
                     {label}
@@ -333,7 +372,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
           </div>
           <div className="manual-cheat-actions">
             <button className="btn primary" disabled={busy || !code.trim()} type="submit">
-              {busy ? "Checking code…" : "Check code"}
+              {busy ? localizer.message("ui.cheats.checkingCode") : localizer.message("ui.cheats.checkCode")}
             </button>
           </div>
           {error ? (
@@ -344,17 +383,24 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
           {result ? (
             <div className="manual-cheat-result" role="status">
               <p>
-                Detected {systems.find(({ value }) => value === result.detectedSystem)?.label ?? result.detectedSystem}{" "}
-                · {result.record.detectedKind ? CHEAT_KIND_LABELS[result.record.detectedKind] : result.detectedType}
+                {localizer.message("ui.cheats.detected", {
+                  system: systems.find(({ value }) => value === result.detectedSystem)?.label ?? result.detectedSystem,
+                  type: result.record.detectedKind
+                    ? CHEAT_KIND_LABELS[result.record.detectedKind]
+                    : result.detectedType,
+                })}
               </p>
-              <p>{deliveryCopy(result.record).text}</p>
+              <p>{deliveryCopy(result.record, localizer).text}</p>
+              {result.record.resolution.type === "unsupported" && result.record.resolution.reason ? (
+                <p className="manual-cheat-reason">{result.record.resolution.reason}</p>
+              ) : null}
               <button
                 className="btn primary"
                 disabled={!isSelectableCheat(result.record)}
                 onClick={() => onAdd(result)}
                 type="button"
               >
-                Add this cheat
+                {localizer.message("ui.cheats.addThis")}
               </button>
             </div>
           ) : null}
@@ -365,21 +411,22 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
 };
 
 const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatabaseRecord }) => {
+  const localizer = useUiLocalizer();
   if (isClassifiedCheat(entry)) {
     const kind = entry.detectedKind ?? entry.record.codeKind;
     return (
       <dl>
         {kind ? (
           <div>
-            <dt>Type</dt>
+            <dt>{localizer.message("ui.output.type")}</dt>
             <dd>{CHEAT_KIND_LABELS[kind]}</dd>
           </div>
         ) : null}
         {getCheatCodeWrites(entry).map((write) => {
-          const compareLabel = getCheatCompareLabel(write);
+          const compareLabel = getCheatCompareLabel(write, localizer);
           return (
             <div key={`${write.offset}:${write.value}`}>
-              <dt>Write</dt>
+              <dt>{localizer.message("ui.cheats.write")}</dt>
               <dd className="mono">
                 {formatCheatWrite(write)}
                 {compareLabel ? ` · ${compareLabel}` : ""}
@@ -389,7 +436,7 @@ const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatab
         })}
         {entry.resolution.type === "unsupported" ? (
           <div>
-            <dt>Support</dt>
+            <dt>{localizer.message("ui.cheats.support")}</dt>
             <dd>{entry.resolution.reason}</dd>
           </div>
         ) : null}
@@ -401,7 +448,7 @@ const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatab
       <dl>
         {entry.codeKind ? (
           <div>
-            <dt>Type</dt>
+            <dt>{localizer.message("ui.output.type")}</dt>
             <dd>{CHEAT_KIND_LABELS[entry.codeKind]}</dd>
           </div>
         ) : null}
@@ -414,7 +461,7 @@ const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatab
       </dl>
       {entry.importWarnings?.length ? (
         <div className="cheat-import-warnings" role="note">
-          <strong>Import warnings</strong>
+          <strong>{localizer.message("ui.cheats.importWarnings")}</strong>
           <ul>
             {entry.importWarnings.map((warning) => (
               <li key={warning}>{warning}</li>
@@ -461,6 +508,7 @@ type AddCheatsDialogProps = AddCheatsDialogCommonProps &
  */
 export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
   const { open, onClose, title, addedIds, stackCount, status, gamePicker, emptyPrompt, extras, manualEntry } = props;
+  const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -513,14 +561,20 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
         <div className="dlg-frame">
           <header className="dlg-head">
             <h2 className="dlg-title">{title}</h2>
-            <button aria-label="Close" className="dlg-x" onClick={onClose} title="Close" type="button">
+            <button
+              aria-label={localizer.message("ui.common.close")}
+              className="dlg-x"
+              onClick={onClose}
+              title={localizer.message("ui.common.close")}
+              type="button"
+            >
               <X aria-hidden="true" />
             </button>
           </header>
           <div className="dlg-body">
             {gamePicker}
             <label className="cheat-search">
-              <span className="sr-only">Search cheats</span>
+              <span className="sr-only">{localizer.message("ui.cheats.search")}</span>
               <Search aria-hidden="true" />
               <input
                 className="input"
@@ -528,7 +582,7 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
                   setQuery(event.target.value);
                   setPage(0);
                 }}
-                placeholder="Search by name or code…"
+                placeholder={localizer.message("ui.cheats.searchPlaceholder")}
                 type="search"
                 value={query}
               />
@@ -542,7 +596,7 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
                 {rows.map((entry) => {
                   const source = isClassifiedCheat(entry) ? entry.record : entry;
                   const classified = isClassifiedCheat(entry) ? entry : null;
-                  const delivery = classified ? deliveryCopy(classified) : null;
+                  const delivery = classified ? deliveryCopy(classified, localizer) : null;
                   const added = addedIds.has(source.id);
                   return (
                     <li className={added ? "cheat-pick is-added" : "cheat-pick"} key={source.id}>
@@ -553,20 +607,26 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
                           {delivery ? <span className="rb">{delivery.short}</span> : null}
                         </span>
                         <details className="cheat-inspection-details">
-                          <summary>Code details</summary>
+                          <summary>{localizer.message("ui.cheats.codeDetails")}</summary>
                           <CheatCodeDetails entry={entry} />
                         </details>
                       </div>
                       {!props.inspection && classified ? (
                         <button
-                          aria-label={`${added ? "Remove" : "Add"} ${source.description}`}
+                          aria-label={localizer.message(added ? "ui.compress.removeFile" : "ui.cheats.addNamed", {
+                            name: source.description,
+                          })}
                           className={added ? "btn slim cheat-pick-btn is-added" : "btn slim cheat-pick-btn"}
                           disabled={!(added || isSelectableCheat(classified))}
                           onClick={() => (added ? props.onRemove(classified) : props.onAdd(classified))}
                           type="button"
                         >
                           {added ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                          <span className="cheat-pick-btn-label">{added ? "Remove" : "Add"}</span>
+                          <span className="cheat-pick-btn-label">
+                            {added
+                              ? localizer.message("ui.common.remove")
+                              : localizer.message("ui.patch.addCheckLabel")}
+                          </span>
                         </button>
                       ) : null}
                     </li>
@@ -575,15 +635,19 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
               </ul>
             ) : (
               <p className="cheat-pick-empty" role="status">
-                {query ? "No cheats match this search." : (emptyPrompt ?? "No cheats available.")}
-                {props.inspection ? "" : " Add a code manually below."}
+                {query
+                  ? localizer.message("ui.cheats.noMatch")
+                  : (emptyPrompt ?? localizer.message("ui.cheats.noneAvailable"))}
+                {props.inspection ? "" : ` ${localizer.message("ui.cheats.addManuallyBelow")}`}
               </p>
             )}
             {props.records.length ? (
               <div className="cheat-pick-foot">
                 <span className="cheat-pick-count">
-                  {visible.length} of {countLabel(props.records.length, "cheat")}
-                  {props.inspection ? "" : ` · ${stackCount} in the stack`}
+                  {localizer.messageCount("ui.cheats.visibleOfTotal", props.records.length, {
+                    visible: visible.length,
+                  })}
+                  {props.inspection ? "" : ` · ${localizer.message("ui.cheats.inStack", { count: stackCount })}`}
                 </span>
                 <span className="cheat-pager">
                   <button
@@ -592,7 +656,7 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
                     onClick={() => setPage(currentPage - 1)}
                     type="button"
                   >
-                    Previous
+                    {localizer.message("ui.cheats.previous")}
                   </button>
                   <span className="mono">
                     {currentPage + 1} / {pageCount}
@@ -603,7 +667,7 @@ export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
                     onClick={() => setPage(currentPage + 1)}
                     type="button"
                   >
-                    Next
+                    {localizer.message("ui.cheats.next")}
                   </button>
                 </span>
               </div>
@@ -626,7 +690,8 @@ export type CheatDatabaseSectionProps = {
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
-  onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[]) => void;
+  onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[], weavePositions?: number[]) => void;
+  onPresenceChange?: (present: boolean) => void;
   /**
    * Bake the ROM cheats that are On into a standalone patch and download it.
    * Resolves with the created file name. Absent when the workflow cannot run
@@ -649,12 +714,14 @@ export const CheatDatabaseSection = ({
   classifyManualCode,
   classifyDatabaseCheats,
   onSelectionChange,
+  onPresenceChange,
   onSaveAsPatch,
   outputSummary,
   validationMessage,
   positionOffset = 0,
   renderStack,
 }: CheatDatabaseSectionProps) => {
+  const localizer = useUiLocalizer();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [savingPatchId, setSavingPatchId] = useState("");
   const savingPatchRef = useRef(false);
@@ -666,6 +733,7 @@ export const CheatDatabaseSection = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
   const positionsRef = useRef(new Map<string, number>());
+  const weavePositionsRef = useRef(new Map<string, number>());
   const selectionCallback = useRef(onSelectionChange);
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
@@ -674,6 +742,7 @@ export const CheatDatabaseSection = ({
       selectionCallback.current?.(
         entries,
         entries.map(({ record }) => positionsRef.current.get(record.id) ?? positionOffset),
+        entries.map(({ record }) => weavePositionsRef.current.get(record.id) ?? positionOffset),
       );
       return;
     }
@@ -707,6 +776,7 @@ export const CheatDatabaseSection = ({
     setSelectedIds(new Set());
     setAddedIds(new Set());
     positionsRef.current.clear();
+    weavePositionsRef.current.clear();
     setManualRecords([]);
     setManualGameId("");
     setManualEntrySlug("");
@@ -719,6 +789,7 @@ export const CheatDatabaseSection = ({
       setSelectedIds(new Set());
       setAddedIds(new Set());
       positionsRef.current.clear();
+      weavePositionsRef.current.clear();
       setManualRecords([]);
       selectionCallback.current?.([]);
     }
@@ -734,6 +805,11 @@ export const CheatDatabaseSection = ({
       }),
     [addedIds, records],
   );
+  const cardsPresent = cards.length > 0;
+  useEffect(() => {
+    onPresenceChange?.(cardsPresent);
+    return () => onPresenceChange?.(false);
+  }, [cardsPresent, onPresenceChange]);
   const reorderList = useListReorder({
     count: cards.length,
     disabled: cards.length < 2,
@@ -790,13 +866,13 @@ export const CheatDatabaseSection = ({
   };
 
   const pickerStatus = loadError
-    ? { error: true, text: `The cheat database is unavailable. ${loadError}` }
+    ? { error: true, text: localizer.message("ui.cheats.unavailable", { error: loadError }) }
     : classificationError
       ? { error: true, text: classificationError }
       : loading
-        ? { text: "Loading this system's cheat database…" }
+        ? { text: localizer.message("ui.cheats.loading") }
         : classifying
-          ? { text: "Checking cheat delivery types in ROMWeaver…" }
+          ? { text: localizer.message("ui.cheats.classifying") }
           : undefined;
   const systems: SystemOption[] = [
     ...(activeIndex?.entries ?? []).map((candidate) => ({
@@ -813,13 +889,11 @@ export const CheatDatabaseSection = ({
   const searchStep = getCheatGameSearchStep(searchInput);
 
   const status = loading
-    ? "Loading this system's cheat database…"
+    ? localizer.message("ui.cheats.loading")
     : classifying
-      ? "Checking cheat delivery types in ROMWeaver…"
+      ? localizer.message("ui.cheats.classifying")
       : "";
-  const loadErrorMessage = loadError
-    ? `The cheat database is unavailable. Offline access starts after this system loads once. ${loadError}`
-    : "";
+  const loadErrorMessage = loadError ? localizer.message("ui.cheats.unavailableOffline", { error: loadError }) : "";
 
   if (!rom) return null;
 
@@ -839,9 +913,9 @@ export const CheatDatabaseSection = ({
               setPatchStatus("");
               setSavingPatchId(entry.record.id);
               void onSaveAsPatch([entry], manualSystem)
-                .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, 1)))
+                .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, 1, localizer)))
                 .catch((reason: unknown) =>
-                  setPatchError(reason instanceof Error ? reason.message : "The cheat patch could not be created."),
+                  setPatchError(reason instanceof Error ? reason.message : localizer.message("ui.cheats.patchFailed")),
                 )
                 .finally(() => {
                   savingPatchRef.current = false;
@@ -859,6 +933,9 @@ export const CheatDatabaseSection = ({
   );
   const onOrderChange = (order: CheatOrderEntry[]) => {
     positionsRef.current = new Map(order.map(({ id, position }) => [id, position]));
+    weavePositionsRef.current = new Map(
+      order.map(({ id, position, weavePosition }) => [id, weavePosition ?? position]),
+    );
     const ids = order.map(({ id }) => id);
     setAddedIds((current) => {
       const previous = [...current];
@@ -899,12 +976,12 @@ export const CheatDatabaseSection = ({
         <span className="cheat-add-copy">
           <span className="cheat-add-label">
             <WandSparkles aria-hidden="true" />
-            Add cheats to the patch order
+            {localizer.message("ui.apply.tutorial.addCheats")}
           </span>
           <small>
             {unsupportedSystem
-              ? getUnsupportedCheatSystemMessage(rom.platform)
-              : "Choose codes to bake into the ROM at their place in the list."}
+              ? getUnsupportedCheatSystemMessage(rom.platform, localizer)
+              : localizer.message("ui.cheats.chooseCodes")}
           </small>
         </span>
       </button>
@@ -937,13 +1014,13 @@ export const CheatDatabaseSection = ({
 
       {outputSummary?.rom ? (
         <div className="cheat-output-summary" role="status">
-          <p>ROM output: Contains patches and {countLabel(outputSummary.rom, "baked ROM cheat")}.</p>
+          <p>{localizer.messageCount("ui.cheats.outputSummary", outputSummary.rom)}</p>
         </div>
       ) : null}
 
       <AddCheatsDialog
         addedIds={addedIds}
-        emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
+        emptyPrompt={searchStep ? localizer.message(`ui.cheats.choose.${searchStep}`) : undefined}
         gamePicker={
           <>
             {game ? <p className="cheat-pick-empty">{game.title}</p> : null}
@@ -967,7 +1044,7 @@ export const CheatDatabaseSection = ({
         records={records}
         stackCount={cards.length}
         status={pickerStatus}
-        title="Add cheats"
+        title={localizer.message("ui.home.goCheats")}
       />
     </div>
   );

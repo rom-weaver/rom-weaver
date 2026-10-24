@@ -11,7 +11,8 @@ const WEBAPP_URL_SESSION_DOC_PATH = "/docs/webapp-integration#url-sessions";
 const API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727";
 const API_CATALOG_CONTENT_TYPE = `application/linkset+json; profile="${API_CATALOG_PROFILE}"`;
 
-const OPENAPI_SOURCE = {
+/** @param {string} siteOrigin */
+const createOpenApiDocument = (siteOrigin) => ({
   openapi: "3.1.0",
   info: {
     title: "rom-weaver webapp integration API",
@@ -20,10 +21,10 @@ const OPENAPI_SOURCE = {
     description:
       "rom-weaver runs entirely in the browser and exposes no server-side data API. " +
       "These GET routes accept query parameters that the client reads once at startup to " +
-      `preload a session. See ${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}.`,
+      `preload a session. See ${siteOrigin}${WEBAPP_URL_SESSION_DOC_PATH}.`,
     license: { identifier: "AGPL-3.0-or-later", name: "AGPL-3.0-or-later" },
   },
-  servers: [{ url: SITE_ORIGIN }],
+  servers: [{ url: siteOrigin }],
   // The routes are public: no authentication, cookies, or tokens.
   security: [],
   paths: {
@@ -60,18 +61,18 @@ const OPENAPI_SOURCE = {
         summary: "Open the Apply workflow with preloaded inputs",
       },
     },
-    "/bundle-patches": {
+    "/weave-patches": {
       get: {
-        operationId: "openBundleWorkflow",
+        operationId: "openWeaveWorkflow",
         description:
-          "Loads the Bundle workflow with a preloaded bundle. The client fetches the bundle " +
+          "Loads the Weave workflow with a preloaded weave. The client fetches the weave " +
           "URL in the browser, so the remote host MUST allow the webapp origin through CORS.",
         parameters: [
           {
             description:
-              "HTTP(S) URL reference for a rom-weaver bundle to preload. Relative references resolve against the webapp base URL.",
+              "HTTP(S) URL reference for a rom-weaver weave to preload. Relative references resolve against the webapp base URL.",
             in: "query",
-            name: "bundle",
+            name: "weave",
             required: false,
             schema: { format: "uri-reference", type: "string" },
           },
@@ -79,27 +80,30 @@ const OPENAPI_SOURCE = {
         responses: {
           200: {
             content: { "text/html": { schema: { type: "string" } } },
-            description: "The webapp shell. The bundle resolves in the browser.",
+            description: "The webapp shell. The weave resolves in the browser.",
           },
         },
-        summary: "Open the Bundle workflow with a preloaded bundle",
+        summary: "Open the Weave workflow with a preloaded weave",
       },
     },
   },
-};
+});
 
-const createApiCatalogSource = () =>
+const OPENAPI_SOURCE = createOpenApiDocument(SITE_ORIGIN);
+
+/** @param {string} [siteOrigin] */
+const createApiCatalogSource = (siteOrigin = SITE_ORIGIN) =>
   `${JSON.stringify(
     {
       linkset: [
         {
-          anchor: `${SITE_ORIGIN}${API_CATALOG_PATH}`,
-          item: Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({ href: `${SITE_ORIGIN}${pathname}` })),
+          anchor: `${siteOrigin}${API_CATALOG_PATH}`,
+          item: Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({ href: `${siteOrigin}${pathname}` })),
         },
         ...Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({
-          anchor: `${SITE_ORIGIN}${pathname}`,
-          "service-desc": [{ href: `${SITE_ORIGIN}${OPENAPI_PATH}`, type: "application/json" }],
-          "service-doc": [{ href: `${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}`, type: "text/html" }],
+          anchor: `${siteOrigin}${pathname}`,
+          "service-desc": [{ href: `${siteOrigin}${OPENAPI_PATH}`, type: "application/json" }],
+          "service-doc": [{ href: `${siteOrigin}${WEBAPP_URL_SESSION_DOC_PATH}`, type: "text/html" }],
         })),
       ],
     },
@@ -107,7 +111,9 @@ const createApiCatalogSource = () =>
     2,
   )}\n`;
 
-const createOpenApiSource = () => `${JSON.stringify(OPENAPI_SOURCE, null, 2)}\n`;
+/** @param {string} [siteOrigin] */
+const createOpenApiSource = (siteOrigin = SITE_ORIGIN) =>
+  `${JSON.stringify(createOpenApiDocument(siteOrigin), null, 2)}\n`;
 
 export {
   API_CATALOG_CONTENT_TYPE,

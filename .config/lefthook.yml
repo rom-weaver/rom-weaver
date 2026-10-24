@@ -86,6 +86,24 @@ pre-commit:
         - "package.json"
         - "package-lock.json"
       run: npm run lint:code
+    quality-architecture:
+      glob:
+        - "crates/**"
+        - "Cargo.{toml,lock}"
+        - "packages/rom-weaver-webapp/src/**"
+        - "scripts/quality-architecture*"
+      run: mise run quality-architecture
+    quality-selection:
+      glob:
+        - "crates/*/Cargo.toml"
+        - ".config/mise.toml"
+        - "packages/rom-weaver-webapp/vitest*.mjs"
+        - "scripts/coverage-rust*"
+        - "scripts/quality-test-selection*"
+      run: mise run quality-selection
+    quality-checker-tests:
+      glob: "scripts/quality-*"
+      run: node --test scripts/quality-*.test.mjs scripts/coverage-rust.test.mjs
     # Runtime imports can change the WASM suite's inputs without editing its classifier.
     ci-script-tests:
       glob:

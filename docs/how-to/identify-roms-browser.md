@@ -1,6 +1,8 @@
-# Identify and check a ROM in the browser
+# Identify a ROM by checksum in the browser
 
-Identify a ROM by checksum to find its known game name, region, and revision in the available identification data. Your file stays on your device.
+Use the browser ROM identifier to identify a ROM by checksum. Find its recorded game name, region, and revision when the identification data contains a match. Your file stays on your device.
+
+Already have a hash? [Search ROM checksums](search-rom-checksums-browser.md) without adding a file.
 
 Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compare it with a published value. Choose [Test](test-roms-in-browser.md) to run a supported game in an emulator; successful playback does not establish that it is the exact ROM a patch requires.
 
@@ -17,40 +19,35 @@ Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compa
 ## Identify a file
 
 1. Open [Identify](https://rom-weaver.com/identify-rom).
-2. Add your ROM or a supported archive.
+2. Add one or more ROMs or supported archives. Each file gets its own result.
 3. Wait for identification to finish.
-4. Read the **Identify** and **Checks** drawers on the ROM card.
+4. Read the result on the ROM card. Its **Checks** drawer lists the checksums; switch from **Simple** to **Detailed** to add the **Identify** drawer. The switch label shows the active view.
 
 An archive can produce several results. Each result names its member so you can tell which ROM it describes.
 
-An unknown result means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
+An unknown ROM shows one neutral **No match** notice above its card, with its checksums still listed. It means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
 
 If several records share the checksums, read every candidate. If identification data could not load, check your connection and select **Retry identification**.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-light.avif" width="1170" height="2321">
-    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-light.avif" width="1770" height="1500">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-light.webp" width="1170" height="2321">
-    <img src="../screenshots/identify-checks-desktop-light.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the light theme" width="1770" height="1500">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-light.avif" width="1170" height="2029">
+    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-light.avif" width="1770" height="1340">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-light.webp" width="1170" height="2029">
+    <img src="../screenshots/identify-checks-desktop-light.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the light theme" width="1770" height="1340">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-dark.avif" width="1170" height="2321">
-    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-dark.avif" width="1770" height="1500">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-dark.webp" width="1170" height="2321">
-    <img src="../screenshots/identify-checks-desktop-dark.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the dark theme" width="1770" height="1500">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-dark.avif" width="1170" height="2029">
+    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-dark.avif" width="1770" height="1340">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-dark.webp" width="1170" height="2029">
+    <img src="../screenshots/identify-checks-desktop-dark.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the dark theme" width="1770" height="1340">
   </picture>
   <figcaption>An unknown ROM still has checksums. This example uses the supplied homebrew ROM.</figcaption>
 </figure>
 
 ## Search without a file
 
-1. Open a fresh [Identify page](https://rom-weaver.com/identify-rom).
-2. Enter a checksum or game name in **Identify by checksum or game name**.
-3. For a name search, select the game, then its release.
-4. Read the expected ROM's details. Add your file to compare it with that expectation.
-
-Search finds database records. It does not download a game. A name match alone does not prove that you have the right revision.
+Follow [Search ROM checksums](search-rom-checksums-browser.md) to look up an existing CRC32, MD5, or SHA-1 hash. That guide also covers finding releases by game name.
 
 ## Inspect known cheats
 
@@ -59,7 +56,7 @@ Search finds database records. It does not download a game. A name match alone d
 3. Search the matched game's known codes.
 4. Open **Code details** for original database fields and import warnings.
 
-This view is for inspection. It includes checksum-only matches and candidates found inside archives, even when rom-weaver has not verified that a code is compatible with those exact bytes. Open [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) or [Create a cheat patch](https://rom-weaver.com/create-patch?guide=create-cheats) to classify and use a code.
+This view is for inspection. It includes checksum-only matches and candidates found inside archives, even when rom-weaver has not verified that a code is compatible with those exact bytes. Open [Apply cheat codes](https://rom-weaver.com/apply-cheats) or [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch) to classify and use a code.
 
 ## Compare a checksum
 

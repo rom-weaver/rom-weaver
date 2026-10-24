@@ -8,7 +8,9 @@ const getSoftNavigationUrl = (event: MouseEvent, anchor: HTMLAnchorElement, curr
   if (anchor.target && anchor.target !== "_self") return null;
   if (anchor.hasAttribute("download")) return null;
 
-  const url = new URL(anchor.href, currentUrl.href);
+  // Fragment-only links MUST stay on this route even when <base> points at the app root.
+  const href = anchor.getAttribute("href");
+  const url = new URL(href?.startsWith("#") ? href : anchor.href, currentUrl.href);
   if (url.origin !== currentUrl.origin || url.protocol !== currentUrl.protocol) return null;
   if (!readWorkflowViewFromPath(url.pathname)) return null;
   return url;

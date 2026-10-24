@@ -149,7 +149,14 @@ test("identify producer runs for every selected consumer and skips fork document
   assert.ok(identify, "CI has no identify producer condition");
   const condition = identify.match(/        if: >-\n([\s\S]*)/u)?.[1].trim();
   assert.ok(condition, "identify producer has no condition");
-  const selected = ({ eventName, rust = "false", webapp = "false", docker = "[]", deploy = "", firstParty = false }) =>
+  const selected = ({
+    eventName,
+    rust = "false",
+    webapp = "false",
+    docker = "[]",
+    deploy = "",
+    firstParty = false,
+  }) =>
     runInNewContext(condition, {
       github: {
         event_name: eventName,
@@ -169,7 +176,19 @@ test("identify producer runs for every selected consumer and skips fork document
     });
 
   assert.equal(selected({ eventName: "push", webapp: "true" }), true, "tag deploy can build WASM");
-  assert.equal(selected({ eventName: "workflow_dispatch" }), true, "manual runs can select consumers");
-  assert.equal(selected({ eventName: "pull_request", firstParty: true }), true, "first-party previews need data");
-  assert.equal(selected({ eventName: "pull_request" }), false, "fork documentation runs do not build data");
+  assert.equal(
+    selected({ eventName: "workflow_dispatch" }),
+    true,
+    "manual runs can select consumers",
+  );
+  assert.equal(
+    selected({ eventName: "pull_request", firstParty: true }),
+    true,
+    "every first-party preview needs data",
+  );
+  assert.equal(
+    selected({ eventName: "pull_request" }),
+    false,
+    "fork documentation runs do not build data",
+  );
 });

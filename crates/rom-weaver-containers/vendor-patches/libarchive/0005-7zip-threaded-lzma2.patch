@@ -1,0 +1,795 @@
+diff --git a/libarchive/archive.h b/libarchive/archive.h
+index 41a5440cac..2d503a03c0 100644
+--- a/libarchive/archive.h
++++ b/libarchive/archive.h
+@@ -843,6 +843,8 @@ __LA_DECL int archive_write_set_format_by_name(struct archive *,
+ 		     const char *name);
+ /* To minimize link pollution, use one or more of the following. */
+ __LA_DECL int archive_write_set_format_7zip(struct archive *);
++__LA_DECL int archive_write_set_format_7zip_size_hint(struct archive *,
++		     uint64_t _uncompressed_bytes);
+ __LA_DECL int archive_write_set_format_ar_bsd(struct archive *);
+ __LA_DECL int archive_write_set_format_ar_svr4(struct archive *);
+ __LA_DECL int archive_write_set_format_cpio(struct archive *);
+diff --git a/libarchive/archive_write_set_format_7zip.c b/libarchive/archive_write_set_format_7zip.c
+index 3d682ff2b5..7704e8be2b 100644
+--- a/libarchive/archive_write_set_format_7zip.c
++++ b/libarchive/archive_write_set_format_7zip.c
+@@ -31,6 +31,9 @@
+ #ifdef HAVE_LIMITS_H
+ #include <limits.h>
+ #endif
++#ifdef HAVE_PTHREAD_H
++#include <pthread.h>
++#endif
+ #ifdef HAVE_STDLIB_H
+ #include <stdlib.h>
+ #endif
+@@ -171,6 +174,45 @@ struct ppmd_stream {
+ 	size_t			 buff_bytes;
+ };
+ 
++#if defined(HAVE_LZMA_H) && defined(HAVE_PTHREAD_H)
++struct lzma2_mt_job {
++	pthread_t		 thread;
++	int			 joined;
++	uint8_t			*in;		/* [preset_size bytes][block bytes] */
++	size_t			 preset_size;	/* leading seed-dictionary bytes */
++	size_t			 in_size;	/* block (data) bytes after preset */
++	uint8_t			*out;
++	size_t			 out_size;
++	size_t			 out_pos;
++	lzma_options_lzma	 opt;
++	lzma_ret		 ret;
++};
++
++struct lzma2_mt_stream {
++	lzma_options_lzma	 opt;
++	uint8_t			*chunk;
++	size_t			 chunk_size;	/* block (encode) unit, may be < dict */
++	size_t			 chunk_used;
++	/*
++	 * When seeding is enabled the block is encoded smaller than the
++	 * dictionary so a single file splits into parallel blocks, and each
++	 * block after the first is seeded with the preceding up-to-dictionary
++	 * bytes (preset_dict) so cross-block matches survive. This keeps the
++	 * single-thread ratio while still parallelising one file, instead of
++	 * resetting the dictionary at every block boundary.
++	 */
++	uint8_t			*history;	/* last dict_size bytes, NULL if off */
++	size_t			 history_cap;	/* == dict_size when seeding */
++	size_t			 history_len;
++	struct lzma2_mt_job	*jobs;
++	size_t			 job_head;
++	size_t			 job_count;
++	size_t			 threads;
++	size_t			 job_limit;
++	int			 end_marker_written;
++};
++#endif
++
+ struct coder {
+ 	unsigned		 codec;
+ 	size_t			 prop_size;
+@@ -233,6 +275,15 @@ struct _7zip {
+ 
+ 	int			 opt_threads;
+ 
++	/*
++	 * Hint of the total uncompressed bytes that will be written into the
++	 * single compressed folder. When set and smaller than the preset
++	 * dictionary, LZMA/LZMA2 reduce the dictionary to fit the data, which
++	 * avoids allocating a window larger than the input can ever reference.
++	 * 0 means "unknown".
++	 */
++	uint64_t		 size_hint;
++
+ 	struct la_zstream	 stream;
+ 	struct coder		 coder;
+ 
+@@ -298,13 +349,19 @@ static int	compression_code_bzip2(struct archive *,
+ static int	compression_end_bzip2(struct archive *, struct la_zstream *);
+ #endif
+ static int	compression_init_encoder_lzma1(struct archive *,
+-		    struct la_zstream *, int);
++			    struct la_zstream *, int);
+ static int	compression_init_encoder_lzma2(struct archive *,
+-		    struct la_zstream *, int);
++			    struct la_zstream *, int, int, uint64_t);
+ #if defined(HAVE_LZMA_H)
+ static int	compression_code_lzma(struct archive *,
+-		    struct la_zstream *, enum la_zaction);
++			    struct la_zstream *, enum la_zaction);
+ static int	compression_end_lzma(struct archive *, struct la_zstream *);
++#if defined(HAVE_PTHREAD_H)
++static int	compression_code_lzma2_mt(struct archive *,
++			    struct la_zstream *, enum la_zaction);
++static int	compression_end_lzma2_mt(struct archive *,
++			    struct la_zstream *);
++#endif
+ #endif
+ static int	compression_init_encoder_ppmd(struct archive *,
+ 		    struct la_zstream *, uint8_t, uint32_t);
+@@ -413,6 +470,29 @@ archive_write_set_format_7zip(struct archive *_a)
+ 	return (ARCHIVE_OK);
+ }
+ 
++int
++archive_write_set_format_7zip_size_hint(struct archive *_a,
++    uint64_t uncompressed_bytes)
++{
++	struct archive_write *a = (struct archive_write *)_a;
++	struct _7zip *zip;
++
++	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
++	    ARCHIVE_STATE_NEW | ARCHIVE_STATE_HEADER | ARCHIVE_STATE_DATA,
++	    "archive_write_set_format_7zip_size_hint");
++
++	if (a->format_data == NULL || a->format_name == NULL ||
++	    strcmp(a->format_name, "7zip") != 0) {
++		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
++		    "7zip size hint requires 7zip write format");
++		return (ARCHIVE_FATAL);
++	}
++
++	zip = (struct _7zip *)a->format_data;
++	zip->size_hint = uncompressed_bytes;
++	return (ARCHIVE_OK);
++}
++
+ static int
+ _7z_options(struct archive_write *a, const char *key, const char *value)
+ {
+@@ -2068,41 +2148,524 @@ compression_init_encoder_bzip2(struct archive *a,
+  * _7_LZMA1, _7_LZMA2 compressor.
+  */
+ #if defined(HAVE_LZMA_H)
++#if defined(HAVE_PTHREAD_H)
++#define LZMA2_MT_MIN_CHUNK_SIZE ((size_t)1 << 20)
++/*
++ * Files at or below this stay single-threaded. Seeded parallel blocks keep
++ * cross-block matches, so for compressible or already-compressed data (real
++ * ROMs) they stay at size parity with a continuous stream; only literal-heavy
++ * data pays ~2%. Keep the threshold low so files parallelise for speed, but
++ * skip trivially small files where threading overhead is not worth it.
++ */
++#define LZMA2_MT_SPLIT_THRESHOLD ((size_t)4 << 20)
++/* Bound each streaming input step without changing the encoded output. */
++#define LZMA2_MT_ENCODE_STEP ((size_t)1 << 20)
++
++static size_t
++compression_lzma2_mt_chunk_size(const lzma_options_lzma *opt)
++{
++	uint64_t chunk_size = opt->dict_size;
++
++	if (chunk_size < LZMA2_MT_MIN_CHUNK_SIZE)
++		chunk_size = LZMA2_MT_MIN_CHUNK_SIZE;
++	if (chunk_size > (uint64_t)(size_t)-1)
++		return (0);
++	return ((size_t)chunk_size);
++}
++
++static void
++compression_lzma2_mt_set_error(struct archive *a, lzma_ret ret)
++{
++	switch (ret) {
++	case LZMA_MEM_ERROR:
++		archive_set_error(a, ENOMEM,
++		    "Internal error initializing compression library: "
++		    "Cannot allocate memory");
++		break;
++	case LZMA_OPTIONS_ERROR:
++		archive_set_error(a, ARCHIVE_ERRNO_MISC,
++		    "lzma2 compression options are not supported");
++		break;
++	default:
++		archive_set_error(a, ARCHIVE_ERRNO_MISC,
++		    "lzma2 compression failed: raw encoder returned status %d",
++		    ret);
++		break;
++	}
++}
++
++static void *
++compression_lzma2_mt_worker(void *arg)
++{
++	struct lzma2_mt_job *job = (struct lzma2_mt_job *)arg;
++	lzma_filter filters[2];
++	lzma_stream strm = LZMA_STREAM_INIT;
++	const uint8_t *next;
++	uint8_t *out;
++	size_t cap, left, produced;
++
++	if (job->in_size > (size_t)-1 - (job->in_size / 16) - 1024) {
++		job->ret = LZMA_MEM_ERROR;
++		return (NULL);
++	}
++	cap = job->in_size + (job->in_size / 16) + 1024;
++	if (cap < 1024)
++		cap = 1024;
++
++	/*
++	 * Seed the dictionary with the preceding bytes so this block can match
++	 * back into earlier blocks. The first block has preset_size == 0, which
++	 * leaves preset_dict NULL and makes its LZMA2 stream reset the
++	 * dictionary; later blocks keep the running window (no reset), so the
++	 * stripped-and-concatenated blocks form one valid LZMA2 stream.
++	 */
++	if (job->preset_size > 0) {
++		job->opt.preset_dict = job->in;
++		job->opt.preset_dict_size = (uint32_t)job->preset_size;
++	} else {
++		job->opt.preset_dict = NULL;
++		job->opt.preset_dict_size = 0;
++	}
++	filters[0].id = LZMA_FILTER_LZMA2;
++	filters[0].options = &job->opt;
++	filters[1].id = LZMA_VLI_UNKNOWN;
++	filters[1].options = NULL;
++
++	if (lzma_raw_encoder(&strm, filters) != LZMA_OK) {
++		job->ret = LZMA_PROG_ERROR;
++		return (NULL);
++	}
++	out = malloc(cap);
++	if (out == NULL) {
++		lzma_end(&strm);
++		job->ret = LZMA_MEM_ERROR;
++		return (NULL);
++	}
++	strm.next_out = out;
++	strm.avail_out = cap;
++	next = job->in + job->preset_size;
++	left = job->in_size;
++
++	/*
++	 * Stream the block in fixed steps. Output is identical to a one-shot
++	 * raw encode.
++	 */
++	for (;;) {
++		lzma_action action;
++		lzma_ret ret;
++
++		if (strm.avail_in == 0 && left > 0) {
++			size_t step = left < LZMA2_MT_ENCODE_STEP
++			    ? left : LZMA2_MT_ENCODE_STEP;
++			strm.next_in = next;
++			strm.avail_in = step;
++			next += step;
++			left -= step;
++		}
++		action = (left == 0 && strm.avail_in == 0)
++		    ? LZMA_FINISH : LZMA_RUN;
++
++		if (strm.avail_out == 0) {
++			uint8_t *bigger;
++			produced = (size_t)(strm.next_out - out);
++			if (cap > (size_t)-1 / 2 ||
++			    (bigger = realloc(out, cap * 2)) == NULL) {
++				free(out);
++				lzma_end(&strm);
++				job->ret = LZMA_MEM_ERROR;
++				return (NULL);
++			}
++			cap *= 2;
++			out = bigger;
++			strm.next_out = out + produced;
++			strm.avail_out = cap - produced;
++		}
++
++		ret = lzma_code(&strm, action);
++
++		if (ret == LZMA_STREAM_END)
++			break;
++		if (ret != LZMA_OK) {
++			free(out);
++			lzma_end(&strm);
++			job->ret = ret;
++			return (NULL);
++		}
++	}
++
++	produced = (size_t)(strm.next_out - out);
++	lzma_end(&strm);
++	if (produced == 0 || out[produced - 1] != 0) {
++		free(out);
++		job->ret = LZMA_DATA_ERROR;
++		return (NULL);
++	}
++	job->out = out;
++	job->out_size = produced - 1;	/* strip the trailing end marker */
++	job->ret = LZMA_OK;
++	return (NULL);
++}
++
++static int
++compression_lzma2_mt_join(struct archive *a, struct lzma2_mt_job *job)
++{
++	int ret;
++
++	if (job->joined)
++		return (ARCHIVE_OK);
++	ret = pthread_join(job->thread, NULL);
++	if (ret != 0) {
++		archive_set_error(a, ret,
++		    "Couldn't join lzma2 worker thread");
++		return (ARCHIVE_FATAL);
++	}
++	job->joined = 1;
++	free(job->in);
++	job->in = NULL;
++	if (job->ret != LZMA_OK) {
++		compression_lzma2_mt_set_error(a, job->ret);
++		return (ARCHIVE_FATAL);
++	}
++	return (ARCHIVE_OK);
++}
++
++static int
++compression_lzma2_mt_drain(struct archive *a, struct la_zstream *lastrm,
++    int wait)
++{
++	struct lzma2_mt_stream *strm;
++
++	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
++	while (strm->job_count > 0) {
++		struct lzma2_mt_job *job = &strm->jobs[strm->job_head];
++		size_t bytes;
++		int ret;
++
++		if (!job->joined) {
++			if (!wait)
++				return (ARCHIVE_OK);
++			ret = compression_lzma2_mt_join(a, job);
++			if (ret != ARCHIVE_OK)
++				return (ret);
++		}
++
++		bytes = job->out_size - job->out_pos;
++		if (bytes > lastrm->avail_out)
++			bytes = lastrm->avail_out;
++		if (bytes > 0) {
++			memcpy(lastrm->next_out, job->out + job->out_pos, bytes);
++			lastrm->next_out += bytes;
++			lastrm->avail_out -= bytes;
++			lastrm->total_out += bytes;
++			job->out_pos += bytes;
++		}
++		if (job->out_pos < job->out_size)
++			return (ARCHIVE_OK);
++
++		free(job->out);
++		memset(job, 0, sizeof(*job));
++		strm->job_head = (strm->job_head + 1) % strm->threads;
++		strm->job_count--;
++		if (lastrm->avail_out == 0)
++			return (ARCHIVE_OK);
++	}
++	return (ARCHIVE_OK);
++}
++
++/* Keep the most recent history_cap bytes so the next block can be seeded. */
++static void
++compression_lzma2_mt_history_push(struct lzma2_mt_stream *strm,
++    const uint8_t *data, size_t len)
++{
++	size_t cap = strm->history_cap;
++
++	if (cap == 0)
++		return;
++	if (len >= cap) {
++		memcpy(strm->history, data + (len - cap), cap);
++		strm->history_len = cap;
++		return;
++	}
++	if (strm->history_len + len > cap) {
++		size_t keep = cap - len;
++		memmove(strm->history,
++		    strm->history + (strm->history_len - keep), keep);
++		strm->history_len = keep;
++	}
++	memcpy(strm->history + strm->history_len, data, len);
++	strm->history_len += len;
++}
++
++static int
++compression_lzma2_mt_submit(struct archive *a, struct lzma2_mt_stream *strm)
++{
++	struct lzma2_mt_job *job;
++	size_t job_index;
++	size_t preset_size;
++	int ret;
++
++	if (strm->chunk_used == 0)
++		return (ARCHIVE_OK);
++	if (strm->job_count >= strm->job_limit) {
++		archive_set_error(a, ARCHIVE_ERRNO_MISC,
++		    "Internal error queueing lzma2 worker thread");
++		return (ARCHIVE_FATAL);
++	}
++
++	/* preset_size is 0 unless seeding is enabled (history_cap > 0). */
++	preset_size = strm->history_len;
++	job_index = (strm->job_head + strm->job_count) % strm->threads;
++	job = &strm->jobs[job_index];
++	memset(job, 0, sizeof(*job));
++	job->in = malloc(preset_size + strm->chunk_used);
++	if (job->in == NULL) {
++		archive_set_error(a, ENOMEM,
++		    "Can't allocate memory for lzma2 worker input");
++		return (ARCHIVE_FATAL);
++	}
++	if (preset_size > 0)
++		memcpy(job->in, strm->history, preset_size);
++	memcpy(job->in + preset_size, strm->chunk, strm->chunk_used);
++	job->preset_size = preset_size;
++	job->in_size = strm->chunk_used;
++	job->opt = strm->opt;
++	ret = pthread_create(&job->thread, NULL, compression_lzma2_mt_worker,
++	    job);
++	if (ret != 0) {
++		free(job->in);
++		memset(job, 0, sizeof(*job));
++		archive_set_error(a, ret,
++		    "Couldn't create lzma2 worker thread");
++		return (ARCHIVE_FATAL);
++	}
++	/* Roll this block into the seed window for the following block. */
++	compression_lzma2_mt_history_push(strm, strm->chunk, strm->chunk_used);
++	strm->job_count++;
++	strm->chunk_used = 0;
++	return (ARCHIVE_OK);
++}
++
++static int
++compression_init_encoder_lzma2_mt(struct archive *a,
++    struct la_zstream *lastrm, const lzma_options_lzma *lzma_opt, int threads,
++    uint64_t size_hint)
++{
++	struct lzma2_mt_stream *strm;
++
++	strm = calloc(1, sizeof(*strm));
++	if (strm == NULL) {
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
++		archive_set_error(a, ENOMEM,
++		    "Can't allocate memory for lzma2 stream");
++		return (ARCHIVE_FATAL);
++	}
++	strm->opt = *lzma_opt;
++	strm->threads = (size_t)threads;
++	strm->job_limit = strm->threads;
++	strm->chunk_size = compression_lzma2_mt_chunk_size(lzma_opt);
++	if (strm->chunk_size == 0) {
++		free(strm);
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
++		archive_set_error(a, ENOMEM,
++		    "lzma2 chunk size is too large");
++		return (ARCHIVE_FATAL);
++	}
++	/*
++	 * Split one file into parallel blocks smaller than the dictionary,
++	 * seeding each later block with the preceding dictionary bytes so
++	 * cross-block matches survive. Only engages when the total size is
++	 * known and a per-thread block is smaller than the dictionary;
++	 * otherwise one chunk == dictionary as before.
++	 */
++	if (size_hint > LZMA2_MT_SPLIT_THRESHOLD && strm->threads > 1 &&
++	    (uint64_t)lzma_opt->dict_size > LZMA2_MT_MIN_CHUNK_SIZE) {
++		uint64_t per = (size_hint + strm->threads - 1) / strm->threads;
++		if (per < LZMA2_MT_MIN_CHUNK_SIZE)
++			per = LZMA2_MT_MIN_CHUNK_SIZE;
++		if (per < (uint64_t)lzma_opt->dict_size) {
++			strm->chunk_size = (size_t)per;
++			strm->history_cap = (size_t)lzma_opt->dict_size;
++		}
++	}
++	strm->chunk = malloc(strm->chunk_size);
++	strm->jobs = calloc(strm->threads, sizeof(*strm->jobs));
++	if (strm->history_cap > 0)
++		strm->history = malloc(strm->history_cap);
++	if (strm->chunk == NULL || strm->jobs == NULL ||
++	    (strm->history_cap > 0 && strm->history == NULL)) {
++		free(strm->chunk);
++		free(strm->jobs);
++		free(strm->history);
++		free(strm);
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
++		archive_set_error(a, ENOMEM,
++		    "Can't allocate memory for lzma2 stream");
++		return (ARCHIVE_FATAL);
++	}
++	lastrm->real_stream = strm;
++	lastrm->valid = 1;
++	lastrm->code = compression_code_lzma2_mt;
++	lastrm->end = compression_end_lzma2_mt;
++	return (ARCHIVE_OK);
++}
++
++static int
++compression_code_lzma2_mt(struct archive *a, struct la_zstream *lastrm,
++    enum la_zaction action)
++{
++	struct lzma2_mt_stream *strm;
++	int ret;
++
++	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
++
++	ret = compression_lzma2_mt_drain(a, lastrm, 0);
++	if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
++		return (ret);
++
++	while (lastrm->avail_in > 0) {
++		size_t bytes;
++
++			while (strm->job_count >= strm->job_limit) {
++				ret = compression_lzma2_mt_drain(a, lastrm, 1);
++				if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
++					return (ret);
++		}
++
++		bytes = strm->chunk_size - strm->chunk_used;
++		if (bytes > lastrm->avail_in)
++			bytes = lastrm->avail_in;
++		memcpy(strm->chunk + strm->chunk_used, lastrm->next_in, bytes);
++		strm->chunk_used += bytes;
++		lastrm->next_in += bytes;
++		lastrm->avail_in -= bytes;
++		lastrm->total_in += bytes;
++
++		if (strm->chunk_used == strm->chunk_size) {
++			ret = compression_lzma2_mt_submit(a, strm);
++			if (ret != ARCHIVE_OK)
++				return (ret);
++		}
++	}
++
++	if (action == ARCHIVE_Z_FINISH) {
++		while (strm->job_count >= strm->job_limit) {
++			ret = compression_lzma2_mt_drain(a, lastrm, 1);
++			if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
++				return (ret);
++		}
++		ret = compression_lzma2_mt_submit(a, strm);
++		if (ret != ARCHIVE_OK)
++			return (ret);
++		while (strm->job_count > 0) {
++			ret = compression_lzma2_mt_drain(a, lastrm, 1);
++			if (ret != ARCHIVE_OK || lastrm->avail_out == 0)
++				return (ret);
++		}
++		if (!strm->end_marker_written) {
++			if (lastrm->avail_out == 0)
++				return (ARCHIVE_OK);
++			*lastrm->next_out++ = 0;
++			lastrm->avail_out--;
++			lastrm->total_out++;
++			strm->end_marker_written = 1;
++		}
++		return (ARCHIVE_EOF);
++	}
++
++	return (ARCHIVE_OK);
++}
++
++static int
++compression_end_lzma2_mt(struct archive *a, struct la_zstream *lastrm)
++{
++	struct lzma2_mt_stream *strm;
++	size_t i;
++
++	(void)a; /* UNUSED */
++	strm = (struct lzma2_mt_stream *)lastrm->real_stream;
++	if (strm != NULL) {
++		for (i = 0; i < strm->job_count; i++) {
++			struct lzma2_mt_job *job =
++			    &strm->jobs[(strm->job_head + i) % strm->threads];
++			if (!job->joined)
++				pthread_join(job->thread, NULL);
++			free(job->in);
++			free(job->out);
++		}
++		free(strm->jobs);
++		free(strm->chunk);
++		free(strm->history);
++		free(strm);
++	}
++	lastrm->valid = 0;
++	lastrm->real_stream = NULL;
++	return (ARCHIVE_OK);
++}
++#endif
++
++/*
++ * Round an uncompressed-size hint up to the smallest LZMA2-representable
++ * dictionary size (2^n or 3*2^(n-1)), capped at the preset dictionary, so the
++ * encoder window and the stored properties byte agree and never exceed what
++ * the input can reference.
++ */
++static uint32_t
++lzma_reduce_dict_size(uint64_t size_hint, uint32_t preset_dict)
++{
++	int b;
++
++	for (b = 0; b <= 40; b++) {
++		uint64_t cand = (uint64_t)(2 | (b & 1)) << (b / 2 + 11);
++		if (cand >= size_hint)
++			return (cand < (uint64_t)preset_dict)
++			    ? (uint32_t)cand : preset_dict;
++	}
++	return preset_dict;
++}
++
+ static int
+ compression_init_encoder_lzma(struct archive *a,
+-    struct la_zstream *lastrm, int level, uint64_t filter_id)
++    struct la_zstream *lastrm, int level, uint64_t filter_id, int threads,
++    uint64_t size_hint)
+ {
+ 	static const lzma_stream lzma_init_data = LZMA_STREAM_INIT;
+ 	lzma_stream *strm;
+-	lzma_filter *lzmafilters;
++	lzma_filter lzmafilters[2];
+ 	lzma_options_lzma lzma_opt;
+ 	int r;
+ 
+ 	if (lastrm->valid)
+ 		compression_end(a, lastrm);
+-	strm = calloc(1, sizeof(*strm) + sizeof(*lzmafilters) * 2);
+-	if (strm == NULL) {
+-		archive_set_error(a, ENOMEM,
+-		    "Can't allocate memory for lzma stream");
+-		return (ARCHIVE_FATAL);
+-	}
+-	lzmafilters = (lzma_filter *)(strm+1);
+ 	if (level > 9)
+ 		level = 9;
+ 	if (lzma_lzma_preset(&lzma_opt, level)) {
+-		free(strm);
+ 		lastrm->real_stream = NULL;
+ 		archive_set_error(a, ENOMEM,
+ 		    "Internal error initializing compression library");
+ 		return (ARCHIVE_FATAL);
+ 	}
++	/*
++	 * A dictionary larger than the data can never be referenced, so reduce
++	 * it to the input size (rounded up to the next representable dictionary
++	 * and capped at the preset). For LZMA2 this also shrinks the per-thread
++	 * chunk and encoder memory.
++	 */
++	if (size_hint > 0 && size_hint < (uint64_t)lzma_opt.dict_size)
++		lzma_opt.dict_size =
++		    lzma_reduce_dict_size(size_hint, lzma_opt.dict_size);
+ 	lzmafilters[0].id = filter_id;
+ 	lzmafilters[0].options = &lzma_opt;
+ 	lzmafilters[1].id = LZMA_VLI_UNKNOWN;/* Terminate */
++	lzmafilters[1].options = NULL;
+ 
+-	r = lzma_properties_size(&(lastrm->prop_size), lzmafilters);
++	r = lzma_properties_size(&(lastrm->prop_size), &(lzmafilters[0]));
+ 	if (r != LZMA_OK) {
+-		free(strm);
+ 		lastrm->real_stream = NULL;
+ 		archive_set_error(a, ARCHIVE_ERRNO_MISC,
+ 		    "lzma_properties_size failed");
+@@ -2111,22 +2674,40 @@ compression_init_encoder_lzma(struct archive *a,
+ 	if (lastrm->prop_size) {
+ 		lastrm->props = malloc(lastrm->prop_size);
+ 		if (lastrm->props == NULL) {
+-			free(strm);
+ 			lastrm->real_stream = NULL;
+ 			archive_set_error(a, ENOMEM,
+ 			    "Cannot allocate memory");
+ 			return (ARCHIVE_FATAL);
+ 		}
+-		r = lzma_properties_encode(lzmafilters,  lastrm->props);
++		r = lzma_properties_encode(&(lzmafilters[0]),  lastrm->props);
+ 		if (r != LZMA_OK) {
+-			free(strm);
+ 			lastrm->real_stream = NULL;
++			free(lastrm->props);
++			lastrm->props = NULL;
++			lastrm->prop_size = 0;
+ 			archive_set_error(a, ARCHIVE_ERRNO_MISC,
+ 			    "lzma_properties_encode failed");
+ 			return (ARCHIVE_FATAL);
+ 		}
+ 	}
+ 
++#if defined(HAVE_PTHREAD_H)
++	if (filter_id == LZMA_FILTER_LZMA2 && threads > 1)
++		return (compression_init_encoder_lzma2_mt(a, lastrm,
++		    &lzma_opt, threads, size_hint));
++#else
++	(void)threads; /* UNUSED */
++#endif
++
++	strm = calloc(1, sizeof(*strm));
++	if (strm == NULL) {
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
++		archive_set_error(a, ENOMEM,
++		    "Can't allocate memory for lzma stream");
++		return (ARCHIVE_FATAL);
++	}
+ 	*strm = lzma_init_data;
+ 	r = lzma_raw_encoder(strm, lzmafilters);
+ 	switch (r) {
+@@ -2139,14 +2720,20 @@ compression_init_encoder_lzma(struct archive *a,
+ 		break;
+ 	case LZMA_MEM_ERROR:
+ 		free(strm);
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
+ 		lastrm->real_stream = NULL;
+ 		archive_set_error(a, ENOMEM,
+ 		    "Internal error initializing compression library: "
+ 		    "Cannot allocate memory");
+ 		r =  ARCHIVE_FATAL;
+ 		break;
+-        default:
++	        default:
+ 		free(strm);
++		free(lastrm->props);
++		lastrm->props = NULL;
++		lastrm->prop_size = 0;
+ 		lastrm->real_stream = NULL;
+ 		archive_set_error(a, ARCHIVE_ERRNO_MISC,
+ 		    "Internal error initializing compression library: "
+@@ -2162,15 +2749,15 @@ compression_init_encoder_lzma1(struct archive *a,
+     struct la_zstream *lastrm, int level)
+ {
+ 	return compression_init_encoder_lzma(a, lastrm, level,
+-		    LZMA_FILTER_LZMA1);
++		    LZMA_FILTER_LZMA1, 1, 0);
+ }
+ 
+ static int
+ compression_init_encoder_lzma2(struct archive *a,
+-    struct la_zstream *lastrm, int level)
++    struct la_zstream *lastrm, int level, int threads, uint64_t size_hint)
+ {
+ 	return compression_init_encoder_lzma(a, lastrm, level,
+-		    LZMA_FILTER_LZMA2);
++		    LZMA_FILTER_LZMA2, threads, size_hint);
+ }
+ 
+ static int
+@@ -2244,10 +2831,12 @@ compression_init_encoder_lzma1(struct archive *a,
+ }
+ static int
+ compression_init_encoder_lzma2(struct archive *a,
+-    struct la_zstream *lastrm, int level)
++    struct la_zstream *lastrm, int level, int threads, uint64_t size_hint)
+ {
+ 
+ 	(void) level; /* UNUSED */
++	(void) threads; /* UNUSED */
++	(void) size_hint; /* UNUSED */
+ 	if (lastrm->valid)
+ 		compression_end(a, lastrm);
+ 	return (compression_unsupported_encoder(a, lastrm, "lzma"));
+@@ -2538,11 +3127,11 @@ _7z_compression_init_encoder(struct archive_write *a, unsigned compression,
+ 		    &(a->archive), &(zip->stream),
+ 		    compression_level);
+ 		break;
+-	case _7Z_LZMA2:
+-		r = compression_init_encoder_lzma2(
+-		    &(a->archive), &(zip->stream),
+-		    compression_level);
+-		break;
++		case _7Z_LZMA2:
++			r = compression_init_encoder_lzma2(
++			    &(a->archive), &(zip->stream),
++			    compression_level, zip->opt_threads, zip->size_hint);
++			break;
+ 	case _7Z_PPMD:
+ 		r = compression_init_encoder_ppmd(
+ 		    &(a->archive), &(zip->stream),

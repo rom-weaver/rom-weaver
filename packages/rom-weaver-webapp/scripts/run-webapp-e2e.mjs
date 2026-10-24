@@ -8,12 +8,22 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import zlib from "node:zlib";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
+import { chooseFilesByKeyboard, runAccessibleNavigationAudit, tabTo } from "./accessible-navigation-audit.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 import { createGuidedLoadingAudit } from "./guided-loading-audit.mjs";
+import {
+  runChecksumJourney,
+  runCompressExtractRoundtrip,
+  runCreateApplyRoundtrip,
+  runSaveEditorJourney,
+  runTrimJourney,
+} from "./production-workflow-journeys.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
@@ -30,11 +40,14 @@ const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const LINK_AUDIT_WORKFLOW_ROUTES = [
   "",
   "apply-patches",
-  "create-patch",
+  "apply-cheats",
+  "create-rom-patch",
+  "create-rom-cheat-patch",
   "checksum",
   "compress",
   "identify-rom",
   "test-rom",
+  "weave-patches",
   "bundle-patches",
   "extract",
   "trim-rom",
@@ -45,6 +58,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "create",
   "identify",
   "test",
+  "weave",
   "bundle",
   "trim",
   "tools",
@@ -183,9 +197,12 @@ const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
     request.on("error", reject);
   });
 
+// The settings console repeats the phone dock, so the page's own Menu is the one that controls the sheet.
+const PAGE_DOCK_MENU = '.dock-menu[aria-controls="menu-sheet"]';
+
 const openSettingsPanel = async (page) => {
-  // Phones reach Settings through the dock's App button; desktop keeps the header tool.
-  const settings = page.locator(".dock-app:visible, .topbar-tools .settings-tool:visible");
+  // Both layouts keep a Settings tool in the header; phones also list it in Menu.
+  const settings = page.locator(".shell-head-tools .settings-tool:visible, .topbar-tools .settings-tool:visible");
   await settings.first().click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
 };
@@ -245,12 +262,13 @@ const runHydrationAudit = async (createContext, baseUrl) => {
   try {
     for (const testCase of [
       { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
-      { finalView: "creator", initialView: "creator", path: "create-patch/" },
+      { finalView: "creator", initialView: "creator", path: "create-rom-patch/" },
+      { finalView: "creator", initialView: "creator", path: "create-rom-patch?guide=create-cheats" },
       { finalView: "trim", initialView: "trim", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
-      { finalView: "bundle", initialView: "bundle", path: "bundle-patches?guide=bundle" },
+      { finalView: "weave", initialView: "weave", path: "weave-patches?guide=weave" },
     ]) {
       const page = await context.newPage();
       const failures = [];
@@ -586,7 +604,7 @@ export const checkCssCoverage = (entries) => {
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
   // smooth `scrollBy` otherwise glides the page while Playwright is hovering
-  // the bundle download button, and the hover retries "element is not stable"
+  // the weave download button, and the hover retries "element is not stable"
   // until it times out. Chromium only: under the emulation WebKit intermittently
   // serves stale theme colours to axe after a theme flip (`.mode-label` read
   // dark-theme text on a light background), so WebKit keeps its default media.
@@ -619,7 +637,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   /** Menu is the phone's index; the sidebar is always on screen on desktop. */
   const openNav = async () => {
     if (await page.locator(".side-nav:visible").count()) return;
-    if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(".dock-menu").click();
+    // The page's Menu, not the console's copy, which lingers while the console slides out.
+    if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(PAGE_DOCK_MENU).click();
     await page.locator("#menu-sheet:visible").waitFor({ state: "visible" });
   };
   const scanVariants = async (label) => {
@@ -761,8 +780,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
-    await page.locator(".dock-menu").waitFor({ state: "visible" });
-    await page.locator(".dock-app").waitFor({ state: "visible" });
+    await page.locator(PAGE_DOCK_MENU).waitFor({ state: "visible" });
+    await page.locator('.dock-tab[data-mode="identify"]').waitFor({ state: "visible" });
     const docsOpen = page.locator(".docs-bar-open");
     await docsOpen.waitFor({ state: "visible" });
     await docsOpen.click();
@@ -882,7 +901,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
-    await logDialog.locator(".console-close:visible, .dlg-x:visible").click();
+    // A phone closes from the console's dock, where Menu was; desktop from the header.
+    await logDialog.locator(".dock-menu:visible, .dlg-x:visible").click();
 
     await page.locator(".reset-btn:visible").click();
     const resetConfirmation = page.locator(".rw-modal .confirm-card:visible");
@@ -904,7 +924,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const onboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
+    const onboardingChip = page.locator(".sample-tutorial-start .sample-tutorial-start-chip:visible").first();
     await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
     await onboardingChip.click();
     const guidedApply = page.locator(".sample-tutorial-start-primary:visible").first();
@@ -915,16 +935,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // files and moves on by itself once they are in.
     await guidedApply.click();
     await page
-      .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="4"]:not([data-moving])')
+      .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="5"]:not([data-moving])')
       .waitFor({ state: "visible", timeout: 60_000 });
-    await scanVariants("guided Apply 1/4 (waiting for files)");
+    await scanVariants("guided Apply 1/5 (waiting for files)");
     await tutorial.locator(".sample-tutorial-next").click();
-    for (let step = 2; step <= 4; step += 1) {
+    for (let step = 2; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/4`);
-      if (step === 4) {
+      await scanVariants(`guided Apply ${step}/5`);
+      if (step === 5) {
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           page.locator("#rom-weaver-button-apply").click(),
@@ -938,30 +958,30 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
-    await scanGuidedLoading(page, ["first-weave.zip"], "guided Bundle loading (desktop, light)", async () => {
-      await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
-      await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
+    await scanGuidedLoading(page, ["first-weave.zip"], "guided Weave loading (desktop, light)", async () => {
+      await page.goto(new URL("weave-patches?guide=weave", baseUrl).href, { waitUntil: "domcontentloaded" });
+      await page.locator("#rom-weaver-input-file-unified-weave").waitFor({ state: "attached" });
       await installAuditTools();
     });
-    for (let step = 1; step <= 4; step += 1) {
+    for (let step = 1; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Bundle ${step}/4`);
-      if (step === 4) {
-        const createBundleButton = page.locator("#rom-weaver-button-export-bundle:not([data-downloadable])");
-        await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Weave ${step}/5`);
+      if (step === 5) {
+        const createWeaveButton = page.locator("#rom-weaver-button-export-weave:not([data-downloadable])");
+        await createWeaveButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(
           () => {
-            const button = document.getElementById("rom-weaver-button-export-bundle");
+            const button = document.getElementById("rom-weaver-button-export-weave");
             return button instanceof HTMLButtonElement && !button.disabled;
           },
           undefined,
           { timeout: 60_000 },
         );
-        await createBundleButton.click();
-        // The same control turns into the download once the bundle is built.
-        const downloadButton = page.locator("#rom-weaver-button-export-bundle[data-downloadable]");
+        await createWeaveButton.click();
+        // The same control turns into the download once the weave is built.
+        const downloadButton = page.locator("#rom-weaver-button-export-weave[data-downloadable]");
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
         // Stability first: the guide re-anchors (and may scroll) while the
         // control settles from Create into Download, and hovering during that
@@ -975,7 +995,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           downloadButton.click(),
         ]);
         if (!download.suggestedFilename().endsWith(".zip")) {
-          throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+          throw new Error(`guided Weave downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
       } else {
         await tutorial.locator(".sample-tutorial-next").click();
@@ -1011,7 +1031,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await setTheme("light");
     await openNav();
     await navRow("creator").click();
-    const createOnboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
+    const createOnboardingChip = page.locator(".sample-tutorial-start .sample-tutorial-start-chip:visible").first();
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
     const guidedCreate = page.locator(".sample-tutorial-start-primary:visible").first();
@@ -1022,13 +1042,29 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       "guided Create loading (desktop, light)",
       () => guidedCreate.click(),
     );
-    for (let step = 1; step <= 6; step += 1) {
+    for (let step = 1; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="6"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Create ${step}/6`);
-      if (step === 6) {
-        await page.locator("#patch-builder-button-create").click();
+      await scanVariants(`guided Create ${step}/5`);
+      if (step === 5) {
+        // The guide ends on the click, before the asynchronous create/compress
+        // run finishes. Keep its document alive until the patch has downloaded;
+        // navigation would otherwise invalidate WebKit's in-flight OPFS reads.
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+          page.locator("#patch-builder-button-create").click(),
+        ]);
+        // Create downloads the bare patch by default; ZIP is an opt-in in Options.
+        if (!download.suggestedFilename().endsWith(".bps")) {
+          throw new Error(`guided Create downloaded ${download.suggestedFilename()}; expected a bare .bps`);
+        }
+        const downloadPath = await download.path();
+        if (!downloadPath) throw new Error(`guided Create download failed: ${await download.failure()}`);
+        const bytes = fs.readFileSync(downloadPath);
+        if (!bytes.subarray(0, 4).equals(Buffer.from("BPS1"))) {
+          throw new Error("guided Create download is not a bare BPS patch");
+        }
       } else {
         await tutorial.locator(".sample-tutorial-next").click();
       }
@@ -1075,9 +1111,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
             ?.flatMap((value) => (URL.canParse(value) ? [new URL(value).origin] : [])),
         );
         const countBlocksNaming = (origin) => origins.filter((block) => block?.includes(origin)).length;
+        const anchorOrigins = [...document.querySelectorAll(".docs-article a[href]")].map((link) =>
+          URL.canParse(link.href) ? new URL(link.href).origin : "",
+        );
         return {
           local: countBlocksNaming(location.origin),
           production: countBlocksNaming(productionOrigin),
+          productionLinks: anchorOrigins.filter((origin) => origin === productionOrigin).length,
         };
       }, SITE_ORIGIN);
       assertNoProductionDocsSamples(samples, slug);
@@ -1137,6 +1177,8 @@ export const assertSingleDocsHeading = (headingCount, slug) => {
 // assertSingleDocsHeading above.
 export const assertNoProductionDocsSamples = (samples, slug) => {
   if (samples.production) throw new Error(`${slug} still downloads ${samples.production} sample(s) from production`);
+  if (samples.productionLinks)
+    throw new Error(`${slug} still links to production from ${samples.productionLinks} anchor(s)`);
 };
 
 // Pure half of createWorkerReuseCorpus's manifest.json: the one deterministic
@@ -1180,6 +1222,247 @@ const configureUncompressedOutput = async (page) => {
   await page.locator(".settings-actions .btn.primary:visible").click();
 };
 
+const buildPpfUndoPatch = (records, undo = true) => {
+  const header = Buffer.alloc(60);
+  header.write("PPF30", 0, "ascii");
+  header[5] = 2;
+  header.write("Browser undo journey", 6, "ascii");
+  header[58] = Number(undo);
+  return Buffer.concat([
+    header,
+    ...records.map(({ offset, data, original }) => {
+      const recordHeader = Buffer.alloc(9);
+      recordHeader.writeBigUInt64LE(BigInt(offset));
+      recordHeader[8] = data.length;
+      return Buffer.concat([recordHeader, Buffer.from(data), ...(undo ? [Buffer.from(original)] : [])]);
+    }),
+  ]);
+};
+
+const buildUndoJourneyZip = (entries) => {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [fileName, bytes] of entries) {
+    const name = Buffer.from(fileName);
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+    crc = (crc ^ 0xffffffff) >>> 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(bytes.length, 18);
+    local.writeUInt32LE(bytes.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, bytes);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(bytes.length, 20);
+    central.writeUInt32LE(bytes.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, name);
+    offset += local.length + name.length + bytes.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+};
+
+const readUndoJourneyZip = (bytes) => {
+  const entries = new Map();
+  let offset = bytes.readUInt32LE(bytes.length - 6);
+  const count = bytes.readUInt16LE(bytes.length - 12);
+  for (let index = 0; index < count; index += 1) {
+    if (bytes.readUInt32LE(offset) !== 0x02014b50) throw new Error("PPF Undo: invalid ZIP directory");
+    const size = bytes.readUInt32LE(offset + 20);
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const name = bytes.subarray(offset + 46, offset + 46 + nameLength).toString();
+    const localOffset = bytes.readUInt32LE(offset + 42);
+    const payloadOffset =
+      localOffset + 30 + bytes.readUInt16LE(localOffset + 26) + bytes.readUInt16LE(localOffset + 28);
+    const payload = bytes.subarray(payloadOffset, payloadOffset + size);
+    const method = bytes.readUInt16LE(offset + 10);
+    if (method !== 0 && method !== 8) throw new Error(`PPF Undo: unsupported ZIP fixture method ${method}`);
+    entries.set(name, method === 8 ? zlib.inflateRawSync(payload) : payload);
+    offset += 46 + nameLength + bytes.readUInt16LE(offset + 30) + bytes.readUInt16LE(offset + 32);
+  }
+  return entries;
+};
+
+const runPpfUndoJourney = async (createContext, baseUrl) => {
+  const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const failures = [];
+  const downloads = [];
+  page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  page.on("download", (download) => downloads.push(download));
+  const original = Buffer.from("abcdefghijklmnop");
+  const patched = Buffer.from("abXY123hijklmnop");
+  const records = [
+    { offset: 2, data: "XYZW", original: "cdef" },
+    { offset: 4, data: "123", original: "ZWg" },
+  ];
+  const validPatch = buildPpfUndoPatch(records);
+  const patchFile = (buffer, name) => ({ buffer, mimeType: "application/octet-stream", name });
+  try {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    const nav = page.locator("#tab-ppf-undo");
+    await nav.waitFor({ state: "visible" });
+    if (await nav.locator(".nav-beta").count()) throw new Error("PPF Undo navigation still has a beta chip");
+    await nav.click();
+    const picker = page.locator("#ppf-undo-input-picker");
+    await picker.waitFor({ state: "attached" });
+    await picker.setInputFiles([patchFile(patched, "patched.bin"), patchFile(validPatch, "overlapping.ppf")]);
+    const restore = page.getByRole("button", { name: "Restore original ROM", exact: true });
+    await page.locator("#ppf-undo-output-compression").selectOption("none");
+    const restoreAndCheck = async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+        restore.click(),
+      ]);
+      const downloadPath = await download.path();
+      if (!downloadPath) throw new Error("PPF Undo: Playwright did not expose the downloaded file");
+      if (!fs.readFileSync(downloadPath).equals(original)) {
+        throw new Error("PPF Undo: restored ROM differs from the original bytes");
+      }
+      if (download.suggestedFilename() !== "patched-restored.bin") {
+        throw new Error(`PPF Undo: unexpected output filename ${download.suggestedFilename()}`);
+      }
+      await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).waitFor();
+    };
+    await restoreAndCheck();
+    for (const { buffer, name, error } of [
+      {
+        buffer: buildPpfUndoPatch(records, false),
+        name: "no-undo.ppf",
+        error: "PPF patch does not contain complete undo data",
+      },
+      {
+        buffer: buildPpfUndoPatch([...records, { offset: original.length, data: "X", original: "a" }]),
+        name: "out-of-bounds.ppf",
+        error: "PPF undo data exceeds ROM bounds",
+      },
+    ]) {
+      await picker.setInputFiles(patchFile(buffer, name));
+      const previousDownloads = downloads.length;
+      await restore.click();
+      await page.locator("#ppf-undo-container").getByRole("alert").filter({ hasText: error }).waitFor({
+        timeout: DOWNLOAD_TIMEOUT_MS,
+      });
+      await restore.waitFor({ state: "visible" });
+      if (downloads.length !== previousDownloads) throw new Error(`PPF Undo: ${name} triggered a download`);
+      if (await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).count()) {
+        throw new Error(`PPF Undo: ${name} left a downloadable output`);
+      }
+      await picker.setInputFiles(patchFile(validPatch, "overlapping.ppf"));
+      await page.locator("#ppf-undo-container").getByRole("alert").waitFor({ state: "hidden" });
+      await restoreAndCheck();
+    }
+    if (downloads.length !== 3) throw new Error(`PPF Undo: expected 3 downloads, got ${downloads.length}`);
+    await picker.setInputFiles(
+      patchFile(
+        buildUndoJourneyZip([
+          ["patched.bin", patched],
+          ["overlapping.ppf", validPatch],
+          ["ignored.ips", Buffer.from("PATCHEOF")],
+        ]),
+        "undo-inputs.zip",
+      ),
+    );
+    await page.locator("#ppf-undo-container").getByRole("status").filter({ hasText: "Ignored ignored.ips" }).waitFor();
+    await restoreAndCheck();
+    await page.locator("#ppf-undo-output-compression").selectOption("zip");
+    const [compressed] = await Promise.all([
+      page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+      restore.click(),
+    ]);
+    const compressedPath = await compressed.path();
+    if (
+      !(
+        compressedPath &&
+        [...readUndoJourneyZip(fs.readFileSync(compressedPath)).values()].some((bytes) => bytes.equals(original))
+      )
+    ) {
+      throw new Error("PPF Undo: ZIP output did not contain the original ROM bytes");
+    }
+    if (compressed.suggestedFilename() !== "patched-restored.zip")
+      throw new Error("PPF Undo: unexpected ZIP output name");
+    await picker.setInputFiles(patchFile(Buffer.from("PATCHEOF"), "unsupported.ips"));
+    await page.locator("#ppf-undo-container").getByRole("alert").filter({ hasText: "No valid PPF patch" }).waitFor();
+    if (!(await restore.isDisabled())) throw new Error("PPF Undo: unsupported patch left the prior patch runnable");
+    await picker.setInputFiles(patchFile(validPatch, "replacement.ppf"));
+    await page.locator("#ppf-undo-container").getByRole("alert").waitFor({ state: "hidden" });
+    await page.locator("#ppf-undo-output-compression").selectOption("none");
+    await restoreAndCheck();
+    const originalDisc = Buffer.alloc(2352 * 16);
+    original.copy(originalDisc);
+    const patchedDisc = Buffer.from(originalDisc);
+    patched.copy(patchedDisc);
+    const cue = Buffer.from('FILE "track.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n');
+    const restoreDiscAndCheck = async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+        restore.click(),
+      ]);
+      const downloadPath = await download.path();
+      if (!downloadPath) throw new Error("PPF Undo: missing disc download");
+      const entries = readUndoJourneyZip(fs.readFileSync(downloadPath));
+      if (
+        !(
+          entries.get("track.bin")?.equals(originalDisc) &&
+          [...entries.entries()].some(([name, bytes]) => name.endsWith(".cue") && bytes.equals(cue))
+        )
+      ) {
+        throw new Error("PPF Undo: disc download did not preserve the restored track and sheet");
+      }
+    };
+    await picker.setInputFiles(
+      patchFile(
+        buildUndoJourneyZip([
+          ["disc.cue", cue],
+          ["track.bin", patchedDisc],
+          ["extra.bin", Buffer.from("extra")],
+          ["disc.ppf", validPatch],
+          ["alternative.ppf", validPatch],
+        ]),
+        "disc.zip",
+      ),
+    );
+    const selection = page.locator(".rw-modal.select-modal .seltree");
+    await selection.getByRole("button").filter({ hasText: "track.bin" }).click();
+    await selection.getByRole("button").filter({ hasText: "disc.ppf" }).click();
+    await page
+      .locator("#ppf-undo-container")
+      .getByRole("status")
+      .filter({ hasText: "Choose one patched ROM" })
+      .waitFor();
+    await restoreDiscAndCheck();
+    await picker.setInputFiles([
+      patchFile(cue, "disc.cue"),
+      patchFile(patchedDisc, "track.bin"),
+      patchFile(validPatch, "disc.ppf"),
+    ]);
+    await restoreDiscAndCheck();
+    if (failures.length) throw new Error(`PPF Undo: uncaught page error\n${failures.join("\n")}`);
+    process.stdout.write("PASS PPF Undo (overlapping records, validation errors, replacement recovery)\n");
+  } finally {
+    await context.close();
+  }
+};
+
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   const page = await context.newPage();
@@ -1189,9 +1472,11 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await configureUncompressedOutput(page);
-    await page
-      .locator("#rom-weaver-input-file-unified")
-      .setInputFiles(fixtureNames.map((fixture) => path.join(FIXTURE_DIR, fixture)));
+    await chooseFilesByKeyboard(
+      page,
+      page.locator("#rom-weaver-input-file-unified"),
+      fixtureNames.map((fixture) => path.join(FIXTURE_DIR, fixture)),
+    );
 
     const apply = page.locator("#rom-weaver-button-apply");
     await apply.waitFor({ state: "visible" });
@@ -1201,9 +1486,10 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
       return button instanceof HTMLButtonElement && !button.disabled && /apply/i.test(button.textContent || "");
     });
 
+    await tabTo(page, apply);
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
-      apply.click(),
+      page.keyboard.press("Enter"),
     ]);
     const downloadPath = await download.path();
     if (!downloadPath) throw new Error(`${name}: Playwright did not expose the downloaded file`);
@@ -1361,6 +1647,9 @@ const main = async () => {
         }
       });
     if (RUN_AUDITS) {
+      await scenario("accessible navigation", (createContext) =>
+        runAccessibleNavigationAudit(createContext, previewBaseUrl),
+      );
       await runAuditPhases(
         () => scenario("hydration", (createContext) => runHydrationAudit(createContext, previewBaseUrl)),
         () => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, previewBaseUrl)),
@@ -1369,11 +1658,27 @@ const main = async () => {
     }
     if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
     if (RUN_RAW_JOURNEY) {
+      await scenario("Create/Apply/Weave byte roundtrips", (createContext) =>
+        runCreateApplyRoundtrip(createContext, previewBaseUrl, configureUncompressedOutput),
+      );
+      await scenario("checksum/comparison/recovery", (createContext) =>
+        runChecksumJourney(createContext, previewBaseUrl),
+      );
+      await scenario("Compress/Extract ZIP roundtrip/recovery", (createContext) =>
+        runCompressExtractRoundtrip(createContext, previewBaseUrl),
+      );
+      await scenario("Trim NDS exact extent", (createContext) =>
+        runTrimJourney(createContext, previewBaseUrl, configureUncompressedOutput),
+      );
+      await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
       await scenario("raw apply/download", (createContext) =>
         runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",
           "archive_sources/change.ips",
         ]),
+      );
+      await scenario("Save Editor exact edit/reopen", (createContext) =>
+        runSaveEditorJourney(createContext, previewBaseUrl),
       );
     }
     if (RUN_ARCHIVE_JOURNEY) {
@@ -1414,7 +1719,7 @@ export const runE2EScenario = async (name, run, report = (line) => process.stdou
         /browser has been closed|browser.*disconnected|Target crashed|ECONNRESET|ECONNREFUSED|net::ERR_CONNECTION_(?:RESET|CLOSED)/i.test(
           message,
         );
-      report(`FAIL ${name} attempt=${attempt}: ${error?.stack || message}`);
+      report(`FAIL ${name} attempt=${attempt}: ${inspect(error, { colors: false, depth: null })}`);
       if (attempt === E2E_ATTEMPTS || !infrastructureFailure) throw error;
       report(`RETRY ${name} with a fresh browser`);
     } finally {
@@ -1445,7 +1750,7 @@ const run = async () => {
 // pure helpers and must not trigger a full browser E2E run as a side effect.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   run().catch((error) => {
-    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.stderr.write(`${inspect(error, { colors: false, depth: null })}\n`);
     process.exitCode = 1;
   });
 }

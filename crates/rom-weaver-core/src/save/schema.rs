@@ -32,6 +32,28 @@ use super::{
 };
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
+/// CRC-32/ISO-HDLC (init and xorout `0xffffffff`, reflected `0xedb88320`).
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = flate2::Crc::new();
+    crc.update(bytes);
+    crc.sum()
+}
+
+/// CRC-16/CCITT-FALSE (init `0xffff`, poly `0x1021`, no reflection).
+fn crc16_ccitt_false(bytes: impl IntoIterator<Item = u8>) -> u16 {
+    bytes.into_iter().fold(0xffffu16, |mut crc, byte| {
+        crc ^= u16::from(byte) << 8;
+        for _ in 0..8 {
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
+        }
+        crc
+    })
+}
+
 const MAX_FIELDS: usize = 4096;
 const MAX_COMPONENTS: usize = 4096;
 const MAX_INTEGRITY_BYTES: usize = 64 * 1024 * 1024;
@@ -1443,19 +1465,7 @@ impl Checksum {
                 })
         });
         if matches!(self.algorithm, ChecksumAlgorithm::Crc16CcittFalseLe) {
-            return input
-                .fold(0xffffu16, |mut crc, byte| {
-                    crc ^= u16::from(byte) << 8;
-                    for _ in 0..8 {
-                        crc = if crc & 0x8000 != 0 {
-                            (crc << 1) ^ 0x1021
-                        } else {
-                            crc << 1
-                        };
-                    }
-                    crc
-                })
-                .into();
+            return crc16_ccitt_false(input).into();
         }
         if matches!(self.algorithm, ChecksumAlgorithm::Sum8Mod255Complement) {
             return input.fold(0u32, |sum, byte| (sum + u32::from(byte)) % 255) ^ 255;

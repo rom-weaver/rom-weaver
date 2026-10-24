@@ -77,6 +77,46 @@ pub fn remove_in_progress_outputs() {
     }
 }
 
+fn live_temp_dirs() -> &'static Mutex<Vec<std::path::PathBuf>> {
+    static PATHS: OnceLock<Mutex<Vec<std::path::PathBuf>>> = OnceLock::new();
+    PATHS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Track a temp directory or file owned by a live guard (`TempPathAllocator`, staging dir, stdin spool), so a process that must leave
+/// without running destructors (a forced second Ctrl-C) can still remove it. Native only.
+pub fn register_live_temp_dir(path: &std::path::Path) {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    if let Ok(mut paths) = live_temp_dirs().lock() {
+        paths.push(path.to_path_buf());
+    }
+}
+
+/// Stop tracking a temp directory or file once its owner has removed it itself. Call this after the removal, not before, so a
+/// forced exit during a slow removal still finds the path in `remove_live_temp_dirs`.
+pub fn unregister_live_temp_dir(path: &std::path::Path) {
+    if let Ok(mut paths) = live_temp_dirs().lock() {
+        paths.retain(|registered| registered != path);
+    }
+}
+
+/// Remove every tracked temp path. Called right before the process exits without
+/// unwinding, since `Drop` will not run then.
+pub fn remove_live_temp_dirs() {
+    let Ok(mut paths) = live_temp_dirs().lock() else {
+        return;
+    };
+    for path in paths.drain(..) {
+        // Entries are directories (allocators, staging) or single files (stdin spool).
+        if path.is_dir() {
+            let _ = std::fs::remove_dir_all(&path);
+        } else {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 /// Forget the registered outputs; the run finished and they are real files now.
 pub fn clear_in_progress_outputs() {
     if let Ok(mut paths) = in_progress_outputs().lock() {

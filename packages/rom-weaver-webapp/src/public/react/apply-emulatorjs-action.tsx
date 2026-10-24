@@ -51,7 +51,11 @@ export const EmulatorJsAction = ({
           retained = getApplyEntry(fileName) || getApplyEntry();
         }
         if (!retained?.checksum) throw new Error(localizer.message("ui.apply.emulator.missingChecksum"));
-        const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum, fileName: retained.fileName });
+        const { gameName } = createEmulatorGameIdentity({
+          checksum: retained.checksum,
+          core: retained.core,
+          fileName: retained.fileName,
+        });
         prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
         requestEmulatorStartFromUserAction(gameName);

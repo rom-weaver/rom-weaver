@@ -1,6 +1,6 @@
 # rom-weaver documentation
 
-rom-weaver changes, checks, compresses, and tests game files you already have. Your files stay on your device.
+rom-weaver applies BPS, IPS, UPS, and xdelta ROM patches, converts discs to and from CHD and RVZ, compresses 3DS ROMs to Z3DS, identifies ROMs, and tests games you already have. Your files stay on your device.
 
 [What rom-weaver supports](reference/features.md) explains every feature in plain words, with links to exact support limits.
 
@@ -33,23 +33,25 @@ Start in the browser. No account, installation, or commercial game is needed for
 
 Prefer the terminal? Start with [Install the CLI](how-to/install-cli.md), then [your first CLI apply](tutorials/cli-first-weave.md).
 
-Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
+Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-rom-patch?guide=create), [Weave](https://rom-weaver.com/weave-patches?guide=weave), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-rom-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
 
 ## Choose a task
 
 | I want to… | Browser guide |
 | --- | --- |
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
-| Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
-| Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
+| Add a patch recipe to my release page | [Add an Apply button](hosting/webapp-integration.md#add-an-apply-button) |
+| Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [weave a recipe](how-to/create-bundles.md) |
+| Find which game or revision a file contains | [Identify a ROM by checksum](how-to/identify-roms-browser.md) |
+| Find a ROM from an existing CRC32, MD5, or SHA-1 hash | [Search ROM checksums](how-to/search-rom-checksums-browser.md) |
 | Check a file against an expected checksum | [Checksum a file](how-to/checksum-roms-browser.md) |
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
-| Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
-| Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
-| Convert CHD to ISO or BIN/CUE | [Extract a disc from CHD](how-to/extract-files-browser.md#convert-chd-to-iso-or-bincue) |
-| Compress a GameCube or Wii ISO | [Convert ISO to RVZ](how-to/convert-to-rvz-browser.md) |
+| Decompress RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
+| Compress ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
+| Decompress CHD to ISO, BIN/CUE, or GDI | [Extract a disc from CHD](how-to/extract-chd-browser.md) |
+| Compress a GameCube or Wii ISO | [Compress ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
 | Use cheat codes | [Add cheats](how-to/use-browser-cheats.md) |
@@ -65,7 +67,8 @@ For terminal equivalents and availability limits, use the [feature map](referenc
 Guided practice runs. Follow them start to finish; everything you need is supplied.
 
 - [Your first patch in the browser](tutorials/first-patch.md): patch a homebrew ROM and verify the result byte for byte.
-- [Your first apply in the terminal](tutorials/cli-first-weave.md): the same job, plus creating and bundling a patch, from a command line.
+- [Patch a compressed CHD disc](tutorials/patch-compressed-disc.md): apply two supplied patches and verify the decompressed result.
+- [Your first apply in the terminal](tutorials/cli-first-weave.md): the same job, plus creating a patch and a weave, from a command line.
 
 ## How-to guides
 
@@ -73,23 +76,27 @@ Procedures for specific tasks.
 
 ### In the browser
 
+- [Add an Apply button to a release](hosting/webapp-integration.md#add-an-apply-button)
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
+- [Convert BPS to IPS and other patch formats](how-to/convert-patch-format-browser.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
-- [Create and share a patch bundle](how-to/create-bundles.md)
-- [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Share multiple ROM patches as one weave](how-to/create-bundles.md)
+- [Identify a ROM by checksum](how-to/identify-roms-browser.md)
+- [Search ROM checksums](how-to/search-rom-checksums-browser.md)
 - [Checksum a file](how-to/checksum-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
-- [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
-- [Convert ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
-- [Convert GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
-- [Compress Nintendo 3DS ROMs to Z3DS](how-to/convert-to-z3ds-browser.md)
-- [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files](how-to/extract-z3ds-browser.md)
+- [Decompress RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
+- [Decompress CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md)
+- [Compress ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
+- [Compress GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
+- [Compress 3DS ROMs to Z3DS or ZCCI](how-to/convert-to-z3ds-browser.md)
+- [Decompress Z3DS or ZCCI to CCI](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
-- [Test a ROM in the browser](how-to/test-roms-in-browser.md)
-- [Fix a checksum error](how-to/fix-checksum-errors.md)
+- [Use the online ROM tester](how-to/test-roms-in-browser.md)
+- [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md)
 - [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
 - [Settings, beta tools, and offline use](how-to/browser-settings.md)
@@ -101,7 +108,7 @@ Procedures for specific tasks.
 - [Verify a download](how-to/verify-downloads.md)
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
-- [Bundles from the CLI](how-to/cli-bundles.md)
+- [Weaves from the CLI](how-to/cli-bundles.md)
 - [Identify and hash files](how-to/identify-and-hash-files.md)
 - [Bake cheat codes into a ROM](how-to/bake-cheat-codes.md)
 - [Edit a game save from the CLI](how-to/cli-save.md)
@@ -113,7 +120,7 @@ Procedures for specific tasks.
 ### Deploying and integrating
 
 - [Self-hosting](hosting/self-hosting.md): Docker, static deployment, reverse proxies, subpaths, HTTPS, and COOP/COEP.
-- [Webapp integration](hosting/webapp-integration.md): preload `?bundle=...` and `?rom=...&patch=...` URLs, or feed same-origin OPFS files into the pipeline.
+- [Webapp integration](hosting/webapp-integration.md): preload `?weave=...` and `?rom=...&patch=...` URLs, or feed same-origin OPFS files into the pipeline.
 - [Hosted deployment channels](development/ci.md#deploy-channels): production, beta, nightly, and pull-request previews.
 
 ## Reference
@@ -127,7 +134,7 @@ Facts to look up. No advice, no steps.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
-- [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v2.schema.json): the machine-readable bundle format.
+- [`rom-weaver-weave.json` schema](rom-weaver-weave-v2.schema.json): the machine-readable weave format.
 - [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
 - [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
 
@@ -138,17 +145,18 @@ Background on the engine, formats, and design decisions.
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
 - [ROM cheats](explanation/rom-cheats.md): why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
-- [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
+- [BPS vs IPS, UPS, xdelta and PPF](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
-- [What a bundle is](explanation/bundles.md): the portable patch recipe.
+- [What a weave is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
 - [Where identify data comes from](explanation/identify-sources.md): Libretro metadata, OpenGood fallback records, and local lookup.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
-- [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
+- [ROM patcher comparison](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 
 ## Quick answers
 
 - [FAQ](faq.md): common questions, each pointing at the page that owns the answer.
+- [About](legal/about.md): who makes rom-weaver, its licence, and what it is built on.
 - [Privacy](legal/privacy.md): browser storage, logs, analytics, and network requests.
 - [Notices](https://rom-weaver.com/docs/notices): licensing and third-party components.
 
@@ -159,7 +167,7 @@ Background on the engine, formats, and design decisions.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
 - [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
-- [References](development/references.md): format specifications and upstream reference implementations.
+- [ROM patch and disc format specifications](development/references.md): format specifications and upstream reference implementations.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).
 - [Commit conventions](development/commits.md) and the [release guide](../.github/RELEASING.md).

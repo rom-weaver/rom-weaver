@@ -42,10 +42,12 @@ type UnifiedDropZoneProps = {
   /** Full per-bucket extension support for the format disclosure and input help. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
-  lead?: { line1: MessageId; line2: MessageId; description: MessageId };
+  lead?: { line1: MessageId; description: MessageId };
+  /** Renders the lead as the page's h1; a hidden sibling form turns it off so the page keeps one. */
+  heading?: boolean;
   /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
   guide?: WorkflowGuide;
-  /** Onboarding control (the "New here?" beacon) that leads the empty-state help row. */
+  /** Onboarding control (the per-page sample link) that leads the empty-state help row. */
   onboarding?: ReactNode;
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
@@ -86,10 +88,11 @@ const UnifiedDropZone = ({
   beforeDropZone,
   guide,
   headerExtra,
+  heading = true,
   heroLabel,
   heroLabelCoarse,
   info,
-  lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2", description: "ui.hero.applyDescription" },
+  lead = { line1: "ui.hero.thesis", description: "ui.hero.applyDescription" },
   multiple = true,
   num = "0x01",
   onBrowseStart,
@@ -150,6 +153,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title ?? localizer.message("ui.drop.inputs")}
     >
+      {heading ? <h1 className="sr-only">{localizer.message(lead.line1)}</h1> : null}
       {beforeDropZone}
       <DropZone
         {...dropZoneProps}

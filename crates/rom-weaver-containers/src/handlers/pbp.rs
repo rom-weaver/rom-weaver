@@ -38,6 +38,9 @@ struct PbpDiscEntry {
 
 #[derive(Clone, Debug)]
 struct PbpArchive {
+    /// False for a PBP whose `DATA.PSAR` section is empty (PSP homebrew `EBOOT.PBP`): it is
+    /// itself the executable and has no disc to extract.
+    has_psar: bool,
     discs: Vec<PbpDiscEntry>,
 }
 
@@ -99,6 +102,17 @@ impl PbpContainerHandler {
         }
 
         let psar_offset = self.parse_psar_offset(source, &mut file, file_size)?;
+        if psar_offset == file_size {
+            debug!(
+                source = %source.display(),
+                psar_offset,
+                "pbp has an empty DATA.PSAR section (self-contained PSP executable)"
+            );
+            return Ok(PbpArchive {
+                has_psar: false,
+                discs: Vec::new(),
+            });
+        }
         let disc_offsets = self.parse_disc_offsets(source, &mut file, psar_offset, file_size)?;
         let mut discs = Vec::with_capacity(disc_offsets.len());
         for (index, disc_offset) in disc_offsets.into_iter().enumerate() {
@@ -116,7 +130,20 @@ impl PbpContainerHandler {
                 source.display()
             )));
         }
-        Ok(PbpArchive { discs })
+        Ok(PbpArchive {
+            has_psar: true,
+            discs,
+        })
+    }
+
+    fn ensure_has_psar(source: &Path, archive: &PbpArchive) -> Result<()> {
+        if archive.has_psar {
+            return Ok(());
+        }
+        Err(RomWeaverError::Validation(format!(
+            "pbp source `{}` has an empty DATA.PSAR, so it is a self-contained PSP executable with no disc to extract",
+            source.display()
+        )))
     }
 
     fn parse_psar_offset(&self, source: &Path, file: &mut File, file_size: u64) -> Result<u64> {
@@ -165,12 +192,8 @@ impl PbpContainerHandler {
             header[Self::PSAR_INDEX_FIELD_OFFSET + 2],
             header[Self::PSAR_INDEX_FIELD_OFFSET + 3],
         ]) as u64;
-        if psar_offset >= file_size {
-            return Err(RomWeaverError::Validation(format!(
-                "source `{}` has an invalid DATA.PSAR offset ({psar_offset:#X})",
-                source.display()
-            )));
-        }
+        // The section loop above already rejected an offset past the end of the file. An offset
+        // equal to the file size is an empty DATA.PSAR section, handled by `parse_archive`.
         Ok(psar_offset)
     }
 
@@ -817,6 +840,11 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         }
     }
 
+    fn is_self_contained_rom(&self, source: &Path) -> bool {
+        self.parse_archive(source)
+            .is_ok_and(|archive| !archive.has_psar)
+    }
+
     fn probe_details(
         &self,
         request: &ContainerProbeRequest,
@@ -824,6 +852,17 @@ impl ContainerHandlerOperations for PbpContainerHandler {
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let archive = self.parse_archive(&request.source)?;
+        if !archive.has_psar {
+            return Ok(OperationReport::succeeded(
+                OperationFamily::Container,
+                Some(PBP.name.to_string()),
+                "probe",
+                "pbp: empty DATA.PSAR; self-contained PSP executable with no disc to extract"
+                    .to_string(),
+                Some(100.0),
+                Some(execution),
+            ));
+        }
         let disc_count = archive.discs.len();
         let total_tracks = archive
             .discs
@@ -856,6 +895,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         _context: &OperationContext,
     ) -> Result<Vec<String>> {
         let archive = self.parse_archive(&request.source)?;
+        Self::ensure_has_psar(&request.source, &archive)?;
         let outputs = self.build_disc_outputs(&request.source, archive.discs.len());
         let mut entries = Vec::with_capacity(outputs.len() * 2);
         for output in outputs {
@@ -871,6 +911,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let archive = self.parse_archive(&request.source)?;
+        Self::ensure_has_psar(&request.source, &archive)?;
         let outputs = self.build_disc_outputs(&request.source, archive.discs.len());
         fs::create_dir_all(&request.out_dir)?;
 

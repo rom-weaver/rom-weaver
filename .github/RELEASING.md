@@ -102,7 +102,7 @@ DNS lives in the same Cloudflare account, so adding a custom domain to a Pages p
 
 The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so it works unchanged at an apex domain, a project subpath, or the Forgejo mirror.
 
-One value is **not** relative: each bundle schema's `$id` points at its public GitHub raw-content URL. The constants in `crates/rom-weaver-cli/src/bundle_schema.rs` mirror those URLs, and unit tests assert that they match. Custom `$schema` values are preserved verbatim. A v1-to-v2 upgrade replaces the official v1 URL with the official v2 URL. Treat each new bundle version as a new schema file. Never change an existing schema's identity.
+One value is **not** relative: each weave schema's `$id` points at its public GitHub raw-content URL. The constants in `crates/rom-weaver-cli/src/weave_schema.rs` mirror those URLs, and unit tests assert that they match. Custom `$schema` values are preserved verbatim. A v1-to-v2 upgrade replaces the official v1 URL with the official v2 URL. Treat each new weave version as a new schema file. Never change an existing schema's identity.
 
 Cloudflare Pages reads the generated `dist/_headers` file. It applies the COOP/COEP headers on the first response, blocks indexing outside production, caches content-hashed assets, and keeps the service worker revalidating. The service worker in `packages/rom-weaver-webapp/src/webapp/rom-weaver-service-worker.ts` remains the fallback for hosts that cannot set response headers and chooses the compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
 

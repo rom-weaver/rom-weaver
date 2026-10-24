@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { SaveEditor } from "../../../src/webapp/components/save-editor.tsx";
 
 const {
@@ -151,9 +153,18 @@ beforeEach(() => {
     },
   });
   inspectSave.mockResolvedValue(documentResult([textField(), moneyField()]));
-  previewSaveFields.mockResolvedValue({ preview: { changed: true, changes: [{ field: "money" }] } });
+  previewSaveFields.mockResolvedValue({
+    preview: { changed: true, changes: [{ field: "money" }] },
+  });
   setSaveFields.mockResolvedValue({
-    output: { dispose: vi.fn(), fileName: "edited.sav", path: "/work/edited.sav", saveAs: vi.fn(), size: 10, vfs: {} },
+    output: {
+      dispose: vi.fn(),
+      fileName: "edited.sav",
+      path: "/work/edited.sav",
+      saveAs: vi.fn(),
+      size: 10,
+      vfs: {},
+    },
   });
   replaceEmulatorSaveSram.mockImplementation(async (gameId: string, data: Uint8Array) => ({
     gameId,
@@ -251,6 +262,96 @@ describe("SaveEditor", () => {
     );
   });
 
+  const mockMarioAndZelda = () => {
+    listSaveGames.mockResolvedValueOnce({
+      games: [
+        {
+          identity: { id: "super-mario-world", name: "Super Mario World" },
+          supported_save_sizes: [2048],
+        },
+        {
+          identity: { id: "super-mario-world-schema", name: "Super Mario World (File 1 schema)" },
+          supported_save_sizes: [2048],
+        },
+        {
+          identity: { id: "zelda-a-link-to-the-past", name: "Zelda" },
+          supported_save_sizes: [8192],
+        },
+      ],
+      generationGames: ["super-mario-world", "super-mario-world-schema", "zelda-a-link-to-the-past"],
+    });
+    inspectSave.mockResolvedValue(documentResult([textField()]));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    return waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+  };
+
+  it("lists one entry per game and creates the all-files save by default", async () => {
+    await mockMarioAndZelda();
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Super Mario World",
+      "Zelda",
+      "All files",
+      "File 1 only",
+    ]);
+    expect(document.body.textContent).not.toMatch(/schema/i);
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "super-mario-world" }));
+  });
+
+  it("creates the File 1 profile when File 1 only is chosen and hides the choice for other games", async () => {
+    await mockMarioAndZelda();
+    fireEvent.change(screen.getByLabelText("Files to edit"), { target: { value: "file-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "super-mario-world-schema" }));
+  });
+
+  it("offers no file choice for a game without a File 1 profile", async () => {
+    await mockMarioAndZelda();
+    fireEvent.change(screen.getByLabelText("Game for the new save"), {
+      target: { value: "zelda-a-link-to-the-past" },
+    });
+    expect(screen.queryByLabelText("Files to edit")).toBeNull();
+  });
+
+  it("returns to All files when the game changes", async () => {
+    await mockMarioAndZelda();
+    fireEvent.change(screen.getByLabelText("Files to edit"), { target: { value: "file-1" } });
+    fireEvent.change(screen.getByLabelText("Game for the new save"), {
+      target: { value: "zelda-a-link-to-the-past" },
+    });
+    fireEvent.change(screen.getByLabelText("Game for the new save"), {
+      target: { value: "super-mario-world" },
+    });
+    expect((screen.getByLabelText("Files to edit") as HTMLSelectElement).value).toBe("all");
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "super-mario-world" }));
+  });
+
+  it("keeps a File 1 profile without an all-files twin under the game's name", async () => {
+    listSaveGames.mockResolvedValueOnce({
+      games: [
+        {
+          identity: { id: "lonely-schema", name: "Lonely Game (File 1 schema)" },
+          supported_save_sizes: [2048],
+        },
+      ],
+      generationGames: ["lonely-schema"],
+    });
+    inspectSave.mockResolvedValue(documentResult([textField()]));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Lonely Game"]);
+    expect(screen.queryByLabelText("Files to edit")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "lonely-schema" }));
+  });
+
   it("shows only editable properties for a fresh save", async () => {
     inspectSave.mockResolvedValueOnce({
       document: {
@@ -301,6 +402,30 @@ describe("SaveEditor", () => {
     const gender = screen.getByRole("radiogroup", { name: "Gender" });
     expect((gender.querySelector("input:checked") as HTMLInputElement).value).toBe("male");
     expect(screen.getByLabelText("Badge 1").textContent).toContain("1");
+  });
+
+  it("shows a toggle's id only when it differs from its label", async () => {
+    const toggle = (id: string, label: string) => ({
+      constraints: { choices: [], max: null, max_length: null, min: null },
+      description: label,
+      editable: true,
+      encoding: null,
+      id,
+      kind: "boolean",
+      label,
+      section_id: 0,
+      step: null,
+      value: { bool: false },
+      warnings: [],
+    });
+    inspectSave.mockResolvedValueOnce(
+      documentResult([textField(), toggle("options.region_map_zoom", "Region map zoom"), toggle("flags.rtc", "Clock")]),
+    );
+    const { container } = render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    const ids = [...container.querySelectorAll(".save-editor-toggle-id")].map((node) => node.textContent);
+    expect(ids).toEqual(["rtc"]);
+    expect(screen.getByRole("checkbox", { name: "Region map zoom" })).toBeTruthy();
   });
 
   it("shows a field error and keeps the previous value for invalid integers", async () => {
@@ -360,7 +485,7 @@ describe("SaveEditor", () => {
     expect(screen.getByText("ASH → MAY")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Preview changes" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
-    await waitFor(() => expect(screen.getByText(/field changes/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/1 field change,/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Reset Name" }));
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
@@ -482,7 +607,9 @@ describe("SaveEditor", () => {
     ]);
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await waitFor(() =>
-      expect(screen.getByText("No emulator saves yet. Save a game in Test to open its SRAM here.")).toBeTruthy(),
+      expect(
+        screen.getByText("No emulator saves yet. Save a game in Test to open its in-game save here."),
+      ).toBeTruthy(),
     );
     expect(screen.queryByRole("button", { name: /State only/ })).toBeNull();
   });
@@ -515,8 +642,8 @@ describe("SaveEditor", () => {
     await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "MAY" } });
     fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Replace selected SRAM" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Replace selected SRAM" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Replace the selected in-game save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Replace the selected in-game save" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() =>
       expect(replaceEmulatorSaveSram).toHaveBeenCalledWith(
@@ -533,5 +660,21 @@ describe("SaveEditor", () => {
         new Uint8Array([9, 8]),
       ),
     );
+  });
+});
+
+describe("SaveEditor in German", () => {
+  it("translates the editor chrome, the generator, and the field groups", async () => {
+    await preloadCatalog("de");
+    inspectSave.mockResolvedValueOnce(documentResult(genericFields));
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <SaveEditor onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(screen.getByText("Neuer Spielstand")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Spiel wählen" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Choose a game" })).toBeNull();
+    view.unmount();
   });
 });

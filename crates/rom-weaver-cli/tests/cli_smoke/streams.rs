@@ -9,6 +9,20 @@ use std::{
 fn binary() -> ProcessCommand {
     let mut command = ProcessCommand::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // The CLI keeps an inherited SIG_IGN for SIGHUP/SIGTERM (nohup semantics), so a test runner
+    // started with either ignored would make the termination tests wait forever for a handler.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGHUP, libc::SIG_DFL);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+    }
     command
 }
 
@@ -212,6 +226,318 @@ fn extract_stdin_detects_archive_magic() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(output.stdout, b"magic payload");
+}
+
+#[test]
+fn corrupt_archive_stdout_is_empty_and_staging_is_clean_before_retry() {
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(32_768, 0xface);
+    let staging = temp.child("staging");
+    fs::create_dir(staging.path()).unwrap();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(&payload).unwrap();
+    let gzip = encoder.finish().unwrap();
+    for format in ["gz", "zip", "7z"] {
+        let valid = if format == "gz" {
+            gzip.clone()
+        } else {
+            fs::read(compress_stdin_to_file(
+                &temp,
+                format,
+                "payload.bin",
+                &payload,
+            ))
+            .unwrap()
+        };
+        let mut corrupt = valid.clone();
+        if format == "gz" {
+            let crc_offset = corrupt.len() - 8;
+            corrupt[crc_offset] ^= 1;
+        } else {
+            corrupt.truncate(10);
+        }
+        let source = temp.child(format!("damaged.{format}"));
+        fs::write(source.path(), &corrupt).unwrap();
+        let output = binary()
+            .args(["extract", source.to_str().unwrap(), "--output", "-"])
+            .env("TMPDIR", staging.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{format}: stdout bytes={}, stderr={}",
+            output.stdout.len(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty(), "{format}: partial binary output");
+        assert_eq!(fs::read(source.path()).unwrap(), corrupt);
+        assert_eq!(fs::read_dir(staging.path()).unwrap().count(), 0);
+        fs::write(source.path(), &valid).unwrap();
+        let retried = binary()
+            .args(["extract", source.to_str().unwrap(), "--output", "-"])
+            .env("TMPDIR", staging.path())
+            .output()
+            .unwrap();
+        assert!(
+            retried.status.success(),
+            "{format}: {}",
+            String::from_utf8_lossy(&retried.stderr)
+        );
+        assert_eq!(retried.stdout, payload, "{format}: retry byte integrity");
+        assert_eq!(fs::read(source.path()).unwrap(), valid);
+        assert_eq!(fs::read_dir(staging.path()).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn gzip_concatenated_members_validate_each_crc_and_size() {
+    let temp = setup_temp_dir();
+    let first = pseudo_random_bytes(131_073, 0x1234);
+    let second = pseudo_random_bytes(65_537, 0x5678);
+    let encode = |bytes: &[u8]| {
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(bytes).unwrap();
+        encoder.finish().unwrap()
+    };
+    let first_member = encode(&first);
+    let mut valid = first_member.clone();
+    valid.extend(encode(&[]));
+    valid.extend(encode(&second));
+    let source = temp.child("members.bin.gz");
+    let expected = [first, second].concat();
+    fs::write(source.path(), &valid).unwrap();
+    let output = command_stdout(&["extract", source.to_str().unwrap(), "--output", "-"], 0);
+    assert_eq!(output, expected);
+    for (offset, label) in [
+        (first_member.len() - 8, "gzip CRC32 mismatch"),
+        (first_member.len() - 4, "gzip uncompressed size mismatch"),
+        (valid.len() - 8, "gzip CRC32 mismatch"),
+        (valid.len() - 4, "gzip uncompressed size mismatch"),
+    ] {
+        let mut damaged = valid.clone();
+        damaged[offset] ^= 1;
+        fs::write(source.path(), &damaged).unwrap();
+        let result = command_output_with_env(
+            &["extract", source.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(result.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&result.stderr).contains(label));
+        assert_eq!(fs::read(source.path()).unwrap(), damaged);
+    }
+    fs::write(source.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", source.to_str().unwrap(), "--output", "-"], 0),
+        expected
+    );
+    assert_eq!(fs::read(source.path()).unwrap(), valid);
+}
+
+#[test]
+fn gzip_filtered_tar_rejects_corrupt_trailers_without_binary_output() {
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(131_073, 0xabc);
+    let mut tar = tar::Builder::new(Vec::new());
+    let mut header = tar::Header::new_gnu();
+    header.set_size(payload.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "payload.bin", payload.as_slice())
+        .unwrap();
+    let tar_bytes = tar.into_inner().unwrap();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(&tar_bytes).unwrap();
+    let valid = encoder.finish().unwrap();
+    let archive = temp.child("filtered.tar.gz");
+    for offset in [valid.len() - 8, valid.len() - 4] {
+        let mut corrupt = valid.clone();
+        corrupt[offset] ^= 1;
+        fs::write(archive.path(), &corrupt).unwrap();
+        let output = command_output_with_env(
+            &["extract", archive.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("tar.gz list failed"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(fs::read(archive.path()).unwrap(), corrupt);
+    }
+    fs::write(archive.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", archive.to_str().unwrap(), "--output", "-"], 0),
+        payload
+    );
+    assert_eq!(fs::read(archive.path()).unwrap(), valid);
+}
+
+#[test]
+fn padded_gzip_tar_validates_unread_members_before_emitting_output() {
+    let temp = setup_temp_dir();
+    let encode_tar = |payload: &[u8]| {
+        let mut tar = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, "payload.bin", payload)
+            .unwrap();
+        let mut bytes = tar.into_inner().unwrap();
+        bytes.resize(131_072, 0);
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(&bytes).unwrap();
+        encoder.finish().unwrap()
+    };
+    let valid = encode_tar(b"abc");
+    let mut altered_payload = encode_tar(b"abd");
+    let trailer = altered_payload.len() - 8;
+    altered_payload[trailer..].copy_from_slice(&valid[valid.len() - 8..]);
+    let mut wrong_size = valid.clone();
+    let size_offset = wrong_size.len() - 4;
+    wrong_size[size_offset] ^= 1;
+    let mut corrupt_later_member = valid.clone();
+    corrupt_later_member.extend_from_slice(&altered_payload);
+    let archive = temp.child("padded.tar.gz");
+    for corrupt in [
+        altered_payload,
+        wrong_size,
+        valid[..valid.len() - 1].to_vec(),
+        corrupt_later_member,
+    ] {
+        fs::write(archive.path(), &corrupt).unwrap();
+        let output = command_output_with_env(
+            &["extract", archive.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(output.stdout.is_empty());
+        assert_eq!(fs::read(archive.path()).unwrap(), corrupt);
+    }
+    fs::write(archive.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", archive.to_str().unwrap(), "--output", "-"], 0),
+        b"abc"
+    );
+    assert_eq!(fs::read(archive.path()).unwrap(), valid);
+}
+
+#[test]
+fn layered_gzip_validates_every_filter_before_emitting_output() {
+    let temp = setup_temp_dir();
+    let mut tar = tar::Builder::new(Vec::new());
+    let mut header = tar::Header::new_gnu();
+    header.set_size(3);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "payload.bin", &b"abc"[..])
+        .unwrap();
+    let mut tar_bytes = tar.into_inner().unwrap();
+    tar_bytes.resize(131_072, 0);
+    let gzip = |bytes: &[u8]| {
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(bytes).unwrap();
+        encoder.finish().unwrap()
+    };
+    let mut uuencoded = b"begin 644 payload.tar\n".to_vec();
+    for line in tar_bytes.chunks(45) {
+        uuencoded.push(line.len() as u8 + 32);
+        for chunk in line.chunks(3) {
+            let a = chunk[0];
+            let b = chunk.get(1).copied().unwrap_or(0);
+            let c = chunk.get(2).copied().unwrap_or(0);
+            for value in [
+                a >> 2,
+                (a << 4 | b >> 4) & 63,
+                (b << 2 | c >> 6) & 63,
+                c & 63,
+            ] {
+                uuencoded.push(value + 32);
+            }
+        }
+        uuencoded.push(b'\n');
+    }
+    uuencoded.extend_from_slice(b"`\nend\n");
+    let mut nested = gzip(&tar_bytes);
+    nested.resize(nested.len() + 131_072, 0);
+    for (label, mut inner) in [
+        ("nested", gzip(&tar_bytes)),
+        ("uuencoded", uuencoded),
+        ("triple", gzip(&nested)),
+    ] {
+        inner.resize(inner.len() + 131_072, 0);
+        let valid = gzip(&inner);
+        let archive = temp.child(format!("{label}.tar.gz"));
+        let mut wrong_crc = valid.clone();
+        wrong_crc[valid.len() - 8] ^= 1;
+        let mut wrong_size = valid.clone();
+        wrong_size[valid.len() - 4] ^= 1;
+        for damaged in [wrong_crc, wrong_size, valid[..valid.len() - 1].to_vec()] {
+            fs::write(archive.path(), &damaged).unwrap();
+            let output = binary()
+                .args(["extract", archive.to_str().unwrap(), "--output", "-"])
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(1),
+                "{label}: layered gzip bypassed integrity validation"
+            );
+            assert!(output.stdout.is_empty(), "{label}: partial binary output");
+            assert!(String::from_utf8_lossy(&output.stderr).contains("gzip"));
+            assert_eq!(fs::read(archive.path()).unwrap(), damaged);
+        }
+        fs::write(archive.path(), &valid).unwrap();
+        assert_eq!(
+            command_stdout(&["extract", archive.to_str().unwrap(), "--output", "-"], 0),
+            b"abc"
+        );
+        assert_eq!(fs::read(archive.path()).unwrap(), valid);
+    }
+}
+
+#[test]
+fn gzip_preserves_inner_xz_validation_before_emitting_output() {
+    let temp = setup_temp_dir();
+    let mut tar = tar::Builder::new(Vec::new());
+    let mut header = tar::Header::new_gnu();
+    header.set_size(3);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "payload.bin", &b"abc"[..])
+        .unwrap();
+    let mut tar_bytes = tar.into_inner().unwrap();
+    tar_bytes.resize(131_072, 0);
+    let valid = rom_weaver_core::codecs::encode_xz_preset(&tar_bytes, 6).unwrap();
+    let mut wrong_crc = valid.clone();
+    wrong_crc[valid.len() - 12] ^= 1;
+    let archive = temp.child("inner-xz.tar.gz");
+    for inner in [wrong_crc, valid[..valid.len() - 1].to_vec(), valid.clone()] {
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(&inner).unwrap();
+        let compressed = encoder.finish().unwrap();
+        fs::write(archive.path(), &compressed).unwrap();
+        let output = binary()
+            .args(["extract", archive.to_str().unwrap(), "--output", "-"])
+            .output()
+            .unwrap();
+        if inner == valid {
+            assert!(output.status.success());
+            assert_eq!(output.stdout, b"abc");
+        } else {
+            assert_eq!(
+                output.status.code(),
+                Some(1),
+                "valid outer gzip bypassed inner XZ integrity validation"
+            );
+            assert!(output.stdout.is_empty(), "partial binary output");
+        }
+        assert_eq!(fs::read(archive.path()).unwrap(), compressed);
+    }
 }
 
 #[test]
@@ -806,8 +1132,8 @@ fn binary_patch_output_rejects_ambiguous_formats_and_side_effects() {
             "-o",
             "-",
             "--no-compress",
-            "--emit-bundle",
-            "bundle.json",
+            "--emit-weave",
+            "weave.json",
         ],
         vec![
             "weave",
@@ -962,4 +1288,282 @@ fn assert_invalid_stream_output(args: &[&str], output: &std::process::Output) {
     } else {
         assert!(output.stdout.is_empty(), "{args:?}");
     }
+}
+
+// quality-reason: Linux procfs verifies the handler and blocked stdin before signalling.
+#[cfg(target_os = "linux")]
+#[test]
+fn termination_cancels_open_stdin_and_removes_spools() {
+    for signal in [libc::SIGTERM, libc::SIGHUP] {
+        for command in ["compress", "checksum", "probe", "identify", "weave"] {
+            let temp = setup_temp_dir();
+            let output = temp.path().join("output.zip");
+            let mut process = binary();
+            process.env("TMPDIR", temp.path()).stdin(Stdio::piped());
+            match command {
+                "compress" => {
+                    process
+                        .args(["compress", "--input", "-", "--format", "zip", "--output"])
+                        .arg(&output);
+                }
+                "weave" => {
+                    process
+                        .args(["weave", "create", "--from", "-", "--output"])
+                        .arg(&output);
+                }
+                _ => {
+                    process.args([command, "--input", "-"]);
+                }
+            }
+            let mut child = process.spawn().expect("spawn stdin command");
+            child
+                .stdin
+                .as_mut()
+                .expect("open stdin")
+                .write_all(b"partial")
+                .expect("write partial input");
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let proc = PathBuf::from(format!("/proc/{}", child.id()));
+            loop {
+                let status = fs::read_to_string(proc.join("status")).expect("child status");
+                let caught = status
+                    .lines()
+                    .find_map(|line| line.strip_prefix("SigCgt:"))
+                    .and_then(|mask| u64::from_str_radix(mask.trim(), 16).ok())
+                    .unwrap();
+                let wait = fs::read_to_string(proc.join("wchan")).expect("child wait state");
+                if caught & (1 << (signal - 1)) != 0
+                    && (wait.trim() == "pipe_read" || wait.contains("poll"))
+                {
+                    break;
+                }
+                if child.try_wait().expect("child status").is_some() || Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let result = child.wait_with_output().expect("reap stdin command");
+                    panic!("{command} never reached stdin: {result:?}");
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            // SAFETY: the child is alive, and these are valid termination signals.
+            assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("wait for cancellation") {
+                    break status;
+                }
+                if Instant::now() >= deadline {
+                    child.kill().expect("stop blocked stdin command");
+                    child.wait().expect("reap blocked stdin command");
+                    panic!("{command} ignored signal {signal} while stdin remained open");
+                }
+                thread::sleep(Duration::from_millis(5));
+            };
+            assert_eq!(status.code(), Some(130), "{command}: {status:?}");
+            assert!(!output.exists(), "cancelled command wrote output");
+            assert_eq!(
+                fs::read_dir(temp.path()).expect("read spool root").count(),
+                0,
+                "{command} left a stdin spool behind"
+            );
+        }
+    }
+}
+
+#[test]
+fn probe_stdin_failure_names_stdin_not_the_staging_file() {
+    let mut child = binary()
+        .args(["probe", "--input", "-", "--json"])
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("spawn probe");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"opaque bytes no handler claims")
+        .expect("write stdin");
+    let output = child.wait_with_output().expect("probe output");
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("JSON failure report");
+    let label = report["label"].as_str().expect("label");
+    assert!(
+        label.contains("no registered handler matched `<stdin>`"),
+        "{label}"
+    );
+    assert!(!label.contains("rom-weaver-stdin"), "{label}");
+}
+
+// quality-reason: Linux procfs verifies installed handlers and blocked I/O before signalling.
+#[cfg(target_os = "linux")]
+mod cancelled_output {
+    use super::*;
+    use std::io::Read;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::process::Child;
+
+    fn wait_for_io(child: &mut Child, signal: i32, blocked: &str) {
+        let proc = PathBuf::from(format!("/proc/{}", child.id()));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let status = fs::read_to_string(proc.join("status")).expect("child status");
+            let caught = status
+                .lines()
+                .find_map(|line| line.strip_prefix("SigCgt:"))
+                .and_then(|mask| u64::from_str_radix(mask.trim(), 16).ok())
+                .unwrap();
+            let wait = fs::read_to_string(proc.join("wchan")).expect("child wait state");
+            if caught & (1 << (signal - 1)) != 0
+                && (wait.trim() == blocked || wait.contains("poll"))
+            {
+                return;
+            }
+            if child.try_wait().expect("child status").is_some() || Instant::now() >= deadline {
+                let _ = child.kill();
+                let output = child.wait().expect("reap child");
+                panic!("child did not reach {blocked}: {output:?}");
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn cancel(child: &mut Child, signal: i32) {
+        // SAFETY: the child is alive and signal is SIGTERM or SIGHUP.
+        assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(status) = child.try_wait().expect("wait for cancellation") {
+                assert_eq!(status.code(), Some(130), "{status:?}");
+                return;
+            }
+            if Instant::now() >= deadline {
+                child.kill().expect("stop blocked child");
+                child.wait().expect("reap blocked child");
+                panic!("termination must unwind while the output pipe remains unread");
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn weave_stdin_cancellation_keeps_json_and_jsonl_error_kinds() {
+        for mode in ["--jsonl", "--json"] {
+            for signal in [libc::SIGTERM, libc::SIGHUP] {
+                let temp = setup_temp_dir();
+                let mut child = binary()
+                    .args(["weave", "create", "--from", "-", mode, "--output"])
+                    .arg(temp.path().join("weave.zip"))
+                    .env("TMPDIR", temp.path())
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .expect("spawn weave");
+                child.stdin.as_mut().unwrap().write_all(b"partial").unwrap();
+                wait_for_io(&mut child, signal, "pipe_read");
+                cancel(&mut child, signal);
+                let output = child.wait_with_output().expect("collect weave output");
+                let events = parse_json_lines(&output.stdout);
+                assert!(!events.is_empty());
+                for event in &events {
+                    let reports = event["reports"]
+                        .as_array()
+                        .map(Vec::as_slice)
+                        .unwrap_or(std::slice::from_ref(event));
+                    for report in reports {
+                        assert_ne!(
+                            report["status"], "failed",
+                            "weave cancellation must not emit validation failure: {report}"
+                        );
+                        assert_ne!(report["error_kind"], "validation", "{report}");
+                    }
+                }
+                let last = events.last().unwrap();
+                assert_eq!(last["status"], "cancelled", "{last}");
+                assert_eq!(last["error_kind"], "cancelled", "{last}");
+                assert_eq!(
+                    last["details"]["error"]["code"], "operation.cancelled",
+                    "{last}"
+                );
+                assert_eq!(last["details"]["error"]["exit_code"], 130, "{last}");
+                assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn termination_unwinds_unread_stdout_without_changing_pipe_flags() {
+        for signal in [libc::SIGTERM, libc::SIGHUP] {
+            let temp = setup_temp_dir();
+            let input = temp.path().join("random.bin");
+            fs::write(&input, pseudo_random_bytes(1024 * 1024, 7)).unwrap();
+            let spools = temp.path().join("spools");
+            fs::create_dir(&spools).unwrap();
+            let mut descriptors = [0; 2];
+            // SAFETY: descriptors has room for both initialized pipe descriptors.
+            assert_eq!(
+                unsafe { libc::pipe2(descriptors.as_mut_ptr(), libc::O_CLOEXEC) },
+                0
+            );
+            // SAFETY: each successful pipe descriptor is transferred to exactly one File.
+            let reader = unsafe { File::from_raw_fd(descriptors[0]) };
+            // SAFETY: this is the other owned descriptor returned by pipe.
+            let writer = unsafe { File::from_raw_fd(descriptors[1]) };
+            // SAFETY: F_GETFL queries the valid writer descriptor without mutation.
+            let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
+            assert!(flags >= 0);
+            let mut child = binary()
+                .args(["compress", "--input"])
+                .arg(&input)
+                .args(["--format", "zip", "--output", "-"])
+                .current_dir(temp.path())
+                .env("PWD", temp.path())
+                .env("TMPDIR", &spools)
+                .stdout(Stdio::from(writer.try_clone().unwrap()))
+                .spawn()
+                .expect("spawn stdout writer");
+            wait_for_io(&mut child, signal, "pipe_write");
+            // SAFETY: the retained writer shares the child's open file description.
+            assert_eq!(
+                unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) },
+                flags
+            );
+            cancel(&mut child, signal);
+            // SAFETY: the writer is still valid after the child has exited.
+            assert_eq!(
+                unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) },
+                flags
+            );
+            drop(writer);
+            let mut bytes = Vec::new();
+            reader.take(1024 * 1024).read_to_end(&mut bytes).unwrap();
+            assert!(
+                !bytes.is_empty(),
+                "child must reach binary stdout before cancellation"
+            );
+            assert_eq!(fs::read_dir(&spools).unwrap().count(), 0);
+            assert_eq!(
+                fs::read_dir(temp.path()).unwrap().count(),
+                2,
+                "leftover staging directory"
+            );
+        }
+    }
+}
+
+#[test]
+fn extract_non_archive_stdin_does_not_expose_the_staging_path() {
+    let temp = setup_temp_dir();
+    let output = command_stdout_with_stdin(
+        &[
+            "extract",
+            "-",
+            "-o",
+            temp.child("out").path().to_str().unwrap(),
+            "--json",
+        ],
+        b"not an archive",
+        1,
+    );
+    let text = String::from_utf8(output).expect("utf8");
+    assert!(!text.contains("rom-weaver-stream"), "{text}");
+    assert!(text.contains("stdin"), "{text}");
 }

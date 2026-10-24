@@ -58,7 +58,6 @@
 #include "archive_entry_locale.h"
 #include "archive_private.h"
 #include "archive_read_private.h"
-#include "archive_zlib_private.h"
 
 #if (!defined(HAVE_LIBXML_XMLREADER_H) && \
      !defined(HAVE_BSDXML_H) && !defined(HAVE_EXPAT_H) && \
@@ -1473,10 +1472,8 @@ decompression_init(struct archive_read *a, enum enctype encoding)
 	case GZIP:
 		if (xar->stream_valid)
 			r = inflateReset(&(xar->stream));
-		else {
-			archive_zlib_set_allocators(&(xar->stream));
+		else
 			r = inflateInit(&(xar->stream));
-		}
 		if (r != Z_OK) {
 			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
 			    "Couldn't initialize zlib stream");

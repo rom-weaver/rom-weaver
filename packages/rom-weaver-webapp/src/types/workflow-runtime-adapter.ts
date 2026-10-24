@@ -1,3 +1,4 @@
+import type { ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
 import type { CheatRecord, ClassifiedCheatRecord } from "../lib/cheats/model.ts";
 import type {
@@ -9,7 +10,7 @@ import type {
   ThreadBudget,
 } from "../wasm/index.ts";
 import type { CheatWriteConflict } from "../wasm/generated/rom-weaver-rust-types.d.ts";
-import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
+import type { WeaveHeaderMode, ParsedWeaveCreateResult, ParsedWeaveParseResult } from "./weave.ts";
 import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIngestResult } from "./ingest.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
@@ -103,6 +104,8 @@ type RuntimeWorkerOutput = {
   timing?: PublicOutput["timing"];
   trackNumber?: number;
   trimSizeSummary?: TrimResult["sizeSummary"];
+  /** Handler warnings the worker run reported. */
+  warnings?: string[];
 };
 
 type RuntimeWorkerIo = {
@@ -159,6 +162,7 @@ type RuntimeRomSpecificHooks = {
 };
 
 type RuntimeRomSpecificCreateChdInput = RuntimeRomSpecificHooks & {
+  compressionProfile?: RuntimeRomSpecificCreateChdOptions["compressionProfile"];
   compressionCodecs?: RuntimeRomSpecificCreateChdOptions["compressionCodecs"];
   cueFilePath?: RuntimeRomSpecificCreateChdOptions["cueFilePath"];
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
@@ -371,6 +375,7 @@ type RuntimePatchCreateFormatCandidates = {
 };
 
 type RuntimeTrimWorkerInput = {
+  dryRun?: boolean;
   extension?: string;
   logLevel?: LogLevel;
   outputName: string;
@@ -395,10 +400,38 @@ type WorkflowRuntimeBinary = {
   assertSource: (source: SourceRef, context: string) => void;
 };
 
+type WorkflowRuntimeBundle = {
+  parse?: (input: Parameters<NonNullable<WorkflowRuntimeWeave["parse"]>>[0]) => Promise<{
+    cleanup: () => Promise<void>;
+    result: ParsedBundleParseResult;
+    extractedFiles: Map<string, File>;
+  }>;
+  create?: (
+    input: Omit<
+      Parameters<NonNullable<WorkflowRuntimeWeave["create"]>>[0],
+      "weaveRom" | "weaveFileName" | "noWeaveRom"
+    > & {
+      bundleRom?: { source: unknown; fileName?: string };
+      bundleFileName?: string;
+      noBundleRom?: boolean;
+    },
+  ) => Promise<{
+    result: ParsedBundleCreateResult;
+    bundleOutput: PublicOutput;
+    archiveOutput?: PublicOutput;
+  }>;
+};
+
 type WorkflowRuntimeCheat = {
-  run: (input: { records: CheatRecord[]; signal?: AbortSignal; source: SourceRef }) => Promise<{
+  run: (input: {
+    exportPatches?: boolean;
+    records: CheatRecord[];
+    signal?: AbortSignal;
+    source: SourceRef;
+  }) => Promise<{
     conflicts: CheatWriteConflict[];
     records: ClassifiedCheatRecord[];
+    patches?: Array<{ bytes: number[]; format: "ips" | "ips32" }>;
   }>;
 };
 
@@ -519,8 +552,8 @@ type WorkflowRuntimeIngest = {
   }>;
 };
 
-type WorkflowRuntimeBundle = {
-  // Parse a dropped/fetched rom-weaver-bundle.json (plain, compressed, or an archive carrying one). Bundled
+type WorkflowRuntimeWeave = {
+  // Parse a dropped/fetched rom-weaver-weave.json (plain, compressed, or an archive carrying one). Weaved
   // ROM/patch members are extracted into an operation-scoped directory and exposed as OPFS-backed
   // `File`s keyed by their reported path. The caller transfers them to workflow ownership or runs
   // `cleanup` on failure/cancellation.
@@ -533,15 +566,15 @@ type WorkflowRuntimeBundle = {
     signal?: AbortSignal;
   }) => Promise<{
     cleanup: () => Promise<void>;
-    result: ParsedBundleParseResult;
+    result: ParsedWeaveParseResult;
     extractedFiles: Map<string, File>;
   }>;
-  // Write a rom-weaver-bundle.json bundle (and optional everything-bundle .zip) from the current session's
+  // Write a rom-weaver-weave.json weave (and optional everything-weave .zip) from the current session's
   // files. Cached ROM checks avoid a second hash; outputs stay as VFS-backed runtime outputs.
   create?: (input: {
     rom?: { source: unknown; fileName?: string };
     /** Optional packaged ROM payload; checks still come from the logical `rom`. */
-    bundleRom?: { source: unknown; fileName?: string };
+    weaveRom?: { source: unknown; fileName?: string };
     patches: Array<{
       source: unknown;
       fileName?: string;
@@ -555,7 +588,7 @@ type WorkflowRuntimeBundle = {
       label?: string;
       /** Optional patches start deselected at apply time; absent/false = applied by default. */
       optional?: boolean;
-      header?: BundleHeaderMode;
+      header?: WeaveHeaderMode;
       /** Declared input basis frozen at export ("base" = authored against the base ROM). */
       basis?: "base" | "previous";
       /** Expected pre-apply ROM checksums for this entry ("algo=hex", comma-separable). */
@@ -564,12 +597,12 @@ type WorkflowRuntimeBundle = {
       outputChecks?: string;
     }>;
     outputName?: string;
-    outputHeader?: BundleHeaderMode;
-    /** Shared input rule emitted in the v2 bundle root. */
+    outputHeader?: WeaveHeaderMode;
+    /** Shared input rule emitted in the v2 weave root. */
     patchBasis?: "auto" | "base" | "previous";
-    /** Advisory logical ROM file name written to bundle `rom.name`. */
+    /** Advisory logical ROM file name written to weave `rom.name`. */
     romName?: string;
-    /** Exact logical ROM member/track locator written to bundle `rom.member`. */
+    /** Exact logical ROM member/track locator written to weave `rom.member`. */
     romMember?: string;
     /** Cached checksums from apply staging; Rust hashes only when this is absent. */
     romChecksums?: string;
@@ -577,17 +610,17 @@ type WorkflowRuntimeBundle = {
     romSize?: number;
     /** Expected final-output checksums once the full chain is applied ("algo=hex", comma-separable). */
     outputCheck?: string;
-    /** Bundle file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = bundle only. */
-    bundleFileName?: string;
-    /** Leave the ROM out of the bundle and emit its bundle entry with checks only. */
-    noBundleRom?: boolean;
+    /** Weave file name (base name; its extension picks the archive format, e.g. "pack.7z"). Absent = weave only. */
+    weaveFileName?: string;
+    /** Leave the ROM out of the weave and emit its weave entry with checks only. */
+    noWeaveRom?: boolean;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
     signal?: AbortSignal;
   }) => Promise<{
-    result: ParsedBundleCreateResult;
-    bundleOutput: PublicOutput;
+    result: ParsedWeaveCreateResult;
+    weaveOutput: PublicOutput;
     archiveOutput?: PublicOutput;
   }>;
 };
@@ -595,6 +628,8 @@ type WorkflowRuntimeBundle = {
 type WorkflowRuntimeTrim = {
   trim?: (input: {
     source: SourceRef;
+    /** Plan only: resolves without output, rejects when the input cannot be trimmed. */
+    dryRun?: boolean;
     extension?: string;
     outputName: string;
     threads?: RuntimeThreadBudgetInput;
@@ -658,6 +693,7 @@ type WorkflowRuntime = {
   binary: WorkflowRuntimeBinary;
   ingest?: WorkflowRuntimeIngest;
   checksum?: WorkflowRuntimeChecksum;
+  weave?: WorkflowRuntimeWeave;
   bundle?: WorkflowRuntimeBundle;
   cheat?: WorkflowRuntimeCheat;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as

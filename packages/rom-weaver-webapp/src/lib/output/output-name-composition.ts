@@ -77,7 +77,17 @@ const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly 
 };
 
 const buildCheatOutputBaseName = (baseName: string, descriptions: readonly string[]): string => {
-  const base = String(baseName || "").replace(/(?: \[cht [^[\]]+\])+$/u, "");
+  const name = String(baseName || "");
+  let end = name.length;
+  // Scan disjoint suffixes so a nonmatching filename cannot cause regex backtracking.
+  while (end > 0 && name[end - 1] === "]") {
+    const open = name.lastIndexOf("[", end - 1);
+    if (open < 1 || name[open - 1] !== " " || !name.startsWith("[cht ", open)) break;
+    const label = name.slice(open + 5, end - 1);
+    if (!label || label.includes("]")) break;
+    end = open - 1;
+  }
+  const base = name.slice(0, end);
   const labels = descriptions
     .map((description) => sanitizePatchMetadataPart(description))
     .filter(Boolean)

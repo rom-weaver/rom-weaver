@@ -10,22 +10,17 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         fields.extend(slot_fields(slot));
     }
     fields.extend([
-        FieldDefinition::new(
-            "system.language".into(),
-            "Language".into(),
-            0x1afc,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "system.unlock_group_1".into(),
-            "Hard, Boss Rush, and Sound Test modes unlocked".into(),
+        catalog_field("system.language", "Language", 0x1afc, Storage::U8),
+        catalog_field(
+            "system.unlock_group_1",
+            "Hard, Boss Rush, and Sound Test modes unlocked",
             0x1af8,
             Storage::Bit,
         )
         .bit(0),
-        FieldDefinition::new(
-            "system.unlock_group_2".into(),
-            "Julius, No Use, and No Soul modes unlocked".into(),
+        catalog_field(
+            "system.unlock_group_2",
+            "Julius, No Use, and No Soul modes unlocked",
             0x1af8,
             Storage::Bit,
         )

@@ -3,9 +3,35 @@ import { SITE_NAME } from "./workflow-seo.mjs";
 const SITE_ORIGIN = "https://rom-weaver.com";
 
 /**
+ * A sample command's URL: the production origin followed by exactly one path
+ * segment. Longer paths and origins that merely start with the host
+ * (`rom-weaver.com.example`) are not samples. Guides and Markdown alternates
+ * both retarget these inside code blocks only.
+ */
+const SAMPLE_URL_PATTERN = new RegExp(
+  `${SITE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/([A-Za-z0-9._-]+)(?![A-Za-z0-9._~%/-])`,
+  "g",
+);
+
+/**
+ * Practice files that live in the repository and are served by the site at the
+ * same path, so guides can link them relatively and work on GitHub and on any
+ * deployment. The build serves exactly these (scripts/vite-config/root-static-assets.mjs).
+ */
+const SITE_SAMPLE_PATHS = Object.freeze([
+  "docs/samples/compressed-disc/practice-disc.chd",
+  "docs/samples/compressed-disc/01-first.bps",
+  "docs/samples/compressed-disc/02-second.bps",
+]);
+
+/** @param {string} repositoryPath path from the repository root, without a leading slash */
+const siteSamplePath = (repositoryPath) => (SITE_SAMPLE_PATHS.includes(repositoryPath) ? `/${repositoryPath}` : null);
+
+/**
  * @typedef {{
  *   file: string,
  *   audience?: "browser" | "cli",
+ *   editable?: false,
  *   group?: string,
  *   label: string,
  *   slug: string,
@@ -21,6 +47,12 @@ const DOC_SOURCES = Object.freeze([
     file: "tutorials/first-patch.md",
     label: "Apply your first patch (browser)",
     slug: "docs/get-started",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "tutorials/patch-compressed-disc.md",
+    label: "Patch a compressed disc",
+    slug: "docs/patch-compressed-disc",
   }),
   Object.freeze({
     audience: "cli",
@@ -48,8 +80,14 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/convert-patch-format-browser.md",
+    label: "Convert patch formats (browser)",
+    slug: "docs/convert-patch-format",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/create-bundles.md",
-    label: "Create bundles (browser)",
+    label: "Create weaves (browser)",
     slug: "docs/create-bundles",
   }),
   Object.freeze({
@@ -72,6 +110,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/search-rom-checksums-browser.md",
+    label: "Search ROM checksums (browser)",
+    slug: "docs/search-rom-checksums",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/extract-files-browser.md",
     label: "Extract files (browser)",
     slug: "docs/extract-files-browser",
@@ -79,19 +123,25 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({
     audience: "browser",
     file: "how-to/convert-roms-browser.md",
-    label: "Convert ROMs (browser)",
+    label: "Compress ROMs (browser)",
     slug: "docs/convert-roms-browser",
   }),
   Object.freeze({
     audience: "browser",
     file: "how-to/convert-rvz-to-iso-browser.md",
-    label: "Convert RVZ to ISO (browser)",
+    label: "Decompress RVZ to ISO (browser)",
     slug: "docs/convert-rvz-to-iso",
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/extract-chd-browser.md",
+    label: "Decompress CHD (browser)",
+    slug: "docs/extract-chd",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/convert-to-chd-browser.md",
-    label: "Convert ISO or BIN/CUE to CHD (browser)",
+    label: "Compress ISO or BIN/CUE to CHD (browser)",
     slug: "docs/convert-to-chd",
   }),
   Object.freeze({
@@ -174,7 +224,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Create patches (CLI)",
     slug: "docs/cli-create",
   }),
-  Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Weaves (CLI)", slug: "docs/cli-bundles" }),
   Object.freeze({ audience: "cli", file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
   Object.freeze({
     audience: "cli",
@@ -241,7 +291,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Compression formats",
     slug: "docs/compression-formats",
   }),
-  Object.freeze({ file: "explanation/bundles.md", label: "What a bundle is", slug: "docs/bundles" }),
+  Object.freeze({ file: "explanation/bundles.md", label: "What a weave is", slug: "docs/bundles" }),
   Object.freeze({ file: "explanation/browser-and-cli.md", label: "Browser and CLI", slug: "docs/browser-and-cli" }),
   Object.freeze({
     file: "explanation/identify-sources.md",
@@ -280,7 +330,8 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),
-  Object.freeze({ file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
+  // Generated at build time and not tracked in git, so GitHub has nothing to edit.
+  Object.freeze({ editable: false, file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
   Object.freeze({ file: "legal/privacy.md", label: "Privacy", slug: "docs/privacy" }),
 ]);
 
@@ -331,26 +382,28 @@ const groupDocRoutes = (routes) => {
 
 /** @type {Readonly<Record<string, string>>} */
 const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
-  "docs/apply-rom-patches": "Patching & bundles",
+  "docs/apply-rom-patches": "Patching & weaves",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",
   "docs/use-mcp": "Setup & offline",
   "docs/checksum-roms-browser": "ROM checks",
-  "docs/cli-apply": "Patching & bundles",
-  "docs/cli-bundles": "Patching & bundles",
-  "docs/cli-create": "Patching & bundles",
+  "docs/cli-apply": "Patching & weaves",
+  "docs/cli-bundles": "Patching & weaves",
+  "docs/cli-create": "Patching & weaves",
   "docs/cli-save": "Saves",
   "docs/cli-trim": "ROM checks",
+  "docs/convert-patch-format": "Patching & weaves",
   "docs/convert-roms-browser": "Conversion & files",
   "docs/convert-rvz-to-iso": "Conversion & files",
   "docs/convert-to-chd": "Conversion & files",
   "docs/convert-to-rvz": "Conversion & files",
   "docs/convert-to-z3ds": "Conversion & files",
-  "docs/create-bundles": "Patching & bundles",
+  "docs/create-bundles": "Patching & weaves",
   "docs/create-game-saves-browser": "Saves",
   "docs/create-game-saves-cli": "Saves",
-  "docs/create-rom-patches": "Patching & bundles",
+  "docs/create-rom-patches": "Patching & weaves",
   "docs/edit-gen3-saves": "Saves",
+  "docs/extract-chd": "Conversion & files",
   "docs/extract-files-browser": "Conversion & files",
   "docs/extract-z3ds": "Conversion & files",
   "docs/fix-checksum-errors": "Troubleshooting",
@@ -358,9 +411,10 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/identify-and-hash-files": "ROM checks",
   "docs/identify-roms-browser": "ROM checks",
   "docs/install": "Setup & offline",
+  "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",
-  "docs/undo-ppf-browser": "Patching & bundles",
+  "docs/undo-ppf-browser": "Patching & weaves",
   "docs/use-cheats": "Cheats",
   "docs/verify-downloads": "Setup & offline",
   "docs/work-with-archives": "Conversion & files",
@@ -369,7 +423,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
 const DOC_NAVIGATION_GROUP_ORDER = Object.freeze([
   "Start here",
   "Walkthroughs",
-  "Patching & bundles",
+  "Patching & weaves",
   "ROM checks",
   "Conversion & files",
   "Saves",
@@ -457,5 +511,8 @@ export {
   groupDocRoutes,
   isLegalDocRoute,
   readDocsSlugFromPathname,
+  SAMPLE_URL_PATTERN,
   SITE_ORIGIN,
+  SITE_SAMPLE_PATHS,
+  siteSamplePath,
 };

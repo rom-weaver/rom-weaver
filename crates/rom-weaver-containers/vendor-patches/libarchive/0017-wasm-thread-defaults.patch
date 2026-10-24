@@ -1,0 +1,22 @@
+diff --git a/libarchive/archive_write_set_format_7zip.c b/libarchive/archive_write_set_format_7zip.c
+--- a/libarchive/archive_write_set_format_7zip.c
++++ b/libarchive/archive_write_set_format_7zip.c
+@@ -491,7 +491,7 @@
+ 	zip->opt_zstd_compression_level = 3;
+ #endif
+ 
+-	zip->opt_threads = 1;
++	zip->opt_threads = 0;
+ 
+ 	a->format_data = zip;
+ 
+@@ -3443,7 +3443,8 @@
+ 		return (ARCHIVE_FATAL);
+ 	}
+ 
+-	ZSTD_CCtx_setParameter(strm, ZSTD_c_nbWorkers, threads);
++	if (threads > 1)
++		ZSTD_CCtx_setParameter(strm, ZSTD_c_nbWorkers, threads);
+ 
+ 	// p7zip-zstd fails to unpack archives that don't have prop_size 5.
+ 	// 7-Zip-zstd fails to unpack archives that don't have prop_size 3 or 5.

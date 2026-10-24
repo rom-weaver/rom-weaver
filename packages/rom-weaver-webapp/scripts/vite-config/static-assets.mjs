@@ -10,12 +10,13 @@ import {
 } from "../../src/webapp/api-catalog.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { WORKFLOW_ENTRY_ROUTES, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { createRootManifestSource } from "./channel.mjs";
 import { copyEmulatorJsAssets } from "./emulatorjs.mjs";
 import { rootDir } from "./paths.mjs";
 import { PRERENDER_ROOT } from "./prerender-shell.mjs";
 import {
+  createLlmsSource,
   generatedLicenseAssetSources,
   generatedSampleAssetPaths,
   getGeneratedSampleAsset,
@@ -38,7 +39,7 @@ const copyFile = (from, to) => {
   fs.copyFileSync(from, to);
 };
 
-export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks) => {
+export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, routePreloadLinks, siteOrigin) => {
   let outDir = "dist";
   return {
     apply: "build",
@@ -51,6 +52,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         if (assetPath === "/manifest.json") {
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
           fs.writeFileSync(outputPath, createRootManifestSource(channel, channelLabel));
+          continue;
+        }
+        if (assetPath === "/llms.txt") {
+          fs.writeFileSync(outputPath, createLlmsSource(rootStaticAssetSources[assetPath], siteOrigin));
           continue;
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
@@ -84,22 +89,22 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           true,
         ),
       );
-      for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
-        fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route));
+      for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+        fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route, siteOrigin));
       }
       const patcherHtml = withRoutePreloadLinks(withShell("patcher"), routePreloadLinks.get("patcher"));
       const applyHtml = injectLdJson(
         createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.patcher,
       );
-      const bundleHtml = injectLdJson(
+      const weaveHtml = injectLdJson(
         createWorkflowRouteHtml(
-          withRoutePreloadLinks(withShell("bundle"), routePreloadLinks.get("bundle")),
-          WORKFLOW_SEO_ROUTES.bundle,
+          withRoutePreloadLinks(withShell("weave"), routePreloadLinks.get("weave")),
+          WORKFLOW_SEO_ROUTES.weave,
           channel,
           channelLabel,
         ),
-        WORKFLOW_SEO_ROUTES.bundle,
+        WORKFLOW_SEO_ROUTES.weave,
       );
       fs.writeFileSync(
         path.join(distDir, "404.html"),
@@ -156,18 +161,26 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         WORKFLOW_SEO_ROUTES.test,
       );
       const trimHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("trim"), "trim-rom"),
+        makeBetaRouteNoindex(withShell("trim"), "trim-rom", channel, channelLabel),
         routePreloadLinks.get("trim"),
       );
-      const ppfUndoHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("ppf-undo"), "ppf-undo"),
-        routePreloadLinks.get("ppf-undo"),
+      const ppfUndoHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("ppf-undo"), routePreloadLinks.get("ppf-undo")),
+          WORKFLOW_SEO_ROUTES["ppf-undo"],
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES["ppf-undo"],
       );
       const saveEditorHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("save-editor"), "save-editor"),
+        makeBetaRouteNoindex(withShell("save-editor"), "save-editor", channel, channelLabel),
         routePreloadLinks.get("save-editor"),
       );
-      const whatsNewHtml = withRoutePreloadLinks(withShell("whats-new"), routePreloadLinks.get("whats-new"));
+      const whatsNewHtml = withRoutePreloadLinks(
+        makeBetaRouteNoindex(withShell("whats-new"), "whats-new", channel, channelLabel),
+        routePreloadLinks.get("whats-new"),
+      );
       for (const route of DOC_ROUTES) {
         const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
@@ -178,12 +191,24 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         fs.writeFileSync(extensionlessPath, docsHtml);
         fs.writeFileSync(directoryIndexPath, docsHtml);
         const source = DOC_SOURCES.find((entry) => entry.slug === route.slug);
-        writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source));
+        writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source), siteOrigin);
       }
       for (const [slug, html] of [
+        ...Object.values(WORKFLOW_ENTRY_ROUTES).map((route) => [
+          route.slug,
+          injectLdJson(
+            createWorkflowRouteHtml(
+              withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get(route.view)),
+              route,
+              channel,
+              channelLabel,
+            ),
+            route,
+          ),
+        ]),
         ["apply-patches", applyHtml],
-        ["bundle-patches", bundleHtml],
-        ["create-patch", createHtml],
+        ["weave-patches", weaveHtml],
+        ["create-rom-patch", createHtml],
         ["checksum", checksumHtml],
         ["compress", compressHtml],
         ["extract", extractHtml],
@@ -194,10 +219,10 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its
         // content is fetched release notes, so it stays out of the index.
-        ["whats-new", makeBetaRouteNoindex(whatsNewHtml, "whats-new")],
+        ["whats-new", whatsNewHtml],
         ["save-editor", saveEditorHtml],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
-        ["tools", ppfUndoHtml],
+        ["tools", makeBetaRouteNoindex(ppfUndoHtml, "ppf-undo")],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
@@ -220,13 +245,14 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         );
       }
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
-      // Every channel serves the catalog. Its links use the canonical production
-      // origin, matching the canonical URLs and Markdown headers; only the
-      // sitemap stays production-only. This also lets a PR preview verify the
-      // catalog on Cloudflare Pages before merge.
+      // Every channel serves the catalog. Its links use the origin the build is
+      // served from (production unless ROM_WEAVER_SITE_ORIGIN says otherwise),
+      // while canonical URLs and headers stay on production; only the sitemap
+      // stays production-only. This also lets a PR preview verify the catalog on
+      // Cloudflare Pages before merge.
       fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
-      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
-      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
+      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource(siteOrigin));
+      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource(siteOrigin));
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
         recursive: true,

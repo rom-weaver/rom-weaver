@@ -4,3 +4,4 @@
    render-blocking into every docs route page (rom-weaver-preload-workflow-route-chunks).
    The layer order declared in index.css keeps its cascade priority, not its load order. */
 @import "./docs.css" layer(docs);
+@import "./docs-tool-links.css" layer(docs);

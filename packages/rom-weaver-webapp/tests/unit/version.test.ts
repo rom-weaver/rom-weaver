@@ -18,7 +18,7 @@ const FIXTURE_CHANGELOG = `# Changelog
 
 ### ⚠ BREAKING CHANGES
 
-* **bundle:** reset bundle format to v1
+* **weave:** reset weave format to v1
 
 ### Features
 
@@ -64,12 +64,77 @@ describe("readReleaseNotes", () => {
     expect(release?.truncated).toBe(false);
   });
 
+  it("carries each release's heading date, and none when the heading has no date", () => {
+    expect(notesFor("2.0.0")?.notes.map((note) => note.date)).toEqual(["2026-07-29", "2026-07-01", "2026-06-01"]);
+    const source = path.join(fixtureDir, "UNDATED.md");
+    fs.writeFileSync(source, "## [3.0.0](https://example.com)\n### Features\n* Undated thing\n");
+    expect(notesFor("3.0.0", source)?.notes[0]?.date).toBeUndefined();
+  });
+
   it("starts at the requested version rather than the newest one", () => {
     expect(notesFor("1.1.0")?.notes.map((note) => note.version)).toEqual(["1.1.0", "1.0.0"]);
   });
 
   it("groups entries under their changelog heading", () => {
     expect(notesFor("2.0.0")?.notes[0]?.groups.map((group) => group.title)).toEqual(["⚠ BREAKING CHANGES", "Features"]);
+  });
+
+  it("keeps populated highlight subsections separate from generated groups and legacy entries", () => {
+    const source = path.join(fixtureDir, "HIGHLIGHTS.md");
+    fs.writeFileSync(
+      source,
+      `## [3.0.0](https://example.com)
+### Highlights
+* Legacy headline
+#### New features
+* **webapp:** New workflow ${issue(9)}
+#### Improvements
+* Faster workflow
+#### Fixes
+* Fixed workflow
+#### Security
+* Safer workflow
+#### Empty
+### Bug Fixes
+#### Generated subheading
+* Generated fix
+### Highlights
+* Older flat headline
+`,
+    );
+    expect(notesFor("3.0.0", source)?.notes[0]?.groups).toEqual([
+      {
+        entries: [
+          { summary: "Legacy headline" },
+          { pr: "9", scope: "webapp", summary: "New workflow" },
+          { summary: "Faster workflow" },
+          { summary: "Fixed workflow" },
+          { summary: "Safer workflow" },
+        ],
+        sections: [
+          { entries: [{ summary: "Legacy headline" }], title: "" },
+          { entries: [{ pr: "9", scope: "webapp", summary: "New workflow" }], title: "New features" },
+          { entries: [{ summary: "Faster workflow" }], title: "Improvements" },
+          { entries: [{ summary: "Fixed workflow" }], title: "Fixes" },
+          { entries: [{ summary: "Safer workflow" }], title: "Security" },
+        ],
+        title: "Highlights",
+      },
+      { entries: [{ summary: "Generated fix" }], title: "Bug Fixes" },
+      { entries: [{ summary: "Older flat headline" }], title: "Highlights" },
+    ]);
+  });
+
+  it("keeps subsection entries readable by deployed clients that only use group entries", () => {
+    const source = path.join(fixtureDir, "SECTIONED.md");
+    fs.writeFileSync(source, "## [3.0.0](https://example.com)\n### Highlights\n#### Fixes\n* Fixed workflow\n");
+    expect(notesFor("3.0.0", source)?.notes[0]?.groups).toEqual([
+      {
+        entries: [{ summary: "Fixed workflow" }],
+        sections: [{ entries: [{ summary: "Fixed workflow" }], title: "Fixes" }],
+        title: "Highlights",
+      },
+    ]);
   });
 
   it("splits an entry into scope, summary and its pull request", () => {
@@ -106,8 +171,8 @@ describe("readReleaseNotes", () => {
 
   it("keeps a link-less breaking-change line", () => {
     expect(notesFor("2.0.0")?.notes[0]?.groups[0]?.entries[0]).toEqual({
-      scope: "bundle",
-      summary: "reset bundle format to v1",
+      scope: "weave",
+      summary: "reset weave format to v1",
     });
   });
 

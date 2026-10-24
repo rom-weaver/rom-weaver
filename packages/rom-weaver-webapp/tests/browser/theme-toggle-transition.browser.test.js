@@ -14,7 +14,7 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 const noop = () => undefined;
 const PAGE_TABS = [
   { group: "patches", href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { group: "patches", href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
+  { group: "patches", href: "/create-rom-patch", icon: null, id: "creator", label: "Create Patch" },
 ];
 const THEME_CHOICE = { auto: 2, dark: 1, light: 0 };
 

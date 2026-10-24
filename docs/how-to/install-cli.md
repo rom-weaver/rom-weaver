@@ -26,7 +26,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; other operations can also use it for title lookup and bundle checks. Raw cheat codes supplied with `--code` do not need the database.
+Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify` and cheat baking read that data; other operations can also use it for title lookup and weave checks. Raw cheat codes supplied with `--code` do not need the database.
 
 | Method | Manpages | Identify and cheat data |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Some install methods deliver only the executable, so two extra steps finish them
 | mise | `rom-weaver man --install` | `rom-weaver setup` |
 | `cargo install` (source) | `rom-weaver man --install` | `rom-weaver setup` |
 
-Homebrew, the macOS/Linux install script, and global npm installs put the generated CLI manpages in a Unix manpath. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. The Docker image stores the pages under `/usr/local/share/man/man1`, but it has no `man(1)` program. See [Install shell completions](#install-shell-completions) for completion files, and [man pages](../reference/cli.md#man-pages) for the page commands.
+Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. [Man pages](../reference/cli.md#man-pages) lists where each install method puts the pages. See [Install shell completions](#install-shell-completions) for completion files.
 
 ## Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
@@ -55,11 +55,11 @@ scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket
 scoop install rom-weaver
 ```
 
-Scoop stores the generated manpages under the app directory's `docs\\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
+Scoop stores the generated manpages under the app directory's `docs\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
 
 ## Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
+Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. The same provenance policy checks the documentation archive before extraction. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
 
 ```bash
 sh -c 'curl -fsSL \
@@ -108,7 +108,9 @@ rom-weaver man --install
 rom-weaver setup
 ```
 
-`rom-weaver setup` downloads this version's identify packs and cheat shards from its GitHub release into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, install-script, and Docker packages already carry that data, so `setup` only reports on those.
+`rom-weaver setup` downloads this version's identify packs and cheat shards into the per-user data directory. Running it again reports the installed copy; `--force` refreshes it.
+
+The Homebrew, scoop, npm, install-script, and Docker packages already carry that data and need no setup. Running `setup` with those packages installs a separate per-user copy.
 
 ## mise
 

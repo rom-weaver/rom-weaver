@@ -101,7 +101,24 @@ jobs:
           path: target/release/rom-weaver
 
       - name: Run parity check
+        id: parity
         # FAILS the job on any byte mismatch -- this is the regression signal.
         env:
           PARITY_CARGO_PROFILE: release
-        run: node scripts/parity-check.mjs
+        run: |
+          set -euo pipefail
+          mkdir -p .agent/quality-signals
+          node scripts/parity-check.mjs 2>&1 | tee .agent/quality-signals/live-parity.log
+
+      - name: Live upstream parity summary
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-summary.mjs live-upstream-parity=${{ steps.parity.outcome }}
+
+      - name: Upload live parity diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-reference-evidence
+          include-hidden-files: true
+          path: .agent/quality-signals/live-parity.log
+          if-no-files-found: warn

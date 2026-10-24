@@ -53,7 +53,7 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.byteUnits).toBe("decimal");
-    expect(settings.bundlePackage).toBe("patches");
+    expect(settings.weavePackage).toBe("patches");
     expect(settings.postApplyDownloadBehavior).toBe("auto-show");
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
@@ -63,24 +63,17 @@ describe("getDefaultSettings", () => {
     expect(settings.threads).toBe("auto");
   });
 
-  it("places both post-apply settings after the bundle output setting", () => {
+  it("places both post-apply settings after the weave output setting", () => {
     const downloadField = SETTINGS_FIELD_METADATA.postApplyDownloadBehavior;
     const testField = SETTINGS_FIELD_METADATA.postApplyTestBehavior;
     expect(downloadField.kind).toBe("select");
     expect(downloadField.options?.map((option) => option.value)).toEqual(["auto-show", "show"]);
-    expect(downloadField.options?.map((option) => option.label)).toEqual([
-      "Auto Start & DL Again Button (Default)",
-      "DL Again Button",
-    ]);
+    expect(downloadField.options?.map((option) => option.label)).toEqual(["Automatically", "With a button"]);
     expect(testField.kind).toBe("select");
     expect(testField.options?.map((option) => option.value)).toEqual(["show", "auto-show", "hide"]);
-    expect(testField.options?.map((option) => option.label)).toEqual([
-      "Show After Apply (Default)",
-      "Auto Test & Show After Apply",
-      "Hide Button",
-    ]);
+    expect(testField.options?.map((option) => option.label)).toEqual(["With a button", "Automatically", "Never"]);
     expect(SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior")).toBeGreaterThan(
-      SETTINGS_FIELD_ORDER.indexOf("bundlePackage"),
+      SETTINGS_FIELD_ORDER.indexOf("weavePackage"),
     );
     expect(SETTINGS_FIELD_ORDER.indexOf("postApplyTestBehavior")).toBeGreaterThan(
       SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior"),
@@ -116,17 +109,17 @@ describe("validateSettingsDraft", () => {
     expect(result.invalidFields).not.toContain(getSettingsFieldId("language"));
   });
 
-  it("accepts a bundle package default", () => {
-    const result = validateSettingsDraft(validDraft({ bundlePackage: "ROM" }));
-    expect(result.settings.bundlePackage).toBe("rom");
-    expect(result.invalidFields).not.toContain(getSettingsFieldId("bundlePackage"));
+  it("accepts a weave package default", () => {
+    const result = validateSettingsDraft(validDraft({ weavePackage: "ROM" }));
+    expect(result.settings.weavePackage).toBe("rom");
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("weavePackage"));
   });
 
-  it("migrates an archived bundle package to its ROM-inclusion choice", () => {
+  it("migrates an archived weave package to its ROM-inclusion choice", () => {
     const storage = makeStorage(
-      JSON.stringify({ version: SETTINGS_STORAGE_VERSION, apply: { output: { bundlePackage: "7z:rom" } } }),
+      JSON.stringify({ version: SETTINGS_STORAGE_VERSION, apply: { output: { weavePackage: "7z:rom" } } }),
     );
-    expect(loadSettings(storage).bundlePackage).toBe("rom");
+    expect(loadSettings(storage).weavePackage).toBe("rom");
   });
 
   it("accepts binary file size units", () => {
@@ -190,6 +183,18 @@ describe("validateSettingsDraft", () => {
     const result = validateSettingsDraft(validDraft({ rvzBlockSize: "0" }));
     expect(result.invalidFields).toContain(getSettingsFieldId("rvzBlockSize"));
     expect(result.messages.length).toBeGreaterThan(0);
+  });
+
+  it.each(["1", "32769", "65535", "not-a-number"])("rejects invalid RVZ block size %s", (rvzBlockSize) => {
+    const result = validateSettingsDraft(validDraft({ rvzBlockSize }));
+    expect(result.invalidFields).toContain(getSettingsFieldId("rvzBlockSize"));
+    expect(result.messages.join(" ")).toContain("power of two");
+  });
+
+  it.each([32768, 65536, 1048576])("accepts RVZ block size %i", (rvzBlockSize) => {
+    const result = validateSettingsDraft(validDraft({ rvzBlockSize }));
+    expect(result.invalidFields).not.toContain(getSettingsFieldId("rvzBlockSize"));
+    expect(result.settings.rvzBlockSize).toBe(rvzBlockSize);
   });
 
   it("keeps `auto` worker threads and never flags them", () => {
@@ -509,5 +514,34 @@ describe("loadSettings", () => {
     const storage = makeStorage(payload);
     expect(loadSettings(storage)).toEqual(getDefaultSettings());
     expect(storage.removedKeys).toEqual([LOCAL_STORAGE_SETTINGS_ID]);
+  });
+});
+
+describe("legacy bundle package settings", () => {
+  it("loads legacy output fields and serializes only weave fields", () => {
+    const settings = loadSettings(
+      makeStorage(
+        JSON.stringify({
+          version: SETTINGS_STORAGE_VERSION,
+          apply: { output: { bundlePackage: "rom" } },
+        }),
+      ),
+    );
+    expect(settings.weavePackage).toBe("rom");
+    const stored = JSON.parse(serializeSettingsForStorage(settings) as string);
+    expect(stored.apply.output.weavePackage).toBe("rom");
+    expect(stored.apply.output).not.toHaveProperty("bundlePackage");
+  });
+
+  it("prefers canonical package settings over legacy fields", () => {
+    const settings = loadSettings(
+      makeStorage(
+        JSON.stringify({
+          version: SETTINGS_STORAGE_VERSION,
+          apply: { output: { weavePackage: "patches", bundlePackage: "rom" } },
+        }),
+      ),
+    );
+    expect(settings.weavePackage).toBe("patches");
   });
 });

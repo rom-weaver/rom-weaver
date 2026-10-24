@@ -98,7 +98,7 @@ type OfflineWarmupDisplayProgress = {
  * Both install stages report the same combined byte totals - the app's own
  * precache plus the warm-up set - so one percentage covers the whole install.
  * Entry counts are the fallback for a build with no precache size map (dev, or
- * a host still serving an older bundle).
+ * a host still serving an older weave).
  */
 const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null => {
   if (!progress || progress.ready) return null;
@@ -352,7 +352,6 @@ const BuildTag = ({
     return (
       <span className="build-tag">
         <button
-          aria-haspopup="dialog"
           aria-label={`${name}, ${versionText}`}
           className="sub-chip channel-badge"
           data-channel={key}
@@ -372,13 +371,7 @@ const BuildTag = ({
   }
   return (
     <span className="build-tag">
-      <button
-        aria-haspopup="dialog"
-        className="sub-chip sub-link"
-        onClick={onOpenWhatsNew}
-        title={versionTitle}
-        type="button"
-      >
+      <button className="sub-chip sub-link" onClick={onOpenWhatsNew} title={versionTitle} type="button">
         {versionText}
       </button>
     </span>

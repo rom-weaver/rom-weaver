@@ -1,6 +1,10 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
+import { APP_VERSION } from "../../src/webapp/build-version.ts";
+import { WORKFLOW_ENTRY_ROUTES, withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { createServiceWorkerCacheState } from "../../src/webapp/pwa/service-worker-cache-state.ts";
 import { createWebappRootController } from "../../src/webapp/webapp-controller.ts";
@@ -10,6 +14,7 @@ import { resolveThreads, selectViewWithTransition, WebappRoot } from "../../src/
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 
 const mocks = vi.hoisted(() => ({
+  mastheadFails: false,
   queryOfflineReadyState: vi.fn(async () => null),
   requestEmulatorStartFromUserAction: vi.fn(),
   scheduleOfflineWarmup: vi.fn(() => () => undefined),
@@ -26,6 +31,18 @@ vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", async (importOriginal) 
     ...actual,
     queryOfflineReadyState: mocks.queryOfflineReadyState,
     scheduleOfflineWarmup: mocks.scheduleOfflineWarmup,
+  };
+});
+
+// Lets a test fail a part of the page outside the panels, which only the root boundary covers.
+vi.mock("../../src/webapp/components/shell.tsx", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/webapp/components/shell.tsx")>();
+  return {
+    ...actual,
+    Masthead: (props: Parameters<typeof actual.Masthead>[0]) => {
+      if (mocks.mastheadFails) throw new TypeError("Failed to fetch dynamically imported module");
+      return <actual.Masthead {...props} />;
+    },
   };
 });
 
@@ -73,34 +90,51 @@ const baseState = () => {
 
 const renderRoot = async ({
   currentView = "patcher" as WebappRootProps["state"]["currentView"],
+  assetBaseUrl,
+  workflowEntry,
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
+  detailedViewEnabled = false,
+  language,
   updateReady = false,
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
+  assetBaseUrl?: string;
+  workflowEntry?: WebappRootProps["workflowEntry"];
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
+  detailedViewEnabled?: boolean;
+  language?: string;
   updateReady?: boolean;
 } = {}) => {
   if (!notFound) await preloadWorkflowRoute(currentView);
   const { actions, called } = createActions();
-  const view = render(
+  const state = baseState();
+  state.settings.detailedViewEnabled = detailedViewEnabled;
+  if (language) state.settings.language = language;
+  const root = (confirmationDialog = createEmptyConfirmationDialogState()) => (
     <WebappRoot
       actions={actions}
-      confirmationDialog={createEmptyConfirmationDialogState()}
+      assetBaseUrl={assetBaseUrl}
+      workflowEntry={workflowEntry}
+      confirmationDialog={confirmationDialog}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
         serviceWorkerCache: { updateReady },
         vite: createEmptyVitePageUpdateState(),
       })}
       serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus, updateReady }}
-      state={{ ...baseState(), currentView, settingsDialogOpen }}
+      state={{ ...state, currentView, settingsDialogOpen }}
       urlSession={null}
-    />,
+    />
   );
-  return { ...view, called };
+  const view = render(root());
+  /** Re-renders as the controller does after `requestConfirmation`. */
+  const rerenderWithConfirmation = (confirmationDialog: WebappRootProps["confirmationDialog"]) =>
+    view.rerender(root(confirmationDialog));
+  return { ...view, called, rerenderWithConfirmation };
 };
 
 const fileDragEvent = (type: string, target: EventTarget = document, files: File[] = []) => {
@@ -127,6 +161,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 /** A nav row by its visible label, from whichever layout the test names. */
@@ -177,6 +212,21 @@ describe("the workbench shell", () => {
     expect(document.documentElement.dataset.betaToolsEnabled).toBeDefined();
   });
 
+  it.each(["de", "es", "en"])("marks the document language as %s once the locale is active", async (language) => {
+    document.documentElement.lang = "en";
+    await renderRoot({ language });
+
+    expect(document.documentElement.lang).toBe(language);
+  });
+
+  it("names the Save Editor row and page title in full, not Saves", async () => {
+    const { container } = await renderRoot({ currentView: "save-editor" });
+
+    expect(navRow(container, "Save Editor")).toBeTruthy();
+    expect(navRow(container, "Saves")).toBeUndefined();
+    expect(document.title).toContain("Save Editor");
+  });
+
   it("renders the not-found workbench with links out and no workflow panels", async () => {
     const { container } = await renderRoot({ notFound: true });
 
@@ -187,13 +237,81 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
+  });
+
+  it("renders the not-found page in the saved language instead of the browser locale", async () => {
+    vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["en"]);
+    await preloadCatalog("de");
+    const { container } = await renderRoot({ notFound: true, language: "de" });
+
+    expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+    expect(container.querySelector(".not-found-label")?.textContent).toBe("Diese Seite gibt es hier nicht.");
+    expect(container.querySelector(".not-found-copy")?.textContent).toBe(
+      "Prüfe die Adresse oder wähle, wohin du als Nächstes möchtest.",
+    );
+    expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+  });
+
+  it("keeps not-found links and tab loads inside a subdirectory deployment", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
+
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-patches");
+    expect(container.querySelector(".not-found-docs")?.getAttribute("href")).toBe("/rom-weaver/docs");
+    const tabHrefs = [...container.querySelectorAll(".side-nav a[href^='/']")].map((link) => link.getAttribute("href"));
+    expect(tabHrefs).toContain("/rom-weaver/docs");
+    expect(tabHrefs.filter((href) => !href?.startsWith("/rom-weaver/"))).toEqual([]);
+
+    fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/create-rom-patch");
+    fireEvent.click(navRow(container, "Docs"));
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
+  });
+
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
+  });
+
   it("routes a not-found tab click to a full page load", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ notFound: true });
 
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
-    expect(assign).toHaveBeenCalledWith("/create-patch");
+    expect(assign).toHaveBeenCalledWith("/create-rom-patch");
+  });
+
+  it("keeps the not-found Docs link on the site root instead of a protocol-relative URL", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ notFound: true });
+
+    const hrefs = [...container.querySelectorAll("a[href]")].map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href?.startsWith("//"))).toEqual([]);
+    expect(hrefs).toContain("/docs");
+
+    fireEvent.click(navRow(container, "Docs"));
+
+    expect(assign).toHaveBeenCalledWith("/docs");
   });
 });
 
@@ -268,17 +386,18 @@ describe("the unified dialog", () => {
     );
   });
 
-  it("switches from the default simple view to detailed view from the panel heading", async () => {
-    const { called, container } = await renderRoot();
+  it.each([false, true])("labels the active view when detailed is %s", async (detailedViewEnabled) => {
+    const { called, container } = await renderRoot({ detailedViewEnabled });
 
     const toggle = container.querySelector(".workflow-panel-head .panel-view-toggle input") as HTMLInputElement;
-    expect(toggle.closest("label")?.textContent).toBe("Detailed");
+    expect(toggle.closest("label")?.textContent).toBe(detailedViewEnabled ? "Detailed" : "Simple");
     expect(toggle.getAttribute("role")).toBe("switch");
-    expect(toggle.checked).toBe(false);
-    expect(toggle.getAttribute("aria-label")).toBe("Detailed");
+    expect(toggle.checked).toBe(detailedViewEnabled);
+    expect(toggle.getAttribute("aria-checked")).toBe(String(detailedViewEnabled));
+    expect(toggle.getAttribute("aria-label")).toBe("Simple / Detailed");
     fireEvent.click(toggle);
 
-    expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(true);
+    expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(!detailedViewEnabled);
     expect(called("onOpenSettings")).not.toHaveBeenCalled();
   });
 
@@ -309,34 +428,156 @@ describe("the unified dialog", () => {
   });
 });
 
+describe("the full-page load notice", () => {
+  afterEach(() => {
+    mocks.mastheadFails = false;
+  });
+
+  it("still shows the reload confirmation the full-page notice asks for", async () => {
+    // React reports the caught error to the console; the assertion is on what stays rendered.
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.mastheadFails = true;
+    const { called, container, rerenderWithConfirmation } = await renderRoot({ updateReady: true });
+
+    await waitFor(() => expect(container.querySelector("main.workbench.is-not-found [role=alert]")).not.toBeNull());
+    fireEvent.click(within(container).getByRole("button", { name: "Reload" }));
+    expect(called("onReloadUpdate")).toHaveBeenCalledTimes(1);
+    // With staged work, applying the update asks first (webapp.ts `confirmReloadUpdate`).
+    rerenderWithConfirmation({
+      ...createEmptyConfirmationDialogState(),
+      cancelLabel: "Stay here",
+      confirmLabel: "Reload now",
+      message: "Staged files will be lost.",
+      open: true,
+      title: "Reload and lose changes?",
+    });
+
+    // The dialog may portal out of the root container.
+    expect(within(document.body).getByRole("button", { name: "Reload now" })).toBeTruthy();
+    expect(document.body.textContent).toContain("Reload and lose changes?");
+  });
+});
+
 describe("the update banner", () => {
-  it("remembers a dismissal for this build", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-    const banner = container.querySelector(".reveal.is-open .updates.update-ready");
-    expect(banner).not.toBeNull();
+  const LAST_SEEN_KEY = "rom-weaver-last-seen-version";
+  const readyBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner.update-ready");
+  const updatedBanner = (container: HTMLElement) =>
+    container.querySelector(".reveal.is-open .update-banner:not(.update-ready)");
+  // Lets the lazy banner and its changelog fetch settle before asserting it stayed shut.
+  const settleBanner = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
-    fireEvent.click(container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-
-    expect(container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
-    expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        json: () =>
+          Promise.resolve([
+            {
+              date: "2026-07-29T00:00:00Z",
+              hash: "release",
+              release: {
+                changelogUrl: "https://github.com/rom-weaver/rom-weaver/blob/main/CHANGELOG.md",
+                notes: [
+                  {
+                    groups: [{ entries: [{ summary: "Shiny highlight" }], title: "Highlights" }],
+                    version: APP_VERSION,
+                  },
+                ],
+                repositoryUrl: "https://github.com/rom-weaver/rom-weaver",
+                truncated: false,
+                version: APP_VERSION,
+              },
+              subject: "release",
+            },
+          ]),
+        ok: true,
+      }),
+    );
   });
 
-  it("stays dismissed on the next mount of the same build", async () => {
-    const first = await renderRoot({ updateReady: true });
-    fireEvent.click(first.container.querySelector(".updates.update-ready .banner-x") as HTMLButtonElement);
-    cleanup();
+  afterEach(() => vi.unstubAllGlobals());
 
-    const second = await renderRoot({ updateReady: true });
+  describe("with a deploy waiting", () => {
+    it("remembers a dismissal for this build", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
 
-    expect(second.container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(readyBanner(container)).toBeNull();
+      expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeTruthy();
+    });
+
+    it("stays dismissed on the next mount of the same build", async () => {
+      const first = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(first.container)).not.toBeNull());
+      fireEvent.click(readyBanner(first.container)?.querySelector(".banner-x") as HTMLButtonElement);
+      cleanup();
+
+      const second = await renderRoot({ updateReady: true });
+      await settleBanner();
+
+      expect(readyBanner(second.container)).toBeNull();
+    });
+
+    it("sends See what's new to the whats-new route", async () => {
+      const { called, container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
   });
 
-  it("sends its What's new link to the whats-new route", async () => {
-    const { called, container } = await renderRoot({ updateReady: true });
+  describe("after an update", () => {
+    beforeEach(() => {
+      window.localStorage.setItem(LAST_SEEN_KEY, "0.0.1");
+    });
 
-    fireEvent.click(container.querySelector(".updates.update-ready .updates-ver") as HTMLButtonElement);
+    it("tells a returning visitor what changed and opens What's new", async () => {
+      const { called, container } = await renderRoot();
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Shiny highlight"));
+      fireEvent.click(within(container).getByRole("button", { name: "See what’s new" }));
+
+      await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    });
+
+    it("records the running version once dismissed", async () => {
+      const { container } = await renderRoot();
+      await waitFor(() => expect(updatedBanner(container)).not.toBeNull());
+
+      fireEvent.click(updatedBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION);
+    });
+
+    it("counts reading What's new as seeing the update", async () => {
+      const { container } = await renderRoot({ currentView: "whats-new" });
+
+      await waitFor(() => expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe(APP_VERSION));
+      await settleBanner();
+      expect(updatedBanner(container)).toBeNull();
+    });
+
+    it("waits behind a deploy that is ready to load, then takes the banner once it is dismissed", async () => {
+      const { container } = await renderRoot({ updateReady: true });
+      await waitFor(() => expect(readyBanner(container)).not.toBeNull());
+
+      expect(updatedBanner(container)).toBeNull();
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+
+      fireEvent.click(readyBanner(container)?.querySelector(".banner-x") as HTMLButtonElement);
+
+      await waitFor(() => expect(updatedBanner(container)?.textContent).toContain("Updated from v0.0.1"));
+      expect(window.localStorage.getItem(LAST_SEEN_KEY)).toBe("0.0.1");
+    });
   });
 });
 
@@ -348,7 +589,7 @@ describe("the What's new route", () => {
     expect(panel).not.toBeNull();
     expect(panel?.hasAttribute("hidden")).toBe(false);
     expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
-    expect(document.title).toBe("rom-weaver - What's new");
+    expect(document.title).toBe(withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE));
   });
 
   it("reaches the route from the version chip", async () => {
@@ -371,6 +612,33 @@ describe("the What's new route", () => {
 });
 
 describe("page-level drag and drop", () => {
+  it.each([
+    { currentView: "docs" as const },
+    { currentView: "whats-new" as const },
+    { currentView: "save-editor" as const },
+    { currentView: "patcher" as const, notFound: true },
+  ])("offers ROM routing from $currentView (notFound=$notFound)", async (options) => {
+    const { called, container } = await renderRoot(options);
+    const drag = fileDragEvent("dragover");
+    act(() => {
+      document.dispatchEvent(drag);
+    });
+    expect(drag.defaultPrevented).toBe(true);
+    expect(container.querySelector("#column")?.className).toContain("rw-page-dragging");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Release to add files");
+
+    const drop = fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]);
+    act(() => {
+      document.dispatchEvent(drop);
+    });
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor(() => expect(within(container).queryByRole("button", { name: /Test ROM/ })).toBeTruthy());
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    fireEvent.click(within(container).getByRole("button", { name: /Apply Patches/ }));
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(container.querySelector(".is-not-found")).toBeNull();
+  });
+
   it("arms the page while a file is dragged over it", async () => {
     const { container } = await renderRoot();
 
@@ -418,19 +686,140 @@ describe("page-level drag and drop", () => {
 
     expect(dropped.defaultPrevented).toBe(false);
   });
+
+  it("names the workflow a landing-page drop opens, then lets the veil go", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const column = () => container.querySelector("#column")?.className ?? "";
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["patch"], "hack.bps")]));
+    });
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    expect(column()).toContain("rw-drop-routing");
+    expect(container.querySelector(".dropveil-text")?.textContent).toBe("Opening Apply Patches");
+    expect(container.querySelector('p[role="status"].sr-only')?.textContent).toBe("Opening Apply Patches");
+    await waitFor(() => expect(column()).not.toContain("rw-drop-routing"), { timeout: 2000 });
+  });
+
+  it("routes a file picked on the landing page without raising the drop veil", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+    const input = container.querySelector<HTMLInputElement>("#home-file-input");
+    if (!input) throw new Error("The landing page rendered no file input");
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => seen.push(container.querySelector("#column")?.className ?? ""));
+    observer.observe(container.querySelector("#column") as Element, { attributeFilter: ["class"] });
+
+    Object.defineProperty(input, "files", { value: [new File(["patch"], "hack.bps")] });
+    fireEvent.change(input);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("patcher"));
+    observer.disconnect();
+    expect(seen.some((className) => className.includes("rw-drop-routing"))).toBe(false);
+  });
+
+  it("sends a save dropped alone on the landing page to Test", async () => {
+    const { called } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["save"], "game.sav")]));
+    });
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("test"));
+  });
+
+  it("opens Saves & storage for a save backup dropped on the landing page", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["{}"], "game.rw-emulator-save.json")]));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
+  });
+
+  it("opens Saves & storage for a save backup dropped on another workflow", async () => {
+    const { called, container } = await renderRoot({ currentView: "test" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["{}"], "game.rw-emulator-save.json")]));
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+  });
+
+  it("lets the veil go without naming a workflow when a landing-page drop needs a choice", async () => {
+    const { called, container } = await renderRoot({ currentView: "home" });
+
+    act(() => {
+      document.dispatchEvent(fileDragEvent("drop", document.body, [new File(["rom"], "game.sfc")]));
+    });
+
+    await waitFor(() => expect(container.querySelector("#column")?.className).not.toContain("rw-drop-routing"));
+    expect(called("onSelectView")).not.toHaveBeenCalled();
+    expect(container.querySelector(".dropveil-text")?.textContent).not.toContain("Opening");
+  });
 });
 
 describe("page metadata per view", () => {
+  it.each(Object.keys(WORKFLOW_ENTRY_ROUTES) as (keyof typeof WORKFLOW_ENTRY_ROUTES)[])(
+    "uses task-specific metadata for %s",
+    async (workflowEntry) => {
+      const canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      const description = document.createElement("meta");
+      description.name = "description";
+      document.head.append(canonical, description);
+      const route = WORKFLOW_ENTRY_ROUTES[workflowEntry];
+      try {
+        await renderRoot({ currentView: route.view, workflowEntry });
+        expect(canonical.href).toBe(`https://rom-weaver.com/${route.slug}`);
+        expect(description.content).toBe(route.description);
+        expect(document.title).toBe(withChannelBadge(route.title, CHANNEL_BADGE));
+      } finally {
+        canonical.remove();
+        description.remove();
+      }
+    },
+  );
+
+  it("updates PPF undo metadata after navigating from Apply", async () => {
+    const canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    const description = document.createElement("meta");
+    description.name = "description";
+    document.head.append(canonical, description);
+    try {
+      const root = await renderRoot({ currentView: "patcher" });
+      expect(canonical.href).toBe("https://rom-weaver.com/apply-patches");
+      root.unmount();
+      await renderRoot({ currentView: "ppf-undo" });
+      expect(canonical.href).toBe("https://rom-weaver.com/ppf-undo");
+      expect(description.content).toContain("Undo a PPF3 patch");
+      expect(document.title).toContain("Undo PPF patches online");
+    } finally {
+      canonical.remove();
+      description.remove();
+    }
+  });
+
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim ROM");
+    expect(document.title).toBe(withChannelBadge("Trim ROM | rom-weaver", CHANNEL_BADGE));
   });
 
   it("uses the marketing title for a view that has one", async () => {
     await renderRoot({ currentView: "test" });
 
-    expect(document.title).not.toBe("rom-weaver - Test");
+    expect(document.title).not.toBe("Test | rom-weaver");
     expect(document.title).toContain("rom-weaver");
   });
 });
@@ -537,6 +926,29 @@ describe("the settings draft flow", () => {
     expect(called("onSaveClose")).toHaveBeenCalledTimes(1);
   });
 
+  it("applies an accent chosen in the dialog at once while other fields stay drafts", async () => {
+    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+    await openSettings(container);
+    const chip = await waitFor(() => {
+      const input = container.querySelector<HTMLInputElement>('.accent-picker input[type="radio"]:not(:checked)');
+      if (!input) throw new Error("The settings tab rendered no accent chip");
+      return input;
+    });
+
+    fireEvent.click(chip);
+
+    expect(called("onAccentChange")).toHaveBeenCalledWith(chip.value);
+    expect(called("onDraftChange")).not.toHaveBeenCalled();
+
+    const checkbox = container.querySelector<HTMLInputElement>("#settings-beta-tools-enabled");
+    if (!checkbox) throw new Error("The settings tab rendered no beta tools field");
+    fireEvent.click(checkbox);
+
+    expect(called("onDraftChange")).toHaveBeenCalledTimes(1);
+    expect(called("onDraftChange").mock.calls[0]?.[0]).toBe("betaToolsEnabled");
+    expect(called("onAccentChange")).toHaveBeenCalledTimes(1);
+  });
+
   it("deep links the page thread count into the Threads setting", async () => {
     const { called, container } = await renderRoot();
 
@@ -601,8 +1013,10 @@ describe("console history", () => {
       expect(container.querySelector('[data-logtab="offline"]')?.getAttribute("aria-selected")).toBe("true"),
     );
     window.history.back();
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).toBeNull());
-    expect(window.location.hash).toBe("");
+    await waitFor(() => {
+      expect(container.querySelector("dialog.log-dlg")).toBeNull();
+      expect(window.location.hash).toBe("");
+    });
   });
 
   it("drops its entries when the console closes from inside", async () => {
@@ -622,20 +1036,28 @@ describe("console history", () => {
 });
 
 describe("the phone dock", () => {
-  it("opens the settings console from the dock's App button", async () => {
+  it("opens the settings console from Menu, and the console's own dock reads Close", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".dock-app") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('#menu-sheet [data-nav="settings"]') as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
     );
+    // The modal makes the page's dock inert, so the console repeats it with Menu reading Close.
+    const consoleDock = container.querySelector(".log-dlg .dock") as HTMLElement;
+    const slots = Array.from(consoleDock.querySelectorAll(".dock-tab")).map((slot) => slot.textContent);
+    expect(slots).toEqual(["Apply", "Create", "Identify", "Test", "Close"]);
+    fireEvent.click(consoleDock.querySelector(".dock-menu") as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector(".log-dlg")).toBeNull());
   });
 });
 
 describe("development offline status", () => {
   it("forces every display state and restores the actual status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     vi.stubEnv("DEV", true);
     vi.stubEnv("MODE", "development");
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
@@ -650,11 +1072,13 @@ describe("development offline status", () => {
     for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
       fireEvent.change(select, { target: { value } });
       expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
-      expect(container.querySelector(".reveal.is-open .update-ready") !== null).toBe(value === "update");
       if (value === "update") {
-        fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+        await waitFor(() => expect(container.querySelector(".reveal.is-open .update-ready")).not.toBeNull());
+        fireEvent.click(container.querySelector(".update-banner .banner-x") as HTMLButtonElement);
         expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
         expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeNull();
+      } else {
+        expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
       }
     }
     fireEvent.change(select, { target: { value: "actual" } });

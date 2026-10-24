@@ -16,6 +16,12 @@ pub(super) const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
 pub(super) const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
     &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
 pub(super) const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
+/// Formats whose create cannot express a target smaller than the source: PPF rejects it and
+/// EBP (IPS plus trailing JSON metadata) has no truncate footer, so applying the patch would
+/// leave the output at the source size.
+pub(super) const NO_SHRINK_CREATE_PATCH_FORMATS: &[&str] = &["ebp", "ppf"];
+/// Formats whose patches only apply to one known source ROM (MOD/PMSR: Paper Mario USA v1.0).
+pub(super) const SOURCE_RESTRICTED_CREATE_PATCH_FORMATS: &[&str] = &["pmsr"];
 pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
     ".7z",
     ".apk",
@@ -97,6 +103,8 @@ pub struct PatchCreateFormatPolicyMetadata {
     pub medium_formats: &'static [&'static str],
     pub mid_large_formats: &'static [&'static str],
     pub large_formats: &'static [&'static str],
+    pub no_shrink_formats: &'static [&'static str],
+    pub source_restricted_formats: &'static [&'static str],
 }
 
 pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata {
@@ -112,6 +120,8 @@ pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata 
         medium_formats: MEDIUM_CREATE_PATCH_FORMATS,
         mid_large_formats: MID_LARGE_CREATE_PATCH_FORMATS,
         large_formats: LARGE_CREATE_PATCH_FORMATS,
+        no_shrink_formats: NO_SHRINK_CREATE_PATCH_FORMATS,
+        source_restricted_formats: SOURCE_RESTRICTED_CREATE_PATCH_FORMATS,
     }
 }
 
@@ -544,8 +554,8 @@ impl CliApp {
 
     /// Merge one source's expected input-ROM requirements into the accumulated
     /// expectation, failing on any conflicting value. Shared by the
-    /// patch-file-name requirements and rom-weaver-bundle.json bundle checks; merge order
-    /// (CLI flags, then bundle rom/patch checks, then file names) decides
+    /// patch-file-name requirements and rom-weaver-weave.json weave checks; merge order
+    /// (CLI flags, then weave rom/patch checks, then file names) decides
     /// which source a conflict is reported against.
     pub(super) fn merge_expected_input_requirements(
         &self,
@@ -734,8 +744,11 @@ impl CliApp {
         Ok(format!("{scope} checksum(s) verified ({rendered})"))
     }
 
-    pub(super) fn validate_patch_input_size(
+    /// Checks `source` against size expectations; `side` (`input` or `output`) names which end of
+    /// the patch the file is in messages.
+    pub(super) fn validate_patch_size(
         source: &Path,
+        side: &str,
         expected_size: Option<u64>,
         minimum_size: Option<u64>,
     ) -> Result<String> {
@@ -744,14 +757,14 @@ impl CliApp {
             && actual_size != expected
         {
             return Err(RomWeaverError::Validation(format!(
-                "input size mismatch; expected {expected} byte(s), actual {actual_size}"
+                "{side} size mismatch; expected {expected} byte(s), actual {actual_size}"
             )));
         }
         if let Some(minimum) = minimum_size
             && actual_size < minimum
         {
             return Err(RomWeaverError::Validation(format!(
-                "input size is below required minimum; expected at least {minimum} byte(s), actual {actual_size}"
+                "{side} size is below required minimum; expected at least {minimum} byte(s), actual {actual_size}"
             )));
         }
 
@@ -763,9 +776,9 @@ impl CliApp {
             labels.push(format!("min_size={minimum}"));
         }
         if labels.is_empty() {
-            Ok(format!("input size verified ({actual_size} byte(s))"))
+            Ok(format!("{side} size verified ({actual_size} byte(s))"))
         } else {
-            Ok(format!("input size verified ({})", labels.join(", ")))
+            Ok(format!("{side} size verified ({})", labels.join(", ")))
         }
     }
 }

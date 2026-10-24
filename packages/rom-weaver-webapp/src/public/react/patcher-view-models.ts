@@ -48,6 +48,7 @@ interface UiViewStateInput {
   inputNoticeMessage: string;
   inputStaging: boolean;
   outputRuntimeNoticeMessage: string;
+  outputWarningMessage: string;
   patchNoticeMessage: string;
   patchProgress: InputProgress | null;
   patchProgressByKey: Record<string, InputProgress>;
@@ -65,6 +66,7 @@ const buildUiViewState = ({
   inputNoticeMessage,
   inputStaging,
   outputRuntimeNoticeMessage,
+  outputWarningMessage,
   patchNoticeMessage,
   patchProgress,
   patchProgressByKey,
@@ -86,12 +88,20 @@ const buildUiViewState = ({
       message: inputNoticeMessage,
       visible: !!inputNoticeMessage,
     },
-    outputNotice: {
-      dismissible: !!outputRuntimeNoticeMessage,
-      level: "error" as const,
-      message: effectiveOutputNoticeMessage,
-      visible: !!effectiveOutputNoticeMessage,
-    },
+    // A run error wins; otherwise the finished output's handler warnings show as a warning.
+    outputNotice: effectiveOutputNoticeMessage
+      ? {
+          dismissible: !!outputRuntimeNoticeMessage,
+          level: "error" as const,
+          message: effectiveOutputNoticeMessage,
+          visible: true,
+        }
+      : {
+          dismissible: false,
+          level: "warning" as const,
+          message: outputWarningMessage,
+          visible: !!outputWarningMessage,
+        },
     patchInput: {
       loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
     },
@@ -148,6 +158,7 @@ const buildStackViewState = ({
       canMoveUp: index > 0 && !(busy || disabled),
       canRemove: !(busy || disabled),
       chainVerdict: patchInfo?.chainVerdict,
+      checksumCompared: patchInfo?.checksumCompared === true,
       checksumTiming: patchInfo?.checksumTiming || "",
       decompressionTimeMs: patchInfo?.decompressionTimeMs,
       detailText: patchInfo?.targetLabel || "",
@@ -190,22 +201,30 @@ const buildStackViewState = ({
       validationLabel: patchInfo?.validationLabel || "",
       validationMessage: patchInfo?.validationMessage || "",
       validationState: patchInfo?.validationState || "",
+      validationUnreadable: !!patchInfo?.validationUnreadable,
       validationValues: patchInfo?.validationValues || [],
     };
   }),
 });
+
+/** Whether the apply button can start a run: not disabled, not blocked by a failed validation. */
+const isApplyButtonActionable = (button: { blocked: boolean; disabled: boolean }) =>
+  !(button.disabled || button.blocked);
 
 interface OutputViewStateInput {
   activeSettings: ApplyPatchFormSettings;
   applyQueued: boolean;
   applyTimingText: string;
   busy: boolean;
+  applyBlocked: boolean;
   canQueueApply: boolean;
   completedSizeSummary: OutputSizeSummary;
   compressTimingText: string;
   disabled: boolean;
   displayedCompression: CompressionFormat;
   effectiveResolvedOutputName: string;
+  /** The default output format is still waiting on the engine's header evidence for a `.bin`. */
+  formatPending: boolean;
   hasPendingDownload: boolean;
   /** The ROM's identified title, or null when it has no single confident match. */
   identifiedTitle: string | null;
@@ -223,6 +242,7 @@ interface OutputViewStateInput {
 const buildOutputViewState = ({
   activeSettings,
   applyQueued,
+  applyBlocked,
   applyTimingText,
   busy,
   canQueueApply,
@@ -231,6 +251,7 @@ const buildOutputViewState = ({
   disabled,
   displayedCompression,
   effectiveResolvedOutputName,
+  formatPending,
   hasPendingDownload,
   identifiedTitle,
   outputName,
@@ -243,6 +264,7 @@ const buildOutputViewState = ({
   z3dsLabelSource,
 }: OutputViewStateInput) => ({
   applyButton: {
+    blocked: applyBlocked && !hasPendingDownload,
     disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
     label: hasPendingDownload ? `Download ${pendingDownloadFileName || "output"}` : "Apply & download",
     loading: busy || applyQueued,
@@ -258,6 +280,7 @@ const buildOutputViewState = ({
   applyTiming: applyTimingText,
   compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>, z3dsLabelSource),
   compressionFormat: displayedCompression,
+  formatPending,
   compressTiming: compressTimingText,
   disabled: disabled || busy,
   displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
@@ -295,4 +318,11 @@ const buildNoticeViewState = ({ failureMessage, failurePlacement }: NoticeViewSt
   visible: !!failureMessage && !failurePlacement,
 });
 
-export { buildNoticeViewState, buildOutputViewState, buildStackViewState, buildUiViewState, formatHeaderAutoLabel };
+export {
+  buildNoticeViewState,
+  buildOutputViewState,
+  buildStackViewState,
+  buildUiViewState,
+  formatHeaderAutoLabel,
+  isApplyButtonActionable,
+};

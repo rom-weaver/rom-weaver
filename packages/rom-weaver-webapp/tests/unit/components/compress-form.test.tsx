@@ -48,7 +48,7 @@ describe("CompressForm", () => {
       target: { value: "release" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^Options / }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Level", exact: true }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Compression level", exact: true }), {
       target: { value: "low" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));

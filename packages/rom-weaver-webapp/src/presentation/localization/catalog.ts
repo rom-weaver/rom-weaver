@@ -10,7 +10,7 @@ const DEFAULT_LOCALE: LocaleCode = "en";
 /*
  * The catalogs are the `lingui compile`d output of the `.po` files in
  * `./locales`; the English source-of-truth lives in `./messages.ts` (read by
- * `lingui extract`). Only English ships in the main bundle: it is the fallback
+ * `lingui extract`). Only English ships in the main weave: it is the fallback
  * every other locale degrades to, so it is needed at first paint. Every other
  * catalog is its own chunk, fetched the first time its locale is resolved, so
  * a visitor pays for one language rather than all of them.

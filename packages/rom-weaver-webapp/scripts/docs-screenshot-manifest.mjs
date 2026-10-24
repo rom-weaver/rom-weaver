@@ -19,22 +19,22 @@ const DOCS_SCREENSHOT_CASES = [
     dismissGuide: true,
     docsRoute: "docs/create-rom-patches",
     name: "create-inputs",
-    route: "/create-patch?guide=create",
+    route: "/create-rom-patch?guide=create",
     target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
   },
   {
     dismissGuide: true,
     docsRoute: "docs/create-rom-patches",
     name: "create-output",
-    route: "/create-patch?guide=create",
+    route: "/create-rom-patch?guide=create",
     target: "#patch-builder-row-output",
   },
   {
     dismissGuide: true,
-    docsRoute: "docs/create-bundles",
+    // quality-reason: The guide omits obsolete Bundle-labeled images; retain this capture case for a refreshed Weave screenshot.
     name: "bundle-output",
-    route: "/bundle-patches?guide=bundle",
-    target: "#rom-weaver-bundle-job",
+    route: "/weave-patches?guide=weave",
+    target: "#rom-weaver-weave-job",
   },
   {
     docsRoute: "docs/identify-roms-browser",
@@ -60,6 +60,15 @@ const DOCS_SCREENSHOT_CASES = [
     docsRoute: "docs/use-cheats",
     practiceFiles: true,
     name: "cheat-step",
+    route: "/apply-patches?guide=apply",
+    target: "#rom-weaver-row-patch-stack",
+  },
+  // The README shows this whole first screen; no docs guide embeds it.
+  {
+    dismissGuide: true,
+    fullScreen: true,
+    practiceFiles: true,
+    name: "apply-page",
     route: "/apply-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
   },
@@ -107,6 +116,7 @@ const DOCS_SCREENSHOT_NAMES = [
   "checksum-home-light.webp",
   "checksum-initial-light.webp",
   "checksum-mobile-dark.webp",
+  "ppf-undo-restored.webp",
 ];
 
 export {

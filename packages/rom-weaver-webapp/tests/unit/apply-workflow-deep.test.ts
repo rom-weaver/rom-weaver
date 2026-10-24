@@ -156,6 +156,7 @@ describe("runApplyWorkflow validation and preparation", () => {
       [undefined],
       ["patch-a"],
       [{ member: "disc/track01.bin", rom: true }],
+      { memberChecks: new Map([["disc/track01.bin", []]]) },
     );
     expect(mocks.buildSessionOutputFiles).toHaveBeenCalledWith(
       [inputAsset],
@@ -242,6 +243,30 @@ describe("runApplyWorkflow validation and preparation", () => {
     expect(runtime.patch.applyPatch).toHaveBeenCalledOnce();
     expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
       expect.objectContaining({ options: expect.objectContaining({ patchTargets: [{ rom: true }, null] }) }),
+    );
+  });
+
+  it("sends a ROM target for a renamed bare file that matches only through the weave rom checks", async () => {
+    const inputAsset = { ...asset(), checksums: { crc32: "00000000" }, fileName: "game.bin", size: 16 };
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 16 });
+
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 16),
+        options: { output: { outputName: "result.bin" } },
+        parsedPatches: [parsedPatch("ips")],
+        patchOptions: [{ memberChecks: "crc32=00000000", target: { member: "first.bin", rom: true } }],
+        patches: [sourceRef("first.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [patchFile("first.ips")],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ patchTargets: [{ rom: true }] }) }),
     );
   });
 
@@ -477,5 +502,35 @@ describe("runApplyWorkflow recovery and multi-asset paths", () => {
       options: expect.objectContaining({ outputName: "patched.sfc" }),
     });
     expect(result.inputs).toHaveLength(2);
+  });
+
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2.sfc"],
+    ["game.sfc", "game.sfc"],
+    ["GAME.SFC", "GAME.SFC"],
+  ])("treats typed output name %s as a base name for the worker", async (typedName, expectedName) => {
+    const runtime = makeRuntime();
+    const input = asset("one", "one.sfc", 5);
+    input.file.getExtension = () => "sfc";
+    const patch = patchFile("fix.ips");
+    const parsed = parsedPatch("ips");
+    mocks.resolvePatchTargets.mockResolvedValue([input]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 0 });
+    mocks.parsePatchForApply.mockResolvedValue(parsed);
+    await runApplyWorkflow(
+      {
+        inputs: [sourceRef("one.sfc", 5)],
+        options: { output: { outputName: typedName } },
+        patches: [sourceRef("fix.ips", 4)],
+        preparedInputAssets: [input],
+        preparedPatchFiles: [patch],
+        parsedPatches: [parsed],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch.mock.calls[0]?.[0]).toMatchObject({
+      options: expect.objectContaining({ outputName: expectedName }),
+    });
   });
 });

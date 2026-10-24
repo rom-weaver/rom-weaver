@@ -27,7 +27,7 @@ test("checkTouchStyles: `:hover` grouped with `:focus-visible` outside the media
 });
 
 test("checkTouchStyles: `:hover` grouped with `:focus-visible` INSIDE a correctly gated media query is still a violation", () => {
-  // Regression case: gating the whole group does not make grouping legal - AGENTS.md requires the
+  // Regression case: gating the whole group does not make grouping legal - the CSS rules require the
   // hover and focus/active halves to live in separate selector lists regardless of gating.
   const { failures } = checkTouchStyles(
     [

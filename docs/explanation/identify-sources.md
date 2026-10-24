@@ -46,7 +46,7 @@ The webapp downloads default packs during background preparation. Optional group
 
 The pack is an application asset; the checksum comparison happens locally. The request identifies the pack, not the ROM checksum or filename. Offline identification needs the relevant pack to be cached.
 
-A checksum with no file behind it - the expected ROM a bundle or a patch declares - is looked up the same local way. rom-weaver still sends nothing.
+A checksum with no file behind it - the expected ROM a weave or a patch declares - is looked up the same local way. rom-weaver still sends nothing.
 
 ## Related
 

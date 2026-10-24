@@ -32,7 +32,7 @@ impl ChdReadSession {
 
         let header = Self::convert_header(chd.header());
         let mut metadata_by_tag_and_index = BTreeMap::new();
-        let metadatas: Vec<chd::metadata::Metadata> = chd
+        let metadatas: Vec<crate::chd_rs::metadata::Metadata> = chd
             .metadata_refs()
             .try_into()
             .map_err(|error| format!("failed to read CHD metadata: {error}"))?;
@@ -99,14 +99,13 @@ impl ChdReadSession {
         }
     }
 
-    fn convert_header(header: &chd::header::Header) -> ChdHeader {
+    fn convert_header(header: &crate::chd_rs::header::Header) -> ChdHeader {
         let compression = match header {
-            chd::header::Header::V1Header(value) | chd::header::Header::V2Header(value) => {
-                [value.compression, 0, 0, 0]
-            }
-            chd::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
-            chd::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
-            chd::header::Header::V5Header(value) => value.compression,
+            crate::chd_rs::header::Header::V1Header(value)
+            | crate::chd_rs::header::Header::V2Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
+            crate::chd_rs::header::Header::V5Header(value) => value.compression,
         };
         ChdHeader {
             version: header.version() as u32,
@@ -141,7 +140,7 @@ impl ChdReadSession {
     pub(super) fn open_rust_chd(
         source: &Path,
         parent_source: Option<&Path>,
-    ) -> std::result::Result<chd::Chd<BufReader<File>>, String> {
+    ) -> std::result::Result<crate::chd_rs::Chd<BufReader<File>>, String> {
         let parent = if let Some(parent_source) = parent_source {
             let parent_file = File::open(parent_source).map_err(|error| {
                 format!(
@@ -160,7 +159,7 @@ impl ChdReadSession {
                 .len();
             let mut parent_reader = BufReader::new(parent_file);
             Self::validate_v5_map_allocation(&mut parent_reader, parent_source, parent_file_len)?;
-            let parent_chd = chd::Chd::open(parent_reader, None).map_err(|error| {
+            let parent_chd = crate::chd_rs::Chd::open(parent_reader, None).map_err(|error| {
                 format!(
                     "failed to parse parent chd `{}`: {error}",
                     parent_source.display()
@@ -179,7 +178,7 @@ impl ChdReadSession {
             .len();
         let mut reader = BufReader::new(file);
         Self::validate_v5_map_allocation(&mut reader, source, file_len)?;
-        chd::Chd::open(reader, parent)
+        crate::chd_rs::Chd::open(reader, parent)
             .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
     }
 
@@ -340,7 +339,7 @@ impl ChdReadSession {
     /// Decode a single hunk into `hunk_buffer` (with `compressed_buffer` as scratch), using the
     /// uniform "failed to decode/read hunk N of `path`" wording shared by every Rust decode path.
     fn decode_hunk_into(
-        chd: &mut chd::Chd<BufReader<File>>,
+        chd: &mut crate::chd_rs::Chd<BufReader<File>>,
         hunk_index: u32,
         source: &Path,
         compressed_buffer: &mut Vec<u8>,
@@ -364,43 +363,19 @@ impl ChdReadSession {
         Ok(())
     }
 
-    /// Browser wasi-threads guard: pre-grow the heap once on the main thread to cover a full
-    /// batch's concurrent working set (per-thread stacks + decoded output + in-flight compressed
-    /// bytes), so the parallel decode reuses committed memory and performs no `memory.grow` while
-    /// sibling threads run. dlmalloc only grows above the initial `memory.size`, so without this the
-    /// first batch's allocations grow the heap mid-decode and V8 can race that into an OOB trap that
-    /// wedges the join. No-op off wasm.
-    #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+    /// Reserves a full batch's concurrent working set (worker stacks plus decoded output and
+    /// in-flight compressed bytes) before the batch threads spawn, so the parallel decode never
+    /// grows the heap while siblings run; see [`reserve_parallel_heap`].
     fn pregrow_decode_heap(batch_hunks: usize, hunk_bytes_usize: usize, effective_threads: usize) {
-        const STACK_RESERVE_PER_THREAD: usize = 4 * 1024 * 1024;
-        const HEAP_RESERVE_MARGIN: usize = 32 * 1024 * 1024;
-        const HEAP_RESERVE_MAX: usize = 768 * 1024 * 1024;
         let batch_bytes = batch_hunks.saturating_mul(hunk_bytes_usize);
         let reserve = batch_bytes
             .saturating_mul(2)
-            .saturating_add(effective_threads.saturating_mul(STACK_RESERVE_PER_THREAD))
-            .saturating_add(HEAP_RESERVE_MARGIN)
-            .min(HEAP_RESERVE_MAX);
+            .saturating_add(parallel_heap_reserve(effective_threads));
         trace!(
             reserve,
-            batch_bytes,
-            effective_threads,
-            "chd wasm decode pregrow heap to avoid memory.grow race"
+            batch_bytes, effective_threads, "chd decode reserve parallel heap"
         );
-        // Touch the allocation so the grow cannot be elided, then drop it; wasm memory never
-        // shrinks, so the committed pages stay in dlmalloc's free list for the decode threads.
-        let mut heap_warm: Vec<u8> = Vec::with_capacity(reserve);
-        heap_warm.push(0);
-        std::hint::black_box(heap_warm.as_ptr());
-        drop(heap_warm);
-    }
-
-    #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
-    fn pregrow_decode_heap(
-        _batch_hunks: usize,
-        _hunk_bytes_usize: usize,
-        _effective_threads: usize,
-    ) {
+        reserve_parallel_heap(reserve);
     }
 
     fn stream_with_rust<F>(

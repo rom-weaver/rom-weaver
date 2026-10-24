@@ -1,6 +1,11 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { brotliCompressFile } from "../../../../scripts/wasm/brotli-compress.mjs";
+import {
+  brotliCompressBufferCached,
+  brotliCompressFile,
+  DEFAULT_BROTLI_CACHE_DIR,
+} from "../../../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "../../functions/assets/content-types.js";
 import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { rootDir } from "./paths.mjs";
@@ -19,7 +24,7 @@ export const writeBrotliSidecars = () => {
   let outDir = "dist";
   return {
     apply: "build",
-    closeBundle() {
+    async closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
       const allWasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
@@ -36,7 +41,13 @@ export const writeBrotliSidecars = () => {
         throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
       }
       if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
-      else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
+      else
+        brotliCompressFile({
+          inputPath: emittedWasm,
+          outputPath: `${emittedWasm}.br`,
+          quality: 11,
+          parameterProfile: "default",
+        });
       // The Pages Function reads the type from SIDECAR_CONTENT_TYPES instead of probing
       // the static asset, so a staged sidecar whose extension is missing there would
       // silently fall back to Pages' own compression. Fail the build instead.
@@ -57,21 +68,35 @@ export const writeBrotliSidecars = () => {
         for (const name of identifySidecars) assertSidecarTypeIsKnown(`/assets/${name.slice(0, -3)}`);
         sidecarUrls.push("/assets/identify-*");
       }
-      for (const name of fs.readdirSync(assetsDir)) {
+      // Quality-11 compression is the slow step, so run it on libuv's thread pool
+      // with bounded concurrency. Results are kept by index and consumed in sorted
+      // name order, so the sidecars and routes never depend on completion order.
+      const candidates = fs
+        .readdirSync(assetsDir)
+        .sort()
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
-        if (name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")) continue;
-        const assetPath = path.join(assetsDir, name);
-        const { compressedSize, sourceSize } = brotliCompressFile({
-          inputPath: assetPath,
-          outputPath: `${assetPath}.br`,
-          quality: 11,
-        });
-        if (compressedSize > sourceSize * (1 - PAGES_BROTLI_MIN_SAVINGS)) {
-          fs.rmSync(`${assetPath}.br`);
-          continue;
+        .filter((name) => !(name.endsWith(".wasm") || name.endsWith(".br") || name.endsWith(".map")));
+      const compressed = Array.from({ length: candidates.length });
+      let nextIndex = 0;
+      const worker = async () => {
+        while (nextIndex < candidates.length) {
+          const index = nextIndex++;
+          const source = await fs.promises.readFile(path.join(assetsDir, candidates[index]));
+          const result = await brotliCompressBufferCached(source, {
+            cacheDir: DEFAULT_BROTLI_CACHE_DIR,
+            quality: 11,
+          });
+          compressed[index] = { compressed: result.compressed, sourceSize: source.byteLength };
         }
+      };
+      await Promise.all(Array.from({ length: Math.max(1, Math.min(os.availableParallelism(), 8)) }, worker));
+      for (const [index, name] of candidates.entries()) {
+        const assetPath = path.join(assetsDir, name);
+        const { compressed: sidecar, sourceSize } = compressed[index];
+        if (sidecar.byteLength > sourceSize * (1 - PAGES_BROTLI_MIN_SAVINGS)) continue;
+        fs.writeFileSync(`${assetPath}.br`, sidecar);
         assertSidecarTypeIsKnown(`/assets/${name}`);
         // Every identify asset rides the one wildcard include staged above. An exact
         // entry per pack, shard, and manifest would be redundant and eat the budget

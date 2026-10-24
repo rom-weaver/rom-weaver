@@ -6,7 +6,7 @@ import type { BinarySource } from "./patcher-form.ts";
  * Owns patch enablement, keyed by stable slot ids so replacements and reorders
  * retain state. Disabled patches remain visible but are removed from run inputs.
  *
- * Bundle sessions seed defaults; tracking drops removed slots; run filtering
+ * Weave sessions seed defaults; tracking drops removed slots; run filtering
  * keeps patch-aligned options in sync.
  */
 const useApplyPatchEnablement = () => {
@@ -71,7 +71,7 @@ const useApplyPatchEnablement = () => {
     });
   }, []);
 
-  /** Seed a bundle session's default enablement in one pass. */
+  /** Seed a weave session's default enablement in one pass. */
   const seedPatchEnablement = useCallback((entries: Array<{ id: string; enabled: boolean }>) => {
     setDisabledPatchIds((previous) => {
       const next = new Set(previous);

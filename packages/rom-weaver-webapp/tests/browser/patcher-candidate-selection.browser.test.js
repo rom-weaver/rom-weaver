@@ -172,7 +172,7 @@ test("clearing ROM input releases extracted OPFS files", async () => {
   await clickCandidateSelectionOption("game.bin");
   await waitForInputStackFileName();
 
-  const clearButton = document.querySelector("button[title='Clear ROM input'], button[title='Remove ROM input']");
+  const clearButton = document.querySelector("button[title='Remove ROM'], button[title='Remove ROM']");
   if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear or remove ROM input button");
   clearButton.click();
 
@@ -195,7 +195,7 @@ test("clearing CHD ROM input does not leave staged OPFS source files", async () 
 
   expect(await listOpfsStagedInputSourceFiles("game-cd.chd")).toEqual([]);
 
-  const clearButton = document.querySelector("button[title='Clear ROM input'], button[title='Remove ROM input']");
+  const clearButton = document.querySelector("button[title='Remove ROM'], button[title='Remove ROM']");
   if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear or remove ROM input button");
   clearButton.click();
 
@@ -219,7 +219,7 @@ test("clearing a selected archive input requires selection again when re-added",
   await clickCandidateSelectionOption("game.bin");
   await waitForInputStackFileName();
 
-  const clearButton = document.querySelector("button[title='Clear ROM input']");
+  const clearButton = document.querySelector("button[title='Remove ROM']");
   if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
   clearButton.click();
 

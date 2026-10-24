@@ -96,7 +96,7 @@ pub(super) struct ExtractStepEvent<'a> {
 
 impl CliApp {
     /// Classify a container's listed entries into the early-routing signal the host (and the
-    /// `ingest` command) consume: whether the bundle routes to the ROM input bucket
+    /// `ingest` command) consume: whether the weave routes to the ROM input bucket
     /// (`is_rom = has_rom || !has_patch`), the per-entry `rom`/`patch`/`common`/`other` summaries,
     /// and the raw `has_rom`/`has_patch` flags (the latter two let a caller detect a *mixed*
     /// archive that carries both a ROM and sidecar patches). Pure (no I/O, no events) so it is
@@ -132,7 +132,7 @@ impl CliApp {
                 }
             })
             .collect::<Vec<_>>();
-        // Mirror the host's default-to-ROM routing: only a bundle that carries patches and no ROM
+        // Mirror the host's default-to-ROM routing: only a weave that carries patches and no ROM
         // payload is a patch source; everything else (unclassifiable, mixed, or empty) routes to the
         // ROM input bucket so an ambiguous drop still lands somewhere sensible.
         let is_rom = has_rom || !has_patch;
@@ -140,7 +140,7 @@ impl CliApp {
     }
 
     /// Emit an early `probe-manifest` event the instant the container is listed - before any
-    /// heavy extraction - so the host can route a dropped file (ROM input vs patch bundle) and
+    /// heavy extraction - so the host can route a dropped file (ROM input vs patch weave) and
     /// render its identity card right away instead of awaiting a separate probe roundtrip. The
     /// event is purely additive: it is gated on streaming output (`emit_progress_events`), so the
     /// CLI report bytes are unchanged. Status stays `Running` because extraction continues; the

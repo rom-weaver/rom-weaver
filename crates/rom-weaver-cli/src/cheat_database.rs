@@ -60,7 +60,7 @@ pub(crate) fn attribution(directory: Option<&Path>) -> String {
 }
 
 /// The database the shards were imported from, as its manifest names it.
-/// Recorded in a bundle's cheat entries so a reader knows which IDs they are.
+/// Recorded in a weave's cheat entries so a reader knows which IDs they are.
 pub(crate) fn source_name(directory: &Path) -> String {
     load_manifest(directory)
         .and_then(|manifest| manifest.source)
@@ -152,7 +152,7 @@ fn serde_name<T: Serialize>(value: &T) -> String {
 /// The record ID the data build assigns: `cheat_` plus the first 24 hex
 /// digits of SHA-256 over `system NUL gameId NUL codeKind NUL fields`, where
 /// `fields` is the raw field map without `enable`, as JSON with keys sorted by
-/// UTF-16 code unit. Mirrors `cheatIdSource` in `shard-format.mjs`; bundles
+/// UTF-16 code unit. Mirrors `cheatIdSource` in `shard-format.mjs`; weaves
 /// store these IDs, so the two MUST agree byte for byte.
 pub(crate) fn stable_cheat_id(
     system: &str,
@@ -320,9 +320,9 @@ fn shard_candidates(slug: &str) -> [String; 4] {
 }
 
 /// The directory holding the shards: `--cheat-database`, else
-/// `$ROM_WEAVER_CHEAT_DATABASE`, else `cheats` inside the identify database
-/// directory that `rom-weaver setup` installs into.
-pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
+/// `$ROM_WEAVER_CHEAT_DATABASE`, else the first local data tree with this
+/// system's shard. Explicit overrides stay authoritative even when absent.
+pub(crate) fn resolve_directory(explicit: Option<&Path>, system: CheatSystem) -> Result<PathBuf> {
     if let Some(directory) = explicit {
         trace!(directory = %directory.display(), "cheat database directory from --cheat-database");
         return Ok(directory.to_path_buf());
@@ -332,15 +332,29 @@ pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
         trace!(directory = %directory.display(), "cheat database directory from environment");
         return Ok(directory);
     }
-    let directory = default_directory()?;
-    trace!(directory = %directory.display(), "cheat database directory from the identify database directory");
+    let directory = default_directory(system)?;
+    trace!(directory = %directory.display(), "cheat database directory from local data trees");
     Ok(directory)
 }
 
-/// `<identify database directory>/cheats`, which is where `rom-weaver setup`
-/// unpacks the cheat shards that travel in the identify archive.
-pub(crate) fn default_directory() -> Result<PathBuf> {
-    Ok(crate::identify_database::default_database_dir()?.join("cheats"))
+/// Preserve legacy user shards before the setup and executable-relative trees.
+/// A directory for another system must not hide an installed matching shard.
+fn default_directory(system: CheatSystem) -> Result<PathBuf> {
+    let database_dir = crate::identify_database::default_database_dir()?;
+    if let Some(slug) = shard_slug(system) {
+        let candidates = shard_candidates(slug);
+        let directories = std::iter::once(database_dir.join("cheats")).chain(
+            crate::identify_builtin::data_roots(&database_dir)
+                .into_iter()
+                .map(|root| root.join("cheats")),
+        );
+        for directory in directories {
+            if candidates.iter().any(|name| directory.join(name).is_file()) {
+                return Ok(directory);
+            }
+        }
+    }
+    Ok(database_dir.join("full-v1/cheats"))
 }
 
 /// Read the manifest when it is present. A missing manifest is not fatal: the
@@ -362,8 +376,9 @@ fn load_manifest(directory: &Path) -> Option<CheatDatabaseManifest> {
 pub(crate) fn load_shard(directory: &Path, system: CheatSystem) -> Result<CheatShard> {
     let Some(slug) = shard_slug(system) else {
         return Err(RomWeaverError::Validation(format!(
-            "the cheat database has no shard for {}; supported systems are nes, snes, genesis, \
-             32x, sms, gamegear, gameboy, gameboy-color, and gba",
+            "no cheat database exists for {} ({}); pass cheat codes directly or use a weave with \
+             code snapshots",
+            system.display_name(),
             system.id()
         )));
     };
@@ -466,11 +481,19 @@ fn decompress_shard(raw: &[u8], path: &Path, limit: u64) -> Result<Vec<u8>> {
     Ok(decompressed)
 }
 
-/// Fold a title or file name into the comparison form the webapp uses:
-/// lower-case, extension dropped, bracketed region/revision tags dropped, and
-/// every run of non-alphanumerics collapsed to a single space.
+/// Fold a title, file name, or search query into its comparison form: accents
+/// folded to their base letter (NFKD, marks dropped), lower-case, extension
+/// dropped, bracketed region/revision tags dropped (nested brackets included),
+/// and every run of non-alphanumerics collapsed to a single space. The webapp's
+/// `normalizeCheatText` mirrors this; both run
+/// `tests/fixtures/cheat-title-normalization.json`.
 pub(crate) fn normalize_text(value: &str) -> String {
-    let mut without_extension = value.to_ascii_lowercase();
+    use unicode_normalization::UnicodeNormalization;
+    let decomposed = value.nfkd().collect::<String>().to_lowercase();
+    let mut without_extension = decomposed
+        .chars()
+        .filter(|character| !unicode_normalization::char::is_combining_mark(*character))
+        .collect::<String>();
     if let Some(dot) = without_extension.rfind('.') {
         let extension = &without_extension[dot + 1..];
         if (1..=8).contains(&extension.len())
@@ -509,7 +532,8 @@ pub(crate) fn normalize_text(value: &str) -> String {
 }
 
 /// Match a ROM to a shard game: any checksum hit first, then the normalized
-/// title. Mirrors `matchCheatGame` in the webapp's `lib/cheats/catalog.ts`.
+/// title. The webapp's `matchCheatGame` in `lib/cheats/catalog.ts` follows the same
+/// order; this module is native-only, so the browser keeps its own copy.
 pub(crate) fn match_game<'a>(
     shard: &'a CheatShard,
     checksums: &BTreeMap<String, String>,
@@ -657,6 +681,31 @@ mod tests {
             normalize_text("Super Mario Bros. [!].nes"),
             "super mario bros"
         );
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TitleCase {
+        name: String,
+        input: String,
+        normalized: String,
+    }
+
+    /// The webapp's `normalizeCheatText` runs the same cases, so the title the
+    /// browser matches on is the title the CLI matches on.
+    #[test]
+    fn normalize_text_matches_the_shared_cases() {
+        let cases: Vec<TitleCase> = serde_json::from_str(include_str!(
+            "../tests/fixtures/cheat-title-normalization.json"
+        ))
+        .expect("cheat title normalization cases");
+        for case in cases {
+            assert_eq!(
+                normalize_text(&case.input),
+                case.normalized,
+                "{}",
+                case.name
+            );
+        }
     }
 
     #[test]

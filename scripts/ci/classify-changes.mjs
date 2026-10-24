@@ -28,17 +28,132 @@ const FULL_CI_PLUMBING = new Set([
 // consumers have the same proof.
 const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/cache-cleanup.mjs",
+  "scripts/ci/cla-gate.mjs",
   "scripts/ci/cleanup-preview-deployments.sh",
   "scripts/ci/deploy-pages.mjs",
   "scripts/ci/deployment-status.mjs",
+  "scripts/ci/docker-tag-policy.mjs",
   "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
   "scripts/ci/ensure-cloudflare-pages-project.mjs",
   "scripts/ci/github-api.mjs",
+  "scripts/ci/npm-publish-package.mjs",
+  "scripts/ci/publication-freshness.mjs",
+  "scripts/ci/publish-apply-video.mjs",
+  "scripts/ci/purge-cloudflare-pages-cache.mjs",
+]);
+
+// Root scripts that no build, image, or CI job imports or runs on a pull
+// request. Their tests MUST run in `repo-lint` without webapp dependencies;
+// `classify-changes.test.mjs` checks that its test step lists every one.
+export const ROOT_LEAF_SCRIPTS = [
+  "bench-disc-tools",
+  "generate-compressed-disc-sample",
+  "markdownlint-no-soft-line-breaks",
+  "quality-diff-coverage",
+  "quality-fuzz",
+  "quality-kani",
+  "quality-miri",
+  "quality-mutation",
+  "quality-native-unaligned",
+  "quality-plan",
+  "quality-reference",
+  "quality-reference-encoder",
+  "quality-regression-proof",
+  "quality-sanitizer",
+  "quality-summary",
+  "quality-test-selection",
+  "quality-trusted-guardrails",
+  "quality-workflows",
+  "release-metadata",
+  "remove-worktree",
+  "setup-worktree",
+  "strip-ai-attribution",
+  "update-markdown-toc",
+];
+const ROOT_LEAF_SCRIPT = new RegExp(
+  `^scripts/(?:${ROOT_LEAF_SCRIPTS.join("|")})(?:\\.test)?\\.mjs$`,
+);
+
+// Webapp static assets that live under docs/ but are not guide Markdown.
+const DOCS_WEBAPP_ASSET = /^docs\/(?:screenshots\/|samples\/|rom-weaver-[\w-]+\.schema\.json$)/;
+
+// Where case tables shared by a crate test and a webapp unit test live, so
+// the Rust and TypeScript checks stay in step; an edit MUST run both suites.
+// `wasm-runtime-coverage.test.mjs` (in `repo-lint`) fails if the unit suite
+// imports a crate file that does not select the webapp.
+const SHARED_CASE_TABLE = /^crates\/[^/]+\/tests\/fixtures\/[^/]+\.json$/;
+
+const WEBAPP_PACKAGE = "packages/rom-weaver-webapp/";
+
+// Inputs that can change the bundle the Lighthouse gates audit. Webapp tests,
+// guide Markdown, and Rust-only targets cannot; build scripts fail open.
+const isLighthouseInput = (path) =>
+  (path.startsWith(WEBAPP_PACKAGE) &&
+    !/(?:^|\/)tests?\/|\.test\.[cm]?[jt]sx?$/.test(path.slice(WEBAPP_PACKAGE.length))) ||
+  isWasmCompilerInput(path) ||
+  (path.startsWith("scripts/wasm/") &&
+    !path.endsWith(".test.mjs") &&
+    path !== "scripts/wasm/README.md") ||
+  (/^scripts\/[^/]+\.mjs$/.test(path) &&
+    !path.endsWith(".test.mjs") &&
+    !ROOT_LEAF_SCRIPT.test(path)) ||
+  path.startsWith("design/") ||
+  /^(?:Cargo\.(?:toml|lock)|package(?:-lock)?\.json)$/.test(path);
+
+// The real runtime lifecycle suite imports these host helpers outside the worker layers.
+// The import-graph test MUST reject newly reachable helpers missing from this list.
+const WASM_RUNTIME_SUPPORT = new Set([
+  "packages/rom-weaver-webapp/src/lib/cheats/model.ts",
+  "packages/rom-weaver-webapp/src/lib/checksum-algorithms.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/codec-parser.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/compression-metadata.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/container-format-registry.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/disc-image-policy.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/rom-specific-format-support.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/z3ds-subtypes.ts",
+  "packages/rom-weaver-webapp/src/lib/errors.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs",
+  "packages/rom-weaver-webapp/src/lib/identify/identify-catalog.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/sha256-hex.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/title-index.mjs",
+  "packages/rom-weaver-webapp/src/lib/input/input-assets.ts",
+  "packages/rom-weaver-webapp/src/lib/input/input-classification.ts",
+  "packages/rom-weaver-webapp/src/lib/input/path-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/input/patch-archive-replacement.ts",
+  "packages/rom-weaver-webapp/src/lib/input/path-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/input/rom-specific-file-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/patch-format-classification.ts",
+  "packages/rom-weaver-webapp/src/lib/path-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/perf/op-perf-marks.ts",
+  "packages/rom-weaver-webapp/src/lib/workflow/source-preparation.ts",
+  "packages/rom-weaver-webapp/src/presentation/formatting/index.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/catalog.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/de.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/en.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/es.ts",
+  "packages/rom-weaver-webapp/src/webapp/offline-warmup.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/docs-image-format.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-copy-policy.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-download-log.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-progress-reporter.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-warmup-client.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/response-encoded-size.ts",
 ]);
 
 const EMPTY = {
   rust: false,
+  // `rust-lint` alone: a fuzz-target change needs its build check but no
+  // test or platform build.
+  rust_lint: false,
+  // The fuzz workspace build check inside `rust-lint`.
+  fuzz: false,
   webapp: false,
+  // `webapp-browser` and `webapp-webkit-e2e`. A pull request that changes only
+  // published guide Markdown keeps the static checks and Chromium E2E.
+  webapp_browser: false,
+  // The Lighthouse steps of `webapp-static`. Every event but a pull request
+  // audits; a pull request audits when a bundle input changed.
+  lighthouse: false,
   wasm_runtime: false,
   security: false,
   docker_cli: false,
@@ -53,6 +168,20 @@ const EMPTY = {
   full: false,
 };
 
+// Docker-only compiler inputs are outside the module fingerprint. ARM MUST
+// compile them before merge, including when the diff base is unavailable.
+export function canReuseArmDockerWasm(paths) {
+  return (
+    paths !== null &&
+    !paths.some(
+      (path) =>
+        path === "packages/rom-weaver-webapp/Dockerfile" ||
+        path === ".dockerignore" ||
+        path.startsWith(".github/"),
+    )
+  );
+}
+
 // Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
 // The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
 export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
@@ -61,7 +190,13 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
   }
 
+  // Whether any path other than published guide Markdown or a shared case table
+  // selected the webapp; the jobs `webapp_browser` gates cannot observe those.
+  // `webapp` is cleared per path so each path's own selection is visible.
+  let browserInput = false;
   for (const path of paths.filter(Boolean)) {
+    const webappBefore = result.webapp;
+    result.webapp = false;
     if (
       /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
@@ -73,7 +208,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         !path.endsWith(".test.mjs") &&
         !REPO_LINT_CI_HELPERS.has(path) &&
         path !== "scripts/ci/cli-platform-matrix.mjs" &&
-        path !== "scripts/ci/docker-matrix.mjs")
+        path !== "scripts/ci/docker-matrix.mjs" &&
+        path !== "scripts/ci/docker-smoke.mjs")
     )
       result.full = true;
 
@@ -87,6 +223,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         // inputs below changed and the Docker path itself needs proving.
         if (eventName !== "pull_request") result.docker_cli = true;
       }
+      if (SHARED_CASE_TABLE.test(path)) result.webapp = true;
     }
 
     if (
@@ -108,10 +245,18 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 
     if (
       path === "scripts/ci/cli-platform-matrix.mjs" ||
-      path === "packages/rom-weaver-alias/package.json"
+      path === "packages/rom-weaver-alias/package.json" ||
+      // Rust tests read these: patches vcdiff and cli_smoke trim fixtures, and
+      // the CLI reference paragraph cli_smoke compares with `extract --help`.
+      path.startsWith("tests/fixtures/") ||
+      path === "docs/reference/cli.md"
     )
       result.rust = true;
-    if (path === "scripts/ci/docker-matrix.mjs") {
+    if (path.startsWith("fuzz/")) {
+      result.rust_lint = true;
+      result.fuzz = true;
+    }
+    if (path === "scripts/ci/docker-matrix.mjs" || path === "scripts/ci/docker-smoke.mjs") {
       result.webapp = true;
       result.docker_cli = true;
       result.docker_webapp = true;
@@ -122,12 +267,16 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     if (
       path.startsWith("packages/rom-weaver-webapp/") ||
       PUBLISHED_DOCS.has(path) ||
+      DOCS_WEBAPP_ASSET.test(path) ||
+      // Icon-master notes; the masters `brand:check` renders are under the
+      // webapp package, and the hygiene test in `webapp-static` guards this tree.
+      path.startsWith("design/") ||
       path === "package.json" ||
       path === "package-lock.json" ||
       // CI helper tests run in repo-lint. Their implementation does not enter
       // the webapp bundle, and the classifier keeps selection plumbing above
-      // fail-open.
-      /^scripts\/(?!ci\/).*\.mjs$/.test(path) ||
+      // fail-open. Leaf scripts run their tests in repo-lint too.
+      (/^scripts\/(?!ci\/).*\.mjs$/.test(path) && !ROOT_LEAF_SCRIPT.test(path)) ||
       path.startsWith("scripts/wasm/") ||
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
@@ -143,6 +292,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
       path.startsWith("scripts/wasm/") ||
       path.startsWith("tests/fixtures/") ||
+      WASM_RUNTIME_SUPPORT.has(path) ||
       path.startsWith("crates/rom-weaver-patches/tests/fixtures/hdiffpatch/") ||
       /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
         path,
@@ -179,6 +329,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     if (
       path === "packages/rom-weaver-webapp/Dockerfile" ||
       path === "packages/rom-weaver-webapp/sws.toml" ||
+      path === "docs/hosting/self-hosting.md" ||
       path === "packages/rom-weaver-webapp/scripts/compress-static-assets.mjs"
     ) {
       result.docker_webapp = true;
@@ -221,6 +372,11 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       /\.(?:cjs|js|md|mjs|sh)$/.test(path)
     )
       result.repo_lint = true;
+
+    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path))
+      browserInput = true;
+    if (isLighthouseInput(path)) result.lighthouse = true;
+    result.webapp ||= webappBefore;
   }
 
   if (result.full) {
@@ -235,9 +391,15 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     result.docker_cli_arm64 = true;
     result.docker_webapp_arm64 = true;
     result.repo_lint = true;
+    result.fuzz = true;
   }
   // Every runtime test consumes the production module and webapp dependencies.
   if (result.wasm_runtime) result.webapp = true;
+  if (result.rust) result.rust_lint = true;
+  if (result.full || eventName !== "pull_request") result.lighthouse = true;
+  result.webapp_browser =
+    result.webapp &&
+    (eventName !== "pull_request" || browserInput || result.wasm_runtime || result.full);
 
   // Only a pull request narrows an image to one architecture. Every other event
   // - a push to main, whose legs feed the `nightly` manifest lists, and a
@@ -273,7 +435,7 @@ export function coverageTiers(eventName, headRef = undefined) {
 // skip. It keeps the Rust selection of whatever changed since the last green
 // nightly and drops everything else: those stacks already ran on each push.
 export function scheduledSelection(result) {
-  return { ...EMPTY, rust: result.rust };
+  return { ...EMPTY, rust: result.rust, rust_lint: result.rust };
 }
 
 export function formatChanges(result) {

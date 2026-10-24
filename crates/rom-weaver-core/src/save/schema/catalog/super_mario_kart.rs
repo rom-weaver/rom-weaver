@@ -37,27 +37,27 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 fn game_super_mario_kart_schema() -> GameDefinition {
     let mut fields = vec![
-        FieldDefinition::new(
-            "grand_prix.mushroom_cup".into(),
-            "Mushroom Cup packed trophy flags".into(),
+        catalog_field(
+            "grand_prix.mushroom_cup",
+            "Mushroom Cup packed trophy flags",
             2034,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "grand_prix.flower_cup".into(),
-            "Flower Cup packed trophy flags".into(),
+        catalog_field(
+            "grand_prix.flower_cup",
+            "Flower Cup packed trophy flags",
             2035,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "grand_prix.star_cup".into(),
-            "Star Cup packed trophy flags".into(),
+        catalog_field(
+            "grand_prix.star_cup",
+            "Star Cup packed trophy flags",
             2036,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "grand_prix.special_cup".into(),
-            "Special Cup packed trophy flags".into(),
+        catalog_field(
+            "grand_prix.special_cup",
+            "Special Cup packed trophy flags",
             2037,
             Storage::U8,
         ),

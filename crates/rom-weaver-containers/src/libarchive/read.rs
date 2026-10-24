@@ -1,5 +1,6 @@
+use super::legacy_pathname::decode_legacy_pathname;
 use super::*;
-use std::os::raw::c_int;
+use std::os::raw::{c_char, c_int};
 use tracing::trace;
 
 type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
@@ -10,6 +11,9 @@ type SupportFunction = unsafe extern "C" fn(*mut archive) -> c_int;
 // snapshot of the fork, and the accessor only exists in the staged build copy.
 unsafe extern "C" {
     fn rom_weaver_7zip_entry_solid_block(archive: *mut archive) -> i64;
+    fn rom_weaver_7zip_entry_decoder_bytes(archive: *mut archive) -> i64;
+    // Appended to the staged archive_entry.c the same way.
+    fn rom_weaver_archive_entry_stored_pathname(entry: *mut archive_entry) -> *const c_char;
 }
 
 const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
@@ -56,7 +60,9 @@ impl ReadArchive {
                 "{context}: libarchive reader allocation returned null"
             ))
         })?;
-        Ok(Self { ptr: Some(ptr) })
+        let reader = Self { ptr: Some(ptr) };
+        ffi::configure_utf8(reader.as_ptr(), context)?;
+        Ok(reader)
     }
 
     pub fn support_raw_format(&mut self, context: &str) -> Result<()> {
@@ -89,6 +95,26 @@ impl ReadArchive {
         self.check_status(status, context)
     }
 
+    /// Fails unless `filter` decodes the opened input. libarchive silently falls back to its
+    /// pass-through filter when the decoder rejects the header, which would yield the input bytes.
+    pub(crate) fn require_filter(&self, filter: ReadFilter, source: &Path) -> Result<()> {
+        let (expected, name) = match filter {
+            ReadFilter::Gzip => (ARCHIVE_FILTER_GZIP, "gzip"),
+            ReadFilter::Bzip2 => (ARCHIVE_FILTER_BZIP2, "bzip2"),
+            ReadFilter::Xz => (ARCHIVE_FILTER_XZ, "xz"),
+            ReadFilter::Zstd => (ARCHIVE_FILTER_ZSTD, "zstd"),
+        };
+        let actual = unsafe { archive_filter_code(self.as_ptr(), 0) };
+        trace!(source = %source.display(), expected, actual, "libarchive read filter check");
+        if actual == expected {
+            return Ok(());
+        }
+        Err(RomWeaverError::Validation(format!(
+            "`{}` is not a valid {name} stream",
+            source.display()
+        )))
+    }
+
     pub fn open_filename(
         &mut self,
         input: &Path,
@@ -96,9 +122,16 @@ impl ReadArchive {
         block_size: usize,
         context: &str,
     ) -> Result<()> {
-        let input = path_to_cstring(input, label)?;
-        let status =
-            unsafe { archive_read_open_filename(self.as_ptr(), input.as_ptr(), block_size) };
+        #[cfg(windows)]
+        let status = {
+            let input = ffi::path_to_wide(input, label)?;
+            unsafe { sys::archive_read_open_filename_w(self.as_ptr(), input.as_ptr(), block_size) }
+        };
+        #[cfg(not(windows))]
+        let status = {
+            let input = path_to_cstring(input, label)?;
+            unsafe { sys::archive_read_open_filename(self.as_ptr(), input.as_ptr(), block_size) }
+        };
         self.check_status(status, context)
     }
 
@@ -231,7 +264,33 @@ impl<'a> ReadArchiveEntry<'a> {
         u64::try_from(unsafe { archive_entry_size(self.ptr.as_ptr()) }).ok()
     }
 
-    pub(crate) fn pathname_mb(&self) -> io::Result<&CStr> {
+    /// The entry name as UTF-8, decoding names stored in a legacy charset.
+    pub(crate) fn pathname(&self) -> io::Result<String> {
+        // The stored bytes come first: on Windows the UTF-8 accessor widens raw legacy bytes to
+        // Latin-1 code points instead of failing.
+        let stored = unsafe { rom_weaver_archive_entry_stored_pathname(self.ptr.as_ptr()) };
+        if !stored.is_null() {
+            let stored = unsafe { CStr::from_ptr(stored) };
+            return Ok(match stored.to_str() {
+                Ok(path) => path.to_owned(),
+                Err(_) => decode_legacy_pathname(stored.to_bytes(), self.archive.format()),
+            });
+        }
+        if let Ok(path) = self.pathname_utf8() {
+            return Ok(path.to_owned());
+        }
+        // libarchive's UTF-8 accessor can fail for names whose stored bytes are already UTF-8.
+        let pathname = self.pathname_mb()?;
+        if let Ok(path) = pathname.to_str() {
+            return Ok(path.to_owned());
+        }
+        Ok(decode_legacy_pathname(
+            pathname.to_bytes(),
+            self.archive.format(),
+        ))
+    }
+
+    fn pathname_mb(&self) -> io::Result<&CStr> {
         let pathname = unsafe { archive_entry_pathname(self.ptr.as_ptr()) };
         if pathname.is_null() {
             return Err(self.io_error("archive entry pathname was unavailable"));
@@ -239,7 +298,7 @@ impl<'a> ReadArchiveEntry<'a> {
         Ok(unsafe { CStr::from_ptr(pathname) })
     }
 
-    pub(crate) fn pathname_utf8(&self) -> io::Result<&str> {
+    fn pathname_utf8(&self) -> io::Result<&str> {
         let pathname = unsafe { archive_entry_pathname_utf8(self.ptr.as_ptr()) };
         if pathname.is_null() {
             return Err(self.io_error("archive entry UTF-8 pathname was unavailable"));
@@ -256,6 +315,14 @@ impl<'a> ReadArchiveEntry<'a> {
     pub(crate) fn solid_block(&self) -> Option<u64> {
         let index = unsafe { rom_weaver_7zip_entry_solid_block(self.archive.as_ptr()) };
         u64::try_from(index).ok()
+    }
+
+    // Decoder working state (LZMA dictionaries, PPMd models) the 7z solid block holding this
+    // entry declares, or `None` when `solid_block` is `None`. Each worker that decodes the
+    // block allocates it, so it bounds how many workers fit the memory budget.
+    pub(crate) fn decoder_bytes(&self) -> Option<u64> {
+        let bytes = unsafe { rom_weaver_7zip_entry_decoder_bytes(self.archive.as_ptr()) };
+        u64::try_from(bytes).ok()
     }
 
     pub(crate) fn into_reader(self) -> ArchiveDataReader<'a> {
@@ -304,6 +371,7 @@ where
             source.display()
         ),
     )?;
+    archive.require_filter(filter, source)?;
 
     let result = (|| -> Result<T> {
         if !archive.next_header(&format!(

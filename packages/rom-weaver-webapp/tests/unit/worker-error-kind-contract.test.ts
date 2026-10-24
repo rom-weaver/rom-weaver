@@ -5,10 +5,9 @@ import { resolveWorkerErrorKind } from "../../src/wasm/workers/worker-error-util
 // The canonical `Display` output prefix each RomWeaverError variant renders,
 // mirrored from the Rust contract test in
 // `crates/rom-weaver-core/tests/unit/error.rs`. resolveWorkerErrorKind() must
-// classify each of these into the matching generated RomWeaverErrorKind via its
-// inferCoreWorkerErrorKind() message regex. This locks the JS side to the same
-// message-prefix => kind mapping the Rust side enforces; if a Rust `#[error]`
-// prefix changes without updating both, one of these assertions breaks.
+// classify each of these into the matching generated RomWeaverErrorKind through
+// the generated ROM_WEAVER_ERROR_KIND_PREFIXES table. If a Rust `#[error]` prefix
+// changes without the table, one of these assertions breaks.
 const CANONICAL_DISPLAY_TO_KIND: ReadonlyArray<[message: string, kind: RomWeaverErrorKind]> = [
   ["validation failed: bad header [E_BAD]", "validation"],
   ["unknown format for path `/tmp/mystery.bin`", "unknown_format"],
@@ -23,7 +22,7 @@ describe("worker-error kind contract", () => {
     "classifies %j as kind %j from the canonical Rust Display prefix",
     (message, kind) => {
       // A plain Error carries no explicit `kind`, so resolveWorkerErrorKind
-      // falls through to message-prefix inference (the regex under test).
+      // falls through to message-prefix inference (the table under test).
       const error = new Error(message);
       expect(resolveWorkerErrorKind(error, error.name, message)).toBe(kind);
     },
@@ -32,9 +31,9 @@ describe("worker-error kind contract", () => {
   it("prefers an explicit typed error kind over message-prefix inference", () => {
     // The Rust core attaches the generated RomWeaverErrorKind to a failed event
     // (propagated onto the thrown error as `kind`). resolveWorkerErrorKind must
-    // trust that typed kind even when the message text would regex-classify
+    // trust that typed kind even when the message text would prefix-classify
     // differently - this is what makes the typed kind the contract and the
-    // inferCoreWorkerErrorKind regex a mere fallback.
+    // prefix table a mere fallback.
     const unmatchable = Object.assign(new Error("totally unrelated text"), {
       kind: "validation",
     });

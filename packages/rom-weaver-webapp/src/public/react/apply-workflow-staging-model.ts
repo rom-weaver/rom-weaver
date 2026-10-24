@@ -1,4 +1,5 @@
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
+import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
 import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
@@ -24,8 +25,8 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
  * stages from scratch, so the run replays these onto the fresh stages. */
 type ApplyPatchRunOptions = {
   id?: string;
-  input?: ParsedBundlePatchInput;
-  target?: ParsedBundlePatchInput;
+  input?: ParsedWeavePatchInput;
+  target?: ParsedWeavePatchInput;
   inputChecks?: string;
   outputChecks?: string;
   basis?: "base" | "previous";
@@ -119,6 +120,7 @@ const getApplyOutputCompression = (
     parentCompressions: input?.parentCompressions,
     sourceFileName: sourceName,
     sourceSize: input?.size ?? getBinarySourceSize(snapshot.inputs[0]),
+    hasDiscEvidence: hasDiscImageEvidence(input?.romType?.recommendedFormat, input?.chdMode),
   });
 };
 
@@ -155,16 +157,24 @@ const formatRomIdentification = (identification: ParsedIdentifyResolution | unde
   return `Possible titles: ${names.join("; ")}`;
 };
 
+// The engine's dry run only knows the checksums embedded in the patch; the cheap preflight also knows
+// the file-name `[crc32:..]` token (the engine never sees it), so a preflight mismatch outranks a
+// passing dry run (only the first patch's token reaches the preflight). Other deep verdicts (invalid, deferred, unknown, pending) keep winning.
+const isPreflightMismatchOverridingDeep = (patch: ApplyWorkflowPatchState): boolean =>
+  patch.checksumPreflight?.status === "invalid" &&
+  !!patch.checksumPreflight.requiredCrc32FromFilename &&
+  patch.patchValidation?.status === "valid";
+
 const getPatchValidationStatus = (patch: ApplyWorkflowPatchState, requirementValues: string[]): string => {
   const deep = patch.patchValidation;
-  if (deep) return deep.status;
+  if (deep && !isPreflightMismatchOverridingDeep(patch)) return deep.status;
   if (patch.checksumPreflight?.status === "invalid") return "invalid";
   if (patch.checksumPreflight) return "verifying";
   return requirementValues.length ? "pending" : "unknown";
 };
 
 const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState["patchValidation"]): string => {
-  if (status === "verifying") return "Verifying patch against the ROM…";
+  if (status === "verifying") return "Checking patch against the ROM…";
   if (deep?.status === "deferred")
     return deep.message || "Applies to the previous patch's output; verified during apply";
   if (deep?.status === "valid") return "Patch validation passed";
@@ -192,7 +202,7 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   // The deep preflight validation is deferred and runs silently after staging. Until its verdict
   // lands, a targeted patch (its cheap preflight computed) reads as "verifying"; a preflight checksum
   // mismatch fails immediately without waiting for preflight. Once the verdict lands it wins.
-  const deep = patch.patchValidation;
+  const deep = isPreflightMismatchOverridingDeep(patch) ? undefined : patch.patchValidation;
   const status = getPatchValidationStatus(patch, enforceableRequirementValues);
   const validationValues = requirementValues.length
     ? requirementValues
@@ -204,7 +214,8 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
       ? "Expected ROM title identified"
       : getPatchValidationMessage(status, deep);
   return {
-    checksumMismatch: status === "invalid",
+    // An unreadable patch is not a checksum mismatch: the override cannot help, so it must block Apply.
+    checksumMismatch: status === "invalid" && !deep?.unreadable,
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),
     validationActualValue: actualValue,
     validationLabel: requirementValues.length ? "Expected" : "Validation",
@@ -243,6 +254,11 @@ const toPatchStageInfo = (
     archiveName,
     basisChoice: patch.basisChoice,
     chainVerdict: patch.chainVerdict,
+    // A checksum was actually compared: the preflight's required input CRC32 (embedded, filename
+    // token, or a pasted 8-hex CRC32 - a pasted SHA-1/MD5 is only enforced at apply, so it never
+    // counts) or a chain match against a known ROM/patch output.
+    checksumCompared:
+      !!patch.checksumPreflight?.requiredCrc32 || (!!patch.chainVerdict && patch.chainVerdict.matched.kind !== "none"),
     checksumPreflightMismatch: validation.checksumMismatch,
     checksumTiming: validation.checksumTiming,
     decompressionTimeMs: patch.decompressionTimeMs,
@@ -276,6 +292,7 @@ const toPatchStageInfo = (
     validationLabel: validation.validationLabel,
     validationMessage: validation.validationMessage,
     validationState: validation.validationState,
+    validationUnreadable: !!patch.patchValidation?.unreadable,
     validationValues: validation.validationValues,
     wasDecompressed: patch.wasDecompressed,
   };
@@ -345,6 +362,7 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
       size: result.inputs[0]?.size || 0,
     },
     sizeSummary: result.sizeSummary,
+    ...(result.warnings?.length ? { warnings: result.warnings } : {}),
   } as ApplyWorkflowResult;
 };
 
@@ -504,6 +522,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       : resolvedFileName;
     return {
       archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
+      chdCodecMode: resolved.chdCodecMode ?? null,
       chdMode: resolved.chdMode ?? input.chdMode,
       checksums: resolved.checksums || undefined,
       checksumTiming: formatChecksumTiming(

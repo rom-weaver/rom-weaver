@@ -1,6 +1,6 @@
 # Set up the browser app
 
-Use Settings to change app preferences, enable beta tools, and prepare local assets for offline use.
+Set preferences, enable beta tools, and prepare offline assets in **Settings**.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -14,34 +14,36 @@ Use Settings to change app preferences, enable beta tools, and prepare local ass
 
 ## Change preferences
 
-Open **Settings** from the app navigation. On a phone, select **Controls** at the right end of the bottom bar, or swipe the bar to the left. Change the required values, then select **Save**.
+Open **Settings** from navigation, or **Menu** → **Settings** at the bottom-right on a phone. Change preferences, then select **Save**.
 
-The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the **New here?** button that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
+Settings covers language, byte units, output defaults, compression, and the practice-run links. **Show practice-run links** adds links such as **Patch a practice ROM** below empty drop zones for [practice runs](../reference/guided-runs.md). **Advanced** exposes worker threads, codecs, and RVZ block size. Keep automatic thread selection unless limiting resources.
 
-To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe the bottom bar to the right, or use your browser's back gesture.
+On phones, leave Settings with bottom-right **Close**, a right swipe from the left edge, or the browser's back gesture.
 
-The separate **Theme** and **Accent** controls in the navigation apply changes immediately. Theme offers light, dark, and system appearance; Accent changes the highlight color.
+Navigation’s separate **Theme** (light, dark, or system) and **Accent** (highlight color) controls apply immediately, as do the Theme and Accent choices inside the Settings dialog. **Optional ROM databases** download or delete immediately, and **Advanced** changes persist as you make them. Every other setting waits for **Save**.
 
 ## Enable beta tools
 
 1. Open **Settings**.
-2. Select **Enable beta tools (Trim, PPF undo, and Save Editor)**.
+2. Select **Enable beta tools (Trim and Save Editor)**.
 3. Select **Save**.
 4. Open the required tool from the app's navigation.
 
-This exposes Trim, PPF Undo, and Save Editor. Cheat tools in Apply, Create, and Identify do not require this setting.
+Only Trim and Save Editor require this setting; PPF Undo and cheats in Apply, Create, and Identify do not.
 
 ## Prepare for offline use
 
 1. While online, open **Settings**, select **Keep an offline copy**, then **Save**.
 2. Wait for the app's offline download to finish.
 3. Reopen **Settings** and select the **Optional ROM databases** you need. These choices download immediately.
-4. Open the sample, bundle, or cheat list you plan to use while online.
+4. Open the sample, weave, or cheat list you plan to use while online.
 5. Load a game for each emulator system you need, so its core is cached.
 
-Check the result before relying on it: disconnect your device, reopen rom-weaver, and run a small local job.
+**Offline active** confirms only the app cache. Finish optional downloads, keep ROMs and patches locally, and cache needed emulator cores. Browser-menu installation does not verify these resources.
 
-Remote bundle links still need network access unless their required files are available locally. Browser storage eviction can remove cached assets.
+Before relying on offline use, disconnect, reopen rom-weaver, and run a small local job.
+
+Remote weaves need network access unless their files are local. Browser storage eviction can remove cached assets.
 
 [Offline behavior](../explanation/local-first.md#offline) explains these limits. [Test a ROM](test-roms-in-browser.md) covers emulator controls.
 
@@ -49,8 +51,8 @@ Remote bundle links still need network access unless their required files are av
 
 Before clearing site data, [export emulator saves](test-roms-in-browser.md#export-and-restore-a-save).
 
-Use **Saves & storage** to inspect emulator saves. Turn on **Advanced** to list the working files too. Clear an **Optional ROM databases** selection in Settings to remove that group's cached data.
+Inspect saves in **Saves & storage**; enable **Advanced** to include working files. Clear an **Optional ROM databases** selection in Settings to remove that group's cached data.
 
-Remove only data you no longer need. Browser site-data controls can remove the entire local app cache.
+Remove only unneeded data: browser site-data controls can erase the entire app cache.
 
-[Privacy](../legal/privacy.md) lists what the browser stores. [Webapp status](../hosting/webapp-runtime-status.md) explains the version and offline status labels.
+See [Privacy](../legal/privacy.md) for stored data and [Webapp status](../hosting/webapp-runtime-status.md) for version/offline labels.

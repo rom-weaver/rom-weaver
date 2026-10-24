@@ -1,17 +1,18 @@
 import {
   Archive,
-  Bell,
   BookOpen,
+  ChevronUp,
   Download,
   EllipsisVertical,
   FileDiff,
   Gamepad,
   ListChecks,
   ListOrdered,
-  Package,
+  MousePointer2,
   RefreshCw,
   Scissors,
   SlidersHorizontal,
+  Spool,
   Stamp,
   ToggleRight,
   Upload,
@@ -48,13 +49,13 @@ type SampleTutorialAction =
   | "header"
   | "menu"
   | "options"
-  | "package"
   | "play"
   | "remove"
   | "reorder"
   | "replace"
   | "swap"
-  | "toggle";
+  | "toggle"
+  | "weave";
 
 const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void, enabled = true) => {
   const onDismissRef = useRef(onDismiss);
@@ -153,7 +154,7 @@ const getViewTutorialStep = (
 
 /**
  * The match for a step's selector that is actually on screen. Every visited
- * workflow panel stays mounted (hidden), and Apply and Bundle render the same
+ * workflow panel stays mounted (hidden), and Apply and Weave render the same
  * form, so a document-wide lookup can land on a hidden panel's copy of the row:
  * the ring would then frame an empty box and the row the reader sees would stay
  * under the scrim.
@@ -192,13 +193,13 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   header: Scissors,
   menu: EllipsisVertical,
   options: SlidersHorizontal,
-  package: Package,
   play: Gamepad,
   remove: X,
   reorder: ListOrdered,
   replace: RefreshCw,
   swap: SwapIcon,
   toggle: ToggleRight,
+  weave: Spool,
 };
 
 const GUIDE_GAP = 14;
@@ -235,13 +236,103 @@ const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: r
  * top of this one.
  */
 const startGuideMotion = (
-  element: HTMLElement,
+  element: Element,
   keyframes: PropertyIndexedKeyframes,
   options: KeyframeAnimationOptions,
 ): Animation => {
   const animation = element.animate(keyframes, options);
   animation.finished.catch(() => undefined);
   return animation;
+};
+
+const TutorialInputDemo = () => {
+  const demoRef = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let animations: Animation[] = [];
+    const stop = () => {
+      for (const animation of animations) animation.cancel();
+    };
+    const play = () => {
+      stop();
+      animations = [];
+      if (media.matches) return;
+      const cursor = demoRef.current?.querySelector(".demo-cursor");
+      const file = demoRef.current?.querySelector(".demo-file");
+      if (!(cursor && file && typeof cursor.animate === "function")) return;
+      const options = { duration: 2800, easing: GUIDE_ENTER_EASE, iterations: 3 };
+      animations = [
+        startGuideMotion(
+          cursor,
+          {
+            offset: [0, 0.3, 0.45, 0.6, 1],
+            transform: [
+              "translate(24px, 18px)",
+              "translate(0, 0)",
+              "translate(0, 3px)",
+              "translate(0, 0)",
+              "translate(24px, 18px)",
+            ],
+          },
+          options,
+        ),
+        startGuideMotion(
+          file,
+          {
+            offset: [0, 0.15, 0.25, 0.6, 0.75, 1],
+            opacity: [0, 0, 1, 1, 0, 0],
+            transform: [
+              "translate(0, -28px)",
+              "translate(0, -28px)",
+              "translate(0, 0)",
+              "translate(31px, 0)",
+              "translate(31px, 10px)",
+              "translate(0, -28px)",
+            ],
+          },
+          options,
+        ),
+      ];
+    };
+    play();
+    media.addEventListener("change", play);
+    return () => {
+      stop();
+      media.removeEventListener("change", play);
+    };
+  }, []);
+  return (
+    <svg aria-hidden="true" className="sample-tutorial-input-demo" ref={demoRef} viewBox="0 0 400 44">
+      <rect
+        fill="var(--well)"
+        height="42"
+        rx="3"
+        stroke="var(--seam-strong)"
+        strokeDasharray="4 3"
+        width="190"
+        x="1"
+        y="1"
+      />
+      <rect
+        fill="var(--well)"
+        height="42"
+        rx="3"
+        stroke="var(--seam-strong)"
+        strokeDasharray="4 3"
+        width="190"
+        x="209"
+        y="1"
+      />
+      <Upload height="22" width="22" x="84" y="11" />
+      <g className="demo-cursor">
+        <MousePointer2 height="22" width="22" x="96" y="18" />
+      </g>
+      <Archive height="22" width="22" x="293" y="11" />
+      <g className="demo-file">
+        <Gamepad height="22" width="22" x="262" y="11" />
+      </g>
+    </svg>
+  );
 };
 
 const bindFinalCta = (cta: HTMLElement | null, final: boolean, onEnd: () => void) => {
@@ -270,7 +361,7 @@ const ringAroundTarget = (rect: GuideRect) => ({
   top: rect.top - GUIDE_RING_INSET,
   width: rect.width + GUIDE_RING_INSET * 2,
 });
-/** Desktop only - below 641px the card stays the full-width bar pinned by CSS. */
+/** Desktop anchor breakpoint; explicit below placement and tall phone cards also anchor. */
 const GUIDE_ANCHOR_QUERY = "(min-width: 641px)";
 
 const clampWithin = (value: number, limit: number) =>
@@ -304,6 +395,12 @@ const guideTopLimit = () =>
     if (!rect?.height) return limit;
     return Math.max(limit, rect.bottom + GUIDE_MARGIN);
   }, GUIDE_MARGIN);
+
+/** `.dock-pad` is the in-flow spacer that carries the fixed dock's height. */
+const dockHeight = () => document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
+
+/** The lowest a reveal may leave the row or card: the fixed dock owns the band below it. */
+const guideBottomLimit = () => window.innerHeight - dockHeight() - GUIDE_MARGIN;
 
 /**
  * Which side of the row the card sits on. A row taller than a chunk of the
@@ -364,11 +461,9 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, placeAb
  */
 const scrollDeltaForPinned = (rect: GuideRect, dialog: HTMLElement) => {
   const card = dialog.getBoundingClientRect();
-  // `.dock-pad` is the in-flow spacer that carries the dock's height.
-  const dock = document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
   const pinnedTop = card.top + card.height / 2 < window.innerHeight / 2;
   const bandTop = pinnedTop ? card.bottom + GUIDE_GAP : GUIDE_MARGIN;
-  const bandBottom = pinnedTop ? window.innerHeight - dock - GUIDE_MARGIN : card.top - GUIDE_GAP;
+  const bandBottom = pinnedTop ? guideBottomLimit() : card.top - GUIDE_GAP;
   const room = bandBottom - bandTop;
   if (rect.height <= room && rect.top >= bandTop && rect.bottom <= bandBottom) return 0;
   const desiredTop = rect.height <= room ? bandTop + (room - rect.height) / 2 : bandTop;
@@ -383,7 +478,7 @@ const pairInView = (rect: GuideRect, dialog: HTMLElement, placeAbove: boolean) =
   const cardHeight = dialog.getBoundingClientRect().height;
   const top = placeAbove ? rect.top - GUIDE_GAP - cardHeight : rect.top;
   const bottom = placeAbove ? rect.bottom : rect.bottom + GUIDE_GAP + cardHeight;
-  return top >= guideTopLimit() && bottom <= window.innerHeight - GUIDE_MARGIN;
+  return top >= guideTopLimit() && bottom <= guideBottomLimit();
 };
 
 /** The row and the control lifted with it, as one box to keep on screen. */
@@ -398,6 +493,7 @@ const unionRect = (rect: GuideRect, other: GuideRect | undefined): GuideRect => 
 };
 
 const SampleTutorialStart = ({
+  chipLabel,
   documentation,
   downloadHref,
   downloadLabel,
@@ -411,8 +507,10 @@ const SampleTutorialStart = ({
   onSecondaryStart,
   secondaryHref,
   startAction = "apply",
-  secondaryAction = "package",
+  secondaryAction = "weave",
 }: {
+  /** The page's own call to action on the closed chip ("Patch a sample"). */
+  chipLabel: string;
   documentation?: { href: string; label: string };
   downloadHref: string;
   downloadLabel: string;
@@ -445,6 +543,9 @@ const SampleTutorialStart = ({
   // after hydration so a sub-path deployment still links correctly.
   const [href, setHref] = useState(`/${downloadName}`);
   useEffect(() => setHref(downloadHref), [downloadHref]);
+  useEffect(() => {
+    if (error) setOpen(true);
+  }, [error]);
 
   // Re-enabling the setting revives a locally dismissed beacon: in the webapp
   // a dismissal flips onboardingEnabled off, so the transition back to true is
@@ -487,8 +588,9 @@ const SampleTutorialStart = ({
         ref={chipRef}
         type="button"
       >
-        <Bell aria-hidden="true" className="sample-tutorial-start-bell" />
-        {localizer.message("ui.tutorial.new")}
+        <span aria-hidden="true" className="sample-tutorial-start-knot" />
+        {chipLabel}
+        <ChevronUp aria-hidden="true" className="sample-tutorial-start-caret" />
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
           the prerendered shell - four inline SVGs and all - on every page. */}
@@ -505,7 +607,10 @@ const SampleTutorialStart = ({
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return;
               event.preventDefault();
-              if (!loading) onStart();
+              if (!loading) {
+                setOpen(false);
+                onStart();
+              }
             }}
           >
             <span aria-hidden="true" className="sample-tutorial-start-action-icon">
@@ -522,7 +627,10 @@ const SampleTutorialStart = ({
               onClick={(event) => {
                 if (!isPlainLeftClick(event)) return;
                 event.preventDefault();
-                if (!loading) onSecondaryStart();
+                if (!loading) {
+                  setOpen(false);
+                  onSecondaryStart();
+                }
               }}
             >
               <span aria-hidden="true" className="sample-tutorial-start-action-icon">
@@ -634,12 +742,16 @@ const SampleTutorial = ({
   const stepOpenMenu = step?.openMenu;
   const stepPlacement = step?.placement;
   const stepTarget = step?.target;
+  const selectView = (detailed: boolean) => {
+    if (!targetEl) return;
+    const toggle = findLift(targetEl, VIEW_TOGGLE_SELECTOR)?.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (toggle && !toggle.disabled && toggle.checked !== detailed) toggle.click();
+  };
   const endGuide = () => {
     clearGuidedSampleQuery();
     onClose();
   };
   const endGuideRef = useRef(endGuide);
-  const endedByCtaRef = useRef(false);
   endGuideRef.current = endGuide;
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
@@ -774,10 +886,7 @@ const SampleTutorial = ({
         // whenever its download state changes and would drop a class we added.
         cta = target.querySelector<HTMLElement>(stepCta);
         cta?.setAttribute("data-guide-cta", "true");
-        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => {
-          endedByCtaRef.current = true;
-          endGuideRef.current();
-        });
+        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => endGuideRef.current());
       }
       return true;
     };
@@ -793,13 +902,10 @@ const SampleTutorial = ({
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
       setTargetEl(null);
-      if (!endedByCtaRef.current) {
-        if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
-        for (const drawer of openedDrawers) {
-          if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
-        }
+      if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
+      for (const drawer of openedDrawers) {
+        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
       }
-      endedByCtaRef.current = false;
       removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
@@ -817,6 +923,7 @@ const SampleTutorial = ({
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     const ring = ringRef.current;
+    if (dialog && dialog.dataset.step !== (live ? String(stepIndex + 1) : undefined)) return;
     const unanchor = () => {
       if (!dialog) return;
       delete dialog.dataset.anchored;
@@ -870,6 +977,9 @@ const SampleTutorial = ({
       if (Math.abs(left) < 1) revealTo = null;
       return revealTo === null ? 0 : left;
     };
+    // A phone card placed below its target MUST ride the page to keep both reachable.
+    const anchorCard = () =>
+      desktop.matches || stepPlacement === "below" || dialog.getBoundingClientRect().height > window.innerHeight * 0.6;
     // Only when moving between steps - see the glide rules in dropzone.css.
     const setGlide = (element: HTMLElement, glide: boolean) => {
       if (glide) element.dataset.glide = "true";
@@ -883,8 +993,9 @@ const SampleTutorial = ({
      */
     const place = (glide: boolean, shift = 0) => {
       const rect = targetEl.getBoundingClientRect();
-      // Below 641px the card stays the CSS-pinned bar; the ring still frames.
-      const card = desktop.matches ? anchorToTarget(shiftRect(rect, shift), dialog, prefer) : null;
+      const card = anchorCard() ? anchorToTarget(shiftRect(rect, shift), dialog, prefer) : null;
+      // Anchored phone cards MUST follow the row without covering its controls.
+      if (card && !desktop.matches) card.top = rect.bottom - shift + GUIDE_GAP;
       const box = ringAroundTarget(rect);
       // Viewport to document. Every box is measured before anything is written,
       // so a placement never interleaves reads and writes into a forced reflow.
@@ -918,26 +1029,34 @@ const SampleTutorial = ({
       // the panel heading above the row - so the reveal keeps it in view too.
       const lifted = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
       const reveal = unionRect(rect, lifted);
-      const placeAbove = shouldPlaceAbove(rect.height, prefer);
+      const placeAbove = desktop.matches && shouldPlaceAbove(rect.height, prefer);
+      const cardTop = rect.bottom + GUIDE_GAP;
+      const cardBottom = cardTop + dialog.getBoundingClientRect().height;
+      const hangs = anchorCard() && !desktop.matches;
       let top = 0;
-      if (!desktop.matches) top = scrollDeltaForPinned(reveal, dialog);
+      if (!anchorCard()) top = scrollDeltaForPinned(reveal, dialog);
       else if (!pairInView(reveal, dialog, placeAbove)) {
         top = scrollDeltaForPair(reveal, dialog, placeAbove);
         // When the lifted control, the row and the card cannot all fit, the
         // card below gets as much room as scrolling can give it without
         // pushing the lifted control - the one the step asks the reader to
         // use - or the row's top off the screen. Whatever is still short is
-        // the card overlapping the row's tail, never the control.
+        // the card overlapping the row's tail, never the control. A phone card
+        // never overlaps its row, so there the card itself has to come into
+        // view: only its own top is kept on screen.
         if (!placeAbove) {
-          const floor = window.innerHeight - GUIDE_MARGIN;
-          const cardBottom = rect.bottom + GUIDE_GAP + dialog.getBoundingClientRect().height;
-          top = Math.max(top, Math.min(cardBottom - floor, reveal.top - guideTopLimit()));
+          const keep = hangs ? cardTop : reveal.top;
+          top = Math.max(top, Math.min(cardBottom - guideBottomLimit(), keep - guideTopLimit()));
         }
       }
       // The page cannot scroll past either end, and a card placed for a scroll
       // that falls short would miss its row by the difference. A page that
-      // reports no scrollable height is left to the start check below.
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      // reports no scrollable height is left to the start check below. A phone
+      // card hangs below its row, so placing it lengthens the page down to its
+      // spacer (see dropzone.css): the scroll that clears the dock is reachable
+      // even when the page as measured now ends above it.
+      const pageEnd = hangs ? window.scrollY + cardBottom + dockHeight() + GUIDE_MARGIN : 0;
+      const maxScroll = Math.max(document.documentElement.scrollHeight, pageEnd) - window.innerHeight;
       const reachable = maxScroll > 0 ? Math.min(Math.max(top, -window.scrollY), maxScroll - window.scrollY) : top;
       const shift = Math.abs(reachable) > 1 ? reachable : 0;
       const from = window.scrollY;
@@ -981,7 +1100,7 @@ const SampleTutorial = ({
       place(false, pendingShift());
       const height = targetEl.getBoundingClientRect().height;
       const card = dialog.getBoundingClientRect().height;
-      const cardMoved = !desktop.matches && card !== cardHeight;
+      const cardMoved = !anchorCard() && card !== cardHeight;
       cardHeight = card;
       if (height === rowHeight && !cardMoved) return;
       rowHeight = height;
@@ -1017,7 +1136,7 @@ const SampleTutorial = ({
       // the next step's placement measure from the CSS-pinned bar and glide
       // across the screen instead of from the card the user is looking at.
     };
-  }, [stepLift, stepPlacement, stepTarget, targetEl]);
+  }, [live, stepIndex, stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;
@@ -1067,8 +1186,7 @@ const SampleTutorial = ({
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
             inside it is keyed per step. */}
-        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing tutorial copy must be keyboard-scrollable. */}
-        <section aria-label={instructionsLabel} className="sample-tutorial-copy-area" tabIndex={0}>
+        <section aria-label={instructionsLabel} className="sample-tutorial-copy-area">
           <div aria-live="polite" className="sample-tutorial-live">
             <div className="sample-tutorial-copy" key={copyKey}>
               <div className="sample-tutorial-kicker-row">
@@ -1092,20 +1210,35 @@ const SampleTutorial = ({
               <p id={bodyId}>{live ? stepBody : loadingBody}</p>
               {live && step.view ? (
                 <div className="sample-tutorial-compare">
-                  <p data-current={detailedViewEnabled ? undefined : "true"}>
+                  {/* Named by their content: the summary is visible text, so a
+                      shorter aria-label could not contain it. The whitespace keeps
+                      the parts separate words; the grid and flex layouts drop it. */}
+                  <button
+                    aria-pressed={!detailedViewEnabled}
+                    data-current={detailedViewEnabled ? undefined : "true"}
+                    onClick={() => selectView(false)}
+                    type="button"
+                  >
                     <strong>
                       {localizer.message("ui.tutorial.view.simple")}
+                      {detailedViewEnabled ? null : " "}
                       {detailedViewEnabled ? null : <em className="mono">{currentLabel}</em>}
-                    </strong>
-                    {localizer.message("ui.tutorial.view.simpleSummary")}
-                  </p>
-                  <p data-current={detailedViewEnabled ? "true" : undefined}>
+                    </strong>{" "}
+                    <span>{localizer.message("ui.tutorial.view.simpleSummary")}</span>
+                  </button>
+                  <button
+                    aria-pressed={detailedViewEnabled}
+                    data-current={detailedViewEnabled ? "true" : undefined}
+                    onClick={() => selectView(true)}
+                    type="button"
+                  >
                     <strong>
                       {localizer.message("ui.view.detailed")}
+                      {detailedViewEnabled ? " " : null}
                       {detailedViewEnabled ? <em className="mono">{currentLabel}</em> : null}
-                    </strong>
-                    {localizer.message("ui.tutorial.view.detailedSummary")}
-                  </p>
+                    </strong>{" "}
+                    <span>{localizer.message("ui.tutorial.view.detailedSummary")}</span>
+                  </button>
                 </div>
               ) : null}
               {live && stepTryIt ? (
@@ -1114,6 +1247,7 @@ const SampleTutorial = ({
                   <span>{stepTryIt}</span>
                 </p>
               ) : null}
+              {live && stepIndex === 0 && download ? <TutorialInputDemo /> : null}
               {live && stepIndex === 0 && download ? (
                 <p className="sample-tutorial-practice">
                   <span>{localizer.message("ui.tutorial.practiceFiles")}</span>

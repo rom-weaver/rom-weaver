@@ -110,151 +110,239 @@ fn registry_lists_every_game_with_format_metadata() {
         .iter()
         .map(|definition| definition.identity.id.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(
-        ids,
+    let mut expected = vec![
+        "pokemon-gold",
+        "pokemon-silver",
+        "pokemon-crystal",
+        "pokemon-ruby",
+        "pokemon-sapphire",
+        "pokemon-emerald",
+        "pokemon-firered",
+        "pokemon-leafgreen",
+        "pokemon-diamond",
+        "pokemon-pearl",
+        "pokemon-platinum",
+        "pokemon-heartgold",
+        "pokemon-soulsilver",
+        "zelda-a-link-to-the-past",
+        "pokemon-red",
+        "pokemon-blue",
+        "pokemon-yellow",
+        "pokemon-black",
+        "pokemon-white",
+        "pokemon-black-2",
+        "pokemon-white-2",
+        "super-mario-world",
+        "donkey-kong-country-2-diddy-s-kong-quest-slot-1",
+        "donkey-kong-country-2-diddy-s-kong-quest-slot-2",
+        "donkey-kong-country-2-diddy-s-kong-quest-slot-3",
+        "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-1",
+        "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-2",
+        "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-3",
+        "donkey-kong-country-slot-1-player-1",
+        "donkey-kong-country-slot-1-player-2",
+        "donkey-kong-country-slot-2-player-1",
+        "donkey-kong-country-slot-2-player-2",
+        "donkey-kong-country-slot-3-player-1",
+        "donkey-kong-country-slot-3-player-2",
+        "final-fantasy-nes",
+        "mario-party-2-canonical-eeprom",
+        "mario-party-canonical-eeprom",
+        "pokemon-red-schema",
+        "pokemon-blue-schema",
+        "pokemon-yellow-schema",
+        "pokemon-gold-schema",
+        "pokemon-silver-schema",
+        "pokemon-crystal-schema",
+        "secret-of-mana-slot-1",
+        "secret-of-mana-slot-2",
+        "secret-of-mana-slot-3",
+        "secret-of-mana-slot-4",
+        "solatorobo-red-the-hunter-desmume",
+        "super-mario-64-canonical-eeprom-mario-a",
+        "super-mario-64-canonical-eeprom-mario-b",
+        "super-mario-64-canonical-eeprom-mario-c",
+        "super-mario-64-canonical-eeprom-mario-d",
+        "super-mario-kart-schema",
+        "super-mario-rpg-slot-1",
+        "super-mario-rpg-slot-2",
+        "super-mario-rpg-slot-3",
+        "super-mario-rpg-slot-4",
+        "super-mario-world-schema",
+        "super-mario-world-file-2-schema",
+        "super-mario-world-file-3-schema",
+        "super-metroid-samus-a",
+        "super-metroid-samus-b",
+        "super-metroid-samus-c",
+        "super-metroid-samus-a-supermetroid",
+        "super-metroid-samus-b-supermetroid",
+        "super-metroid-samus-c-supermetroid",
+        "wario-land-super-mario-land-3",
+        "zelda-a-link-to-the-past-file-1-schema",
+        "zelda-a-link-to-the-past-file-2-schema",
+        "zelda-a-link-to-the-past-file-3-schema",
+        "kirbys-adventure-europe-usa-rev1-france-germany-slot-1",
+        "kirbys-adventure-europe-usa-rev1-france-germany-slot-2",
+        "kirbys-adventure-europe-usa-rev1-france-germany-slot-3",
+        "kirbys-adventure-usa-japan-slot-1",
+        "kirbys-adventure-usa-japan-slot-2",
+        "kirbys-adventure-usa-japan-slot-3",
+        "kirbys-adventure-canada-slot-1",
+        "kirbys-adventure-canada-slot-2",
+        "kirbys-adventure-canada-slot-3",
+        "f-zero",
+        "game-and-watch-gallery-3",
+        "final-fight-one",
+        "super-street-fighter-ii-turbo-revival",
+        "f-zero-x",
+        "diddy-kong-racing",
+        "lylat-wars",
+        "mission-impossible",
+        "final-fantasy-vi-slot-1",
+        "final-fantasy-vi-slot-2",
+        "final-fantasy-vi-slot-3",
+        "mystic-quest-legend-slot-1",
+        "mystic-quest-legend-slot-2",
+        "mystic-quest-legend-slot-3",
+        "donkey-kong-land",
+        "f-zero-maximum-velocity",
+        "pokemon-trading-card-game",
+        "wario-land-3",
+        "zelda-oracle-of-ages-slot-1",
+        "zelda-oracle-of-ages-slot-2",
+        "zelda-oracle-of-ages-slot-3",
+        "zelda-oracle-of-seasons-slot-1",
+        "zelda-oracle-of-seasons-slot-2",
+        "zelda-oracle-of-seasons-slot-3",
+        "mario-kart-64",
+        "actraiser-europe",
+        "actraiser-usa",
+        "actraiser-japan",
+        "chrono-trigger-slot-1",
+        "chrono-trigger-slot-2",
+        "chrono-trigger-slot-3",
+        "super-punch-out-slot-1",
+        "super-punch-out-slot-2",
+        "super-punch-out-slot-3",
+        "super-punch-out-slot-4",
+        "super-punch-out-slot-5",
+        "super-punch-out-slot-6",
+        "super-punch-out-slot-7",
+        "super-punch-out-slot-8",
+        "sonic-3-604",
+        "sonic-3-980",
+        "sonic-3-65536",
+        "shining-force-16381",
+        "shining-force-16382",
+        "shining-force-65536",
+        "soleil-512",
+        "soleil-4608",
+        "soleil-8704",
+        "soleil-12800",
+        "soleil-65536",
+        "castlevania-aria-of-sorrow",
+        "castlevania-circle-of-the-moon",
+        "1080-snowboarding",
+        "yoshis-story-canonical-eeprom-europe",
+        "yoshis-story-canonical-eeprom-usa",
+        "yoshis-story-canonical-eeprom-japan",
+        "wario-land-ii",
+        "zelda-links-awakening-gb-international",
+        "zelda-links-awakening-gb-japan-alternate",
+        "zelda-links-awakening-gbc-international",
+        "zelda-links-awakening-gbc-japan-alternate",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<Vec<_>>();
+    expected.push("rondo-of-blood-japan".into());
+    expected.extend(["sonic-advance", "sonic-advance-2", "sonic-advance-3"].map(str::to_owned));
+    expected.extend((1..=3).map(|slot| format!("bomberman-64-canonical-eeprom-slot-{slot}")));
+    expected.push("super-smash-bros-canonical-sram".into());
+    for block in 1..=15 {
+        for (game, regions) in [
+            ("tekken", &["europe", "usa", "japan"][..]),
+            ("rayman", &["europe", "usa", "japan"][..]),
+            (
+                "castlevania-symphony-of-the-night",
+                &["europe", "usa", "japan", "asia"][..],
+            ),
+            (
+                "grandia",
+                &["europe", "usa", "japan", "france", "germany"][..],
+            ),
+        ] {
+            expected.extend(
+                regions
+                    .iter()
+                    .map(|region| format!("{game}-{region}-block-{block}")),
+            );
+        }
+    }
+    expected.extend((1..=4).map(|slot| format!("paper-mario-canonical-flashram-file-{slot}")));
+    expected
+        .extend((1..=3).map(|slot| format!("zelda-ocarina-of-time-canonical-sram-file-{slot}")));
+    expected.extend(
         [
-            "pokemon-gold",
-            "pokemon-silver",
-            "pokemon-crystal",
-            "pokemon-ruby",
-            "pokemon-sapphire",
-            "pokemon-emerald",
-            "pokemon-firered",
-            "pokemon-leafgreen",
-            "pokemon-diamond",
-            "pokemon-pearl",
-            "pokemon-platinum",
-            "pokemon-heartgold",
-            "pokemon-soulsilver",
-            "zelda-a-link-to-the-past",
-            "pokemon-red",
-            "pokemon-blue",
-            "pokemon-yellow",
-            "pokemon-black",
-            "pokemon-white",
-            "pokemon-black-2",
-            "pokemon-white-2",
-            "super-mario-world",
-            "donkey-kong-country-2-diddy-s-kong-quest-slot-1",
-            "donkey-kong-country-2-diddy-s-kong-quest-slot-2",
-            "donkey-kong-country-2-diddy-s-kong-quest-slot-3",
-            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-1",
-            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-2",
-            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-3",
-            "donkey-kong-country-slot-1-player-1",
-            "donkey-kong-country-slot-1-player-2",
-            "donkey-kong-country-slot-2-player-1",
-            "donkey-kong-country-slot-2-player-2",
-            "donkey-kong-country-slot-3-player-1",
-            "donkey-kong-country-slot-3-player-2",
-            "final-fantasy-nes",
-            "mario-party-2-canonical-eeprom",
-            "mario-party-canonical-eeprom",
-            "pokemon-red-schema",
-            "pokemon-blue-schema",
-            "pokemon-yellow-schema",
-            "pokemon-gold-schema",
-            "pokemon-silver-schema",
-            "pokemon-crystal-schema",
-            "secret-of-mana-slot-1",
-            "secret-of-mana-slot-2",
-            "secret-of-mana-slot-3",
-            "secret-of-mana-slot-4",
-            "solatorobo-red-the-hunter-desmume",
-            "super-mario-64-canonical-eeprom-mario-a",
-            "super-mario-64-canonical-eeprom-mario-b",
-            "super-mario-64-canonical-eeprom-mario-c",
-            "super-mario-64-canonical-eeprom-mario-d",
-            "super-mario-kart-schema",
-            "super-mario-rpg-slot-1",
-            "super-mario-rpg-slot-2",
-            "super-mario-rpg-slot-3",
-            "super-mario-rpg-slot-4",
-            "super-mario-world-schema",
-            "super-mario-world-file-2-schema",
-            "super-mario-world-file-3-schema",
-            "super-metroid-samus-a",
-            "super-metroid-samus-b",
-            "super-metroid-samus-c",
-            "super-metroid-samus-a-supermetroid",
-            "super-metroid-samus-b-supermetroid",
-            "super-metroid-samus-c-supermetroid",
-            "wario-land-super-mario-land-3",
-            "zelda-a-link-to-the-past-file-1-schema",
-            "zelda-a-link-to-the-past-file-2-schema",
-            "zelda-a-link-to-the-past-file-3-schema",
-            "kirbys-adventure-europe-usa-rev1-france-germany-slot-1",
-            "kirbys-adventure-europe-usa-rev1-france-germany-slot-2",
-            "kirbys-adventure-europe-usa-rev1-france-germany-slot-3",
-            "kirbys-adventure-usa-japan-slot-1",
-            "kirbys-adventure-usa-japan-slot-2",
-            "kirbys-adventure-usa-japan-slot-3",
-            "kirbys-adventure-canada-slot-1",
-            "kirbys-adventure-canada-slot-2",
-            "kirbys-adventure-canada-slot-3",
-            "f-zero",
-            "game-and-watch-gallery-3",
-            "final-fight-one",
-            "super-street-fighter-ii-turbo-revival",
-            "f-zero-x",
-            "diddy-kong-racing",
-            "lylat-wars",
-            "mission-impossible",
-            "final-fantasy-vi-slot-1",
-            "final-fantasy-vi-slot-2",
-            "final-fantasy-vi-slot-3",
-            "mystic-quest-legend-slot-1",
-            "mystic-quest-legend-slot-2",
-            "mystic-quest-legend-slot-3",
-            "donkey-kong-land",
-            "f-zero-maximum-velocity",
-            "pokemon-trading-card-game",
-            "wario-land-3",
-            "zelda-oracle-of-ages-slot-1",
-            "zelda-oracle-of-ages-slot-2",
-            "zelda-oracle-of-ages-slot-3",
-            "zelda-oracle-of-seasons-slot-1",
-            "zelda-oracle-of-seasons-slot-2",
-            "zelda-oracle-of-seasons-slot-3",
-            "mario-kart-64",
-            "actraiser-europe",
-            "actraiser-usa",
-            "actraiser-japan",
-            "chrono-trigger-slot-1",
-            "chrono-trigger-slot-2",
-            "chrono-trigger-slot-3",
-            "super-punch-out-slot-1",
-            "super-punch-out-slot-2",
-            "super-punch-out-slot-3",
-            "super-punch-out-slot-4",
-            "super-punch-out-slot-5",
-            "super-punch-out-slot-6",
-            "super-punch-out-slot-7",
-            "super-punch-out-slot-8",
-            "sonic-3-604",
-            "sonic-3-980",
-            "sonic-3-65536",
-            "shining-force-16381",
-            "shining-force-16382",
-            "shining-force-65536",
-            "soleil-512",
-            "soleil-4608",
-            "soleil-8704",
-            "soleil-12800",
-            "soleil-65536",
-            "castlevania-aria-of-sorrow",
-            "castlevania-circle-of-the-moon",
-            "1080-snowboarding",
-            "yoshis-story-canonical-eeprom-europe",
-            "yoshis-story-canonical-eeprom-usa",
-            "yoshis-story-canonical-eeprom-japan",
-            "wario-land-ii",
-            "zelda-links-awakening-gb-international",
-            "zelda-links-awakening-gb-japan-alternate",
-            "zelda-links-awakening-gbc-international",
-            "zelda-links-awakening-gbc-japan-alternate",
+            "wario-land-4",
+            "konami-krazy-racers",
+            "warioware-inc-minigame-mania",
+            "castlevania-harmony-of-dissonance",
+            "advance-wars",
         ]
+        .map(str::to_owned),
     );
+    for game in ["golden-sun", "golden-sun-the-lost-age"] {
+        expected.extend((1..=3).map(|slot| format!("{game}-file-{slot}")));
+    }
+    expected.extend(
+        [
+            "kurukuru-kururin",
+            "zelda-the-minish-cap",
+            "sonic-rush",
+            "castlevania-dawn-of-sorrow",
+            "castlevania-order-of-ecclesia",
+            "game-boy-camera",
+            "kingdom-hearts-chain-of-memories",
+        ]
+        .map(str::to_owned),
+    );
+    expected.extend((1..=3).map(|slot| format!("banjo-kazooie-canonical-eeprom-file-{slot}")));
+    for block in 1..=15 {
+        for (game, regions) in [
+            (
+                "final-fantasy-vii",
+                &[
+                    "europe",
+                    "usa",
+                    "japan",
+                    "japan-international",
+                    "france",
+                    "germany",
+                    "spain",
+                ][..],
+            ),
+            (
+                "final-fantasy-viii",
+                &[
+                    "europe-australia",
+                    "usa",
+                    "japan",
+                    "france",
+                    "germany",
+                    "italy",
+                    "spain",
+                ][..],
+            ),
+        ] {
+            expected.extend(
+                regions
+                    .iter()
+                    .map(|region| format!("{game}-{region}-block-{block}")),
+            );
+        }
+    }
+    assert_eq!(ids, expected);
     assert!(definitions[3..8].iter().all(|definition| {
         definition.platform == "gba"
             && definition.save_format == "gba_flash_128k"
@@ -1324,4 +1412,67 @@ fn compiled_and_custom_handlers_have_unique_registry_ids() {
     }
     assert!(ids.contains("super-mario-world"));
     assert!(ids.contains("super-mario-world-schema"));
+}
+
+#[test]
+fn single_money_edit_preserves_all_unrelated_fields_and_bytes() {
+    let registry = SaveGameRegistry::default();
+    let mut amounts = vec![0, 1, 255, 256, 65_535, 65_536, 999_999];
+    let mut seed = 0xcafe_u32;
+    for _ in 0..16 {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        amounts.push(seed % 1_000_000);
+    }
+    for (family, id, money_offset) in [
+        (Family::Rs, "pokemon-ruby", 0x490),
+        (Family::Emerald, "pokemon-emerald", 0x490),
+        (Family::Frlg, "pokemon-firered", 0x290),
+    ] {
+        for active_slot in [0, 1] {
+            let (counter_a, counter_b) = if active_slot == 0 { (9, 8) } else { (8, 9) };
+            let input = input(fixture(family, counter_a, counter_b), Some(id));
+            let identity = game(family, id);
+            let before = registry
+                .parse(&input, &identity)
+                .expect("original document");
+            let money_start = logical_offset(active_slot, money_offset);
+            let checksum_start = section_offset(active_slot, 1) + 0xFF6;
+            for amount in &amounts {
+                let result = registry
+                    .apply(
+                        &input,
+                        &identity,
+                        &[SaveEdit {
+                            field: "trainer.money".into(),
+                            value: SaveValue::U32(*amount),
+                        }],
+                        false,
+                    )
+                    .expect("single-field edit");
+                let output = result.bytes.expect("edited bytes");
+                assert_eq!(output.len(), input.bytes.len());
+                for (offset, (original, edited)) in input.bytes.iter().zip(&output).enumerate() {
+                    if !(money_start..money_start + 4).contains(&offset)
+                        && !(checksum_start..checksum_start + 2).contains(&offset)
+                    {
+                        assert_eq!(
+                            original, edited,
+                            "{id}, slot={active_slot}, amount={amount}, offset={offset:#x}"
+                        );
+                    }
+                }
+                for field in &before.fields {
+                    let expected = if field.id == "trainer.money" {
+                        SaveValue::U32(*amount)
+                    } else {
+                        field.value.clone()
+                    };
+                    assert_eq!(value(&result.document, &field.id), expected);
+                }
+                assert_eq!(result.document.integrity, before.integrity);
+            }
+        }
+    }
 }

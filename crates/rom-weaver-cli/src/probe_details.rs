@@ -42,6 +42,10 @@ impl CliApp {
         mut report: OperationReport,
         recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
+        // The recommendation is advice about a recognised source; a failed probe has none to give.
+        if report.status == OperationStatus::Failed {
+            return report;
+        }
         if let Some(recommendation) = recommendation {
             report.label =
                 Self::append_compress_recommendation_label(&report.label, recommendation);

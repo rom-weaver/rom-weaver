@@ -39,7 +39,7 @@ block-padding.workspace = true
 bytes.workspace = true
 bzip2-sys = { workspace = true, features = ["static"] }
 cbc.workspace = true
-chd.workspace = true
+claxon.workspace = true
 ciso.workspace = true
 crc32fast.workspace = true
 crossbeam-channel = { workspace = true, optional = true }
@@ -52,22 +52,32 @@ flacenc.workspace = true
 flate2.workspace = true
 itertools.workspace = true
 libc.workspace = true
-# The folded CHD module uses liblzma unconditionally, so this cannot stay
-# optional behind compress-lzma-vendored the way the inlined nod source alone
-# would allow.
+# libarchive links liblzma unconditionally (`src/libarchive/sys.rs`), so this
+# cannot stay optional behind compress-lzma-vendored the way the inlined nod
+# source alone would allow.
 liblzma-sys.workspace = true
 libz-sys = { workspace = true, features = ["libc", "static", "stock-zlib"] }
 lz4-sys = "1.9.4"
+lz4_flex = "0.14.0"
 lru.workspace = true
 md-5.workspace = true
 polonius-the-crab.workspace = true
 rayon.workspace = true
-rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.19.1" }
-rom-weaver-core = { path = "../rom-weaver-core", version = "0.19.1" }
+rom-weaver-checksum = { path = "../rom-weaver-checksum", version = "0.22.2" }
+rom-weaver-core = { path = "../rom-weaver-core", version = "0.22.2" }
 sha1.workspace = true
 serde_json.workspace = true
 simple_moving_average.workspace = true
 tracing.workspace = true
+# Direct dependencies of the vendored `src/chd_rs` module; they leave with it.
+bitreader.workspace = true
+bitstream-io.workspace = true
+byteorder.workspace = true
+crc.workspace = true
+lzma-rust2.workspace = true
+num-derive.workspace = true
+num-traits.workspace = true
+text_io.workspace = true
 # Direct dependencies of the vendored `src/xdvdfs` module; they leave with it.
 arrayvec.workspace = true
 async-trait.workspace = true
@@ -84,6 +94,7 @@ zstd.workspace = true
 zeekstd.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+same-file.workspace = true
 liblzma-sys = { workspace = true, features = ["parallel"] }
 zstd-sys = { workspace = true, features = ["zstdmt"] }
 
@@ -95,13 +106,16 @@ zstd-sys = { workspace = true, features = ["zstdmt"] }
 openssl-sys = { version = "0.9.80", features = ["vendored"] }
 
 [build-dependencies]
+diffy = { version = "0.5.2", default-features = false }
+serde_json.workspace = true
 bindgen = "0.73.1"
 cc = "1"
 cmake = "0.1.58"
 path-slash = "0.2.1"
 
 [dev-dependencies]
-claxon.workspace = true
+diffy = { version = "0.5.2", default-features = false }
+proptest = "1.6.0"
 rand.workspace = true
 tar.workspace = true
 

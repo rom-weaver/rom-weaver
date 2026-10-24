@@ -252,7 +252,7 @@ beforeEach(() => {
   workflowMockState.originalStateOverrides = {};
   workflowMockState.runDeferred = createDeferred();
   workflowMockState.runCalls = 0;
-  window.history.replaceState(null, "", "/create-patch");
+  window.history.replaceState(null, "", "/create-rom-patch");
 });
 
 afterEach(() => {
@@ -262,7 +262,7 @@ afterEach(() => {
 });
 
 test("guided Create URL starts and loads the sample tutorial", async () => {
-  window.history.replaceState(null, "", "/create-patch?guide=create");
+  window.history.replaceState(null, "", "/create-rom-patch?guide=create");
   const requested = [];
   globalThis.fetch = async (url) => {
     requested.push(String(url));
@@ -278,21 +278,68 @@ test("guided Create URL starts and loads the sample tutorial", async () => {
   expect(requested).toEqual(["/hello-world.nes", "/modified-world.nes"]);
 });
 
-test("Create explains that dropped patches belong in Apply", async () => {
+const getVisibleSourceModeButton = (label) =>
+  Array.from(document.querySelectorAll(".seg-btn")).find(
+    (button) => button.textContent?.trim() === label && !button.closest("[hidden]"),
+  );
+
+test("Create defaults to Modified ROM", async () => {
+  mount(createElement(CreatePatchForm, withCreateWorkflowMock()));
+
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  expect(getVisibleSourceModeButton("Patches & cheats")).toBeInstanceOf(HTMLButtonElement);
+  expect(document.querySelector("#rom-weaver-row-patch-stack")).toBeNull();
+});
+
+test("Create automatically keeps dropped patches in Patches & cheats", async () => {
   mount(
     createElement(
       CreatePatchForm,
       withCreateWorkflowMock({
-        pageDrop: { files: [new File([], "hack.ips")], id: 1 },
+        pageDrop: { files: [new File(["PATCHEOF"], "hack.ips")], id: 1 },
       }),
     ),
   );
 
+  await expect.poll(() => getVisibleSourceModeButton("Patches & cheats")?.getAttribute("aria-pressed")).toBe("true");
   await expect
-    .poll(() => document.getElementById("patch-builder-input-notice")?.textContent || "")
-    .toContain("Patches belong in Apply");
+    .poll(() => document.querySelector("#rom-weaver-row-patch-stack")?.textContent || "")
+    .toContain("hack.ips");
+  expect(document.getElementById("patch-builder-input-notice")).toBeNull();
   expect(document.querySelector("#patch-builder-row-original .file")).toBeNull();
   expect(document.querySelector("#patch-builder-row-modified .file")).toBeNull();
+});
+
+test("Create preserves the ROM pair and dropped patches across source mode switches", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+      }),
+    ),
+  );
+
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  selectFileInput(document.getElementById("patch-builder-input-file-unified"), new File(["PATCHEOF"], "retained.ips"));
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-row-patch-stack")?.textContent || "")
+    .toContain("retained.ips");
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
+    .toContain("original.bin");
+
+  getVisibleSourceModeButton("Modified ROM").click();
+  await expect.poll(() => getVisibleSourceModeButton("Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector("#patch-builder-row-original .card")?.textContent).toContain("original.bin");
+  expect(document.querySelector("#patch-builder-row-modified .card")?.textContent).toContain("modified.bin");
+  expect(document.querySelector("#patch-builder-container")?.closest("[hidden]")).toBeNull();
+
+  getVisibleSourceModeButton("Patches & cheats").click();
+  await expect.poll(() => getVisibleSourceModeButton("Patches & cheats")?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector("#rom-weaver-row-patch-stack")?.textContent).toContain("retained.ips");
+  expect(document.querySelectorAll("#rom-weaver-list-patch-stack .card")).toHaveLength(1);
 });
 
 test("Create preserves simultaneous drop order regardless of filename length", async () => {
@@ -525,7 +572,7 @@ test("an overflow ROM is reported without replacing the prepared sources", async
 
   await expect.poll(() => document.body.textContent || "").toContain("original.bin");
   await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
-  await expect.poll(() => document.body.textContent || "").toContain("Unused inputs: modified-v2.bin.");
+  await expect.poll(() => document.body.textContent || "").toContain("Not used: modified-v2.bin.");
   expect(document.getElementById("patch-builder-input-notice")?.classList.contains("error")).toBe(true);
   expect(workflowMockState.originalSetCalls).toBe(1);
   expect(workflowMockState.modifiedSetCalls).toBe(1);
@@ -639,4 +686,44 @@ test("create queued run cancels when source preparation warns", async () => {
   workflowMockState.modifiedDeferred.resolve();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("create keeps the chosen output Type when the Simple/Detailed view changes", async () => {
+  const renderForm = (settings) =>
+    mount(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings },
+        createElement(
+          CreatePatchForm,
+          withCreateWorkflowMock({
+            defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+            defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+          }),
+        ),
+      ),
+    );
+  const root = renderForm({ detailedViewEnabled: false });
+
+  await expect
+    .poll(() => document.getElementById("patch-builder-select-output-compression"))
+    .toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(document.getElementById("patch-builder-select-output-compression"), "7z");
+  await expect.poll(() => document.getElementById("patch-builder-select-output-compression")?.value).toBe("7z");
+
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(
+        CreatePatchForm,
+        withCreateWorkflowMock({
+          defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+          defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+        }),
+      ),
+    ),
+  );
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 100));
+  expect(document.getElementById("patch-builder-select-output-compression")?.value).toBe("7z");
 });

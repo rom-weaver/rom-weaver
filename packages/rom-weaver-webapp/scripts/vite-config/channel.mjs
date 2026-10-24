@@ -30,6 +30,28 @@ export const resolveAppChannel = (value) => {
   return "dev";
 };
 
+// Where this build is served from. Canonical URLs, sitemaps and canonical
+// headers always name production; the machine-readable endpoints (llms.txt, the
+// Markdown alternates, openapi.json and the API catalog) name the deployment
+// that ships them, so a nightly, preview or self-hosted copy points readers and
+// agents at itself. Unset means production; deploys and self-hosters set
+// ROM_WEAVER_SITE_ORIGIN to the origin their copy is served from.
+export const PRODUCTION_SITE_ORIGIN = "https://rom-weaver.com";
+export const resolveSiteOrigin = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return PRODUCTION_SITE_ORIGIN;
+  let url;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error(`ROM_WEAVER_SITE_ORIGIN '${text}' is not a URL; expected an origin such as https://example.com`);
+  }
+  if (!(url.protocol === "https:" || url.protocol === "http:") || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error(`ROM_WEAVER_SITE_ORIGIN '${text}' must be an http(s) origin without a path, query, or fragment`);
+  }
+  return url.origin;
+};
+
 // Installed PWAs are identified by their manifest name, so without a per-channel
 // one a nightly install is indistinguishable from production on the home screen.
 export const createRootManifestSource = (channel, channelLabel) => {

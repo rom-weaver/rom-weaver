@@ -29,7 +29,7 @@ The editor also accepts the [supported save containers](../reference/save-editor
 
 ## Use the browser
 
-1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Saves](https://rom-weaver.com/save-editor).
+1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Save Editor](https://rom-weaver.com/save-editor).
 2. Add the game save file.
 3. Select the game if recognition asks for a choice. For another supported profile, select **Choose game profile**, then **Open profile**.
 4. Read the integrity results and warnings before you change any fields.
@@ -41,16 +41,16 @@ Filtering does not discard changes in hidden fields. Use [Create game saves](cre
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-light.avif" width="1170" height="2627">
-    <source type="image/avif" srcset="../screenshots/save-editor-desktop-light.avif" width="1770" height="1669">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-light.webp" width="1170" height="2627">
-    <img src="../screenshots/save-editor-desktop-light.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the light theme" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-light.avif" width="1170" height="2917">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-light.avif" width="1770" height="1813">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-light.webp" width="1170" height="2917">
+    <img src="../screenshots/save-editor-desktop-light.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the light theme" width="1770" height="1813">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-dark.avif" width="1170" height="2627">
-    <source type="image/avif" srcset="../screenshots/save-editor-desktop-dark.avif" width="1770" height="1669">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-dark.webp" width="1170" height="2627">
-    <img src="../screenshots/save-editor-desktop-dark.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the dark theme" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-dark.avif" width="1170" height="2917">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-dark.avif" width="1770" height="1813">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-dark.webp" width="1170" height="2917">
+    <img src="../screenshots/save-editor-desktop-dark.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the dark theme" width="1770" height="1813">
   </picture>
   <figcaption>A generated Zelda save, filtered to one property, with an edit preview. The original stays unchanged.</figcaption>
 </figure>

@@ -32,7 +32,9 @@ use ts_rs::TS;
 
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
-pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
+pub use container::{
+    RAW_SAVE_FILE_EXTENSIONS, SaveContainer, SaveContainerKind, unwrap_save_container,
+};
 pub use formats::{
     SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
 };

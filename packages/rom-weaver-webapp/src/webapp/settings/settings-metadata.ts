@@ -48,7 +48,7 @@ type SettingsState = {
   language: string;
   byteUnits: ByteUnitSystem;
   logLevel: string;
-  bundlePackage: string;
+  weavePackage: string;
   postApplyDownloadBehavior: PostApplyActionBehavior;
   postApplyTestBehavior: PostApplyActionBehavior;
   verifyBootAfterApply: boolean;
@@ -86,7 +86,8 @@ type StorageLike = (Pick<Storage, "getItem"> & Partial<Pick<Storage, "removeItem
 
 type SettingsChoiceOption = {
   value: string;
-  label: string;
+  label?: string;
+  labelId?: MessageId;
 };
 
 type SettingsFieldKey = keyof SettingsState;
@@ -118,7 +119,6 @@ type SettingsFieldMetadata<K extends SettingsFieldKey = SettingsFieldKey> = {
   defaultValue: SettingsState[K] | (() => SettingsState[K]);
   label?: string;
   labelId?: MessageId;
-  labelDataLocalize?: string;
   layout?: "default" | "large";
   validationLabel?: string;
   codecOptions?: CompressionCodecOption[];
@@ -126,8 +126,7 @@ type SettingsFieldMetadata<K extends SettingsFieldKey = SettingsFieldKey> = {
   options?: SettingsChoiceOption[];
   validValues?: string[];
   placeholder?: DynamicSettingsText;
-  suggestion?: DynamicSettingsText;
-  suggestionDataLocalize?: DynamicSettingsText;
+  suggestion?: (context: SettingsFieldContext, localizer: Localizer) => string;
   min?: DynamicSettingsNumber;
   max?: DynamicSettingsNumber;
   step?: number;
@@ -179,7 +178,7 @@ const SETTINGS_FIELD_ORDER = [
   "fixChecksum",
   "identifiedOutputName",
   "requireInputChecksumMatch",
-  "bundlePackage",
+  "weavePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
   "verifyBootAfterApply",
@@ -236,9 +235,10 @@ const ZIP_ZSTD_CODEC =
 
 /**
  * The settings panel's sections, in display order. Shared with Find so a
- * setting can be reached by name from anywhere in the app.
+ * setting can be reached by name from anywhere in the app. `title` is the stable
+ * English key (anchor ids, Find keywords); `titleId` is what the UI shows.
  */
-const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title: string }> = [
+const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title: string; titleId?: MessageId }> = [
   {
     fields: [
       "language",
@@ -251,10 +251,11 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "betaToolsEnabled",
     ],
     title: "Webapp",
+    titleId: "ui.settings.section.webapp",
   },
   {
     fields: [
-      "bundlePackage",
+      "weavePackage",
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
       "verifyBootAfterApply",
@@ -264,16 +265,22 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "requireInputChecksumMatch",
     ],
     title: "Behavior",
+    titleId: "ui.settings.section.behavior",
   },
-  { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
+  {
+    fields: ["defaultCompression", "compressionProfile", "threads"],
+    title: "Compression",
+    titleId: "ui.settings.section.compression",
+  },
   {
     fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],
     title: "Codecs",
+    titleId: "ui.settings.section.codecs",
   },
   { fields: ["rvzBlockSize"], title: "RVZ" },
 ];
 
-/** Anchor id of a settings panel group; the console's jump links scroll to it. */
+/** Anchor id of a settings panel group. */
 const settingsGroupId = (title: string) => `settings-group-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
 /**
@@ -290,6 +297,16 @@ const ADVANCED_SETTINGS_FIELDS: ReadonlySet<SettingsFieldKey> = new Set<Settings
   "rvzBlockSize",
 ]);
 
+const POST_APPLY_LABEL_IDS: Readonly<Record<string, MessageId>> = {
+  Automatically: "ui.settings.option.postApply.autoShow",
+  "With a button": "ui.settings.option.postApply.show",
+  Never: "ui.settings.option.postApply.hide",
+};
+const withPostApplyLabelId = (option: { label: string; value: string }): SettingsChoiceOption => ({
+  ...option,
+  labelId: POST_APPLY_LABEL_IDS[option.label] as MessageId,
+});
+
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   betaToolsEnabled: {
     defaultValue: false,
@@ -298,86 +315,81 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("betaToolsEnabled"),
     labelId: "settings.betaToolsEnabled",
-    labelDataLocalize: "Enable beta tools (Trim, PPF undo, and Save Editor)",
     layout: "large",
   },
   byteUnits: {
     defaultValue: "decimal",
     id: "settings-byte-units",
     key: "byteUnits",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.byteUnits"),
     kind: "select",
     label: getSettingsLabel("byteUnits"),
     labelId: "settings.byteUnits",
     options: [
-      { label: "Decimal (KB, MB, GB)", value: "decimal" },
-      { label: "Binary (KiB, MiB, GiB)", value: "binary" },
+      { labelId: "ui.settings.option.byteUnits.decimal", value: "decimal" },
+      { labelId: "ui.settings.option.byteUnits.binary", value: "binary" },
     ],
-    suggestion: "Choose decimal or binary units for file sizes.",
     validationLabel: "File size units",
     validValues: ["decimal", "binary"],
   },
-  bundlePackage: {
+  weavePackage: {
     defaultValue: "patches",
-    id: "settings-bundle-package",
-    key: "bundlePackage",
+    id: "settings-weave-package",
+    key: "weavePackage",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.weavePackage"),
     kind: "select",
-    label: getSettingsLabel("bundlePackage"),
-    labelId: "settings.bundlePackage",
+    label: getSettingsLabel("weavePackage"),
+    labelId: "settings.weavePackage",
     options: [
-      { label: "Bundle + patches", value: "patches" },
-      { label: "Bundle + ROM + patches", value: "rom" },
+      { labelId: "ui.settings.option.weavePackage.patches", value: "patches" },
+      { labelId: "ui.settings.option.weavePackage.rom", value: "rom" },
     ],
-    suggestion:
-      "Choose whether to include the ROM in a shared bundle. The Compression type controls its archive format.",
-    validationLabel: "Bundle",
+    validationLabel: "What a shared weave includes",
     validValues: ["patches", "rom"],
   },
   emulatorSaveStorageEnabled: {
     defaultValue: true,
     id: "settings-emulator-save-storage-enabled",
     key: "emulatorSaveStorageEnabled",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.emulatorSaveStorage"),
     kind: "checkbox",
     label: getSettingsLabel("emulatorSaveStorageEnabled"),
     labelId: "settings.emulatorSaveStorageEnabled",
     layout: "large",
-    suggestion:
-      "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage.",
   },
   postApplyDownloadBehavior: {
     defaultValue: "auto-show",
     id: "settings-post-apply-download-behavior",
     key: "postApplyDownloadBehavior",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.postApplyDownload"),
     kind: "select",
     label: getSettingsLabel("postApplyDownloadBehavior"),
     labelId: "settings.postApplyDownloadBehavior",
-    options: [...POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS],
-    suggestion: "Choose whether Download runs automatically and whether its button stays visible.",
-    validationLabel: "Post Apply Download",
+    options: POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS.map(withPostApplyLabelId),
+    validationLabel: "Download after patching",
     validValues: POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS.map((option) => option.value),
   },
   postApplyTestBehavior: {
     defaultValue: "show",
     id: "settings-post-apply-test-behavior",
     key: "postApplyTestBehavior",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.postApplyTest"),
     kind: "select",
     label: getSettingsLabel("postApplyTestBehavior"),
     labelId: "settings.postApplyTestBehavior",
-    options: [...POST_APPLY_TEST_BEHAVIOR_OPTIONS],
-    suggestion: "Choose whether Test opens automatically and whether its button stays visible.",
-    validationLabel: "Post Apply Test",
+    options: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map(withPostApplyLabelId),
+    validationLabel: "Open Test after patching",
     validValues: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map((option) => option.value),
   },
   verifyBootAfterApply: {
     defaultValue: false,
     id: "settings-verify-boot-after-apply",
     key: "verifyBootAfterApply",
+    suggestion: (_context, localizer) => localizer.message("settings.verifyBootAfterApplyHelp"),
     kind: "checkbox",
     label: getSettingsLabel("verifyBootAfterApply"),
     labelId: "settings.verifyBootAfterApply",
     layout: "large",
-    suggestion: getSettingsLabel("verifyBootAfterApplyHelp"),
-    suggestionDataLocalize:
-      "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked.",
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
@@ -386,14 +398,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createcd-codecs",
     key: "chdCreateCdCodecs",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.codecValuesLevels", {
+        levels: codecLevelRangeText("chdCreateCdCodecs"),
+        values: codecValuesText("chdCreateCdCodecs"),
+      }),
     kind: "text",
     label: getUiSettingsLabel("chdCd"),
     labelId: "ui.settings.chdCd",
-    labelDataLocalize: "CD Codecs",
     placeholder: codecDefaultPlaceholderText("chdCreateCdCodecs"),
-    suggestion: `Valid values: ${codecValuesText("chdCreateCdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateCdCodecs")}`,
-    suggestionDataLocalize: `Valid values: ${codecValuesText("chdCreateCdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateCdCodecs")}`,
-    validationLabel: "CD Codecs",
+    validationLabel: "CD codecs",
   },
   chdCreateDvdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateDvdCodecs"),
@@ -402,57 +416,64 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createdvd-codecs",
     key: "chdCreateDvdCodecs",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.codecValuesLevels", {
+        levels: codecLevelRangeText("chdCreateDvdCodecs"),
+        values: codecValuesText("chdCreateDvdCodecs"),
+      }),
     kind: "text",
     label: getUiSettingsLabel("chdDvd"),
     labelId: "ui.settings.chdDvd",
-    labelDataLocalize: "DVD Codecs",
     placeholder: codecDefaultPlaceholderText("chdCreateDvdCodecs"),
-    suggestion: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
-    suggestionDataLocalize: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
-    validationLabel: "DVD Codecs",
+    validationLabel: "DVD codecs",
   },
   compressionProfile: {
     defaultValue: "max",
     id: "settings-compression-profile",
     key: "compressionProfile",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.compressionProfile", {
+        other: formatLevelRange(STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL),
+        zstd: formatLevelRange(ZSTD_CODEC_MIN_LEVEL, ZSTD_CODEC_MAX_LEVEL),
+      }),
     kind: "range",
     label: getSettingsLabel("compressionProfile"),
     labelId: "settings.compressionProfile",
-    labelDataLocalize: "Level",
     max: COMPRESSION_PROFILES.length - 1,
     min: 0,
     scaleLabels: [...COMPRESSION_PROFILE_LABELS],
     step: 1,
-    suggestion: `Default: Max. zstd levels: ${formatLevelRange(
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}. Other codec levels: ${formatLevelRange(STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL)}.`,
-    suggestionDataLocalize: `Default: Max. zstd levels: ${formatLevelRange(
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}. Other codec levels: ${formatLevelRange(STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL)}.`,
-    validationLabel: "Level",
+    validationLabel: "Compression level",
     validValues: [...COMPRESSION_PROFILES],
   },
   defaultCompression: {
     defaultValue: "zip/special",
     id: "settings-default-compression",
     key: "defaultCompression",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.defaultCompression"),
     kind: "select",
     label: getSettingsLabel("defaultCompression"),
     labelId: "settings.defaultCompression",
     options: [
-      { label: ".7z or ROM specific", value: "7z/special" },
-      { label: ".zip or ROM specific", value: "zip/special" },
-      { label: "ROM specific only", value: "special only" },
-      { label: ".7z only", value: "7z only" },
-      { label: ".zip only", value: "zip only" },
-      { label: "None", value: "none" },
+      {
+        label: "ROM-specific format, else .7z",
+        labelId: "ui.settings.option.defaultCompression.sevenZipSpecial",
+        value: "7z/special",
+      },
+      {
+        label: "Default: ROM-specific format, else plain file or .zip",
+        labelId: "ui.settings.option.defaultCompression.zipSpecial",
+        value: "zip/special",
+      },
+      {
+        label: "ROM-specific format only",
+        labelId: "ui.settings.option.defaultCompression.specialOnly",
+        value: "special only",
+      },
+      { labelId: "ui.settings.option.defaultCompression.sevenZipOnly", value: "7z only" },
+      { labelId: "ui.settings.option.defaultCompression.zipOnly", value: "zip only" },
+      { labelId: "ui.settings.option.defaultCompression.none", value: "none" },
     ],
-    suggestion:
-      ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
-    suggestionDataLocalize:
-      ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
     validationLabel: "Type",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
@@ -460,13 +481,11 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     defaultValue: false,
     id: "settings-detailed-view-enabled",
     key: "detailedViewEnabled",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.detailedView"),
     kind: "checkbox",
     label: getSettingsLabel("detailedViewEnabled"),
     labelId: "settings.detailedViewEnabled",
-    labelDataLocalize: "Show detailed file information",
     layout: "large",
-    suggestion:
-      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch.",
   },
   fixChecksum: {
     defaultValue: false,
@@ -475,18 +494,17 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("fixChecksum"),
     labelId: "settings.fixChecksum",
-    labelDataLocalize: "Fix ROM header",
     layout: "large",
   },
   identifiedOutputName: {
     defaultValue: true,
     id: "settings-identified-output-name",
     key: "identifiedOutputName",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.identifiedOutputName"),
     kind: "checkbox",
     label: getSettingsLabel("identifiedOutputName"),
     labelId: "settings.identifiedOutputName",
     layout: "large",
-    suggestion: "When off, output names derive from the input file name instead.",
   },
   accent: {
     defaultValue: getDefaultAccent,
@@ -513,19 +531,18 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     defaultValue: getDefaultWebappLogLevel,
     id: "settings-log-level",
     key: "logLevel",
+    suggestion: (_context, localizer) => localizer.message("ui.settings.suggestion.logLevel"),
     kind: "select",
     label: getSettingsLabel("logLevel"),
     labelId: "settings.logLevel",
     options: [
-      { label: "Off", value: "off" },
-      { label: "Errors", value: "error" },
-      { label: "Warnings", value: "warn" },
+      { labelId: "ui.patch.off", value: "off" },
+      { labelId: "ui.settings.option.logLevel.error", value: "error" },
+      { labelId: "ui.settings.option.logLevel.warn", value: "warn" },
       { label: "Info", value: "info" },
       { label: "Debug", value: "debug" },
       { label: "Trace", value: "trace" },
     ],
-    suggestion:
-      "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
     validationLabel: "Log level",
     validValues: [...LOG_LEVELS],
   },
@@ -536,20 +553,17 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("onboardingEnabled"),
     labelId: "settings.onboardingEnabled",
-    labelDataLocalize: 'Show the "New here?" quick-start tips',
     layout: "large",
   },
   offlineCopyEnabled: {
     defaultValue: true,
     id: "settings-offline-copy-enabled",
     key: "offlineCopyEnabled",
+    suggestion: (_context, localizer) => localizer.message("settings.offlineCopyHelp"),
     kind: "checkbox",
     label: getSettingsLabel("offlineCopyEnabled"),
     labelId: "settings.offlineCopyEnabled",
-    labelDataLocalize: "Keep an offline copy",
     layout: "large",
-    suggestion: getSettingsLabel("offlineCopyHelp"),
-    suggestionDataLocalize: "Automatically download the app for offline use unless data saver is on.",
   },
   requireInputChecksumMatch: {
     defaultValue: true,
@@ -558,7 +572,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("requireInputChecksumMatch"),
     labelId: "settings.requireInputChecksumMatch",
-    labelDataLocalize: "Require input checksum match",
     layout: "large",
   },
   rvzBlockSize: {
@@ -566,15 +579,14 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-block-size",
     key: "rvzBlockSize",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.rvzBlockSize", { value: COMPRESSION_DEFAULTS.rvzBlockSize }),
     kind: "number",
     label: getUiSettingsLabel("rvzBlockSize"),
     labelId: "ui.settings.rvzBlockSize",
-    labelDataLocalize: "RVZ block size",
     max: 2147483647,
-    min: 1,
+    min: 32768,
     step: 1,
-    suggestion: `Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}`,
-    suggestionDataLocalize: "Valid values: 1-2147483647",
     validationLabel: "RVZ block size",
   },
   rvzCodec: {
@@ -583,21 +595,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-codec",
     key: "rvzCodec",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.codecLevel", {
+        codec: COMPRESSION_DEFAULTS.rvzCodec,
+        range: codecLevelRange(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MIN_LEVEL, ZSTD_CODEC_MAX_LEVEL),
+      }),
     kind: "text",
     label: getUiSettingsLabel("rvzCodec"),
     labelId: "ui.settings.rvzCodec",
-    labelDataLocalize: "RVZ codec",
     placeholder: `${COMPRESSION_DEFAULTS.rvzCodec}:${getCodecMaxLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MAX_LEVEL)}`,
-    suggestion: `Default: ${COMPRESSION_DEFAULTS.rvzCodec}. Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}[:${codecLevelRange(
-      COMPRESSION_DEFAULTS.rvzCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}].`,
-    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.rvzCodec}. Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}[:${codecLevelRange(
-      COMPRESSION_DEFAULTS.rvzCodec,
-      ZSTD_CODEC_MIN_LEVEL,
-      ZSTD_CODEC_MAX_LEVEL,
-    )}].`,
     validationLabel: "RVZ codec",
   },
   sevenZipCodec: {
@@ -605,24 +611,18 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     defaultValue: COMPRESSION_DEFAULTS.sevenZipCodec,
     id: "settings-7z-codec",
     key: "sevenZipCodec",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.codecLevel", {
+        codec: COMPRESSION_DEFAULTS.sevenZipCodec,
+        range: codecLevelRange(COMPRESSION_DEFAULTS.sevenZipCodec, STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL),
+      }),
     kind: "text",
     label: getUiSettingsLabel("sevenZipCodec"),
     labelId: "ui.settings.sevenZipCodec",
-    labelDataLocalize: "7z codec",
     placeholder: `${COMPRESSION_DEFAULTS.sevenZipCodec}:${getCodecMaxLevel(
       COMPRESSION_DEFAULTS.sevenZipCodec,
       STANDARD_CODEC_MAX_LEVEL,
     )}`,
-    suggestion: `Default: ${COMPRESSION_DEFAULTS.sevenZipCodec}. Optional level: ${COMPRESSION_DEFAULTS.sevenZipCodec}[:${codecLevelRange(
-      COMPRESSION_DEFAULTS.sevenZipCodec,
-      STANDARD_CODEC_MIN_LEVEL,
-      STANDARD_CODEC_MAX_LEVEL,
-    )}].`,
-    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.sevenZipCodec}. Optional level: ${COMPRESSION_DEFAULTS.sevenZipCodec}[:${codecLevelRange(
-      COMPRESSION_DEFAULTS.sevenZipCodec,
-      STANDARD_CODEC_MIN_LEVEL,
-      STANDARD_CODEC_MAX_LEVEL,
-    )}].`,
     validationLabel: "7z codec",
   },
   threads: {
@@ -630,18 +630,17 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.threadsEnabled,
     id: "settings-worker-threads",
     key: "threads",
+    suggestion: ({ uiState }, localizer) =>
+      localizer.message(
+        uiState.threadsEnabled ? "ui.settings.suggestion.threadsThreaded" : "ui.settings.suggestion.threadsSingle",
+      ),
     kind: "number",
     label: getSettingsLabel("threads"),
     labelId: "settings.threads",
-    labelDataLocalize: "Threads",
     max: 64,
     min: 0,
     placeholder: "auto",
     step: 1,
-    suggestion: ({ uiState }) =>
-      uiState.threadsEnabled
-        ? "Valid values: auto, 0-64. Use 0 to disable threaded bundles."
-        : "Valid values: auto or 1.",
     validationLabel: "Threads",
   },
   zipCodec: {
@@ -650,17 +649,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.zipEnabled,
     id: "settings-zip-codec",
     key: "zipCodec",
+    suggestion: (_context, localizer) =>
+      localizer.message("ui.settings.suggestion.zipCodec", {
+        codec: COMPRESSION_DEFAULTS.zipCodec,
+        levels: codecLevelRangeText("zipCodec"),
+        values: codecValuesText("zipCodec"),
+      }),
     kind: "text",
     label: getUiSettingsLabel("zipCodec"),
     labelId: "ui.settings.zipCodec",
-    labelDataLocalize: "ZIP codec",
     placeholder: `${ZIP_ZSTD_CODEC}:${getCodecMaxLevel(ZIP_ZSTD_CODEC, ZSTD_CODEC_MAX_LEVEL)}`,
-    suggestion: `Default: ${COMPRESSION_DEFAULTS.zipCodec}. Valid values: ${codecValuesText("zipCodec")}. Optional levels: ${codecLevelRangeText(
-      "zipCodec",
-    )}. Store does not use a level.`,
-    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.zipCodec}. Valid values: ${codecValuesText("zipCodec")}. Optional levels: ${codecLevelRangeText(
-      "zipCodec",
-    )}. Store does not use a level.`,
     validationLabel: "ZIP codec",
   },
 };
@@ -672,6 +670,9 @@ const getSettingsChoiceValues = <K extends SettingsFieldKey>(fieldKey: K): strin
   if (Array.isArray(field.options)) return field.options.map((option) => option.value);
   return [];
 };
+
+const getSettingsChoiceLabel = (option: SettingsChoiceOption, localizer: Localizer): string =>
+  option.labelId ? localizer.message(option.labelId) : (option.label ?? option.value);
 
 const getSettingsFieldLabel = (fieldKey: SettingsFieldKey, localizer: Localizer): string => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
@@ -764,16 +765,11 @@ const getSettingsFieldPlaceholder = (
 const getSettingsFieldSuggestion = (
   fieldKey: SettingsFieldKey,
   settings: SettingsDraftState,
-  uiState: SettingsUiState = getSettingsUiState(settings),
-): string | undefined => resolveSettingsFieldTextValue(SETTINGS_FIELD_METADATA[fieldKey].suggestion, settings, uiState);
-
-const getSettingsFieldSuggestionDataLocalize = (
-  fieldKey: SettingsFieldKey,
-  settings: SettingsDraftState,
-  uiState: SettingsUiState = getSettingsUiState(settings),
+  uiState: SettingsUiState,
+  localizer: Localizer,
 ): string | undefined => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
-  return resolveSettingsFieldTextValue(field.suggestionDataLocalize ?? field.suggestion, settings, uiState);
+  return field.suggestion?.({ settings, uiState }, localizer);
 };
 
 const getSettingsFieldMin = (
@@ -803,6 +799,7 @@ const getDefaultSettings = (): SettingsState => {
 const copySettings = (source: SettingsState): SettingsState => Object.assign({}, source);
 
 export type {
+  SettingsChoiceOption,
   SettingsDraft,
   SettingsDraftState,
   SettingsFieldKey,
@@ -819,6 +816,7 @@ export {
   getCompressionProfileFromIndex,
   getDefaultSettings,
   getDefaultThreads,
+  getSettingsChoiceLabel,
   getSettingsChoiceValues,
   getSettingsFieldDefaultValue,
   getSettingsFieldId,
@@ -827,7 +825,6 @@ export {
   getSettingsFieldMin,
   getSettingsFieldPlaceholder,
   getSettingsFieldSuggestion,
-  getSettingsFieldSuggestionDataLocalize,
   getSettingsFieldValidationLabel,
   getSettingsUiState,
   isSettingsDraftFieldNumeric,

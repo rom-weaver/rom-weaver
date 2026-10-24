@@ -305,7 +305,7 @@ impl IdentifyPackProvider {
                     .find(|entry| entry.pack_slug == slug)
                     .and_then(|entry| entry.pack_sha256.as_deref())
             {
-                let actual = sha256_hex(&bytes);
+                let actual = super::identify_builtin::sha256(&bytes);
                 if actual != expected {
                     return Err(RomWeaverError::Validation(format!(
                         "ROM identify pack `{}` does not match its catalog sha256 \
@@ -575,7 +575,7 @@ fn download_redump_dat(platform: &str, database_dir: &Path) -> Result<PathBuf> {
         ))
     })?;
     let path = database_dir.join(format!(".{endpoint}-redump-dat.zip"));
-    write_atomic(&path, &bytes)?;
+    super::path_access::write_atomic(&path, &bytes)?;
     Ok(path)
 }
 
@@ -608,32 +608,6 @@ struct ImportedSystem {
     components: usize,
     routed_keys: usize,
     shared_components: usize,
-}
-
-/// Write `bytes` to `path` atomically (`.part` + rename).
-#[cfg(not(target_arch = "wasm32"))]
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let part = path.with_extension("part");
-    fs::write(&part, bytes).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to write `{}`: {error}", part.display()))
-    })?;
-    fs::rename(&part, path).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to finalize `{}`: {error}", path.display()))
-    })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut stream = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
-        .ok()
-        .flatten()
-        .expect("sha256 is a supported algorithm");
-    stream.update(bytes).expect("sha256 update never fails");
-    stream
-        .finalize()
-        .expect("sha256 finalize never fails")
-        .remove("sha256")
-        .expect("sha256 value present")
 }
 
 /// Build one platform's RWFP1 pack bytes from its unsorted game records.
@@ -699,6 +673,17 @@ fn import_redump_dat(
             database_dir.display()
         ))
     })?;
+    let mut magic = [0u8; 2];
+    if fs::File::open(dump)
+        .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut magic))
+        .is_err()
+        || &magic != b"PK"
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "Redump DAT archive `{}` is not a ZIP file",
+            dump.display()
+        )));
+    }
     let entries = list_regular_archive_file_entries(dump, "zip")?;
     let mut dat_entries: Vec<DumpEntry> = Vec::new();
     for entry in &entries {
@@ -768,8 +753,8 @@ fn import_redump_dat(
         let slug = slugify_platform(&platform);
         let file = format!("{slug}.pack");
         let path = database_dir.join(&file);
-        write_atomic(&path, &pack)?;
-        let sha256 = sha256_hex(&pack);
+        super::path_access::write_atomic(&path, &pack)?;
+        let sha256 = super::identify_builtin::sha256(&pack);
         imported.push(ImportedSystem {
             platform,
             slug,
@@ -847,7 +832,7 @@ fn write_merged_catalog(
     })?;
     // Self-check the merged catalog before it replaces the previous one.
     IdentifyCatalog::parse(&bytes)?;
-    write_atomic(&catalog_path, &bytes)
+    super::path_access::write_atomic(&catalog_path, &bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,7 +1124,7 @@ fn identify_database_status(args: IdentifyDatabaseDirCommand) -> Result<Operatio
             "slug": slug,
             "format": format,
             "bytes": bytes.len(),
-            "sha256": sha256_hex(&bytes),
+            "sha256": super::identify_builtin::sha256(&bytes),
         }));
     }
     let mut report = OperationReport::succeeded(

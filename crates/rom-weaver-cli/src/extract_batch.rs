@@ -82,6 +82,24 @@ impl CliApp {
 
         // Take each job out of `pending` exactly once as its wave is scheduled; results land in
         // input order via the index carried alongside each command.
+        // Concurrent jobs may share a missing parent directory. Create those parents once here so
+        // a failing job's cleanup only ever removes its own output directory, then drop any that
+        // are still empty once every job has finished.
+        let mut shared_parents: Vec<PathBuf> = Vec::new();
+        if job_count > 1 {
+            for job in &jobs {
+                let Some(parent) = job.output.parent() else {
+                    continue;
+                };
+                // Record before creating, so a partially failed create is still cleaned up.
+                shared_parents.extend(crate::extract_command::missing_dirs_to_create(parent));
+                if let Err(error) = std::fs::create_dir_all(parent) {
+                    debug!(path = %parent.display(), %error, "could not pre-create shared extract parent");
+                }
+            }
+            // A job's own output directory is that job's to keep or clean up.
+            shared_parents.retain(|dir| jobs.iter().all(|job| job.output != *dir));
+        }
         let mut pending: Vec<Option<ExtractCommand>> = jobs.into_iter().map(Some).collect();
         let mut outcomes: Vec<Option<AppRunOutcome>> = (0..job_count).map(|_| None).collect();
 
@@ -128,6 +146,12 @@ impl CliApp {
             }
         }
 
+        // Deepest first, so a nested parent goes before its own parent.
+        shared_parents.sort();
+        shared_parents.dedup();
+        shared_parents.sort_by_key(|dir| std::cmp::Reverse(dir.components().count()));
+        crate::extract_command::remove_created_empty_dirs(&shared_parents);
+
         ExtractBatchReport {
             outcomes: outcomes
                 .into_iter()
@@ -165,15 +189,31 @@ mod tests {
     }
 
     // No tempfile dev-dep in this crate; derive a unique dir from pid + an atomic counter so parallel
-    // test runs never collide, and remove it at the end of the test.
-    fn unique_work_dir() -> PathBuf {
+    // test runs never collide. The guard removes it on success, failed assertion, and panic.
+    struct WorkDir(PathBuf);
+
+    impl std::ops::Deref for WorkDir {
+        type Target = Path;
+
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for WorkDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn unique_work_dir() -> WorkDir {
         use std::sync::atomic::{AtomicU32, Ordering};
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir =
             std::env::temp_dir().join(format!("rw-extract-batch-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).expect("create work dir");
-        dir
+        WorkDir(dir)
     }
 
     // Build a real zip containing `<stem>.bin` via the app's own compress command.
@@ -184,6 +224,7 @@ mod tests {
         let (reporter, prompter) = silent();
         let outcome = RomWeaverApp::run(
             Commands::Compress(CompressCommand {
+                rvz_block_size: None,
                 input: vec![input],
                 entry_names: Vec::new(),
                 format: Some("zip".to_string()),
@@ -232,6 +273,54 @@ mod tests {
                 threads: ThreadBudget::Auto,
             })
             .collect()
+    }
+
+    #[test]
+    fn failed_concurrent_jobs_leave_no_shared_parent_and_successes_keep_it() {
+        let work = unique_work_dir();
+        let broken: Vec<PathBuf> = ["one", "two", "three"]
+            .iter()
+            .map(|stem| {
+                let path = work.join(format!("{stem}.xyz"));
+                fs::write(&path, b"not an archive").expect("fixture");
+                path
+            })
+            .collect();
+        let run = |archives: &[PathBuf], out: &Path| {
+            let (reporter, prompter) = silent();
+            run_extract_batch(
+                extract_jobs(archives, &["one", "two", "three"], out),
+                ExtractBatchOptions {
+                    emit_progress_events: false,
+                    interactive_selection_enabled: false,
+                    threads: ThreadBudget::Fixed(4),
+                    sequential: false,
+                },
+                reporter,
+                prompter,
+            )
+        };
+
+        let all_failed = work.join("missing-parent").join("out");
+        let report = run(&broken, &all_failed);
+        assert!(
+            report
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status != OperationStatus::Succeeded)
+        );
+        assert!(
+            !work.join("missing-parent").exists(),
+            "failed batch must not leave shared parents"
+        );
+
+        let mixed_parent = work.join("mixed-parent").join("out");
+        let good = make_zip(&work, "good", b"good payload");
+        let mixed = vec![good, broken[1].clone(), broken[2].clone()];
+        let report = run(&mixed, &mixed_parent);
+        assert_eq!(report.outcomes[0].status, OperationStatus::Succeeded);
+        assert!(mixed_parent.join("one").exists(), "successful output stays");
+        assert!(!mixed_parent.join("two").exists() && !mixed_parent.join("three").exists());
     }
 
     #[test]
@@ -304,7 +393,5 @@ mod tests {
                 "`{stem}` concurrent extract must match the sequential extract"
             );
         }
-
-        let _ = fs::remove_dir_all(&work);
     }
 }

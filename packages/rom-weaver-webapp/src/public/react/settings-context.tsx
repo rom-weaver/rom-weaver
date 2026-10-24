@@ -132,6 +132,19 @@ const getDefaultCompressionMode = (settings: RuntimeValue | undefined): DefaultC
   return normalizeDefaultCompression(source.defaultCompression);
 };
 
+/**
+ * Apply and Create hand back the bare file by default. The shared `defaultCompression` setting
+ * ships as "zip/special" (archive output), and saved settings are full snapshots, so an untouched
+ * default is indistinguishable from a deliberate pick of it; for these two workflows that value
+ * means "ROM-specific format or the bare file". Any other saved choice (".zip only", ".7z only",
+ * ".7z or ROM specific", ...) is honored as written, and ZIP/7z stay an opt-in in the form's
+ * output options.
+ */
+const getBareDefaultCompressionMode = (settings: RuntimeValue | undefined): DefaultCompressionMode => {
+  const mode = getDefaultCompressionMode(settings);
+  return mode === "zip/special" ? "special only" : mode;
+};
+
 const getDefaultCompressionArchive = (mode: DefaultCompressionMode): ArchiveDefaultCompression => {
   if (mode === "7z/special" || mode === "7z only") return "7z";
   if (mode === "none" || mode === "special only") return "none";
@@ -182,6 +195,8 @@ const getNormalizedWorkflowSettings = (
 ) => {
   const source = toRecord(settings as RuntimeValue);
   const output = toRecord(source.output);
+  const canonicalOutput = { ...output };
+  delete canonicalOutput.bundlePackage;
   const outputContainer = toRecord(output.container);
   const workers = toRecord(source.workers);
   const compatibility = toRecord(source.compatibility);
@@ -239,8 +254,13 @@ const getNormalizedWorkflowSettings = (
       sink: (configuredLogSink || emitDefaultWorkflowLog) as ApplyLoggingSettings["sink"] | undefined,
     },
     output: {
-      ...output,
-      bundlePackage: readFirstDefined(output.bundlePackage, source.bundlePackage),
+      ...canonicalOutput,
+      weavePackage: readFirstDefined(
+        output.weavePackage,
+        source.weavePackage,
+        output.bundlePackage,
+        source.bundlePackage,
+      ),
       identifiedName: readFirstDefined(output.identifiedName, source.identifiedOutputName) as boolean | undefined,
       compression: readFirstDefined(output.compression, "auto"),
       container: {
@@ -275,9 +295,11 @@ const getNormalizedWorkflowSettings = (
 
 const toApplyWorkflowSettings = (settings: ApplyPatchFormSettings, threads?: RuntimeValue): ApplyWorkflowSettings => {
   const normalized = getNormalizedWorkflowSettings(settings, threads);
-  const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
+  const canonicalSettings = { ...settings } as ApplyPatchFormSettings & { bundlePackage?: unknown };
+  delete canonicalSettings.bundlePackage;
+  const defaultCompression = getBareDefaultCompressionMode(settings as RuntimeValue);
   return {
-    ...settings,
+    ...canonicalSettings,
     compatibility: normalized.compatibility,
     defaultCompression,
     logging: normalized.logging,
@@ -296,7 +318,7 @@ const toCreateWorkflowSettings = (
   threads?: RuntimeValue,
 ): CreateWorkflowSettings => {
   const normalized = getNormalizedWorkflowSettings(settings, threads);
-  const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
+  const defaultCompression = getBareDefaultCompressionMode(settings as RuntimeValue);
   return {
     ...settings,
     defaultCompression,
@@ -326,6 +348,7 @@ const useCreateSettings = () => {
 
 export {
   allowsDefaultCompressionSpecial,
+  getBareDefaultCompressionMode,
   getCreateSettingsOutputName,
   getDefaultCompressionArchive,
   getDefaultCompressionMode,

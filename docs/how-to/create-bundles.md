@@ -1,119 +1,127 @@
-# Create and share a patch bundle in the browser
+# Share multiple ROM patches as one weave
 
-A rom-weaver bundle packages an ordered patch recipe into one download. It helps users choose the right ROM, apply patches in the right order, and get the same result you tested.
+Package multiple patches, their order, and expected ROM checksums into one download.
+
+<a id="create-and-share-a-patch-weave-in-the-browser"></a>
+
+<a id="create-and-share-a-patch-bundle-in-the-browser"></a>
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Choose what to include](#choose-what-to-include)
 - [Build the patch recipe](#build-the-patch-recipe)
-- [Turn on bundle output and download it](#turn-on-bundle-output-and-download-it)
+- [Turn on weave output and download it](#turn-on-weave-output-and-download-it)
 - [Test the finished download](#test-the-finished-download)
 - [Publish a useful release](#publish-a-useful-release)
-- [Open a hosted bundle in Apply](#open-a-hosted-bundle-in-apply)
+- [Open a hosted weave](#open-a-hosted-weave)
 
 <!-- END doctoc -->
 
-New to bundles? [What a bundle is](../explanation/bundles.md) covers what one contains and when it is worth making, and the [guided Bundle Patches tour](https://rom-weaver.com/bundle-patches?guide=bundle) builds one from the homebrew practice files.
+See [What a weave is](../explanation/bundles.md) for background, or try the [guided Weave Patches tour](https://rom-weaver.com/weave-patches?guide=weave) with homebrew files.
 
 ## Choose what to include
 
-Leave **Include ROM in bundle** clear for a patch-only release. The archive contains the recipe, patches, and expected ROM checksums. Each user supplies the matching ROM.
+Leave **Include ROM in weave** clear for a patch-only release. The archive contains the recipe, patches, and expected ROM checksums. Each user supplies the matching ROM.
 
-Select **Include ROM in bundle** only for a ROM you can redistribute, such as your own homebrew. Packaging does not grant redistribution rights.
+Select **Include ROM in weave** only for a ROM you can redistribute, such as your own homebrew. Packaging does not grant redistribution rights.
 
-Keep ZIP for a broadly readable download. Bundle archives use 7z when the Apply output uses 7z compression; other output formats produce ZIP bundles.
+Choose ZIP for broad compatibility, or 7z. This selects the recipe archive format, not the recipient’s patched ROM container.
 
 ## Build the patch recipe
 
-1. Open [Bundle](https://rom-weaver.com/bundle-patches).
-2. Add the clean ROM and every patch.
+1. Open [Weave](https://rom-weaver.com/weave-patches).
+2. Add the clean ROM and every patch. Add supported ROM cheats through **Add cheats to the patch order** when needed.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
-4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
-5. Open **Checks** on each patch. Use **Add check** to record a known CRC32, MD5, SHA-1, or byte count for the input or output. Input checks describe the bytes the patch expects. Embedded output checks describe the patch’s standalone result. They do not verify a combined stack when earlier patches changed its source. Do not guess a value just to fill the form.
+4. Open each patch's three-dot **Patch actions** menu → **Edit details**. Add a readable name and any description, version, and author users need.
+5. Open **Checks** → **Add check** for a known input or output CRC32, MD5, SHA-1, or byte count. Input checks describe the expected bytes. Embedded output checks verify the standalone result, not a combined stack whose earlier patches changed the source. Never guess values.
 
-Set the input selector on each patch card. It chooses the state that the patch runs on, and the patch's input checks describe that same state:
+Set each patch's input selector to the state its checks describe:
 
-1. Keep **auto** to let the checks select the state.
+1. Keep **Automatic** to let the checks select the state. It then shows the detected state, such as **Original ROM (detected)**.
 2. Choose **Original ROM** when the patch was made from the clean ROM.
-3. Choose **Previous patch output** when the patch was made from the result above it.
-4. Choose **Output of** a named patch when the patch depends on that patch's result. Keep each referenced patch enabled and before its dependent patch.
+3. Choose **Previous patch's result** when the patch was made from the result above it.
+4. Choose **Output of** a named patch for a dependency. Keep that patch enabled and ordered before its dependent patch.
 
-For a disc, use the track selector to select the required track. Keep accumulated execution to continue that track's selected patch chain. Turn each optional patch on and off after reopening the exported bundle to check both results.
+For discs, select the required track. Keep accumulated execution to continue that track's chain. Test optional switches after reopening the exported weave.
 
-Keep an explicit input and its target on the same track in the browser. A recipe that reads one track and writes another requires the [CLI](cli-apply.md); the browser stops before applying that recipe.
+Keep an explicit input and its target on the same track. Cross-track recipes require the [CLI](cli-apply.md); the browser rejects them before applying.
 
-To include a disc ROM, add an archive that contains the disc sheet and all track files. A loose CUE or GDI sheet cannot include its track files in the exported package.
+To include a disc ROM, add an archive containing the disc sheet and every track. A loose CUE or GDI sheet cannot package its track files.
 
 Leave each required patch **On**. Turn a genuine add-on **Off** to make it optional and off by default.
 
-Checks from formats such as BPS may already appear and cannot be edited. Add only checks you know are correct, such as values from the patch author or from the Original and Modified files you tested.
+Built-in checks, such as BPS checksums, cannot be edited. Add only values from the author or your tested Original and Modified files.
 
-Order is part of the recipe. Move a card only when you know the patch was authored for that state. Test every optional combination you tell users is supported, especially when a later patch depends on an earlier one.
+Reorder only when the patch supports that input state. Test optional combinations as described below, including dependencies.
 
-## Turn on bundle output and download it
+Each enabled ROM cheat becomes a separate patch at its chosen position. Recipients can toggle each cheat independently. Original patches keep their metadata and optional switches.
 
-1. Expand **Apply** and set the output filename and format users should receive after patching.
-2. Open **Share this patch recipe (for patch creators)**.
-3. Leave **Include ROM in bundle** clear for a patch-only release.
-4. Select **Share bundle** and wait for the checks and download.
-5. Save the archive. The control becomes **Download ZIP Bundle** or **Download 7z Bundle** for another copy.
+Cheat patches record the resolved ROM writes. Compare codes resolve against the enabled changes above them during export. Test optional combinations after reopening the archive.
 
-The expected filename helps users find the ROM. Checksums establish whether its contents match; a different filename alone does not block applying.
+<a id="turn-on-bundle-output-and-download-it"></a>
 
-<figure class="docs-screenshot">
-  <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-light.avif" width="1170" height="453">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif" width="1770" height="302">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-light.webp" width="1170" height="453">
-    <img src="../screenshots/bundle-output-desktop-light.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the light theme" width="1770" height="302">
-  </picture>
-  <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-dark.avif" width="1170" height="453">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif" width="1770" height="302">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-dark.webp" width="1170" height="453">
-    <img src="../screenshots/bundle-output-desktop-dark.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the dark theme" width="1770" height="302">
-  </picture>
-  <figcaption>Bundle creation packages the staged recipe without applying the patches.</figcaption>
-</figure>
+## Turn on weave output and download it
 
-Bundle creation does not apply the patches. It packages the recipe you have staged. **APPLY & DOWNLOAD** remains available separately when you also want to build the patched output.
+1. In the main **Weave** output step, enter the expected output name. It is also used to name the downloaded archive.
+2. Choose **.zip** or **.7z** in its format selector.
+3. Open **Options** and leave **Include ROM in weave** clear for a patch-only release.
+4. Select **Share weave** and wait for the checks and download.
+5. Save the archive. The control becomes **Download ZIP weave** or **Download 7z weave** for another copy.
 
-Your ROM and patches are read locally. A patch-only bundle carries the ROM's checksums, not its bytes.
+Expand the secondary **Download this ROM** step to test the recipe. Its name and compression settings are shared with Weave: 7z selects a 7z weave; other Apply formats select ZIP. Recheck the Weave format before sharing.
+
+On **Apply**, expand **Download the weave**. On **Create**, this appears in [Patches & cheats mode](create-rom-patches.md#build-from-patches-and-cheats).
+
+For one patch instead, expand **Download a combined patch** on Apply or Weave.
+
+Checksums verify content; a filename mismatch alone does not block Apply.
+
+Weave creation runs preceding enabled changes when resolving ROM cheats. Download the patched ROM separately.
+
+Files are read locally. Patch-only weaves contain ROM checksums, not ROM bytes.
 
 ## Test the finished download
 
-Test the archive you will publish, not only the loose files used to make it:
+Test the actual archive you will publish:
 
 1. Open a fresh [Apply](https://rom-weaver.com/apply-patches) page.
-2. Add the downloaded bundle archive.
-3. For a patch-only bundle, add a fresh copy of the documented Original.
+2. Add the downloaded weave archive.
+3. For a patch-only weave, add a fresh copy of the documented Original.
 4. Confirm the displayed patch order, names, required switches, and optional switches match the release.
 5. Run **APPLY & DOWNLOAD**.
 6. Compare the result checksum with your intended Modified file.
 7. Launch the result in the emulator or hardware you support.
 8. Repeat for every optional combination you promise works.
 
-Also test the failure path. Add a harmless wrong sample file and make sure the bundle clearly asks for the matching ROM rather than silently producing an output.
+Test rejection too: add a harmless wrong sample file and confirm the weave requests the matching ROM instead of producing output.
 
-Compare the same checksum algorithm on both files to check reconstruction. Playing the result tests the paths you exercise; it does not establish that every patch combination works.
+Compare the same checksum algorithm on both files. Playing tests only the paths you exercise, not every patch combination.
 
 ## Publish a useful release
 
-Follow the [release-notes checklist](create-rom-patches.md#write-useful-release-notes). Also include the bundle archive's checksum and a link to [Open a bundle](apply-rom-patches.md#open-a-bundle).
+Follow the [release-notes checklist](create-rom-patches.md#write-useful-release-notes). Also include the weave archive's checksum and a link to [Open a weave](apply-rom-patches.md#open-a-bundle).
 
-Do not rely on the recipe as the only human explanation. Someone should be able to read the release page and understand what the download changes before opening it.
+Explain what the download changes on its release page; do not rely on the recipe alone.
 
-For an update, rebuild the recipe from the same clean Original and the new patch files. Update the patch details and test the new archive from a fresh page.
+For updates, rebuild from the same clean Original and new patches, update their details, and retest the archive from a fresh page.
 
-## Open a hosted bundle in Apply
+<a id="open-a-hosted-bundle-in-apply"></a>
 
-You can give users a link that preloads a public bundle:
+<a id="open-a-hosted-weave-in-apply"></a>
+
+## Open a hosted weave
+
+Share a link that preloads the public weave:
 
 ```text
-https://rom-weaver.com/bundle-patches?bundle=https://example.com/release.zip
+https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip
 ```
 
-The bundle host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.
+Weave links open **Weave**, including links that start on the Apply route. Recipients add their matching ROM, review the recipe, expand **Download this ROM**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
 
-The [webapp integration guide](../hosting/webapp-integration.md) covers multiple URL parameters, same-origin files, hosting headers, and error handling. For scripted bundle creation, use the [CLI bundle guide](cli-bundles.md).
+Use the [copyable Apply-button examples](../hosting/webapp-integration.md#add-an-apply-button) for HTML and Markdown release pages.
+
+The host must allow CORS. ROMs stay local. Relative patch URLs resolve against the recipe URL.
+
+See [webapp integration](../hosting/webapp-integration.md) for URL parameters, hosting headers, and errors, or the [CLI weave guide](cli-bundles.md) for scripted creation.

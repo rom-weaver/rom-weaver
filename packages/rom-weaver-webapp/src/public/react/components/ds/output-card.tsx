@@ -1,9 +1,10 @@
 import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
-import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
+import type { CSSProperties, ReactNode } from "react";
+import { detectMismatchedExtension, detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
+import { stripLeadingExtensionDot } from "../../../../lib/path-utils.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
-import { Drawer, DrawerReadout } from "./drawer.tsx";
+import { Drawer } from "./drawer.tsx";
 import { DropdownSelect } from "./dropdown-select.tsx";
 
 /**
@@ -12,8 +13,8 @@ import { DropdownSelect } from "./dropdown-select.tsx";
  * overrides), and a caller-supplied action (run button or inline progress).
  * Shared by apply, create, and trim outputs.
  *
- * The drawer header carries every option as an accessible labelled chip, so the
- * values stay readable while the drawer is shut.
+ * The drawer header carries the codec and level as accessible labelled chips, so
+ * the settings that change the output stay readable while the drawer is shut.
  */
 
 type FormatOption = { value: string; label: string };
@@ -28,9 +29,9 @@ type OutputCompressPanel = {
   formatInfo?: ReactNode;
   formatId?: string;
   onFormatChange?: (value: string) => void;
-  optionsNote?: ReactNode | false;
 };
 type OutputCardProps = {
+  className?: string;
   fileName: string;
   onFileNameChange: (value: string) => void;
   fileNamePlaceholder?: string;
@@ -38,6 +39,8 @@ type OutputCardProps = {
   fileNameId?: string;
   format: string;
   formatOptions: FormatOption[];
+  /** Hold the picker on a placeholder while the default format still depends on pending evidence. */
+  formatPending?: boolean;
   onFormatChange: (value: string) => void;
   formatLabel?: string;
   formatId?: string;
@@ -49,6 +52,12 @@ type OutputCardProps = {
    * input file. Absent when the ROM carries no single confident title.
    */
   nameSource?: { identifiedName: string; on: boolean; onChange: (on: boolean) => void } | null;
+  /**
+   * Extensions the output is saved with, the content extension first (`sfc`,
+   * then `zip` for a zipped ROM). Set it to warn when the name ends in a
+   * different supported extension (`game.gba` for an SFC output).
+   */
+  outputExtensions?: readonly string[] | null;
 };
 
 /** One labeled control field inside the output options grid. */
@@ -56,14 +65,20 @@ const OutputField = ({
   label,
   labelInfo,
   className,
+  style,
   children,
 }: {
   label: ReactNode;
   labelInfo?: ReactNode;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) => (
-  <div className={join("ofld ofield", className)}>
+  <div
+    className={join("ofld ofield", labelInfo ? "ofld-has-info" : false, className)}
+    // Phone layouts keep the cell wide enough for its label.
+    style={typeof label === "string" ? ({ "--ofld-label-ch": label.length, ...style } as CSSProperties) : style}
+  >
     <span className="ofld-l ofld-lbl">
       <span className="ofld-text">{label}</span>
       {labelInfo}
@@ -73,6 +88,7 @@ const OutputField = ({
 );
 
 const OutputCard = ({
+  className,
   fileName,
   onFileNameChange,
   fileNamePlaceholder,
@@ -80,6 +96,7 @@ const OutputCard = ({
   fileNameId,
   format,
   formatOptions,
+  formatPending,
   onFormatChange,
   formatLabel,
   formatId,
@@ -87,6 +104,7 @@ const OutputCard = ({
   disabled,
   action,
   nameSource,
+  outputExtensions,
 }: OutputCardProps) => {
   const localizer = useUiLocalizer();
   const resolvedFileNameLabel = fileNameLabel || localizer.message("ui.output.filename");
@@ -95,6 +113,7 @@ const OutputCard = ({
   // The format selector appends the extension, so a name that already ends in
   // an output-looking extension would be saved doubled (`game.zip.zip`).
   const doubledExtension = detectOutputLikeExtension(fileName);
+  const mismatchedExtension = doubledExtension ? null : detectMismatchedExtension(fileName, outputExtensions);
   const compressionFields =
     compress?.formatOptions?.length && compress.onFormatChange ? (
       <OutputField label={resolvedCompressionFormatLabel} labelInfo={compress.formatInfo}>
@@ -115,13 +134,23 @@ const OutputCard = ({
       </OutputField>
     ) : null;
   return (
-    <div className="card outcard">
+    <div className={join("card outcard", className)}>
       {doubledExtension ? (
         <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
           <TriangleAlert aria-hidden="true" />
           <span>
             {localizer.message("ui.output.doubledExtension.before")} <code>.{doubledExtension}</code>
             {localizer.message("ui.output.doubledExtension.after")}
+          </span>
+        </p>
+      ) : mismatchedExtension ? (
+        <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <span>
+            {localizer.message("ui.output.extensionMismatch", {
+              expected: stripLeadingExtensionDot(outputExtensions?.[0]).toLowerCase(),
+              extension: mismatchedExtension,
+            })}
           </span>
         </p>
       ) : null}
@@ -147,12 +176,12 @@ const OutputCard = ({
           <DropdownSelect
             aria-label={resolvedFormatLabel}
             className="select mono"
-            disabled={disabled}
+            disabled={disabled || formatPending}
             id={formatId}
             onChange={(event) => onFormatChange(event.currentTarget.value)}
-            value={format}
+            value={formatPending ? "" : format}
           >
-            {formatOptions.map((option) => (
+            {(formatPending ? [{ label: "…", value: "" }] : formatOptions).map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -167,20 +196,8 @@ const OutputCard = ({
           integrated
           label={localizer.message("ui.output.options")}
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
-          readouts={
-            <>
-              {nameSource ? (
-                <DrawerReadout label={localizer.message("ui.output.name")}>
-                  {nameSource.on ? localizer.message("ui.output.identified") : localizer.message("ui.output.file")}
-                </DrawerReadout>
-              ) : null}
-              {compress?.readouts}
-            </>
-          }
+          readouts={compress?.readouts}
         >
-          {compress?.optionsNote === false ? null : (
-            <p className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</p>
-          )}
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">

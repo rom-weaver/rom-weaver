@@ -1,6 +1,8 @@
-# Comparison with similar tools
+# ROM patcher comparisons: rom-weaver, RomPatcher.js and other tools
 
-The useful distinction is the job each tool handles: a single patch, an embedded patcher, a disc conversion, or a complete ROM workflow. Format counts alone do not show whether a tool fits that job.
+The right ROM patcher depends on the job: one patch, an embedded patcher, or a complete workflow. This comparison covers RomPatcher.js, Flips, MultiPatch, and specialist disc converters. Format counts alone do not establish which tool fits your files.
+
+<a id="comparison-with-similar-tools"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -8,6 +10,7 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 - [The tools](#the-tools)
 - [At a glance](#at-a-glance)
 - [Applying a patch](#applying-a-patch)
+- [rom-weaver as a RomPatcher.js alternative](#rom-weaver-as-a-rompatcherjs-alternative)
 - [Creating a patch](#creating-a-patch)
 - [Containers and disc images](#containers-and-disc-images)
 - [Native conversion speed against chdman and dolphin-tool](#native-conversion-speed-against-chdman-and-dolphin-tool)
@@ -25,7 +28,7 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 
 | Tool | Main purpose | Trade-off |
 | --- | --- | --- |
-| rom-weaver | Extraction, patch chains, checksums, compression, and bundles in a browser or native CLI | More controls than a single-purpose patcher; browser storage limits still apply. |
+| rom-weaver | Extraction, patch chains, checksums, compression, and weaves in a browser or native CLI | More controls than a single-purpose patcher; browser storage limits still apply. |
 | [RomPatcher.js](https://github.com/marcrobledo/RomPatcher.js) | Browser and Node patching, including embedding in another website | A useful fit for a release page with its own patch button. |
 | [Floating IPS (Flips)](https://github.com/Sir-Walrus/Flips) | IPS and BPS patch creation and application | A focused alternative when those formats cover the job. |
 | [MultiPatch](https://github.com/Sappharad/MultiPatch) | A native macOS app for several patch families | Fits a desktop macOS workflow rather than a browser workflow. |
@@ -41,7 +44,17 @@ An existing patch usually decides the format for you. The remaining choices conc
 
 ## Applying a patch
 
-For a single uncompressed ROM and a supported patch, a focused patcher can be sufficient. rom-weaver becomes useful when the input needs extraction, several patches must run in order, or a bundle carries expected checksums and optional patches.
+For a single uncompressed ROM and a supported patch, a focused patcher can be sufficient. rom-weaver becomes useful when the input needs extraction, several patches must run in order, or a weave carries expected checksums and optional patches.
+
+## rom-weaver as a RomPatcher.js alternative
+
+[RomPatcher.js](https://github.com/marcrobledo/RomPatcher.js) is Marc Robledo's project, branded [Rom Patcher JS](https://www.marcrobledo.com/RomPatcher.js/) on its website. rom-weaver is a separate project. Both apply and create ROM patches in a browser.
+
+RomPatcher.js documents IPS, UPS, APS, BPS, RUP, PPF, and VCDIFF support, among other formats. It displays CRC32, MD5, and SHA-1, handles headers, and extracts ZIP files. Its browser, Node.js, and embedding options suit focused patching and custom release pages.
+
+rom-weaver is an alternative when the job includes ordered patch chains, optional patches, or weave checks. It combines these with supported archive and disc-container extraction, checksums, and output compression. The [format reference](../reference/formats.md) identifies which inputs and outputs it supports.
+
+For one supported patch, either tool may cover the job. RomPatcher.js explicitly documents embedding a custom patcher into another website. rom-weaver's [weaves](bundles.md) instead describe patch order, choices, and expected bytes across a workflow. Neither a format list nor checksum display alone proves that the original ROM matches.
 
 ## Creating a patch
 
@@ -65,7 +78,7 @@ The measurements identify the versions, machine, codec settings, input types, an
 
 A displayed checksum identifies the bytes a tool read. Validation compares those bytes with an expected value. These are different capabilities: an IPS patch, for example, contains no expected source checksum for a patcher to check.
 
-rom-weaver can take expected checks from a bundle or explicit command options. [How patching works](how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the limits of that evidence.
+rom-weaver can take expected checks from a weave or explicit command options. [How patching works](how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the limits of that evidence.
 
 ## Headers and byte order
 
@@ -73,7 +86,7 @@ Two dumps can represent the same game in different byte layouts. Patching needs 
 
 ## Patching features
 
-Patch order, optional choices, and expected intermediate results are part of a release. A [bundle](bundles.md) records them in a machine-readable file. With separate single-patch runs, the user or a script must preserve that information and manage intermediate outputs.
+Patch order, optional choices, and expected intermediate results are part of a release. A [weave](bundles.md) records them in a machine-readable file. With separate single-patch runs, the user or a script must preserve that information and manage intermediate outputs.
 
 ## Beyond patching
 
@@ -89,4 +102,4 @@ Keep a tool that already handles your input and produces the result you need. Co
 
 ## How this page was checked
 
-The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.
+The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. RomPatcher.js capabilities were rechecked against its [README](https://github.com/marcrobledo/RomPatcher.js) and [official webapp](https://www.marcrobledo.com/RomPatcher.js/) on 2026-10-08. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.

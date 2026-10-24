@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::{
-    CancellationToken, ProgressEvent, ProgressSink, Result, RomWeaverError, SharedThreadPool,
-    TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
+    CancellationToken, N64ByteOrder, ProgressEvent, ProgressSink, Result, RomWeaverError,
+    SharedThreadPool, TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
 };
 use serde::{Deserialize, Serialize};
 use tracing::trace;
@@ -20,16 +20,6 @@ use ts_rs::TS;
 pub enum PatchChecksumValidation {
     Strict,
     Ignore,
-}
-
-/// Planner-proven physical N64 byte order for the input passed to one patch
-/// handler. Unlike file-magic detection, this remains valid when an earlier
-/// chain step edits the ROM header.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PatchInputN64ByteOrder {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
 }
 
 /// Exact embedded endpoint a reversible patch should use. Most handlers infer
@@ -137,7 +127,7 @@ pub struct PatchPolicy {
     pub patch_endpoint_selection: Option<PatchEndpointSelection>,
     /// Planner-proven physical N64 order for this step's input. Patch handlers
     /// that normalize typed N64 inputs may use it instead of mutable ROM magic.
-    pub patch_input_n64_byte_order: Option<PatchInputN64ByteOrder>,
+    pub patch_input_n64_byte_order: Option<N64ByteOrder>,
     /// Secondary-compression mode for xdelta/vcdiff patch create.
     pub xdelta_secondary_mode: XdeltaSecondaryMode,
     /// Per-operation override for the patch-apply in-memory size cap (bytes). `None` uses the
@@ -190,15 +180,46 @@ impl OperationContext {
             temp_root = %temp_root.display(),
             "creating operation context"
         );
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new(temp_root)),
+            progress,
+            cancel,
+        )
+    }
+
+    fn with_temp_paths(
+        thread_budget: ThreadBudget,
+        temp_paths: Arc<TempPathAllocator>,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
         Self {
             thread_budget,
-            temp_paths: Arc::new(TempPathAllocator::new(temp_root)),
+            temp_paths,
             progress,
             cancel,
             patch_policy: PatchPolicy::default(),
             operation_pool: Arc::new(Mutex::new(None)),
             seeded_checksums: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Like [`Self::new`], but the temp root is a fresh directory under `temp_parent` that only
+    /// this context uses and that is removed when the context drops.
+    pub fn new_with_private_temp_root(
+        thread_budget: ThreadBudget,
+        temp_parent: &Path,
+        prefix: &str,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new_private(temp_parent, prefix)),
+            progress,
+            cancel,
+        )
     }
 
     /// Record already-known checksums for `path` (merging into any existing entry) so later
@@ -220,7 +241,7 @@ impl OperationContext {
         }
     }
 
-    /// The seeded checksum for `path`/`algorithm`, if one was recorded via [`seed_checksums`].
+    /// The seeded checksum for `path`/`algorithm`, if one was recorded via [`Self::seed_checksums`].
     pub fn seeded_checksum(&self, path: &Path, algorithm: &str) -> Option<String> {
         let cache = self
             .seeded_checksums
@@ -341,11 +362,11 @@ impl OperationContext {
         self
     }
 
-    pub fn patch_input_n64_byte_order(&self) -> Option<PatchInputN64ByteOrder> {
+    pub fn patch_input_n64_byte_order(&self) -> Option<N64ByteOrder> {
         self.patch_policy.patch_input_n64_byte_order
     }
 
-    pub fn with_patch_input_n64_byte_order(mut self, order: PatchInputN64ByteOrder) -> Self {
+    pub fn with_patch_input_n64_byte_order(mut self, order: N64ByteOrder) -> Self {
         self.patch_policy.patch_input_n64_byte_order = Some(order);
         self
     }

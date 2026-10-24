@@ -1,6 +1,10 @@
-# Choosing a patch format
+# BPS vs IPS, UPS, xdelta and PPF: ROM patch formats compared
 
-BPS, IPS, xdelta, PPF, and a dozen more. This guide explains what actually separates them and which one to publish in.
+ROM patch formats differ in checksums, size limits, and compatible patchers. BPS is a strong cartridge default; IPS, UPS, xdelta, and PPF serve different release needs.
+
+<a id="choosing-a-patch-format"></a>
+
+<a id="rom-patch-formats-compared-bps-ips-ups-xdelta-and-ppf"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -21,7 +25,7 @@ BPS, IPS, xdelta, PPF, and a dozen more. This guide explains what actually separ
 
 ## Applying a patch? Use the format you received
 
-An existing patch's format is already chosen. The [format table](../reference/formats.md#patch-formats) lists what rom-weaver can apply and create.
+An existing patch's format is already chosen, though Create can [convert it](../how-to/convert-patch-format-browser.md) when you have the clean ROM. The [format table](../reference/formats.md#patch-formats) lists what rom-weaver can apply and create.
 
 Converting a patch does not fix a source checksum mismatch. The mismatch concerns the starting bytes, not the patch format. [Fix a checksum error](../how-to/fix-checksum-errors.md) gives the procedure.
 
@@ -33,7 +37,17 @@ Every format on this page records the same thing: which bytes changed. What sepa
 
 Some store a checksum of the original inside the patch. When a user feeds in the wrong file, the patcher stops and says so. Others have no source checks, so the patcher can apply changes to the wrong ROM without detecting the mistake.
 
-That difference decides most of your choice. For cartridge-sized files, size and speed usually matter less than whether users can detect a mistake. Disc-sized files make patch size and tool support more important.
+That difference decides most of your choice. For cartridge releases, built-in validation helps users detect a wrong starting file. Disc-sized files make patch size and tool support more important.
+
+| Format | Built-in validation | Size and layout limits | Compatibility and common use |
+| --- | --- | --- | --- |
+| BPS | CRC32 for source, output, and patch | Variable-length sizes and offsets; creator memory limits still apply | Cartridge releases with a BPS-compatible patcher |
+| IPS / IPS32 | No source, output, or patch checksum | IPS record starts use 24-bit offsets, below 16 MiB; IPS32 uses 32-bit offsets | IPS for older patchers; IPS32 requires explicit tool support |
+| UPS | CRC32 for source, output, and patch | Variable-length sizes and offsets, without IPS's 24-bit boundary | Releases whose community tools expect UPS |
+| xdelta / VCDIFF | Checks vary by encoder and options; output-window checks are not a whole-source checksum | Windowed encoding supports large files; decoder limits and extensions vary | Large binaries and disc images with compatible VCDIFF tools |
+| PPF | PPF1 has no source check; PPF2 checks size and a sample block; PPF3 can check a sample block | PPF1/2 use 32-bit offsets; PPF3 uses 64-bit offsets; exact disc layout matters | Disc releases using PPF-compatible tools |
+
+These are format differences, not promises about every patcher's limits or validation settings. A sample block cannot prove that the whole source file matches. The [implementation references](../development/references.md#patch-reference-implementations) document the parsers and external format sources.
 
 No format records every human requirement. Region, revision, header state, patch order, and expected checksums still need clear [release notes](../how-to/create-rom-patches.md#write-useful-release-notes).
 
@@ -53,7 +67,7 @@ IPS also has a hard limit built into its 24-bit offsets: it cannot encode a chan
 
 ## UPS
 
-UPS stores checksums of the input and the output, so it can catch a wrong starting file the way BPS does.
+UPS stores CRC32 checksums of the input, output, and patch itself. Like BPS, it can detect a wrong starting file and a damaged patch.
 
 UPS remains useful in communities whose tools expect it. rom-weaver applies and creates it.
 
@@ -63,11 +77,11 @@ VCDIFF is a general-purpose format for describing the difference between any two
 
 It handles large binaries and disc images well, which is why disc projects reach for it. Patches turn up as `.xdelta`, `.delta`, `.dat`, and `.vcdiff`.
 
-An xdelta patch's source checks depend on how it was made. Separate published checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF.
+An xdelta patch's checks depend on its encoder and options. Optional output-window checks do not identify the entire original file. Separate published source and output checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF.
 
 ## PPF
 
-PPF was designed for disc patching and remains in use. Different PPF versions can do different things, so your release notes carry more weight than usual here.
+PPF was designed for disc patching and remains in use. PPF1 lacks source validation; PPF2 checks source size and a sample block. PPF3 supports optional block checking, 64-bit offsets, and undo data. These block checks are not whole-file checksums.
 
 Disc layouts add another source of mismatch. A `.bin` or `.iso` extension does not identify the track layout, image format, or dump. Those differences change the bytes a patch expects.
 
@@ -83,7 +97,7 @@ The [full format table](../reference/formats.md#patch-formats) is the authoritat
 
 Some dumps contain a copier header before the ROM data. Others, especially Nintendo 64 dumps, store the same data in different byte orders. A patch needs the form its author used.
 
-rom-weaver first compares the available expected checksums against supported variants. Explicit checks and bundle checks take precedence over a patch's own source checks. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
+rom-weaver first compares the available expected checksums against supported variants. Explicit checks and a weave's input checks for its first patch take precedence over a patch's own source checks. A weave's expected-ROM checks describe the file as supplied, so rom-weaver compares them with that file unchanged, and a match on the file as supplied does not choose a layout. A weave can be recorded from another dump of the same game, so the CLI also accepts a match on the file's header-stripped form or another N64 byte order. When only such a form matches, that form chooses the layout only if the patch gives no clue of its own: no checksum or declared-check evidence, and no decisive structural evidence such as record geometry, the ROM-header tiebreak, or the N64 boot-checksum tiebreak. It takes the place of keeping the file unchanged. `weave create` does not apply patches, but on the ROM the weave was recorded from, the patch can only meet headerless bytes or that byte order, which makes that form the better guess when nothing else decides. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
 
 For the first patch, missing checksum evidence can trigger inference from patch records, validation failures, and the resulting platform header. N64 inference can also use a rewritten boot checksum. These are fallbacks, not checksum proof. Later chain steps use checksum evidence rather than repeating first-patch inference.
 
@@ -103,6 +117,6 @@ rom-weaver therefore does not offer a headerless form behind an `.smd` header. I
 - **Publishing for a cartridge game:** BPS, for the checksums it carries.
 - **Publishing where old patchers must work:** IPS, with checksums in your release notes.
 - **Publishing for a disc or a very large file:** xdelta/VCDIFF or PPF, or whatever that platform's community already uses.
-- **Publishing several patches at once:** any of the above, plus a rom-weaver bundle to record the order, the optional pieces, and the checksums.
+- **Publishing several patches at once:** any of the above, plus a rom-weaver weave to record the order, the optional pieces, and the checksums.
 
 [Create a patch](../how-to/create-rom-patches.md) covers creation and reconstruction checks.

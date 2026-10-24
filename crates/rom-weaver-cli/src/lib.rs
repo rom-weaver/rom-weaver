@@ -41,8 +41,7 @@ use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::rom_headers::{
     A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
-    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
-    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
+    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, NGP_COPYRIGHT_MAGIC,
     PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
     SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
     detect_known_rom_header_from_prefix as detect_known_header_from_prefix,
@@ -51,25 +50,28 @@ use rom_weaver_checksum::rom_headers::{
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
     VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
-    supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
+    n64_byte_order_from_row_id, supported_algorithms, unsupported_checksum_algorithm,
+    unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
-    CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
-    is_ambiguous_disc_image_extension, unregistered_output_format_message,
+    CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
+    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
+    unregistered_output_format_message,
 };
+pub use rom_weaver_core::N64ByteOrder;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
     OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
-    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchInputN64ByteOrder,
-    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
-    Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
-    ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
-    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
-    enumerate_disc_sheet_refs, env_u64, is_patch_filter_candidate_name,
-    is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
-    process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
+    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchValidateRequest,
+    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
+    SelectionMatcher, SelectionPrompter, SolidPatchMetadata, ThreadBudget, ThreadCapability,
+    ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet,
+    emit_variant_plan, ensure_output_available, enumerate_disc_sheet_refs, env_u64,
+    is_dcp_patch_name, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
+    normalize_archive_name, operation_report_details, process_cancellation_token,
+    should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -172,17 +174,19 @@ detected platform pick the pack. Nothing is uploaded."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Install the offline identify database",
+            about = "Install the offline identify and cheat databases",
             long_about = "\
-Install the identify database this build's `identify` command searches.
+Install the identify database this build's `identify` command searches, plus
+the cheat shards that `cheat` and weave cheat steps read.
 
 Run it once after installing rom-weaver by a method that ships only the
 executable, such as `cargo binstall` or `cargo install`. The Homebrew, scoop,
-npm, and install-script packages already place the database beside the binary,
-so this only reports what is there.
+npm, install-script, and Docker packages already carry the database and need
+no setup. Running setup still installs a separate per-user copy.
 
 The download comes from this version's GitHub release and lands in the per-user
-data directory; `identify database install-group` adds the optional packs."
+data directory. Repeating setup reports the existing per-user copy;
+`identify database install-group` adds the optional packs."
         )
     )]
     // Database installation uses native data directories; the browser stages packs separately.
@@ -274,10 +278,14 @@ footer recording what was cut."
         not(target_arch = "wasm32"),
         command(
             subcommand,
-            about = "Build and read rom-weaver-bundle.json patch recipes"
+            name = "weave",
+            visible_alias = "bundle",
+            about = "Build and read rom-weaver-weave.json patch recipes"
         )
     )]
-    Bundle(BundleCommands),
+    #[serde(alias = "weave")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
+    Bundle(WeaveCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(subcommand, about = "Inspect and edit supported persistent game saves")
@@ -365,35 +373,35 @@ GameShark/Pro Action Replay codes."
     feature = "typescript-types",
     ts(rename_all = "kebab-case", tag = "type", content = "args")
 )]
-pub enum BundleCommands {
+pub enum WeaveCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Write a rom-weaver-bundle.json recipe from local ROM and patch files",
+            about = "Write a rom-weaver-weave.json recipe from local ROM and patch files",
             long_about = "\
-Write a rom-weaver-bundle.json recipe from local ROM and patch files.
+Write a rom-weaver-weave.json recipe from local ROM and patch files.
 
-A bundle records which ROM the patches are for, what order they run in, and
+A weave records which ROM the patches are for, what order they run in, and
 what the result should hash to. Hand it to someone else and
-`rom-weaver patch apply --bundle` reproduces your exact result.
+`rom-weaver patch apply --weave` reproduces your exact result.
 
 Checksums come from the real files, so nothing here is taken on faith. Every
 --patch-* flag describes the --patch before it.
 
---output names the recipe itself; add .gz or .zst to compress it. --bundle
+--output names the recipe itself; add .gz or .zst to compress it. --weave
 additionally packs the recipe and its files into one shareable archive."
         )
     )]
-    Create(Box<BundleCreateCommand>),
+    Create(Box<WeaveCreateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Read a rom-weaver-bundle.json recipe and report what it points at",
+            about = "Read a rom-weaver-weave.json recipe and report what it points at",
             long_about = "\
-Read a rom-weaver-bundle.json recipe, check that it is valid, and report the
+Read a rom-weaver-weave.json recipe, check that it is valid, and report the
 ROM and patches it points at.
 
-The input can be a plain rom-weaver-bundle.json, a compressed one (.gz, .bz2,
+The input can be a plain rom-weaver-weave.json, a compressed one (.gz, .bz2,
 .xz, or .zst), or an archive with the recipe at its root alongside the files it
 names.
 
@@ -401,28 +409,28 @@ Entries that name a file are looked for in the archive, or next to the recipe.
 Pass --output to write those files out and get real paths back. Entries that
 name a url are reported as they are; nothing is downloaded.
 
-To actually run a bundle, use `rom-weaver patch apply --bundle` instead."
+To actually run a weave, use `rom-weaver patch apply --weave` instead."
         )
     )]
-    Parse(BundleParseCommand),
-    // CLI-only: the webapp never dispatches `bundle schema` (the CLI prints the
+    Parse(WeaveParseCommand),
+    // CLI-only: the webapp never dispatches `weave schema` (the CLI prints the
     // schema before dispatch), so keep it out of the generated TS command union
     // where a variant without `args` would break the command-branch types.
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Print the rom-weaver-bundle.json JSON Schema, for editors and hand-authoring",
+            about = "Print the rom-weaver-weave.json JSON Schema, for editors and hand-authoring",
             long_about = "\
-Print the rom-weaver-bundle.json JSON Schema to stdout.
+Print the rom-weaver-weave.json JSON Schema to stdout.
 
 Save it and point your editor at it, and the editor will check and autocomplete
-a bundle as you write it:
+a weave as you write it:
 
-  rom-weaver bundle schema > rom-weaver-bundle-v2.schema.json
+  rom-weaver weave schema > rom-weaver-weave-v2.schema.json
 
-Then `bundle create --from <your file>` turns what you wrote into a finished
-bundle with the checksums filled in."
+Then `weave create --from <your file>` turns what you wrote into a finished
+weave with the checksums filled in."
         )
     )]
     Schema,
@@ -884,7 +892,7 @@ pub fn run_command(
 
 /// Like [`run_command`] but returns the full [`AppRunOutcome`] so callers that
 /// chain commands (for example `apply --tui`, which applies then writes a
-/// bundle) can gate on success. Logging init is idempotent across calls.
+/// weave) can gate on success. Logging init is idempotent across calls.
 pub fn run_command_outcome(
     command: Commands,
     options: RunCommandOptions,
@@ -933,7 +941,7 @@ fn log_command_options(command: &Commands) {
         args = nested.take();
     }
     for option in [
-        "input", "inputs", "original", "modified", "patches", "bundle", "output", "format", "algo",
+        "input", "inputs", "original", "modified", "patches", "weave", "output", "format", "algo",
         "threads",
     ] {
         let Some(value) = args.get(option).filter(|value| !value.is_null()) else {
@@ -1343,27 +1351,53 @@ enum TrimInputKind {
     RvzConvert,
 }
 
+/// Path-recognized trim extensions (lowercase, no dot) and the kind each selects.
+/// `xiso` kinds match the whole file name suffix (`game.xiso.iso`); the rest match
+/// the final extension.
+const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
+    ("nds", TrimInputKind::NdsFamily),
+    ("dsi", TrimInputKind::NdsFamily),
+    ("srl", TrimInputKind::NdsFamily),
+    ("gba", TrimInputKind::Gba),
+    ("3ds", TrimInputKind::ThreeDs),
+    ("xiso", TrimInputKind::Xiso),
+    ("xiso.iso", TrimInputKind::Xiso),
+];
+
+/// Extensions trim accepts only after sniffing the file's contents (an Xbox `.iso`).
+const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
+
+/// Extensions of GameCube/Wii disc images the container registry recommends RVZ for (by
+/// content), so trim converts them to RVZ. `.iso` is listed under the sniffed extensions.
+const TRIM_RVZ_CONVERT_EXTENSIONS: &[&str] = &["gcm", "wbfs", "rvz"];
+
+/// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
+/// supported-files list: path-recognized, content-sniffed, then RVZ-convert.
+pub fn trim_input_extensions() -> Vec<&'static str> {
+    TRIM_PATH_EXTENSIONS
+        .iter()
+        .map(|(extension, _)| *extension)
+        .chain(TRIM_CONTENT_SNIFFED_EXTENSIONS.iter().copied())
+        .chain(TRIM_RVZ_CONVERT_EXTENSIONS.iter().copied())
+        .collect()
+}
+
 impl TrimInputKind {
     fn from_path(path: &Path) -> Option<Self> {
         let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
-        if file_name.ends_with(".xiso") || file_name.ends_with(".xiso.iso") {
-            return Some(Self::Xiso);
+        for (extension, kind) in TRIM_PATH_EXTENSIONS {
+            if *kind == Self::Xiso && file_name.ends_with(&format!(".{extension}")) {
+                return Some(*kind);
+            }
         }
 
-        let extension = path.extension()?.to_str()?;
-        if extension.eq_ignore_ascii_case("nds")
-            || extension.eq_ignore_ascii_case("dsi")
-            || extension.eq_ignore_ascii_case("srl")
-        {
-            return Some(Self::NdsFamily);
-        }
-        if extension.eq_ignore_ascii_case("gba") {
-            return Some(Self::Gba);
-        }
-        if extension.eq_ignore_ascii_case("3ds") {
-            return Some(Self::ThreeDs);
-        }
-        None
+        let path_extension = path.extension()?.to_str()?;
+        TRIM_PATH_EXTENSIONS
+            .iter()
+            .find(|(extension, kind)| {
+                *kind != Self::Xiso && path_extension.eq_ignore_ascii_case(extension)
+            })
+            .map(|(_, kind)| *kind)
     }
 
     const fn mode_label(self) -> &'static str {
@@ -1446,34 +1480,6 @@ enum HeaderRepairStatus {
     NotMatched,
     MatchedNoChange,
     Repaired,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(rename_all = "kebab-case")]
-pub enum N64ByteOrder {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
-}
-
-impl N64ByteOrder {
-    const fn id(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
-
-    const fn label(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
 }
 
 /// Which N64 byte order a patch should see. `Auto` matches the patch's required
@@ -1640,7 +1646,7 @@ mod cheat_database;
 mod cheat_resolution;
 mod cheats;
 mod cheats_apply;
-pub use cheat_command::CheatCommandResult;
+pub use cheat_command::{CheatCommandResult, CheatPatchSnapshot};
 pub use cheats::{
     CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite,
     CheatWriteConflict, ClassifiedCheatRecord,
@@ -1664,11 +1670,11 @@ mod patch_filename_checksum;
 use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
 
 #[cfg(not(target_arch = "wasm32"))]
-mod bundle_cheats;
-mod bundle_schema;
-pub use bundle_schema::{
-    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleCheatEntry, BundleCheckState,
-    BundleChecks, BundleOutput, BundlePatchEntry, BundlePatchInput, BundleRom, RomWeaverBundle,
+mod weave_cheats;
+mod weave_schema;
+pub use weave_schema::{
+    RomWeaverWeave, WEAVE_JSON_SCHEMA, WEAVE_JSON_SCHEMA_URL, WEAVE_VERSION, WeaveCheatEntry,
+    WeaveCheckState, WeaveChecks, WeaveOutput, WeavePatchEntry, WeavePatchInput, WeaveRom,
 };
 
 mod patch_plan;
@@ -1677,32 +1683,55 @@ pub use patch_plan::{
     PatchInputVerdict, PatchPlanVerdict, PatchValidationPlan,
 };
 
-mod bundle_parse;
+mod weave_parse;
+pub use weave_parse::{BUNDLE_BASE_FILE_NAME, WEAVE_BASE_FILE_NAME};
 
-mod bundle_load;
+/// Production weave parsing seam for the owned fuzz harness only.
+#[cfg(feature = "fuzzing")]
+pub fn parse_weave_for_fuzzing(bytes: &[u8]) -> Result<RomWeaverWeave> {
+    weave_parse::parse_weave_bytes(bytes)
+}
 
-mod bundle_apply;
+mod weave_load;
+
+mod weave_apply;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod bundle_download;
+mod weave_download;
 
-mod bundle_command;
-pub use bundle_command::{BundleParseResult, BundlePatchSource, BundleSourceKind, BundleSourceRef};
+mod weave_command;
+pub use weave_command::{WeaveParseResult, WeavePatchSource, WeaveSourceKind, WeaveSourceRef};
 
-mod bundle_create;
-pub use bundle_create::BundleCreateResult;
+mod weave_create;
+pub use weave_create::WeaveCreateResult;
+
+pub use self::{
+    RomWeaverWeave as RomWeaverBundle, WEAVE_VERSION as BUNDLE_VERSION,
+    WeaveCheatEntry as BundleCheatEntry, WeaveCheckState as BundleCheckState,
+    WeaveChecks as BundleChecks, WeaveCommands as BundleCommands,
+    WeaveCreateCommand as BundleCreateCommand, WeaveCreatePatchSpec as BundleCreatePatchSpec,
+    WeaveCreateResult as BundleCreateResult, WeaveOutput as BundleOutput,
+    WeaveParseCommand as BundleParseCommand, WeaveParseResult as BundleParseResult,
+    WeavePatchEntry as BundlePatchEntry, WeavePatchInput as BundlePatchInput,
+    WeavePatchSource as BundlePatchSource, WeaveRom as BundleRom,
+    WeaveSourceKind as BundleSourceKind, WeaveSourceRef as BundleSourceRef,
+};
+
+#[cfg(feature = "fuzzing")]
+pub use parse_weave_for_fuzzing as parse_bundle_for_fuzzing;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatAction, CheatCommand,
-    CheatSelectionArgs, ChecksumCommand, CompressCommand, ExtractCommand, IdentifyCommand,
-    IdentifyDatabaseCommands, IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand,
-    IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand,
-    IdentifyDatabaseUpdateCommand, IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT,
-    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
+    ArchiveSelectionArgs, CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand,
+    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
+    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
+    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
     SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
-    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand,
+    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand, WeaveCreateCommand,
+    WeaveCreatePatchSpec, WeaveParseCommand,
 };
 
 mod expect_tokens;
@@ -1790,3 +1819,6 @@ mod header_repair_tests;
 #[cfg(test)]
 #[path = "../tests/unit/cli.rs"]
 mod cli_tests;
+
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v2.schema.json");
+pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json";

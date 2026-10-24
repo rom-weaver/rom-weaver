@@ -133,7 +133,7 @@ fn generated_assets_and_early_exits_honor_json() {
     for (args, field) in [
         (vec!["completions", "bash", "--json"], "content"),
         (vec!["man", "checksum", "--json"], "content"),
-        (vec!["bundle", "schema", "--json"], "schema"),
+        (vec!["weave", "schema", "--json"], "schema"),
         (vec!["--json", "--help"], "content"),
         (vec!["checksum", "--help", "--json"], "content"),
         (vec!["--json", "--version"], "version"),

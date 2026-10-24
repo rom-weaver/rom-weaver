@@ -251,7 +251,7 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
 
 /// Sega 8-bit Game Genie: `DDA-AAA` or `DDA-AAA-RXR`. The decode is the one in
 /// Genesis Plus GX `libretro/libretro.c` `decode_cheat`
-/// (https://github.com/libretro/Genesis-Plus-GX/blob/master/libretro/libretro.c).
+/// (<https://github.com/libretro/Genesis-Plus-GX/blob/master/libretro/libretro.c>).
 fn decode_sega8(code: &str, system: CheatSystem, raw: &str) -> Result<DecodedCode> {
     if code.len() != 6 && code.len() != 9 {
         return Err(coded(

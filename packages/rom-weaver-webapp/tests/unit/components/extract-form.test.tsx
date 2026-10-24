@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAgentWorkflow } from "../../../src/webapp/agent/workflow-registry.ts";
 import { ExtractForm } from "../../../src/webapp/components/extract-form.tsx";
 
 const runtime = vi.hoisted(() => ({ create: vi.fn(), extract: vi.fn(), probe: vi.fn() }));
@@ -26,6 +27,128 @@ const addFile = (file: File) =>
 describe("ExtractForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("keeps NFS parts and their key together, including on retry", async () => {
+    runtime.extract.mockRejectedValue(new Error("try again"));
+    const key = new File([new Uint8Array(16)], "htk.bin");
+    const first = new File(["EGGS"], "hif_000000.nfs");
+    const second = new File(["part"], "hif_000001.nfs");
+    render(<ExtractForm />);
+
+    const picker = screen.getByLabelText("Drop an archive or disc image to extract it") as HTMLInputElement;
+    expect(picker.multiple).toBe(true);
+    fireEvent.change(picker, { target: { files: [key, second, first] } });
+
+    await screen.findByText("try again");
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [key, second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Extract again" }));
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(2));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [key, second] }),
+    );
+  });
+
+  it("opens a split WBFS set from its .wbfs part and skips files from another set", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("Game.iso")] });
+    const first = new File(["WBFS"], "Game.wbfs");
+    const second = new File(["part"], "Game.WBF1");
+    const third = new File(["part"], "game.wbf2");
+    const other = new File(["part"], "Other.wbf1");
+    render(<ExtractForm pageDrop={{ files: [third, other, first, second], id: 1 }} />);
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [third, second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
+  });
+
+  it("opens a split WBFS set when a part from another set comes first", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("Game.iso")] });
+    const first = new File(["WBFS"], "Game.wbfs");
+    const second = new File(["part"], "Game.wbf1");
+    const other = new File(["part"], "Other.wbf1");
+    render(<ExtractForm pageDrop={{ files: [other, second, first], id: 1 }} />);
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect(runtime.extract).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: first, companionFiles: [second], extractAll: true }),
+    );
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["Other.wbf1"]);
+  });
+
+  it.each([
+    [
+      1398102,
+      "Game.wbfs is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.",
+    ],
+    [
+      5592405,
+      "Game.wbfs and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.",
+    ],
+  ])("explains a WBFS of %i bytes against a 4 MiB header instead of the raw size error", async (size, text) => {
+    runtime.extract.mockRejectedValue(
+      new Error(
+        `failed to open wbfs source \`/work/Game.wbfs\`: Invalid WBFS file size: 2097152, expected 4194304; path fallback failed: disc format error: Invalid WBFS file size: ${size}, expected 4194304 [wbfs.size_mismatch] (actual=${size}, expected=4194304)`,
+      ),
+    );
+    render(<ExtractForm />);
+
+    addFile(new File(["WBFS"], "Game.wbfs"));
+
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.queryByText(/\/work\//)).toBeNull();
+  });
+
+  it("extracts the first of several dropped files and names the ones it did not use", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
+    render(
+      <ExtractForm
+        pageDrop={{ files: [new File(["1"], "a.zip"), new File(["2"], "b.zip"), new File(["3"], "c.zip")], id: 1 }}
+      />,
+    );
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
+    expect(
+      await screen.findByText("Extract opens one archive per run: only a.zip was used; b.zip, c.zip were skipped."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Add one file at a time.")).toBeNull();
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["b.zip", "c.zip"]);
+  });
+
+  it("names a file that is not an archive instead of the internal storage path", async () => {
+    runtime.extract.mockRejectedValue(
+      new Error("no registered container matched `/work/notes.txt` [extract.no_container]"),
+    );
+    const view = render(<ExtractForm />);
+
+    addFile(new File(["hello"], "notes.txt"));
+
+    expect(await screen.findByText("notes.txt is not an archive or disc image that Extract can open.")).toBeTruthy();
+    expect(screen.queryByText(/\/work\//)).toBeNull();
+    view.unmount();
+  });
+
+  it("extracts the first of several dropped files and names the ones it did not use", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
+    render(
+      <ExtractForm
+        pageDrop={{ files: [new File(["1"], "a.zip"), new File(["2"], "b.zip"), new File(["3"], "c.zip")], id: 1 }}
+      />,
+    );
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
+    expect(
+      await screen.findByText("Extract opens one archive per run: only a.zip was used; b.zip, c.zip were skipped."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Add one file at a time.")).toBeNull();
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["b.zip", "c.zip"]);
   });
 
   it("extracts on add, then downloads one file as itself and several as one ZIP", async () => {

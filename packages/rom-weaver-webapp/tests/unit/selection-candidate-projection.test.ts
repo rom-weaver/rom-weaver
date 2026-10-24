@@ -6,7 +6,7 @@ import type { SharedRomSourceState, SharedRomStagedSource } from "../../src/lib/
 describe("projectSelectionCandidates", () => {
   it("maps public ids, clones candidates, rewrites relationships, and keeps internal metadata", () => {
     const group = {
-      breadcrumbs: ["bundle.zip"],
+      breadcrumbs: ["weave.zip"],
       candidateIds: ["child", "missing"],
       id: "group",
       kind: "multi-file-input" as const,
@@ -17,7 +17,7 @@ describe("projectSelectionCandidates", () => {
       warnings: ["nested archive"],
     };
     const child = {
-      breadcrumbs: ["bundle.zip", "patches"],
+      breadcrumbs: ["weave.zip", "patches"],
       fileName: "child.ips",
       id: "child",
       kind: "patch" as const,
@@ -36,7 +36,7 @@ describe("projectSelectionCandidates", () => {
     const request: CandidateSelectionRequest = {
       candidates: [group, child, hidden],
       role: "patch",
-      sourceName: "bundle.zip",
+      sourceName: "weave.zip",
       warnings: [],
     };
     const owner = {

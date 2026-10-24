@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import type { BinarySource } from "../../src/public/react/patcher-form.ts";
@@ -95,6 +95,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   latest = null;
 });
@@ -140,6 +141,29 @@ describe("TrimPatchForm", () => {
     expect(onComplete).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Trimmed .nes");
     expect(container.textContent).toContain("32 B raw");
+  });
+
+  it("labels a ROM that was already at its trimmed size", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ settings: { zipCodec: "store", zipLevel: 0 } });
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    (latest as NonNullable<typeof latest>).workflow.run.mockResolvedValueOnce({
+      input: latest.workflow.getInput(),
+      output: { ...latest.output, size: 128 },
+      sizeSummary: { compressionTimeMs: 0, inputSize: 128, outputSize: 128, rawSize: 128, trimTimeMs: 1 },
+    } as never);
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Trim ROM"),
+    );
+    await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+    await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
+    expect(container.textContent).toContain("Already trimmed .nes");
   });
 
   it("surfaces a trim failure and supports canceling the confirmation", async () => {
@@ -284,6 +308,27 @@ describe("TrimPatchForm", () => {
     },
   );
 
+  it("offers only raw, ZIP, and 7z outputs for a cartridge ROM", async () => {
+    const { container } = renderForm({ pageDrop: { files: [new File(["rom"], "game.nds")], id: 1 } });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await vi.waitFor(() => {
+      const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      expect(Array.from(format.options).map((option) => option.value)).toEqual(["nds", "zip", "7z"]);
+    });
+  });
+
+  it.each([
+    { fileName: "game.3ds", expected: ["3ds", "z3ds", "zip", "7z"], extra: {} },
+    { fileName: "disc.cue", expected: ["cue", "chd", "zip", "7z"], extra: { chd: true } },
+  ])("keeps matching container formats for $fileName", async ({ fileName, expected }) => {
+    const { container } = renderForm({ pageDrop: { files: [new File(["rom"], fileName)], id: 1 } });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await vi.waitFor(() => {
+      const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      expect(Array.from(format.options).map((option) => option.value)).toEqual(expected);
+    });
+  });
+
   it("updates the trim output name and format controls", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const onSettingsChange = vi.fn();
@@ -303,5 +348,68 @@ describe("TrimPatchForm", () => {
     expect(onSettingsChange).toHaveBeenCalled();
     expect(outputName.value).toBe("trimmed-copy");
     expect(latest?.workflow.setOutputFormat).not.toHaveBeenCalled();
+  });
+
+  it("appends the real output extension to a typed trim name with a dotted version", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ settings: { zipCodec: "store", zipLevel: 0 } });
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-output-file")).toBeTruthy());
+    const runWithTypedName = async (typedName: string) => {
+      const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+      fireEvent.change(nameField, { target: { value: typedName } });
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Trim ROM"),
+      );
+      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
+      return latest?.workflow.setOutputName.mock.calls.at(-1)?.[0];
+    };
+
+    expect(await runWithTypedName("Hack v1.2")).toBe("Hack v1.2.zip");
+  });
+
+  it("keeps a typed dotted version that extends the source name", async () => {
+    const file = new File(["rom"], "Hack v1.nds", { type: "application/octet-stream" });
+    const { container } = renderForm();
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-output-file")).toBeTruthy());
+    const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+    fireEvent.change(nameField, { target: { value: "Hack v1.2" } });
+
+    expect((container.querySelector("#trim-builder-output-file") as HTMLInputElement).value).toBe("Hack v1.2");
+  });
+
+  it("appends the real output extension to a typed trim name with a dotted version", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm({ settings: { zipCodec: "store", zipLevel: 0 } });
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-output-file")).toBeTruthy());
+    const runWithTypedName = async (typedName: string) => {
+      const nameField = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+      fireEvent.change(nameField, { target: { value: typedName } });
+      await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+      const confirm = Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("Trim ROM"),
+      );
+      await act(async () => fireEvent.click(confirm as HTMLButtonElement));
+      await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
+      return latest?.workflow.setOutputName.mock.calls.at(-1)?.[0];
+    };
+
+    expect(await runWithTypedName("Hack v1.2")).toBe("Hack v1.2.zip");
   });
 });

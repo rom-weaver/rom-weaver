@@ -1,20 +1,28 @@
+import { sanitizeTypedOutputName } from "../path-utils.ts";
+import { isDcpPatchName, isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
-  ApplyWorkflowBundleSources,
+  ApplyWorkflowWeaveSources,
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
-import type { ApplyResult } from "../../types/public.ts";
+import type { ApplyResult, CreateResult } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
-import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
+import type { ApplySettings, CompressionFormat, CreateSettings } from "../../types/settings.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-controller.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchValidationPlan } from "../../wasm/index.ts";
-import type { ApplyWorkflowOptions, PatchInput, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowOptions,
+  PatchInput,
+  ProgressEvent,
+  PublicOutput,
+} from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
 import { runApplyWorkflow } from "../apply/workflow.ts";
+import { runCreateWorkflow } from "../create/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import type { CheatRecord } from "../cheats/model.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
@@ -25,6 +33,14 @@ import {
   type InputParentCompression,
   type PreparedSidecarPatch,
 } from "../input/input-assets.ts";
+import {
+  createBareMemberRule,
+  describeBareMemberFailure,
+  describeUnboundInputMember,
+  findMemberAssets,
+  loneBareFile,
+  missingBareFileAlgorithms,
+} from "../apply/bare-member-target.ts";
 import { getPatchArchiveReplacement } from "../input/patch-archive-replacement.ts";
 import {
   getPatchLeafFileForSelection,
@@ -49,7 +65,11 @@ import {
   clearApplyPatchTarget,
   evaluateApplyPatchReadiness,
 } from "./apply-patch-readiness-state-machine.ts";
-import { type PatchTargetValidationAdapters, validateApplyPatchTargets } from "./apply-patch-target-validation.ts";
+import {
+  isTransientValidationError,
+  type PatchTargetValidationAdapters,
+  validateApplyPatchTargets,
+} from "./apply-patch-target-validation.ts";
 import {
   applyPreparedInputMetadata,
   applyPreparedPatchMetadata,
@@ -83,7 +103,24 @@ import {
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
-import { cloneChecksumRomProbe, getInputAssetChecksums } from "./staged-source-checksums.ts";
+import {
+  calculateInputChecksumsForFile,
+  cloneChecksumRomProbe,
+  getInputAssetChecksums,
+} from "./staged-source-checksums.ts";
+import {
+  type ComputedChecksums,
+  isTransformVariant,
+  rememberComputed,
+  type WeaveRomCheck,
+  type WeaveRomExpectation,
+  verifyWeaveRom,
+} from "./apply-weave-rom-check.ts";
+
+/** A weave-ROM check for this pass: a verdict, or `unavailable` when hashing failed transiently. */
+type WeaveRomRunCheck =
+  | WeaveRomCheck
+  | { message: string; missing: string[]; status: "unavailable"; variant?: undefined };
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
@@ -113,6 +150,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
    * form reads it for chain verdict chips, order suggestions, and output enforceability. */
   readonly latestChainPlans = new Map<string, PatchValidationPlan>();
+  private readonly chainLayoutBases = new Map<
+    string,
+    { fingerprint: string; sources: unknown[]; bases: Array<"base" | "previous"> }
+  >();
   private publishedChainPlans: ReadonlyMap<string, PatchValidationPlan> = new Map();
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
@@ -122,9 +163,29 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
+  /** Toggled-off patches from the latest validation pass; they are excluded from the run. Tracked by
+   * stage, not index: re-staging (the run's enabled-only list) creates new stages, which none match. */
+  private disabledPatches: ReadonlySet<StagedSource<TSource>> = new Set();
   private inputs: TSource[] = [];
+  // Object identities MUST remain weak so replaced archives can be collected while restaging stays deduplicated.
+  private discoveredSidecarSources = new WeakSet<object>();
+  private discoveredSidecarPrimitiveSources = new Set<TSource>();
   private cheatRecords: CheatRecord[] = [];
   private cheatPositions: number[] = [];
+  /** The active weave's `rom.checks`, verified against the supplied ROM file. */
+  private weaveRom: WeaveRomExpectation | undefined;
+  /** The active weave's `rom.member`, set with or without `rom.checks`: a lone bare ROM file always
+   * stands in for it. */
+  private weaveRomMember: string | undefined;
+  /** Declared ROM checksums staging does not compute (e.g. sha256), hashed once per file. */
+  private readonly weaveRomChecksums = new WeakMap<object, ComputedChecksums>();
+  /** The variant the weave's `rom.checks` matched when the raw file did not: its asset and CRC32.
+   * Patches without layout evidence of their own take their header/byte-order decision from it. */
+  private weaveRomLayout: { assetId: string; crc32: string } | undefined;
+  /** Cancels the in-flight on-demand weave-ROM hash when the ROM is replaced or cleared. */
+  private weaveRomHashAbort: AbortController | undefined;
+  /** Algorithms already hashed (or being hashed) for a lone bare file, so each is requested once. */
+  private readonly attemptedBareChecksums = new WeakMap<object, Set<string>>();
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -180,9 +241,24 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.recomputeOutputState();
   }
 
-  /** Export the exact leaves staging prepared, so a bundle export right after apply needs no
+  /** Set (or clear) the active weave's expected ROM, verified by the plan pass and the next run. */
+  setWeaveRom(expectation: Partial<WeaveRomExpectation> | undefined): void {
+    this.weaveRomMember = expectation?.member;
+    const next = expectation?.checks ? { ...expectation, checks: expectation.checks } : undefined;
+    if (next?.checks !== this.weaveRom?.checks || next?.member !== this.weaveRom?.member) {
+      this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
+    }
+    this.weaveRom = next;
+  }
+
+  /** Export the exact leaves staging prepared, so a weave export right after apply needs no
    * second archive extraction/ingest pass. */
-  getBundleExportSources(): ApplyWorkflowBundleSources {
+  getBundleExportSources(): ApplyWorkflowWeaveSources {
+    return this.getWeaveExportSources();
+  }
+
+  getWeaveExportSources(): ApplyWorkflowWeaveSources {
     const session = this.inputSession;
     const selectedOwner = this.getSelectedInputOwner();
     const inputStage = selectedOwner || session?.view;
@@ -266,11 +342,15 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async setInput(
     input: TSource | TSource[],
     options?: {
+      appendSidecarPatches?: boolean;
       onPrepared?: (input: ApplyWorkflowInputState | null) => void;
       onFinalized?: (input: ApplyWorkflowInputState | null) => void;
     },
   ): Promise<void> {
+    this.cancelWeaveRomHash();
     return this.mutate("setInput", async () => {
+      this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
       this.trace("input.set.start", {
         inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
       });
@@ -337,7 +417,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         // only on the patch row and must not keep the ROM row showing "checksumming".
         options?.onFinalized?.(this.getInput());
         const endImplicit = startStageSpan("setInput:discoverImplicitPatches");
-        await this.discoverImplicitPatches();
+        await this.discoverImplicitPatches(options?.appendSidecarPatches);
         endImplicit();
         await this.refreshPatchReadiness();
         this.recomputeOutputState();
@@ -357,7 +437,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   async clearInput(): Promise<void> {
+    this.cancelWeaveRomHash();
     return this.mutate("clearInput", async () => {
+      this.weaveRomLayout = undefined;
+      this.chainLayoutBases.clear();
       await this.releaseInputSession();
       this.inputs = [];
       this.inputSession = undefined;
@@ -612,9 +695,31 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return true;
   }
 
-  private async discoverImplicitPatches(): Promise<void> {
-    if (this.patches.length || !this.inputSession) return;
-    const stages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
+  private hasDiscoveredSidecarSource(source: TSource): boolean {
+    if (typeof source === "object" && source !== null) return this.discoveredSidecarSources.has(source);
+    return this.discoveredSidecarPrimitiveSources.has(source);
+  }
+
+  private rememberDiscoveredSidecarSource(source: TSource): void {
+    if (typeof source === "object" && source !== null) {
+      this.discoveredSidecarSources.add(source);
+      return;
+    }
+    this.discoveredSidecarPrimitiveSources.add(source);
+  }
+
+  private async discoverImplicitPatches(appendSidecarPatches = false): Promise<void> {
+    if (!this.inputSession || (this.patches.length && !(appendSidecarPatches && this.selectFile))) return;
+    const sessionStages = this.inputSession.stages.length ? this.inputSession.stages : [this.inputSession.view];
+    const stages = appendSidecarPatches
+      ? sessionStages.filter(
+          (stage) =>
+            !(
+              this.hasDiscoveredSidecarSource(stage.source) ||
+              this.patches.some((patch) => patch.source === stage.source)
+            ),
+        )
+      : sessionStages;
     // No selection handler = headless/libretro-style soft-patching: apply only name-matched sidecars,
     // no prompt. With a handler (the webapp) every sidecar goes through the selection flow instead.
     if (!this.selectFile) {
@@ -626,7 +731,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       if (!sidecarPatches.length) continue;
       // Preferred path: the dialog already ran off the streamed `patch-manifest` while the ROM hashed;
       // apply that pick off the materialized leaves - no second dialog, no re-ingest.
-      if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) continue;
+      if (await this.applyEarlySidecarSelection(stage, sidecarPatches)) {
+        if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
+        continue;
+      }
       // A lone sidecar auto-adds (no prompt), reusing the already-extracted leaf. (The apply
       // execution skips its own discovery once rows exist.)
       if (sidecarPatches.length === 1) {
@@ -635,6 +743,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           this.trace("patch.implicit.sidecar-auto-add", { fileName: only.file.fileName });
           await this.addFannedOutPatch(only.file, only.parentCompressions);
         }
+        if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
         continue;
       }
       // Fallback (early dialog never ran): surface the multi-select by re-staging the archive as a
@@ -643,6 +752,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // The staging cache is reference-counted, so the patch flow can share the exact source object
       // with the input flow without conflating a same-metadata but different File.
       await this.surfaceArchivePatchSelection(stage.source);
+      if (appendSidecarPatches) this.rememberDiscoveredSidecarSource(stage.source);
     }
   }
 
@@ -693,6 +803,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       await this.releasePatchSources();
       this.patches = [];
       this.latestChainPlans.clear();
+      this.chainLayoutBases.clear();
       this.recomputeOutputState();
       this.trace("patches.clear", { patchCount });
     });
@@ -780,7 +891,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     return this.mutate("setPatchOption", async () => {
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
       let verificationChanged = false;
+      if ("inputChecks" in option) {
+        const value = option.inputChecks?.trim() || undefined;
+        verificationChanged ||= stage.state.inputChecks !== value;
+        stage.state.inputChecks = value;
+      }
       if ("id" in option) {
         verificationChanged ||= stage.state.patchId !== option.id?.trim();
         stage.state.patchId = option.id?.trim() || undefined;
@@ -799,7 +916,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           else clearApplyPatchTarget(stage);
         } else if (option.input?.member) {
           const member = option.input.member;
-          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === member);
+          await this.hashBareFileChecksums();
+          const matches = findMemberAssets(member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
@@ -817,15 +935,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
           else clearApplyPatchTarget(stage);
         } else if (target?.member) {
-          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === target.member);
+          await this.hashBareFileChecksums();
+          const matches = findMemberAssets(target.member, this.getPatchableInputAssets(), this.getBareMemberRule());
           if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
           else clearApplyPatchTarget(stage);
         }
-      }
-      if ("inputChecks" in option) {
-        const value = option.inputChecks?.trim() || undefined;
-        verificationChanged ||= stage.state.inputChecks !== value;
-        stage.state.inputChecks = value;
       }
       if ("outputChecks" in option) {
         const value = option.outputChecks?.trim() || undefined;
@@ -860,33 +974,26 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       // validation key - must be recomputed. The caller reruns the deep
       // validation off the new key. No-op writes skip the recompute entirely.
       if (verificationChanged) await this.evaluatePatchReadiness(stage);
+      // A weave load sets the patches one at a time, so a patch bound earlier saw a rule without
+      // this one. A changed rule re-resolves every member patch against the whole rule.
+      if (loneBareFile(this.getPatchableInputAssets()) && this.getBareMemberRuleKey() !== bareMemberRuleBefore)
+        await this.refreshPatchReadiness();
       this.recomputeOutputState();
     });
   }
 
   async run(): Promise<ApplyResult<TDestination>> {
     return this.mutate("run", async () => {
-      const input = this.inputSession;
-      if (!input) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
-      await this.finalizeInputStableState();
-      await this.refreshPatchReadiness();
-      this.recomputeOutputState();
-      if (input.view.state.status !== "ready" || !input.view.state.selectedCandidateId)
-        throw new RomWeaverError("AMBIGUOUS_SELECTION", "Input selection is required");
-      const pendingPatch = this.patches.find((patch) => patch.state.status !== "ready");
-      if (pendingPatch) {
-        if (!pendingPatch.state.selectedCandidateId)
-          throw new RomWeaverError(
-            "AMBIGUOUS_SELECTION",
-            `${pendingPatch.state.fileName || "Patch"} requires selection`,
-          );
-        throw new RomWeaverError(
-          "AMBIGUOUS_SELECTION",
-          pendingPatch.state.warnings.at(-1)?.message || `${pendingPatch.state.fileName || "Patch"} is not ready`,
-        );
+      await this.prepareRun();
+      // The strict-validation override (or a non-strict setting) skips the weave's ROM check, like
+      // the CLI's --ignore-checksum-validation skips weave checks.
+      if (this.settings.validation?.requireInputChecksumMatch === true) {
+        const verdict = await this.verifyWeaveRom();
+        if (verdict?.status === "mismatch")
+          throw new RomWeaverError("CHECKSUM_MISMATCH", verdict.message || "Input checksum mismatch");
+        if (verdict?.status === "unavailable")
+          throw new RomWeaverError("WORKER_FAILED", verdict.message || "The weave's ROM could not be verified");
       }
-      const outputName = this.outputState.outputName;
-      if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await withAbortSignal(
         runApplyWorkflow(
           this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress)),
@@ -904,8 +1011,156 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         outputs,
         patches: result.patches,
         sizeSummary: result.sizeSummary,
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
       return publicResult;
+    });
+  }
+
+  private async prepareRun(): Promise<void> {
+    const input = this.inputSession;
+    if (!input) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
+    await this.finalizeInputStableState();
+    await this.refreshPatchReadiness();
+    this.recomputeOutputState();
+    if (input.view.state.status !== "ready" || !input.view.state.selectedCandidateId)
+      throw new RomWeaverError("AMBIGUOUS_SELECTION", "Input selection is required");
+    const pendingPatch = this.patches.find((patch) => patch.state.status !== "ready");
+    if (pendingPatch) {
+      if (!pendingPatch.state.selectedCandidateId)
+        throw new RomWeaverError("AMBIGUOUS_SELECTION", `${pendingPatch.state.fileName || "Patch"} requires selection`);
+      throw new RomWeaverError(
+        "AMBIGUOUS_SELECTION",
+        pendingPatch.state.warnings.at(-1)?.message || `${pendingPatch.state.fileName || "Patch"} is not ready`,
+      );
+    }
+    const outputName = this.outputState.outputName;
+    if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
+  }
+
+  async createCombinedPatch(settings: Partial<CreateSettings>): Promise<CreateResult<TDestination>> {
+    return this.mutate("createCombinedPatch", async () => {
+      await this.prepareRun();
+      if (!(this.patches.length || this.cheatRecords.length))
+        throw new RomWeaverError("INVALID_INPUT", "Select at least one patch or cheat to combine");
+      const assets = this.getPreparedInputAssets();
+      if (assets.length !== 1 || !assets[0]?.patchable)
+        throw new RomWeaverError(
+          "INVALID_INPUT",
+          "Combined patches require exactly one ROM file; multi-file ROMs are not supported",
+        );
+      const original = assets[0];
+      const originalSource = getPatchFileExternalSource(original.file, original.fileName);
+      if (!originalSource) throw new RomWeaverError("INVALID_INPUT", "The prepared original ROM is not readable");
+      const outputName = sanitizeTypedOutputName(settings.output?.outputName);
+      if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
+      const applyPatch = this.runtime.patch.applyPatch;
+      const createPatch = this.runtime.patch.createPatch;
+      const createSource = this.runtime.output.createSource;
+      if (!createSource)
+        throw new RomWeaverError("UNSUPPORTED_FORMAT", "Combined patch output is unavailable in this runtime");
+      const intermediateOutputs: PublicOutput[] = [];
+      const modifiedSources: SourceRef[] = [];
+      const applyInput = this.createPatchInput((progress) => this.emitApplyWorkerProgress(progress));
+      applyInput.options = {
+        ...applyInput.options,
+        retainUncompressedOutput: undefined,
+        // The user's Apply name MAY carry an archive extension that would misclassify the raw intermediate ROM.
+        output: { ...applyInput.options?.output, compression: "none", header: "keep", outputName: original.fileName },
+      };
+      const runtime: WorkflowRuntime = {
+        ...this.runtime,
+        patch: {
+          ...this.runtime.patch,
+          applyPatch: applyPatch
+            ? async (...args) => {
+                const output = await applyPatch(...args);
+                intermediateOutputs.push(output);
+                return output;
+              }
+            : undefined,
+        },
+        output: {
+          ...this.runtime.output,
+          // Chaining MUST use the prepared source: public output paths may belong to a download-only VFS.
+          createSource: async (source, fileName) => {
+            modifiedSources.push(source);
+            const output = await createSource(source, fileName);
+            intermediateOutputs.push(output);
+            return output;
+          },
+        },
+      };
+      let createdOutput: PublicOutput | undefined;
+      let succeeded = false;
+      try {
+        const applied = await runApplyWorkflow(applyInput, runtime);
+        if (applied.outputs.length !== 1 || modifiedSources.length !== 1)
+          throw new RomWeaverError("INVALID_INPUT", "Combined patches require exactly one modified ROM output");
+        this.abortController.signal.throwIfAborted();
+        const createRuntime: WorkflowRuntime = {
+          ...this.runtime,
+          patch: {
+            ...this.runtime.patch,
+            createPatch: createPatch
+              ? async (...args) => {
+                  const result = await createPatch(...args);
+                  intermediateOutputs.push(result.output);
+                  return result;
+                }
+              : undefined,
+          },
+        };
+        const created = await runCreateWorkflow(
+          {
+            original: originalSource,
+            modified: modifiedSources[0],
+            originalCrc32: getInputAssetChecksums(original)?.crc32,
+            options: {
+              ...cloneValue(settings),
+              output: { ...cloneValue(settings.output), outputName },
+              signal: this.abortController.signal,
+              onLog: settings.logging?.sink ?? this.settings.logging?.sink,
+              onProgress: (progress) =>
+                this.emitProgress({
+                  ...progress,
+                  stage: progress.stage === "output" ? "compress" : "create",
+                  details: isRecord(progress.details) ? progress.details : undefined,
+                  id: `${this.id}:worker:create`,
+                  role: "worker",
+                  workflow: "create",
+                }),
+            },
+          },
+          createRuntime,
+        );
+        createdOutput = created.output;
+        this.abortController.signal.throwIfAborted();
+        const output = wrapPublicOutput<TDestination>(created.output, this.runtime, 0);
+        const warnings = [...(applied.warnings || []), ...(created.warnings || [])];
+        const result: CreateResult<TDestination> = {
+          original: { id: original.id, fileName: original.fileName, kind: original.kind, size: original.size },
+          modified: {
+            id: `${this.id}:combined`,
+            fileName: applied.output.fileName,
+            kind: "rom",
+            size: applied.output.size,
+          },
+          output,
+          type: created.format as CreateResult<TDestination>["type"],
+          sizeSummary: { ...created.sizeSummary, outputSize: output.size },
+          ...(warnings.length ? { warnings } : {}),
+        };
+        succeeded = true;
+        return result;
+      } finally {
+        await Promise.allSettled(
+          [...new Set(intermediateOutputs)]
+            .filter((output) => output !== createdOutput)
+            .map((output) => output.dispose()),
+        );
+        if (!succeeded && createdOutput) await createdOutput.dispose();
+      }
     });
   }
 
@@ -938,6 +1193,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     await this.flushPendingOwnedSourceReleases();
     await this.runtime.workerIo?.releaseOwnedSources?.([...this.ownedSourceRefCounts.keys()]).catch(() => undefined);
     this.ownedSourceRefCounts.clear();
+    this.discoveredSidecarPrimitiveSources.clear();
     this.patches = [];
     this.clearListeners();
     this.disposed = true;
@@ -1019,6 +1275,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       role: stage.state.role,
       sourceSize: stage.state.sourceSize,
     });
+    if (isDcpPatchName(stage.state.fileName)) {
+      // Name the DCP before any staging, ingest, or selection runs; see apply-dcp-patch.ts.
+      this.addDirectCandidate(stage, stage.state.role, stage.index, stage.state.id);
+      stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
+      markDcpPatchUnsupported(stage);
+      return stage;
+    }
     const requests: CandidateSelectionRequest[] = [];
     const options = createSourceStagingOptions({
       base: this.createExecutionOptions(),
@@ -1312,9 +1575,24 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       stage.state.patchValidation = undefined;
       return;
     }
+    if (isDcpPatchStage(stage)) {
+      // The ingest surfaced a .dcp (bare, or a leaf of an archive) as one patch; see apply-dcp-patch.ts.
+      markDcpPatchUnsupported(stage);
+      return;
+    }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
-    if (!parsed)
-      throw new RomWeaverError("INVALID_INPUT", `Invalid patch file: ${patchFile.fileName || stage.state.fileName}`);
+    if (!parsed) {
+      // An unreadable patch is a per-card failure (like a checksum mismatch), not a workflow error:
+      // keep the card and mark it invalid so it shows a plain-language fault and blocks Apply.
+      stage.state.requirements = undefined;
+      stage.state.checksumPreflight = undefined;
+      stage.state.patchValidation = {
+        message: `Validation failed: Invalid patch file: ${patchFile.fileName || stage.state.fileName}`,
+        status: "invalid",
+        unreadable: true,
+      };
+      return;
+    }
     stage.parsedPatch = parsed;
     stage.state.requirements = clonePatchRequirements(getPatchProbeRequirements(parsed));
     stage.state.checksumPreflight = undefined;
@@ -1358,6 +1636,133 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     session.view.state.romType = session.view.state.romType ? { ...session.view.state.romType } : undefined;
   }
 
+  /** Hash `algorithms` for one asset on demand (staging computes only CRC32, MD5 and SHA-1). A
+   * transient failure, or an aborted hash, throws; any other failure maps to no checksums. */
+  private async computeWeaveRomAssetChecksums(asset: InputAsset, algorithms: readonly string[], signal: AbortSignal) {
+    try {
+      const result = await calculateInputChecksumsForFile({
+        algorithms,
+        emitProgress: (event) => this.emitProgress(event),
+        file: asset.file,
+        identify: false,
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        progressId: `${this.id}:weave-rom:${asset.id}`,
+        role: "input",
+        runtime: this.runtime,
+        signal,
+        state: { fileName: asset.fileName, id: asset.id, size: asset.size },
+        workflow: "apply",
+      });
+      return { checksums: result.checksums, variants: result.variants };
+    } catch (error) {
+      if (signal.aborted || isTransientValidationError(error)) throw error;
+      // Not transient: the algorithm cannot be computed here, which fails verification.
+      this.trace("weave.rom.checksum-failed", { algorithms: algorithms.join(","), assetId: asset.id });
+      return { checksums: {} };
+    }
+  }
+
+  /** Hash, once per file, the algorithms a lone bare file's declared member checks need beyond
+   * staging's CRC32, MD5 and SHA-1, so the bare-member rule can compare them (a weave created with
+   * `--checksum sha256`). A transient failure leaves them unhashed; the next pass retries. */
+  private async hashBareFileChecksums(): Promise<void> {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    if (!bare) return;
+    const missing = missingBareFileAlgorithms(this.getBareMemberRule(), bare).filter(
+      (algorithm) => !this.attemptedBareChecksums.get(bare.file)?.has(algorithm),
+    );
+    if (!missing.length) return;
+    const attempted = this.attemptedBareChecksums.get(bare.file) ?? new Set<string>();
+    for (const algorithm of missing) attempted.add(algorithm);
+    this.attemptedBareChecksums.set(bare.file, attempted);
+    try {
+      const result = await this.computeWeaveRomAssetChecksums(bare, missing, this.abortController.signal);
+      rememberComputed(this.weaveRomChecksums, bare.file, missing, result);
+    } catch (error) {
+      if (this.abortController.signal.aborted) throw error;
+      for (const algorithm of missing) attempted.delete(algorithm);
+      this.trace("bare-member.checksum-unavailable", { assetId: bare.id, message: toRomWeaverError(error).message });
+    }
+  }
+
+  /** Compare the active weave's `rom.checks` with the supplied ROM file, hashing any declared
+   * algorithm staging did not compute. A transient hashing failure, or a hash cancelled because
+   * the ROM changed, yields a retryable `unavailable` result instead of a verdict. */
+  private async verifyWeaveRom(options?: { skipHash?: boolean }): Promise<WeaveRomRunCheck | undefined> {
+    const expectation = this.weaveRom;
+    if (!expectation) return undefined;
+    if (options?.skipHash) {
+      this.trace("weave.rom.verify-skipped", { member: expectation.member ?? "" });
+      return {
+        message: "The weave's ROM is being replaced; it is checked again once the new ROM is staged",
+        missing: [],
+        status: "unavailable",
+      };
+    }
+    const workflowSignal = this.abortController.signal;
+    const hashAbort = new AbortController();
+    this.weaveRomHashAbort = hashAbort;
+    const forwardAbort = () => hashAbort.abort(workflowSignal.reason);
+    workflowSignal.addEventListener("abort", forwardAbort, { once: true });
+    try {
+      const verdict = await verifyWeaveRom(
+        expectation,
+        this.getPatchableInputAssets(),
+        this.weaveRomChecksums,
+        (asset, algorithms) => this.computeWeaveRomAssetChecksums(asset, algorithms, hashAbort.signal),
+      );
+      this.trace("weave.rom.verify", {
+        assetId: verdict.assetId ?? "",
+        member: expectation.member ?? "",
+        missing: verdict.missing.join(","),
+        status: verdict.status,
+        variant: verdict.variant ?? "",
+      });
+      return verdict;
+    } catch (error) {
+      if (workflowSignal.aborted) throw error;
+      const message = toRomWeaverError(error).message;
+      this.trace("weave.rom.verify-unavailable", { message, superseded: hashAbort.signal.aborted });
+      return {
+        message: `The weave's ROM checksum could not be computed yet (${message}); it is checked again on the next pass`,
+        missing: [],
+        status: "unavailable",
+      };
+    } finally {
+      workflowSignal.removeEventListener("abort", forwardAbort);
+      if (this.weaveRomHashAbort === hashAbort) this.weaveRomHashAbort = undefined;
+    }
+  }
+
+  /** Record the layout variant a weave-ROM verdict matched; true when it changed. A transient
+   * `unavailable` verdict keeps the previous layout. */
+  private updateWeaveRomLayout(verdict: WeaveRomRunCheck | undefined): boolean {
+    if (verdict?.status === "unavailable") return false;
+    const asset =
+      verdict?.status === "match" && verdict.variant
+        ? this.getPatchableInputAssets().find((candidate) => candidate.id === verdict.assetId)
+        : undefined;
+    const crc32 = asset?.checksumVariants?.find((variant) => variant.id === verdict?.variant)?.checksums?.crc32;
+    const next = asset && crc32 ? { assetId: asset.id, crc32 } : undefined;
+    const previous = this.weaveRomLayout;
+    if (previous?.assetId === next?.assetId && previous?.crc32 === next?.crc32) return false;
+    this.weaveRomLayout = next;
+    this.trace("weave.rom.layout", {
+      assetId: next?.assetId ?? "",
+      crc32: next?.crc32 ?? "",
+      variant: verdict?.variant ?? "",
+    });
+    return true;
+  }
+
+  /** Cancel an in-flight weave-ROM hash: its file is about to be replaced. Callers that queue an
+   * input change behind other work (the apply form) SHOULD call this before queueing it. */
+  cancelWeaveRomHash(): void {
+    this.weaveRomHashAbort?.abort(new RomWeaverError("CANCELLED", "The ROM changed"));
+    this.weaveRomHashAbort = undefined;
+  }
+
   private getSelectedInputOwner(): StagedSource<TSource> | undefined {
     return this.inputStages.getSelectedOwner(this.inputSession) as StagedSource<TSource> | undefined;
   }
@@ -1376,7 +1781,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private getPreparedInputAssets(): InputAsset[] {
     const session = this.inputSession;
     if (!session) return [];
-    // A synthetic session bundles several separately-provided ROMs. Apply keeps only the chosen one
+    // A synthetic session weaves several separately-provided ROMs. Apply keeps only the chosen one
     // ("ask which one"), so once a pick is made expose just that stage's assets - patch targeting,
     // checksums, and the run all operate on the single selected ROM, not every uploaded file.
     if (session.synthetic) {
@@ -1414,17 +1819,95 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
-  private async evaluatePatchReadiness(stage: StagedSource<TSource>): Promise<boolean> {
-    return evaluateApplyPatchReadiness(stage, {
+  /** Whether `stage` runs first on `targetId`: each target is its own engine run, and a toggled-off
+   * patch is excluded from the run. */
+  private isFirstEnabledPatchOn(stage: StagedSource<TSource>, targetId: string | undefined): boolean {
+    const first = this.patches.find(
+      (patch) => !this.disabledPatches.has(patch) && (patch === stage || patch.state.targetInputId === targetId),
+    );
+    return first === stage && !this.disabledPatches.has(stage);
+  }
+
+  /** The patches that currently run first on their target. */
+  private getFirstEnabledPatches(): Set<StagedSource<TSource>> {
+    return new Set(this.patches.filter((patch) => this.isFirstEnabledPatchOn(patch, patch.state.targetInputId)));
+  }
+
+  private async evaluatePatchReadiness(
+    stage: StagedSource<TSource>,
+    declaredInputChecks?: string,
+    previousLayout?: StagedSource<TSource>["state"],
+  ): Promise<boolean> {
+    await this.hashBareFileChecksums();
+    const inputRef = stage.state.patchTarget || stage.state.patchInput;
+    const memberRef = inputRef && !("patch" in inputRef) ? inputRef.member : undefined;
+    const changed = await evaluateApplyPatchReadiness(stage, {
+      declaredInputChecks,
+      memberRef,
+      describeBareMemberFailure: (bare) =>
+        memberRef ? describeBareMemberFailure(memberRef, bare, this.getBareMemberRule()) : undefined,
+      filenameCrc32AppliesTo: (target) =>
+        this.isFirstEnabledPatchOn(stage, target.id) && !(inputRef && "patch" in inputRef),
+      previousLayout,
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
+      getWeaveLayoutCrc32: (target) =>
+        this.weaveRomLayout?.assetId === target.id ? this.weaveRomLayout.crc32 : undefined,
       notifyAwaitingInputTarget: (patchStage) => this.emitPatchAwaitingInputProgress(patchStage),
       parsePatch: (patchStage) => this.parsePatch(patchStage),
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
     });
+    // A target ref hides the input member ref above, but the worker still binds that member to the leaf.
+    const input = stage.state.patchInput;
+    const inputMember = stage.state.patchTarget && input && "rom" in input ? input.member : undefined;
+    const unbound =
+      inputMember && stage.state.status === "ready"
+        ? describeUnboundInputMember(inputMember, this.getPatchableInputAssets(), this.getBareMemberRule())
+        : undefined;
+    if (!unbound) return changed;
+    clearApplyPatchTarget(stage);
+    stage.state.status = "needsSelection";
+    this.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", unbound));
+    return true;
+  }
+
+  /** The checks a bare file must satisfy to stand in for a patch's member: the patch's own input
+   * checks, else the weave's `rom.checks` when the weave names no `rom.member` (those checks then
+   * describe the root ROM rather than a member). */
+  private memberChecksFor(stage: StagedSource<TSource>): string | undefined {
+    if (stage.state.inputChecks) return stage.state.inputChecks;
+    return this.weaveRomMember ? undefined : this.weaveRom?.checks;
+  }
+
+  /** The members a lone bare ROM file is asked to stand in for, from the enabled patches; the run
+   * builds the same rule from its enabled-only patch list. */
+  private getBareMemberRule() {
+    return createBareMemberRule(
+      this.patches
+        .filter((patch) => !this.disabledPatches.has(patch))
+        .map((patch) => ({
+          checks: this.memberChecksFor(patch),
+          input: patch.state.patchInput,
+          target: patch.state.patchTarget,
+        })),
+      this.weaveRomMember,
+      this.getBareFileChecksums(),
+    );
+  }
+
+  /** The on-demand checksums of the lone bare file (see `hashBareFileChecksums`). */
+  private getBareFileChecksums() {
+    const bare = loneBareFile(this.getPatchableInputAssets());
+    return bare ? this.weaveRomChecksums.get(bare.file)?.checksums : undefined;
+  }
+
+  private getBareMemberRuleKey() {
+    const rule = this.getBareMemberRule();
+    return JSON.stringify([rule.rootMember, [...rule.memberChecks]]);
   }
 
   private async refreshPatchReadiness() {
+    await this.hashBareFileChecksums();
     for (const [index, patch] of this.patches.entries()) {
       const targetRef = patch.state.patchTarget || patch.state.patchInput;
       if (targetRef && "patch" in targetRef) {
@@ -1437,7 +1920,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (target) assignApplyPatchTarget(patch, target);
         else clearApplyPatchTarget(patch);
       } else if (targetRef?.member) {
-        const matches = this.getPatchableInputAssets().filter((asset) => asset.member === targetRef.member);
+        const matches = findMemberAssets(targetRef.member, this.getPatchableInputAssets(), this.getBareMemberRule());
         if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);
         else clearApplyPatchTarget(patch);
       }
@@ -1450,17 +1933,38 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
    * Disabled patches wait until they are re-enabled.
    */
   async validatePatches(options?: {
-    /** Index-aligned declared chain metadata (bundle/user basis + checks) per staged patch. */
+    /** Index-aligned declared chain metadata (weave/user basis + checks) per staged patch. */
     chainMeta?: ReadonlyMap<
       number,
       { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
     >;
     defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
+    /** The active weave's expected ROM; present (even undefined) replaces the stored one. */
+    weaveRom?: Partial<WeaveRomExpectation>;
+    /** Set when a newer input change is queued behind this pass: the ROM about to be replaced is
+     * not hashed for the weave's checks, and its patches stay a retryable "unknown". */
+    skipWeaveRomHash?: boolean;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
-      const assets = this.getPatchableInputAssets();
+      const bareMemberRuleBefore = this.getBareMemberRuleKey();
+      if (options && "weaveRom" in options) this.setWeaveRom(options.weaveRom);
+      const weaveRomVerdict = await this.verifyWeaveRom({ skipHash: options?.skipWeaveRomHash === true });
+      if (this.updateWeaveRomLayout(weaveRomVerdict)) await this.refreshPatchReadiness();
       const disabledIndexes = options?.disabledIndexes;
+      // A toggle can change which patch runs first, and only that patch's file-name crc32 applies:
+      // the patches gaining or losing that role re-run their preflight below.
+      const firstEnabledBefore = this.getFirstEnabledPatches();
+      this.disabledPatches = new Set(this.patches.filter((_, index) => disabledIndexes?.has(index)));
+      // A new `rom.member` or a toggled member patch changes which members a bare file may stand in for.
+      if (this.getBareMemberRuleKey() !== bareMemberRuleBefore) await this.refreshPatchReadiness();
+      const firstEnabledAfter = this.getFirstEnabledPatches();
+      const firstEnabledMoved = new Set(
+        [...firstEnabledBefore, ...firstEnabledAfter].filter(
+          (patch) => firstEnabledBefore.has(patch) !== firstEnabledAfter.has(patch),
+        ),
+      );
+      const assets = this.getPatchableInputAssets();
       const pending: Array<{
         chain?: { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string };
         chainFingerprint?: string;
@@ -1468,14 +1972,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         stage: StagedSource<TSource>;
         target: InputAsset;
       }> = [];
+      const previousByTarget = new Map<string, StagedSource<TSource>>();
       let skippedDisabled = 0;
       for (const [index, stage] of this.patches.entries()) {
         if (disabledIndexes?.has(index)) {
           skippedDisabled += 1;
           continue;
         }
-        const preflight = stage.state.checksumPreflight;
-        if (!(stage.state.status === "ready" && stage.state.targetInputId && preflight)) continue;
+        if (!(stage.state.status === "ready" && stage.state.targetInputId && stage.state.checksumPreflight)) continue;
         if (!(stage.parsedPatch && stage.preparedPatchFile)) continue;
         // The planner receives a linear patch list. An explicit named producer is resolved by
         // apply-time execution, so planning it against the current visual order would report a
@@ -1485,7 +1989,24 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
         );
         if (!target) continue;
-        pending.push({ chain: options?.chainMeta?.get(index), preflight, stage, target });
+        const chain = options?.chainMeta?.get(index);
+        const basis = chain?.basis ?? stage.state.basisChoice ?? options?.defaultPatchBasis ?? this.defaultPatchBasis;
+        if (
+          basis !== "auto" ||
+          !previousByTarget.has(target.id) ||
+          !target.checksumVariants?.some(isTransformVariant) ||
+          firstEnabledMoved.has(stage)
+        ) {
+          await this.evaluatePatchReadiness(
+            stage,
+            chain?.inputChecks,
+            basis === "previous" ? previousByTarget.get(target.id)?.state : undefined,
+          );
+        }
+        const preflight = stage.state.checksumPreflight;
+        if (!preflight) continue;
+        pending.push({ chain, preflight, stage, target });
+        previousByTarget.set(target.id, stage);
       }
       // Plan-mode verdicts depend on chain position, so each target chain gets a fingerprint of
       // its ordered enabled members + declarations; any order/enablement/declaration change
@@ -1496,7 +2017,108 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         if (bucket) bucket.push(entry);
         else chainsByTarget.set(entry.target.id, [entry]);
       }
+      const unresolvedLayout = new Set<StagedSource<TSource>>();
+      for (const targetId of this.chainLayoutBases.keys()) {
+        if (!chainsByTarget.has(targetId)) this.chainLayoutBases.delete(targetId);
+      }
       for (const [targetId, chain] of chainsByTarget) {
+        const target = chain[0]?.target;
+        const defaultBasis = options?.defaultPatchBasis ?? this.defaultPatchBasis;
+        const hasAuto = chain
+          .slice(1)
+          .some((entry) => (entry.chain?.basis ?? entry.stage.state.basisChoice ?? defaultBasis) === "auto");
+        if (
+          target?.checksumVariants?.some(isTransformVariant) &&
+          hasAuto &&
+          weaveRomVerdict?.status !== "unavailable" &&
+          !options?.skipWeaveRomHash
+        ) {
+          const sources = [target.file, ...chain.map((entry) => entry.stage.preparedPatchFile)];
+          const layoutFingerprint = JSON.stringify({
+            target: [target.id, target.size, target.checksums, target.checksumVariants],
+            defaultBasis,
+            chain: chain.map((entry) => [
+              entry.stage.state.id,
+              entry.stage.state.selectedCandidateId,
+              entry.stage.state.requirements,
+              entry.chain,
+              entry.stage.state.basisChoice,
+              entry.stage.state.inputChecks,
+              entry.stage.state.outputChecks,
+              entry.stage.state.validateInputChecksum,
+              entry.stage.state.validateOutputChecksum,
+              entry.stage.state.headerChoice,
+              entry.stage.state.n64ByteOrderChoice,
+            ]),
+          });
+          let cached = this.chainLayoutBases.get(targetId);
+          if (
+            cached?.fingerprint !== layoutFingerprint ||
+            sources.some((source, index) => cached?.sources[index] !== source)
+          ) {
+            // AUTO basis MUST come from the engine's endpoint planner, including embedded
+            // evidence. Probe original bytes on isolated states before grouping by layout.
+            const probes: typeof chain = chain.map((entry) => ({
+              ...entry,
+              stage: {
+                ...entry.stage,
+                state: {
+                  ...entry.stage.state,
+                  headerChoice: "keep" as const,
+                  n64ByteOrderChoice: "keep" as const,
+                  patchValidation: undefined,
+                  chainVerdict: undefined,
+                },
+              },
+            }));
+            let bases: Array<"base" | "previous"> | undefined;
+            const started = Date.now();
+            await validateApplyPatchTargets(probes, {
+              defaultPatchBasis: defaultBasis,
+              emitProgress: () => undefined,
+              onChainPlan: (_id, plan) => {
+                if (
+                  plan.per_patch.length === chain.length &&
+                  plan.per_patch.every((entry, index) => entry.index === index)
+                )
+                  bases = plan.per_patch.map((entry) => entry.basis);
+              },
+              runtime: this.runtime,
+              settings: {
+                ...this.settings,
+                compatibility: { ...this.settings.compatibility, removeHeader: false },
+              },
+              signal: this.abortController.signal,
+              workflowId: this.id,
+            });
+            this.trace("patch.layout.plan", {
+              targetId,
+              patches: chain.length,
+              elapsedMs: Date.now() - started,
+              resolved: !!bases,
+            });
+            if (bases && !this.abortController.signal.aborted) {
+              cached = { fingerprint: layoutFingerprint, sources, bases };
+              this.chainLayoutBases.set(targetId, cached);
+            } else {
+              this.chainLayoutBases.delete(targetId);
+              for (const [index, entry] of chain.entries()) {
+                const verdict = probes[index]?.stage.state.patchValidation;
+                entry.stage.state.patchValidation = verdict ? { ...verdict, status: "unknown" } : undefined;
+                unresolvedLayout.add(entry.stage);
+              }
+              continue;
+            }
+          }
+          for (const [index, entry] of chain.entries()) {
+            await this.evaluatePatchReadiness(
+              entry.stage,
+              entry.chain?.inputChecks,
+              cached.bases[index] === "previous" ? chain[index - 1]?.stage.state : undefined,
+            );
+            if (entry.stage.state.checksumPreflight) entry.preflight = entry.stage.state.checksumPreflight;
+          }
+        }
         const fingerprint = JSON.stringify({
           chain: chain.map((entry) => [
             entry.stage.state.id,
@@ -1506,6 +2128,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
           ]),
           defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
+          // The ROM verdict joins the key so a retried hash that now resolves re-runs the chain.
+          weaveRom: this.weaveRom ? { ...this.weaveRom, status: weaveRomVerdict?.status ?? "unknown" } : null,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
       }
@@ -1536,11 +2160,22 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         runtime: this.runtime,
         settings: this.settings,
         signal: this.abortController.signal,
+        ...(weaveRomVerdict?.status === "mismatch" || weaveRomVerdict?.status === "unavailable"
+          ? {
+              weaveRom: {
+                message: weaveRomVerdict.message || "Input checksum mismatch",
+                status: weaveRomVerdict.status,
+              },
+            }
+          : {}),
         workflowId: this.id,
       };
       // Batch patches by input and header decision to share one runner boot and mount. Independent
       // groups still run concurrently; transient failures become retryable unknown verdicts.
-      await validateApplyPatchTargets(pending, adapters);
+      await validateApplyPatchTargets(
+        pending.filter((entry) => !unresolvedLayout.has(entry.stage)),
+        adapters,
+      );
       this.recomputeOutputState();
     });
   }
@@ -1610,7 +2245,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   private getEffectiveInputSources(): TSource[] {
     const session = this.inputSession;
-    // Synthetic sessions bundle several separately-provided ROMs; apply keeps only the chosen one,
+    // Synthetic sessions weave several separately-provided ROMs; apply keeps only the chosen one,
     // so the run (and its size accounting) sees just that source rather than every uploaded file.
     if (session?.synthetic) {
       const selectedOwner = this.getSelectedInputOwner();
@@ -1633,6 +2268,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         ...(patch.state.patchInput ? { input: patch.state.patchInput } : {}),
         ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
         ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
+        ...(this.memberChecksFor(patch) ? { memberChecks: this.memberChecksFor(patch) } : {}),
         ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
@@ -1646,6 +2282,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         validateOutputChecksum: patch.state.validateOutputChecksum,
       })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
+      ...(this.weaveRomMember ? { rootMember: this.weaveRomMember } : {}),
+      ...(this.getBareFileChecksums() ? { bareFileChecksums: { ...this.getBareFileChecksums() } } : {}),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };

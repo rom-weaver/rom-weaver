@@ -184,10 +184,7 @@ fn identify_args(input: Option<PathBuf>, database: Vec<PathBuf>) -> IdentifyComm
         database_dir: None,
         exhaustive_database_search: false,
         subcommand: None,
-        select: Vec::new(),
-        filter: Vec::new(),
-        no_extract: false,
-        no_ignore: false,
+        selection: ArchiveSelectionArgs::default(),
         no_trim_fix: false,
         threads: ThreadBudget::Fixed(1),
     }
@@ -1194,6 +1191,43 @@ fn identify_flags_a_per_track_pack_as_an_unsupported_media_profile() {
         last_label(&sink),
         "this input's media profile is not supported yet"
     );
+}
+
+#[test]
+fn identify_does_not_blame_the_media_profile_when_no_platform_was_detected() {
+    let temp = assert_fs::TempDir::new().expect("temporary directory");
+    let dir = temp.path().join("db");
+    catalog_database(
+        &dir,
+        "Sony PlayStation",
+        "psx",
+        "sony-playstation",
+        "redump-cd-track-v1",
+    );
+    fs::write(
+        dir.join("sony-playstation.pack"),
+        pack_bytes(
+            "Sony PlayStation",
+            "redump-cd-track-v1",
+            vec![game(
+                "A",
+                "Sony PlayStation",
+                vec![component(16, "aabbccdd")],
+            )],
+        ),
+    )
+    .expect("pack fixture");
+    let rom = temp.path().join("rom.bin");
+    fs::write(&rom, vec![0x22_u8; 48]).expect("rom fixture");
+
+    let (app, sink) = recording_app();
+    let mut args = identify_args(Some(rom), Vec::new());
+    args.database_dir = Some(dir);
+    assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
+
+    let details = identify_details(&sink);
+    assert!(details.get("condition").is_none_or(Value::is_null));
+    assert_eq!(last_label(&sink), "no title matched the supplied database");
 }
 
 #[test]

@@ -3,6 +3,7 @@ import {
   getNamedSourceFileName,
   getNamedSourcePath,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import type { RomTypeTag } from "../../types/checksum.ts";
 import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../types/selection.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -23,7 +24,8 @@ import {
   decodeUtf8,
   getPatchFileBytes,
 } from "./binary-service.ts";
-import { getBundleRomProvenance } from "./bundle-rom-provenance.ts";
+import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
+import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
   attachInputPreparationMetrics,
   getInputPreparationMetrics,
@@ -67,7 +69,11 @@ const MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH = Math.max(
 const MAX_ARCHIVE_MAGIC_PREFIX_LENGTH = Math.max(
   ...MAGIC_SIGNATURES.map((entry) => (entry.offset || 0) + entry.bytes.length),
 );
-const MAX_LAZY_BROWSER_PREFIX_LENGTH = Math.max(MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH, MAX_ARCHIVE_MAGIC_PREFIX_LENGTH);
+const MAX_LAZY_BROWSER_PREFIX_LENGTH = Math.max(
+  1024,
+  MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH,
+  MAX_ARCHIVE_MAGIC_PREFIX_LENGTH,
+);
 
 type LazyBrowserSource = {
   blob: Blob;
@@ -127,9 +133,15 @@ const getRomSpecificMagicExtension = (bytes: Uint8Array) => {
 
 const replaceFileExtension = (fileName: string, extension: string) => replaceFileNameExtension(fileName, extension);
 
+const blobPrefixes = new WeakMap<Blob, Uint8Array>();
+
 const readBlobPrefix = async (blob: Blob, length: number) => {
+  const cached = blobPrefixes.get(blob);
+  if (cached && cached.byteLength >= Math.min(length, blob.size)) return cached.subarray(0, length);
   const buffer = await blob.slice(0, length).arrayBuffer();
-  return new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength));
+  const prefix = new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength));
+  blobPrefixes.set(blob, prefix);
+  return prefix;
 };
 
 const getLazyBrowserSource = async (
@@ -441,19 +453,36 @@ const prepareInputAssets = async (
     selectedEntryName,
   });
   const assets = await resolveCompressedInputAssets(file, options, runtime, sourceIndex, selectedEntryName);
+  for (const asset of assets) {
+    const preparedFile = asset.file;
+    const metadata = preparedFile.metadata;
+    if (asset.kind !== "rom" || metadata?.mode || metadata?.cuePath || /\.(cue|gdi)$/i.test(preparedFile.fileName))
+      continue;
+    // The Rust ingest verdict (native `chd` auto-inference over the file's bytes) picks the DVD codec field.
+    const romType = (preparedFile as { romType?: RomTypeTag }).romType;
+    if (chdCodecModeFromCreateMode(romType?.chdCreateMode) !== "dvd") continue;
+    asset.chdCodecMode = "dvd";
+    if (assets.length !== 1) continue;
+    options?.onProgress?.({
+      details: { chdCodecMode: "dvd" },
+      stage: "input",
+      percent: null,
+      label: `Prepared ${preparedFile.fileName}`,
+    });
+  }
   emitInputPreparationTrace(options, "input.assets.prepare.finish", {
     assetCount: assets.length,
     fileName: file.fileName,
   });
-  return withBundleRomProvenance(source, assets);
+  return withWeaveRomProvenance(source, assets);
 };
 
-// A bundle-supplied ROM is extracted from the bundle archive out-of-band, so `resolveCompressedInputAssets`
-// sees a bare file and records no extract chain. When the bundle registered a breadcrumb for this source,
+// A weave-supplied ROM is extracted from the weave archive out-of-band, so `resolveCompressedInputAssets`
+// sees a bare file and records no extract chain. When the weave registered a breadcrumb for this source,
 // attach it as the input's `parentCompressions` so the ROM card renders the same "Extract" section a
 // plainly-dropped archive would - but never clobber a real chain the extract pass already recorded.
-const withBundleRomProvenance = (source: SourceRef, assets: InputAsset[]): InputAsset[] => {
-  const provenance = getBundleRomProvenance(source);
+const withWeaveRomProvenance = (source: SourceRef, assets: InputAsset[]): InputAsset[] => {
+  const provenance = getWeaveRomProvenance(source);
   if (!provenance?.length) return assets;
   const existing = getInputPreparationMetrics(assets);
   if (existing?.parentCompressions?.length) return assets;

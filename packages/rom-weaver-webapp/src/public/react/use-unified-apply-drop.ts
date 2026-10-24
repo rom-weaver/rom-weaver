@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
-import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
+import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
+import { loadLocalWeaveSession } from "../../lib/weave/local-weave-session.ts";
 import {
   isCueEntryFileName,
   isGdiEntryFileName,
@@ -10,7 +10,15 @@ import {
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
-import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
+import {
+  classifyArchiveBucket,
+  classifyDroppedFiles,
+  isArchiveFileName,
+  isPatchFileName,
+  isRomFileName,
+  isWeaveFileName,
+} from "./file-classification.ts";
+import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 /**
  * Drop orchestration for the Apply tab.
@@ -24,18 +32,18 @@ import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName
 const logger = createLogger("unified-apply-drop");
 const MIN_PENDING_DISPLAY_MS = 180;
 
-/** UI-only row shown while an archive or bundle is being identified and routed. */
+/** UI-only row shown while an archive or weave is being identified and routed. */
 type PendingDrop = {
   entryCount?: number;
   extracting: boolean;
   id: string;
   kind: "patch" | "rom";
-  bundle?: boolean;
+  weave?: boolean;
   name: string;
   sheet?: "CUE" | "GDI";
 };
 
-type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "bundle" | "name" | "sheet">>;
+type PendingDropUpdate = Partial<Pick<PendingDrop, "entryCount" | "kind" | "weave" | "name" | "sheet">>;
 
 type UnifiedDropController = {
   discardCompletedOutput?: () => void;
@@ -43,13 +51,8 @@ type UnifiedDropController = {
   providePatchInputFiles?: (files: File[]) => void;
 };
 
-// The canonical name is the trusted fast-path: it marks a bundle by name
-// alone, and its parse errors surface. `rom-weaver-bundle.json[.codec]`.
-const isBundleFileName = (name: string) =>
-  /^rom-weaver-bundle\.json(?:\.[^.]+)?$/i.test(name.split(/[\\/]/).pop() || "");
-
 // Any other uncompressed `*.json` is a content-probe CANDIDATE: it is only
-// treated as a bundle if its bytes parse+validate (mirrors the Rust loader), so
+// treated as a weave if its bytes parse+validate (mirrors the Rust loader), so
 // a stray `config.json` costs one parse attempt and is then ignored.
 const isJsonCandidateName = (name: string) => /\.json$/i.test(name.split(/[\\/]/).pop() || "");
 
@@ -64,46 +67,23 @@ type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
   onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal, onSettled?: () => void) => void;
 };
-type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
+type ActiveDropKind = "weave" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
-  beforeNonBundleDelivery?: () => Promise<void>;
-  onBundleDetected?: () => void;
-  rememberBundleSourceCleanup?: (cleanup: () => Promise<void>) => void;
+  beforeNonWeaveDelivery?: () => Promise<void>;
+  onWeaveDetected?: () => void;
+  rememberWeaveSourceCleanup?: (cleanup: () => Promise<void>) => void;
 };
 
 const getDropKind = (files: File[], classification: ReturnType<typeof classifyDroppedFiles>): ActiveDropKind => {
-  const hasBundle = files.some((file) => isBundleFileName(file.name));
+  const hasWeave = files.some((file) => isWeaveFileName(file.name));
   const hasRom = classification.inputs.length > 0 || files.some((file) => isRomFileName(file.name));
-  return hasBundle ? "bundle" : hasRom ? "rom" : classification.archives.length ? "unknown" : "patch";
-};
-
-/**
- * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-bundle verdict
- * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
- * direction, since Rust's reclassify still moves a misrouted patch bundle afterwards.
- */
-const classifyArchiveBucket = (archive: File, names: string[]): "rom" | "patch" => {
-  const hasRom = names.some(isRomFileName);
-  const hasPatch = names.some(isPatchFileName);
-  // Archive-only roots usually wrap nested patch bundles; route them to patch
-  // enumeration instead of the ROM keep-one prompt. Rust corrects real ROMs.
-  const hasNestedArchive = names.some(isArchiveFileName);
-  const bucket = hasRom ? "rom" : hasPatch || hasNestedArchive ? "patch" : "rom";
-  logger.trace("archive content classified", {
-    bucket,
-    entryCount: names.length,
-    hasNestedArchive,
-    hasPatch,
-    hasRom,
-    name: archive.name,
-  });
-  return bucket;
+  return hasWeave ? "weave" : hasRom ? "rom" : classification.archives.length ? "unknown" : "patch";
 };
 
 const routeUnifiedDrop = async (
   files: File[],
   controller: UnifiedDropController,
-  onBundleSession?: (session: BundleApplySession) => void,
+  onWeaveSession?: (session: WeaveApplySession) => void,
   isCancelled?: () => boolean,
   onPendingUpdate?: (file: File, update: PendingDropUpdate) => void,
   signal?: AbortSignal,
@@ -112,13 +92,15 @@ const routeUnifiedDrop = async (
 ): Promise<void> => {
   if (signal?.aborted || isCancelled?.()) return;
   const { archives, inputs, patches } = classifyDroppedFiles(files);
-  const directBundles = files.filter((file) => isBundleFileName(file.name));
+  const directWeaves = files.filter((file) => isWeaveFileName(file.name));
   const archiveEntries = await Promise.all(
     archives.map((archive) => listDroppedArchiveEntryNames(archive).catch(() => [] as string[])),
   );
   if (signal?.aborted || isCancelled?.()) return;
-  const bundleArchives = archives.filter((_archive, index) =>
-    archiveEntries[index]?.some((name) => normalizeArchivePath(name).toLowerCase() === "rom-weaver-bundle.json"),
+  const weaveArchives = archives.filter((_archive, index) =>
+    archiveEntries[index]?.some(
+      (name) => normalizeArchivePath(name).toLowerCase() === ROM_WEAVER_WEAVE_FILE_NAMES.weave,
+    ),
   );
   const archiveBuckets = archives.map((archive, index) => classifyArchiveBucket(archive, archiveEntries[index] || []));
   archives.forEach((archive, index) => {
@@ -146,26 +128,39 @@ const routeUnifiedDrop = async (
   // replaces the placeholder. This does not wait on a timer interval.
   if (archives.length && onPendingUpdate) await new Promise<void>((resolve) => setTimeout(resolve, 0));
   if (signal?.aborted || isCancelled?.()) return;
-  // Deliver a loaded bundle into the form: seed the session, then hand its ROM
-  // (bundled, or a companion dropped alongside a checks-only bundle) and its
+  // Deliver a loaded weave into the form: seed the session, then hand its ROM
+  // (bundled, or a companion dropped alongside a checks-only weave) and its
   // patches to the input pipeline.
-  const applyLoadedBundle = async (
-    loaded: NonNullable<Awaited<ReturnType<typeof loadLocalBundleSession>>>,
-    bundleFile: File,
+  const applyLoadedWeave = async (
+    loaded: NonNullable<Awaited<ReturnType<typeof loadLocalWeaveSession>>>,
+    weaveFile: File,
   ) => {
-    const companionRoms = inputs.filter((file) => file !== bundleFile);
-    if (!loaded.romFile && companionRoms.length > 1) {
+    // Companion ROMs route like a second drop: bare files plus ROM-bucket archives, with a
+    // directly dropped CUE kept together with its tracks.
+    const companionRoms = loaded.romFile
+      ? []
+      : [...inputs, ...archives.filter((_archive, index) => archiveBuckets[index] === "rom")].filter(
+          (file) => file !== weaveFile,
+        );
+    let companionRom: File[] | undefined;
+    try {
+      companionRom = await chooseSingleRom(companionRoms, selectFile);
+    } catch (error) {
       await loaded.cleanup();
-      throw new Error("A checks-only bundle drop contains more than one possible ROM");
+      throw error;
+    }
+    if (signal?.aborted || isCancelled?.()) {
+      await loaded.cleanup();
+      return;
     }
     try {
-      onBundleSession?.(loaded.session);
-      const romFile = loaded.romFile || companionRoms[0];
-      if (romFile) controller.provideRomInputFiles?.([romFile]);
+      onWeaveSession?.(loaded.session);
+      const romFiles = loaded.romFile ? [loaded.romFile] : companionRom;
+      if (romFiles?.length) controller.provideRomInputFiles?.(romFiles);
       controller.providePatchInputFiles?.(loaded.patchFiles);
-      lifecycle?.rememberBundleSourceCleanup?.(loaded.cleanup);
-      logger.debug("bundle source cleanup registered with form owner", {
-        hasRom: !!romFile,
+      lifecycle?.rememberWeaveSourceCleanup?.(loaded.cleanup);
+      logger.debug("weave source cleanup registered with form owner", {
+        hasRom: !!romFiles?.length,
         patchCount: loaded.patchFiles.length,
       });
     } catch (error) {
@@ -174,48 +169,48 @@ const routeUnifiedDrop = async (
     }
   };
 
-  // 1) Canonical `rom-weaver-bundle.json` (by name, direct or an archive root):
+  // 1) Canonical `rom-weaver-weave.json` (by name, direct or an archive root):
   // authoritative, so its parse errors surface.
-  const canonicalBundles = [...directBundles, ...bundleArchives.filter((file) => !directBundles.includes(file))];
-  if (canonicalBundles.length > 1) throw new Error("Drop contains more than one bundle");
-  if (canonicalBundles[0]) {
-    lifecycle?.onBundleDetected?.();
-    onPendingUpdate?.(canonicalBundles[0], { bundle: true });
-    const loaded = await loadLocalBundleSession(canonicalBundles[0], files, { signal });
+  const canonicalWeaves = [...directWeaves, ...weaveArchives.filter((file) => !directWeaves.includes(file))];
+  if (canonicalWeaves.length > 1) throw new Error("Drop contains more than one weave");
+  if (canonicalWeaves[0]) {
+    lifecycle?.onWeaveDetected?.();
+    onPendingUpdate?.(canonicalWeaves[0], { weave: true });
+    const loaded = await loadLocalWeaveSession(canonicalWeaves[0], files, { signal });
     if (signal?.aborted || isCancelled?.()) {
       await loaded.cleanup();
       return;
     }
-    await applyLoadedBundle(loaded, canonicalBundles[0]);
+    await applyLoadedWeave(loaded, canonicalWeaves[0]);
     return;
   }
 
   // 2) No canonical name: content-probe other `*.json` candidates - a bare
   // `rw.json`, or an archive whose index is not the canonical name. The first
-  // whose bytes parse+validate as a bundle wins; anything that fails to parse
+  // whose bytes parse+validate as a weave wins; anything that fails to parse
   // falls through to normal routing (so a stray `config.json` is harmless).
   const probeCandidates = [
-    ...files.filter((file) => isJsonCandidateName(file.name) && !directBundles.includes(file)),
+    ...files.filter((file) => isJsonCandidateName(file.name) && !directWeaves.includes(file)),
     ...archives.filter(
       (archive, index) =>
-        !bundleArchives.includes(archive) && (archiveEntries[index] || []).some(isRootJsonArchiveEntry),
+        !weaveArchives.includes(archive) && (archiveEntries[index] || []).some(isRootJsonArchiveEntry),
     ),
   ];
   for (const candidate of probeCandidates) {
-    const loaded = await loadLocalBundleSession(candidate, files, { probe: true, signal });
+    const loaded = await loadLocalWeaveSession(candidate, files, { probe: true, signal });
     if (signal?.aborted || isCancelled?.()) {
       await loaded?.cleanup();
       return;
     }
     if (!loaded) continue;
-    logger.debug("content-probed a bundle from a non-canonical json candidate", { name: candidate.name });
-    lifecycle?.onBundleDetected?.();
-    onPendingUpdate?.(candidate, { bundle: true });
-    await applyLoadedBundle(loaded, candidate);
+    logger.debug("content-probed a weave from a non-canonical json candidate", { name: candidate.name });
+    lifecycle?.onWeaveDetected?.();
+    onPendingUpdate?.(candidate, { weave: true });
+    await applyLoadedWeave(loaded, candidate);
     return;
   }
   if (signal?.aborted || isCancelled?.()) return;
-  await lifecycle?.beforeNonBundleDelivery?.();
+  await lifecycle?.beforeNonWeaveDelivery?.();
   if (signal?.aborted || isCancelled?.()) return;
   const romArchives = archives.filter((_archive, index) => archiveBuckets[index] === "rom");
   const patchArchives = archives.filter((_archive, index) => archiveBuckets[index] === "patch");
@@ -307,14 +302,14 @@ const normalizeArchivePath = (name: string) => name.replaceAll("\\", "/").replac
 
 const useUnifiedApplyDrop = (
   controller: UnifiedDropController,
-  onBundleSession?: (session: BundleApplySession) => void,
+  onWeaveSession?: (session: WeaveApplySession) => void,
   onError?: (error: Error) => void,
   selectFile?: SelectFile,
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
   const activeDropsRef = useRef(new Map<AbortController, ActiveDropKind>());
-  const bundleSourceCleanupsRef = useRef(new Set<() => Promise<void>>());
+  const weaveSourceCleanupsRef = useRef(new Set<() => Promise<void>>());
   const dropQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   const mountedRef = useRef(true);
@@ -326,18 +321,18 @@ const useUnifiedApplyDrop = (
     // Captured at setup so the cleanup does not read `.current` later; both refs hold a
     // collection that is only ever mutated, never reassigned, so these are the same objects.
     const activeDrops = activeDropsRef.current;
-    const bundleSourceCleanups = bundleSourceCleanupsRef.current;
+    const weaveSourceCleanups = weaveSourceCleanupsRef.current;
     const pendingTimers = pendingTimersRef.current;
     return () => {
       mountedRef.current = false;
       for (const controller of activeDrops.keys()) controller.abort();
       activeDrops.clear();
-      const cleanups = [...bundleSourceCleanups];
-      bundleSourceCleanups.clear();
+      const cleanups = [...weaveSourceCleanups];
+      weaveSourceCleanups.clear();
       void Promise.all(
         cleanups.map((cleanup) =>
           cleanup().catch((error: unknown) => {
-            logger.warn("bundle source cleanup failed", { error: String(error) });
+            logger.warn("weave source cleanup failed", { error: String(error) });
           }),
         ),
       );
@@ -347,8 +342,8 @@ const useUnifiedApplyDrop = (
       pendingTimers.clear();
     };
   }, []);
-  const rememberBundleSourceCleanup = useCallback((cleanup: () => Promise<void>) => {
-    bundleSourceCleanupsRef.current.add(cleanup);
+  const rememberWeaveSourceCleanup = useCallback((cleanup: () => Promise<void>) => {
+    weaveSourceCleanupsRef.current.add(cleanup);
   }, []);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
@@ -357,18 +352,18 @@ const useUnifiedApplyDrop = (
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
       // keep the name predicate for ROM/container overlaps such as RVZ and CHD that probe as archives.
       const dropKind = getDropKind(files, classification);
-      // Dynamic bundle promotion must mirror a direct canonical bundle submitted at this moment:
+      // Dynamic weave promotion must mirror a direct canonical weave submitted at this moment:
       // it supersedes only routes that already existed, never newer user actions added while probing.
       const precedingDropControllers = new Set(activeDropsRef.current.keys());
-      if (dropKind === "bundle") {
+      if (dropKind === "weave") {
         for (const activeController of activeDropsRef.current.keys()) activeController.abort();
         activeDropsRef.current.clear();
         dropQueueRef.current = Promise.resolve();
       } else if (dropKind === "rom") {
-        // A later explicit ROM replaces an earlier explicit ROM/bundle, but patch routes are additive.
-        // An archive of unknown contents stays ordered ahead of the ROM: it may itself be a patch bundle.
+        // A later explicit ROM replaces an earlier explicit ROM/weave, but patch routes are additive.
+        // An archive of unknown contents stays ordered ahead of the ROM: it may itself be a patch weave.
         for (const [activeController, activeKind] of activeDropsRef.current) {
-          if (activeKind !== "rom" && activeKind !== "bundle") continue;
+          if (activeKind !== "rom" && activeKind !== "weave") continue;
           activeController.abort();
           activeDropsRef.current.delete(activeController);
         }
@@ -390,7 +385,7 @@ const useUnifiedApplyDrop = (
       // button is still enabled and would hand back output built from the PREVIOUS inputs.
       if (files.length) controller.discardCompletedOutput?.();
       const { archives } = classification;
-      const identifiedFiles = files.filter((file) => archives.includes(file) || isBundleFileName(file.name));
+      const identifiedFiles = files.filter((file) => archives.includes(file) || isWeaveFileName(file.name));
       const pending: PendingDrop[] = identifiedFiles.map((file) => {
         nextIdRef.current += 1;
         return {
@@ -429,36 +424,36 @@ const useUnifiedApplyDrop = (
         pendingTimersRef.current.add(timer);
       };
       const previousRoute = dropQueueRef.current.catch(() => undefined);
-      const mayContainBundle =
+      const mayContainWeave =
         classification.archives.length > 0 || files.some((file) => isJsonCandidateName(file.name));
-      const promoteToBundle = () => {
+      const promoteToWeave = () => {
         for (const activeController of precedingDropControllers) {
           if (!activeDropsRef.current.has(activeController)) continue;
           activeController.abort();
           activeDropsRef.current.delete(activeController);
         }
-        activeDropsRef.current.set(dropController, "bundle");
+        activeDropsRef.current.set(dropController, "weave");
       };
       const runRoute = () =>
         routeUnifiedDrop(
           files,
           controller,
-          onBundleSession,
+          onWeaveSession,
           isCancelled,
           updatePending,
           dropController.signal,
           {
-            ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
-            rememberBundleSourceCleanup,
-            onBundleDetected: promoteToBundle,
+            ...(mayContainWeave ? { beforeNonWeaveDelivery: () => previousRoute } : {}),
+            rememberWeaveSourceCleanup,
+            onWeaveDetected: promoteToWeave,
           },
           selectFile,
         );
       // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
-      // overtake an earlier archive/bundle that is still being identified or downloaded. Potential
-      // bundles identify concurrently; a real bundle supersedes prior routes, while an ordinary
+      // overtake an earlier archive/weave that is still being identified or downloaded. Potential
+      // weaves identify concurrently; a real weave supersedes prior routes, while an ordinary
       // archive/JSON waits on the captured tail before delivering and preserves drop order.
-      const route = mayContainBundle ? runRoute() : previousRoute.then(runRoute);
+      const route = mayContainWeave ? runRoute() : previousRoute.then(runRoute);
       dropQueueRef.current = route.then(
         () => undefined,
         () => undefined,
@@ -466,7 +461,7 @@ const useUnifiedApplyDrop = (
       void route
         .catch((error) => {
           if (dropController.signal.aborted || isCancelled?.()) return;
-          logger.error("bundle drop failed", { error: String(error) });
+          logger.error("weave drop failed", { error: String(error) });
           onError?.(error instanceof Error ? error : new Error(String(error)));
         })
         .finally(() => {
@@ -476,7 +471,7 @@ const useUnifiedApplyDrop = (
           onSettled?.();
         });
     },
-    [controller, onError, onBundleSession, rememberBundleSourceCleanup, selectFile],
+    [controller, onError, onWeaveSession, rememberWeaveSourceCleanup, selectFile],
   );
 
   return { onDrop, pendingDrops };

@@ -52,13 +52,13 @@ fn parses_patch_apply_execution_target_fields() {
     assert_eq!(args.patch_id, ["a", "b"]);
     assert!(matches!(
         args.patch_input.as_slice(),
-        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: None }),
-         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: None })] if patch == "a"
+        [Some(rom_weaver_app::WeavePatchInput::Rom { rom: true, member: None }),
+         Some(rom_weaver_app::WeavePatchInput::Patch { patch, member: None })] if patch == "a"
     ));
     assert!(matches!(
         args.patch_target.as_slice(),
-        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: Some(rom_member) }),
-         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: Some(patch_member) })]
+        [Some(rom_weaver_app::WeavePatchInput::Rom { rom: true, member: Some(rom_member) }),
+         Some(rom_weaver_app::WeavePatchInput::Patch { patch, member: Some(patch_member) })]
             if rom_member == "track.bin" && patch == "a" && patch_member == "game.bin"
     ));
     assert_eq!(args.patch_input_check, ["size=16", "crc32=12345678"]);
@@ -95,4 +95,31 @@ fn well_formed_json_with_an_unknown_command_type_reports_an_invalid_json_error()
         error.starts_with("invalid typed run request JSON: "),
         "unexpected error message: {error}"
     );
+}
+
+#[test]
+fn probe_and_identify_requests_keep_flattened_selection_keys() {
+    let request = parse_wasm_run_request(
+        r#"{"command":{"type":"probe","args":{"input":"game.zip","select":["a.bin"],"filter":["rom"],"no_extract":true,"no_ignore":true}}}"#,
+    )
+    .expect("probe request with selection keys should parse");
+    let rom_weaver_app::Commands::Probe(args) = request.command else {
+        panic!("expected probe command");
+    };
+    assert_eq!(args.selection.select, ["a.bin"]);
+    assert_eq!(args.selection.filter, [rom_weaver_app::FilterKind::Rom]);
+    assert!(args.selection.no_extract);
+    assert!(args.selection.no_ignore);
+
+    let request = parse_wasm_run_request(
+        r#"{"command":{"type":"identify","args":{"input":"game.zip","select":["a.bin"],"filter":["rom"],"no_extract":true,"no_ignore":true}}}"#,
+    )
+    .expect("identify request with selection keys should parse");
+    let rom_weaver_app::Commands::Identify(args) = request.command else {
+        panic!("expected identify command");
+    };
+    assert_eq!(args.selection.select, ["a.bin"]);
+    assert_eq!(args.selection.filter, [rom_weaver_app::FilterKind::Rom]);
+    assert!(args.selection.no_extract);
+    assert!(args.selection.no_ignore);
 }

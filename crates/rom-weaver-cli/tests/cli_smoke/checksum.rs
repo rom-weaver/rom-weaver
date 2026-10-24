@@ -692,7 +692,7 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -1096,7 +1096,7 @@ fn checksum_headered_roms_include_remove_header_variant() {
             json["details"]["checksums"]["sha1"].as_str(),
             label_digest_value(label, "sha1")
         );
-        assert!(!label.contains("Remove header"));
+        assert!(!label.contains("Header removed"));
         let remove_header = checksum_variant_row(&json, "remove-header");
         assert_eq!(remove_header["checksums"]["sha1"], expected_sha1);
         assert_eq!(remove_header["applyCompatibility"]["removeHeader"], true);
@@ -1785,4 +1785,119 @@ fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
     let mut encoder = GzEncoder::new(output, DeflateCompression::default());
     encoder.write_all(&source).expect("write gzip fixture");
     encoder.finish().expect("finish gzip fixture");
+}
+
+#[test]
+fn checksum_jsonl_reports_each_progress_percent_once() {
+    let temp = setup_temp_dir();
+    // One read chunk covers the whole file, so a naive per-percent loop would
+    // replay the same 100% event a hundred times.
+    let payload = vec![0x5a_u8; 1024 * 1024];
+    fs::write(temp.child("big.bin").path(), &payload).expect("payload fixture");
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("big.bin").path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let output = String::from_utf8(output).expect("utf8 jsonl");
+
+    let percents: Vec<f64> = output
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("jsonl event"))
+        .filter(|event| event["stage"] == "checksum" && event["status"] == "running")
+        .filter_map(|event| event["percent"].as_f64())
+        .collect();
+    assert!(!percents.is_empty(), "progress events in {output}");
+    assert!(
+        percents.iter().filter(|percent| **percent >= 100.0).count() <= 2,
+        "repeated 100% progress events: {percents:?}"
+    );
+}
+
+#[test]
+fn checksum_rejects_a_directory_input_with_a_clear_error() {
+    let temp = setup_temp_dir();
+    let json = run_single_json_event(
+        &[
+            "checksum",
+            "--input",
+            temp.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().expect("error message");
+    assert!(
+        message.contains("input is a directory"),
+        "unexpected directory error: {message}"
+    );
+}
+
+#[test]
+fn checksum_argument_errors_show_the_subcommand_usage() {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["checksum", "--digest", "missing.bin"])
+        .assert()
+        .code(2)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--digest requires exactly one algorithm"),
+        "{stderr}"
+    );
+    // Windows prints the binary as `rom-weaver.exe`.
+    assert!(
+        stderr.contains("Usage: rom-weaver checksum")
+            || stderr.contains("Usage: rom-weaver.exe checksum"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("<COMMAND>"), "{stderr}");
+}
+
+#[test]
+fn checksum_select_reaches_inside_a_dcp() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("IP.BIN").path(), b"ip bytes").expect("ip fixture");
+    fs::write(temp.child("OTHER.DAT").path(), b"other").expect("other fixture");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("IP.BIN").path().to_str().expect("path"),
+            "--input",
+            temp.child("OTHER.DAT").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("game.dcp").path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let selected = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("game.dcp").path().to_str().expect("path"),
+            "--select",
+            "IP.BIN",
+            "--algo",
+            "sha1",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&selected);
+    assert_eq!(json["details"]["file_name"], "IP.BIN");
+    assert_eq!(
+        json["details"]["checksums"]["sha1"],
+        checksum_value(temp.child("IP.BIN").path(), "sha1")
+    );
 }

@@ -5,6 +5,8 @@ import {
   CheatDatabaseSection,
   DIALOG_PAGE_SIZE,
 } from "../../../src/public/react/components/cheat-database-section.tsx";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import type {
   CheatDatabaseIndex,
   CheatRecord,
@@ -163,7 +165,7 @@ describe("CheatDatabaseSection", () => {
     expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
     expect(view.queryByText("Cheats as a Patch")).toBeNull();
     const addCheats = view.getByRole("button", { name: /Add cheats to the patch order/u });
-    expect(addCheats.textContent).toContain("bake into the ROM");
+    expect(addCheats.textContent).toContain("write into the ROM");
     expect(addCheats.textContent).not.toContain("Super Mario World");
     expect(view.container.querySelector(".cheat-add-note")).toBeNull();
     expect(view.container.textContent).not.toContain("Exact checksum match");
@@ -187,7 +189,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     await waitFor(() => expect(view.getByText(/Cheat conflict at ROM offset 0x2871/u).closest(".notice")).toBeTruthy());
-    expect(view.getByText(/Contains patches and 1 baked ROM cheat/u)).toBeTruthy();
+    expect(view.getByText(/includes patches and 1 cheat written into the ROM/u)).toBeTruthy();
   });
 
   it("waits for a ROM before it offers anything", () => {
@@ -320,15 +322,20 @@ describe("CheatDatabaseSection", () => {
 
   it("keeps a card when its switch goes off and drops it when removed", async () => {
     const onSelectionChange = vi.fn();
-    const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
+    const onPresenceChange = vi.fn();
+    const view = render(
+      <CheatDatabaseSection {...props} onPresenceChange={onPresenceChange} onSelectionChange={onSelectionChange} />,
+    );
     await openDialog(view);
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
 
     const toggle = view.getByRole("checkbox", { name: "Include Infinite lives" }) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
     fireEvent.click(toggle);
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
     expect(view.getByText("Infinite lives")).toBeTruthy();
 
     fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
@@ -336,9 +343,22 @@ describe("CheatDatabaseSection", () => {
       expect.objectContaining({ record: expect.objectContaining({ id: "cheat-1" }) }),
     ]);
 
-    fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives from the cheat stack" }));
+    fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives from the cheat list" }));
     expect(view.queryByText("Infinite lives")).toBeNull();
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    expect(onPresenceChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("reports no cheat cards when the section unmounts", async () => {
+    const onPresenceChange = vi.fn();
+    const view = render(<CheatDatabaseSection {...props} onPresenceChange={onPresenceChange} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    expect(onPresenceChange).toHaveBeenLastCalledWith(true);
+
+    view.unmount();
+
+    expect(onPresenceChange).toHaveBeenLastCalledWith(false);
   });
 
   it("shows the cheat kind and source in the card drawer", async () => {
@@ -353,6 +373,32 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText("C2B4-6D07")).toBeTruthy();
     expect(view.queryByText("baked into output")).toBeNull();
     expect(view.getByText("Libretro database")).toBeTruthy();
+  });
+
+  it("publishes separate execution and weave positions from the shared stack", async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        onSelectionChange={onSelectionChange}
+        renderStack={({ controls, onOrderChange }) => (
+          <>
+            {controls}
+            <button onClick={() => onOrderChange([{ id: "cheat-1", position: 0, weavePosition: 1 }])} type="button">
+              Publish stack order
+            </button>
+          </>
+        )}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    fireEvent.click(view.getByRole("button", { name: "Publish stack order" }));
+    expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
+      "cheat-1",
+    ]);
+    expect(onSelectionChange.mock.lastCall?.slice(1)).toEqual([[0], [1]]);
   });
 
   it("reorders cheat cards and publishes their new bake order", async () => {
@@ -415,7 +461,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
     fireEvent.change(view.getByLabelText("Code type"), { target: { value: "pro-action-replay" } });
     fireEvent.click(view.getByRole("button", { name: "Check code" }));
-    await view.findByText(/Detected Nintendo - Super Nintendo Entertainment System · Action Replay/u);
+    await view.findByText(/Detected Nintendo - Super Nintendo Entertainment System, Action Replay/u);
     fireEvent.click(view.getByRole("button", { name: "Add this cheat" }));
 
     expect(onSelectionChange).toHaveBeenLastCalledWith([
@@ -475,7 +521,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
     fireEvent.click(view.getByRole("button", { name: "Check code" }));
-    await view.findByText("Cannot be baked into the ROM");
+    await view.findByText("Can't be written into the ROM");
     expect((view.getByRole("button", { name: "Add this cheat" }) as HTMLButtonElement).disabled).toBe(true);
     expect(onSelectionChange).not.toHaveBeenCalledWith([
       expect.objectContaining({ record: expect.objectContaining({ id: "manual-2" }) }),
@@ -491,12 +537,12 @@ describe("CheatDatabaseSection", () => {
     const view = render(<CheatDatabaseSection {...props} classifyDatabaseCheats={classifier} />);
     await waitFor(() => expect(finishClassification).toBeDefined());
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    expect(view.getByRole("status").textContent).toContain("Checking cheat delivery types");
+    expect(view.getByRole("status").textContent).toContain("Checking which cheats can be written");
     expect(view.queryByText(/No cheats match this search/u)).toBeNull();
 
     finishClassification?.(records);
     await view.findByText("Infinite lives");
-    expect(view.queryByText(/Checking cheat delivery types/u)).toBeNull();
+    expect(view.queryByText(/Checking which cheats can be written/u)).toBeNull();
   });
 
   it("shows manual browsing as unverified and keeps controls within their container", async () => {
@@ -726,7 +772,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    await view.findByText(/no cheats that can be written into the ROM for Super Mario World/u);
     expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
   });
 
@@ -741,7 +787,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    await view.findByText(/no cheats that can be written into the ROM for Super Mario World/u);
     expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
   });
 
@@ -898,5 +944,22 @@ describe("CheatDatabaseSection save as patch", () => {
     fireEvent.click(view.getByLabelText("Download Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: /Save as patch/u }));
     await waitFor(() => expect(view.getByRole("alert").textContent).toBe("patch create failed"));
+  });
+});
+
+describe("CheatDatabaseSection in Spanish", () => {
+  it("translates the add control, the picker, and the plural footer", async () => {
+    await preloadCatalog("es");
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ language: "es" }}>
+        <CheatDatabaseSection {...props} outputSummary={{ rom: 2 }} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(view.getByText(/contiene parches y 2 trucos de ROM integrados/iu)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: /Añadir trucos al orden de parches/u }));
+    await view.findByText("Infinite lives");
+    expect(view.getByPlaceholderText("Buscar por nombre o código…")).toBeTruthy();
+    expect(view.getByRole("button", { name: "Añadir Infinite lives" })).toBeTruthy();
+    expect(view.getByText(/de \d+ trucos/u)).toBeTruthy();
   });
 });

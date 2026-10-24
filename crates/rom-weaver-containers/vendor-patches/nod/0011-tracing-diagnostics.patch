@@ -1,0 +1,49 @@
+diff --git a/build/gc.rs b/build/gc.rs
+index 2f877fea2..ea113d945 100644
+--- a/build/gc.rs
++++ b/build/gc.rs
+@@ -318,11 +318,11 @@ impl GCPartitionLayout {
+                 if !self.user_files.iter().any(|info| info.name == path)
+                     && !self.junk_files.contains(&path)
+                 {
+-                    println!("FST file {} not found", path);
++                    debug!("FST file {} not found", path);
+                     return false;
+                 }
+             }
+-            println!("Using existing FST");
++            debug!("Using existing FST");
+             return true;
+         }
+         false
+diff --git a/io/gcz.rs b/io/gcz.rs
+index a776e2e66..30f9f0d38 100644
+--- a/io/gcz.rs
++++ b/io/gcz.rs
+@@ -5,8 +5,10 @@ use std::{
+     sync::Arc,
+ };
+ 
++
+ use adler2::adler32_slice;
+ use bytes::{BufMut, Bytes, BytesMut};
++use tracing::trace;
+ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, little_endian::*};
+ 
+ use crate::{
+@@ -229,9 +231,14 @@ impl BlockProcessor for BlockProcessorGCZ {
+         self.inner.seek(SeekFrom::Start(block_idx as u64 * block_size as u64))?;
+         let (mut block_data, disc_data) = read_block(&mut self.inner, block_size as usize)?;
+ 
++
+         // Try to compress block
+         let is_compressed = if self.compressor.compress(&block_data)? {
+-            println!("Compressed block {} to {}", block_idx, self.compressor.buffer.len());
++            trace!(
++                block_idx,
++                compressed_len = self.compressor.buffer.len(),
++                "compressed GCZ block"
++            );
+             block_data = Bytes::copy_from_slice(self.compressor.buffer.as_slice());
+             true
+         } else {

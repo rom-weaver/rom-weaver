@@ -122,6 +122,32 @@ beforeEach(() => {
 });
 
 describe("BrowserProxyRandomAccessFile handle lifecycle", () => {
+  it("retains buffered bytes after a failed flush", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    file.writeAt(0, new Uint8Array([1, 2, 3]));
+    proxy.setWriteResult(() => {
+      throw new OpfsProxyError("write failed", 29);
+    });
+    expect(() => file.flush()).toThrow("write failed");
+    proxy.setWriteResult(null);
+    file.flush();
+    expect(proxy.writes).toHaveLength(2);
+    expect(proxy.writes[1]?.data).toEqual(new Uint8Array([1, 2, 3]));
+    file.close();
+  });
+
+  it("closes the handle and releases buffers when its final flush fails", () => {
+    const before = browserProxyAdapterBufferBytes();
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    file.writeAt(0, new Uint8Array([1, 2, 3]));
+    proxy.setWriteResult(() => {
+      throw new OpfsProxyError("write failed", 29);
+    });
+    expect(() => file.close()).toThrow("write failed");
+    expect(proxy.closed).toEqual([1]);
+    expect(browserProxyAdapterBufferBytes()).toBe(before);
+  });
+
   it("opens lazily, once, with the options it was configured with", () => {
     const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", {
       create: true,
@@ -350,7 +376,11 @@ describe("BrowserProxyRandomAccessFile writes", () => {
     proxy.setWriteResult(() => 2);
 
     expect(() => file.flush()).toThrow(OpfsProxyError);
-    expect(() => file.writeAt(0, new Uint8Array([1]))).not.toThrow();
+    expect(() => file.writeAt(0, new Uint8Array([1]))).toThrow(OpfsProxyError);
+    proxy.setWriteResult(null);
+    file.flush();
+    expect(proxy.writes[2]?.data).toEqual(new Uint8Array([1, 2, 3, 4]));
+    file.close();
   });
 
   it("commits pending writes before size and truncate", () => {

@@ -35,12 +35,14 @@ const TESTS_LINE_REGEX = /^\s*Tests\s+(\d.*?)\s*$/gm;
 // literal because no-control-regex rejects an escape character in the source.
 const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
-const resolveConcurrency = () => {
-  const raw = process.env.BROWSER_TEST_CONCURRENCY;
+export const resolveConcurrency = (environment = process.env) => {
+  const raw = environment.BROWSER_TEST_CONCURRENCY;
   if (raw) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isInteger(parsed) && parsed > 0) return parsed;
   }
+  const browsers = (environment.ROM_WEAVER_BROWSER || "chromium").toLowerCase().split(",");
+  if (browsers.some((browser) => ["webkit", "all"].includes(browser.trim()))) return 1;
   const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
   return Math.max(2, Math.min(4, cores));
 };

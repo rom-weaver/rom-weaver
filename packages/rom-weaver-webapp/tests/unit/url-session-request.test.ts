@@ -9,23 +9,38 @@ describe("readUrlSessionRequest", () => {
     expect(readUrlSessionRequest("?theme=dark", BASE).request).toBeNull();
   });
 
-  test("parses a bundle request and resolves relative urls", () => {
-    const { request, warnings } = readUrlSessionRequest("?bundle=packs/rom-weaver-bundle.json", BASE);
+  test("parses a weave request and resolves relative urls", () => {
+    const { request, warnings } = readUrlSessionRequest("?weave=packs/rom-weaver-weave.json", BASE);
     expect(request).toEqual({
-      bundleUrl: "https://weaver.example/app/packs/rom-weaver-bundle.json",
-      kind: "bundle",
+      weaveUrl: "https://weaver.example/app/packs/rom-weaver-weave.json",
+      kind: "weave",
     });
     expect(warnings).toEqual([]);
   });
 
-  test("bundle wins over rom/patch shortcuts with a warning", () => {
+  test("accepts the legacy bundle query as a weave request", () => {
+    expect(readUrlSessionRequest("?bundle=old.json", BASE).request).toEqual({
+      kind: "weave",
+      weaveUrl: "https://weaver.example/app/old.json",
+    });
+  });
+
+  test("canonical weave query wins over legacy bundle query", () => {
+    expect(readUrlSessionRequest("?bundle=old.json&weave=new.json", BASE).request).toEqual({
+      kind: "weave",
+      weaveUrl: "https://weaver.example/app/new.json",
+    });
+    expect(readUrlSessionRequest("?weave=&bundle=old.json", BASE).request).toBeNull();
+  });
+
+  test("weave wins over rom/patch shortcuts with a warning", () => {
     const { request, warnings } = readUrlSessionRequest(
-      "?bundle=https://host.example/rom-weaver-bundle.json&rom=https://host.example/game.bin&patch=a.ips",
+      "?weave=https://host.example/rom-weaver-weave.json&rom=https://host.example/game.bin&patch=a.ips",
       BASE,
     );
     expect(request).toEqual({
-      bundleUrl: "https://host.example/rom-weaver-bundle.json",
-      kind: "bundle",
+      weaveUrl: "https://host.example/rom-weaver-weave.json",
+      kind: "weave",
     });
     expect(warnings).toHaveLength(1);
   });

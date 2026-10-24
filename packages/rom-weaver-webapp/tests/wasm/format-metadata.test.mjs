@@ -17,7 +17,7 @@ const sorted = (values) => [...values].sort((left, right) => String(left).locale
 describe("generated format metadata parity", () => {
   it("keeps file filters derived from format registries", () => {
     expect(sorted(ROM_WEAVER_FILE_FILTERS.containerExtensions)).toEqual(
-      sorted(ROM_WEAVER_CONTAINER_FORMATS.flatMap((format) => format.extensions)),
+      sorted(unique(ROM_WEAVER_CONTAINER_FORMATS.flatMap((format) => format.extensions))),
     );
     expect(ROM_WEAVER_FILE_FILTERS.patchExtensions).toEqual([
       ...ROM_WEAVER_PATCH_FORMATS.flatMap((format) => format.extensions),
@@ -39,6 +39,11 @@ describe("generated format metadata parity", () => {
     expect(coverage.patchFormats).toContain("xdelta");
     expect(coverage.patchFormats).not.toContain("mod");
     expect(coverage.patchFormats).not.toContain("vcdiff");
+  });
+
+  it("declares which create formats cannot shrink a target or need a specific source", () => {
+    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats).toEqual(["ebp", "ppf"]);
+    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.sourceRestrictedFormats).toEqual(["pmsr"]);
   });
 
   it("keeps the exhaustive matrix covering every compression profile and thread mode", () => {

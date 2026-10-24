@@ -25,7 +25,11 @@ import {
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
-import { getChdAutoCreateMode, getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
+import {
+  discFormatToChdMode,
+  getChdAutoCreateMode,
+  getDiscFormatLabel,
+} from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import type { SourceMetadata } from "../../types/workflow-source.ts";
 
@@ -34,6 +38,7 @@ type SettingsLike = Record<string, unknown>;
 // ingest/checksum identity pass; it drives the CHD output-panel disc label (no TS regex).
 type SourceLike = {
   metadata?: SourceMetadata;
+  chdCodecMode?: "dvd" | null;
   fileName?: string;
   getExtension?: () => string;
 };
@@ -81,7 +86,8 @@ type CompressField =
       kind: "text";
       key: string;
       label: string;
-      chip: CompressFieldChip;
+      /** Absent when the value is too minor to earn a header chip. */
+      chip?: CompressFieldChip;
       value: string;
       placeholder?: string;
       mono?: boolean;
@@ -146,7 +152,10 @@ const FIELD_INFO: Record<string, CompressFieldInfo> = {
   },
   compressionProfile: COMPRESSION_PROFILE_FIELD_INFO,
   rvzBlockSize: {
-    items: [`Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}.`, "Valid values: 1-2147483647."],
+    items: [
+      `Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}.`,
+      "Valid values: powers of two from 32768 to 1073741824 bytes.",
+    ],
     title: getSettingsLabel("rvzBlockSize"),
   },
   rvzCodec: {
@@ -213,9 +222,9 @@ const getProfileOptions = (overridden: boolean): CompressFieldOption[] => [
 const levelField = (settings: SettingsLike, overridden = false): CompressField => ({
   chip: {
     label: getSettingsLabel("compressionProfile"),
-    // An explicit codec:level entry wins over the profile, so the profile name
-    // would misreport what the run uses.
-    value: overridden ? OVERRIDDEN_PROFILE_LABEL : (PROFILE_LABELS[profileIndex(settings)] as string),
+    // An explicit codec:level entry wins over the profile, so the codec chip
+    // carries that level and the profile name would misreport the run.
+    value: overridden ? "" : (PROFILE_LABELS[profileIndex(settings)] as string),
   },
   info: FIELD_INFO.compressionProfile,
   key: "compressionProfile",
@@ -253,19 +262,38 @@ const codecProfileSummary = (fieldKey: string, codecSummary: string, settings: S
     .join(",");
 };
 
-/** Header chip for a codec field: a short key plus the codec list with its levels resolved. */
-const codecChip = (fieldKey: string, codecSummary: string, settings: SettingsLike): CompressFieldChip => ({
-  label: getUiSettingsLabel("codec"),
-  value: codecProfileSummary(fieldKey, codecSummary, settings),
-});
+/** CHD names its CD codecs separately; the header chip shows the underlying codec instead. */
+const CHD_CD_CODEC_FAMILIES: Record<string, string> = { cdfl: "flac", cdlz: "lzma", cdzl: "zlib", cdzs: "zstd" };
+
+/**
+ * Header chip for a codec field: the first codec, its resolved level only when an
+ * explicit `codec:level` entry replaces the profile, and `+` when more codecs follow.
+ */
+const codecChip = (
+  fieldKey: string,
+  codecSummary: string,
+  settings: SettingsLike,
+  levelOverridden: boolean,
+): CompressFieldChip => {
+  const [first = "", ...rest] = codecProfileSummary(fieldKey, codecSummary, settings).split(",");
+  const [codec = "", level] = first.split(":");
+  const family = CHD_CD_CODEC_FAMILIES[codec] ?? codec;
+  const value = levelOverridden && level !== undefined ? `${family}:${level}` : family;
+  return { label: getUiSettingsLabel("codec"), value: value && rest.length > 0 ? `${value}+` : value };
+};
 
 /** Build the compress-panel model for a normalized output format, or null when the format isn't compressed. */
 const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "dvd" | null => {
   const configuredMode = str(settings, "chdOutputMode", "auto").toLowerCase();
   if (configuredMode === "cd" || configuredMode === "dvd") return configuredMode;
   if (!source) return null;
+  const panelSource = source as SourceLike;
+  const explicitMode = panelSource.metadata?.mode;
+  if (explicitMode === "cd" || explicitMode === "dvd") return explicitMode;
+  if (panelSource.metadata?.cuePath || /\.(cue|gdi)$/i.test(panelSource.fileName || "")) return "cd";
+  if (panelSource.chdCodecMode === "dvd") return "dvd";
   const resolvedMode = getChdAutoCreateMode(source as SourceLike);
-  return resolvedMode === "cd" || resolvedMode === "dvd" ? resolvedMode : null;
+  return resolvedMode === "cd" ? "cd" : "dvd";
 };
 
 const buildCompressPanel = (format: string, settings: SettingsLike, source?: unknown): CompressPanelModel | null => {
@@ -279,7 +307,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
-          chip: codecChip("zipCodec", codecSummary, settings),
+          chip: codecChip("zipCodec", codecSummary, settings, levelOverridden),
           info: FIELD_INFO.zipCodec,
           key: "zipCodec",
           kind: "codec",
@@ -300,7 +328,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
-          chip: codecChip("sevenZipCodec", codecSummary, settings),
+          chip: codecChip("sevenZipCodec", codecSummary, settings, levelOverridden),
           info: FIELD_INFO.sevenZipCodec,
           key: "sevenZipCodec",
           kind: "codec",
@@ -321,7 +349,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
-          chip: codecChip("rvzCodec", codecSummary, settings),
+          chip: codecChip("rvzCodec", codecSummary, settings, levelOverridden),
           info: FIELD_INFO.rvzCodec,
           key: "rvzCodec",
           kind: "codec",
@@ -331,10 +359,6 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           value: codec,
         },
         {
-          chip: {
-            label: getUiSettingsLabel("rvzBlockSize"),
-            value: str(settings, "rvzBlockSize") || String(COMPRESSION_DEFAULTS.rvzBlockSize),
-          },
           info: FIELD_INFO.rvzBlockSize,
           key: "rvzBlockSize",
           kind: "text",
@@ -353,7 +377,13 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     // so the output reflects the GD-vs-CD media the create will actually produce.
     // The verdict comes from the Rust ingest/checksum identity pass (`metadata.format`),
     // not a TS regex over the cue text / file name.
-    const discLabel = source ? getDiscFormatLabel((source as SourceLike).metadata?.format) : null;
+    // A staged generic-codec hint hides only an identity medium that contradicts it.
+    const stagedCodecMode = (source as SourceLike | undefined)?.chdCodecMode;
+    const identityFormat = (source as SourceLike | undefined)?.metadata?.format;
+    const discLabel =
+      source && (!stagedCodecMode || discFormatToChdMode(identityFormat) === stagedCodecMode)
+        ? getDiscFormatLabel(identityFormat)
+        : null;
     const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
     const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";
@@ -365,7 +395,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     return {
       fields: [
         {
-          chip: codecChip(codecKey, codecSummary, settings),
+          chip: codecChip(codecKey, codecSummary, settings, levelOverridden),
           info: FIELD_INFO[codecKey],
           key: codecKey,
           kind: "codec",
@@ -400,6 +430,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
 
 export {
   buildCompressPanel,
+  codecProfileSummary,
   COMPRESSION_PROFILE_FIELD_INFO,
   type CompressField,
   type CompressFieldInfo,

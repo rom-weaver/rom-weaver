@@ -6,7 +6,6 @@ import {
 } from "../../storage/shared/path-utils.ts";
 import {
   getFileNameWithoutExtension as getSharedFileNameWithoutExtension,
-  hasFileNameExtension as hasSharedFileNameExtension,
   replaceFileNameExtension as replaceSharedFileNameExtension,
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
@@ -18,8 +17,6 @@ const normalizeArchiveEntryPath = (fileName: FileNameValue): string =>
 
 const normalizeArchiveEntryName = (fileName: FileNameValue): string =>
   stripFileNameQuery(normalizeArchiveEntryPath(fileName));
-
-const hasFileNameExtension = (fileName: FileNameValue): boolean => hasSharedFileNameExtension(fileName);
 
 const replaceFileNameExtension = (fileName: string, extension: FileNameValue): string => {
   return replaceSharedFileNameExtension(fileName, extension || "bin");
@@ -40,7 +37,6 @@ export {
   appendFileNameExtension,
   getBaseFileName,
   getFileNameWithoutExtension,
-  hasFileNameExtension,
   normalizeArchiveEntryName,
   normalizeArchiveEntryPath,
   replaceFileNameExtension,

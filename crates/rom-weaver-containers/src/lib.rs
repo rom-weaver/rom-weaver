@@ -16,12 +16,15 @@ use std::{
 mod archive_entries;
 mod archive_formats;
 pub mod chd;
+pub mod chd_rs;
 mod constants;
 mod extract_support;
 mod formats;
 pub mod libarchive;
 mod libarchive_support;
 pub mod nod;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod xdvdfs;
 
 #[cfg(test)]
@@ -43,7 +46,7 @@ use crate::nod::{
 use crate::xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
-use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
+use ciso::split::SplitFileReader;
 use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_core::codecs::{decode_deflate_into_buffer, normalize_codec_label};
 use rom_weaver_core::{
@@ -83,12 +86,13 @@ pub use formats::{
     CompressFormatRecommendation, ContainerCapabilitiesMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerRegistry,
     ContainerThreadCapabilityMetadata, DiscImagePolicyMetadata, container_format_metadata,
-    disc_image_policy_metadata, extract_only_create_error, extract_only_create_validation_message,
-    is_ambiguous_disc_image_extension, is_likely_disc_image_size, is_likely_disc_image_source,
-    recommend_container_for_identity, supported_create_format_names, supported_create_formats_text,
+    disc_image_policy_metadata, ensure_split_wbfs_inputs_complete, extract_only_create_error,
+    extract_only_create_validation_message, is_ambiguous_disc_image_extension,
+    is_likely_disc_image_size, is_likely_disc_image_source, recommend_container_for_identity,
+    supported_create_format_names, supported_create_formats_text,
     unregistered_output_format_message,
 };
-use formats::{GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
+use formats::{GC_CISO, GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
 use libarchive_support::{
     LibarchiveCreateConfig, extract_regular_archive_with_libarchive, libarchive_close_read_stream,
     libarchive_open_read_stream, list_regular_archive_entries_with_libarchive,
@@ -215,7 +219,12 @@ pub(crate) use xiso::XisoContainerHandler;
 #[path = "handlers/nod_shared.rs"]
 mod nod_shared;
 pub(crate) use nod_shared::NodHandlerCore;
+#[cfg(test)]
+pub(crate) use nod_shared::write_disc_header_details;
 
+#[path = "handlers/gc_ciso.rs"]
+mod gc_ciso;
+pub(crate) use gc_ciso::GcCisoContainerHandler;
 #[path = "handlers/gcz.rs"]
 mod gcz;
 pub(crate) use gcz::GczContainerHandler;

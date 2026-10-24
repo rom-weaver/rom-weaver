@@ -1,4 +1,4 @@
-import { CircleX, TriangleAlert, X } from "lucide-react";
+import { CircleX, Info, TriangleAlert, X } from "lucide-react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import { useUiLocalizer } from "../../settings-context.tsx";
@@ -11,7 +11,7 @@ import { prefersReducedMotion } from "./flat-transition.ts";
  * every workflow so progress and status rendering is never duplicated.
  */
 
-type NoticeLevel = "error" | "warn";
+type NoticeLevel = "error" | "info" | "warn";
 
 const Notice = ({
   level,
@@ -30,7 +30,7 @@ const Notice = ({
 }) => {
   const localizer = useUiLocalizer();
   const resolvedDismissLabel = dismissLabel ?? localizer.message("ui.common.dismiss");
-  const Icon = level === "error" ? CircleX : TriangleAlert;
+  const Icon = level === "error" ? CircleX : level === "info" ? Info : TriangleAlert;
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />

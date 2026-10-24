@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 import { DOCS_SCREENSHOT_NAMES } from "../docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "../first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "../generated-icon-assets.mjs";
-import { createRootManifestSource, rootManifestSourcePath } from "./channel.mjs";
+import { createRootManifestSource, PRODUCTION_SITE_ORIGIN, rootManifestSourcePath } from "./channel.mjs";
 import { identifyDataSources } from "./identify-data.mjs";
 import { repoRoot, rootDir } from "./paths.mjs";
 
@@ -12,6 +12,11 @@ const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
 const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
+
+// llms.txt is authored against production. Every link is rewritten to the
+// deployment serving it; repository and raw.githubusercontent.com links stay put.
+export const createLlmsSource = (sourcePath, siteOrigin) =>
+  fs.readFileSync(sourcePath, "utf8").replaceAll(PRODUCTION_SITE_ORIGIN, siteOrigin);
 
 export const rootStaticAssetSourcesForChannel = (channel) => ({
   "/auth.md": path.join(rootAssetDir, "auth.md"),
@@ -29,12 +34,21 @@ export const rootStaticAssetSourcesForChannel = (channel) => ({
   "/manifest.json": rootManifestSourcePath,
   "/emulatorjs/LICENSE": path.join(rootDir, "vendor", "emulatorjs", "LICENSE"),
   "/emulatorjs/NOTICE": path.join(rootDir, "vendor", "emulatorjs", "NOTICE"),
+  "/rom-weaver-bundle-v1.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v1.schema.json"),
   "/rom-weaver-bundle-v2.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v2.schema.json"),
+  "/rom-weaver-weave-v1.schema.json": path.join(repoRoot, "docs", "rom-weaver-weave-v1.schema.json"),
+  "/rom-weaver-weave-v2.schema.json": path.join(repoRoot, "docs", "rom-weaver-weave-v2.schema.json"),
   "/social-preview.avif": generatedSocialPreviewPath("social-preview.avif"),
   "/social-preview.png": generatedSocialPreviewPath("social-preview.png"),
   "/social-preview.webp": generatedSocialPreviewPath("social-preview.webp"),
   ...identifyDataSources,
   ...docsScreenshotSources,
+  "/docs/samples/compressed-disc/practice-disc.chd": path.join(
+    repoRoot,
+    "docs/samples/compressed-disc/practice-disc.chd",
+  ),
+  "/docs/samples/compressed-disc/01-first.bps": path.join(repoRoot, "docs/samples/compressed-disc/01-first.bps"),
+  "/docs/samples/compressed-disc/02-second.bps": path.join(repoRoot, "docs/samples/compressed-disc/02-second.bps"),
 });
 export const generatedSampleAssetPaths = new Set([
   "/first-create.zip",
@@ -64,7 +78,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
-  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
+  else if (/\.(?:pack|chd|bps)$/.test(requestPath)) res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith("LICENSE") || requestPath.endsWith("NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }
@@ -73,15 +87,17 @@ const setRootStaticAssetContentType = (requestPath, res) => {
 export const LEGACY_WORKFLOW_ROUTES = {
   apply: "apply-patches",
   "apply-patch": "apply-patches",
-  bundle: "bundle-patches",
-  create: "create-patch",
+  bundle: "weave-patches",
+  "bundle-patches": "weave-patches",
+  create: "create-rom-patch",
+  "create-patch": "create-rom-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patches",
+  weave: "weave-patches",
 };
 
-const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
+const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel, siteOrigin) => {
   const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
@@ -115,6 +131,13 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
       res.end(createRootManifestSource(channel, channelLabel));
       return;
     }
+    if (requestPath === "/llms.txt") {
+      res.statusCode = 200;
+      setRootStaticAssetContentType(requestPath, res);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(createLlmsSource(sourcePath, siteOrigin));
+      return;
+    }
     fs.readFile(sourcePath ?? sidecarSourcePath, (err, source) => {
       if (err) {
         next(err);
@@ -136,13 +159,13 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
   });
 };
 
-export const serveRootStaticAssets = (channel, channelLabel) => ({
+export const serveRootStaticAssets = (channel, channelLabel, siteOrigin) => ({
   apply: "serve",
   configurePreviewServer(server) {
-    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel);
+    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel, siteOrigin);
   },
   configureServer(server) {
-    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel);
+    applyRootStaticAssetMiddleware(server.middlewares, channel, channelLabel, siteOrigin);
   },
   name: "rom-weaver-root-static-assets",
 });

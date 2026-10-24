@@ -1,4 +1,4 @@
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
@@ -44,6 +44,7 @@ type StagedInputInfo = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   splitBinAvailable?: boolean;
   cueText?: string;
   gdiText?: string;
@@ -52,9 +53,12 @@ type StagedInputInfo = {
   validationLabel?: string;
   validationMessage?: string;
   validationState?: string;
+  validationUnreadable?: boolean;
   validationValues?: string[];
   sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
+  /** True when a checksum was available to compare for this patch (vs. only a dry-run apply). */
+  checksumCompared?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip). */
   chainVerdict?: {
     basis: "base" | "previous";
@@ -109,6 +113,7 @@ type LocalPatcherSessionState = {
   completedApplyTimeMs: number | null;
   completedCompressionTimeMs: number | null;
   completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
+  completedWarnings: string[];
   failureMessage: string;
   inputStaging: boolean;
   outputErrorMessage: string;
@@ -154,7 +159,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed onto re-staged runs. */
     patchOptions?: Array<{
       id?: string;
-      input?: ParsedBundlePatchInput;
+      input?: ParsedWeavePatchInput;
       inputChecks?: string;
       outputChecks?: string;
       basis?: "base" | "previous";
@@ -181,11 +186,15 @@ type LocalApplyPatchFormSessionOptions = Pick<
     options?: { interactive?: boolean },
   ) => void | Promise<void>;
   applyReady?: boolean;
+  applyDisabled?: boolean;
+  applyValidationError?: string;
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;
   resolvedOutputNameKey?: string;
   cheatNames?: readonly string[];
   disabledPatchIds?: ReadonlySet<string>;
+  /** Slot ids index-aligned with the patch list; `disabledPatchIds` is keyed by these. */
+  getPatchSlotIds?: () => readonly string[];
   stageInput?: (
     input: ApplyWorkflowStageSnapshot,
     handlers: {
@@ -223,7 +232,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     patchIndex: number,
     option: {
       id?: string;
-      input?: ParsedBundlePatchInput;
+      input?: ParsedWeavePatchInput;
       inputChecks?: string;
       outputChecks?: string;
       basis?: "base" | "previous";

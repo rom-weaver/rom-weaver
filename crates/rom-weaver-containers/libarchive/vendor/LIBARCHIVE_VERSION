@@ -1,5 +1,5 @@
-source: https://github.com/brandonocasey/libarchive
-ref: v3.8.7-8-g967bb0d
-commit: 967bb0dfef336ce4f6de7f17623cd4a12fae5032
-pruned: .git .github .cirrus.yml libarchive/test cat/test cpio/test tar/test unzip/test test_utils doc examples contrib build/autoconf build/ci build/release build/utils build/autogen.sh build/bump-version.sh build/clean.sh build/makerelease.sh
-refreshed-by: scripts/vendor-libarchive.mjs
+source: https://github.com/libarchive/libarchive
+ref: v3.8.7
+commit: ded82291ab41d5e355831b96b0e1ff49e24d8939
+manifest: vendor-patches/libarchive/manifest.json
+refreshed-by: scripts/vendor-dependencies.mjs

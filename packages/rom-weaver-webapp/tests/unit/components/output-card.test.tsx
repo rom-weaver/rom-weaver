@@ -68,3 +68,28 @@ describe("OutputCard identified-name toggle", () => {
     expect(container.querySelector(".outname-source")).toBeNull();
   });
 });
+
+describe("OutputCard extension-mismatch warning", () => {
+  it("warns when the name ends in a different supported extension", () => {
+    const { container } = render(<OutputCard {...baseProps} fileName="game.gba" outputExtensions={["sfc", "zip"]} />);
+    const warn = container.querySelector(".outname-ext-warn");
+    expect(warn?.getAttribute("role")).toBe("alert");
+    expect(warn?.textContent).toContain(".gba");
+    expect(warn?.textContent).toContain(".sfc");
+  });
+
+  it("stays silent for a matching extension, a dotted base name, or no output extensions", () => {
+    for (const [fileName, outputExtensions] of [
+      ["game.sfc", ["sfc"]],
+      ["game.SFC", ["sfc", "zip"]],
+      ["Hack v1.2", ["sfc"]],
+      ["game.gba", undefined],
+    ] as const) {
+      expect(
+        render(
+          <OutputCard {...baseProps} fileName={fileName} outputExtensions={outputExtensions} />,
+        ).container.querySelector(".outname-ext-warn"),
+      ).toBeNull();
+    }
+  });
+});

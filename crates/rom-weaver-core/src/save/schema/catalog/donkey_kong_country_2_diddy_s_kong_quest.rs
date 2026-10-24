@@ -3,68 +3,58 @@ use super::*;
 fn default() -> GameDefinition {
     {
         let fields = vec![
-            FieldDefinition::new(
-                "slot_1.player_1.kremkoins".into(),
-                "Kremkoins".into(),
-                19,
-                Storage::U8,
-            ),
-            FieldDefinition::new(
-                "slot_1.player_1.play_time".into(),
-                "Play-time ticks".into(),
+            catalog_field("slot_1.player_1.kremkoins", "Kremkoins", 19, Storage::U8),
+            catalog_field(
+                "slot_1.player_1.play_time",
+                "Play-time ticks",
                 14,
                 Storage::U32Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_1.completion".into(),
-                "Completion percentage".into(),
+            catalog_field(
+                "slot_1.player_1.completion",
+                "Completion percentage",
                 18,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_1.hero_coins".into(),
-                "Hero's Coins".into(),
+            catalog_field(
+                "slot_1.player_1.hero_coins",
+                "Hero's Coins",
                 20,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_1.location".into(),
-                "Location code".into(),
+            catalog_field(
+                "slot_1.player_1.location",
+                "Location code",
                 189,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.kremkoins".into(),
-                "Kremkoins".into(),
-                353,
-                Storage::U8,
-            ),
-            FieldDefinition::new(
-                "slot_1.player_2.play_time".into(),
-                "Play-time ticks".into(),
+            catalog_field("slot_1.player_2.kremkoins", "Kremkoins", 353, Storage::U8),
+            catalog_field(
+                "slot_1.player_2.play_time",
+                "Play-time ticks",
                 348,
                 Storage::U32Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_2.completion".into(),
-                "Completion percentage".into(),
+            catalog_field(
+                "slot_1.player_2.completion",
+                "Completion percentage",
                 352,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.hero_coins".into(),
-                "Hero's Coins".into(),
+            catalog_field(
+                "slot_1.player_2.hero_coins",
+                "Hero's Coins",
                 354,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.location".into(),
-                "Location code".into(),
+            catalog_field(
+                "slot_1.player_2.location",
+                "Location code",
                 523,
                 Storage::U8,
             )
@@ -143,68 +133,58 @@ fn game_donkey_kong_country_2_diddy_s_kong_quest_slot_2() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_2.player_1.kremkoins".into(),
-            "Kremkoins".into(),
-            699,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_2.player_1.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field("slot_2.player_1.kremkoins", "Kremkoins", 699, Storage::U8),
+        catalog_field(
+            "slot_2.player_1.play_time",
+            "Play-time ticks",
             694,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_1.completion",
+            "Completion percentage",
             698,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_1.hero_coins".into(),
-            "Hero's Coins".into(),
+        catalog_field(
+            "slot_2.player_1.hero_coins",
+            "Hero's Coins",
             700,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_1.location",
+            "Location code",
             869,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.kremkoins".into(),
-            "Kremkoins".into(),
-            1033,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_2.player_2.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field("slot_2.player_2.kremkoins", "Kremkoins", 1033, Storage::U8),
+        catalog_field(
+            "slot_2.player_2.play_time",
+            "Play-time ticks",
             1028,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_2.completion",
+            "Completion percentage",
             1032,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.hero_coins".into(),
-            "Hero's Coins".into(),
+        catalog_field(
+            "slot_2.player_2.hero_coins",
+            "Hero's Coins",
             1034,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_2.location",
+            "Location code",
             1203,
             Storage::U8,
         )
@@ -240,68 +220,58 @@ fn game_donkey_kong_country_2_diddy_s_kong_quest_slot_3() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_3.player_1.kremkoins".into(),
-            "Kremkoins".into(),
-            1379,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_3.player_1.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field("slot_3.player_1.kremkoins", "Kremkoins", 1379, Storage::U8),
+        catalog_field(
+            "slot_3.player_1.play_time",
+            "Play-time ticks",
             1374,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_1.completion",
+            "Completion percentage",
             1378,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_1.hero_coins".into(),
-            "Hero's Coins".into(),
+        catalog_field(
+            "slot_3.player_1.hero_coins",
+            "Hero's Coins",
             1380,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_1.location",
+            "Location code",
             1549,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.kremkoins".into(),
-            "Kremkoins".into(),
-            1713,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_3.player_2.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field("slot_3.player_2.kremkoins", "Kremkoins", 1713, Storage::U8),
+        catalog_field(
+            "slot_3.player_2.play_time",
+            "Play-time ticks",
             1708,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_2.completion",
+            "Completion percentage",
             1712,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.hero_coins".into(),
-            "Hero's Coins".into(),
+        catalog_field(
+            "slot_3.player_2.hero_coins",
+            "Hero's Coins",
             1714,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_2.location",
+            "Location code",
             1883,
             Storage::U8,
         )

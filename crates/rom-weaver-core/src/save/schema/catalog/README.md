@@ -13,3 +13,5 @@ Sonic 3, Shining Force, and Soleil also use Game Tools Collection revision [`8fb
 All profiles in these modules require explicit selection and a game-made template. Their definitions expose only the fields whose write and integrity rules are implemented. Omitted game data is not editable.
 
 The Castlevania GBA, 1080° Snowboarding, Wario Land II, Yoshi's Story, and Link's Awakening modules also use revision `75ce8f848b628f202c50daa75d95dda58eb1f3a5`. Their module comments and the [source catalog](../../../../../../data/save-schemas/README.md) identify the layouts and write rules.
+
+The additional handheld, Nintendo 64, PlayStation, and PC Engine definitions use Game Tools Collection revision [`6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9). Their module comments pin the field layouts and write rules. The [source catalog](../../../../../../data/save-schemas/README.md#additional-save-editors) lists accepted variants and exact editing scope, including supplementary Ocarina of Time and Final Fantasy VIII integrity sources.

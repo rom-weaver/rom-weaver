@@ -3,6 +3,7 @@ const toScriptString = (value: string) => JSON.stringify(value).replace(/</g, "\
 type EmulatorDocumentOptions = {
   gameId?: number;
   gameLabel?: string;
+  saveId?: string;
   /**
    * Build a silent player for an unattended boot check. It starts at once,
    * never takes focus, and leaves out the save and audio bridges, so it
@@ -13,6 +14,7 @@ type EmulatorDocumentOptions = {
 
 type EmulatorGameIdentityInput = {
   checksum: string;
+  core?: string;
   fileName?: string;
 };
 
@@ -26,26 +28,67 @@ const hashString = (value: string): number => {
 };
 
 /**
- * EmulatorJS names the file it writes into the core's filesystem after
- * `EJS_gameName` whenever the game URL is a blob URL, which ours always is. A
- * CHD MUST therefore keep its extension on that name: the disc cores dispatch
- * the CHD reader on it (yabause matches `.CHD`, genesis_plus_gx `.chd`), and an
- * extensionless file is read as a raw image instead. No other input gets a
- * suffix - the name keys saved games and states, so changing it for a format
- * that already works would orphan every save made under the bare checksum.
- * `gameId` stays keyed by the checksum alone for the same reason.
+ * Disc image extensions the vendored disc cores (pcsx_rearmed, yabause,
+ * genesis_plus_gx, ppsspp) read or EmulatorJS acts on. EmulatorJS names the
+ * file it writes into the core after `EJS_gameName`, picks its loader and
+ * invents a `MODE1/2352` cue sheet from that name, so a disc MUST keep its
+ * real extension or a 2048-byte-sector ISO is misread.
  */
-const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentityInput) => {
+const DISC_IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "ccd",
+  "chd",
+  "cso",
+  "cue",
+  "gdi",
+  "img",
+  "iso",
+  "m3u",
+  "mdf",
+  "mds",
+  "pbp",
+  "toc",
+]);
+
+/**
+ * `.bin` is a raw CD track on these cores but a cartridge ROM on every other
+ * one (Mega Drive, Atari 7800). A cartridge keeps the bare checksum so its
+ * saved settings, which EmulatorJS keys on the game name, stay where they were.
+ */
+const BIN_DISC_CORES: ReadonlySet<string> = new Set(["psx", "segaSaturn"]);
+
+const discImageSuffix = (fileName: string | undefined, core: string | undefined): string => {
+  const extension = (fileName || "")
+    .trim()
+    .match(/\.([a-z0-9]+)$/i)?.[1]
+    ?.toLowerCase();
+  if (!extension) return "";
+  if (extension === "bin") return core && BIN_DISC_CORES.has(core) ? ".bin" : "";
+  return DISC_IMAGE_EXTENSIONS.has(extension) ? `.${extension}` : "";
+};
+
+/**
+ * Disc image filenames MUST retain their extension for core dispatch.
+ * App saves use the payload checksum independently of that filename.
+ */
+const createEmulatorGameIdentity = ({ checksum, core, fileName }: EmulatorGameIdentityInput) => {
   const normalizedChecksum = checksum.replace(/[^a-f0-9]/gi, "").toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(normalizedChecksum)) {
     throw new Error("The emulator game identity requires a SHA-1 checksum.");
   }
-  const suffix = /\.chd$/i.test((fileName || "").trim()) ? ".chd" : "";
   return {
     gameId: hashString(normalizedChecksum),
-    gameName: `${normalizedChecksum}${suffix}`,
+    saveId: normalizedChecksum,
+    gameName: `${normalizedChecksum}${discImageSuffix(fileName, core)}`,
   };
 };
+
+/**
+ * Systems whose single-threaded core is vendored instead of the threaded one.
+ * The threaded yabause build starts 13 pthreads from a 4-worker pool, then its
+ * renderer spins on the main thread for layer threads whose workers can only
+ * start once that thread yields, so the page hangs.
+ */
+const SINGLE_THREADED_CORES: ReadonlySet<string> = new Set(["segaSaturn"]);
 
 /**
  * Drop a previously saved "Disabled" choice for either hidden setting.
@@ -76,6 +119,41 @@ const CLEAR_HIDDEN_SETTINGS = `
       })();`;
 
 /**
+ * A disc image's game name gained its extension after settings were already
+ * saved under the bare checksum, and EmulatorJS keys settings on the name
+ * (`ejs-<gameID>-<core>-<gameName>-settings`) with no separate option. Copy
+ * the old entry to the new key once so remaps, settings, and cheats survive.
+ * Safe to delete once no such saved setting can be in the wild.
+ */
+const createMigrateBareSettings = (gameId: number, saveId: string, gameName: string) => `
+      (() => {
+        const bare = ${toScriptString(saveId)};
+        const named = ${toScriptString(gameName)};
+        if (named === bare) return;
+        const prefix = 'ejs-' + ${gameId} + '-';
+        const oldTail = '-' + bare + '-settings';
+        try {
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key || !key.startsWith(prefix) || !key.endsWith(oldTail)) continue;
+            const next = key.slice(0, key.length - oldTail.length) + '-' + named + '-settings';
+            if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+          }
+        } catch (error) {
+          console.warn('Could not migrate the EmulatorJS settings for ' + bare, error);
+        }
+      })();`;
+
+/**
+ * EmulatorJS requests a screen wake lock without handling a refusal, which
+ * surfaces as an unhandled rejection whenever the browser denies it (headless
+ * browsers, battery saver, an unfocused tab). The lock is best-effort, so a
+ * denied request resolves to an already-released sentinel instead. The script
+ * MUST run before `loader.js`.
+ */
+const TOLERATE_WAKE_LOCK_DENIAL = `{const w=navigator.wakeLock,r=w?.request?.bind(w);if(r)w.request=t=>Promise.resolve().then(()=>r(t)).catch(()=>({released:!0,type:t,addEventListener(){},removeEventListener(){},release:()=>Promise.resolve()}))}`;
+
+/**
  * Stop EmulatorJS from calling home to `cdn.emulatorjs.org` for a version
  * check. Its constructor runs the check whenever `EJS_DEBUG_XX` is true or the
  * hostname is `localhost`/`127.0.0.1`, so the dev server, the browser tests,
@@ -99,6 +177,25 @@ const DISABLE_UPDATE_CHECK = `
         });
       })();`;
 
+/**
+ * EmulatorJS builds its bar buttons from an icon plus a text span that its
+ * stylesheet hides for some of them (mute/unmute), which leaves a button with
+ * no accessible name. The bar is the core's own markup, so the wrapper names
+ * each button from its own text as the bar is built.
+ */
+const LABEL_MENU_BUTTONS = `
+      (() => {
+        const label = () => {
+          for (const button of document.querySelectorAll('.ejs_menu_button')) {
+            if (button.hasAttribute('aria-label')) continue;
+            const text = (button.textContent || '').trim() || button.getAttribute('title');
+            if (text) button.setAttribute('aria-label', text);
+          }
+        };
+        new MutationObserver(label).observe(document.documentElement, { childList: true, subtree: true });
+        label();
+      })();`;
+
 const createEmulatorAudioContextBridgeScript = (gameName: string) => `
       (() => {
         const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
@@ -115,10 +212,10 @@ const createEmulatorAudioContextBridgeScript = (gameName: string) => `
         window.webkitAudioContext = RomWeaverAudioContext;
       })();`;
 
-const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
+const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId: string) => `
       (() => {
         const source = "rom-weaver-emulator";
-        const gameId = ${toScriptString(gameName)};
+        const gameId = ${toScriptString(saveId)};
         const gameName = gameId;
         const gameLabel = ${toScriptString(gameLabel)};
         const toBytes = (value) => {
@@ -138,7 +235,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
         EJS_onLoadSave = () => request("request-load-sram");
         EJS_ready = () => {
           const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
-          if (!bridge || !bridge.hasPrepared(gameId)) return;
+          if (!bridge || !bridge.hasPrepared(${toScriptString(gameName)})) return;
           const button = document.querySelector('.ejs_start_button');
           if (button && typeof button.click === "function") button.click();
         };
@@ -242,11 +339,14 @@ const HEADLESS_AUDIO_CONTEXT_SCRIPT = `
         window.webkitAudioContext = RomWeaverBootCheckAudioContext;
       })();`;
 
-const playerBridgeScripts = (gameName: string, gameLabel: string) => `
+const playerBridgeScripts = (gameName: string, gameLabel: string, gameId: number, saveId: string) => `
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${LABEL_MENU_BUTTONS}</script>
+    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
+    <script>${createMigrateBareSettings(gameId, saveId, gameName)}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
-    <script>${createEmulatorBridgeScript(gameName, gameLabel)}</script>`;
+    <script>${createEmulatorBridgeScript(gameName, gameLabel, saveId)}</script>`;
 
 const createEmulatorDocument = (
   dataUrl: string,
@@ -254,8 +354,10 @@ const createEmulatorDocument = (
   gameName: string,
   core: string,
   options: EmulatorDocumentOptions = {},
-) => `<!doctype html>
-<html lang="en">
+) => {
+  const threads = !SINGLE_THREADED_CORES.has(core);
+  return `<!doctype html>
+  <html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>html,body,#game{width:100%;height:100%;margin:0;background:#000;overflow:hidden}#game{display:block}</style>
@@ -269,12 +371,12 @@ const createEmulatorDocument = (
         console.warn('Could not configure the EmulatorJS audio session', error);
       }
       EJS_DEBUG_XX = false;
-      EJS_threads = true;
-      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: 'enabled' };
-      // Only the threaded WebGL 2 cores are vendored, so both in-emulator
-      // toggles that rename the core have to go: switching either off asks for
-      // a <core>-wasm.data or <core>-legacy-wasm.data that does not exist and
-      // the game dies on a 404.
+      EJS_threads = ${threads};
+      EJS_defaultOptions = { webgl2Enabled: 'enabled', ejs_threads: '${threads ? "enabled" : "disabled"}' };
+      // Only one WebGL 2 build of each core is vendored, so both in-emulator
+      // toggles that rename the core have to go: flipping either asks for a
+      // <core>-wasm.data, <core>-thread-wasm.data, or <core>-legacy-wasm.data
+      // that does not exist and the game dies on a 404.
       EJS_hideSettings = ['ejs_threads', 'webgl2Enabled'];
       // The core's context menu opens on the contextmenu event, which a touch
       // long-press fires. Holding the d-pad therefore covers the game with the
@@ -287,9 +389,10 @@ const createEmulatorDocument = (
       EJS_gameName = ${toScriptString(gameName)};
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
-    </script>${options.headless ? `\n    <script>${HEADLESS_AUDIO_CONTEXT_SCRIPT}</script>\n    <script>${DISABLE_UPDATE_CHECK}</script>` : playerBridgeScripts(gameName, options.gameLabel || gameName)}
+    </script>${options.headless ? `\n    <script>${HEADLESS_AUDIO_CONTEXT_SCRIPT}</script>\n    <script>${DISABLE_UPDATE_CHECK}</script>\n    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>` : playerBridgeScripts(gameName, options.gameLabel || gameName, options.gameId ?? hashString(gameName), options.saveId || gameName)}
     <script src="${dataUrl}loader.js"></script>
   </body>
-</html>`;
+  </html>`;
+};
 
 export { createEmulatorDocument, createEmulatorGameIdentity };

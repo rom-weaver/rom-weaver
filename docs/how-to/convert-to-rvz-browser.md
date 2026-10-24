@@ -1,6 +1,6 @@
-# Convert ISO to RVZ in the browser
+# Compress ISO to RVZ online
 
-Compress a GameCube or Wii ISO to RVZ locally in your browser. No patch, upload, or account is needed.
+Compress a GameCube or Wii ISO to RVZ with local browser compression. Use this RVZ converter without uploads or an account.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -19,7 +19,7 @@ Compress a GameCube or Wii ISO to RVZ locally in your browser. No patch, upload,
 
 Use a valid GameCube or Wii disc image. Renaming another console's image to `.iso` does not make it compatible with RVZ.
 
-For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select the **Add** button.
+For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select **Add N files**.
 
 ## Create the RVZ
 
@@ -29,6 +29,8 @@ For a disc inside ZIP, 7z, or another supported container, add the container to 
 4. Select **Compress** and wait for the result.
 5. Select **Download** and save the `.rvz` file.
 
+Block size defaults to 131072 bytes. Enter a power of two from 32768 to 1073741824 bytes. Examples include 32768, 65536, and 1048576. Invalid values show an error before compression starts.
+
 If RVZ is unavailable, check that **Inputs** contains only one compatible disc image. Multiple files offer archive output instead.
 
 Keep the page open until compression and download finish. To stop compression, use the cancel control on the progress bar.
@@ -37,7 +39,7 @@ Keep the page open until compression and download finish. To stop compression, u
 
 Open the RVZ in an emulator that supports RVZ for your console. Keep the original ISO until you check the result.
 
-To compare the uncompressed bytes, [convert the RVZ back to ISO](convert-rvz-to-iso-browser.md). Compare that ISO's checksum with the original through [Identify](identify-roms-browser.md).
+To compare the uncompressed bytes, [decompress the RVZ back to ISO](convert-rvz-to-iso-browser.md). Compare that ISO's checksum with the original through [Identify](identify-roms-browser.md).
 
 Keep enough free storage for the ISO and compressed output. The resulting file size depends on the disc contents and compression settings.
 

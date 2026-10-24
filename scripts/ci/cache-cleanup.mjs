@@ -21,6 +21,7 @@ const cacheFamily = (key) => {
   if (
     key.startsWith("ccache-") ||
     key.startsWith("sccache-") ||
+    key.startsWith("wasm-target-") ||
     key.startsWith("semver-checks-") ||
     key.startsWith("identify-brotli-")
   ) {
@@ -83,9 +84,7 @@ function createApi({ token, repo, apiBase, fetchImpl }) {
     const response = await fetchImpl(apiUrl(path, apiBase), { method, headers });
     if (response.status === 404 && allow404) return null;
     if (!response.ok) {
-      throw new Error(
-        `cache-cleanup: ${method} ${path} failed with ${response.status}: ${await response.text()}`,
-      );
+      throw new Error(`cache-cleanup: ${method} ${path} failed with ${response.status}: ${await response.text()}`);
     }
     return response.status === 204 ? null : response.json();
   }
@@ -96,9 +95,7 @@ function createApi({ token, repo, apiBase, fetchImpl }) {
     while (next) {
       const response = await fetchImpl(apiUrl(next, apiBase), { headers });
       if (!response.ok) {
-        throw new Error(
-          `cache-cleanup: GET ${next} failed with ${response.status}: ${await response.text()}`,
-        );
+        throw new Error(`cache-cleanup: GET ${next} failed with ${response.status}: ${await response.text()}`);
       }
       const body = await response.json();
       if (!Array.isArray(body.actions_caches)) {

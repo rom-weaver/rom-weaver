@@ -2,7 +2,7 @@ import {
   ArrowUp,
   Check,
   ChevronRight,
-  Copy,
+  ClipboardList,
   Download,
   ExternalLink,
   HardDrive,
@@ -21,6 +21,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -52,14 +53,8 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { isReactWebappDevelopmentMode } from "../development-defaults.ts";
 import { setAdvancedSettings, useAdvancedSettings } from "../advanced-settings.ts";
-import {
-  ADVANCED_SETTINGS_FIELDS,
-  SETTINGS_FIELD_ID_TO_KEY,
-  SETTINGS_FIELD_METADATA,
-  SETTINGS_PANEL_SECTIONS,
-  settingsGroupId,
-} from "../settings/settings-state.ts";
-import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
+import { ADVANCED_SETTINGS_FIELDS, SETTINGS_FIELD_ID_TO_KEY } from "../settings/settings-state.ts";
+import { EmulatorSavesPanel, type EmulatorSaveImportRequest } from "./emulator-saves-panel.tsx";
 import {
   describeWarmupUnit,
   installingRuntimeLabel,
@@ -71,7 +66,8 @@ import {
   RUNTIME_STATES,
   RuntimeGlyph,
 } from "./shell.tsx";
-import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./shell.tsx";
+import { PhoneDock } from "./shell-nav.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -108,6 +104,9 @@ const MAX_DETAILS_CHARS = 4096;
 // The row height is fixed in CSS so the native scrollbar stays exact without a heavyweight list library.
 const TRACE_ROW_HEIGHT = 25;
 const VIRTUAL_OVERSCAN_ROWS = 12;
+// A phone wraps each row; until a row mounts and is measured it counts at this
+// height, about a header line over a two-line message.
+const WRAPPED_ROW_ESTIMATE = 60;
 
 // While an install is running the cached-file list re-reads the caches on this
 // interval so files appear as they land. Each pass measures every stored body,
@@ -220,6 +219,7 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
   return (
     <button
       className={lineClassName(copied, failed)}
+      data-entry-id={entry.id}
       onClick={() => copy(formatCopyLine(entry), "Log line copy failed")}
       type="button"
     >
@@ -246,14 +246,6 @@ const TAB_MESSAGES = {
   offline: "ui.console.offline",
   settings: "ui.settings.title",
   storage: "ui.console.storage",
-} as const;
-// Phone section bar: five columns beside Close, so every label is one short word.
-const TAB_SHORT_MESSAGES = {
-  about: "ui.console.about",
-  logs: "ui.log.tabLogs",
-  offline: "ui.status.offline",
-  settings: "ui.settings.title",
-  storage: "ui.log.tabStorage",
 } as const;
 const TAB_DESCRIPTIONS = {
   about: "ui.console.aboutDescription",
@@ -749,15 +741,6 @@ const nextTabIndex = (key: string, index: number): number => {
   return -1;
 };
 
-/** Settings groups the jump links can reach, in panel order. */
-const visibleSettingsGroups = (advanced: boolean) =>
-  SETTINGS_PANEL_SECTIONS.filter((section) =>
-    section.fields.some(
-      (fieldKey) =>
-        SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden" && (advanced || !ADVANCED_SETTINGS_FIELDS.has(fieldKey)),
-    ),
-  );
-
 const AdvancedSwitch = ({ advanced, id, localizer }: { advanced: boolean; id: string; localizer: Localizer }) => (
   <button
     aria-checked={advanced}
@@ -786,16 +769,14 @@ const HiddenNote = ({ children, localizer }: { children: ReactNode; localizer: L
 );
 
 /**
- * The console's section list. Desktop draws it as a sidebar with jump links
- * under Settings and the Advanced switch at its foot; a phone draws it as the
- * bar at the foot of the page, ended by Close (see dialogs.css).
+ * The console's section list: a sidebar of tabs with the Advanced switch at
+ * its foot. A phone hides it: Menu opens each section on its own, and the
+ * console's copy of the dock closes it (see dialogs.css).
  */
 const ConsoleNav = ({
   advanced,
   localizer,
   offlinePercent,
-  onClose,
-  onJump,
   onSelect,
   runtimeState,
   tab,
@@ -803,8 +784,6 @@ const ConsoleNav = ({
   advanced: boolean;
   localizer: Localizer;
   offlinePercent: number | null;
-  onClose: () => void;
-  onJump: (title: string) => void;
   onSelect: (tab: LogDialogTab) => void;
   runtimeState: RuntimeState;
   tab: LogDialogTab;
@@ -851,28 +830,10 @@ const ConsoleNav = ({
                 <TabIcon aria-hidden="true" />
               )}
               <span className="console-tab-label">{localizer.message(TAB_MESSAGES[entry])}</span>
-              <span aria-hidden="true" className="console-tab-short">
-                {localizer.message(TAB_SHORT_MESSAGES[entry])}
-              </span>
             </button>
           );
         })}
       </div>
-      <button className="console-close" onClick={onClose} type="button">
-        <X aria-hidden="true" />
-        <span>{localizer.message("ui.common.close")}</span>
-      </button>
-      {tab === "settings" ? (
-        <ul className="console-jumps">
-          {visibleSettingsGroups(advanced).map((section) => (
-            <li key={section.title}>
-              <button className="console-jump" onClick={() => onJump(section.title)} type="button">
-                {section.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
       <div className="console-nav-foot">
         <AdvancedSwitch advanced={advanced} id="console-advanced-desktop" localizer={localizer} />
         <span className="console-build">{`v${APP_VERSION}`}</span>
@@ -882,8 +843,7 @@ const ConsoleNav = ({
 };
 
 /**
- * Phone only: drag the section bar or the page's left edge to the right to
- * close, the way a pushed page goes back. The frame follows the finger, and a
+ * Phone only: drag the page's left edge to the right to close, the way a pushed page goes back. The frame follows the finger, and a
  * release past a quarter of the width, or a light flick, finishes the close so
  * a deliberate swipe does not spring back.
  */
@@ -946,7 +906,7 @@ const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: ()
       suppressClick = false;
       if (!phone.matches || event.button !== 0) return;
       const target = event.target as Element | null;
-      if (!target?.closest(".console-nav, .console-edge")) return;
+      if (!target?.closest(".console-edge")) return;
       drag = {
         id: event.pointerId,
         lastTime: event.timeStamp,
@@ -1013,8 +973,12 @@ const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: ()
   }, [frameRef, onClose, open]);
 };
 
-/** Save/restore for the settings tab; absent handlers drop their buttons. */
-const SettingsActionsBar = ({
+/**
+ * Save/restore for the settings tab, in the head beside the close button;
+ * absent handlers drop their buttons. On a phone Save floats over the panel
+ * instead (dialogs.css), so it needs no bar of its own.
+ */
+const SettingsHeadActions = ({
   localizer,
   onRestoreDefaults,
   onSaveSettings,
@@ -1025,33 +989,30 @@ const SettingsActionsBar = ({
 }) => {
   if (!(onRestoreDefaults || onSaveSettings)) return null;
   return (
-    <div className="dlg-subhead">
-      <div className="log-controls">
-        <div className="dlg-actions settings-actions">
-          {onRestoreDefaults ? (
-            <button
-              className="btn ghost"
-              onClick={onRestoreDefaults}
-              title={localizer.message("ui.settings.defaults")}
-              type="button"
-            >
-              <RotateCcw aria-hidden="true" />
-              <span className="bl">{localizer.message("ui.settings.defaults")}</span>
-            </button>
-          ) : null}
-          {onSaveSettings ? (
-            <button
-              className="btn primary"
-              onClick={onSaveSettings}
-              title={localizer.message("ui.settings.save")}
-              type="button"
-            >
-              <Save aria-hidden="true" />
-              <span className="bl">{localizer.message("ui.settings.save")}</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
+    <div className="console-head-actions settings-actions">
+      {onRestoreDefaults ? (
+        <button
+          aria-label={localizer.message("ui.settings.defaults")}
+          className="btn ghost settings-defaults"
+          onClick={onRestoreDefaults}
+          title={localizer.message("ui.settings.defaults")}
+          type="button"
+        >
+          <RotateCcw aria-hidden="true" />
+          <span className="bl">{localizer.message("ui.settings.defaults")}</span>
+        </button>
+      ) : null}
+      {onSaveSettings ? (
+        <button
+          className="btn primary settings-save"
+          onClick={onSaveSettings}
+          title={localizer.message("ui.settings.save")}
+          type="button"
+        >
+          <Save aria-hidden="true" />
+          <span className="bl">{localizer.message("ui.settings.save")}</span>
+        </button>
+      ) : null}
     </div>
   );
 };
@@ -1112,31 +1073,51 @@ const logDownloadName = (showingOpfs: boolean, showingPrevious: boolean) => {
   return showingPrevious ? "rom-weaver-previous-log.txt" : "rom-weaver-log.txt";
 };
 
-/** Copy-all and download for whichever listing the body is showing. */
+/** The text Copy all and Download hand over for whichever listing the body is showing. */
+const logExportText = (
+  showingOpfs: boolean,
+  entries: readonly LogStoreEntry[],
+  opfsEntries: readonly StorageEntry[],
+): string => (showingOpfs ? opfsEntries.map(formatOpfsEntry).join("\n") : entries.map(formatCopyLine).join("\n"));
+
+/**
+ * Copy all and download for whichever listing the body is showing. Desktop
+ * shows them in the head beside the close button; a phone, which has no close
+ * button there, keeps them in the controls bar above the dock (dialogs.css).
+ * The clipboard list icon tells this apart from copying the one line a row tap copies.
+ */
 const LogExportActions = ({
   copyFeedback,
   exportText,
   localizer,
+  placement,
   showingOpfs,
   showingPrevious,
 }: {
   copyFeedback: CopyFeedback;
   exportText: string;
   localizer: Localizer;
+  placement: "bar" | "head";
   showingOpfs: boolean;
   showingPrevious: boolean;
 }) => {
   const { copied, copy, failed } = copyFeedback;
   return (
-    <div className="dlg-actions log-actions">
+    <div
+      className={
+        placement === "head"
+          ? "dlg-actions log-actions log-actions-head console-head-actions"
+          : "dlg-actions log-actions log-actions-bar"
+      }
+    >
       <button
-        aria-label={localizer.message("ui.common.copy")}
+        aria-label={localizer.message("ui.log.copyAll")}
         className={`btn slim ghost log-icon-btn${copied ? " copied" : ""}${failed ? " copy-failed" : ""}`}
         onClick={() => copy(exportText, "Log copy failed")}
-        title={localizer.message("ui.common.copy")}
+        title={localizer.message("ui.log.copyAll")}
         type="button"
       >
-        {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        {copied ? <Check aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}
       </button>
       <button
         aria-label={localizer.message("ui.result.download")}
@@ -1194,11 +1175,234 @@ const OpfsInspector = ({
   );
 };
 
+const subscribePhoneLayout = (onChange: () => void) => {
+  if (typeof window.matchMedia !== "function") return () => undefined;
+  const query = window.matchMedia(PHONE_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+};
+const isPhoneLayout = () => typeof window.matchMedia === "function" && window.matchMedia(PHONE_QUERY).matches;
+const usePhoneLayout = () => useSyncExternalStore(subscribePhoneLayout, isPhoneLayout, () => false);
+
+/** The trace's vertical padding, which its scroll range adds to the content. */
+const tracePadding = (trace: HTMLElement) => {
+  const style = getComputedStyle(trace);
+  return Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+};
+
+/** Index of the row whose span holds `y`: the last row starting at or before it. */
+const rowAtOffset = (offsets: Float64Array, y: number) => {
+  let low = 0;
+  let high = offsets.length - 1;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if ((offsets[mid] ?? 0) <= y) low = mid;
+    else high = mid - 1;
+  }
+  return low;
+};
+
+/**
+ * Which rows to mount and where they sit. Desktop rows share one fixed height.
+ * A phone wraps every line under its time, level, and caller, so each row has
+ * its own height: mounted rows report it after layout, and the rest count at an
+ * estimate until they mount, which keeps the scroll range close without
+ * measuring thousands of rows.
+ */
+const useTraceWindow = ({
+  entries,
+  onScroll,
+  scrollTop,
+  traceRef,
+  viewportHeight,
+  windowRef,
+  wrapped,
+}: {
+  entries: readonly LogStoreEntry[];
+  onScroll: (scrollTop: number) => void;
+  scrollTop: number;
+  traceRef: RefObject<HTMLDivElement | null>;
+  viewportHeight: number;
+  windowRef: RefObject<HTMLDivElement | null>;
+  wrapped: boolean;
+}) => {
+  const [heights, setHeights] = useState<ReadonlyMap<number, number>>(() => new Map());
+  // Where the reader was when rows were last measured: pinned to the newest
+  // line, or the top visible row and how far into it the viewport starts.
+  const anchorRef = useRef<{ delta: number; id: number; index: number; pinned: boolean; top: number } | null>(null);
+  // The last commit that moved the offsets: its lines, its scroll range (content
+  // plus padding), and the viewport height then. A reader exactly at its bottom
+  // stays pinned when only measured heights or the viewport changed since; a
+  // rotation changes the padding and viewport in the same layout as the width.
+  const committedRef = useRef<{
+    clientHeight: number;
+    entries: readonly LogStoreEntry[];
+    offsets: Float64Array;
+    range: number;
+  } | null>(null);
+  const offsets = useMemo(() => {
+    if (!wrapped) return null;
+    const result = new Float64Array(entries.length + 1);
+    let offset = 0;
+    for (const [index, entry] of entries.entries()) {
+      offset += heights.get(entry.id) ?? WRAPPED_ROW_ESTIMATE;
+      result[index + 1] = offset;
+    }
+    return result;
+  }, [entries, heights, wrapped]);
+  const firstRow = offsets ? rowAtOffset(offsets, scrollTop) : Math.floor(scrollTop / TRACE_ROW_HEIGHT);
+  const lastRow = offsets
+    ? rowAtOffset(offsets, scrollTop + viewportHeight) + 1
+    : Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT);
+  const virtualStart = Math.max(0, firstRow - VIRTUAL_OVERSCAN_ROWS);
+  const virtualEnd = Math.min(entries.length, lastRow + VIRTUAL_OVERSCAN_ROWS);
+  // Crossing the phone breakpoint swaps fixed rows for wrapped ones, so the same
+  // scrollTop lands on a different row; put the reader back on the top row they
+  // had, or at the newest line. Declared first, so it runs before the measuring.
+  const layoutTopRef = useRef<{ atNewest: boolean; id: number; wrapped: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const last = layoutTopRef.current;
+    const trace = traceRef.current;
+    if (!(last && trace) || last.wrapped === wrapped) return;
+    if (last.atNewest) trace.scrollTop = trace.scrollHeight;
+    else {
+      const index = entries.findIndex((entry) => entry.id === last.id);
+      if (index < 0) return;
+      trace.scrollTop = offsets ? (offsets[index] ?? 0) : index * TRACE_ROW_HEIGHT;
+    }
+    onScroll(trace.scrollTop);
+  }, [entries, offsets, onScroll, traceRef, wrapped]);
+  useLayoutEffect(() => {
+    const trace = traceRef.current;
+    if (!trace) return;
+    layoutTopRef.current = {
+      atNewest: scrollTop > 0 && scrollTop + trace.clientHeight >= trace.scrollHeight - 2,
+      id: entries[firstRow]?.id ?? -1,
+      wrapped,
+    };
+  }, [entries, firstRow, scrollTop, traceRef, wrapped]);
+  // Measured heights move every row below them, and rows mounted above the
+  // viewport push it down, so restore the anchor before paint: the newest line
+  // for a pinned reader, otherwise the same spot in the same top row.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    const trace = traceRef.current;
+    if (!(offsets && anchor && trace)) return;
+    anchorRef.current = null;
+    // Something else scrolled since the measurement (the dialog's jump to the
+    // newest line runs between the two renders), so the anchor is stale.
+    if (Math.abs(trace.scrollTop - anchor.top) > 1) return;
+    if (anchor.pinned) trace.scrollTop = trace.scrollHeight;
+    else if (entries[anchor.index]?.id === anchor.id) trace.scrollTop = (offsets[anchor.index] ?? 0) + anchor.delta;
+    else return;
+    onScroll(trace.scrollTop);
+  }, [entries, offsets, onScroll, traceRef]);
+  // Measure what mounted; a change re-renders with the corrected offsets.
+  useLayoutEffect(() => {
+    const rows = windowRef.current?.querySelectorAll<HTMLElement>(":scope > [data-entry-id]");
+    const trace = traceRef.current;
+    if (!(offsets && rows && trace) || virtualEnd <= virtualStart) return;
+    const updates: Array<[number, number]> = [];
+    for (const row of rows) {
+      const id = Number(row.dataset.entryId);
+      const height = row.getBoundingClientRect().height;
+      if (height > 0 && Math.abs((heights.get(id) ?? 0) - height) > 0.5) updates.push([id, height]);
+    }
+    if (updates.length === 0) return;
+    // Read against the offsets the rows were placed by, not scrollHeight: rows
+    // taller than their estimate overflow the content box until they count.
+    // Measuring rows above can grow the content after the dialog scrolled to
+    // the newest line, so the same lines' previous height still counts. Lines
+    // that arrive later extend the offsets, so like the desktop list a reader
+    // at the bottom does not follow them. No trace log here: it would append a
+    // line to this list, which mounts and measures again.
+    const padding = tracePadding(trace);
+    // A list that fits the viewport has no bottom to pin to: a reader at its top
+    // stays there as the rows grow. Against the previous height only an exact
+    // bottom counts, since the restore can move a reader past it.
+    const committed = committedRef.current;
+    const top = trace.scrollTop;
+    const bottom = top + trace.clientHeight;
+    const atBottom = (height: number) => height + padding > trace.clientHeight + 2 && bottom >= height + padding - 2;
+    // The viewport may have changed since that commit (a rotation) or been laid
+    // out only after it (the first open), so either height can mark its bottom.
+    const wasAtBottom =
+      committed?.entries === entries &&
+      [trace.clientHeight, committed.clientHeight].some(
+        (viewport) => committed.range > viewport + 2 && Math.abs(top + viewport - committed.range) <= 2,
+      );
+    const index = rowAtOffset(offsets, top);
+    anchorRef.current = {
+      delta: top - (offsets[index] ?? 0),
+      id: entries[index]?.id ?? -1,
+      index,
+      pinned: atBottom(offsets[entries.length] ?? 0) || wasAtBottom,
+      top,
+    };
+    // Keep only the listed lines: ids are never reused, so heights of lines the
+    // store has dropped would otherwise pile up while lines stream in.
+    const listed = new Set(entries.map((entry) => entry.id));
+    setHeights((previous) => new Map([...[...previous].filter(([id]) => listed.has(id)), ...updates]));
+  }, [entries, heights, offsets, traceRef, virtualEnd, virtualStart, windowRef]);
+  // A new width re-wraps every row, so every measured height is stale; clearing
+  // them re-measures the mounted rows even when the window did not move. The
+  // anchor comes from the offsets the reader last saw, so the restore keeps
+  // their top row (or the newest line) in place.
+  useLayoutEffect(() => {
+    const trace = traceRef.current;
+    if (!(wrapped && trace) || typeof ResizeObserver === "undefined") return;
+    let width = trace.clientWidth;
+    let height = trace.clientHeight;
+    const observer = new ResizeObserver(() => {
+      // Judge the bottom with the viewport height the reader had before this
+      // resize, against the scroll range they last saw.
+      const previousHeight = height;
+      height = trace.clientHeight;
+      if (trace.clientWidth === width) return;
+      width = trace.clientWidth;
+      const committed = committedRef.current;
+      if (committed) {
+        const top = trace.scrollTop;
+        const index = rowAtOffset(committed.offsets, top);
+        anchorRef.current = {
+          delta: top - (committed.offsets[index] ?? 0),
+          id: committed.entries[index]?.id ?? -1,
+          index,
+          pinned: committed.range > previousHeight + 2 && top + previousHeight >= committed.range - 2,
+          top,
+        };
+      }
+      setHeights(new Map());
+    });
+    observer.observe(trace);
+    return () => observer.disconnect();
+  }, [traceRef, wrapped]);
+  useLayoutEffect(() => {
+    const trace = traceRef.current;
+    committedRef.current =
+      offsets && trace
+        ? {
+            clientHeight: trace.clientHeight,
+            entries,
+            offsets,
+            range: (offsets[entries.length] ?? 0) + tracePadding(trace),
+          }
+        : null;
+  }, [entries, offsets, traceRef]);
+  return {
+    contentHeight: offsets ? (offsets[entries.length] ?? 0) : entries.length * TRACE_ROW_HEIGHT,
+    virtualEnd,
+    virtualStart,
+    windowTop: offsets ? (offsets[virtualStart] ?? 0) : virtualStart * TRACE_ROW_HEIGHT,
+  };
+};
+
 /**
  * The virtualized trace listing. Only rows near the viewport are mounted; the
  * fixed CSS row height keeps the native scrollbar exact without a list library.
- * The scroll state lives on the dialog, so leaving this tab and coming back does
- * not re-run the scroll-to-newest effect and lose the reader's place.
+ * A phone wraps each line instead, so its rows use measured offsets.
+ * The scroll state lives on the dialog, so leaving this tab and coming back
+ * restores the reader's place on mount instead of starting at the top.
  */
 const TraceList = ({
   advanced,
@@ -1219,11 +1423,24 @@ const TraceList = ({
   scrollTop: number;
   viewportHeight: number;
 }) => {
-  const virtualStart = Math.max(0, Math.floor(scrollTop / TRACE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
-  const virtualEnd = Math.min(
-    entries.length,
-    Math.ceil((scrollTop + viewportHeight) / TRACE_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
-  );
+  const wrapped = usePhoneLayout();
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  // A remounted list starts at the top while the rows mount at the saved
+  // offset, which leaves the viewport blank; put the scroll back before paint,
+  // and before a phone measures the rows against it.
+  const mountScrollTopRef = useRef(scrollTop);
+  useLayoutEffect(() => {
+    if (traceRef.current) traceRef.current.scrollTop = mountScrollTopRef.current;
+  }, [traceRef]);
+  const { contentHeight, virtualEnd, virtualStart, windowTop } = useTraceWindow({
+    entries,
+    onScroll,
+    scrollTop,
+    traceRef,
+    viewportHeight,
+    windowRef,
+    wrapped,
+  });
   const emptyMessage = filter.trim() ? localizer.message("ui.log.emptyFilter", { q: filter.trim() }) : "-";
   return (
     <div
@@ -1236,8 +1453,8 @@ const TraceList = ({
       {entries.length === 0 ? (
         <div className="tracelog-empty">{emptyMessage}</div>
       ) : (
-        <div className="tracelog-virtual-content" style={{ height: entries.length * TRACE_ROW_HEIGHT }}>
-          <div className="tracelog-virtual-window" style={{ top: virtualStart * TRACE_ROW_HEIGHT }}>
+        <div className="tracelog-virtual-content" style={{ height: contentHeight }}>
+          <div className="tracelog-virtual-window" ref={windowRef} style={{ top: windowTop }}>
             {entries.slice(virtualStart, virtualEnd).map((entry) => (
               <TraceLine entry={entry} key={entry.id} />
             ))}
@@ -1257,11 +1474,14 @@ const LogsStoragePanel = ({
   advanced,
   copyFeedback,
   currentLevel,
+  emulatorSaveImport,
   entries,
+  exportText,
   filter,
   hasPrevious,
   localizer,
   onFilterChange,
+  onEmulatorSaveImportStarted,
   onLevelChange,
   onRefreshOpfs,
   onScroll,
@@ -1278,11 +1498,14 @@ const LogsStoragePanel = ({
   advanced: boolean;
   copyFeedback: CopyFeedback;
   currentLevel: LogLevel;
+  emulatorSaveImport?: EmulatorSaveImportRequest | null;
   entries: readonly LogStoreEntry[];
+  exportText: string;
   filter: string;
   hasPrevious: boolean;
   localizer: Localizer;
   onFilterChange: (filter: string) => void;
+  onEmulatorSaveImportStarted?: () => void;
   onLevelChange: (level: string) => void;
   onRefreshOpfs: () => void;
   onScroll: (scrollTop: number) => void;
@@ -1297,31 +1520,32 @@ const LogsStoragePanel = ({
   viewportHeight: number;
 }) => {
   const showingOpfs = tab === "storage";
-  const exportText = showingOpfs ? opfsEntries.map(formatOpfsEntry).join("\n") : entries.map(formatCopyLine).join("\n");
   // The raw OPFS listing is a debugging tool, so without Advanced the storage
   // section is the emulator saves alone.
   if (showingOpfs && !advanced) {
     return (
       <div aria-labelledby="logtab-storage" className="dlg-body storage-body" id="logpanel-storage" role="tabpanel">
-        <EmulatorSavesPanel active />
+        <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
         <HiddenNote localizer={localizer}>{localizer.message("ui.console.hiddenOpfs")}</HiddenNote>
       </div>
     );
   }
   return (
     <>
-      {showingOpfs ? <EmulatorSavesPanel active /> : null}
+      {showingOpfs ? (
+        <EmulatorSavesPanel active importRequest={emulatorSaveImport} onImportStarted={onEmulatorSaveImportStarted} />
+      ) : null}
       <div className="dlg-subhead">
         {showingOpfs ? (
           <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
             OPFS
           </h3>
         ) : null}
-        {/* The controls take the row; the filter gets the next one to itself.
-            Sharing one row meant the filter and the view toggle fought for the
-            same width, and on a phone both lost - the toggle ellipsed its labels
-            while the filter shrank to a slot too narrow to read what you had
-            typed. */}
+        {/* Desktop lays the view toggle, the filter, and the level out as one
+            row (dialogs.css). A phone gives the controls their row and the
+            filter the next one to itself: sharing a row there left the toggle
+            ellipsing its labels while the filter shrank to a slot too narrow to
+            read what you had typed. */}
         <div className="log-controls">
           {tab === "logs" && hasPrevious ? (
             <LogViewToggle localizer={localizer} onChange={onViewChange} showingPrevious={showingPrevious} />
@@ -1349,6 +1573,7 @@ const LogsStoragePanel = ({
             copyFeedback={copyFeedback}
             exportText={exportText}
             localizer={localizer}
+            placement="bar"
             showingOpfs={showingOpfs}
             showingPrevious={showingPrevious}
           />
@@ -1390,8 +1615,10 @@ const LogsStoragePanel = ({
 };
 
 const LogDialog = ({
+  dockTabs = [],
   open,
   onClose,
+  onSelectDockTab,
   level,
   onLevelChange,
   initialTab = "offline",
@@ -1406,13 +1633,19 @@ const LogDialog = ({
   onOfflineCopyEnabledChange,
   settingsFocusHint,
   settingsPanel,
+  emulatorSaveImport = null,
+  onEmulatorSaveImportStarted,
   updateReady = false,
   previewRuntimeState = null,
   onPreviewRuntimeStateChange,
   onReloadUpdate,
 }: {
+  /** The phone dock's workflows; the console repeats the dock because the modal makes the real one inert. */
+  dockTabs?: WorkflowTab[];
   open: boolean;
   onClose: () => void;
+  /** A dock workflow chosen from inside the console: it closes the console and goes there. */
+  onSelectDockTab?: (id: string) => void;
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
@@ -1430,6 +1663,9 @@ const LogDialog = ({
   settingsFocusHint?: SettingsFocusHint | null;
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
+  /** Save backups dropped on the page for Saves & storage to import. */
+  emulatorSaveImport?: EmulatorSaveImportRequest | null;
+  onEmulatorSaveImportStarted?: () => void;
   updateReady?: boolean;
   previewRuntimeState?: RuntimeState | null;
   onPreviewRuntimeStateChange?: (state: RuntimeState | null) => void;
@@ -1454,12 +1690,6 @@ const LogDialog = ({
     const fieldKey = settingsFocusHint ? SETTINGS_FIELD_ID_TO_KEY[settingsFocusHint.fieldId] : undefined;
     if (fieldKey && ADVANCED_SETTINGS_FIELDS.has(fieldKey)) setAdvancedSettings(true);
   }, [settingsFocusHint]);
-  const jumpToGroup = useCallback((title: string) => {
-    const group = document.getElementById(settingsGroupId(title));
-    if (!group) return;
-    logger.trace("settings jump link", { title });
-    group.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-  }, []);
   // Each open lands on the tab the control that opened it names.
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -1574,6 +1804,7 @@ const LogDialog = ({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      const previousFocus = document.activeElement;
       dialog.showModal();
       // showModal() hands focus to the first tabbable descendant, which is the
       // selected tab, and the browser paints a focus ring on it even when the
@@ -1582,7 +1813,16 @@ const LogDialog = ({
       // the modal - screen readers still announce it, Tab still walks into the
       // rail - without lighting up a control nobody has reached yet.
       dialog.focus({ preventScroll: true });
-    } else if (!open && dialog.open) dialog.close();
+      return () => {
+        // The parent unmounts the console on close, so it MUST restore the opener explicitly.
+        dialog.close();
+        if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+          previousFocus.focus({ preventScroll: true });
+        }
+      };
+    }
+    if (!open && dialog.open) dialog.close();
+    return undefined;
   }, [open]);
 
   const visible = useMemo(() => {
@@ -1597,6 +1837,12 @@ const LogDialog = ({
     if (!query) return leafEntries;
     return leafEntries.filter((entry) => `${formatOpfsEntry(entry)} ${entry.path}`.toLowerCase().includes(query));
   }, [filter, opfsEntries]);
+  // Without Advanced the storage tab is the emulator saves alone, with no listing to export.
+  const showingExport = tab === "logs" || (tab === "storage" && advanced);
+  const exportText = useMemo(
+    () => (showingExport ? logExportText(tab === "storage", visible, visibleOpfs) : ""),
+    [showingExport, tab, visible, visibleOpfs],
+  );
   useEffect(() => {
     if (!(open && tab === "logs")) return;
     const trace = traceRef.current;
@@ -1607,13 +1853,27 @@ const LogDialog = ({
     return () => window.removeEventListener("resize", updateViewport);
   }, [open, tab]);
 
-  // Keep the newest lines in view while the dialog is open.
-  useEffect(() => {
+  // Open the log at the newest lines. A later viewport height change keeps a
+  // reader there only while they are at the newest line: a mid-list reader keeps
+  // their place, and one at the bottom still sees the newest lines after a shrink.
+  const openedAtNewestRef = useRef(false);
+  const atNewestRef = useRef(false);
+  const onTraceScroll = useCallback((nextScrollTop: number) => {
+    setScrollTop(nextScrollTop);
     const trace = traceRef.current;
-    if (open && trace && viewportHeight > 0) {
-      trace.scrollTop = trace.scrollHeight;
-      setScrollTop(trace.scrollTop);
+    atNewestRef.current = !!trace && nextScrollTop + trace.clientHeight >= trace.scrollHeight - 1;
+  }, []);
+  useEffect(() => {
+    if (!open) {
+      openedAtNewestRef.current = false;
+      return;
     }
+    const trace = traceRef.current;
+    if (!trace || viewportHeight <= 0 || (openedAtNewestRef.current && !atNewestRef.current)) return;
+    openedAtNewestRef.current = true;
+    atNewestRef.current = true;
+    trace.scrollTop = trace.scrollHeight;
+    setScrollTop(trace.scrollTop);
   }, [open, viewportHeight]);
 
   return (
@@ -1625,13 +1885,17 @@ const LogDialog = ({
       tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
-        close();
+        if (!event.currentTarget.querySelector(".rw-modal")) close();
       }}
       onClick={(event) => {
         if (event.target === dialogRef.current) close();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") close();
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        // A newly opened confirmation owns Escape even before its focus frame runs.
+        if (event.currentTarget.querySelector(".rw-modal")) return;
+        event.preventDefault();
+        close();
       }}
       ref={dialogRef}
     >
@@ -1639,9 +1903,7 @@ const LogDialog = ({
         <ConsoleNav
           advanced={advanced}
           localizer={localizer}
-          onClose={close}
           offlinePercent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null}
-          onJump={jumpToGroup}
           onSelect={selectTab}
           runtimeState={runtimeState}
           tab={tab}
@@ -1655,23 +1917,36 @@ const LogDialog = ({
               <p className="console-description">{localizer.message(TAB_DESCRIPTIONS[tab])}</p>
             </div>
             <AdvancedSwitch advanced={advanced} id="console-advanced-phone" localizer={localizer} />
+            {tab === "settings" ? (
+              <SettingsHeadActions
+                localizer={localizer}
+                onRestoreDefaults={onRestoreDefaults}
+                onSaveSettings={onSaveSettings}
+              />
+            ) : null}
+            {showingExport ? (
+              <LogExportActions
+                copyFeedback={copyFeedback}
+                exportText={exportText}
+                localizer={localizer}
+                placement="head"
+                showingOpfs={tab === "storage"}
+                showingPrevious={showingPrevious}
+              />
+            ) : null}
             <button
               aria-label={localizer.message("ui.common.close")}
               className="dlg-x"
-              onClick={close}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                close();
+              }}
               title={localizer.message("ui.common.close")}
               type="button"
             >
               <X aria-hidden="true" />
             </button>
           </header>
-          {tab === "settings" ? (
-            <SettingsActionsBar
-              localizer={localizer}
-              onRestoreDefaults={onRestoreDefaults}
-              onSaveSettings={onSaveSettings}
-            />
-          ) : null}
           {tab === "settings" ? (
             <div
               aria-labelledby="logtab-settings"
@@ -1759,7 +2034,9 @@ const LogDialog = ({
               advanced={advanced}
               copyFeedback={copyFeedback}
               currentLevel={currentLevel}
+              emulatorSaveImport={emulatorSaveImport}
               entries={visible}
+              exportText={exportText}
               filter={filter}
               hasPrevious={hasPrevious}
               localizer={localizer}
@@ -1769,9 +2046,10 @@ const LogDialog = ({
                 if (traceRef.current) traceRef.current.scrollTop = 0;
                 setScrollTop(0);
               }}
+              onEmulatorSaveImportStarted={onEmulatorSaveImportStarted}
               onLevelChange={onLevelChange}
               onRefreshOpfs={() => void refreshOpfs()}
-              onScroll={setScrollTop}
+              onScroll={onTraceScroll}
               onViewChange={setView}
               opfsEntries={visibleOpfs}
               opfsError={opfsError}
@@ -1796,6 +2074,22 @@ const LogDialog = ({
         </section>
         {/* Phone only: a strip on the left edge that starts the swipe back. */}
         <div aria-hidden="true" className="console-edge" />
+        {/* Phone only: the dock again, its Menu slot reading Close, so the way
+            out sits where the way in was (see dialogs.css). No workflow reads
+            as current: the console covers the page, and Close is the slot that
+            acts on what is open. */}
+        {dockTabs.length > 0 ? (
+          <PhoneDock
+            closeLabel={localizer.message("ui.common.close")}
+            current=""
+            menuLabel={localizer.message("ui.tools.menu")}
+            menuOpen
+            navLabel={localizer.message("ui.nav.primary")}
+            onSelect={(id) => onSelectDockTab?.(id)}
+            onToggleMenu={close}
+            tabs={dockTabs}
+          />
+        ) : null}
       </div>
     </dialog>
   );

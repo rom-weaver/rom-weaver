@@ -5,9 +5,9 @@ use std::{
 };
 
 use rom_weaver_core::{
-    CancellationToken, OperationContext, OperationStatus, PatchApplyRequest,
-    PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
-    RecordingProgressSink, ThreadBudget,
+    CancellationToken, OperationContext, OperationFamily, OperationStatus, PatchApplyRequest,
+    PatchCheckScopes, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, RecordingProgressSink, ThreadBudget,
 };
 
 use super::{
@@ -361,6 +361,51 @@ fn apply_can_ignore_patch_checksum_mismatch() {
         .expect("ignore checksum validation should apply patch");
 
     assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn apply_label_reports_skipped_validation_unless_source_and_target_are_checked() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    let source = b"hello old world";
+    let target = b"hello new world";
+    fs::write(&input_path, source).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            source,
+            target,
+            vec![TestAction::TargetRead(target.to_vec())],
+        ),
+    )
+    .expect("fixture");
+    let handler = BpsPatchHandler::new(&BPS);
+
+    for (source_scope, target_scope) in [(true, true), (true, false), (false, true)] {
+        let output_path = temp.child("output.bin");
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1).with_patch_check_scopes(PatchCheckScopes {
+                    patch_integrity: true,
+                    source: source_scope,
+                    target: target_scope,
+                }),
+            )
+            .expect("apply");
+        assert_eq!(
+            report.label.contains("; checksum validation skipped"),
+            !(source_scope && target_scope),
+            "scopes ({source_scope}, {target_scope}): {}",
+            report.label
+        );
+        assert_eq!(fs::read(output_path).expect("output"), target);
+    }
 }
 
 #[test]
@@ -1048,6 +1093,68 @@ fn apply_rejects_truncated_action_stream_in_file() {
 }
 
 #[test]
+fn apply_names_truncated_patch_file() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("cut.bps");
+    fs::write(&input_path, []).expect("fixture");
+    fs::write(&patch_path, truncated_target_read_patch(8, b"XY")).expect("fixture");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.child("output.bin"),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("truncated action stream should fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("truncated or corrupt") && message.contains("cut.bps"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
+fn apply_reports_patch_cut_at_a_record_boundary_as_truncated() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("cut.bps");
+    fs::write(&input_path, b"abc").expect("fixture");
+    let full = build_bps_patch(
+        b"abc",
+        b"abcdef",
+        vec![
+            TestAction::SourceRead(3),
+            TestAction::TargetRead(b"def".to_vec()),
+        ],
+    );
+    // Drop the TargetRead record (one command byte plus three data bytes) but keep the footer.
+    let footer_start = full.len() - 12;
+    let mut cut = full[..footer_start - 4].to_vec();
+    cut.extend_from_slice(&full[footer_start..]);
+    fs::write(&patch_path, cut).expect("fixture");
+
+    let error = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: temp.child("output.bin"),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("short action stream should fail");
+    let message = error.to_string();
+    assert!(
+        message.contains("truncated or corrupt") && message.contains("cut.bps"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
 fn parse_reads_non_zero_metadata_block() {
     // A patch carrying a non-empty metadata block still decodes its sizes and action.
     let patch = build_bps_patch_with_metadata(
@@ -1521,6 +1628,70 @@ fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
     drop(output);
 
     assert_eq!(fs::read(&output_path).expect("output"), b"\0\0\0\0WXYZ");
+}
+
+#[test]
+fn apply_progress_sink_preserves_the_public_event_contract() {
+    let temp = TestDir::new();
+    let input = temp.child("progress-source.bin");
+    let patch = temp.child("progress-update.bps");
+    fs::write(&input, b"ABCDEFGH").expect("source fixture");
+    fs::write(
+        &patch,
+        build_bps_patch(
+            b"ABCDEFGH",
+            b"ABxxEFxx",
+            vec![
+                TestAction::SourceRead(2),
+                TestAction::TargetRead(b"xx".to_vec()),
+                TestAction::SourceCopy {
+                    length: 2,
+                    relative_offset: 4,
+                },
+                TestAction::TargetCopy {
+                    length: 2,
+                    relative_offset: 2,
+                },
+            ],
+        ),
+    )
+    .expect("patch fixture");
+
+    for memory_limit in [0, u64::MAX] {
+        let sink = Arc::new(RecordingProgressSink::default());
+        let context = OperationContext::new(
+            ThreadBudget::Fixed(1),
+            temp.child("progress-temp"),
+            sink.clone(),
+            CancellationToken::new(),
+        )
+        .with_patch_apply_in_memory_limit(memory_limit);
+        let output = temp.child(&format!("progress-output-{memory_limit}.bin"));
+        BpsPatchHandler::new(&BPS)
+            .apply(
+                &PatchApplyRequest {
+                    input: input.clone(),
+                    patches: vec![patch.clone()],
+                    output: output.clone(),
+                },
+                &context,
+            )
+            .expect("apply");
+        assert_eq!(fs::read(output).expect("output"), b"ABxxEFxx");
+
+        let events = sink.snapshot();
+        assert_eq!(events.len(), 4, "memory_limit={memory_limit}: {events:?}");
+        for (event, percent) in events.iter().zip([25.0, 50.0, 75.0, 100.0]) {
+            assert_eq!(event.command, "patch-apply");
+            assert_eq!(event.family, OperationFamily::Patch);
+            assert_eq!(event.format.as_deref(), Some("BPS"));
+            assert_eq!(event.stage, "apply");
+            assert_eq!(event.label, "applying patch using BPS");
+            assert_eq!(event.percent, Some(percent));
+            assert_eq!(event.status, OperationStatus::Running);
+            assert_eq!(event.details, None);
+        }
+    }
 }
 
 #[test]

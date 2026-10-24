@@ -10,19 +10,17 @@ import type { MessageId } from "./catalog.ts";
  * during Babel transforms. Plurals use ICU `{count, plural, ...}` messages.
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
-  "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Checksum any file." }),
-  "ui.hero.checksumThesis2": msg({ id: "ui.hero.checksumThesis2", message: "Compare it with the expected value." }),
+  "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Calculate file checksums." }),
   "ui.hero.checksumDescription": msg({
     id: "ui.hero.checksumDescription",
     message:
-      "Choose checksums for any file. Auto extract opens archives and containers. Everything runs locally in your browser.",
+      "Calculate CRC32, MD5, SHA-1, SHA-256, and other file hashes. Compare them with expected checksums. Auto extract opens archives and containers. Everything runs locally in your browser.",
   }),
-  "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress your files." }),
-  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Choose the output format." }),
+  "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress ROMs and disc images." }),
   "ui.hero.compressDescription": msg({
     id: "ui.hero.compressDescription",
     message:
-      "Create ZIP or 7z archives from your files. Compress compatible disc images and ROMs to CHD, RVZ, or Z3DS. Everything runs locally in your browser.",
+      "Compress ISO, BIN/CUE, or GDI disc images to CHD, and GameCube or Wii ISO to RVZ. Create Z3DS ROMs, ZIP, or 7z archives. Everything runs locally in your browser.",
   }),
   "ui.compress.drop": msg({ id: "ui.compress.drop", message: "Drop files to compress them" }),
   "ui.compress.tap": msg({ id: "ui.compress.tap", message: "Tap to add files to compress" }),
@@ -37,10 +35,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.compress.removeFile": msg({ id: "ui.compress.removeFile", message: "Remove {name}" }),
   "ui.compress.running": msg({ id: "ui.compress.running", message: "Compressing files…" }),
   "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
-  "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "Input handling" }),
+  "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "How files are opened" }),
   "ui.drop.inputs": msg({ id: "ui.drop.inputs", message: "Inputs" }),
   "ui.identifyDrawer.archiveMember": msg({ id: "ui.identifyDrawer.archiveMember", message: "Archive member" }),
-  "ui.identifyDrawer.candidates": msg({ id: "ui.identifyDrawer.candidates", message: "Candidates" }),
+  "ui.identifyDrawer.candidates": msg({ id: "ui.identifyDrawer.candidates", message: "Possible matches" }),
   "ui.identifyDrawer.components": msg({ id: "ui.identifyDrawer.components", message: "Components" }),
   "ui.identifyDrawer.condition.database_required": msg({
     id: "ui.identifyDrawer.condition.database_required",
@@ -48,7 +46,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.identifyDrawer.condition.unsupported_media_profile": msg({
     id: "ui.identifyDrawer.condition.unsupported_media_profile",
-    message: "Media profile not supported",
+    message: "Disc layout can't be matched",
   }),
   "ui.identifyDrawer.copyName": msg({ id: "ui.identifyDrawer.copyName", message: "Copy name {name}" }),
   "ui.identifyDrawer.database": msg({ id: "ui.identifyDrawer.database", message: "Database" }),
@@ -73,7 +71,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identifyDrawer.platformCandidates",
     message: "Platform candidates",
   }),
-  "ui.identifyDrawer.quality": msg({ id: "ui.identifyDrawer.quality", message: "Quality" }),
+  "ui.identifyDrawer.quality": msg({ id: "ui.identifyDrawer.quality", message: "Match" }),
   "ui.identifyDrawer.quality.exact": msg({ id: "ui.identifyDrawer.quality.exact", message: "Exact match" }),
   "ui.identifyDrawer.quality.metadata_only": msg({
     id: "ui.identifyDrawer.quality.metadata_only",
@@ -86,7 +84,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identifyDrawer.standard": msg({ id: "ui.identifyDrawer.standard", message: "Standard" }),
   "ui.identifyDrawer.system": msg({ id: "ui.identifyDrawer.system", message: "System" }),
   "ui.identifyDrawer.unexpected": msg({ id: "ui.identifyDrawer.unexpected", message: "Unexpected" }),
-  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "Unidentified" }),
+  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "No match" }),
   "ui.identifyDrawer.unsupported": msg({
     id: "ui.identifyDrawer.unsupported",
     message: "The identification data does not support this input.",
@@ -98,11 +96,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: ", an output extension. The format selector adds the extension; remove it to avoid a doubled name.",
   }),
   "ui.output.doubledExtension.before": msg({ id: "ui.output.doubledExtension.before", message: "The name ends in" }),
-  "ui.output.file": msg({ id: "ui.output.file", message: "File" }),
+  "ui.output.extensionMismatch": msg({
+    id: "ui.output.extensionMismatch",
+    message: "The name ends in .{extension}, but the output is .{expected}.",
+  }),
   "ui.output.filename": msg({ id: "ui.output.filename", message: "Output filename" }),
   "ui.output.format": msg({ id: "ui.output.format", message: "Output format" }),
-  "ui.output.identified": msg({ id: "ui.output.identified", message: "Ident" }),
-  "ui.output.name": msg({ id: "ui.output.name", message: "Name" }),
   "ui.output.nameFromIdentified": msg({ id: "ui.output.nameFromIdentified", message: "Name from identified title" }),
   "ui.output.notSaved": msg({
     id: "ui.output.notSaved",
@@ -111,6 +110,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.output.options": msg({ id: "ui.output.options", message: "Options" }),
   "ui.output.profile": msg({ id: "ui.output.profile", message: "Profile" }),
   "ui.output.showDetails": msg({ id: "ui.output.showDetails", message: "Show {label} details" }),
+  "ui.settings.aboutField": msg({ id: "ui.settings.aboutField", message: "About {label}" }),
   "ui.output.standard": msg({ id: "ui.output.standard", message: "Standard" }),
   "ui.output.type": msg({ id: "ui.output.type", message: "Type" }),
   "ui.patch.headerAuto": msg({ id: "ui.patch.headerAuto", message: "header auto" }),
@@ -121,13 +121,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.sourceInfo.computed": msg({ id: "ui.sourceInfo.computed", message: "Computed" }),
   "ui.sourceInfo.copyDatabase": msg({
     id: "ui.sourceInfo.copyDatabase",
-    message: "Copy {label} from the identification database",
+    message: "Copy {label} {value} from the identification database",
   }),
   "ui.sourceInfo.database": msg({ id: "ui.sourceInfo.database", message: "database" }),
   "ui.sourceInfo.decode": msg({ id: "ui.sourceInfo.decode", message: "DECODE" }),
-  "ui.sourceInfo.expectationAuthorityBundle": msg({
-    id: "ui.sourceInfo.expectationAuthorityBundle",
-    message: "by the bundle",
+  "ui.sourceInfo.expectationAuthorityWeave": msg({
+    id: "ui.sourceInfo.expectationAuthorityWeave",
+    message: "by the weave",
   }),
   "ui.sourceInfo.expectationAuthorityManual": msg({
     id: "ui.sourceInfo.expectationAuthorityManual",
@@ -141,8 +141,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.sourceInfo.expectationAuthorityPatch",
     message: "by the patch",
   }),
-  "ui.sourceInfo.expectationMetaBundle": msg({
-    id: "ui.sourceInfo.expectationMetaBundle",
+  "ui.sourceInfo.expectationMetaWeave": msg({
+    id: "ui.sourceInfo.expectationMetaWeave",
     message: "ROM not included - provide it yourself",
   }),
   "ui.sourceInfo.expectationMetaManual": msg({
@@ -160,16 +160,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.sourceInfo.expected": msg({ id: "ui.sourceInfo.expected", message: "Expected" }),
   "ui.sourceInfo.expectedMatch": msg({
     id: "ui.sourceInfo.expectedMatch",
-    message: "The staged ROM matches what this run expects",
+    message: "This is the expected ROM",
   }),
   "ui.sourceInfo.expectedMismatch": msg({ id: "ui.sourceInfo.expectedMismatch", message: "Not the expected ROM" }),
   "ui.sourceInfo.expectedMismatchContinue": msg({
     id: "ui.sourceInfo.expectedMismatchContinue",
-    message: "You can still continue, but the result may differ from what the expectation's author intended.",
+    message: "You can still continue, but the result may not be what you expect.",
   }),
   "ui.sourceInfo.expectedMismatchDetails": msg({
     id: "ui.sourceInfo.expectedMismatchDetails",
-    message: "This ROM's name or checks do not match what this run expects - see the Expected rows below.",
+    message: "This ROM's name or checksums don't match the expected ROM. See the Expected rows below.",
   }),
   "ui.sourceInfo.expectedRom": msg({ id: "ui.sourceInfo.expectedRom", message: "Expected ROM" }),
   "ui.sourceInfo.extractTiming": msg({ id: "ui.sourceInfo.extractTiming", message: "Extract timing" }),
@@ -205,25 +205,21 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.checksumTiming": msg({ id: "ui.apply.checksumTiming", message: "Checksum {timing}" }),
   "ui.apply.checksumming": msg({ id: "ui.apply.checksumming", message: "Checksumming" }),
   "ui.apply.checksummingProgress": msg({ id: "ui.apply.checksummingProgress", message: "Checksumming…" }),
-  "ui.apply.clearRom": msg({ id: "ui.apply.clearRom", message: "Clear ROM input" }),
-  "ui.apply.compressionType": msg({ id: "ui.apply.compressionType", message: "Compression type" }),
+  "ui.apply.clearRom": msg({ id: "ui.apply.clearRom", message: "Remove ROM" }),
   "ui.apply.fileTypes.archives": msg({ id: "ui.apply.fileTypes.archives", message: "Archives & containers" }),
   "ui.apply.fileTypes.patches": msg({ id: "ui.apply.fileTypes.patches", message: "Patches" }),
   "ui.apply.fileTypes.roms": msg({ id: "ui.apply.fileTypes.roms", message: "ROMs" }),
   "ui.apply.removeDisc": msg({ id: "ui.apply.removeDisc", message: "Remove disc" }),
-  "ui.apply.removeRom": msg({ id: "ui.apply.removeRom", message: "Remove ROM input" }),
+  "ui.apply.removeRom": msg({ id: "ui.apply.removeRom", message: "Remove ROM" }),
   "ui.apply.titleLookupUnavailable": msg({
     id: "ui.apply.titleLookupUnavailable",
     message: "Title lookup unavailable",
   }),
   "ui.home.commandLine": msg({ id: "ui.home.commandLine", message: "Command line" }),
   "ui.home.flowApply": msg({ id: "ui.home.flowApply", message: "Apply Patches" }),
-  "ui.home.flowBundle": msg({ id: "ui.home.flowBundle", message: "Bundle Patches" }),
-  "ui.home.flowCreate": msg({ id: "ui.home.flowCreate", message: "Create Patch" }),
-  "ui.home.flowTest": msg({ id: "ui.home.flowTest", message: "Test ROM" }),
   "ui.home.webapp": msg({ id: "ui.home.webapp", message: "Webapp" }),
   "ui.patch.addCheck": msg({ id: "ui.patch.addCheck", message: "Add {side} check" }),
-  "ui.patch.addCheckLabel": msg({ id: "ui.patch.addCheckLabel", message: "Add check" }),
+  "ui.patch.addCheckLabel": msg({ id: "ui.patch.addCheckLabel", message: "Add" }),
   "ui.patch.applyToAll": msg({ id: "ui.patch.applyToAll", message: "Apply to all" }),
   "ui.patch.archiveSupport": msg({
     id: "ui.patch.archiveSupport",
@@ -231,15 +227,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.basisHelp": msg({
     id: "ui.patch.basisHelp",
-    message: "Choose whether this patch's input checks describe the base ROM or the previous patch output.",
+    message: "Choose whether these checks are for the original ROM or for the previous patch's result.",
   }),
-  "ui.patch.basisLabel": msg({ id: "ui.patch.basisLabel", message: "ROM described by input checks" }),
+  "ui.patch.basisLabel": msg({ id: "ui.patch.basisLabel", message: "These checks are for" }),
   "ui.patch.bulkEdit": msg({ id: "ui.patch.bulkEdit", message: "Bulk edit" }),
   "ui.patch.bulkEditHelp": msg({ id: "ui.patch.bulkEditHelp", message: "Set metadata values for every patch." }),
   "ui.patch.checks": msg({ id: "ui.patch.checks", message: "Checks" }),
   "ui.patch.disabledCount": msg({
     id: "ui.patch.disabledCount",
-    message: "{count, plural, one {# disabled} other {# disabled}}",
+    message: "{count, plural, one {# off} other {# off}}",
+  }),
+  "ui.patch.differsFromPatch": msg({
+    id: "ui.patch.differsFromPatch",
+    message: "Differs from the {check} built into the patch",
   }),
   "ui.patch.doesNotMatchRom": msg({ id: "ui.patch.doesNotMatchRom", message: "Does not match the ROM" }),
   "ui.patch.editCheck": msg({ id: "ui.patch.editCheck", message: "Edit {check} check" }),
@@ -288,7 +288,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patch.output": msg({ id: "ui.patch.output", message: "Output" }),
   "ui.patch.outputCheckHint": msg({
     id: "ui.patch.outputCheckHint",
-    message: "The expected output is verified only when every patch in the bundle is applied.",
+    message: "The expected output is verified only when every patch in the weave is applied.",
   }),
   "ui.patch.pdsUnsupported": msg({
     id: "ui.patch.pdsUnsupported",
@@ -304,7 +304,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.reorderTitle": msg({
     id: "ui.patch.reorderTitle",
-    message: "Drag to reorder · click to edit position · up/down arrow keys",
+    message: "Drag to reorder, click to edit the position, or use the up and down arrow keys",
   }),
   "ui.patch.reorderUnavailable": msg({
     id: "ui.patch.reorderUnavailable",
@@ -317,12 +317,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and more.",
   }),
-  "ui.patch.runsOn": msg({ id: "ui.patch.runsOn", message: "Patch {n} runs on" }),
+  "ui.patch.runsOn": msg({ id: "ui.patch.runsOn", message: "Patch {n} applies to" }),
   "ui.patch.track": msg({ id: "ui.patch.track", message: "Track" }),
   "ui.patch.selectTrack": msg({ id: "ui.patch.selectTrack", message: "Select track" }),
   "ui.select.multipleCandidates": msg({
     id: "ui.select.multipleCandidates",
-    message: "Multiple candidates found, select one",
+    message: "More than one file matches. Choose one.",
   }),
   "ui.select.multipleRoms": msg({ id: "ui.select.multipleRoms", message: "Select the ROM to use" }),
   "ui.select.noSelectableFiles": msg({
@@ -345,86 +345,86 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.add.romOrPatches": msg({ id: "ui.apply.add.romOrPatches", message: "Add the ROM or patches" }),
   "ui.apply.archive.info.apply": msg({
     id: "ui.apply.archive.info.apply",
-    message: "The bundle supplies instructions and verification data; rom-weaver still applies the patches.",
+    message: "The weave supplies instructions and verification data; rom-weaver still applies the patches.",
   }),
   "ui.apply.archive.info.contents": msg({
     id: "ui.apply.archive.info.contents",
     message:
-      "The archive holds that index and the patch files. Including the original ROM is optional; a patch-only bundle asks the player for a matching file.",
+      "The archive holds that index and the patch files. Including the original ROM is optional; a patch-only weave asks the player for a matching file.",
   }),
   "ui.apply.archive.info.index": msg({
     id: "ui.apply.archive.info.index",
     message:
-      "The required rom-weaver-bundle.json index contains the schema version, ROM details and checks, ordered patches, and output defaults and checks.",
+      "The required rom-weaver-weave.json index contains the schema version, ROM details and checks, ordered patches, and output defaults and checks.",
   }),
   "ui.apply.archive.info.recipe": msg({
     id: "ui.apply.archive.info.recipe",
     message:
-      "A rom-weaver bundle is a portable recipe for applying a patch chain to a ROM; it is not a pre-patched ROM.",
+      "A rom-weaver weave is a portable recipe for applying a patch chain to a ROM; it is not a pre-patched ROM.",
   }),
   "ui.apply.archive.summary": msg({
     id: "ui.apply.archive.summary",
-    message: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
+    message: "Exports this session as a portable rom-weaver weave defined by rom-weaver-weave.json.",
   }),
   "ui.apply.archive.title": msg({ id: "ui.apply.archive.title", message: "Archive" }),
   "ui.apply.archive.type": msg({ id: "ui.apply.archive.type", message: "Archive type" }),
-  "ui.apply.bundleTutorial.bundlePatches": msg({
-    id: "ui.apply.bundleTutorial.bundlePatches",
-    message: "Bundle + patches",
+  "ui.apply.weaveTutorial.weavePatches": msg({
+    id: "ui.apply.weaveTutorial.weavePatches",
+    message: "Weave + patches",
   }),
-  "ui.apply.bundleTutorial.download.body": msg({
-    id: "ui.apply.bundleTutorial.download.body",
+  "ui.apply.weaveTutorial.download.body": msg({
+    id: "ui.apply.weaveTutorial.download.body",
     message:
-      "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the control then becomes Download ZIP Bundle.",
+      "Exporting a recipe does not apply patches. Press Share weave to check and download the setup; the control then becomes Download ZIP weave.",
   }),
-  "ui.apply.bundleTutorial.download.title": msg({
-    id: "ui.apply.bundleTutorial.download.title",
+  "ui.apply.weaveTutorial.download.title": msg({
+    id: "ui.apply.weaveTutorial.download.title",
     message: "Build and download",
   }),
-  "ui.apply.bundleTutorial.optional": msg({ id: "ui.apply.bundleTutorial.optional", message: "Required or optional" }),
-  "ui.apply.bundleTutorial.patches.body": msg({
-    id: "ui.apply.bundleTutorial.patches.body",
+  "ui.apply.weaveTutorial.optional": msg({ id: "ui.apply.weaveTutorial.optional", message: "Required or optional" }),
+  "ui.apply.weaveTutorial.patches.body": msg({
+    id: "ui.apply.weaveTutorial.patches.body",
     message:
       "These patches target the original ROM, so players can change their order or skip either one. Use Patch details to edit each patch's label, version, author, and description.",
   }),
-  "ui.apply.bundleTutorial.patches.title": msg({
-    id: "ui.apply.bundleTutorial.patches.title",
+  "ui.apply.weaveTutorial.patches.title": msg({
+    id: "ui.apply.weaveTutorial.patches.title",
     message: "Describe the patch recipe",
   }),
-  "ui.apply.bundleTutorial.rom.body": msg({
-    id: "ui.apply.bundleTutorial.rom.body",
+  "ui.apply.weaveTutorial.rom.body": msg({
+    id: "ui.apply.weaveTutorial.rom.body",
     message:
-      "A bundle is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
+      "A weave is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
   }),
-  "ui.apply.bundleTutorial.rom.title": msg({
-    id: "ui.apply.bundleTutorial.rom.title",
-    message: "Check the starting ROM",
+  "ui.apply.weaveTutorial.rom.title": msg({
+    id: "ui.apply.weaveTutorial.rom.title",
+    message: "Check the original ROM",
   }),
-  "ui.apply.bundleTutorial.safeBundle.body": msg({
-    id: "ui.apply.bundleTutorial.safeBundle.body",
+  "ui.apply.weaveTutorial.safeWeave.body": msg({
+    id: "ui.apply.weaveTutorial.safeWeave.body",
     message:
-      "The bundle download is separate from Apply. Bundle + patches shares the recipe and patches without putting a copyrighted ROM in the download.",
+      "The weave download is separate from Apply. Weave + patches shares the recipe and patches without putting a copyrighted ROM in the download.",
   }),
-  "ui.apply.bundleTutorial.safeBundle.title": msg({
-    id: "ui.apply.bundleTutorial.safeBundle.title",
-    message: "Choose a safe bundle",
+  "ui.apply.weaveTutorial.safeWeave.title": msg({
+    id: "ui.apply.weaveTutorial.safeWeave.title",
+    message: "Choose a safe weave",
   }),
-  "ui.apply.cancelBundleExport": msg({ id: "ui.apply.cancelBundleExport", message: "Cancel bundle export" }),
+  "ui.apply.cancelWeaveExport": msg({ id: "ui.apply.cancelWeaveExport", message: "Cancel weave export" }),
   "ui.apply.clearExpectedRom": msg({ id: "ui.apply.clearExpectedRom", message: "Clear the expected ROM" }),
   "ui.apply.drop.hero": msg({
     id: "ui.apply.drop.hero",
-    message: "Drop or click to add ROMs, patches, bundles, or archives",
+    message: "Drop or click to add ROMs, patches, weaves, or archives",
   }),
   "ui.apply.drop.heroCoarse": msg({
     id: "ui.apply.drop.heroCoarse",
-    message: "Tap to add ROMs, patches, bundles, or archives",
+    message: "Tap to add ROMs, patches, weaves, or archives",
   }),
   "ui.apply.drop.identified": msg({ id: "ui.apply.drop.identified", message: "Identified" }),
   "ui.apply.drop.identifying": msg({ id: "ui.apply.drop.identifying", message: "Identifying" }),
-  "ui.apply.drop.info.bundle": msg({
-    id: "ui.apply.drop.info.bundle",
+  "ui.apply.drop.info.weave": msg({
+    id: "ui.apply.drop.info.weave",
     message:
-      "A rom-weaver bundle is a portable patch recipe: a rom-weaver-bundle.json index, archived with its patches and optionally a ROM.",
+      "A rom-weaver weave is a portable patch recipe: a rom-weaver-weave.json index, archived with its patches and optionally a ROM.",
   }),
   "ui.apply.drop.info.compressed": msg({
     id: "ui.apply.drop.info.compressed",
@@ -438,7 +438,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.drop.info.retroArch",
     message: "RetroArch softpatch naming is supported.",
   }),
-  "ui.apply.drop.readingBundle": msg({ id: "ui.apply.drop.readingBundle", message: "Reading bundle" }),
+  "ui.apply.drop.readingWeave": msg({ id: "ui.apply.drop.readingWeave", message: "Reading weave" }),
   "ui.apply.emulator.missingChecksum": msg({
     id: "ui.apply.emulator.missingChecksum",
     message: "The retained ROM has no SHA-1 checksum.",
@@ -496,15 +496,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.inputHandling.archives",
     message: "Archives are decompressed; we find the ROM or let you choose.",
   }),
-  "ui.apply.inputHandling.bundleContents": msg({
-    id: "ui.apply.inputHandling.bundleContents",
+  "ui.apply.inputHandling.weaveContents": msg({
+    id: "ui.apply.inputHandling.weaveContents",
     message:
-      "A bundle can be a JSON file or an archive with that file and its patches. It may include the ROM; otherwise, provide the matching ROM separately.",
+      "A weave can be a JSON file or an archive with that file and its patches. It may include the ROM; otherwise, provide the matching ROM separately.",
   }),
-  "ui.apply.inputHandling.bundleIndex": msg({
-    id: "ui.apply.inputHandling.bundleIndex",
+  "ui.apply.inputHandling.weaveIndex": msg({
+    id: "ui.apply.inputHandling.weaveIndex",
     message:
-      "A rom-weaver bundle is a recipe for applying a patch chain to a ROM. Its rom-weaver-bundle.json file is the required index.",
+      "A rom-weaver weave is a recipe for applying a patch chain to a ROM. Its rom-weaver-weave.json file is the required index.",
   }),
   "ui.apply.inputHandling.compressed": msg({
     id: "ui.apply.inputHandling.compressed",
@@ -519,10 +519,61 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Patch entries can be required or optional, and record names, sources, header rules, and expected ROM checks.",
   }),
-  "ui.apply.inputHandling.title": msg({ id: "ui.apply.inputHandling.title", message: "Input handling" }),
+  "ui.apply.inputHandling.title": msg({ id: "ui.apply.inputHandling.title", message: "How files are opened" }),
   "ui.apply.itemCount": msg({ id: "ui.apply.itemCount", message: "{count, plural, one {# item} other {# items}}" }),
-  "ui.apply.loadFailed": msg({ id: "ui.apply.loadFailed", message: "rom-weaver failed to load." }),
+  "ui.apply.loadFailed": msg({ id: "ui.apply.loadFailed", message: "rom-weaver didn't load. Reload the page." }),
   "ui.apply.needsPatches": msg({ id: "ui.apply.needsPatches", message: "Add your patch files" }),
+  "ui.create.sourceMode.label": msg({ id: "ui.create.sourceMode.label", message: "Create patch from" }),
+  "ui.create.sourceMode.rom": msg({ id: "ui.create.sourceMode.rom", message: "Modified ROM" }),
+  "ui.create.sourceMode.patches": msg({ id: "ui.create.sourceMode.patches", message: "Patches & cheats" }),
+  "ui.create.changes": msg({ id: "ui.create.changes", message: "Changes" }),
+  "ui.combinedPatch.filename": msg({ id: "ui.combinedPatch.filename", message: "Patch filename" }),
+  "ui.combinedPatch.format": msg({ id: "ui.combinedPatch.format", message: "Patch format" }),
+  "ui.combinedPatch.description": msg({
+    id: "ui.combinedPatch.description",
+    message: "Combine the enabled patches and cheats into one patch for the original ROM.",
+  }),
+  "ui.combinedPatch.working": msg({ id: "ui.combinedPatch.working", message: "Creating combined patch…" }),
+  "ui.combinedPatch.download": msg({ id: "ui.combinedPatch.download", message: "Download patch" }),
+  "ui.combinedPatch.create": msg({ id: "ui.combinedPatch.create", message: "Create patch & download" }),
+  "ui.combinedPatch.title": msg({ id: "ui.combinedPatch.title", message: "Create patch" }),
+  "ui.combinedPatch.downloadTitle": msg({ id: "ui.combinedPatch.downloadTitle", message: "Download a combined patch" }),
+  "ui.combinedPatch.needsRom": msg({
+    id: "ui.combinedPatch.needsRom",
+    message: "Add one original ROM to create a combined patch.",
+  }),
+  "ui.combinedPatch.romChoice.title": msg({ id: "ui.combinedPatch.romChoice.title", message: "Use this ROM as" }),
+  "ui.combinedPatch.romChoice.subtitle": msg({
+    id: "ui.combinedPatch.romChoice.subtitle",
+    message: "{name} - an Original ROM is already loaded.",
+  }),
+  "ui.combinedPatch.romChoice.replace": msg({
+    id: "ui.combinedPatch.romChoice.replace",
+    message: "Replace the Original ROM",
+  }),
+  "ui.combinedPatch.romChoice.replaceNote": msg({
+    id: "ui.combinedPatch.romChoice.replaceNote",
+    message: "Stay in Patches & cheats with this ROM as the original.",
+  }),
+  "ui.combinedPatch.romChoice.modified": msg({
+    id: "ui.combinedPatch.romChoice.modified",
+    message: "Use as the Modified ROM",
+  }),
+  "ui.combinedPatch.romChoice.modifiedNote": msg({
+    id: "ui.combinedPatch.romChoice.modifiedNote",
+    message: "Switch to Modified ROM and compare it with the current original.",
+  }),
+  "ui.combinedPatch.unavailable": msg({
+    id: "ui.combinedPatch.unavailable",
+    message: "The combined patch is unavailable in this browser.",
+  }),
+  "ui.secondary.downloadRom": msg({ id: "ui.secondary.downloadRom", message: "Download patched ROM" }),
+  "ui.secondary.downloadThisRom": msg({ id: "ui.secondary.downloadThisRom", message: "Download this ROM" }),
+  "ui.secondary.downloadWeave": msg({ id: "ui.secondary.downloadWeave", message: "Download the weave" }),
+  "ui.weaveExport.cheatSteps": msg({
+    id: "ui.weaveExport.cheatSteps",
+    message: "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off.",
+  }),
   "ui.create.needsModified": msg({ id: "ui.create.needsModified", message: "Add your modified ROM" }),
   "ui.apply.needsRom": msg({ id: "ui.apply.needsRom", message: "Choose your original ROM" }),
   "ui.apply.outputFilename": msg({ id: "ui.apply.outputFilename", message: "Output filename (no extension)" }),
@@ -540,8 +591,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.outputOptions.output": msg({ id: "ui.apply.outputOptions.output", message: "Output" }),
   "ui.apply.outputOptions.title": msg({ id: "ui.apply.outputOptions.title", message: "Output options" }),
-  "ui.apply.postDownload": msg({ id: "ui.apply.postDownload", message: "Post Apply Download" }),
-  "ui.apply.postTest": msg({ id: "ui.apply.postTest", message: "Post Apply Test" }),
+  "ui.apply.postDownload": msg({ id: "ui.apply.postDownload", message: "Download after patching" }),
+  "ui.apply.postTest": msg({ id: "ui.apply.postTest", message: "Open Test after patching" }),
   "ui.apply.verifyBoot.blank": msg({ id: "ui.apply.verifyBoot.blank", message: "Blank or crashed" }),
   "ui.apply.verifyBoot.boots": msg({ id: "ui.apply.verifyBoot.boots", message: "Boots" }),
   "ui.apply.verifyBoot.checking": msg({ id: "ui.apply.verifyBoot.checking", message: "Checking boot…" }),
@@ -566,16 +617,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",
     message:
-      "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 7z archive, or a bundle. Or press Add files to pick them. rom-weaver works out what each file is and puts it on the right card. Nothing leaves your browser.",
+      "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 7z archive, or a weave. Or press Add files to pick them. rom-weaver works out what each file is and puts it on the right card. Nothing leaves your browser.",
   }),
   "ui.apply.tutorial.addFiles.title": msg({ id: "ui.apply.tutorial.addFiles.title", message: "Add your files" }),
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
   "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Add files" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
-  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Start guided bundle" }),
-  "ui.apply.tutorial.downloadTestBundle": msg({
-    id: "ui.apply.tutorial.downloadTestBundle",
-    message: "Download a test bundle",
+  "ui.apply.tutorial.createWeave": msg({ id: "ui.apply.tutorial.createWeave", message: "Start a practice weave" }),
+  "ui.apply.tutorial.downloadTestWeave": msg({
+    id: "ui.apply.tutorial.downloadTestWeave",
+    message: "Download a test weave",
   }),
   "ui.apply.tutorial.dropFiles": msg({ id: "ui.apply.tutorial.dropFiles", message: "Drop files or a folder" }),
   "ui.apply.tutorial.header": msg({ id: "ui.apply.tutorial.header", message: "Header options" }),
@@ -590,7 +641,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Choose a name and a format. The ROM's own format, such as .nes, downloads the patched ROM itself; ZIP or 7z wraps it in an archive. Your original file is not changed.",
   }),
-  "ui.apply.tutorial.output.title": msg({ id: "ui.apply.tutorial.output.title", message: "Apply and download" }),
+  "ui.apply.tutorial.output.title": msg({ id: "ui.apply.tutorial.output.title", message: "Apply & download" }),
   "ui.apply.tutorial.patchDetails": msg({ id: "ui.apply.tutorial.patchDetails", message: "Patch details" }),
   "ui.apply.tutorial.patches.body": msg({
     id: "ui.apply.tutorial.patches.body",
@@ -600,17 +651,30 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.patches.title": msg({ id: "ui.apply.tutorial.patches.title", message: "Patches and cheats" }),
   "ui.apply.tutorial.remove": msg({ id: "ui.apply.tutorial.remove", message: "Remove" }),
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
+  "ui.apply.tutorial.identify.title": msg({
+    id: "ui.apply.tutorial.identify.title",
+    message: "Identify your original ROM",
+  }),
+  "ui.apply.tutorial.identify.body": msg({
+    id: "ui.apply.tutorial.identify.body",
+    message:
+      "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry.",
+  }),
+  "ui.apply.tutorial.identify.tryIt": msg({
+    id: "ui.apply.tutorial.identify.tryIt",
+    message: "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums.",
+  }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
     message:
       "A patch only works on the exact ROM it was made for, so this card lists the ROM's checksums. The practice ROM, hello-world.nes, is a tiny homebrew game made for this guide.",
   }),
-  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your starting ROM" }),
+  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your original ROM" }),
   "ui.apply.tutorial.sampleLoadFailed": msg({
     id: "ui.apply.tutorial.sampleLoadFailed",
-    message: "Could not load the sample. Try again.",
+    message: "Couldn't load the practice files. Check your connection and try again.",
   }),
-  "ui.apply.tutorial.startApply": msg({ id: "ui.apply.tutorial.startApply", message: "Start guided Apply" }),
+  "ui.apply.tutorial.startApply": msg({ id: "ui.apply.tutorial.startApply", message: "Start a practice run" }),
   "ui.apply.tutorial.toggle": msg({ id: "ui.apply.tutorial.toggle", message: "On / Off" }),
   "ui.apply.tutorial.rom.tryIt": msg({
     id: "ui.apply.tutorial.rom.tryIt",
@@ -628,7 +692,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.tutorial.addFiles.readyTryIt",
     message: "Your files are in. Continue to look at them.",
   }),
-  "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and bundles" }),
+  "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and weaves" }),
   "ui.apply.tutorial.practiceFiles": msg({ id: "ui.apply.tutorial.practiceFiles", message: "Practice files" }),
   "ui.apply.tutorial.addCheats": msg({ id: "ui.apply.tutorial.addCheats", message: "Add cheats to the patch order" }),
   "ui.apply.tutorial.output.tryIt": msg({
@@ -673,18 +737,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.create.tutorial.cheats.title": msg({
     id: "ui.create.tutorial.cheats.title",
-    message: "Optional: build from cheat codes",
+    message: "Optional: build from patches & cheats",
   }),
   "ui.create.tutorial.cheats.body": msg({
     id: "ui.create.tutorial.cheats.body",
     message:
-      "Cheat codes replaces the modified ROM as the source of changes. Switch back to Modified ROM for the sample's expected patch.",
+      "Choose Patches & cheats in step 3 to build from ordered changes. Modified ROM is the default; switching modes keeps your inputs.",
   }),
   "ui.create.tutorial.cheats.tryIt": msg({
     id: "ui.create.tutorial.cheats.tryIt",
-    message: "Switch to Cheat codes and open the practice catalog.",
+    message: "Switch to Patches & cheats and open the practice catalog.",
   }),
-  "ui.create.tutorial.cheatCodes": msg({ id: "ui.create.tutorial.cheatCodes", message: "Cheat codes" }),
+  "ui.create.tutorial.cheatCodes": msg({ id: "ui.create.tutorial.cheatCodes", message: "Patches & cheats" }),
   "ui.create.tutorial.pickCheats": msg({
     id: "ui.create.tutorial.pickCheats",
     message: "Pick from the cheat database",
@@ -704,10 +768,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.create.tutorial.swap": msg({ id: "ui.create.tutorial.swap", message: "Swap" }),
   "ui.create.tutorial.archive": msg({ id: "ui.create.tutorial.archive", message: "Archive" }),
   "ui.create.tutorial.createDownload": msg({ id: "ui.create.tutorial.createDownload", message: "Create & download" }),
+  "ui.test.fdsBios.summary": msg({
+    id: "ui.test.fdsBios.summary",
+    message: "{fileName} needs the Famicom Disk System BIOS.",
+  }),
+  "ui.test.fdsBios.detail": msg({
+    id: "ui.test.fdsBios.detail",
+    message: "Famicom Disk System games cannot run without the FDS BIOS, and loading BIOS files is not supported yet.",
+  }),
+  "ui.test.fdsBios.link": msg({ id: "ui.test.fdsBios.link", message: "Follow FDS BIOS support" }),
   "ui.test.tutorial.load.title": msg({ id: "ui.test.tutorial.load.title", message: "A game is loaded" }),
   "ui.test.tutorial.load.body": msg({
     id: "ui.test.tutorial.load.body",
-    message: "The sample is a tiny homebrew NES game. You can also drop your own ROMs or archives here.",
+    message: "The practice ROM is a tiny homebrew NES game. You can also drop your own ROMs or archives here.",
   }),
   "ui.test.tutorial.chooseRom": msg({ id: "ui.test.tutorial.chooseRom", message: "Choose another ROM" }),
   "ui.test.tutorial.unload": msg({ id: "ui.test.tutorial.unload", message: "Stop and unload" }),
@@ -734,7 +807,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Apply anyway despite patch and ROM check mismatch",
   }),
   "ui.file.identified": msg({ id: "ui.file.identified", message: "Identified" }),
-  "ui.checks.copy": msg({ id: "ui.checks.copy", message: "Copy {label}" }),
+  "ui.checks.copy": msg({ id: "ui.checks.copy", message: "Copy {label} {value}" }),
   "ui.checks.matches": msg({ id: "ui.checks.matches", message: "matches" }),
   "ui.checks.matchesRom": msg({ id: "ui.checks.matchesRom", message: "Matches the ROM" }),
   "ui.checks.mismatch": msg({ id: "ui.checks.mismatch", message: "mismatch" }),
@@ -751,21 +824,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.file.files": msg({ id: "ui.file.files", message: "Files" }),
   "ui.file.patchTarget": msg({ id: "ui.file.patchTarget", message: "Apply patch into" }),
   "ui.home.bring": msg({ id: "ui.home.bring", message: "Bring" }),
-  "ui.home.bundleProof": msg({ id: "ui.home.bundleProof", message: "The bundle is the proof" }),
-  "ui.home.bundleProofDescription": msg({
-    id: "ui.home.bundleProofDescription",
+  "ui.home.weaveProof": msg({ id: "ui.home.weaveProof", message: "The weave is the proof" }),
+  "ui.home.weaveProofDescription": msg({
+    id: "ui.home.weaveProofDescription",
     message:
-      "A bundle records the input checksum, every patch in order, and the expected output. Months later you can show where a file came from, or hand the bundle to someone and they get the same bytes.",
+      "A weave records the input checksum, every patch in order, and the expected output. Months later you can show where a file came from, or hand the weave to someone and they get the same bytes.",
   }),
-  "ui.home.checksums": msg({ id: "ui.home.checksums", message: "Checksums" }),
   "ui.home.cliFoot": msg({
     id: "ui.home.cliFoot",
     message:
       "Cargo, cargo-binstall, and mise install the executable alone, so they need rom-weaver setup to download the identify and cheat databases. Every install method, with checksums and shell completions, is in the install guide.",
-  }),
-  "ui.home.cliItem1": msg({
-    id: "ui.home.cliItem1",
-    message: "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs.",
   }),
   "ui.home.cliItem2": msg({
     id: "ui.home.cliItem2",
@@ -773,21 +841,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.cliItem3": msg({
     id: "ui.home.cliItem3",
-    message: "Batch a whole folder: convert, verify, and patch in one run.",
+    message: "Script batch jobs: compress, verify, and patch from the command line.",
   }),
-  "ui.home.cliWalkthrough": msg({ id: "ui.home.cliWalkthrough", message: "CLI walkthrough" }),
+  "ui.home.cliWalkthrough": msg({ id: "ui.home.cliWalkthrough", message: "Get started with the CLI" }),
   "ui.home.codecCompressionSettings": msg({
     id: "ui.home.codecCompressionSettings",
     message: "with codec-aware compression settings",
   }),
   "ui.home.containers": msg({ id: "ui.home.containers", message: "Containers" }),
   "ui.home.copierHeader": msg({ id: "ui.home.copierHeader", message: "with copier-header detection and repair" }),
-  "ui.home.eyebrow": msg({ id: "ui.home.eyebrow", message: "Your ROM and disc image toolkit" }),
-  "ui.home.filesStay": msg({ id: "ui.home.filesStay", message: "Files stay on the device" }),
   "ui.home.filesStayDescription": msg({
     id: "ui.home.filesStayDescription",
-    message:
-      "The webapp runs the same engine as the CLI, compiled to WebAssembly and running in worker threads. There is no server to send anything to.",
+    message: "Everything runs in this browser tab, on the same engine as the command-line tool.",
   }),
   "ui.home.flowApplyBring": msg({
     id: "ui.home.flowApplyBring",
@@ -795,15 +860,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.flowApplyGet": msg({
     id: "ui.home.flowApplyGet",
-    message: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
+    message: "The patched ROM with checksums checked. Save the chain as a weave to replay or share it.",
   }),
-  "ui.home.flowBundleBringAfter": msg({ id: "ui.home.flowBundleBringAfter", message: "someone sent you." }),
-  "ui.home.flowBundleBringBefore": msg({
-    id: "ui.home.flowBundleBringBefore",
+  "ui.home.flowWeaveBringAfter": msg({ id: "ui.home.flowWeaveBringAfter", message: "someone sent you." }),
+  "ui.home.flowWeaveBringBefore": msg({
+    id: "ui.home.flowWeaveBringBefore",
     message: "A patch chain you have set up in Apply, or a",
   }),
-  "ui.home.flowBundleGet": msg({
-    id: "ui.home.flowBundleGet",
+  "ui.home.flowWeaveGet": msg({
+    id: "ui.home.flowWeaveGet",
     message:
       "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
   }),
@@ -818,12 +883,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.flowTestBring": msg({ id: "ui.home.flowTestBring", message: "A ROM you just patched, or one from disk." }),
   "ui.home.flowTestGet": msg({
     id: "ui.home.flowTestGet",
-    message: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
+    message: "The ROM running in this tab, so you can check the patch before you save it.",
   }),
-  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "See what’s supported" }),
   "ui.home.formatsTitle": msg({
     id: "ui.home.formatsTitle",
-    message: "Every console generation brought its own format. Bring all of them.",
+    message: "Open any of these directly, with no need to extract first.",
   }),
   "ui.home.frontendsDescription": msg({
     id: "ui.home.frontendsDescription",
@@ -841,37 +905,27 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.installWith": msg({ id: "ui.home.installWith", message: "Install with one of" }),
   "ui.home.lede": msg({
     id: "ui.home.lede",
-    message: "Open archives, apply patches in order, and choose your output format.",
+    message:
+      "Add a ROM and its patches, an original and an edited ROM, or a ROM and its save. rom-weaver opens the right tool.",
   }),
   "ui.home.localFirstEyebrow": msg({ id: "ui.home.localFirstEyebrow", message: "Why local-first" }),
   "ui.home.localFirstTitle": msg({
     id: "ui.home.localFirstTitle",
     message: "Your collection is yours. The tool should act like it.",
   }),
-  "ui.home.loomAriaLabel": msg({
-    id: "ui.home.loomAriaLabel",
-    message:
-      "The patched result drawn as vertical threads, with three patches woven across it in order, one colored band per patch.",
-  }),
   "ui.home.loomCaption": msg({
     id: "ui.home.loomCaption",
     message:
-      "One pass, no unpacking by hand, no intermediate files. Save it as a bundle and the order is kept for the next person.",
+      "Patches apply in the order shown, straight from their archives, with no files left in between. Save the list as a weave file so someone else can repeat it.",
   }),
-  "ui.home.loomOriginalRom": msg({ id: "ui.home.loomOriginalRom", message: "Original ROM" }),
-  "ui.home.loomPatch": msg({ id: "ui.home.loomPatch", message: "patch {n}" }),
-  "ui.home.loomCompress": msg({ id: "ui.home.loomCompress", message: "compress" }),
-  "ui.home.loomExtract": msg({ id: "ui.home.loomExtract", message: "extract" }),
-  "ui.home.loomOutput": msg({ id: "ui.home.loomOutput", message: "output" }),
-  "ui.home.loomResult": msg({ id: "ui.home.loomResult", message: "result" }),
-  "ui.home.loomSource": msg({ id: "ui.home.loomSource", message: "source" }),
-  "ui.home.loomTag": msg({ id: "ui.home.loomTag", message: "apply · 3 patches · in order" }),
-  "ui.home.loomUnpack": msg({ id: "ui.home.loomUnpack", message: "unpack" }),
+  "ui.home.loomChecked": msg({ id: "ui.home.loomChecked", message: "SHA-1 checked" }),
+  "ui.home.loomOriginal": msg({ id: "ui.home.loomOriginal", message: "Original" }),
+  "ui.home.loomPatched": msg({ id: "ui.home.loomPatched", message: "Patched" }),
   "ui.home.mostUsed": msg({ id: "ui.home.mostUsed", message: "most used" }),
   "ui.home.nestedArchives": msg({ id: "ui.home.nestedArchives", message: "and nested archives" }),
   "ui.home.open": msg({ id: "ui.home.open", message: "Open" }),
   "ui.home.openFlow": msg({ id: "ui.home.openFlow", message: "Open {flow}" }),
-  "ui.home.openSource": msg({ id: "ui.home.openSource", message: "Open source, forever" }),
+  "ui.home.openSource": msg({ id: "ui.home.openSource", message: "Open source" }),
   "ui.home.openSourceDescription": msg({
     id: "ui.home.openSourceDescription",
     message: "AGPL-3.0 licensed. Read the code, build it yourself, or host the webapp on your own domain.",
@@ -881,14 +935,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.reads": msg({ id: "ui.home.reads", message: "reads" }),
   "ui.home.readsAndWrites": msg({ id: "ui.home.readsAndWrites", message: "reads and writes" }),
   "ui.home.selfHostingGuide": msg({ id: "ui.home.selfHostingGuide", message: "Self-hosting guide" }),
-  "ui.home.title": msg({ id: "ui.home.title", message: "Patch ROMs in your browser." }),
+  "ui.home.title": msg({ id: "ui.home.title", message: "Online ROM patcher." }),
   "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "Keep your files on your device." }),
-  "ui.home.tryAfter": msg({
-    id: "ui.home.tryAfter",
-    message: ": a tiny homebrew NES ROM and two patches, already in order.",
-  }),
-  "ui.home.tryBefore": msg({ id: "ui.home.tryBefore", message: "New here?" }),
-  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through a sample" }),
+  "ui.home.practicePrompt": msg({ id: "ui.home.practicePrompt", message: "No files yet?" }),
+  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Patch a practice ROM, step by step" }),
   "ui.home.webappFoot": msg({
     id: "ui.home.webappFoot",
     message: "Want your own copy? Host it yourself from static files or a Docker image.",
@@ -899,24 +949,118 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.webappItem2": msg({
     id: "ui.home.webappItem2",
-    message: "Install it from the browser menu and it keeps working offline.",
-  }),
-  "ui.home.webappItem3": msg({
-    id: "ui.home.webappItem3",
-    message: "Files are read and written on your device. No upload ever happens.",
+    message:
+      "Cache the app in Settings before going offline. Databases, practice files, and emulator cores may need separate downloads.",
   }),
   "ui.home.webappItem4": msg({
     id: "ui.home.webappItem4",
-    message: "Open a bundle link and the patch chain is staged for you.",
-  }),
-  "ui.home.workflowsDescription": msg({
-    id: "ui.home.workflowsDescription",
-    message: "Create patches, share reusable bundles, and test ROMs in your browser.",
+    message: "Open a weave link and the patch chain is staged for you.",
   }),
   "ui.home.workflowsEyebrow": msg({ id: "ui.home.workflowsEyebrow", message: "Pick a workflow" }),
-  "ui.home.workflowsTitle": msg({ id: "ui.home.workflowsTitle", message: "Other capabilities" }),
   "ui.home.writes": msg({ id: "ui.home.writes", message: "writes" }),
+  "ui.home.checksumTypes": msg({ id: "ui.home.checksumTypes", message: "{count} checksum types" }),
+  "ui.home.containerFormats": msg({ id: "ui.home.containerFormats", message: "{count} archive and disc formats" }),
+  "ui.home.factNoTelemetry": msg({ id: "ui.home.factNoTelemetry", message: "No account, no telemetry" }),
+  "ui.home.factNoUpload": msg({ id: "ui.home.factNoUpload", message: "Nothing is uploaded" }),
+  "ui.home.factOffline": msg({ id: "ui.home.factOffline", message: "Works offline" }),
+  "ui.home.faqArchiveAnswer": msg({
+    id: "ui.home.faqArchiveAnswer",
+    message: "Yes. ROMs and patches inside ZIP, 7z, RAR, and nested archives open in place.",
+  }),
+  "ui.home.faqArchiveQuestion": msg({
+    id: "ui.home.faqArchiveQuestion",
+    message: "Can I drop a ZIP or 7z without extracting it?",
+  }),
+  "ui.home.faqGamesAnswer": msg({
+    id: "ui.home.faqGamesAnswer",
+    message: "No. Bring your own files. Practice runs use a tiny homebrew NES ROM made for them.",
+  }),
+  "ui.home.faqGamesQuestion": msg({ id: "ui.home.faqGamesQuestion", message: "Does rom-weaver include games?" }),
+  "ui.home.faqMore": msg({ id: "ui.home.faqMore", message: "Read the full FAQ" }),
+  "ui.home.faqOriginalAnswer": msg({
+    id: "ui.home.faqOriginalAnswer",
+    message: "Not in the browser. Each result downloads as a new file.",
+  }),
+  "ui.home.faqOriginalQuestion": msg({ id: "ui.home.faqOriginalQuestion", message: "Will it overwrite my original?" }),
+  "ui.home.faqTitle": msg({ id: "ui.home.faqTitle", message: "Questions" }),
+  "ui.home.faqUploadAnswer": msg({
+    id: "ui.home.faqUploadAnswer",
+    message: "No. Files are read and written on your device. There is no server that receives them.",
+  }),
+  "ui.home.faqUploadQuestion": msg({ id: "ui.home.faqUploadQuestion", message: "Are my ROMs or patches uploaded?" }),
+  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "See what’s supported" }),
+  "ui.home.formatsHeading": msg({ id: "ui.home.formatsHeading", message: "Supported formats" }),
+  "ui.home.formatsLink": msg({ id: "ui.home.formatsLink", message: "See every format" }),
+  "ui.home.goApply": msg({ id: "ui.home.goApply", message: "Apply" }),
+  "ui.home.goWeave": msg({ id: "ui.home.goWeave", message: "Weave" }),
+  "ui.home.goCheats": msg({ id: "ui.home.goCheats", message: "Add cheats" }),
+  "ui.home.goChecksum": msg({ id: "ui.home.goChecksum", message: "Checksum" }),
+  "ui.home.goExtract": msg({ id: "ui.home.goExtract", message: "Extract files" }),
+  "ui.home.prepareOffline": msg({ id: "ui.home.prepareOffline", message: "Prepare for offline use" }),
+  "ui.apply.validation.fixChecksum": msg({
+    id: "ui.apply.validation.fixChecksum",
+    message: "Compare the expected ROM before bypassing checks (opens in a new tab)",
+  }),
+  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
+  "ui.home.goCreate": msg({ id: "ui.home.goCreate", message: "Create" }),
+  "ui.home.goIdentify": msg({ id: "ui.home.goIdentify", message: "Identify" }),
+  "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
+  "ui.home.installMethod": msg({ id: "ui.home.installMethod", message: "Install method" }),
+  "ui.home.patchFormats": msg({ id: "ui.home.patchFormats", message: "{count} patch formats" }),
+  "ui.home.routeWeave": msg({ id: "ui.home.routeWeave", message: "Patches to share as a set" }),
+  "ui.home.routeWeaveBody": msg({
+    id: "ui.home.routeWeaveBody",
+    message: "Save their order and checksums in one weave file that others can apply.",
+  }),
+  "ui.home.routeCheats": msg({ id: "ui.home.routeCheats", message: "A game that needs cheat codes" }),
+  "ui.home.routeCheatsBody": msg({
+    id: "ui.home.routeCheatsBody",
+    message: "Write supported codes into the ROM so they work in any emulator.",
+  }),
+  "ui.home.routeChecksum": msg({ id: "ui.home.routeChecksum", message: "Two files to compare" }),
+  "ui.home.routeChecksumBody": msg({
+    id: "ui.home.routeChecksumBody",
+    message: "Calculate checksums to see if they match, even when the names differ.",
+  }),
+  "ui.home.routeDisc": msg({ id: "ui.home.routeDisc", message: "A compressed disc image" }),
+  "ui.home.routeDiscBody": msg({
+    id: "ui.home.routeDiscBody",
+    message: "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE.",
+  }),
+  "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
+  "ui.home.routeEditedBody": msg({
+    id: "ui.home.routeEditedBody",
+    message: "Compare it with the original to make a patch you can share.",
+  }),
+  "ui.home.routePatch": msg({ id: "ui.home.routePatch", message: "A patch someone shared" }),
+  "ui.home.routePatchBody": msg({
+    id: "ui.home.routePatchBody",
+    message: "Translations, fixes, and hacks. Add the game it changes.",
+  }),
+  "ui.home.routeTest": msg({ id: "ui.home.routeTest", message: "A ROM you want to try" }),
+  "ui.home.routeTestBody": msg({
+    id: "ui.home.routeTestBody",
+    message: "Play supported games in this tab before you save anything.",
+  }),
+  "ui.home.routeUnknown": msg({ id: "ui.home.routeUnknown", message: "A ROM you can't identify" }),
+  "ui.home.routeUnknownBody": msg({
+    id: "ui.home.routeUnknownBody",
+    message: "Look up its checksum to find the game, region, and revision.",
+  }),
+  "ui.home.routesDescription": msg({
+    id: "ui.home.routesDescription",
+    message: "Pick the file you have. Each card opens the tool for it.",
+  }),
+  "ui.home.routesTitle": msg({ id: "ui.home.routesTitle", message: "What file do you have?" }),
+  "ui.home.trustOriginals": msg({ id: "ui.home.trustOriginals", message: "Originals stay as they were" }),
+  "ui.home.trustOriginalsBody": msg({ id: "ui.home.trustOriginalsBody", message: "Every result is a new file." }),
+  "ui.home.trustTitle": msg({ id: "ui.home.trustTitle", message: "There is no server to send your files to" }),
   "ui.output.applyDownload": msg({ id: "ui.output.applyDownload", message: "Apply & download" }),
+  "ui.output.applyBlocked": msg({
+    id: "ui.output.applyBlocked",
+    message:
+      "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered.",
+  }),
   "ui.output.cancelApply": msg({ id: "ui.output.cancelApply", message: "Cancel applying" }),
   "ui.output.downloadFile": msg({ id: "ui.output.downloadFile", message: "Download {name}" }),
   "ui.output.patchedFormat": msg({ id: "ui.output.patchedFormat", message: "Patched {format}" }),
@@ -939,10 +1083,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.preflightOutputPending",
     message: "The output has not been created yet.",
   }),
-  "ui.patch.preflightPassed": msg({ id: "ui.patch.preflightPassed", message: "Preflight passed" }),
+  "ui.patch.preflightPassed": msg({ id: "ui.patch.preflightPassed", message: "Ready to apply" }),
   "ui.patch.preflightVerified": msg({
     id: "ui.patch.preflightVerified",
-    message: "rom-weaver verified this patch against the current input.",
+    message: "rom-weaver checked this patch against the file it applies to.",
   }),
   "ui.patch.remove": msg({ id: "ui.patch.remove", message: "Remove" }),
   "ui.patch.replace": msg({ id: "ui.patch.replace", message: "Replace patch" }),
@@ -951,10 +1095,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Choose a patch file or archive to replace this patch.",
   }),
   "ui.patch.replacementInput": msg({ id: "ui.patch.replacementInput", message: "Replacement patch file or archive" }),
-  "ui.patch.validationFailed": msg({ id: "ui.patch.validationFailed", message: "Validation failed" }),
+  "ui.patch.validationFailed": msg({ id: "ui.patch.validationFailed", message: "Checks failed" }),
   "ui.patch.validationMismatch": msg({
     id: "ui.patch.validationMismatch",
     message: "The patch checks did not match this ROM.",
+  }),
+  "ui.patch.validationUnreadableHint": msg({
+    id: "ui.patch.validationUnreadableHint",
+    message: "Remove this patch and choose a valid patch file.",
   }),
   "ui.patch.validationMismatchHint": msg({
     id: "ui.patch.validationMismatchHint",
@@ -962,29 +1110,32 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.validationMismatchOverride": msg({
     id: "ui.patch.validationMismatchOverride",
-    message: "Choose the ROM that this patch was made for, or use the override in 0x04.",
+    message: "Choose the ROM that this patch was made for, or turn on Apply anyway in step 4.",
   }),
   "ui.patch.version": msg({ id: "ui.patch.version", message: "Version" }),
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "On this card" }),
   "ui.tutorial.back": msg({ id: "ui.tutorial.back", message: "Back" }),
   "ui.tutorial.continue": msg({ id: "ui.tutorial.continue", message: "Continue" }),
-  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Hide this button" }),
-  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Bring it back in Settings" }),
+  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Hide practice-run links" }),
+  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Turn them back on in Settings" }),
   "ui.tutorial.done": msg({ id: "ui.tutorial.done", message: "Done" }),
   "ui.tutorial.endHint": msg({ id: "ui.tutorial.endHint", message: "Esc or ✕ leaves the guide." }),
   "ui.tutorial.exit": msg({ id: "ui.tutorial.exit", message: "Leave the guide" }),
-  "ui.tutorial.instructions": msg({ id: "ui.tutorial.instructions", message: "Tutorial instructions" }),
-  "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading sample files…" }),
-  "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading sample files" }),
-  "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading the sample files" }),
-  "ui.tutorial.new": msg({ id: "ui.tutorial.new", message: "New here?" }),
+  "ui.tutorial.instructions": msg({ id: "ui.tutorial.instructions", message: "Practice run steps" }),
+  "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading practice files…" }),
+  "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading practice files" }),
+  "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading practice files" }),
   "ui.tutorial.practiceFiles": msg({ id: "ui.tutorial.practiceFiles", message: "Practice files:" }),
   "ui.tutorial.downloadPractice": msg({ id: "ui.tutorial.downloadPractice", message: "Download {file}" }),
-  "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Getting the sample ready…" }),
-  "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Getting the sample ready" }),
-  "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),
-  "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run · Step {step} of {total}" }),
+  "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Preparing practice files…" }),
+  "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Preparing practice files" }),
+  "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice runs" }),
+  "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run, step {step} of {total}" }),
+  "ui.tutorial.tryApply": msg({ id: "ui.tutorial.tryApply", message: "Patch a practice ROM" }),
+  "ui.tutorial.tryWeave": msg({ id: "ui.tutorial.tryWeave", message: "Share practice patches as a weave" }),
+  "ui.tutorial.tryCreate": msg({ id: "ui.tutorial.tryCreate", message: "Make a patch from practice ROMs" }),
   "ui.tutorial.tryIt": msg({ id: "ui.tutorial.tryIt", message: "Try it" }),
+  "ui.tutorial.tryTest": msg({ id: "ui.tutorial.tryTest", message: "Play a practice ROM" }),
   "ui.tutorial.view.title": msg({ id: "ui.tutorial.view.title", message: "Choose how much to see" }),
   "ui.tutorial.view.simpleBody": msg({
     id: "ui.tutorial.view.simpleBody",
@@ -996,11 +1147,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.tutorial.view.simpleTryIt": msg({
     id: "ui.tutorial.view.simpleTryIt",
-    message: "Switch Detailed on and watch the highlighted card change. Your choice is saved.",
+    message: "Switch to Detailed and watch the highlighted card change. Your choice is saved.",
   }),
   "ui.tutorial.view.detailedTryIt": msg({
     id: "ui.tutorial.view.detailedTryIt",
-    message: "Switch Detailed off to go back to one drawer per file. Your choice is saved.",
+    message: "Switch to Simple to go back to one drawer per file. Your choice is saved.",
   }),
   "ui.tutorial.view.simple": msg({ id: "ui.tutorial.view.simple", message: "Simple" }),
   "ui.tutorial.view.simpleSummary": msg({
@@ -1013,71 +1164,126 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.tutorial.view.current": msg({ id: "ui.tutorial.view.current", message: "Now" }),
   "candidate.warningCount": msg({ id: "candidate.warningCount", message: "{count} warning(s)" }),
-  "error.AMBIGUOUS_SELECTION": msg({ id: "error.AMBIGUOUS_SELECTION", message: "Multiple matching files were found." }),
-  "error.CANCELLED": msg({ id: "error.CANCELLED", message: "Workflow was cancelled." }),
-  "error.CHECKSUM_MISMATCH": msg({ id: "error.CHECKSUM_MISMATCH", message: "Checksum validation failed." }),
+  "ui.errorRecovery.selection": msg({
+    id: "ui.errorRecovery.selection",
+    message:
+      "Remove the affected input and add the required file again. For an archive, check its contents first; keep disc sheets and companion tracks together.",
+  }),
+  "ui.errorRecovery.archiveDepth": msg({
+    id: "ui.errorRecovery.archiveDepth",
+    message: "Extract the outer archive on your device, then add the required file or a less deeply nested archive.",
+  }),
+  "ui.errorRecovery.memory": msg({
+    id: "ui.errorRecovery.memory",
+    message:
+      "Close other memory-heavy tabs before trying again. If this keeps happening, use the native CLI for this file.",
+  }),
+  "ui.errorRecovery.cliGuide": msg({
+    id: "ui.errorRecovery.cliGuide",
+    message: "Get started with the CLI (opens in a new tab)",
+  }),
+  "ui.errorRecovery.archiveGuide": msg({
+    id: "ui.errorRecovery.archiveGuide",
+    message: "Extract files guide (opens in a new tab)",
+  }),
+  "error.AMBIGUOUS_SELECTION": msg({
+    id: "error.AMBIGUOUS_SELECTION",
+    message: "More than one file matches. Choose one.",
+  }),
+  "error.CANCELLED": msg({ id: "error.CANCELLED", message: "Cancelled." }),
+  "error.CHECKSUM_MISMATCH": msg({
+    id: "error.CHECKSUM_MISMATCH",
+    message: "This file's checksum doesn't match the expected one. Check that you chose the right ROM.",
+  }),
   "error.COMPRESSION_FAILED": msg({ id: "error.COMPRESSION_FAILED", message: "Compression failed." }),
-  "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "The selected input is not valid." }),
-  "error.INVALID_SETTINGS": msg({ id: "error.INVALID_SETTINGS", message: "The selected settings are not valid." }),
-  "error.NO_COMPATIBLE_PATCH": msg({ id: "error.NO_COMPATIBLE_PATCH", message: "No compatible patch was found." }),
+  "error.INVALID_INPUT": msg({ id: "error.INVALID_INPUT", message: "rom-weaver couldn't use the files you added." }),
+  "error.INVALID_SETTINGS": msg({
+    id: "error.INVALID_SETTINGS",
+    message: "A setting has a value rom-weaver can't use. Check Settings, or press Reset.",
+  }),
+  "error.NO_COMPATIBLE_PATCH": msg({
+    id: "error.NO_COMPATIBLE_PATCH",
+    message: "None of these patches fit this ROM. Choose the ROM they were made for.",
+  }),
   "error.NO_SELECTABLE_CANDIDATE": msg({
     id: "error.NO_SELECTABLE_CANDIDATE",
-    message: "No selectable file was found.",
+    message: "None of the files you added can be used here.",
   }),
-  "error.OUTPUT_WRITE_FAILED": msg({ id: "error.OUTPUT_WRITE_FAILED", message: "Output could not be written." }),
-  "error.PATCH_APPLY_FAILED": msg({ id: "error.PATCH_APPLY_FAILED", message: "Applying the patch failed." }),
-  "error.PATCH_CREATE_FAILED": msg({ id: "error.PATCH_CREATE_FAILED", message: "Patch creation failed." }),
-  "error.PATCH_PARSE_FAILED": msg({ id: "error.PATCH_PARSE_FAILED", message: "Patch parsing failed." }),
+  "error.OUTPUT_WRITE_FAILED": msg({
+    id: "error.OUTPUT_WRITE_FAILED",
+    message: "Couldn't save the result. Free up storage, or choose a folder the browser can write to.",
+  }),
+  "error.PATCH_APPLY_FAILED": msg({
+    id: "error.PATCH_APPLY_FAILED",
+    message: "The patch couldn't be applied. Check that it was made for this ROM.",
+  }),
+  "error.PATCH_CREATE_FAILED": msg({ id: "error.PATCH_CREATE_FAILED", message: "Couldn't create the patch." }),
+  "error.PATCH_PARSE_FAILED": msg({
+    id: "error.PATCH_PARSE_FAILED",
+    message: "This patch file is damaged or in a format rom-weaver doesn't support.",
+  }),
   "error.PATCH_TARGET_MISMATCH": msg({
     id: "error.PATCH_TARGET_MISMATCH",
-    message: "The patch target did not match the selected input.",
+    message: "This patch was made for a different ROM. Choose the ROM it expects.",
   }),
-  "error.SELECTION_NOT_FOUND": msg({ id: "error.SELECTION_NOT_FOUND", message: "The selected file was not found." }),
-  "error.SOURCE_NOT_FOUND": msg({ id: "error.SOURCE_NOT_FOUND", message: "The selected source could not be found." }),
+  "error.SELECTION_NOT_FOUND": msg({
+    id: "error.SELECTION_NOT_FOUND",
+    message: "That file is no longer available. Add it again.",
+  }),
+  "error.SOURCE_NOT_FOUND": msg({
+    id: "error.SOURCE_NOT_FOUND",
+    message: "That file is no longer available. Add it again.",
+  }),
   "error.SOURCE_UNSUPPORTED": msg({
     id: "error.SOURCE_UNSUPPORTED",
-    message: "The selected source type is not supported.",
+    message: "rom-weaver can't open this kind of file.",
   }),
-  "error.STORAGE_UNAVAILABLE": msg({ id: "error.STORAGE_UNAVAILABLE", message: "Storage is unavailable." }),
+  "error.STORAGE_UNAVAILABLE": msg({
+    id: "error.STORAGE_UNAVAILABLE",
+    message: "This browser's file storage isn't available. Reload the page and try again.",
+  }),
   "error.UNSUPPORTED_FORMAT": msg({
     id: "error.UNSUPPORTED_FORMAT",
-    message: "The selected file format is not supported.",
+    message: "rom-weaver doesn't support this file format.",
   }),
-  "error.WORKER_FAILED": msg({ id: "error.WORKER_FAILED", message: "Worker execution failed." }),
+  "error.WORKER_FAILED": msg({
+    id: "error.WORKER_FAILED",
+    message: "The task stopped unexpectedly. Reload the page and try again.",
+  }),
   "error.WORKER_UNAVAILABLE": msg({
     id: "error.WORKER_UNAVAILABLE",
-    message: "Required worker support is unavailable.",
+    message: "This browser couldn't start the background task this needs. Reload the page, or try another browser.",
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Trim, PPF undo, and Save Editor)",
+    message: "Enable beta tools (Trim and Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
-  "settings.bundlePackage": msg({ id: "settings.bundlePackage", message: "Bundle" }),
+  "settings.weavePackage": msg({ id: "settings.weavePackage", message: "What a shared weave includes" }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
-  "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
-  "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
-  "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
+  "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD codecs" }),
+  "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD codecs" }),
+  "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Compression level" }),
   "settings.detailedViewEnabled": msg({
     id: "settings.detailedViewEnabled",
     message: "Show detailed file information",
   }),
-  "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Type" }),
+  "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Download format" }),
   "settings.emulatorSaveStorageEnabled": msg({
     id: "settings.emulatorSaveStorageEnabled",
     message: "Store emulator saves on this device",
   }),
-  "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
+  "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Repair the header checksum" }),
   "settings.identifiedOutputName": msg({
     id: "settings.identifiedOutputName",
     message: "Name outputs after the identified title",
   }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
-  "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
+  "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Custom compression level" }),
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
   "settings.onboardingEnabled": msg({
     id: "settings.onboardingEnabled",
-    message: 'Show the "New here?" quick-start tips',
+    message: "Show practice-run links",
   }),
   "settings.offlineCopyEnabled": msg({ id: "settings.offlineCopyEnabled", message: "Keep an offline copy" }),
   "settings.offlineCopyHelp": msg({
@@ -1086,11 +1292,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.postApplyDownloadBehavior": msg({
     id: "settings.postApplyDownloadBehavior",
-    message: "Post Apply Download",
+    message: "Download after patching",
   }),
   "settings.postApplyTestBehavior": msg({
     id: "settings.postApplyTestBehavior",
-    message: "Post Apply Test",
+    message: "Open Test after patching",
   }),
   "settings.verifyBootAfterApply": msg({
     id: "settings.verifyBootAfterApply",
@@ -1102,7 +1308,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
-    message: "Require input checksum match",
+    message: "Only patch ROMs whose checksum matches",
   }),
   "settings.rvzBlockSize": msg({ id: "settings.rvzBlockSize", message: "RVZ block size" }),
   "settings.rvzCodec": msg({ id: "settings.rvzCodec", message: "RVZ codec" }),
@@ -1111,31 +1317,33 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.threads": msg({ id: "settings.threads", message: "Threads" }),
   "settings.zipCodec": msg({ id: "settings.zipCodec", message: "ZIP codec" }),
   "ui.basis.auto": msg({ id: "ui.basis.auto", message: "auto" }),
-  "ui.basis.autoBase": msg({ id: "ui.basis.autoBase", message: "auto (Original ROM)" }),
-  "ui.basis.autoPrevious": msg({ id: "ui.basis.autoPrevious", message: "auto (Previous patch output)" }),
-  "ui.basis.base": msg({ id: "ui.basis.base", message: "base ROM" }),
-  "ui.basis.previous": msg({ id: "ui.basis.previous", message: "previous output" }),
+  "ui.basis.autoBase": msg({ id: "ui.basis.autoBase", message: "Original ROM (detected)" }),
+  "ui.basis.autoPrevious": msg({ id: "ui.basis.autoPrevious", message: "Previous patch's result (detected)" }),
+  "ui.basis.base": msg({ id: "ui.basis.base", message: "original ROM" }),
+  "ui.basis.previous": msg({ id: "ui.basis.previous", message: "previous patch's result" }),
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
-  "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
+  "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch's result" }),
   "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title}: {platform}" }),
-  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks: {basis}" }),
+  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Input: {basis}" }),
   "ui.patchChecks.deferred": msg({ id: "ui.patchChecks.deferred", message: "Checks during apply: {input}" }),
   "ui.patchChecks.embeddedOutput": msg({
     id: "ui.patchChecks.embeddedOutput",
-    message: "Embedded output checks: Standalone patch result",
+    message: "Patch result",
   }),
   "ui.patchChecks.expects": msg({ id: "ui.patchChecks.expects", message: "Requires {patch} first" }),
   "ui.patchChecks.precedingPatchOutput": msg({
     id: "ui.patchChecks.precedingPatchOutput",
-    message: "Previous patch output",
+    message: "Previous patch's result",
   }),
-  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks: {input}" }),
+  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input: {input}" }),
   "ui.patchChecks.stackOutput": msg({
     id: "ui.patchChecks.stackOutput",
-    message: "Stack output checks: Combined result",
+    message: "Combined result",
   }),
-  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet" }),
+  "ui.patchChecks.unreadable": msg({ id: "ui.patchChecks.unreadable", message: "Patch file is not valid" }),
+  "ui.patchChecks.failed": msg({ id: "ui.patchChecks.failed", message: "Check failed: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
   "ui.patchChecks.unknownPatchOutput": msg({
     id: "ui.patchChecks.unknownPatchOutput",
@@ -1143,33 +1351,34 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patchChecks.patchNumber": msg({ id: "ui.patchChecks.patchNumber", message: "Patch {n}" }),
   "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified" }),
+  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Checked" }),
   "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
-  "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
+  "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (detected)" }),
   "ui.patchChecks.autoPrevious": msg({
     id: "ui.patchChecks.autoPrevious",
-    message: "Previous patch output (automatic)",
+    message: "Previous patch's result (detected)",
   }),
-  "ui.bundleExport.create": msg({ id: "ui.bundleExport.create", message: "Create {format} Bundle" }),
-  "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
-  "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
-  "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
-  "ui.bundleExport.includeRom": msg({ id: "ui.bundleExport.includeRom", message: "Include ROM in bundle" }),
-  "ui.bundleExport.headerNotSaved": msg({
-    id: "ui.bundleExport.headerNotSaved",
+  "ui.weaveExport.create": msg({ id: "ui.weaveExport.create", message: "Create {format} weave" }),
+  "ui.weaveExport.createRom": msg({ id: "ui.weaveExport.createRom", message: "Create {format} ROM weave" }),
+  "ui.weaveExport.download": msg({ id: "ui.weaveExport.download", message: "Download {format} weave" }),
+  "ui.weaveExport.downloadRom": msg({ id: "ui.weaveExport.downloadRom", message: "Download {format} ROM weave" }),
+  "ui.weaveExport.includeRom": msg({ id: "ui.weaveExport.includeRom", message: "Include ROM in weave" }),
+  "ui.weaveExport.headerNotSaved": msg({
+    id: "ui.weaveExport.headerNotSaved",
     message: "Output header changes apply only to this session.",
   }),
-  "ui.bundleExport.romDistributionWarning": msg({
-    id: "ui.bundleExport.romDistributionWarning",
+  "ui.weaveExport.romDistributionWarning": msg({
+    id: "ui.weaveExport.romDistributionWarning",
     message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
   }),
-  "ui.bundleExport.optional": msg({ id: "ui.bundleExport.optional", message: "optional" }),
-  "ui.bundleExport.outputFilename": msg({
-    id: "ui.bundleExport.outputFilename",
-    message: "Bundle output name (without extension)",
+  "ui.weaveExport.optional": msg({ id: "ui.weaveExport.optional", message: "optional" }),
+  "ui.weaveExport.outputFilename": msg({
+    id: "ui.weaveExport.outputFilename",
+    message: "Weave output name (without extension)",
   }),
-  "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
-  "ui.bundleExport.shareTitle": msg({
-    id: "ui.bundleExport.shareTitle",
+  "ui.weaveExport.share": msg({ id: "ui.weaveExport.share", message: "Share weave" }),
+  "ui.weaveExport.shareTitle": msg({
+    id: "ui.weaveExport.shareTitle",
     message: "Share this patch recipe (for patch creators)",
   }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
@@ -1192,31 +1401,93 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.common.retry": msg({ id: "ui.common.retry", message: "Retry" }),
   "ui.common.skipToMain": msg({ id: "ui.common.skipToMain", message: "Skip to main content" }),
   "ui.drop.addRom": msg({ id: "ui.drop.addRom", message: "Add a ROM" }),
+  "ui.drop.chooseFilesHint": msg({
+    id: "ui.drop.chooseFilesHint",
+    message: "{page} can't use every file you added. Choose which ones to bring.",
+  }),
+  "ui.drop.notUsedHere": msg({ id: "ui.drop.notUsedHere", message: "{page} won't use this file" }),
+  "ui.drop.openFiles": msg({
+    id: "ui.drop.openFiles",
+    message: "{count, plural, one {Open # file in {page}} other {Open # files in {page}}}",
+  }),
+  "ui.drop.applyBeforeTestBody": msg({
+    id: "ui.drop.applyBeforeTestBody",
+    message: "Test plays a ROM as it is. Apply the patches first, then press Test on the patched result.",
+  }),
+  "ui.drop.applyBeforeTestTitle": msg({ id: "ui.drop.applyBeforeTestTitle", message: "Apply the patch first?" }),
+  "ui.drop.homeChoose": msg({ id: "ui.drop.homeChoose", message: "Choose files" }),
+  "ui.drop.homeDrop": msg({ id: "ui.drop.homeDrop", message: "or drop files here" }),
+  "ui.drop.noteApplyFiles": msg({ id: "ui.drop.noteApplyFiles", message: "Open these files in Apply." }),
+  "ui.drop.noteApplyFirst": msg({
+    id: "ui.drop.noteApplyFirst",
+    message: "Patch first, then press Test on the result.",
+  }),
+  "ui.drop.noteApplyMixed": msg({ id: "ui.drop.noteApplyMixed", message: "Uses one ROM and asks which to keep." }),
+  "ui.drop.noteApplyRom": msg({ id: "ui.drop.noteApplyRom", message: "Patch this ROM. Add the patches next." }),
+  "ui.drop.noteApplyWeave": msg({ id: "ui.drop.noteApplyWeave", message: "Apply the weave's patches to a ROM." }),
+  "ui.drop.noteEditWeave": msg({ id: "ui.drop.noteEditWeave", message: "Edit the patch recipe and share a weave." }),
+  "ui.drop.noteCreateMixed": msg({
+    id: "ui.drop.noteCreateMixed",
+    message: "Combine the patches into one patch for the original ROM.",
+  }),
+  "ui.drop.noteCreateRoms": msg({ id: "ui.drop.noteCreateRoms", message: "Compare the ROMs to make a patch." }),
+  "ui.drop.noteStayApply": msg({ id: "ui.drop.noteStayApply", message: "Choose one ROM to patch." }),
+  "ui.drop.noteStayRomOnly": msg({
+    id: "ui.drop.noteStayRomOnly",
+    message: "Keep the ROMs here. The patches are ignored.",
+  }),
+  "ui.drop.noteTestRom": msg({ id: "ui.drop.noteTestRom", message: "Play it as it is." }),
+  "ui.drop.noteTestUnpatched": msg({
+    id: "ui.drop.noteTestUnpatched",
+    message: "Play the ROM unpatched. The patches are left out.",
+  }),
+  "ui.drop.patchesNeedApplyBody": msg({ id: "ui.drop.patchesNeedApplyBody", message: "{page} doesn't use patches." }),
+  "ui.drop.patchesNeedApplyTitle": msg({ id: "ui.drop.patchesNeedApplyTitle", message: "Patches belong in Apply" }),
+  "ui.drop.romsMakePatchBody": msg({ id: "ui.drop.romsMakePatchBody", message: "You added ROMs and no patch." }),
+  "ui.drop.romsMakePatchTitle": msg({ id: "ui.drop.romsMakePatchTitle", message: "Make a patch from these ROMs?" }),
+  "ui.drop.routeCreate": msg({ id: "ui.drop.routeCreate", message: "Create Patch" }),
+  "ui.drop.routeMixedBody": msg({
+    id: "ui.drop.routeMixedBody",
+    message: "You added more than one ROM, plus patches. Each page uses only some of them.",
+  }),
+  "ui.drop.routeMixedTitle": msg({ id: "ui.drop.routeMixedTitle", message: "Where should these go?" }),
+  "ui.drop.routeRomBody": msg({ id: "ui.drop.routeRomBody", message: "Patch it, or play it as it is." }),
+  "ui.drop.routeRomTitle": msg({ id: "ui.drop.routeRomTitle", message: "What do you want to do with this ROM?" }),
+  "ui.drop.routeTest": msg({ id: "ui.drop.routeTest", message: "Test ROM" }),
+  "ui.drop.routeWeaveBody": msg({ id: "ui.drop.routeWeaveBody", message: "Apply its patches, or edit the recipe." }),
+  "ui.drop.routeWeaveTitle": msg({ id: "ui.drop.routeWeaveTitle", message: "What do you want to do with this weave?" }),
+  "ui.drop.stayOn": msg({ id: "ui.drop.stayOn", message: "Stay on {page}" }),
   "ui.drop.duplicateBody": msg({
     id: "ui.drop.duplicateBody",
     message: "The selected inputs appear to be the same ROM. Use them as Original and Modified?",
   }),
   "ui.drop.duplicateConfirm": msg({ id: "ui.drop.duplicateConfirm", message: "Use duplicate ROMs" }),
+  "ui.create.identicalInputs": msg({
+    id: "ui.create.identicalInputs",
+    message:
+      "Original and Modified have identical contents, so the patch would change nothing. Check that you chose the right files.",
+  }),
   "ui.drop.duplicateTitle": msg({ id: "ui.drop.duplicateTitle", message: "Use duplicate ROMs?" }),
   "ui.drop.patchesIgnored": msg({
     id: "ui.drop.patchesIgnored",
     message: "Patches belong in Apply and were ignored.",
   }),
+  "ui.drop.opening": msg({ id: "ui.drop.opening", message: "Opening {page}" }),
   "ui.drop.release": msg({ id: "ui.drop.release", message: "Release to add files" }),
   "ui.drop.staging": msg({ id: "ui.drop.staging", message: "Reading dropped files…" }),
   "ui.drop.tap": msg({ id: "ui.drop.tap", message: "Tap to choose files" }),
   "ui.drop.unusedInputs": msg({
     id: "ui.drop.unusedInputs",
-    message: "Unused inputs: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}.",
+    message: "Not used: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}.",
   }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
   "ui.env.thread": msg({ id: "ui.env.thread", message: "thread" }),
   "ui.find.empty": msg({ id: "ui.find.empty", message: "Nothing matches" }),
-  "ui.find.bundleHint": msg({
-    id: "ui.find.bundleHint",
-    message: "Build patch bundles and optionally apply them.",
+  "ui.find.weaveHint": msg({
+    id: "ui.find.weaveHint",
+    message: "Build patch weaves and optionally apply them.",
   }),
-  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundle Patches" }),
+  "ui.find.weavesApplyPatch": msg({ id: "ui.find.weavesApplyPatch", message: "Weave Patches" }),
   "ui.find.cliArchiveHint": msg({
     id: "ui.find.cliArchiveHint",
     message: "The CLI can extract and compress archives.",
@@ -1268,7 +1539,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.console.hiddenCachedFiles",
     message: "The cached file list is hidden.",
   }),
-  "ui.console.hiddenOpfs": msg({ id: "ui.console.hiddenOpfs", message: "The OPFS file list is hidden." }),
+  "ui.console.hiddenOpfs": msg({ id: "ui.console.hiddenOpfs", message: "The browser's stored-file list is hidden." }),
   "ui.console.hiddenSettings": msg({
     id: "ui.console.hiddenSettings",
     message: "Threads, codecs and the RVZ block size are hidden.",
@@ -1283,7 +1554,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.console.reportIssue": msg({ id: "ui.console.reportIssue", message: "Report an issue" }),
   "ui.console.settingsDescription": msg({
     id: "ui.console.settingsDescription",
-    message: "Changes apply when you save.",
+    message: "Theme and accent apply immediately. Other settings apply when you save.",
   }),
   "ui.console.showAdvanced": msg({ id: "ui.console.showAdvanced", message: "Show advanced" }),
   "ui.console.storage": msg({ id: "ui.console.storage", message: "Saves & storage" }),
@@ -1304,20 +1575,21 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
     message:
-      "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
+      "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
-  "ui.hero.bundleDescription": msg({
-    id: "ui.hero.bundleDescription",
-    message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",
+  "ui.hero.cheatsGuide": msg({ id: "ui.hero.cheatsGuide", message: "Read the cheat codes guide" }),
+  "ui.hero.weaveDescription": msg({
+    id: "ui.hero.weaveDescription",
+    message:
+      "Add a ROM and its patches, set their order, and save them as a weave: one file with the patches, their order, and checksums, ready for others to apply.",
   }),
-  "ui.hero.bundleGuide": msg({ id: "ui.hero.bundleGuide", message: "Read the Bundle guide" }),
-  "ui.hero.bundleThesis": msg({ id: "ui.hero.bundleThesis", message: "Bundle your patches." }),
-  "ui.hero.bundleThesis2": msg({ id: "ui.hero.bundleThesis2", message: "Share a reusable recipe." }),
+  "ui.hero.weaveGuide": msg({ id: "ui.hero.weaveGuide", message: "Read the Weave guide" }),
+  "ui.hero.weaveThesis": msg({ id: "ui.hero.weaveThesis", message: "Share patches as one file." }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:
-      "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
+      "Compare original and modified ROMs, or combine ordered patches and cheats into one patch for your original ROM.",
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
   "ui.hero.compressGuide": msg({ id: "ui.hero.compressGuide", message: "Read the Compress guide" }),
@@ -1330,13 +1602,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractDescription": msg({
     id: "ui.hero.extractDescription",
     message:
-      "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
   }),
-  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Open the archive." }),
-  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Keep only the files you need." }),
+  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Extract files from CHD, RVZ, and archives." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
-    message: "Match your ROM’s checksum against the local database to find its exact dump name.",
+    message:
+      "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum.",
   }),
   "ui.hero.trimDescription": msg({
     id: "ui.hero.trimDescription",
@@ -1352,57 +1624,55 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.testDescription": msg({
     id: "ui.hero.testDescription",
-    message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",
+    message:
+      "Use the ROM tester to play supported games in your browser. Open a ROM, ZIP, or 7z file. Your files stay on your device.",
   }),
   "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
-    message: "Make a patch.",
-  }),
-  "ui.hero.createThesis2": msg({
-    id: "ui.hero.createThesis2",
-    message: "Share your changes.",
+    message: "Create a ROM patch.",
   }),
   "ui.footer.local": msg({
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Patch ROMs in your browser." }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Online ROM patcher." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
-    message: "Try your ROM.",
+    message: "Test your ROM online.",
   }),
-  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "See your changes in play." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
-    message: "Know your ROM.",
-  }),
-  "ui.hero.identifyThesis2": msg({
-    id: "ui.hero.identifyThesis2",
-    message: "Find its exact match.",
+    message: "Identify your ROM.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
-    message: "Undo the patch.",
+    message: "Undo a PPF patch.",
   }),
-  "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
   "ui.hero.saveThesis": msg({
     id: "ui.hero.saveThesis",
-    message: "Edit trainer names, money, badges, hearts, and gear in a game save,",
-  }),
-  "ui.hero.saveThesis2": msg({
-    id: "ui.hero.saveThesis2",
-    message: "with every checksum recalculated before you download.",
+    message: "Edit trainer names, money, badges, hearts, and gear in a game save.",
   }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
-    message: "Keep the game.",
+    message: "Trim unused space from ROMs.",
   }),
-  "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "Lose the padding." }),
   "ui.identify.searchDisclosure": msg({
     id: "ui.identify.searchDisclosure",
     message: "Identify by checksum or game name",
+  }),
+  "ui.identify.noMatchBody": msg({
+    id: "ui.identify.noMatchBody",
+    message:
+      "Not in the identification data. Unknown does not mean corrupt: it may be homebrew, modified, or an unlisted revision. Its checksums are below.",
+  }),
+  "ui.identify.noMatchLink": msg({ id: "ui.identify.noMatchLink", message: "About unknown results" }),
+  "ui.identify.noMatchTitle": msg({ id: "ui.identify.noMatchTitle", message: "No match." }),
+  "ui.identify.drop": msg({ id: "ui.identify.drop", message: "Drop a ROM to identify it" }),
+  "ui.identify.tap": msg({ id: "ui.identify.tap", message: "Tap to add a ROM" }),
+  "ui.identify.trySample": msg({
+    id: "ui.identify.trySample",
+    message: "Try a checksum lookup",
   }),
   "ui.identify.searchRefine": msg({ id: "ui.identify.searchRefine", message: "Not the ROM you meant?" }),
   "ui.identify.searchPlaceholder": msg({
@@ -1416,7 +1686,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identify.searchAsYouType",
     message: "Results appear as you type - no need to press Search.",
   }),
-  "ui.identify.searchFailed": msg({ id: "ui.identify.searchFailed", message: "The search failed." }),
+  "ui.identify.searchFailed": msg({ id: "ui.identify.searchFailed", message: "The search didn't finish. Try again." }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",
     message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters, or a game name.",
@@ -1457,14 +1727,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The platform's data lists no version of this game.",
   }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
+  "ui.log.copyAll": msg({ id: "ui.log.copyAll", message: "Copy all" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),
   "ui.log.filterLabel": msg({ id: "ui.log.filterLabel", message: "Filter log" }),
-  "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "Now" }),
-  "ui.log.viewLabel": msg({ id: "ui.log.viewLabel", message: "Page Logs" }),
-  "ui.log.viewPrevious": msg({ id: "ui.log.viewPrevious", message: "Last" }),
-  "ui.output.bundleDiverged": msg({
-    id: "ui.output.bundleDiverged",
-    message: "Output won't be verified - the patch chain differs from the bundle.",
+  "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "This visit" }),
+  "ui.log.viewLabel": msg({ id: "ui.log.viewLabel", message: "Page logs" }),
+  "ui.log.viewPrevious": msg({ id: "ui.log.viewPrevious", message: "Last visit" }),
+  "ui.output.weaveDiverged": msg({
+    id: "ui.output.weaveDiverged",
+    message: "Output won't be verified - the patch chain differs from the weave.",
   }),
   "ui.output.differentChain": msg({
     id: "ui.output.differentChain",
@@ -1494,7 +1765,42 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}",
   }),
   "ui.related.applyTool": msg({ id: "ui.related.applyTool", message: "Apply tool" }),
-  "ui.related.createTool": msg({ id: "ui.related.createTool", message: "Create tool" }),
+  "ui.docs.tools": msg({ id: "ui.docs.tools", message: "Tools for this guide" }),
+  "ui.docs.toolApplyCheats": msg({
+    id: "ui.docs.toolApplyCheats",
+    message: "Apply cheat codes",
+  }),
+  "ui.docs.toolCreateCheats": msg({
+    id: "ui.docs.toolCreateCheats",
+    message: "Create a patch from cheat codes",
+  }),
+  "ui.hero.applyCheatsThesis": msg({
+    id: "ui.hero.applyCheatsThesis",
+    message: "Apply cheat codes to ROMs",
+  }),
+  "ui.hero.applyCheatsDescription": msg({
+    id: "ui.hero.applyCheatsDescription",
+    message: "Add supported cheat codes to your ROM and download the modified game. Files stay on your device.",
+  }),
+  "ui.hero.createCheatsThesis": msg({
+    id: "ui.hero.createCheatsThesis",
+    message: "Create ROM patches from cheat codes",
+  }),
+  "ui.hero.createCheatsDescription": msg({
+    id: "ui.hero.createCheatsDescription",
+    message: "Turn supported cheat codes into a patch for your ROM. Files stay on your device.",
+  }),
+  "ui.docs.toolApply": msg({ id: "ui.docs.toolApply", message: "Apply ROM patches" }),
+  "ui.docs.toolCreate": msg({ id: "ui.docs.toolCreate", message: "Create ROM patches" }),
+  "ui.docs.toolWeave": msg({ id: "ui.docs.toolWeave", message: "Weave ROM patches" }),
+  "ui.docs.toolChecksum": msg({ id: "ui.docs.toolChecksum", message: "Calculate ROM checksums" }),
+  "ui.docs.toolCompress": msg({ id: "ui.docs.toolCompress", message: "Compress and convert ROMs" }),
+  "ui.docs.toolExtract": msg({ id: "ui.docs.toolExtract", message: "Extract and convert ROMs" }),
+  "ui.docs.toolIdentify": msg({ id: "ui.docs.toolIdentify", message: "Identify ROMs" }),
+  "ui.docs.toolTest": msg({ id: "ui.docs.toolTest", message: "Test ROMs" }),
+  "ui.docs.toolTrim": msg({ id: "ui.docs.toolTrim", message: "Trim ROMs" }),
+  "ui.docs.toolSave": msg({ id: "ui.docs.toolSave", message: "Edit game saves" }),
+  "ui.docs.toolUndo": msg({ id: "ui.docs.toolUndo", message: "Undo PPF patches" }),
   "ui.related.heading": msg({ id: "ui.related.heading", message: "Related" }),
   "ui.related.hintGuide": msg({ id: "ui.related.hintGuide", message: "Opens the guide" }),
   "ui.related.hintCarriesSelection": msg({
@@ -1502,11 +1808,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Keeps this selection",
   }),
   "ui.related.hintTool": msg({ id: "ui.related.hintTool", message: "Switches tab" }),
-  "ui.related.identifyTool": msg({ id: "ui.related.identifyTool", message: "Identify tool" }),
   "ui.related.kindGuide": msg({ id: "ui.related.kindGuide", message: "Guide" }),
   "ui.related.kindTool": msg({ id: "ui.related.kindTool", message: "Tool" }),
   "ui.related.testTool": msg({ id: "ui.related.testTool", message: "Test tool" }),
-  "ui.related.trimTool": msg({ id: "ui.related.trimTool", message: "Trim tool" }),
   "ui.related.useRomInApply": msg({ id: "ui.related.useRomInApply", message: "Use this ROM in Apply" }),
   "ui.result.download": msg({ id: "ui.result.download", message: "Download" }),
   "ui.rom.baseConflict": msg({
@@ -1523,11 +1827,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.save": msg({ id: "ui.settings.save", message: "Save" }),
   "ui.settings.sevenZipCodec": msg({ id: "ui.settings.sevenZipCodec", message: "7z" }),
   "ui.settings.title": msg({ id: "ui.settings.title", message: "Settings" }),
+  "ui.view.simple": msg({ id: "ui.view.simple", message: "Simple" }),
   "ui.view.detailed": msg({ id: "ui.view.detailed", message: "Detailed" }),
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
-  "ui.step.bundle": msg({ id: "ui.step.bundle", message: "Bundle" }),
+  "ui.step.weave": msg({ id: "ui.step.weave", message: "Weave" }),
   "ui.step.cheats": msg({ id: "ui.step.cheats", message: "Cheats as a Patch" }),
   "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),
@@ -1545,14 +1850,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.runtime.headerUnsupported": msg({ id: "ui.runtime.headerUnsupported", message: "Unsupported" }),
   "ui.runtime.activeDesc": msg({
     id: "ui.runtime.activeDesc",
-    message:
-      "The service worker is active and the offline copy is ready. Network requests can still occur while you are online.",
+    message: "The offline copy is ready. While you're online, rom-weaver may still use the network.",
   }),
   "ui.runtime.disabled": msg({ id: "ui.runtime.disabled", message: "Offline support off" }),
   "ui.runtime.disabledDesc": msg({
     id: "ui.runtime.disabledDesc",
     message:
-      "The service worker is off, so rom-weaver needs the network each visit. Patching still runs entirely on this device.",
+      "The offline copy is off, so rom-weaver needs the network on each visit. Patching still runs on this device.",
   }),
   "ui.runtime.installing": msg({ id: "ui.runtime.installing", message: "Installing offline copy" }),
   "ui.runtime.installingDesc": msg({
@@ -1574,7 +1878,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.runtime.offlineSizes": msg({
     id: "ui.runtime.offlineSizes",
-    message: "{compressed} transferred · {uncompressed} stored",
+    message: "{compressed} transferred, {uncompressed} stored",
   }),
   "ui.runtime.downloadOffline": msg({ id: "ui.runtime.downloadOffline", message: "Download offline copy" }),
   "ui.runtime.downloadOfflineHint": msg({
@@ -1627,7 +1931,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.environment": msg({ id: "ui.status.environment", message: "Environment" }),
   "ui.status.envPwa": msg({ id: "ui.status.envPwa", message: "Installed app (PWA)" }),
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
-  "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its licence and its privacy" }),
+  "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its license, and privacy" }),
   "ui.status.build": msg({ id: "ui.status.build", message: "This build" }),
   "ui.settings.identifyPacks": msg({ id: "ui.settings.identifyPacks", message: "Optional ROM databases" }),
   "ui.settings.identifyPacksNote": msg({
@@ -1652,11 +1956,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.version": msg({ id: "ui.status.version", message: "Version" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),
   "ui.theme.auto": msg({ id: "ui.theme.auto", message: "Auto" }),
+  "ui.theme.autoBadge": msg({ id: "ui.theme.autoBadge", message: "A" }),
   "ui.theme.dark": msg({ id: "ui.theme.dark", message: "Dark" }),
   "ui.theme.light": msg({ id: "ui.theme.light", message: "Light" }),
   "ui.theme.matchSystem": msg({ id: "ui.theme.matchSystem", message: "Match system" }),
   "ui.tools.accent": msg({ id: "ui.tools.accent", message: "Accent" }),
-  "ui.tools.app": msg({ id: "ui.tools.app", message: "Controls" }),
+  "ui.tools.app": msg({ id: "ui.tools.app", message: "App" }),
   "ui.tools.appearance": msg({ id: "ui.tools.appearance", message: "Appearance" }),
   "ui.tools.beta": msg({ id: "ui.tools.beta", message: "Beta" }),
   "ui.tools.github": msg({ id: "ui.tools.github", message: "View source on GitHub" }),
@@ -1668,21 +1973,523 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tools.project": msg({ id: "ui.tools.project", message: "Project" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
   "ui.tools.tools": msg({ id: "ui.tools.tools", message: "Menu" }),
-  "ui.update.later": msg({ id: "ui.update.later", message: "Later" }),
-  "ui.update.note": msg({
-    id: "ui.update.note",
-    message: "Reloading swaps the cached app. Running jobs are finished first.",
-  }),
   "ui.update.ready": msg({ id: "ui.update.ready", message: "Update ready" }),
+  "ui.update.readyVersion": msg({ id: "ui.update.readyVersion", message: "v{version} is ready" }),
   "ui.update.reload": msg({ id: "ui.update.reload", message: "Reload" }),
   "ui.update.reloadNow": msg({ id: "ui.update.reloadNow", message: "Reload now" }),
+  "ui.update.seeWhatsNew": msg({ id: "ui.update.seeWhatsNew", message: "See what’s new" }),
+  "ui.update.updatedFrom": msg({ id: "ui.update.updatedFrom", message: "Updated from v{from} to v{to}" }),
+  "ui.update.updatedTo": msg({ id: "ui.update.updatedTo", message: "Updated to v{version}" }),
   "ui.update.whatsNew": msg({ id: "ui.update.whatsNew", message: "What’s new" }),
   "ui.urlSession.corsHint": msg({
     id: "ui.urlSession.corsHint",
     message: "The file host must allow cross-origin downloads (CORS).",
   }),
-  "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
+  "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Couldn't download the files from this link" }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
+  "ui.settings.section.webapp": msg({ id: "ui.settings.section.webapp", message: "Webapp" }),
+  "ui.settings.section.behavior": msg({ id: "ui.settings.section.behavior", message: "Behavior" }),
+  "ui.settings.section.compression": msg({ id: "ui.settings.section.compression", message: "Compression" }),
+  "ui.settings.section.codecs": msg({ id: "ui.settings.section.codecs", message: "Codecs" }),
+  "ui.settings.defaultOption": msg({ id: "ui.settings.defaultOption", message: "{label} (Default)" }),
+  "ui.settings.option.byteUnits.decimal": msg({
+    id: "ui.settings.option.byteUnits.decimal",
+    message: "Decimal (KB, MB, GB)",
+  }),
+  "ui.settings.option.byteUnits.binary": msg({
+    id: "ui.settings.option.byteUnits.binary",
+    message: "Binary (KiB, MiB, GiB)",
+  }),
+  "ui.settings.option.weavePackage.patches": msg({
+    id: "ui.settings.option.weavePackage.patches",
+    message: "Weave + patches",
+  }),
+  "ui.settings.option.weavePackage.rom": msg({
+    id: "ui.settings.option.weavePackage.rom",
+    message: "Weave + ROM + patches",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipSpecial",
+    message: "ROM-specific format, else .7z",
+  }),
+  "ui.settings.option.defaultCompression.zipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.zipSpecial",
+    message: "Default: ROM-specific format, else plain file or .zip",
+  }),
+  "ui.settings.option.defaultCompression.specialOnly": msg({
+    id: "ui.settings.option.defaultCompression.specialOnly",
+    message: "ROM-specific format only",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipOnly": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipOnly",
+    message: ".7z only",
+  }),
+  "ui.settings.option.defaultCompression.zipOnly": msg({
+    id: "ui.settings.option.defaultCompression.zipOnly",
+    message: ".zip only",
+  }),
+  "ui.settings.option.defaultCompression.none": msg({
+    id: "ui.settings.option.defaultCompression.none",
+    message: "None",
+  }),
+  "ui.settings.option.logLevel.error": msg({ id: "ui.settings.option.logLevel.error", message: "Errors" }),
+  "ui.settings.option.logLevel.warn": msg({ id: "ui.settings.option.logLevel.warn", message: "Warnings" }),
+  "ui.settings.option.postApply.autoShow": msg({
+    id: "ui.settings.option.postApply.autoShow",
+    message: "Automatically",
+  }),
+  "ui.settings.option.postApply.show": msg({
+    id: "ui.settings.option.postApply.show",
+    message: "With a button",
+  }),
+  "ui.settings.option.postApply.hide": msg({ id: "ui.settings.option.postApply.hide", message: "Never" }),
+  "ui.settings.suggestion.byteUnits": msg({
+    id: "ui.settings.suggestion.byteUnits",
+    message: "Choose decimal or binary units for file sizes.",
+  }),
+  "ui.settings.suggestion.weavePackage": msg({
+    id: "ui.settings.suggestion.weavePackage",
+    message: "Choose whether to include the ROM in a shared weave. The Compression type controls its archive format.",
+  }),
+  "ui.settings.suggestion.emulatorSaveStorage": msg({
+    id: "ui.settings.suggestion.emulatorSaveStorage",
+    message:
+      "Warning: If you turn this off, new save states and in-game saves are not stored. Existing saves remain until you delete them in Storage.",
+  }),
+  "ui.settings.suggestion.postApplyDownload": msg({
+    id: "ui.settings.suggestion.postApplyDownload",
+    message: "Choose whether Download runs automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.postApplyTest": msg({
+    id: "ui.settings.suggestion.postApplyTest",
+    message: "Choose whether Test opens automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.codecValuesLevels": msg({
+    id: "ui.settings.suggestion.codecValuesLevels",
+    message: "Valid values: {values}. Optional levels: {levels}",
+  }),
+  "ui.settings.suggestion.compressionProfile": msg({
+    id: "ui.settings.suggestion.compressionProfile",
+    message: "Default: Max. zstd levels: {zstd}. Other codec levels: {other}.",
+  }),
+  "ui.settings.suggestion.defaultCompression": msg({
+    id: "ui.settings.suggestion.defaultCompression",
+    message:
+      'Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available. Otherwise Apply and Create download the bare ROM or patch (choose .zip or .7z in their Options), while Compress, Trim and PPF undo use ZIP. Pick ".zip only" or ".7z only" to archive every download.',
+  }),
+  "ui.settings.suggestion.detailedView": msg({
+    id: "ui.settings.suggestion.detailedView",
+    message:
+      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Simple/Detailed switch.",
+  }),
+  "ui.settings.suggestion.identifiedOutputName": msg({
+    id: "ui.settings.suggestion.identifiedOutputName",
+    message: "When off, output names derive from the input file name instead.",
+  }),
+  "ui.settings.suggestion.logLevel": msg({
+    id: "ui.settings.suggestion.logLevel",
+    message: "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
+  }),
+  "ui.settings.suggestion.rvzBlockSize": msg({
+    id: "ui.settings.suggestion.rvzBlockSize",
+    message: "Default: {value}",
+  }),
+  "ui.settings.suggestion.codecLevel": msg({
+    id: "ui.settings.suggestion.codecLevel",
+    message: "Default: {codec}. Optional level: {codec}[:{range}].",
+  }),
+  "ui.settings.suggestion.threadsThreaded": msg({
+    id: "ui.settings.suggestion.threadsThreaded",
+    message: "Valid values: auto, 0-64. Use 0 to disable threaded bundles.",
+  }),
+  "ui.settings.suggestion.threadsSingle": msg({
+    id: "ui.settings.suggestion.threadsSingle",
+    message: "Valid values: auto or 1.",
+  }),
+  "ui.settings.suggestion.zipCodec": msg({
+    id: "ui.settings.suggestion.zipCodec",
+    message: "Default: {codec}. Valid values: {values}. Optional levels: {levels}. Store does not use a level.",
+  }),
+  "ui.notFound.heading": msg({ id: "ui.notFound.heading", message: "404: Page not found" }),
+  "ui.notFound.label": msg({ id: "ui.notFound.label", message: "That page is not here." }),
+  "ui.notFound.copy": msg({
+    id: "ui.notFound.copy",
+    message: "Check the address, or choose where you want to go next.",
+  }),
+  "ui.notFound.browseDocs": msg({ id: "ui.notFound.browseDocs", message: "Browse docs" }),
+  "ui.loadFailed.title": msg({ id: "ui.loadFailed.title", message: "This page didn’t load" }),
+  "ui.loadFailed.copy": msg({
+    id: "ui.loadFailed.copy",
+    message: "rom-weaver may have been updated since you opened this tab. Reload to get the latest version.",
+  }),
+  "ui.cheats.badge.rom": msg({ id: "ui.cheats.badge.rom", message: "ROM cheat" }),
+  "ui.cheats.short.unsupported": msg({ id: "ui.cheats.short.unsupported", message: "N/A" }),
+  "ui.cheats.delivery.rom": msg({ id: "ui.cheats.delivery.rom", message: "Written into the ROM" }),
+  "ui.cheats.delivery.unsupported": msg({
+    id: "ui.cheats.delivery.unsupported",
+    message: "Can't be written into the ROM",
+  }),
+  "ui.cheats.unsupportedSystem": msg({
+    id: "ui.cheats.unsupportedSystem",
+    message: "Cheats are not supported for {platform} yet.",
+  }),
+  "ui.cheats.unsupportedSystemUnknown": msg({
+    id: "ui.cheats.unsupportedSystemUnknown",
+    message: "Cheats are not supported for this ROM's system yet.",
+  }),
+  "ui.cheats.positionReorder": msg({
+    id: "ui.cheats.positionReorder",
+    message: "Cheat {position}. Drag or use arrow keys to reorder.",
+  }),
+  "ui.cheats.position": msg({ id: "ui.cheats.position", message: "Cheat {position}" }),
+  "ui.cheats.reorder": msg({ id: "ui.cheats.reorder", message: "Reorder cheat" }),
+  "ui.cheats.positionTitle": msg({ id: "ui.cheats.positionTitle", message: "Cheat position" }),
+  "ui.cheats.creatingPatch": msg({ id: "ui.cheats.creatingPatch", message: "Creating patch…" }),
+  "ui.cheats.saveAsPatch": msg({ id: "ui.cheats.saveAsPatch", message: "Save as patch" }),
+  "ui.cheats.removeFromStack": msg({ id: "ui.cheats.removeFromStack", message: "Remove {name} from the cheat list" }),
+  "ui.cheats.details": msg({ id: "ui.cheats.details", message: "Cheat details" }),
+  "ui.cheats.code": msg({ id: "ui.cheats.code", message: "Code" }),
+  "ui.cheats.sourceManual": msg({ id: "ui.cheats.sourceManual", message: "Manual entry" }),
+  "ui.cheats.sourceLibretro": msg({ id: "ui.cheats.sourceLibretro", message: "Libretro database" }),
+  "ui.cheats.manualDescription": msg({ id: "ui.cheats.manualDescription", message: "Manual cheat" }),
+  "ui.cheats.classifyFailed": msg({ id: "ui.cheats.classifyFailed", message: "The code could not be classified." }),
+  "ui.cheats.addManually": msg({ id: "ui.cheats.addManually", message: "Add code manually" }),
+  "ui.cheats.cheatCode": msg({ id: "ui.cheats.cheatCode", message: "Cheat code" }),
+  "ui.cheats.codeType": msg({ id: "ui.cheats.codeType", message: "Code type" }),
+  "ui.cheats.detectAuto": msg({ id: "ui.cheats.detectAuto", message: "Detect automatically" }),
+  "ui.cheats.checkingCode": msg({ id: "ui.cheats.checkingCode", message: "Checking code…" }),
+  "ui.cheats.checkCode": msg({ id: "ui.cheats.checkCode", message: "Check code" }),
+  "ui.cheats.detected": msg({ id: "ui.cheats.detected", message: "Detected {system}, {type}" }),
+  "ui.cheats.addThis": msg({ id: "ui.cheats.addThis", message: "Add this cheat" }),
+  "ui.cheats.write": msg({ id: "ui.cheats.write", message: "Write" }),
+  "ui.cheats.support": msg({ id: "ui.cheats.support", message: "Support" }),
+  "ui.cheats.importWarnings": msg({ id: "ui.cheats.importWarnings", message: "Import warnings" }),
+  "ui.cheats.compareFound": msg({ id: "ui.cheats.compareFound", message: "compare {value} found" }),
+  "ui.cheats.search": msg({ id: "ui.cheats.search", message: "Search cheats" }),
+  "ui.cheats.searchPlaceholder": msg({ id: "ui.cheats.searchPlaceholder", message: "Search by name or code…" }),
+  "ui.cheats.codeDetails": msg({ id: "ui.cheats.codeDetails", message: "Code details" }),
+  "ui.cheats.addNamed": msg({ id: "ui.cheats.addNamed", message: "Add {name}" }),
+  "ui.cheats.noMatch": msg({ id: "ui.cheats.noMatch", message: "No cheats match this search." }),
+  "ui.cheats.noneAvailable": msg({ id: "ui.cheats.noneAvailable", message: "No cheats available." }),
+  "ui.cheats.addManuallyBelow": msg({ id: "ui.cheats.addManuallyBelow", message: "Add a code manually below." }),
+  "ui.cheats.visibleOfTotal": msg({
+    id: "ui.cheats.visibleOfTotal",
+    message: "{visible} of {count, plural, one {# cheat} other {# cheats}}",
+  }),
+  "ui.cheats.inStack": msg({ id: "ui.cheats.inStack", message: "{count} in the list" }),
+  "ui.cheats.previous": msg({ id: "ui.cheats.previous", message: "Previous" }),
+  "ui.cheats.next": msg({ id: "ui.cheats.next", message: "Next" }),
+  "ui.cheats.unavailable": msg({ id: "ui.cheats.unavailable", message: "The cheat database is unavailable. {error}" }),
+  "ui.cheats.unavailableOffline": msg({
+    id: "ui.cheats.unavailableOffline",
+    message: "The cheat database is unavailable. Offline access starts after this system loads once. {error}",
+  }),
+  "ui.cheats.loading": msg({ id: "ui.cheats.loading", message: "Loading this system's cheat database…" }),
+  "ui.cheats.classifying": msg({
+    id: "ui.cheats.classifying",
+    message: "Checking which cheats can be written into the ROM…",
+  }),
+  "ui.cheats.patchFailed": msg({ id: "ui.cheats.patchFailed", message: "Couldn't create the cheat patch." }),
+  "ui.cheats.chooseCodes": msg({
+    id: "ui.cheats.chooseCodes",
+    message: "Choose codes to write into the ROM at their place in the list.",
+  }),
+  "ui.cheats.outputSummary": msg({
+    id: "ui.cheats.outputSummary",
+    message:
+      "Patched ROM: includes patches and {count, plural, one {# cheat written into the ROM} other {# cheats written into the ROM}}.",
+  }),
+  "ui.cheats.choose.system": msg({ id: "ui.cheats.choose.system", message: "Choose a system above." }),
+  "ui.cheats.choose.game": msg({ id: "ui.cheats.choose.game", message: "Choose a game above." }),
+  "ui.cheats.addTitleGame": msg({ id: "ui.cheats.addTitleGame", message: "Add cheats for {title}" }),
+  "ui.cheats.patchCreated": msg({
+    id: "ui.cheats.patchCreated",
+    message: "Created {fileName} from {count, plural, one {# ROM cheat} other {# ROM cheats}}.",
+  }),
+  "ui.cheats.browseGames": msg({ id: "ui.cheats.browseGames", message: "Browse games for {platform}" }),
+  "ui.cheats.useAutomatic": msg({ id: "ui.cheats.useAutomatic", message: "Use automatic match" }),
+  "ui.cheats.unverified": msg({
+    id: "ui.cheats.unverified",
+    message: "This ROM revision is unverified. These cheats may target different addresses.",
+  }),
+  "ui.cheats.searchDatabases": msg({ id: "ui.cheats.searchDatabases", message: "Search cheat databases" }),
+  "ui.cheats.searchDatabasesPlaceholder": msg({
+    id: "ui.cheats.searchDatabasesPlaceholder",
+    message: "Search cheat databases by system…",
+  }),
+  "ui.cheats.gameCount": msg({ id: "ui.cheats.gameCount", message: "{count, plural, one {# game} other {# games}}" }),
+  "ui.cheats.cheatCount": msg({
+    id: "ui.cheats.cheatCount",
+    message: "{count, plural, one {# cheat} other {# cheats}}",
+  }),
+  "ui.cheats.noDatabaseMatch": msg({
+    id: "ui.cheats.noDatabaseMatch",
+    message: "No cheat database matches this search.",
+  }),
+  "ui.cheats.warn.noGameRecord": msg({
+    id: "ui.cheats.warn.noGameRecord",
+    message:
+      "The cheat database has no game record for {title}. Search for another release or browse this system's cheat records below.",
+  }),
+  "ui.cheats.warn.noMatch": msg({
+    id: "ui.cheats.warn.noMatch",
+    message:
+      "No game in the {platform} cheat database matches this ROM. Identify the game above. A game you choose by hand may not match this ROM's revision.",
+  }),
+  "ui.cheats.warn.noBakeable": msg({
+    id: "ui.cheats.warn.noBakeable",
+    message:
+      "The cheat database has no cheats that can be written into the ROM for {title}. If this ROM was matched wrongly, identify a different game above.",
+  }),
+  "ui.cheats.warn.noCheats": msg({
+    id: "ui.cheats.warn.noCheats",
+    message:
+      "The cheat database has no cheats for {title}. If this ROM was matched wrongly, identify a different game above.",
+  }),
+  "ui.cheats.selectedGame": msg({ id: "ui.cheats.selectedGame", message: "Selected game: {title}." }),
+  "ui.cheats.warn.noDatabase": msg({
+    id: "ui.cheats.warn.noDatabase",
+    message:
+      "No cheat database covers {platform}. If this ROM was identified wrongly, identify its game or choose a system below.",
+  }),
+  "ui.cheats.warn.unidentifiedSystem": msg({
+    id: "ui.cheats.warn.unidentifiedSystem",
+    message: "The system of this ROM was not identified. Identify its game or choose a system below.",
+  }),
+  "ui.cheats.choseByHand": msg({ id: "ui.cheats.choseByHand", message: "You chose {platform} by hand." }),
+  "ui.cheats.changeSystem": msg({ id: "ui.cheats.changeSystem", message: "Change system" }),
+  "ui.cheats.needRom": msg({
+    id: "ui.cheats.needRom",
+    message: "Select an original ROM whose system supports cheat codes.",
+  }),
+  "ui.cheats.kindConflict": msg({
+    id: "ui.cheats.kindConflict",
+    message: "Create a separate patch for codes with a different code type.",
+  }),
+  "ui.cheats.checking": msg({ id: "ui.cheats.checking", message: "Checking…" }),
+  "ui.cheats.removeCode": msg({ id: "ui.cheats.removeCode", message: "Remove code {code}" }),
+  "ui.cheats.pickHint": msg({
+    id: "ui.cheats.pickHint",
+    message: "Choose codes for this game, or type your own below.",
+  }),
+  "ui.cheats.typeCodes": msg({ id: "ui.cheats.typeCodes", message: "Type codes" }),
+  "ui.cheats.codesPlaceholder": msg({ id: "ui.cheats.codesPlaceholder", message: "One per line or joined with +" }),
+  "ui.cheats.mixedSystems": msg({ id: "ui.cheats.mixedSystems", message: "Mixed systems" }),
+  "ui.cheats.mixedKinds": msg({ id: "ui.cheats.mixedKinds", message: "Mixed code types" }),
+  "ui.cheats.writeCount": msg({
+    id: "ui.cheats.writeCount",
+    message: "{count, plural, one {# write} other {# writes}}",
+  }),
+  "ui.cheats.validation.empty": msg({
+    id: "ui.cheats.validation.empty",
+    message: "Add at least one cheat code to create a patch.",
+  }),
+  "ui.cheats.validation.checking": msg({ id: "ui.cheats.validation.checking", message: "Checking the cheat codes…" }),
+  "ui.cheats.validation.unchecked": msg({
+    id: "ui.cheats.validation.unchecked",
+    message: "{code} has not been checked yet.",
+  }),
+  "ui.saves.emulator.none": msg({ id: "ui.saves.emulator.none", message: "none" }),
+  "ui.saves.emulator.title": msg({ id: "ui.saves.emulator.title", message: "Emulator saves" }),
+  "ui.saves.emulator.description": msg({
+    id: "ui.saves.emulator.description",
+    message: "Each backup can hold both a save state and an in-game save. Matching to the same ROM is automatic.",
+  }),
+  "ui.saves.emulator.refresh": msg({ id: "ui.saves.emulator.refresh", message: "Refresh emulator saves" }),
+  "ui.saves.emulator.importSave": msg({ id: "ui.saves.emulator.importSave", message: "Import save" }),
+  "ui.saves.emulator.importFile": msg({ id: "ui.saves.emulator.importFile", message: "Import {name}" }),
+  "ui.saves.emulator.importHint": msg({
+    id: "ui.saves.emulator.importHint",
+    message: "Choose the file type. Raw saves also need the ROM SHA-1.",
+  }),
+  "ui.saves.emulator.importReplaces": msg({
+    id: "ui.saves.emulator.importReplaces",
+    message: "Importing replaces the stored save for {label}, last changed {date}. Export it first to keep it.",
+  }),
+  "ui.saves.emulator.fileType": msg({ id: "ui.saves.emulator.fileType", message: "File type" }),
+  "ui.saves.emulator.kindCombined": msg({ id: "ui.saves.emulator.kindCombined", message: "rom-weaver exported save" }),
+  "ui.saves.emulator.kindState": msg({ id: "ui.saves.emulator.kindState", message: "Save state" }),
+  "ui.saves.emulator.romSha1": msg({ id: "ui.saves.emulator.romSha1", message: "ROM SHA-1" }),
+  "ui.saves.emulator.import": msg({ id: "ui.saves.emulator.import", message: "Import" }),
+  "ui.saves.emulator.emptyTitle": msg({ id: "ui.saves.emulator.emptyTitle", message: "No emulator saves yet" }),
+  "ui.saves.emulator.emptyBody": msg({
+    id: "ui.saves.emulator.emptyBody",
+    message: "Play a ROM in Test, or import a rom-weaver save.",
+  }),
+  "ui.saves.emulator.fingerprint": msg({
+    id: "ui.saves.emulator.fingerprint",
+    message: "ROM SHA-1 {sha1}",
+  }),
+  "ui.saves.emulator.sizes": msg({ id: "ui.saves.emulator.sizes", message: "Save state {state}, in-game save {sram}" }),
+  "ui.saves.emulator.export": msg({ id: "ui.saves.emulator.export", message: "Export" }),
+  "ui.saves.emulator.delete": msg({ id: "ui.saves.emulator.delete", message: "Delete" }),
+  "ui.saves.generator.newSave": msg({ id: "ui.saves.generator.newSave", message: "New save" }),
+  "ui.saves.generator.gameLabel": msg({ id: "ui.saves.generator.gameLabel", message: "Game for the new save" }),
+  "ui.saves.generator.create": msg({ id: "ui.saves.generator.create", message: "Create save" }),
+  "ui.saves.generator.none": msg({ id: "ui.saves.generator.none", message: "No games can generate a fresh save yet." }),
+  "ui.saves.generator.loading": msg({ id: "ui.saves.generator.loading", message: "Loading games…" }),
+  "ui.saves.generator.choose": msg({ id: "ui.saves.generator.choose", message: "Choose a game" }),
+  "ui.saves.editor.supported.raw": msg({ id: "ui.saves.editor.supported.raw", message: "Raw game saves" }),
+  "ui.saves.editor.supported.gamesharkSp": msg({
+    id: "ui.saves.editor.supported.gamesharkSp",
+    message: "GameShark SP wrappers",
+  }),
+  "ui.saves.editor.supported.wrappers": msg({
+    id: "ui.saves.editor.supported.wrappers",
+    message: "Emulator and memory card wrappers",
+  }),
+  "ui.saves.editor.step.fields": msg({ id: "ui.saves.editor.step.fields", message: "Fields" }),
+  "ui.saves.editor.integrity.invalid": msg({
+    id: "ui.saves.editor.integrity.invalid",
+    message: "Save data is damaged",
+  }),
+  "ui.saves.editor.integrity.partial": msg({
+    id: "ui.saves.editor.integrity.partial",
+    message: "Partially recoverable",
+  }),
+  "ui.saves.editor.integrity.valid": msg({ id: "ui.saves.editor.integrity.valid", message: "Save data checks out" }),
+  "ui.saves.editor.integrity.warnings": msg({
+    id: "ui.saves.editor.integrity.warnings",
+    message: "Valid with warnings",
+  }),
+  "ui.saves.editor.group.equipment": msg({ id: "ui.saves.editor.group.equipment", message: "Equipment" }),
+  "ui.saves.editor.group.hearts": msg({ id: "ui.saves.editor.group.hearts", message: "Health" }),
+  "ui.saves.editor.group.inventory": msg({ id: "ui.saves.editor.group.inventory", message: "Inventory" }),
+  "ui.saves.editor.group.player": msg({ id: "ui.saves.editor.group.player", message: "Player" }),
+  "ui.saves.editor.group.progress": msg({ id: "ui.saves.editor.group.progress", message: "Progress" }),
+  "ui.saves.editor.group.resources": msg({ id: "ui.saves.editor.group.resources", message: "Resources" }),
+  "ui.saves.editor.group.trainer": msg({ id: "ui.saves.editor.group.trainer", message: "Trainer" }),
+  "ui.saves.editor.file": msg({ id: "ui.saves.editor.file", message: "File {n}" }),
+  "ui.saves.editor.countMixed": msg({
+    id: "ui.saves.editor.countMixed",
+    message: "{editable} editable, {readOnly} read-only",
+  }),
+  "ui.saves.editor.countEditable": msg({ id: "ui.saves.editor.countEditable", message: "{editable} editable" }),
+  "ui.saves.editor.max": msg({ id: "ui.saves.editor.max", message: "Max" }),
+  "ui.saves.editor.step": msg({ id: "ui.saves.editor.step", message: "step {step}" }),
+  "ui.saves.editor.noDocument": msg({
+    id: "ui.saves.editor.noDocument",
+    message: "rom-weaver couldn't read this save.",
+  }),
+  "ui.saves.editor.invalidInteger": msg({
+    id: "ui.saves.editor.invalidInteger",
+    message: "Enter a valid integer in the allowed range.",
+  }),
+  "ui.saves.editor.tooLong": msg({ id: "ui.saves.editor.tooLong", message: "This value is too long." }),
+  "ui.saves.editor.chooseListed": msg({
+    id: "ui.saves.editor.chooseListed",
+    message: "Choose one of the listed values.",
+  }),
+  "ui.saves.editor.rawDataMissing": msg({
+    id: "ui.saves.editor.rawDataMissing",
+    message: "The edited save no longer contains the expected raw game data.",
+  }),
+  "ui.saves.editor.outputGone": msg({
+    id: "ui.saves.editor.outputGone",
+    message: "The edited save output is no longer available.",
+  }),
+  "ui.saves.editor.testNone": msg({
+    id: "ui.saves.editor.testNone",
+    message: "No ROM is loaded in Test. You choose one next.",
+  }),
+  "ui.saves.editor.testReady": msg({
+    id: "ui.saves.editor.testReady",
+    message: "Tests with {file}. Make sure it is the game that made this save.",
+  }),
+  "ui.saves.editor.testMismatch": msg({
+    id: "ui.saves.editor.testMismatch",
+    message: "{file} does not match this save. You choose another ROM next.",
+  }),
+  "ui.saves.editor.readOnly": msg({ id: "ui.saves.editor.readOnly", message: "read-only" }),
+  "ui.saves.editor.resetField": msg({ id: "ui.saves.editor.resetField", message: "Reset {label}" }),
+  "ui.saves.editor.emulatorSram": msg({ id: "ui.saves.editor.emulatorSram", message: "emulator in-game save" }),
+  "ui.saves.editor.removeSave": msg({ id: "ui.saves.editor.removeSave", message: "Remove save" }),
+  "ui.saves.editor.slotIndex": msg({ id: "ui.saves.editor.slotIndex", message: "slot {slot}, index {index}" }),
+  "ui.saves.editor.checkedCopies": msg({
+    id: "ui.saves.editor.checkedCopies",
+    message: "{count, plural, one {# checked copy} other {# checked copies}}",
+  }),
+  "ui.saves.editor.chooseFormat": msg({ id: "ui.saves.editor.chooseFormat", message: "Choose the game format" }),
+  "ui.saves.editor.chooseFormatHint": msg({
+    id: "ui.saves.editor.chooseFormatHint",
+    message:
+      "{count, plural, one {# game shares} other {# games share}} this save layout, so the file alone cannot tell which one wrote it.",
+  }),
+  "ui.saves.editor.unidentified": msg({
+    id: "ui.saves.editor.unidentified",
+    message: "The game could not be identified.",
+  }),
+  "ui.saves.editor.rawSaveSize": msg({ id: "ui.saves.editor.rawSaveSize", message: "Raw save size" }),
+  "ui.saves.editor.saveSize": msg({ id: "ui.saves.editor.saveSize", message: "Save size" }),
+  "ui.saves.editor.container": msg({ id: "ui.saves.editor.container", message: "Container: {name}" }),
+  "ui.saves.editor.potentialFormat": msg({
+    id: "ui.saves.editor.potentialFormat",
+    message: "Potential format: {name}",
+  }),
+  "ui.saves.editor.chooseProfileToOpen": msg({
+    id: "ui.saves.editor.chooseProfileToOpen",
+    message: "Choose a game profile to open the save.",
+  }),
+  "ui.saves.editor.gameProfile": msg({ id: "ui.saves.editor.gameProfile", message: "Game profile" }),
+  "ui.saves.editor.chooseProfile": msg({ id: "ui.saves.editor.chooseProfile", message: "Choose a profile" }),
+  "ui.saves.editor.openProfile": msg({ id: "ui.saves.editor.openProfile", message: "Open profile" }),
+  "ui.saves.editor.noProfiles": msg({
+    id: "ui.saves.editor.noProfiles",
+    message: "No supported profiles match this save size.",
+  }),
+  "ui.saves.editor.chooseGameProfile": msg({ id: "ui.saves.editor.chooseGameProfile", message: "Choose game profile" }),
+  "ui.saves.editor.noEmulatorSaves": msg({
+    id: "ui.saves.editor.noEmulatorSaves",
+    message: "No emulator saves yet. Save a game in Test to open its in-game save here.",
+  }),
+  "ui.saves.editor.replaceSave": msg({ id: "ui.saves.editor.replaceSave", message: "Replace the save" }),
+  "ui.saves.editor.heroLabel": msg({ id: "ui.saves.editor.heroLabel", message: "Drop a game save to edit it" }),
+  "ui.saves.editor.heroLabelCoarse": msg({ id: "ui.saves.editor.heroLabelCoarse", message: "Tap to add a game save" }),
+  "ui.saves.editor.info": msg({
+    id: "ui.saves.editor.info",
+    message:
+      "Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state. A new Pokémon save needs a save made by the game as its template.",
+  }),
+  "ui.saves.editor.saveFile": msg({ id: "ui.saves.editor.saveFile", message: "Save file" }),
+  "ui.saves.editor.pending": msg({ id: "ui.saves.editor.pending", message: "{count} pending" }),
+  "ui.saves.editor.saveFiles": msg({ id: "ui.saves.editor.saveFiles", message: "Save files" }),
+  "ui.saves.editor.findProperty": msg({ id: "ui.saves.editor.findProperty", message: "Find a property" }),
+  "ui.saves.editor.noMatch": msg({ id: "ui.saves.editor.noMatch", message: "No properties match this search." }),
+  "ui.saves.editor.reading": msg({ id: "ui.saves.editor.reading", message: "Reading the save…" }),
+  "ui.saves.editor.chooseSupported": msg({
+    id: "ui.saves.editor.chooseSupported",
+    message: "Choose a supported save to inspect its fields.",
+  }),
+  "ui.saves.editor.freshReady": msg({
+    id: "ui.saves.editor.freshReady",
+    message: "The fresh save is ready. Edit its properties or download it.",
+  }),
+  "ui.saves.editor.noChanges": msg({
+    id: "ui.saves.editor.noChanges",
+    message: "No changes yet. Edit a field above to build the edited copy.",
+  }),
+  "ui.saves.editor.previewChanges": msg({
+    id: "ui.saves.editor.previewChanges",
+    message: "{count, plural, one {# field change} other {# field changes}}, integrity {integrity}",
+  }),
+  "ui.saves.editor.integrityValid": msg({ id: "ui.saves.editor.integrityValid", message: "valid" }),
+  "ui.saves.editor.integrityInvalid": msg({ id: "ui.saves.editor.integrityInvalid", message: "invalid" }),
+  "ui.saves.editor.sections": msg({ id: "ui.saves.editor.sections", message: "sections {sections}" }),
+  "ui.saves.editor.downloadEdited": msg({ id: "ui.saves.editor.downloadEdited", message: "Download edited copy" }),
+  "ui.saves.editor.testInRom": msg({ id: "ui.saves.editor.testInRom", message: "Test save in ROM" }),
+  "ui.saves.editor.chooseRomTest": msg({ id: "ui.saves.editor.chooseRomTest", message: "Choose ROM and test" }),
+  "ui.saves.editor.resetAll": msg({ id: "ui.saves.editor.resetAll", message: "Reset all" }),
+  "ui.saves.editor.preview": msg({ id: "ui.saves.editor.preview", message: "Preview changes" }),
+  "ui.saves.editor.replaceSram": msg({
+    id: "ui.saves.editor.replaceSram",
+    message: "Replace the selected in-game save",
+  }),
+  "ui.saves.editor.replaceWarning": msg({
+    id: "ui.saves.editor.replaceWarning",
+    message: "This replaces the stored in-game save.",
+  }),
+  "ui.saves.editor.confirm": msg({ id: "ui.saves.editor.confirm", message: "Confirm" }),
+  "ui.saves.editor.undoReplacement": msg({ id: "ui.saves.editor.undoReplacement", message: "Undo replacement" }),
 };
 
 export { MESSAGES };

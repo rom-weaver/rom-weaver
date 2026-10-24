@@ -10,8 +10,8 @@ import {
   normalizeBrowserThreadCount,
   normalizeCodecList,
   normalizeCodecListWithFallback,
-  normalizeIntegerInRange,
   parseIntegerInRange,
+  parseRvzBlockSize,
 } from "../../platform/shared/compression-options.ts";
 
 const { COMPRESSION_PROFILES, getChdCodecsForMode, normalizeCompressionProfile } = OutputCompressionManager;
@@ -28,6 +28,6 @@ export {
   normalizeCodecList,
   normalizeCodecListWithFallback,
   normalizeCompressionProfile,
-  normalizeIntegerInRange,
   parseIntegerInRange,
+  parseRvzBlockSize,
 };

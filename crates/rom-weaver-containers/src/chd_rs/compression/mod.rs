@@ -1,0 +1,129 @@
+use crate::chd_rs::error::Result;
+use crate::chd_rs::header::CodecType;
+use std::ops::{Add, AddAssign};
+
+mod avhuff;
+mod cdrom;
+pub(crate) mod ecc;
+mod flac;
+mod huff;
+mod lzma;
+mod none;
+mod zlib;
+mod zstd;
+
+#[cfg(test)]
+mod tests;
+
+pub mod codecs {
+    pub use crate::chd_rs::compression::avhuff::AVHuffCodec;
+    pub use crate::chd_rs::compression::cdrom::CdLzmaCodec;
+    pub use crate::chd_rs::compression::cdrom::CdZlibCodec;
+    pub use crate::chd_rs::compression::cdrom::CdZstdCodec;
+    pub use crate::chd_rs::compression::flac::CdFlacCodec;
+    pub use crate::chd_rs::compression::flac::RawFlacCodec;
+    pub use crate::chd_rs::compression::huff::HuffmanCodec;
+    pub use crate::chd_rs::compression::lzma::LzmaCodec;
+    pub use crate::chd_rs::compression::none::NoneCodec;
+    pub use crate::chd_rs::compression::zlib::ZlibCodec;
+    pub use crate::chd_rs::compression::zstd::ZstdCodec;
+}
+
+// unstable(trait_alias)
+/// Marker trait for a codec that can be used to decompress a compressed hunk.
+pub trait CompressionCodec: CodecImplementation + CompressionCodecType + Send + Sync {}
+
+/// Trait for a codec that implements a known CHD codec type.
+pub trait CompressionCodecType {
+    /// Returns the known [`CodecType`](crate::chd_rs::header::CodecType) that this
+    /// codec implements.
+    fn codec_type(&self) -> CodecType
+    where
+        Self: Sized;
+}
+
+/// Trait for a CHD decompression codec implementation.
+pub trait CodecImplementation {
+    /// Creates a new instance of this codec for the provided hunk size.
+    fn new(hunk_size: u32) -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Creates a new instance of this codec for the provided hunk size that compresses
+    /// at the given level, where higher levels compress smaller but slower.
+    ///
+    /// The range of levels depends on the codec, and [`new`](CodecImplementation::new)
+    /// uses the level that chdman compresses with. Returns
+    /// [`InvalidParameter`](crate::chd_rs::Error::InvalidParameter) if the level is out of range,
+    /// or the codec has no compression levels.
+    fn with_level(hunk_size: u32, level: i32) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        let _ = (hunk_size, level);
+        Err(crate::chd_rs::error::Error::InvalidParameter)
+    }
+
+    /// Decompress compressed bytes from the input buffer into the
+    /// output buffer.
+    ///
+    /// Usually the output buffer must have the exact
+    /// length as `hunk_size`, but this may be dependent on the codec
+    /// implementation.
+    fn decompress(&mut self, input: &[u8], output: &mut [u8]) -> Result<DecompressResult>;
+
+    /// Compress bytes from the input buffer into the output buffer, returning the
+    /// number of compressed bytes written.
+    ///
+    /// Returns [`CompressionError`](crate::chd_rs::Error::CompressionError) if the compressed data
+    /// is not smaller than the input, or does not fit in the output buffer. In that case
+    /// the data should be stored uncompressed instead.
+    ///
+    /// The compressed data must decompress with [`decompress`](CodecImplementation::decompress)
+    /// to an output buffer of the same length as the input buffer.
+    fn compress(&mut self, input: &[u8], output: &mut [u8]) -> Result<usize>;
+}
+
+/// The result of a chunk decompression operation.
+#[derive(Copy, Clone, Default)]
+pub struct DecompressResult {
+    bytes_out: usize,
+    bytes_read: usize,
+}
+
+impl Add for DecompressResult {
+    type Output = DecompressResult;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        DecompressResult {
+            bytes_out: self.total_out() + rhs.total_out(),
+            bytes_read: self.total_in() + rhs.total_in(),
+        }
+    }
+}
+
+impl AddAssign for DecompressResult {
+    fn add_assign(&mut self, rhs: Self) {
+        self.bytes_read += rhs.bytes_read;
+        self.bytes_out += rhs.bytes_out;
+    }
+}
+
+impl DecompressResult {
+    pub(crate) fn new(out: usize, read: usize) -> Self {
+        DecompressResult {
+            bytes_out: out,
+            bytes_read: read,
+        }
+    }
+
+    /// Returns the total number of decompressed bytes written to the output buffer.
+    pub fn total_out(&self) -> usize {
+        self.bytes_out
+    }
+
+    /// Returns the total number of bytes read from the compressed input buffer.
+    pub fn total_in(&self) -> usize {
+        self.bytes_read
+    }
+}

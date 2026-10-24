@@ -91,6 +91,32 @@ test("database_required renders as a distinct state", async () => {
   expect(host.textContent.includes("No exact title match found")).toBe(false);
 });
 
+test("a structured condition never gets the no-match notice, and says why instead", async () => {
+  await mountIdentifyForm();
+  await runIdentify({
+    candidates: [
+      {
+        checksums: { crc32: "abcd1234" },
+        checksumVariants: [],
+        condition: "unsupported_media_profile",
+        hint: "This disc layout is not supported yet.",
+        matches: [],
+        path: "game.bin",
+        status: "unknown",
+      },
+    ],
+    input: "game.bin",
+    status: "unknown",
+  });
+  await waitForText("Disc layout can't be matched");
+  const notice = host.querySelector(".notice.info");
+  expect(notice.textContent).toContain("Disc layout can't be matched");
+  expect(notice.textContent).toContain("This disc layout is not supported yet.");
+  expect(host.textContent).not.toContain("homebrew");
+  expect(host.textContent).not.toContain("does not mean corrupt");
+  expect(host.querySelector(".notice.error")).toBeNull();
+});
+
 test("quality, source, platform candidates, and component evidence render on a match", async () => {
   await mountIdentifyForm();
   await runIdentify({

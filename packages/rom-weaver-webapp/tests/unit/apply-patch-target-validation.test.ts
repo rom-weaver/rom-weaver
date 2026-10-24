@@ -121,4 +121,42 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     expect(validatePatch).toHaveBeenCalledTimes(1);
     expect(stage.state.patchValidation?.status).toBe("invalid");
   });
+
+  it("fails a patch the engine passes as the weave's checksum mismatch when the weave ROM mismatches", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
+    const message = "Input checksum mismatch for crc32; expected a1cecd74, actual 3e30b9b3";
+    await validateApplyPatchTarget(stage, createTarget(), preflight, {
+      ...createAdapters(validatePatch),
+      weaveRom: { message, status: "mismatch" },
+    });
+    expect(validatePatch).toHaveBeenCalledTimes(1);
+    expect(stage.state.patchValidation).toMatchObject({ message, status: "invalid" });
+  });
+
+  it("reports a patch the engine fails with its own error, not the weave ROM mismatch", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue({
+      message: "mixed",
+      perPatch: [{ index: 0, message: "BPS patch is truncated", status: "failed" }],
+      status: "mixed",
+    });
+    await validateApplyPatchTarget(stage, createTarget(), preflight, {
+      ...createAdapters(validatePatch),
+      weaveRom: { message: "Input checksum mismatch for crc32", status: "mismatch" },
+    });
+    expect(stage.state.patchValidation).toMatchObject({ message: "BPS patch is truncated", status: "invalid" });
+  });
+
+  it("leaves the patch a retryable 'unknown', without a worker call, when the weave ROM could not be hashed", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
+    const message = "The weave's ROM checksum could not be computed yet";
+    await validateApplyPatchTarget(stage, createTarget(), preflight, {
+      ...createAdapters(validatePatch),
+      weaveRom: { message, status: "unavailable" },
+    });
+    expect(validatePatch).not.toHaveBeenCalled();
+    expect(stage.state.patchValidation).toMatchObject({ message, status: "unknown" });
+  });
 });

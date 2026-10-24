@@ -1,19 +1,37 @@
 # ROM compression formats: CHD, RVZ, Z3DS, ZIP and 7z
 
-Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives.
+Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives. [Compress](https://rom-weaver.com/compress) creates each of them in the browser.
 
 <!-- START doctoc -->
 ## Table of contents
 
+- [Which format should I choose?](#which-format-should-i-choose)
 - [Two kinds of compression](#two-kinds-of-compression)
 - [Compressed disc images: CHD and RVZ](#compressed-disc-images-chd-and-rvz)
 - [3DS ROM compression: Z3DS](#3ds-rom-compression-z3ds)
 - [General archives: ZIP and 7z](#general-archives-zip-and-7z)
 - [Trim, compress, or both](#trim-compress-or-both)
 - [Compression changes your checksums](#compression-changes-your-checksums)
-- [Which format should I choose?](#which-format-should-i-choose)
 
 <!-- END doctoc -->
+
+## Which format should I choose?
+
+| Format | Intended input | Playback and extraction |
+| --- | --- | --- |
+| [CHD](../how-to/convert-to-chd-browser.md) | Supported CD/DVD disc images (`.cue`/`.gdi`/`.iso`) | Compatible emulators read CHD directly; others need an extracted image. |
+| [RVZ](../how-to/convert-to-rvz-browser.md) | GameCube and Wii disc images | Dolphin reads RVZ directly; tools requiring ISO need extraction. |
+| [Z3DS](../how-to/convert-to-z3ds-browser.md) | Supported Nintendo 3DS payloads | Azahar 2123 and later support Z3DS; other tools may require the extracted payload. |
+| ZIP | Any file, including cartridge ROMs | Some emulators load ROMs from ZIP; others need the member extracted first. |
+| 7z | Any file, including ROMs and disc images | Direct emulator support is less common than ZIP; extraction is often needed. |
+
+CHD and RVZ are not interchangeable defaults: RVZ serves GameCube and Wii discs in Dolphin, while CHD support depends on the target system and emulator. A smaller file is only useful for playback if that emulator accepts it. There is no single size winner for every input and compression setting.
+
+CHD versus 7z is a choice between a disc container that compatible emulators can read and a general archive. Neither converts a cartridge game into a disc-platform game.
+
+ZIP versus 7z trades broader direct support for the potential of smaller archives. Compression ratio and time depend on the input and settings. For 3DS, Z3DS preserves the payload type; putting a file in ZIP or 7z does not turn it into a `.3ds` ROM.
+
+For the reverse direction, the browser guides cover [RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md), [CHD to ISO, BIN/CUE, or GDI](../how-to/extract-chd-browser.md), and [Z3DS extraction](../how-to/extract-z3ds-browser.md). The [CLI archive guide](../how-to/work-with-archives.md) covers terminal workflows.
 
 ## Two kinds of compression
 
@@ -27,9 +45,11 @@ A compressed disc image such as CHD or RVZ is a purpose-built container for one 
 
 **CHD** is a purpose-built container for media images. The official [chdman documentation](https://docs.mamedev.org/tools/chdman.html) covers raw, hard-disk, CD, and DVD images. rom-weaver creates CHD from `.cue`/`.gdi`/`.iso` inputs. Use the [browser CHD guide](../how-to/convert-to-chd-browser.md) or the [CLI archive guide](../how-to/work-with-archives.md#compress-a-rom-or-disc-image-instead).
 
+Browser extraction: [Decompress CHD to ISO, BIN/CUE, or GDI](../how-to/extract-chd-browser.md).
+
 **RVZ** is Dolphin's format for GameCube and Wii discs. It understands disc padding, and [Dolphin](https://dolphin-emu.org/docs/faq/) plays it directly.
 
-Browser procedures: [Convert ISO to RVZ](../how-to/convert-to-rvz-browser.md) and [convert RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md).
+Browser procedures: [Compress ISO to RVZ](../how-to/convert-to-rvz-browser.md) and [decompress RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md).
 
 rom-weaver's parity suite checks that chdman and dolphin-tool can extract its CHD and RVZ outputs byte for byte, and that rom-weaver can extract the reference tools' outputs. The compressed container bytes and sizes may differ.
 
@@ -39,7 +59,7 @@ rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, con
 
 **Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms (`.z3ds` and friends) are supported by [Azahar 2123 and later](https://github.com/azahar-emu/azahar/discussions/1302); it is not a disc image format.
 
-Browser procedures: [Compress Nintendo 3DS ROMs to Z3DS](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
+Browser procedures: [Compress 3DS ROMs to Z3DS](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
 
 ## General archives: ZIP and 7z
 
@@ -62,21 +82,5 @@ Procedures: [Trim in the browser](../how-to/trim-roms-browser.md) and [trim or r
 ## Compression changes your checksums
 
 A compressed file does not hash the same as the dump inside it, so a `.chd` will not match a database entry for the `.bin` it was made from. The container and payload are different byte sequences. [Hash the ROM inside an archive](../how-to/identify-and-hash-files.md#hash-the-rom-inside-an-archive) gives the command for checking the payload.
-
-## Which format should I choose?
-
-| Format | Intended input | Playback and extraction |
-| --- | --- | --- |
-| CHD | Supported CD/DVD and other disc images | Compatible emulators read CHD directly; others need an extracted image. |
-| RVZ | GameCube and Wii disc images | Dolphin reads RVZ directly; tools requiring ISO need extraction. |
-| Z3DS | Supported Nintendo 3DS payloads | Azahar 2123 and later support Z3DS; other tools may require the extracted payload. |
-| ZIP | Any file, including cartridge ROMs | Some emulators load ROMs from ZIP; others need the member extracted first. |
-| 7z | Any file, including ROMs and disc images | Direct emulator support is less common than ZIP; extraction is often needed. |
-
-CHD versus 7z is a choice between a disc container that compatible emulators can read and a general archive. Neither converts a cartridge game into a disc-platform game. CHD and RVZ also target different disc workflows; there is no single size winner for every input and compression setting.
-
-ZIP versus 7z trades broader direct support for the potential of smaller archives. Compression ratio and time depend on the input and settings. For 3DS, Z3DS preserves the payload type; putting a file in ZIP or 7z does not turn it into a `.3ds` ROM.
-
-The browser procedures cover [CHD conversion](../how-to/convert-to-chd-browser.md), [RVZ conversion](../how-to/convert-to-rvz-browser.md), and [3DS compression](../how-to/convert-to-z3ds-browser.md). The [CLI archive guide](../how-to/work-with-archives.md) covers terminal workflows.
 
 The [Supported formats](../reference/formats.md#container-and-compression-formats) reference is the authoritative table of every container, extension, and codec, including the `--codec` values each output accepts. Back to the [guide index](../README.md).

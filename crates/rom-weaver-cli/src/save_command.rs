@@ -1,9 +1,11 @@
-use std::{collections::HashSet, fs::OpenOptions};
+use std::{collections::HashSet, fs::OpenOptions, num::IntErrorKind};
 
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 use rom_weaver_core::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
-    SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveValue, candidate_save_formats,
+    SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveRecognitionReason, SaveValue,
+    candidate_save_formats,
 };
 
 const SAVE_DETAILS_KEY: &str = "save_editor";
@@ -373,6 +375,14 @@ impl CliApp {
                 "output": output,
             }})),
         );
+        if args.dry_run
+            && let Some(details) = report.details.as_mut().and_then(Value::as_object_mut)
+        {
+            details.insert("dry_run".to_string(), json!(true));
+            details.insert("writes".to_string(), json!([]));
+            details.insert("downloads".to_string(), json!([]));
+            details.insert("read_only".to_string(), json!(true));
+        }
         if let Some(path) = output {
             report = Self::attach_emitted_files_details(report, vec![path], Some("game-save"));
         }
@@ -508,10 +518,24 @@ fn detect_for_edit(
                     .join(", ")
             ),
         ))),
-        SaveRecognitionOutcome::Unsupported { .. } => Err(Box::new((
+        SaveRecognitionOutcome::Unsupported { reasons } => Err(Box::new((
             recognition.clone(),
-            "unsupported operation: ROMWeaver has no editor for this save".to_string(),
+            unsupported_save_message(input, reasons),
         ))),
+    }
+}
+
+/// A save for a game the caller chose that fails its checksums is a blank or
+/// damaged save, not a missing editor; say so instead of "no editor".
+fn unsupported_save_message(
+    input: &SaveDetectionInput,
+    reasons: &[SaveRecognitionReason],
+) -> String {
+    match &input.selected_game {
+        Some(game) if reasons.contains(&SaveRecognitionReason::ChecksumMismatch) => format!(
+            "validation failed: the save failed its integrity checks (checksum mismatch) for {game}; it may be blank, corrupt, or from another game"
+        ),
+        _ => "unsupported operation: ROMWeaver has no editor for this save".to_string(),
     }
 }
 
@@ -568,18 +592,28 @@ fn parse_save_assignments(
 fn parse_save_value(field: &SaveField, raw: &str) -> Result<SaveValue> {
     match &field.value {
         SaveValue::Text(_) => Ok(SaveValue::Text(raw.to_string())),
-        SaveValue::U32(_) => raw.parse::<u32>().map(SaveValue::U32).map_err(|_| {
+        SaveValue::U32(_) => raw.parse::<u32>().map(SaveValue::U32).map_err(|error| {
+            let message = match error.kind() {
+                IntErrorKind::PosOverflow => "the save field value is out of range",
+                _ => "the save field needs an unsigned integer",
+            };
             RomWeaverError::ValidationCode(
                 ValidationCodeError::new("save_value_type_invalid")
-                    .with_message("the save field needs an unsigned integer")
+                    .with_message(message)
                     .with_field("field", field.id.as_str())
                     .with_field("value", raw),
             )
         }),
-        SaveValue::I32(_) => raw.parse::<i32>().map(SaveValue::I32).map_err(|_| {
+        SaveValue::I32(_) => raw.parse::<i32>().map(SaveValue::I32).map_err(|error| {
+            let message = match error.kind() {
+                IntErrorKind::PosOverflow | IntErrorKind::NegOverflow => {
+                    "the save field value is out of range"
+                }
+                _ => "the save field needs a signed integer",
+            };
             RomWeaverError::ValidationCode(
                 ValidationCodeError::new("save_value_type_invalid")
-                    .with_message("the save field needs a signed integer")
+                    .with_message(message)
                     .with_field("field", field.id.as_str())
                     .with_field("value", raw),
             )
@@ -729,16 +763,6 @@ fn resolve_save_output(input: &Path, requested: Option<&Path>) -> Result<PathBuf
     Err(RomWeaverError::Validation(
         "could not find an unused edited save output path".to_string(),
     ))
-}
-
-fn paths_refer_to_same_file(input: &Path, output: &Path) -> bool {
-    if input == output {
-        return true;
-    }
-    match (fs::canonicalize(input), fs::canonicalize(output)) {
-        (Ok(input), Ok(output)) => input == output,
-        _ => false,
-    }
 }
 
 #[cfg(target_arch = "wasm32")]

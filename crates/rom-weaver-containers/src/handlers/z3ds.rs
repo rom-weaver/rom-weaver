@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::{bounded_items_for_threads, parallel_heap_reserve, reserve_parallel_heap};
 use tracing::debug;
 
 pub(crate) struct Z3dsContainerHandler;
@@ -355,6 +356,32 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// Resident size of one zstd compression context after a 1 MiB frame, measured with
+/// `ZSTD_sizeof_CCtx` at levels 3 (1.2 MiB), 10 (10.5 MiB), and 19 through 22 (17.3 MiB).
+fn z3ds_compressor_context_bytes(level: i32) -> usize {
+    const MIB: usize = 1024 * 1024;
+    match level {
+        ..=3 => 2 * MIB,
+        4..=12 => 11 * MIB,
+        _ => 18 * MIB,
+    }
+}
+
+/// Heap the threaded create needs: the shared margin, each worker's 2 MiB thread stack and lazily
+/// built zstd context, and the frames in flight (`bounded_items_for_threads` queued to the workers
+/// and as many queued back). These are allocated while siblings run, so they must be reserved on
+/// the coordinating thread first.
+pub(crate) fn z3ds_create_heap_reserve(workers: usize, level: i32) -> usize {
+    const THREAD_STACK_BYTES: usize = 2 * 1024 * 1024;
+    let frames_in_flight = bounded_items_for_threads(workers).saturating_mul(2);
+    frames_in_flight
+        .saturating_mul(Z3DS_DEFAULT_FRAME_SIZE_BYTES)
+        .saturating_add(workers.saturating_mul(
+            z3ds_compressor_context_bytes(level).saturating_add(THREAD_STACK_BYTES),
+        ))
+        .saturating_add(parallel_heap_reserve(0))
+}
+
 impl Z3dsContainerHandler {
     const SUPPORTED_CODECS: &[&str] = &["zstd"];
 
@@ -380,6 +407,13 @@ impl Z3dsContainerHandler {
         &self,
         underlying_magic: [u8; 4],
     ) -> Option<&'static str> {
+        // Files written by earlier versions stored the payload's first four bytes, which is the
+        // CIA header size (`20 20 00 00`) for a real CIA. Map it without decoding the payload.
+        // Earlier NCSD/NCCH images stored RSA signature bytes, which cannot be told apart from
+        // arbitrary data here, so they keep extracting as `.3ds` (or by their `.z*` extension).
+        if underlying_magic == CIA_HEADER_SIZE_BYTES {
+            return Some("cia");
+        }
         Z3DS_SUBTYPES
             .iter()
             .find(|subtype| subtype.underlying_magic == Some(underlying_magic))
@@ -954,7 +988,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
     ) -> Result<OperationReport> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(
-                "z3ds create currently requires exactly one input file".into(),
+                "z3ds create currently requires exactly one input file; pass one 3DS file (.3ds, .cia, .cci, .cxi, or .3dsx)".into(),
             ));
         }
 
@@ -980,16 +1014,24 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let create_progress_bytes = Arc::new(AtomicU64::new(0));
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
-        let mut underlying_magic = [0_u8; 4];
-        {
-            let mut input = BufReader::new(File::open(input_path)?);
-            let magic_read = input.read(&mut underlying_magic)?;
-            if magic_read < underlying_magic.len() {
-                for byte in &mut underlying_magic[magic_read..] {
-                    *byte = 0;
-                }
+        let mut head = [0_u8; NCSD_MAGIC_OFFSET + 4];
+        let mut head_len = 0;
+        let mut head_file = File::open(input_path)?;
+        while head_len < head.len() {
+            match head_file.read(&mut head[head_len..]) {
+                Ok(0) => break,
+                Ok(read) => head_len += read,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error.into()),
             }
         }
+        let head = &head[..head_len];
+        let underlying_magic = detect_underlying_magic(head);
+        debug!(
+            underlying_magic = %self.format_magic(underlying_magic),
+            "z3ds create underlying magic"
+        );
+        let recognized_3ds = looks_like_3ds(head);
 
         let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
         let metadata_aligned = Self::align_16(metadata.len());
@@ -1009,6 +1051,27 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         // Write frames in order as they finish so peak memory depends on the
         // read-ahead window and worker contexts, not the compressed image size;
         // the output guard removes a partial file on error.
+        let report_chunk_progress = |task_len: u64| {
+            if input_size > 0 {
+                let completed = create_progress_bytes
+                    .fetch_add(task_len, Ordering::Relaxed)
+                    .saturating_add(task_len)
+                    .min(input_size);
+                maybe_emit_container_byte_progress(
+                    context,
+                    completed,
+                    input_size,
+                    ContainerByteProgress {
+                        command: "compress",
+                        format: Z3DS.name,
+                        stage: "create",
+                        label: &create_progress_label,
+                        thread_execution: Some(&execution),
+                        emitted_progress_bucket: create_progress_bucket.as_ref(),
+                    },
+                );
+            }
+        };
         let build: Result<()> = (|| {
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
@@ -1031,11 +1094,10 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             if execution.used_parallelism {
                 // Read frames on the caller and hand bounded buffers to workers, keeping output ordered and
                 // the worker count at `effective_threads`.
-                let create_progress_bytes = Arc::clone(&create_progress_bytes);
-                let create_progress_bucket = Arc::clone(&create_progress_bucket);
                 let mut input = BufReader::new(File::open(input_path)?);
                 input.seek(SeekFrom::Start(0))?;
 
+                reserve_parallel_heap(z3ds_create_heap_reserve(execution.effective_threads, level));
                 ordered_streaming_compress(
                     &create_tasks,
                     execution.effective_threads,
@@ -1051,25 +1113,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                         })?;
                         let mut data = vec![0_u8; read_len];
                         input.read_exact(&mut data)?;
-                        if input_size > 0 {
-                            let completed = create_progress_bytes
-                                .fetch_add(task.len, Ordering::Relaxed)
-                                .saturating_add(task.len)
-                                .min(input_size);
-                            maybe_emit_container_byte_progress(
-                                context,
-                                completed,
-                                input_size,
-                                ContainerByteProgress {
-                                    command: "compress",
-                                    format: Z3DS.name,
-                                    stage: "create",
-                                    label: &create_progress_label,
-                                    thread_execution: Some(&execution),
-                                    emitted_progress_bucket: create_progress_bucket.as_ref(),
-                                },
-                            );
-                        }
+                        report_chunk_progress(task.len);
                         Ok((task.index, task.len, data))
                     },
                     || (),
@@ -1088,25 +1132,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             } else {
                 for task in &create_tasks {
                     let frame = self.compress_create_task(&source, level, task)?;
-                    if input_size > 0 {
-                        let completed = create_progress_bytes
-                            .fetch_add(task.len, Ordering::Relaxed)
-                            .saturating_add(task.len)
-                            .min(input_size);
-                        maybe_emit_container_byte_progress(
-                            context,
-                            completed,
-                            input_size,
-                            ContainerByteProgress {
-                                command: "compress",
-                                format: Z3DS.name,
-                                stage: "create",
-                                label: &create_progress_label,
-                                thread_execution: Some(&execution),
-                                emitted_progress_bucket: create_progress_bucket.as_ref(),
-                            },
-                        );
-                    }
+                    report_chunk_progress(task.len);
                     self.write_create_frame(&mut output, &mut seek_table, &mut totals, frame)?;
                 }
             }
@@ -1142,12 +1168,67 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             Some(100.0),
             Some(execution.clone()),
         );
-        Ok(attach_compression_details(
+        let mut report = attach_compression_details(
             report,
             "zstd",
             Some(level),
             header.uncompressed_size,
             &execution,
-        ))
+        );
+        if !recognized_3ds {
+            report.label.push_str("; warning=");
+            report.label.push_str(NOT_3DS_WARNING);
+            if let Some(serde_json::Value::Object(details)) = report.details.as_mut() {
+                details.insert(
+                    "warnings".to_string(),
+                    serde_json::Value::Array(vec![NOT_3DS_WARNING.into()]),
+                );
+            }
+        }
+        Ok(report)
     }
+}
+
+/// Offset of the NCSD/NCCH magic inside real `.3ds`/`.cci`/`.cxi` images.
+const NCSD_MAGIC_OFFSET: usize = 0x100;
+const NOT_3DS_WARNING: &str = "input is not recognizable 3DS content";
+
+/// A CIA starts with its little-endian header size, 0x2020.
+const CIA_HEADER_SIZE_BYTES: [u8; 4] = [0x20, 0x20, 0, 0];
+
+/// The Z3DS header's underlying magic for a payload, as upstream Azahar writes it: `NCSD`
+/// (.3ds/.cci), `NCCH` (.cxi), `CIA\0` (.cia) or `3DSX`. Real NCSD/NCCH images carry their magic
+/// at 0x100 (offset 0 is the RSA signature) and a CIA begins with its header size. Unrecognized
+/// payloads keep their first four bytes.
+fn detect_underlying_magic(head: &[u8]) -> [u8; 4] {
+    let at = |offset: usize| -> Option<[u8; 4]> {
+        head.get(offset..offset + 4)
+            .and_then(|bytes| bytes.try_into().ok())
+    };
+    if at(0) == Some(*b"3DSX") {
+        return *b"3DSX";
+    }
+    if let Some(magic) = at(NCSD_MAGIC_OFFSET).filter(|magic| matches!(magic, b"NCSD" | b"NCCH")) {
+        return magic;
+    }
+    if at(0) == Some(CIA_HEADER_SIZE_BYTES) {
+        return *b"CIA\0";
+    }
+    let mut first = [0_u8; 4];
+    let len = head.len().min(4);
+    first[..len].copy_from_slice(&head[..len]);
+    first
+}
+
+/// True when `head` (the first bytes of the input) starts like a 3DS image: a
+/// bare table magic, a CIA header size, or NCSD/NCCH at 0x100.
+pub(crate) fn looks_like_3ds(head: &[u8]) -> bool {
+    let at = |offset: usize| head.get(offset..offset + 4);
+    let table_magic = Z3DS_SUBTYPES
+        .iter()
+        .filter_map(|subtype| subtype.underlying_magic)
+        .any(|magic| at(0) == Some(magic.as_slice()));
+    table_magic
+        || at(0) == Some([0x20, 0x20, 0, 0].as_slice())
+        || matches!(at(NCSD_MAGIC_OFFSET), Some(b"NCSD" | b"NCCH"))
 }

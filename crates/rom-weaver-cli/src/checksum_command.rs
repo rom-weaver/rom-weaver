@@ -120,6 +120,7 @@ impl CliApp {
                 kind_filter,
                 stop_on_single_payload_codec: false,
             },
+            false,
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
@@ -168,6 +169,18 @@ impl CliApp {
             thread_execution.clone(),
         ) {
             return Some(report);
+        }
+        if source.is_dir() {
+            return Some(OperationReport::failed(
+                OperationFamily::Checksum,
+                Some(self.checksum.name().to_string()),
+                "validate",
+                format!(
+                    "input is a directory, not a file: `{}`; checksum hashes one file at a time",
+                    source.display()
+                ),
+                thread_execution.clone(),
+            ));
         }
 
         let invalid = algo.iter().find(|algo| {

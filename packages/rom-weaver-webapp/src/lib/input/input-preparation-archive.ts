@@ -1,3 +1,4 @@
+import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -183,16 +184,40 @@ const listCompressionEntries = async (
 };
 
 /**
- * List archive names without extraction so drop routing can separate ROMs from
- * patch bundles before staging. The cached result is reused by descent. Failure
- * returns [] and lets Rust correct the default ROM route later.
+ * Drop routing MUST inspect nested leaves before choosing a ROM or patch bucket.
+ * Direct payloads keep the metadata-only fast path; ambiguous wrappers use the
+ * core's bounded recursive extraction and release its temporary outputs.
  */
 const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]> => {
   const file = await createPatchFile(source as Parameters<typeof createPatchFile>[0], "archive.bin");
   const entries = await listCompressionEntries(file, undefined);
-  return entries
+  const names = entries
     .map((entry) => (typeof entry === "string" ? entry : String((entry as { filename?: string }).filename || "")))
     .filter((name) => !!name);
+  const hasDirectPayload = names.some((name) => {
+    const normalized = name.toLowerCase();
+    return (
+      [...ROM_WEAVER_FILE_FILTERS.romExtensions, ...ROM_WEAVER_FILE_FILTERS.patchExtensions].some(
+        (extension) => normalized.endsWith(extension) || normalized.endsWith(`${extension}1`),
+      ) || /^(?:\.\/|\/)?rom-weaver-(?:weave|bundle)\.json$/i.test(name.replaceAll("\\", "/"))
+    );
+  });
+  if (hasDirectPayload || !names.some((name) => classifyPatcherInput({ fileName: name }).kind === "compression"))
+    return names;
+  const runtime = await resolveInputPreparationRuntime(DEFAULT_INPUT_PREPARATION_RUNTIME);
+  if (!runtime.compression.extract) throw new Error("Compression extraction is unavailable");
+  const result = await runtime.compression.extract({
+    source: getCompressionRuntimeSource(file),
+    format: getCompressionFormat(file),
+    entries: [],
+    extractAll: true,
+    options: { interactiveSelectionEnabled: false },
+  });
+  try {
+    return result.outputs.map((output) => output.relativePath || output.fileName);
+  } finally {
+    await Promise.all(result.outputs.map(async (output) => output.cleanup?.()));
+  }
 };
 
 // Cache immutable entry listings across routing, CHD mode, naming, and preflight
@@ -473,7 +498,7 @@ const resolveArchiveInputAssetsByDescent = async (
     traceArchivePreparation(options, "input.archive.chd-mode", { chdMode, sourceIndex });
   }
   if (!outputs.length) {
-    // A nested patch-only bundle can default to the ROM bucket before descent
+    // A nested patch-only weave can default to the ROM bucket before descent
     // reveals its leaves. Reclassify and abort ROM staging so it releases OPFS
     // handles before the patch bucket stages the same file.
     if (patchOutputs.length) {
@@ -485,7 +510,7 @@ const resolveArchiveInputAssetsByDescent = async (
       });
       throw new RomWeaverError(
         "INVALID_INPUT",
-        `${archiveFile.fileName || "Archive"} is a patch-only bundle; re-homing it to the patch list`,
+        `${archiveFile.fileName || "Archive"} is a patch-only weave; re-homing it to the patch list`,
         { details: { reclassifiedToPatch: true } },
       );
     }
@@ -688,6 +713,7 @@ const attachBareRomIngestMetadata = async (
       discFormat: asset.discFormat,
       platform: asset.platform,
       recommendedFormat: asset.recommendedFormat,
+      chdCreateMode: asset.chdCreateMode,
     });
     if (romType) (file as { romType?: typeof romType }).romType = romType;
     // A bare ROM is checksummed in place (no extract), so it carries a real checksum duration - unlike

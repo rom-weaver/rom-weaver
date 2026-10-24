@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { filterWasmCompilerInputTree, isWasmCompilerInput } from "./wasm-compiler-inputs.mjs";
+import {
+  filterWasmCacheInputTree,
+  filterWasmCompilerInputTree,
+  isWasmCompilerInput,
+} from "./wasm-compiler-inputs.mjs";
 
 test("selects production compiler inputs and embedded assets", () => {
   for (const path of [
@@ -43,4 +47,40 @@ test("filters committed Git tree entries with the shared path rules", () => {
       "100644 blob asset\tcrates/example/src/embedded.json",
     ].join("\n"),
   );
+});
+
+test("cache inputs exclude standalone script tests and documentation", () => {
+  const entries = [
+    "scripts/wasm/build-app.mjs",
+    "scripts/wasm/wasm32-wasip1-threads-common.sh",
+    "scripts/wasm/wasi-liblzma-threading.h",
+    "scripts/wasm/new-build-helper.mjs",
+    ".github/actions/setup-build-env/action.yml",
+    "Cargo.lock",
+    ".cargo/config.toml",
+    "crates/example/src/lib.rs",
+  ].map((path) => `100644 blob retained\t${path}`);
+  const excluded = [
+    "scripts/wasm/build-app.test.mjs",
+    "scripts/wasm/README.md",
+    "crates/example/tests/integration.rs",
+  ].map((path) => `100644 blob excluded\t${path}`);
+  assert.equal(filterWasmCacheInputTree([...entries, ...excluded].join("\n")), entries.join("\n"));
+});
+
+test("crate prose is not a compiler input, but licenses and vendored files are", () => {
+  for (const path of [
+    "crates/rom-weaver-cli/README.md",
+    "crates/rom-weaver-core/src/save/schema/catalog/README.md",
+  ]) {
+    assert.equal(isWasmCompilerInput(path), false, path);
+  }
+  for (const path of [
+    // gen-third-party-licenses.mjs copies these into the module's attribution.
+    "crates/rom-weaver-containers/src/nod/LICENSE-MIT",
+    "crates/rom-weaver-core/src/save/schema/catalog/LICENSE-GAME-TOOLS-COLLECTION",
+    "crates/rom-weaver-containers/libarchive/vendor/libarchive/README.md",
+  ]) {
+    assert.equal(isWasmCompilerInput(path), true, path);
+  }
 });

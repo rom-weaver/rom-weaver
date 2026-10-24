@@ -435,9 +435,10 @@ impl PatchRegistry {
 
     /// Positively identify a patch by its leading magic alone (no extension fallback).
     ///
-    /// Confirmed patch magic skips the container-probe cascade. Unlike [`probe`],
-    /// extension-only matches return `None`, so ambiguous ZIP-backed formats such
-    /// as `.dcp` still receive container probing.
+    /// Confirmed patch magic skips the container-probe cascade. Unlike [`Self::probe`],
+    /// extension-only matches return `None`, so ambiguous extension-only formats
+    /// still receive container probing. A `.dcp` is excluded earlier by name, so
+    /// nested extraction treats it as a patch leaf and never probes it.
     pub fn probe_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
         let ebp_extension = is_ebp_extension(path);
         let xdelta_extension = is_xdelta_extension(path);
@@ -621,11 +622,8 @@ fn is_xdelta_extension(path: &Path) -> bool {
 }
 
 fn read_signature_prefix(path: &Path, max_len: usize) -> Option<Vec<u8>> {
-    let mut bytes = vec![0u8; max_len];
-    let mut file = fs::File::open(path).ok()?;
-    let read = file.read(&mut bytes).ok()?;
-    bytes.truncate(read);
-    Some(bytes)
+    let file = fs::File::open(path).ok()?;
+    rom_weaver_core::read_up_to(file, max_len).ok()
 }
 
 #[cfg(test)]

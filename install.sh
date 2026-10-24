@@ -60,13 +60,6 @@ elif [ "$download_status" != 200 ]; then
   exit 1
 fi
 
-# The downloaded file's SHA-256 is the key for the repository attestation lookup.
-if command -v sha256sum >/dev/null 2>&1; then
-  digest=$(sha256sum "$tmp_dir/$asset" | cut -d ' ' -f 1)
-else
-  digest=$(shasum --algorithm 256 "$tmp_dir/$asset" | cut -d ' ' -f 1)
-fi
-
 # A missing attestation MUST stop installation; an unavailable API warns unless
 # ROM_WEAVER_REQUIRE_ATTESTATION=1. ROM_WEAVER_SKIP_ATTESTATION=1 bypasses this check.
 skip_attestation="${ROM_WEAVER_SKIP_ATTESTATION:-0}"
@@ -76,7 +69,7 @@ require_attestation="${ROM_WEAVER_REQUIRE_ATTESTATION:-0}"
 # this script.
 attestation_refuse() {
   echo "rom-weaver: $1" >&2
-  echo "rom-weaver: refusing to install $asset." >&2
+  echo "rom-weaver: refusing to install $provenance_asset." >&2
   echo "rom-weaver: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1" >&2
   exit 1
 }
@@ -89,34 +82,46 @@ attestation_unknown() {
   echo "rom-weaver: continuing - this download is unverified" >&2
 }
 
-if [ "$skip_attestation" = 1 ]; then
-  echo "rom-weaver: skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)" >&2
-else
-  # Trust GitHub's API over TLS to find SLSA provenance for this repository and digest.
-  # This lookup does not verify signatures or require a particular build workflow.
-  #
-  # The predicate filter MUST exclude release-membership attestations, which do not
-  # prove that a workflow built the asset. See docs/how-to/verify-downloads.md.
-  #
-  # Read the status explicitly: 404 means no match; transport errors and other
-  # HTTP failures leave the check unresolved.
-  status=$(curl --silent --location --proto '=https' --tlsv1.2 \
-    --output "$tmp_dir/attestations.json" \
-    --write-out '%{http_code}' \
-    "https://api.github.com/repos/$repo/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1") || status=000
-
-  # A repository with no attestations at all answers 404; one that has some, but
-  # none for these bytes, answers 200 with `{"attestations": []}`. Both mean the
-  # same thing. `repository_id` is the first field of an entry and appears only
-  # when there is one, so its presence is what separates the two.
-  if [ "$status" = 200 ] && grep -q '"repository_id"' "$tmp_dir/attestations.json"; then
-    echo "Verified build provenance for $asset"
-  elif [ "$status" = 200 ] || [ "$status" = 404 ]; then
-    attestation_refuse "no build provenance from $repo for $asset"
+verify_provenance() {
+  provenance_asset="$1"
+  # The downloaded file's SHA-256 is the key for the repository attestation lookup.
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(sha256sum "$tmp_dir/$provenance_asset" | cut -d ' ' -f 1)
   else
-    attestation_unknown "could not reach the attestations API for $asset (HTTP $status)"
+    digest=$(shasum --algorithm 256 "$tmp_dir/$provenance_asset" | cut -d ' ' -f 1)
   fi
-fi
+
+  if [ "$skip_attestation" = 1 ]; then
+    echo "rom-weaver: skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)" >&2
+  else
+    # Trust GitHub's API over TLS to find SLSA provenance for this repository and digest.
+    # This lookup does not verify signatures or require a particular build workflow.
+    #
+    # The predicate filter MUST exclude release-membership attestations, which do not
+    # prove that a workflow built the asset. See docs/how-to/verify-downloads.md.
+    #
+    # Read the status explicitly: 404 means no match; transport errors and other
+    # HTTP failures leave the check unresolved.
+    status=$(curl --silent --location --proto '=https' --tlsv1.2 \
+      --output "$tmp_dir/attestations.json" \
+      --write-out '%{http_code}' \
+      "https://api.github.com/repos/$repo/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1") || status=000
+
+    # A repository with no attestations at all answers 404; one that has some, but
+    # none for these bytes, answers 200 with `{"attestations": []}`. Both mean the
+    # same thing. `repository_id` is the first field of an entry and appears only
+    # when there is one, so its presence is what separates the two.
+    if [ "$status" = 200 ] && grep -q '"repository_id"' "$tmp_dir/attestations.json"; then
+      echo "Verified build provenance for $provenance_asset"
+    elif [ "$status" = 200 ] || [ "$status" = 404 ]; then
+      attestation_refuse "no build provenance from $repo for $provenance_asset"
+    else
+      attestation_unknown "could not reach the attestations API for $provenance_asset (HTTP $status)"
+    fi
+  fi
+}
+
+verify_provenance "$asset"
 
 mkdir -p "$install_dir"
 case "$asset" in
@@ -183,6 +188,7 @@ fi
 # binary install successful in that case.
 if curl --fail --location --proto '=https' --tlsv1.2 \
   --output "$tmp_dir/$docs_asset" "$release_url/$docs_asset"; then
+  verify_provenance "$docs_asset"
   tar --extract --gzip --file "$tmp_dir/$docs_asset" --directory "$tmp_dir"
   man_dir="${ROM_WEAVER_MAN_DIR:-$HOME/.local/share/man/man1}"
   bash_completion_dir="${ROM_WEAVER_BASH_COMPLETION_DIR:-$HOME/.local/share/bash-completion/completions}"

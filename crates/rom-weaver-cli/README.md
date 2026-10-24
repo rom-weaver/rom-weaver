@@ -41,7 +41,7 @@ This crate ships the `rom-weaver` binary and the shared `rom_weaver_app` command
 - **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
 - **Checksum and verify.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, with copier-header detection and header-aware checksum variants.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, and XISO, plus lossless GameCube/Wii conversion to RVZ without sector scrubbing. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
-- **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
+- **Share workflows.** `rom-weaver-weave.json` weaves pin patch order, checksums, and output naming so others can replay the exact workflow.
 - **Scriptable.** `--json` emits one complete result document and `--jsonl` emits line-delimited events; generated assets use result details in JSON modes.
 
 Everything runs locally. Nothing is uploaded.
@@ -55,7 +55,7 @@ rom-weaver man --install
 rom-weaver setup
 ```
 
-Cargo installs the executable and nothing else. `rom-weaver man --install` writes the generated manpages, and `rom-weaver setup` downloads this version's identify and cheat databases into the per-user data directory. `identify`, `probe --identify`, and cheat baking need that data; the other commands do not.
+Cargo installs the executable and nothing else. `rom-weaver man --install` writes the generated manpages, and `rom-weaver setup` downloads this version's identify and cheat databases into the per-user data directory. `identify` and cheat baking need that data; the other commands do not.
 
 A source build links native C libraries and needs **Rust 1.95+**, **CMake**, **Clang**, and a native compiler toolchain. The crate's Cargo features (`typescript-types`, `wasm-app`) drive this project's own type generation and WASM entrypoint builds; they are not meant for external use.
 

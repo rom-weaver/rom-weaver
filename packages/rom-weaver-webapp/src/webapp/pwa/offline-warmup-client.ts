@@ -369,6 +369,10 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
           pumpNumber: currentPump,
           sincePreviousPumpMs: previousPumpCompletedAt === null ? null : pumpStartedAt - previousPumpCompletedAt,
         });
+        const identifyGroupIds =
+          saveData && !started
+            ? activeBumps.flatMap((target) => (target.kind === "identify-groups" ? target.groupIds : []))
+            : undefined;
         let reply: Record<string, unknown>;
         try {
           reply = await postPump(
@@ -380,7 +384,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
               }
             },
             PUMP_TIMEOUT_MS,
-            {},
+            identifyGroupIds ? { identifyGroupIds } : {},
             requestController.signal,
           );
         } catch (error) {
@@ -433,7 +437,16 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
         const unit = typeof progress.unit === "string" ? progress.unit : "";
         for (let i = activeBumps.length - 1; i >= 0; i -= 1) {
           const bumpTarget = activeBumps[i];
-          if (!(unit && bumpTarget && matchesBump(unit, bumpTarget))) activeBumps.splice(i, 1);
+          if (identifyGroupIds && bumpTarget?.kind === "identify-groups") {
+            // Retire only completed/requested groups. A second ROM may have
+            // bumped a different group while this pump was still in flight.
+            const completedGroup = identifyGroupIds.find((id) => unit === `identify-group:${id}`);
+            const groupIds = bumpTarget.groupIds.filter((id) =>
+              completedGroup ? id !== completedGroup : !identifyGroupIds.includes(id),
+            );
+            if (groupIds.length) activeBumps[i] = { ...bumpTarget, groupIds };
+            else activeBumps.splice(i, 1);
+          } else if (!(unit && bumpTarget && matchesBump(unit, bumpTarget))) activeBumps.splice(i, 1);
         }
         if (saveData && !started && activeBumps.length === 0) {
           logger.debug("offline warm-up stopped; data saver is on and no bump is pending");

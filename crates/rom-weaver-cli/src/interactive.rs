@@ -1,30 +1,30 @@
-//! `apply --tui`: a light `dialoguer` wizard that collects per-patch bundle
-//! metadata seeded from the apply args, then hands back a `bundle create`
+//! `apply --tui`: a light `dialoguer` wizard that collects per-patch weave
+//! metadata seeded from the apply args, then hands back a `weave create`
 //! command. The apply itself still runs through the normal path; this only
-//! authors the accompanying `rom-weaver-bundle.json`.
+//! authors the accompanying `rom-weaver-weave.json`.
 
 use std::path::PathBuf;
 
 use dialoguer::{Confirm, Input};
-use rom_weaver_app::{BundleCreateCommand, BundleCreatePatchSpec, PatchApplyCommand};
+use rom_weaver_app::{PatchApplyCommand, WeaveCreateCommand, WeaveCreatePatchSpec};
 
-/// The default bundle file name written by the wizard.
-const DEFAULT_BUNDLE_NAME: &str = "rom-weaver-bundle.json";
+/// The default weave file name written by the wizard.
+const DEFAULT_WEAVE_NAME: &str = "rom-weaver-weave.json";
 
 /// Walk each `--patch` collecting name/version/author/optional, plus an output
-/// name, and build the `bundle create` command that mirrors the apply. Prompts
+/// name, and build the `weave create` command that mirrors the apply. Prompts
 /// draw on stderr (the caller has already confirmed a terminal). Returns a
 /// human-readable message on error/cancel.
-pub fn run_bundle_tui(apply: &PatchApplyCommand) -> Result<BundleCreateCommand, String> {
+pub fn run_weave_tui(apply: &PatchApplyCommand) -> Result<WeaveCreateCommand, String> {
     if apply.patches.is_empty() {
         return Err(
-            "--tui needs explicit --patch files (re-opening a bundle input is not supported yet); pass --patch <file> ..."
+            "--tui needs explicit --patch files (re-opening a weave input is not supported yet); pass --patch <file> ..."
                 .to_string(),
         );
     }
 
     crate::render::write_stderr(format_args!(
-        "Authoring rom-weaver-bundle.json for {} patch(es) applied to {}\n",
+        "Authoring rom-weaver-weave.json for {} patch(es) applied to {}\n",
         apply.patches.len(),
         crate::render::display_text(&apply.input.to_string_lossy())
     ));
@@ -68,13 +68,13 @@ pub fn run_bundle_tui(apply: &PatchApplyCommand) -> Result<BundleCreateCommand, 
             .default(false)
             .interact()
             .map_err(|error| error.to_string())?;
-        patch_specs.push(BundleCreatePatchSpec {
+        patch_specs.push(WeaveCreatePatchSpec {
             path: path.clone(),
             name: non_empty(name),
             version: non_empty(version),
             author: non_empty(author),
             optional: optional.then_some(true),
-            ..BundleCreatePatchSpec::default()
+            ..WeaveCreatePatchSpec::default()
         });
     }
 
@@ -91,13 +91,13 @@ pub fn run_bundle_tui(apply: &PatchApplyCommand) -> Result<BundleCreateCommand, 
         .interact_text()
         .map_err(|error| error.to_string())?;
 
-    Ok(BundleCreateCommand {
+    Ok(WeaveCreateCommand {
         rom: Some(apply.input.clone()),
-        output: PathBuf::from(DEFAULT_BUNDLE_NAME),
+        output: PathBuf::from(DEFAULT_WEAVE_NAME),
         output_name: non_empty(output_name),
         threads: apply.threads,
         patch_specs,
-        ..BundleCreateCommand::default()
+        ..WeaveCreateCommand::default()
     })
 }
 

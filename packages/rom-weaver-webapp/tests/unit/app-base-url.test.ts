@@ -18,14 +18,14 @@ describe("readAppBaseUrl", () => {
     expect(new URL(at("/apply-patch/")).pathname).toBe("/");
     expect(new URL(at("/apply-patch")).pathname).toBe("/");
     expect(new URL(at("/apply-patch.html")).pathname).toBe("/");
-    expect(new URL(at("/create-patch")).pathname).toBe("/");
-    expect(new URL(at("/create-patch.html")).pathname).toBe("/");
+    expect(new URL(at("/create-rom-patch")).pathname).toBe("/");
+    expect(new URL(at("/create-rom-patch.html")).pathname).toBe("/");
     expect(new URL(at("/trim-rom/")).pathname).toBe("/");
   });
 
   test("keeps a sub-path deployment prefix", () => {
     expect(new URL(at("/roms/apply-patch/")).pathname).toBe("/roms/");
-    expect(new URL(at("/roms/create-patch")).pathname).toBe("/roms/");
+    expect(new URL(at("/roms/create-rom-patch")).pathname).toBe("/roms/");
     expect(new URL(at("/roms/")).pathname).toBe("/roms/");
   });
 
@@ -51,7 +51,7 @@ describe("readAppBaseUrl", () => {
   });
 
   test("drops any query and hash so it is usable as a base", () => {
-    const base = new URL(at("/apply-patch/?bundle=first-weave.zip#frag"));
+    const base = new URL(at("/apply-patch/?weave=first-weave.zip#frag"));
     expect(base.search).toBe("");
     expect(base.hash).toBe("");
   });
@@ -85,7 +85,9 @@ describe("resolveGuidedSampleHref", () => {
   });
 
   test("keeps guide links inside a sub-path deployment", () => {
-    expect(resolveGuidedSampleHref("https://weaver.example/roms/", "create")).toBe("/roms/create-patch?guide=create");
+    expect(resolveGuidedSampleHref("https://weaver.example/roms/", "create")).toBe(
+      "/roms/create-rom-patch?guide=create",
+    );
   });
 
   test("keeps the authored link when the base is invalid", () => {
@@ -95,7 +97,7 @@ describe("resolveGuidedSampleHref", () => {
 
 describe("readGuidedSampleFromSearch", () => {
   test("reads a supported guide and rejects unknown values", () => {
-    expect(readGuidedSampleFromSearch("?guide=bundle")).toBe("bundle");
+    expect(readGuidedSampleFromSearch("?guide=weave")).toBe("weave");
     expect(readGuidedSampleFromSearch("?guide=unknown")).toBeNull();
     expect(readGuidedSampleFromSearch("?guide=toString")).toBeNull();
   });

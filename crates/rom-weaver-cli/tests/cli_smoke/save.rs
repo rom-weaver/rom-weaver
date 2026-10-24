@@ -68,6 +68,35 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
     assert!(game_ids.contains(&"game-and-watch-gallery-3"));
     assert!(game_ids.contains(&"kirbys-adventure-canada-slot-3"));
     for id in [
+        "castlevania-dawn-of-sorrow",
+        "castlevania-order-of-ecclesia",
+        "castlevania-symphony-of-the-night-usa-block-1",
+        "grandia-usa-block-1",
+        "final-fantasy-vii-usa-block-1",
+        "final-fantasy-viii-usa-block-1",
+        "advance-wars",
+        "banjo-kazooie-canonical-eeprom-file-1",
+        "bomberman-64-canonical-eeprom-slot-1",
+        "castlevania-harmony-of-dissonance",
+        "game-boy-camera",
+        "golden-sun-file-1",
+        "golden-sun-the-lost-age-file-3",
+        "kingdom-hearts-chain-of-memories",
+        "konami-krazy-racers",
+        "kurukuru-kururin",
+        "paper-mario-canonical-flashram-file-1",
+        "rayman-usa-block-1",
+        "rondo-of-blood-japan",
+        "sonic-advance",
+        "sonic-advance-2",
+        "sonic-advance-3",
+        "sonic-rush",
+        "super-smash-bros-canonical-sram",
+        "tekken-usa-block-15",
+        "wario-land-4",
+        "warioware-inc-minigame-mania",
+        "zelda-the-minish-cap",
+        "zelda-ocarina-of-time-canonical-sram-file-3",
         "1080-snowboarding",
         "yoshis-story-canonical-eeprom-japan",
         "castlevania-aria-of-sorrow",
@@ -111,6 +140,94 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
             .iter()
             .any(|game| game == "zelda-a-link-to-the-past")
     );
+}
+
+#[test]
+fn save_set_repairs_rondo_bcd_and_preserves_other_bram_records() {
+    let temp = setup_temp_dir();
+    let source = temp.child("rondo.sav");
+    let output = temp.child("rondo-edited.sav");
+    let mut original = vec![0x67; 2048];
+    original[..0xb0].fill(0);
+    original[..4].copy_from_slice(b"HUBM");
+    original[0x16..0x1f].copy_from_slice(b"DRACULA X");
+    original[0x21] = 4;
+    let checksum = original[0x14..0xb0]
+        .iter()
+        .fold(0u16, |sum, byte| sum.wrapping_sub(u16::from(*byte)));
+    original[0x12..0x14].copy_from_slice(&checksum.to_le_bytes());
+    fs::write(source.path(), &original).unwrap();
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "slot_1.money=123456",
+            "--game",
+            "rondo-of-blood-japan",
+            "--output",
+            output.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let mut expected = original.clone();
+    expected[0x3f..0x42].copy_from_slice(&[0x56, 0x34, 0x12]);
+    let checksum = expected[0x14..0xb0]
+        .iter()
+        .fold(0u16, |sum, byte| sum.wrapping_sub(u16::from(*byte)));
+    expected[0x12..0x14].copy_from_slice(&checksum.to_le_bytes());
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), original);
+}
+
+#[test]
+fn save_set_preserves_ps1_card_wrappers_and_other_blocks() {
+    let temp = setup_temp_dir();
+    let mut card = vec![0xa5; 0x20000];
+    card[..0x80].fill(0);
+    card[..2].copy_from_slice(b"MC");
+    card[0x7f] = b'M' ^ b'C';
+    card[0x180..0x200].fill(0);
+    card[0x180] = 0x51;
+    card[0x184..0x188].copy_from_slice(&0x2000u32.to_le_bytes());
+    card[0x188..0x18a].fill(0xff);
+    card[0x18a..0x18c].copy_from_slice(b"BA");
+    card[0x18c..0x196].copy_from_slice(b"SLUS-00005");
+    card[0x1ff] = card[0x180..0x1ff].iter().fold(0, |xor, byte| xor ^ byte);
+    card[0x6000..0x8000].fill(0);
+    card[0x6000..0x6004].copy_from_slice(&[b'S', b'C', 0x11, 1]);
+    card[0x6200] = 1;
+    for (name, magic, header_size) in [
+        ("raw.mcr", b"".as_slice(), 0),
+        ("dexdrive.gme", b"123-456-STD".as_slice(), 0xf40),
+        ("vgs.mem", b"VgsM".as_slice(), 0x40),
+    ] {
+        let source = temp.child(name);
+        let output = temp.child(format!("edited-{name}"));
+        let mut wrapped = vec![0x5a; header_size];
+        wrapped[..magic.len()].copy_from_slice(magic);
+        wrapped.extend_from_slice(&card);
+        fs::write(source.path(), &wrapped).unwrap();
+        run_single_json_event(
+            &[
+                "save",
+                "set",
+                source.to_str().unwrap(),
+                "lives=99",
+                "--game",
+                "rayman-usa-block-3",
+                "--output",
+                output.to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        let mut expected = wrapped.clone();
+        expected[header_size + 0x6400] = 99;
+        assert_eq!(fs::read(output.path()).unwrap(), expected);
+        assert_eq!(fs::read(source.path()).unwrap(), wrapped);
+    }
 }
 
 #[test]
@@ -726,6 +843,74 @@ fn save_set_rejects_bad_values_and_source_collisions() {
 }
 
 #[test]
+fn save_set_rejects_late_invalid_assignments_atomically_and_can_retry() {
+    let temp = setup_temp_dir();
+    let source = write_fixture(&temp);
+    let output = temp.child("retry.sav");
+    let original = emerald_fixture();
+    let existing = b"existing destination must survive";
+    for (assignment, code) in [
+        ("trainer.money=2", "save_edit_conflict"),
+        ("missing.field=1", "save_field_invalid"),
+        ("trainer.gender=not-a-gender", "save_enum_invalid"),
+        ("trainer.name", "save_assignment_invalid"),
+    ] {
+        fs::write(output.path(), existing).unwrap();
+        let report = run_single_json_event(
+            &[
+                "save",
+                "set",
+                source.to_str().unwrap(),
+                "trainer.money=12345",
+                assignment,
+                "--output",
+                output.to_str().unwrap(),
+                "--force",
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(report["status"], "failed");
+        assert!(report["label"].as_str().unwrap().contains(code), "{report}");
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read(output.path()).unwrap(), existing);
+    }
+    let report = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "trainer.money=12345",
+            "--output",
+            output.to_str().unwrap(),
+            "--force",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    let mut expected = original.clone();
+    let section = section_offset(0, 1);
+    expected[section + 0x490..section + 0x494]
+        .copy_from_slice(&(12345u32 ^ 0x1234_5678).to_le_bytes());
+    let sum = checksum(&expected[section..section + 0xF80]);
+    expected[section + 0xFF6..section + 0xFF8].copy_from_slice(&sum.to_le_bytes());
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(&source).unwrap(), original);
+    let inspected = run_single_json_event(
+        &[
+            "save",
+            "get",
+            output.to_str().unwrap(),
+            "trainer.money",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(inspected["label"], "12345");
+}
+
+#[test]
 fn save_gen1_identify_and_set_preserve_unknown_bytes_and_checksum() {
     let temp = setup_temp_dir();
     let source = temp.child("red.sav");
@@ -872,6 +1057,40 @@ fn save_create_generates_zelda_and_requires_a_pokemon_template() {
         "save_generation_unsupported"
     );
     assert!(!red.path().exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn save_create_rejects_a_hard_linked_output_as_the_source() {
+    let temp = setup_temp_dir();
+    let source = temp.child("template.sav");
+    let original = pokemon_gen1_fixture();
+    fs::write(source.path(), &original).unwrap();
+    let linked = temp.child("linked.sav");
+    fs::hard_link(source.path(), linked.path()).unwrap();
+
+    let collision = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--output",
+            linked.path().to_str().unwrap(),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        collision["details"]["save_editor"]["error"]["code"],
+        "save_output_is_source"
+    );
+    // The staged temp file plus rename never touches the source inode, so the
+    // source stays intact either way; the regression is the missing rejection.
+    assert_eq!(fs::read(source.path()).unwrap(), original);
 }
 
 #[test]
@@ -1212,4 +1431,84 @@ fn save_create_and_edit_super_mario_world() {
         &["save", "inspect", edited.path().to_str().unwrap(), "--json"],
         0,
     );
+}
+
+#[test]
+fn save_set_reports_an_out_of_range_integer() {
+    let temp = setup_temp_dir();
+    let source = write_fixture(&temp);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "trainer.money=99999999999",
+            "--dry-run",
+            "--json",
+        ],
+        1,
+    );
+    assert!(report.to_string().contains("out of range"), "{report}");
+}
+
+#[test]
+fn save_set_and_create_dry_run_carry_plan_fields_and_keep_preview() {
+    let temp = setup_temp_dir();
+    let save = write_fixture(&temp);
+    let set_args = [
+        "save",
+        "set",
+        save.to_str().unwrap(),
+        "trainer.money=999999",
+        "-n",
+    ];
+    let json_args: Vec<_> = set_args.iter().copied().chain(["--json"]).collect();
+    let preview = run_single_json_event(&json_args, 0);
+    assert_eq!(preview["details"]["dry_run"], true);
+    assert_eq!(preview["details"]["writes"], serde_json::json!([]));
+    assert_eq!(preview["details"]["downloads"], serde_json::json!([]));
+    assert_eq!(preview["details"]["read_only"], true);
+    assert!(preview["details"]["save_editor"]["result"].is_object());
+
+    let human = String::from_utf8(command_stdout(&set_args, 0)).unwrap();
+    assert!(human.contains("5000 -> 999999"), "{human}");
+
+    let template = save.to_str().unwrap();
+    let create = run_single_json_event(
+        &["save", "create", "--template", template, "-n", "--json"],
+        0,
+    );
+    assert_eq!(create["details"]["dry_run"], true);
+    assert_eq!(create["details"]["read_only"], true);
+    assert!(create["details"]["save_editor"].is_object());
+}
+
+#[test]
+fn save_inspect_reports_integrity_failure_for_a_chosen_game_with_bad_checksums() {
+    let temp = setup_temp_dir();
+    let save = temp.child("badsum.sav");
+    let mut bytes = emerald_fixture();
+    for slot in 0..2 {
+        for id in 0..14 {
+            // Flip the stored section checksum in both slots.
+            bytes[section_offset(slot, id) + 0xFF6] ^= 0xFF;
+        }
+    }
+    fs::write(save.path(), &bytes).unwrap();
+    let json = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            save.path().to_str().unwrap(),
+            "--game",
+            "pokemon-emerald",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().unwrap();
+    assert!(label.contains("integrity checks"), "{label}");
+    assert!(!label.contains("no editor"), "{label}");
+    assert_eq!(fs::read(save.path()).unwrap(), bytes);
 }

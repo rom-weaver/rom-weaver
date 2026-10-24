@@ -9,12 +9,12 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             let base = slot * SLOT_SIZE;
             GameDefinition {
                 fields: vec![
-                    FieldDefinition::new("money".into(), "Money".into(), base + 0x260, Storage::U24Le)
+                    catalog_field("money", "Money", base + 0x260, Storage::U24Le)
                         .min(0).max(9_999_999),
-                    FieldDefinition::new("location".into(), "Location code".into(), base + 0x964, Storage::U16Le)
+                    catalog_field("location", "Location code", base + 0x964, Storage::U16Le)
                         .mask(0x1ff).editable(false)
                         .description("Read-only because changing locations also requires matching map coordinates.".into()),
-                    FieldDefinition::new("config.battle_speed".into(), "Battle speed (stored 0-5)".into(), base + 0x74d, Storage::U8)
+                    catalog_field("config.battle_speed", "Battle speed (stored 0-5)", base + 0x74d, Storage::U8)
                         .mask(0x7).min(0).max(5),
                 ],
                 description: format!("Edits independent scalar fields in SNES save slot {}. Character, inventory, and progression fields are omitted because several have coupled write rules.", slot + 1),

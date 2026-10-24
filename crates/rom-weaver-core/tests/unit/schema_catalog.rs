@@ -7,7 +7,7 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
     let registry = SaveGameRegistry::default();
     let mut ids = HashSet::new();
     let handlers = super::catalog::all();
-    assert_eq!(handlers.len(), 140);
+    assert_eq!(handlers.len(), 611);
     for handler in handlers {
         let definition = super::SchemaSaveHandler::definitions(&handler)
             .into_iter()
@@ -101,4 +101,12 @@ fn extra_mario_world_slots_preserve_other_files_and_match_full_profile_edits() {
             .unwrap();
         assert_eq!(actual.bytes, expected.bytes);
     }
+}
+
+#[test]
+fn shared_crc_helpers_match_check_values() {
+    assert_eq!(super::crc32(b"123456789"), 0xcbf4_3926);
+    assert_eq!(super::crc32(b""), 0);
+    assert_eq!(super::crc16_ccitt_false(*b"123456789"), 0x29b1);
+    assert_eq!(super::crc16_ccitt_false([]), 0xffff);
 }

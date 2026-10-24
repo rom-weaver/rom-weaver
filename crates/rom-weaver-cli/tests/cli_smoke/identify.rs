@@ -116,10 +116,17 @@ pub(crate) fn identify_pack_with_entries(entries: &[([u8; 4], &str)]) -> Vec<u8>
     rwfp1_pack(entries)
 }
 
-fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
+pub(crate) fn identify_pack_for_disc(
+    platform: &str,
+    size: u64,
+    crc32: [u8; 4],
+    md5: [u8; 16],
+    sha1: [u8; 20],
+    name: &str,
+) -> Vec<u8> {
     let game = PackGame {
         name: name.to_string(),
-        platform: "Test System".to_string(),
+        platform: platform.to_string(),
         source: IdentifySource::Libretro,
         upstream_source: UpstreamSource::Libretro,
         provenance: Vec::new(),
@@ -137,7 +144,7 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
             ordinal: 0,
             hash_scope: "full_file".to_string(),
             filename: None,
-            size: 5,
+            size,
             crc32: Some(crc32.iter().map(|byte| format!("{byte:02x}")).collect()),
             md5: Some(md5.iter().map(|byte| format!("{byte:02x}")).collect()),
             sha1: Some(sha1.iter().map(|byte| format!("{byte:02x}")).collect()),
@@ -149,7 +156,7 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
         }],
     };
     rom_weaver_checksum::identify_pack_v1::encode(
-        "Test System",
+        platform,
         IdentifySource::Libretro,
         "full_file",
         &serde_json::json!([]),
@@ -158,6 +165,9 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
     .expect("RWFP1 pack")
 }
 
+fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
+    identify_pack_for_disc("Test System", 5, crc32, md5, sha1, name)
+}
 pub(crate) fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
     identify_pack_with_hashes(
         crc32,
@@ -422,6 +432,33 @@ fn identify_matches_a_manual_hash() {
         identify["components"][0]["md5"],
         "5d41402abc4b2a76b9719d911017c592"
     );
+}
+
+#[test]
+fn identify_hash_with_a_database_pack_needs_no_home_directory() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    // `env -i`: no HOME or XDG directories, so no installed-pack location.
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .env_clear()
+        .args([
+            "identify",
+            "--hash",
+            "3610a686",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["identify"]["status"], "matched");
 }
 
 #[test]
@@ -1118,4 +1155,301 @@ fn identify_title_index_rejects_misaligned_default_pack_metadata() {
             .expect("stderr")
             .contains("defaultPacks must align with packs")
     );
+}
+
+#[test]
+fn identify_reports_a_missing_input_as_its_own_command_failure() {
+    let temp = setup_temp_dir();
+    let missing = temp.child("missing.bin");
+    let json = run_single_json_event(
+        &[
+            "identify",
+            "--input",
+            missing.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["command"], "identify");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "identify");
+    assert_eq!(json["status"], "failed");
+}
+
+#[test]
+fn identify_hash_rejects_an_unknown_system() {
+    let output = command_stdout(
+        &[
+            "identify", "--hash", "aaaaaaaa", "--system", "bogus", "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("unknown system `bogus`"),
+        "{json}"
+    );
+}
+
+#[test]
+fn identify_hash_with_size_matches_md5_and_sha1() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+    let pack = temp
+        .child("test.pack")
+        .path()
+        .to_str()
+        .expect("path")
+        .to_owned();
+    for (hash, size, status) in [
+        ("5d41402abc4b2a76b9719d911017c592", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "6", "unknown"),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--hash",
+                hash,
+                "--size",
+                size,
+                "--database",
+                &pack,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(
+            json["details"]["identify"]["status"], status,
+            "hash={hash} size={size}"
+        );
+    }
+}
+
+#[test]
+fn identify_title_index_error_names_the_path() {
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            "missing-title-index.json",
+            "--name",
+            "foo",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert!(
+        json.to_string().contains("missing-title-index.json"),
+        "{json}"
+    );
+}
+
+fn assert_default_pbp_rom_resolution(command: &str, source_name: &str) {
+    let temp = setup_temp_dir();
+    let source = temp.child(source_name);
+    fs::write(source.path(), build_test_empty_psar_pbp()).expect("PBP fixture");
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    let archive = temp.child("homebrew.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(archive.path(), "homebrew.zip")], outer.path());
+    for input in [source.path(), archive.path(), outer.path()] {
+        let mut args = vec![command, "--input", input.to_str().expect("path"), "--json"];
+        if command == "identify" {
+            args.extend(["--database", database.path().to_str().expect("path")]);
+        }
+        let terminal = isolated_json_event(&temp, &args, 0);
+        let details = if command == "identify" {
+            &terminal["details"]["identify"]
+        } else {
+            &terminal["details"]
+        };
+        assert_eq!(
+            details["checksums"]["sha1"],
+            checksum["details"]["checksums"]["sha1"]
+        );
+        if command == "identify" {
+            assert_eq!(details["detected_platform"], "Sony Playstation Portable");
+        } else {
+            assert_eq!(details["platform"], "Sony Playstation Portable");
+            assert_eq!(details["size"], 256);
+        }
+    }
+}
+
+#[test]
+fn checksum_default_preserves_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("checksum", "EBOOT.PBP");
+}
+
+#[test]
+fn identify_default_preserves_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("identify", "EBOOT.PBP");
+}
+
+#[test]
+fn checksum_and_identify_default_still_extract_disc_pbp() {
+    let temp = setup_temp_dir();
+    let disc = build_test_pbp_iso(72, 63);
+    let raw = temp.child("expected.bin");
+    fs::write(raw.path(), &disc).expect("raw fixture");
+    let expected = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            raw.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    )["details"]["checksums"]["sha1"]
+        .clone();
+    let source = temp.child("disc.pbp");
+    fs::write(
+        source.path(),
+        build_test_pbp_fixture(vec![("SLUS00001", disc)]),
+    )
+    .expect("PBP fixture");
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    for command in ["checksum", "identify"] {
+        let mut args = vec![
+            command,
+            "--input",
+            source.path().to_str().expect("path"),
+            "--json",
+        ];
+        if command == "identify" {
+            args.extend(["--database", database.path().to_str().expect("path")]);
+        }
+        let ambiguous = isolated_json_event(&temp, &args, 1);
+        assert!(
+            ambiguous["label"]
+                .as_str()
+                .expect("label")
+                .contains("ambiguous")
+        );
+        args.extend(["--select", "disc.bin"]);
+        let terminal = isolated_json_event(&temp, &args, 0);
+        let details = if command == "identify" {
+            &terminal["details"]["identify"]
+        } else {
+            &terminal["details"]
+        };
+        assert_eq!(details["checksums"]["sha1"], expected);
+    }
+}
+
+#[test]
+fn checksum_default_preserves_extensionless_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("checksum", "homebrew");
+}
+
+#[test]
+fn identify_default_preserves_extensionless_empty_psar_pbp_rom() {
+    assert_default_pbp_rom_resolution("identify", "homebrew");
+}
+
+fn assert_stdin_pbp_rom_resolution(command: &str) {
+    let temp = setup_temp_dir();
+    let database = temp.child("test.pack");
+    fs::write(database.path(), identify_pack()).expect("database fixture");
+    let mut args = vec![command, "--input", "-", "--json"];
+    if command == "identify" {
+        args.extend(["--database", database.path().to_str().expect("path")]);
+    }
+    let mut process = Command::cargo_bin("rom-weaver").expect("binary");
+    for key in [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "XDG_DATA_HOME",
+        "TMPDIR",
+    ] {
+        process.env(key, temp.path());
+    }
+    let output = process
+        .args(args)
+        .write_stdin(build_test_empty_psar_pbp())
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let terminal = parse_single_json_line(&output);
+    let details = if command == "identify" {
+        &terminal["details"]["identify"]
+    } else {
+        &terminal["details"]
+    };
+    let source = temp.child("expected.PBP");
+    fs::write(source.path(), build_test_empty_psar_pbp()).expect("raw fixture");
+    let expected = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        details["checksums"]["sha1"],
+        expected["details"]["checksums"]["sha1"]
+    );
+    if command == "identify" {
+        assert_eq!(details["detected_platform"], "Sony Playstation Portable");
+    }
+}
+
+#[test]
+fn checksum_stdin_preserves_empty_psar_pbp_rom() {
+    assert_stdin_pbp_rom_resolution("checksum");
+}
+
+#[test]
+fn identify_stdin_preserves_empty_psar_pbp_rom() {
+    assert_stdin_pbp_rom_resolution("identify");
 }

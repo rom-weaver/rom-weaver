@@ -15,7 +15,7 @@ inputs:
       tool.
     default: ""
   apt-packages:
-    description: Space-separated apt packages to install (empty skips apt entirely).
+    description: Space-separated system dependencies to ensure (empty adds no packages beyond requested compiler caches).
     default: ""
   rust-components:
     description: Space-separated rustup components to add to the mise-pinned toolchain.
@@ -25,6 +25,9 @@ inputs:
     default: ""
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
+    default: "true"
+  cargo-cache-targets:
+    description: Cache Cargo target artifacts. Set to false when the caller manages a separate target cache.
     default: "true"
   ccache:
     description: >-
@@ -86,10 +89,12 @@ runs:
     # cmake/ninja/pkg-config build the vendored C deps. Jobs that compile no
     # Rust pass an empty list.
     - name: Install system dependencies
-      if: inputs.apt-packages != ''
+      if: inputs.apt-packages != '' || (runner.os == 'Linux' && (inputs.ccache == 'true' || inputs.sccache == 'true'))
       shell: bash
       env:
         APT_PACKAGES: ${{ inputs.apt-packages }}
+        INSTALL_CCACHE: ${{ inputs.ccache }}
+        INSTALL_SCCACHE: ${{ inputs.sccache }}
       run: |
         node scripts/ci/install-system-dependencies.mjs
 
@@ -99,14 +104,14 @@ runs:
       if: inputs.ccache == 'true'
       shell: bash
       env:
-        APT_PACKAGES: ccache
         CCACHE_MAXSIZE_INPUT: ${{ inputs.ccache-maxsize }}
       run: |
         set -euo pipefail
         if command -v ccache >/dev/null 2>&1; then
           echo "ccache already on PATH"
         elif [ "$RUNNER_OS" = "Linux" ]; then
-          node scripts/ci/install-system-dependencies.mjs
+          echo "::error::compiler cache missing after system dependency setup"
+          exit 1
         elif [ "$RUNNER_OS" = "macOS" ]; then
           brew install ccache
         else
@@ -148,14 +153,13 @@ runs:
     - name: Install sccache
       if: inputs.sccache == 'true'
       shell: bash
-      env:
-        APT_PACKAGES: sccache
       run: |
         set -euo pipefail
         if command -v sccache >/dev/null 2>&1; then
           echo "sccache already on PATH"
         elif [ "$RUNNER_OS" = "Linux" ]; then
-          node scripts/ci/install-system-dependencies.mjs
+          echo "::error::compiler cache missing after system dependency setup"
+          exit 1
         elif [ "$RUNNER_OS" = "macOS" ]; then
           brew install sccache
         else
@@ -222,6 +226,7 @@ runs:
       with:
         # Save failed jobs because the key covers the toolchain and Cargo.lock.
         cache-on-failure: true
+        cache-targets: ${{ inputs.cargo-cache-targets }}
         # Restore on every ref but save only from main to avoid branch-local cache waste.
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.cache-save == 'true' }}
 

@@ -33,11 +33,11 @@ const TABS = [
     id: "patcher",
     label: "Apply Patch",
   },
-  { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { group: "patches", href: "weave", icon: <svg aria-hidden="true" />, id: "weave", label: "Weaves" },
   {
     dock: true,
     group: "patches",
-    href: "create-patch",
+    href: "create-rom-patch",
     icon: <svg aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",
@@ -162,6 +162,23 @@ describe("Find", () => {
     expect(container.querySelector(".find-palette")).toBeNull();
   });
 
+  it("moves focus to the main landmark after activating a result", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    try {
+      const { container } = render(withSettings(<Masthead {...props} />));
+      fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
+      fireEvent.change(findInput(container), { target: { value: "crea" } });
+      fireEvent.keyDown(findInput(container), { key: "Enter" });
+
+      await vi.waitFor(() => expect(document.activeElement).toBe(main));
+    } finally {
+      main.remove();
+    }
+  });
+
   it("shows a title result and sends it to Identify", async () => {
     vi.useFakeTimers();
     identifyMocks.searchExpectedRomTitles.mockResolvedValueOnce({
@@ -202,19 +219,23 @@ describe("Find", () => {
 
     expect(container.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe(selectedBefore);
     expect(container.querySelector(".find-results")?.textContent).toContain("Checksum Hero");
+    const options = [...container.querySelectorAll('[role="option"]')];
+    expect(options.length).toBeGreaterThan(1);
+    expect(options.at(-1)?.textContent).toContain("Checksum Hero");
+    expect(options.slice(0, -1).every((option) => !option.classList.contains("is-identify"))).toBe(true);
   });
 
-  it("opens the bundle page", () => {
+  it("opens the weave page", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
-    fireEvent.change(findInput(container), { target: { value: "bundle" } });
+    fireEvent.change(findInput(container), { target: { value: "weave" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
-    expect(first?.textContent).toContain("Bundle Patches");
+    expect(first?.textContent).toContain("Weave Patches");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
 
-    expect(onSelectTab).toHaveBeenCalledWith("bundle");
+    expect(onSelectTab).toHaveBeenCalledWith("weave");
   });
 
   it("uses the guide link for a CLI-only command", () => {
@@ -250,12 +271,12 @@ describe("Find", () => {
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     expect(container.querySelector("#find-palette")).not.toBeNull();
 
-    // Opening Tools closes the floating palette and focuses the sheet's own box.
+    // Opening Menu closes the floating palette; its own box waits for a tap, so the keyboard stays down.
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(container.querySelector("#find-palette")).toBeNull();
     const embedded = container.querySelector("#menu-sheet .find-palette.is-embedded") as HTMLElement;
     expect(embedded.getAttribute("role")).toBe("search");
-    expect(document.activeElement).toBe(embedded.querySelector(".find-input"));
+    expect(document.activeElement).not.toBe(embedded.querySelector(".find-input"));
     expect(container.querySelector(".dock-find")).toBeNull();
 
     // Empty, the box shows the sheet's nav and points at no options.

@@ -8,10 +8,6 @@ afterEach(() => vi.restoreAllMocks());
 describe("Modal", () => {
   it("keeps an open modal focused, traps Tab, and restores the page on close", () => {
     const onClose = vi.fn();
-    const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      callback(0);
-      return 0;
-    });
     const { rerender } = render(
       <div className="rw-app">
         <button id="outside" type="button">
@@ -38,7 +34,7 @@ describe("Modal", () => {
     expect(dialog.textContent).toContain("Settings");
     expect(dialog.textContent).toContain("More detail");
     expect(dialog.getAttribute("aria-labelledby")).toBeTruthy();
-    expect(frame).toHaveBeenCalled();
+    expect(document.activeElement).toBe(dialog);
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();

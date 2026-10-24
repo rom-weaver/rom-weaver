@@ -1,7 +1,13 @@
 import { readDocLastmod } from "../docs-discovery.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import {
+  BETA_ROUTE_TITLES,
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  WORKFLOW_SEO_ROUTES,
+  WORKFLOW_ENTRY_ROUTES,
+} from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
@@ -65,13 +71,24 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 export const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in
+// The Trim and Save Editor tabs are still beta - they navigate in
 // production but must not be indexed, so strip the shared index directive to
 // noindex and point their canonical at themselves.
-export const makeBetaRouteNoindex = (html, slug) =>
-  html
+export const makeBetaRouteNoindex = (html, slug, channel = "prod", channelLabel = "") => {
+  let betaHtml = html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
+  const baseTitle = BETA_ROUTE_TITLES[slug];
+  if (!baseTitle) return betaHtml;
+  const title = channel === "prod" ? baseTitle : baseTitle.replace(SITE_NAME, `${SITE_NAME} ${channelLabel}`);
+  betaHtml = betaHtml.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  for (const [attribute, name] of [
+    ["property", "og:title"],
+    ["name", "twitter:title"],
+  ])
+    betaHtml = replaceMetaContent(betaHtml, attribute, name, title);
+  return betaHtml;
+};
 
 export const createNotFoundHtml = (html, channel, channelLabel) => {
   const title = `Page not found | ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
@@ -103,7 +120,7 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
 
 export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${Object.values(WORKFLOW_SEO_ROUTES)
+${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
   .map((route) => `  <url><loc>https://rom-weaver.com/${route.slug}</loc></url>`)
   .join("\n")}
 ${DOC_SOURCES.map((source) => {
@@ -113,5 +130,6 @@ ${DOC_SOURCES.map((source) => {
 </urlset>
 `;
 
-export const createWorkflowMarkdown = (route) =>
-  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](https://rom-weaver.com/${route.slug})\n\n[Documentation](https://rom-weaver.com/docs.md)\n`;
+// The Canonical line names production; the links name the serving deployment.
+export const createWorkflowMarkdown = (route, siteOrigin = "https://rom-weaver.com") =>
+  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](${siteOrigin}/${route.slug})\n\n[Documentation](${siteOrigin}/docs.md)\n`;

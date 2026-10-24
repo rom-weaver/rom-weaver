@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
 
 /* Two checks that carry the same digests and size describe the same ROM, so the
    key - not the object - decides when a lookup re-runs. Without it every render
    would restart a pack load. */
-const checkKey = (checks: ParsedBundleChecks | undefined): string => {
+const checkKey = (checks: ParsedWeaveChecks | undefined): string => {
   const checksums = checks?.checksums || {};
   const digests = Object.keys(checksums)
     .sort()
@@ -21,7 +21,7 @@ const checkKey = (checks: ParsedBundleChecks | undefined): string => {
  * Identify expected checks before a ROM is staged, using checksum-routed packs.
  * Disable this lookup once the ROM is staged; retain a result for the same checks.
  */
-const useExpectedRomIdentification = (checks: ParsedBundleChecks | undefined, enabled = true) => {
+const useExpectedRomIdentification = (checks: ParsedWeaveChecks | undefined, enabled = true) => {
   const key = checkKey(checks);
   // Equivalent check objects MUST NOT restart the lookup on each render.
   const latestChecks = useLatestRef(checks);

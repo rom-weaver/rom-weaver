@@ -7,6 +7,7 @@ The browser runtime runs `rom-weaver` in dedicated workers. The webapp imports i
 
 - [What you get](#what-you-get)
 - [Import paths](#import-paths)
+- [Weave compatibility](#weave-compatibility)
 - [Browser OPFS runner example](#browser-opfs-runner-example)
 - [Dedicated browser worker client example](#dedicated-browser-worker-client-example)
 - [Build and package](#build-and-package)
@@ -32,6 +33,12 @@ Import the TypeScript sources directly with relative paths, for example:
 - `src/wasm/rom-weaver-browser-opfs-api.ts`
 - `src/wasm/workers/browser-worker-client.ts`
 - `src/wasm/workers/worker-protocol.ts`
+
+## Weave compatibility
+
+The `bundle` command tag, `bundle-parse` and `bundle-create` labels, and bundle argument names remain accepted. Generated declarations retain the `Bundle*` names alongside `Weave*`. JSON reports include both bundle and weave result fields; command identifiers and validation codes keep their published bundle spellings.
+
+The browser workflow runtime retains `runtime.bundle` with its original input and result fields. `runtime.weave` exposes the weave names. Existing React bundle session and export callback props remain accepted.
 
 ## Browser OPFS runner example
 

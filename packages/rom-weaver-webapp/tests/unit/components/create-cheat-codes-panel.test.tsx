@@ -152,6 +152,48 @@ describe("CreateCheatCodesPanel", () => {
     await waitFor(() => expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ kind: "pro-action-rocky" })));
   });
 
+  it("lists the codes the engine split out of the typed block", async () => {
+    const classifier = vi.fn<ManualCheatClassifier>(async (request) => {
+      const base = await classifyManualCode(request);
+      return request.code.includes(" ")
+        ? { ...base, record: { ...base.record, codes: ["800B4CD40063"] } }
+        : { ...base, record: { ...base.record, codes: [request.code] } };
+    });
+    const { onEntriesChange } = renderPanel("800B4CD4 0063", { classifyManualCode: classifier });
+    await waitFor(() =>
+      expect(onEntriesChange).toHaveBeenLastCalledWith([expect.objectContaining({ code: "800B4CD40063" })]),
+    );
+    expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ code: "800B4CD4 0063" }));
+    expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ code: "800B4CD40063" }));
+  });
+
+  it("reports not classifying when unmounted during the split debounce", async () => {
+    const { onClassifyingChange, view } = renderPanel("SXIOPO");
+    await waitFor(() => expect(onClassifyingChange).toHaveBeenCalledWith(true));
+    view.unmount();
+    expect(onClassifyingChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("ignores card removal while a changed value is still being split", async () => {
+    const { onValueChange, view } = renderPanel("SXIOPO");
+    await waitFor(() => expect(view.getByRole("button", { name: "Remove code SXIOPO" })).toBeTruthy());
+    const stale = view.getByRole("button", { name: "Remove code SXIOPO" });
+    view.rerender(
+      <CreateCheatCodesPanel
+        {...props}
+        kind="auto"
+        onClassifyingChange={vi.fn()}
+        onEntriesChange={vi.fn()}
+        onKindChange={vi.fn()}
+        onSystemChange={vi.fn()}
+        onValueChange={onValueChange}
+        value={"SXIOPO\nSXIOPO"}
+      />,
+    );
+    fireEvent.click(stale);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
   it("blocks a database code that would reinterpret staged codes", async () => {
     const { onKindChange, onValueChange, view } = renderPanel("SXIOPO");
     await waitFor(() => expect(view.getByRole("status").textContent).toContain("Game Genie"));
@@ -267,9 +309,9 @@ describe("CreateCheatCodesPanel", () => {
 
   it("removes every code of a multi-code row at once", async () => {
     const { onValueChange, view } = renderPanel("01050EC6\n01060FC6\nSXIOPO");
+    await view.findByRole("button", { name: "Remove code SXIOPO" });
     fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
-    await view.findByText("Walk through walls");
-    fireEvent.click(view.getByRole("button", { name: "Remove Walk through walls" }));
+    fireEvent.click(await view.findByRole("button", { name: "Remove Walk through walls" }));
     expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
   });
 

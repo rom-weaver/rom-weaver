@@ -156,3 +156,15 @@ it("keeps the hero while a checksum is typed and moves the search into 0x02 on a
   expect(refine?.textContent).toContain("Not the ROM you meant?");
   expect(container.querySelector<HTMLInputElement>(".identify-search-input")?.value).toBe("abcd1234");
 });
+
+it.each(["matched", "unknown"])("carries uploaded %s ROM bytes to Apply", async (status) => {
+  identifyRom.mockResolvedValue({ ...stageCandidate("abcd1234"), status });
+  const onUseFilesInApply = vi.fn();
+  const onSelectTab = vi.fn();
+  const { container } = render(<IdentifyForm onSelectTab={onSelectTab} onUseFilesInApply={onUseFilesInApply} />);
+  await stageRom(container);
+  await waitFor(() => expect(container.querySelector(".related-row-tool")).not.toBeNull());
+  fireEvent.click(container.querySelector(".related-row-tool") as HTMLButtonElement);
+  expect(onUseFilesInApply).toHaveBeenCalledWith([expect.objectContaining({ name: "game.gba", size: 4 })]);
+  expect(onSelectTab).not.toHaveBeenCalled();
+});

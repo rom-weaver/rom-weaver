@@ -21,6 +21,7 @@ import {
   COMPRESSION_PROFILE_NAMES,
   type GeneratedCompressionProfile,
   getGeneratedCompressionCodecFieldCodecs,
+  getGeneratedCompressionCodecLevelMin,
   getGeneratedCompressionProfileLevel,
   normalizeGeneratedCompressionProfile,
 } from "./compression-metadata.ts";
@@ -140,7 +141,11 @@ const OutputCompressionManager = (() => {
   // disc-image policy via the single `isLikelyDiscImageSource` consumption point.
   const _isLikelyDiscImageSource = (source: CompressionSource | null | undefined) => {
     const size = typeof source?.size === "number" && Number.isFinite(source.size) ? source.size : null;
-    return isLikelyDiscImageSource(_getExtension(source), size);
+    return isLikelyDiscImageSource(
+      _getExtension(source),
+      size,
+      _hasChdSourceMetadata(source) || String(source?.metadata?.recommendedFormat || "").toLowerCase() === "chd",
+    );
   };
   // Engine-recommended rom-specific container (chd/rvz/z3ds) from the ingest identity pass.
   // Content-detected in Rust (works on a bare `.iso`), so it is authoritative and wins over the
@@ -151,7 +156,10 @@ const OutputCompressionManager = (() => {
     const recommended = String(source?.metadata?.recommendedFormat || "")
       .trim()
       .toLowerCase();
-    if (recommended === OUTPUT_COMPRESSION.CHD) return OUTPUT_COMPRESSION.CHD;
+    if (recommended === OUTPUT_COMPRESSION.CHD) {
+      // The engine reads headers but not alignment: a `.bin` must also be whole sectors to be a disc.
+      return _isLikelyDiscImageSource(source) ? OUTPUT_COMPRESSION.CHD : null;
+    }
     if (recommended === OUTPUT_COMPRESSION.RVZ) return OUTPUT_COMPRESSION.RVZ;
     if (recommended === OUTPUT_COMPRESSION.Z3DS) return OUTPUT_COMPRESSION.Z3DS;
     return null;
@@ -159,7 +167,7 @@ const OutputCompressionManager = (() => {
   const _resolveAutomaticOutputCompression = (source: CompressionSource | null | undefined) => {
     const engineRecommended = _engineRecommendedRomSpecific(source);
     if (engineRecommended) return engineRecommended;
-    if (_hasChdSourceMetadata(source)) return OUTPUT_COMPRESSION.CHD;
+    if (_hasChdSourceMetadata(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
     if (_isUnambiguousZ3dsCompressionInput(source) || _isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
     if ((_isUnambiguousChdCompressionInput(source) || _isChdSource(source)) && _isLikelyDiscImageSource(source))
       return OUTPUT_COMPRESSION.CHD;
@@ -294,10 +302,11 @@ const OutputCompressionManager = (() => {
         if (parsed.hasLevel) return entry;
 
         const maxLevel = getChdCodecLevelMax(codec);
-        if (maxLevel === null) return codec;
+        const minLevel = getGeneratedCompressionCodecLevelMin(codec);
+        if (maxLevel === null || minLevel === null) return codec;
 
-        const profileLevel = _getCompressionProfileLevel(compressionProfile, codec, codec === "cdzs" ? "" : "");
-        return `${codec}:${Math.max(0, Math.min(maxLevel, profileLevel))}`;
+        const profileLevel = _getCompressionProfileLevel(compressionProfile, codec, "");
+        return `${codec}:${Math.max(minLevel, Math.min(maxLevel, profileLevel))}`;
       })
       .join(",");
   };
@@ -305,7 +314,8 @@ const OutputCompressionManager = (() => {
   const _getChdCodecsForMode = (mode: "cd" | "dvd" | string | null | undefined, options?: OutputCompressionOptions) => {
     options = options || {};
     if (mode === "cd") return _materializeChdCodecLevels(options.chdCreateCdCodecs, options);
-    if (mode === "dvd") return _materializeChdCodecLevels(options.chdCreateDvdCodecs, options);
+    if (mode === "dvd" || mode === "hd" || mode === "raw")
+      return _materializeChdCodecLevels(options.chdCreateDvdCodecs, options);
     return "";
   };
 

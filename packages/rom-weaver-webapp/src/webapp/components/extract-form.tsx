@@ -10,18 +10,54 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { ROM_WEAVER_VALIDATION_CODES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
 
-const ONE_FILE_ERROR = "Add one file at a time.";
+// Extract opens one archive per run, so extra files are named instead of silently dropped.
+const skippedNotice = (used: File, skipped: string[]): string =>
+  `Extract opens one archive per run: only ${used.name} was used; ${skipped.join(", ")} ${skipped.length === 1 ? "was" : "were"} skipped.`;
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
+const isNfsPart = (file: File): boolean => /^hif_\d{6}\.nfs$/i.test(file.name);
+const isNfsKey = (file: File): boolean => /^htk\.bin$/i.test(file.name);
+// FAT32 split WBFS sets continue `game.wbfs` in `game.wbf1`, `game.wbf2`, ...; the reader finds them beside the first part.
+const wbfsStem = (file: File): string | undefined => /^(.+)\.wbf(?:s|\d+)$/i.exec(file.name)?.[1]?.toLowerCase();
+const isWbfsContinuation = (file: File, stem: string): boolean =>
+  /\.wbf\d+$/i.test(file.name) && wbfsStem(file) === stem;
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
-const errorMessage = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+// Rust reports these failures as validation codes, rendered as `[code]` (plus `(key=value, ...)` fields)
+// after the message. The runtime names the file by its internal storage path, so a file that is not an
+// archive gets a plain message.
+const codeTag = (code: string): string => `[${code}]`;
+const NOT_A_CONTAINER_TAG = codeTag(ROM_WEAVER_VALIDATION_CODES.extractNoContainer);
+// The WBFS reader rejects a file, or split set, whose total size differs from its header's size. The
+// code carries the sizes of the last (split-aware) attempt.
+const WBFS_SIZE_TAG = codeTag(ROM_WEAVER_VALIDATION_CODES.wbfsSizeMismatch);
+const WBFS_SIZE_FIELDS_PATTERN = /^ \(actual=(\d+), expected=(\d+)\)/;
+const wbfsSizeFields = (message: string): [number, number] | undefined => {
+  const tagIndex = message.lastIndexOf(WBFS_SIZE_TAG);
+  if (tagIndex < 0) return undefined;
+  const fields = WBFS_SIZE_FIELDS_PATTERN.exec(message.slice(tagIndex + WBFS_SIZE_TAG.length));
+  return fields ? [Number(fields[1]), Number(fields[2])] : undefined;
+};
+const wbfsSizeMessage = (file: File, actual: number, expected: number): string =>
+  actual < expected
+    ? `${file.name} is shorter than its WBFS header says. If it is split, add it together with every .wbf1, .wbf2, ... part; otherwise the file is incomplete.`
+    : `${file.name} and its parts are longer than its WBFS header says. Remove any .wbf part that does not belong to this set.`;
+const errorMessage = (cause: unknown, file?: File): string => {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (!file) return message;
+  if (message.includes(NOT_A_CONTAINER_TAG))
+    return `${file.name} is not an archive or disc image that Extract can open.`;
+  const wbfsSize = wbfsSizeFields(message);
+  if (wbfsSize) return wbfsSizeMessage(file, ...wbfsSize);
+  return message;
+};
 
 // Runtime labels are log text, so the form shows its own label and takes only the percent. An event
 // without a percent keeps the last one for the same label, so the bar does not flicker to indeterminate.
@@ -52,6 +88,7 @@ const toSelectionItem = (output: PublicOutput): SelectionItem => {
 
 const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [source, setSource] = useState<File | null>(null);
+  const [companionFiles, setCompanionFiles] = useState<File[]>([]);
   const [outputs, setOutputs] = useState<PublicOutput[]>([]);
   const [busy, setBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
@@ -59,6 +96,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [zipProgress, setZipProgress] = useState<ProgressState | null>(null);
   const [splitPrompt, setSplitPrompt] = useState<File | null>(null);
   const [error, setError] = useState("");
+  const [skipped, setSkipped] = useState<string[]>([]);
   const outputRef = useRef<PublicOutput[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const zipAbortRef = useRef<AbortController | null>(null);
@@ -83,7 +121,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   }, [disposeZip]);
 
   const extract = useCallback(
-    async (file: File, splitBin: boolean) => {
+    async (file: File, splitBin: boolean, companions: File[] = []) => {
       const runId = ++runIdRef.current;
       const abort = new AbortController();
       abortRef.current = abort;
@@ -98,6 +136,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
         const result = await browserRuntime.compression.extract?.({
           source: file,
+          ...(companions.length ? { companionFiles: companions } : {}),
           entries: [],
           extractAll: true,
           options: {
@@ -118,7 +157,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         outputRef.current = result.outputs;
         setOutputs(result.outputs);
       } catch (cause) {
-        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause, file));
       } finally {
         if (runId === runIdRef.current) {
           abortRef.current = null;
@@ -132,9 +171,9 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   // A multi-track CD CHD can extract as one BIN or as one BIN per track, so ask before extracting it.
   const startExtract = useCallback(
-    async (file: File) => {
+    async (file: File, companions: File[] = []) => {
       if (!isChd(file)) {
-        await extract(file, false);
+        await extract(file, false, companions);
         return;
       }
       const runId = ++runIdRef.current;
@@ -153,7 +192,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         if (runId !== runIdRef.current) return;
         askSplit = binCount(split.entries) > 1 && binCount(split.entries) > binCount(normal.entries);
       } catch (cause) {
-        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause, file));
         return;
       } finally {
         if (runId === runIdRef.current) {
@@ -170,8 +209,24 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   const stageFiles = useCallback(
     (files: File[]) => {
-      const file = files[0];
+      const first = files[0];
+      const nfs =
+        first && (isNfsPart(first) || isNfsKey(first))
+          ? files.find((file) => /^hif_000000\.nfs$/i.test(file.name))
+          : undefined;
+      // A first part from a set without its .wbfs falls back to any .wbfs in the selection.
+      const firstStem = first && wbfsStem(first);
+      const wbfs = firstStem
+        ? (files.find((file) => file.name.toLowerCase() === `${firstStem}.wbfs`) ??
+          files.find((file) => /\.wbfs$/i.test(file.name)))
+        : undefined;
+      const stem = wbfs && wbfsStem(wbfs);
+      const file = nfs || wbfs || first;
       if (!file) return;
+      let companions: File[] = [];
+      if (isNfsPart(file))
+        companions = files.filter((entry) => entry !== file && (isNfsPart(entry) || isNfsKey(entry)));
+      else if (wbfs && stem) companions = files.filter((entry) => isWbfsContinuation(entry, stem));
       if (downloadBusy) {
         setError("Wait for the download to finish, then add the file again.");
         return;
@@ -182,11 +237,9 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       setSplitPrompt(null);
       setProgress(null);
       setSource(file);
-      if (files.length > 1) {
-        setError(ONE_FILE_ERROR);
-        return;
-      }
-      void startExtract(file);
+      setCompanionFiles(companions);
+      setSkipped(files.filter((extra) => extra !== file && !companions.includes(extra)).map((extra) => extra.name));
+      void startExtract(file, companions);
     },
     [clearOutputs, downloadBusy, startExtract],
   );
@@ -195,6 +248,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     if (!pageDrop || pageDrop.id === handledDropRef.current) return;
     handledDropRef.current = pageDrop.id;
     stageFiles(pageDrop.files);
+    pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
   useEffect(
@@ -265,7 +319,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     }
   };
 
-  const canRetry = !(busy || outputs.length || splitPrompt) && error !== ONE_FILE_ERROR;
+  const canRetry = !(busy || outputs.length || splitPrompt);
   const totalBytes = outputs.reduce((sum, output) => sum + output.size, 0);
   useAgentWorkflow("extract", {
     getState: () => ({
@@ -275,6 +329,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       progress,
       downloadProgress: zipProgress,
       error: error || null,
+      skippedFiles: skipped,
       splitChoiceRequired: !!splitPrompt,
       outputs: outputs.map((output) => ({
         id: output.path,
@@ -288,7 +343,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       retry: {
         description: "Extract the source again with the current track-layout flow.",
         enabled: !!source && !busy && !downloadBusy && !splitPrompt,
-        execute: () => (source ? startExtract(source) : undefined),
+        execute: () => (source ? startExtract(source, companionFiles) : undefined),
       },
       downloadAll: {
         description: "Download every extracted output, using a ZIP when needed.",
@@ -314,14 +369,18 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         guide={WORKFLOW_GUIDES.extract}
         heroLabel="Drop an archive or disc image to extract it"
         heroLabelCoarse="Tap to add an archive or disc image"
-        info={<p>Extraction runs locally. Your files never leave this browser.</p>}
+        info={
+          <p>
+            Extraction runs locally. For NFS, select the hif_*.nfs parts and htk.bin together. For a split WBFS, select
+            the .wbfs and every .wbf1, .wbf2, ... part together.
+          </p>
+        }
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",
-          line2: "ui.hero.extractThesis2",
           description: "ui.hero.extractDescription",
         }}
-        multiple={false}
+        multiple
         onFiles={stageFiles}
         title="Archive"
       />
@@ -370,7 +429,10 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
             </>
           ) : null}
           {canRetry ? (
-            <RunButton icon={<RotateCcw aria-hidden="true" />} onClick={() => void startExtract(source)}>
+            <RunButton
+              icon={<RotateCcw aria-hidden="true" />}
+              onClick={() => void startExtract(source, companionFiles)}
+            >
               Extract again
             </RunButton>
           ) : null}
@@ -378,6 +440,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: "Files" }]} />
       )}
+      {source && skipped.length ? (
+        <Notice level="warn" onDismiss={() => setSkipped([])}>
+          {skippedNotice(source, skipped)}
+        </Notice>
+      ) : null}
       {error ? (
         <Notice level="error" onDismiss={() => setError("")}>
           {error}

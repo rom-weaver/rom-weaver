@@ -133,6 +133,15 @@ const { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } =
 const { createBrowserDiscFormatsRuntime } = await import("../../src/platform/browser/workflow-runtime-disc-formats.ts");
 
 function makeIo() {
+  const stageSource = vi.fn(async (request: { source: unknown; fallbackFileName: string }) => {
+    const staged = state.staged.shift() || {
+      cleanup: vi.fn(async () => undefined),
+      fileName: request.fallbackFileName,
+      filePath: `/work/${request.fallbackFileName}`,
+      size: 10,
+    };
+    return staged;
+  });
   return {
     createWorkerOutput: vi.fn(async (result: Record<string, unknown>, fallback: string) => ({
       dispose: vi.fn(async () => {
@@ -147,26 +156,17 @@ function makeIo() {
       const result = await request.run(staged);
       return { fileName: (result as { fileName?: string })?.fileName || "output.bin", path: "/work/output.bin" };
     }),
-    stageSource: vi.fn(async (request: { source: unknown; fallbackFileName: string }) => {
-      const staged = state.staged.shift() || {
-        cleanup: vi.fn(async () => undefined),
-        fileName: request.fallbackFileName,
-        filePath: `/work/${request.fallbackFileName}`,
-        size: 10,
-      };
+    stageSource,
+    stageSources: vi.fn(async (requests: Parameters<typeof stageSource>[0][]) => {
+      const results = await Promise.allSettled(requests.map((request) => stageSource(request)));
+      const staged = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        await Promise.all(staged.map((entry) => entry.cleanup()));
+        throw failure.reason;
+      }
       return staged;
     }),
-    stageSources: vi.fn(async (requests: Array<{ fallbackFileName: string }>) =>
-      requests.map(
-        (request) =>
-          state.staged.shift() || {
-            cleanup: vi.fn(async () => undefined),
-            fileName: request.fallbackFileName,
-            filePath: `/work/${request.fallbackFileName}`,
-            size: 10,
-          },
-      ),
-    ),
   };
 }
 
@@ -186,6 +186,141 @@ beforeEach(() => {
 });
 
 describe("browser archive runtime", () => {
+  it("stages NFS companions in one isolated directory with canonical basenames", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const source = new File(["header"], "HIF_000000.NFS");
+    const companions = [new File(["segment"], "HIF_000001.NFS"), new File(["key"], "HTK.BIN")];
+    const files = [source, ...companions];
+    const stagedFiles = files.map((file) => ({
+      cleanup: vi.fn(async () => undefined),
+      fileName: file.name.toLowerCase(),
+      filePath: `/work/group/${file.name.toLowerCase()}`,
+    }));
+    const cleanups = stagedFiles.map((file) => file.cleanup);
+    state.staged.push(...stagedFiles);
+    state.extractAll.mockResolvedValueOnce([]);
+    await runtime.extract?.({ source, companionFiles: companions, entries: [], extractAll: true });
+    expect(io.stageSource).toHaveBeenCalledTimes(3);
+    const requests = io.stageSource.mock.calls.map(([request]) => request);
+    expect(requests).toEqual(
+      files.map((file) =>
+        expect.objectContaining({
+          fallbackFileName: file.name.toLowerCase(),
+          pathPrefix: expect.stringMatching(/^archive-input-/),
+          pathPrefixInPath: true,
+          source: expect.any(File),
+        }),
+      ),
+    );
+    for (const [index, request] of requests.entries()) {
+      const original = files[index];
+      if (!original) throw new Error("Unexpected staged companion");
+      expect(request.source).not.toBe(original);
+      expect((request.source as File).name).toBe(original.name.toLowerCase());
+      expect(await (request.source as File).text()).toBe(await original.text());
+    }
+    expect(new Set(requests.map((request) => (request as { pathPrefix?: string }).pathPrefix)).size).toBe(1);
+    expect(state.extractAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        knownInputPaths: files.map((file) => `/work/group/${file.name.toLowerCase()}`),
+      }),
+      expect.any(Function),
+      undefined,
+    );
+    for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("stages split WBFS parts under the source's own stem so the output keeps its case", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const source = new File(["header"], "Brawl (USA).WBFS");
+    const companions = [new File(["part"], "brawl (usa).wbf1"), new File(["part"], "Brawl (USA).WBF2")];
+    state.extractAll.mockResolvedValueOnce([]);
+    await runtime.extract?.({ source, companionFiles: companions, entries: [], extractAll: true });
+    const names = io.stageSource.mock.calls.map(([request]) => (request.source as File).name);
+    expect(names).toEqual(["Brawl (USA).wbfs", "Brawl (USA).wbf1", "Brawl (USA).wbf2"]);
+  });
+
+  it("probes grouped NFS inputs with every companion visible and cleans up after failure", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const files = [new File(["header"], "HIF_000000.NFS"), new File(["key"], "HTK.BIN")] as const;
+    const stagedFiles = files.map((file) => ({
+      cleanup: vi.fn(async () => undefined),
+      fileName: file.name.toLowerCase(),
+      filePath: `/work/probe/${file.name.toLowerCase()}`,
+    }));
+    const cleanups = stagedFiles.map((file) => file.cleanup);
+    state.staged.push(...stagedFiles);
+    state.probe.mockRejectedValueOnce(new Error("invalid key"));
+    await expect(runtime.probe?.({ source: files[0], companionFiles: [files[1]], format: "nfs" })).rejects.toThrow(
+      "invalid key",
+    );
+    expect(state.probe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourcePath: "/work/probe/hif_000000.nfs",
+        knownInputPaths: ["/work/probe/hif_000000.nfs", "/work/probe/htk.bin"],
+      }),
+      expect.any(Function),
+      undefined,
+    );
+    for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
+    const requests = io.stageSource.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(2);
+    expect(requests.map(({ source }) => (source as File).name)).toEqual(["hif_000000.nfs", "htk.bin"]);
+  });
+
+  it("cleans partially staged companions when staging fails", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const cleanup = vi.fn(async () => undefined);
+    io.stageSource.mockResolvedValueOnce({
+      cleanup,
+      fileName: "hif_000000.nfs",
+      filePath: "/work/group/hif_000000.nfs",
+      size: 1,
+    });
+    io.stageSource.mockRejectedValueOnce(new Error("sidecar staging failed"));
+    await expect(
+      runtime.extract?.({
+        source: new File(["main"], "hif_000000.nfs"),
+        companionFiles: [new File(["key"], "htk.bin")],
+        entries: [],
+        extractAll: true,
+      }),
+    ).rejects.toThrow("sidecar staging failed");
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("cleans every companion when extraction fails", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const files = [new File(["main"], "hif_000000.nfs"), new File(["key"], "htk.bin")] as const;
+    const stagedFiles = files.map((file) => ({
+      cleanup: vi.fn(async () => undefined),
+      fileName: file.name,
+      filePath: `/work/group/${file.name}`,
+    }));
+    const cleanups = stagedFiles.map((file) => file.cleanup);
+    state.staged.push(...stagedFiles);
+    state.extractAll.mockRejectedValueOnce(new Error("decode failed"));
+    await expect(
+      runtime.extract?.({ source: files[0], companionFiles: [files[1]], entries: [], extractAll: true }),
+    ).rejects.toThrow("decode failed");
+    for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("requires File inputs and unique basenames for companion extraction", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.extract?.({ source: "input.nfs", companionFiles: [new File(["key"], "htk.bin")], entries: [] }),
+    ).rejects.toThrow("requires a File");
+    await expect(
+      runtime.extract?.({
+        source: new File(["main"], "hif_000000.nfs"),
+        companionFiles: [new File(["other"], "HIF_000000.NFS")],
+        entries: [],
+      }),
+    ).rejects.toThrow("Duplicate");
+    expect(io.stageSource).not.toHaveBeenCalled();
+  });
+
   it("stages path, file, and array-buffer archive entry sources", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const entryFile = new File(["file contents"], "file.bin");
@@ -212,6 +347,94 @@ describe("browser archive runtime", () => {
       3,
       expect.objectContaining({ fallbackFileName: "buffer.bin", source: expect.any(File) }),
     );
+  });
+
+  it.each([true, false])(
+    "preserves archive source precedence and byte snapshots with File available: %s",
+    async (hasFile) => {
+      const file = new File(["file"], "original.bin");
+      const shared = new SharedArrayBuffer(4);
+      const sharedBytes = new Uint8Array(shared);
+      sharedBytes.set([1, 2, 3, 4]);
+      const runtime = createBrowserArchiveRuntime(io as never);
+      if (!hasFile) vi.stubGlobal("File", undefined);
+      try {
+        await runtime.create?.({
+          entries: [
+            { fileName: "path.bin", filePath: "/work/path.bin", file, text: "ignored" },
+            { fileName: "file.bin", file, text: "ignored" },
+            { fileName: "text.bin", text: "", u8array: sharedBytes },
+            { fileName: "slice.bin", u8array: sharedBytes.subarray(1, 3), arrayBuffer: new ArrayBuffer(9) },
+            { fileName: "empty.bin", u8array: new Uint8Array(), arrayBuffer: shared },
+            { fileName: "shared.bin", arrayBuffer: shared },
+          ],
+          format: "zip",
+        } as never);
+        sharedBytes.fill(9);
+        const sources = io.stageSource.mock.calls.map(([request]) => request.source);
+        expect(sources.slice(0, 2)).toEqual(["/work/path.bin", file]);
+        const blobs = sources.slice(2);
+        const expected = [[], [2, 3], [], [1, 2, 3, 4]];
+        for (const [index, source] of blobs.entries()) {
+          expect(source).toBeInstanceOf(Blob);
+          if (!(source instanceof Blob)) throw new Error("Expected staged Blob");
+          expect(Array.from(new Uint8Array(await source.arrayBuffer()))).toEqual(expected[index]);
+          expect(source.type).toBe(index === 0 ? "text/plain" : "application/octet-stream");
+        }
+        if (hasFile)
+          expect(blobs.map((source) => (source as File).name)).toEqual([
+            "text.bin",
+            "slice.bin",
+            "empty.bin",
+            "shared.bin",
+          ]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it.each([
+    ["zip", undefined],
+    ["zip", false],
+    ["7z", undefined],
+    ["7z", false],
+    ["7z", true],
+  ])("uses logical flat %s names for VFS-backed disc outputs (preservePaths: %s)", async (format, preservePaths) => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const paths = ["/work/cue/disc [change].cue", "/work/patched/disc [change].cue"];
+    for (const filePath of paths) {
+      state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc [change].cue", filePath });
+    }
+
+    await runtime.create?.({
+      entries: [
+        { filename: "folder/disc [change].cue", filePath: paths[0] },
+        { filename: "folder/disc [change].bin", filePath: paths[1] },
+      ],
+      format,
+      options: { preservePaths },
+    } as never);
+
+    expect(state.compressionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputPaths: paths,
+        entryNames: ["disc [change].cue", "disc [change].bin"],
+      }),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
+  it.each(["zip", "7z"])("rejects unsafe logical %s names before dispatch", async (format) => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.create?.({
+        entries: [{ filename: "../disc.bin", filePath: "/work/disc.bin" }],
+        format,
+      } as never),
+    ).rejects.toThrow("unsafe relative path");
+    expect(state.compressionCreate).not.toHaveBeenCalled();
   });
 
   it("passes aligned relative entry names when a zip preserves paths", async () => {
@@ -255,7 +478,7 @@ describe("browser archive runtime", () => {
       expect.any(Function),
       undefined,
     );
-    expect(io.stageSources).not.toHaveBeenCalled();
+    expect(io.stageSources).toHaveBeenCalledOnce();
     expect(io.stageSource).toHaveBeenCalledTimes(2);
   });
 
@@ -263,11 +486,11 @@ describe("browser archive runtime", () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     state.staged.push({
       cleanup: vi.fn(async () => undefined),
-      fileName: "bundle.epub",
-      filePath: "/work/bundle.epub",
+      fileName: "weave.epub",
+      filePath: "/work/weave.epub",
     });
     const result = await runtime.extract?.({
-      source: { name: "bundle.epub" },
+      source: { name: "weave.epub" },
       entries: ["game.bin"],
       options: { directExtract: true },
     } as never);
@@ -278,9 +501,9 @@ describe("browser archive runtime", () => {
       undefined,
     );
 
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     await expect(
-      runtime.extract?.({ source: "bundle.zip", entries: ["a", "b"], options: { directExtract: true } } as never),
+      runtime.extract?.({ source: "weave.zip", entries: ["a", "b"], options: { directExtract: true } } as never),
     ).rejects.toThrow("exactly one selected entry");
 
     state.staged.push({
@@ -296,14 +519,14 @@ describe("browser archive runtime", () => {
 
   it("extracts every nested leaf once and preserves its relative path", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.extractAll.mockResolvedValueOnce([
       { fileName: "one.bin", filePath: "/work/output-scope/folder/one.bin", size: 4 },
       { fileName: "two.txt", filePath: "/work/output-scope/deeper/two.txt", size: 5 },
     ]);
 
     const result = await runtime.extract?.({
-      source: "bundle.zip",
+      source: "weave.zip",
       entries: [],
       extractAll: true,
       options: { chdSplitBin: true },
@@ -415,13 +638,13 @@ describe("browser archive runtime", () => {
 
   it("normalizes zip-like aliases and uses a VFS fallback output", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
-    const epub = new File(["archive"], "bundle.epub");
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    const epub = new File(["archive"], "weave.epub");
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.probe.mockResolvedValueOnce({ entries: [] });
     await expect(runtime.probe?.({ source: epub } as never)).resolves.toEqual({ entries: [] });
     expect(io.stageSource).toHaveBeenCalledWith(expect.objectContaining({ source: expect.any(File) }));
     const stagedAlias = io.stageSource.mock.calls[0]?.[0]?.source as File;
-    expect(stagedAlias.name).toBe("bundle.zip");
+    expect(stagedAlias.name).toBe("weave.zip");
 
     const wrapped = { source: new File(["wrapped"], "wrapped.epub") };
     state.staged.push({
@@ -437,7 +660,7 @@ describe("browser archive runtime", () => {
       source: wrapped.source,
     });
 
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.ingest.mockResolvedValueOnce({ assets: [], patches: [] });
     await expect(
       runtime.extract?.({ source: epub, entries: ["fallback.bin"], options: {} } as never),
@@ -446,17 +669,33 @@ describe("browser archive runtime", () => {
     });
   });
 
+  it("validates all archive entry data before staging any source", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    await expect(
+      runtime.create?.({
+        entries: [{ fileName: "valid.bin", text: "valid" }, { fileName: "missing.bin" }],
+        format: "zip",
+      }),
+    ).rejects.toThrow("Archive entry data was not provided: missing.bin");
+    expect(io.stageSource).not.toHaveBeenCalled();
+    expect(state.compressionCreate).not.toHaveBeenCalled();
+  });
+
   it("reports staging, descend, and storage failures with emitted context", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const stagedEntry = { cleanup: vi.fn(async () => undefined), fileName: "entry.bin", filePath: "/work/entry.bin" };
-    state.staged.push(stagedEntry);
+    io.stageSource.mockResolvedValueOnce(stagedEntry);
+    io.stageSource.mockRejectedValueOnce(new Error("second entry staging failed"));
     await expect(
       runtime.create?.({
-        entries: [{ fileName: "entry.bin", text: "ok" }, { fileName: "missing.bin" }],
+        entries: [
+          { fileName: "entry.bin", text: "ok" },
+          { fileName: "second.bin", text: "also valid" },
+        ],
         format: "zip",
         options: {},
       } as never),
-    ).rejects.toThrow("Archive entry data was not provided: missing.bin");
+    ).rejects.toThrow("second entry staging failed");
     expect(stagedEntry.cleanup).toHaveBeenCalledTimes(1);
 
     state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc.chd", filePath: "/work/disc.chd" });
@@ -598,6 +837,35 @@ describe("browser CHD runtime", () => {
     });
   });
 
+  it("rewrites GDI track paths and keeps every staged track visible to the guest", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    const text = '2\r\n1 0 4 2352 "tracks/track 01.bin" 0\r\n2 45000 4 2352 track02.bin 128\r\n';
+    state.virtualSources.set("/work/disc.gdi", new Blob([text]));
+    state.staged.push(
+      { filePath: "/work/disc.gdi", fileName: "disc.gdi", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track01-2.bin", fileName: "track 01.bin", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track02-3.bin", fileName: "track02.bin", cleanup: vi.fn(async () => undefined) },
+    );
+    await runtime.createChd({
+      source: "disc.gdi",
+      fileName: "disc.gdi",
+      mode: "gd",
+      imageFiles: [
+        { fileName: "track 01.bin", source: "a" },
+        { fileName: "track02.bin", source: "b" },
+      ],
+    } as never);
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      format: "chd-gd",
+      inputPaths: ["/work/disc.gdi"],
+      knownInputPaths: ["/work/disc.gdi", "/work/track01-2.bin", "/work/track02-3.bin"],
+    });
+    const updated = state.updatedVirtual[0]?.source as Blob | undefined;
+    expect(await updated?.text()).toBe(
+      text.replace('"tracks/track 01.bin"', '"/work/track01-2.bin"').replace("track02.bin", '"/work/track02-3.bin"'),
+    );
+  });
+
   it("reads virtual and OPFS cue sources and hydrates their sidecars", async () => {
     const runtime = createBrowserChdRuntime(io as never);
     state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "blob.cue", filePath: "/work/blob.cue" });
@@ -724,6 +992,15 @@ describe("browser CHD runtime", () => {
 });
 
 describe("browser disc format runtimes", () => {
+  it("forwards the selected RVZ block size to the compression command", async () => {
+    const runtime = createBrowserDiscFormatsRuntime(io as never);
+    await runtime.createRvz({ source: "game.iso", fileName: "game.iso", outputName: "game.rvz", blockSize: "32768" });
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      format: "rvz",
+      rvzBlockSize: "32768",
+    });
+  });
+
   it("creates RVZ and Z3DS outputs with format-specific defaults", async () => {
     const runtime = createBrowserDiscFormatsRuntime(io as never);
     await expect(

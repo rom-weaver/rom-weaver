@@ -185,6 +185,51 @@ impl CliApp {
     }
 }
 
+/// Final component of a path-like string that may use `/` or `\\` separators,
+/// regardless of host platform (weave and archive member names are authored
+/// on any OS).
+pub(super) fn path_basename(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// True when `left` and `right` name the same file: equal paths, equal
+/// canonical paths, or the same device/inode (hard links, bind mounts).
+pub(super) fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    left == right
+        || matches!(
+            (fs::canonicalize(left), fs::canonicalize(right)),
+            (Ok(left), Ok(right)) if left == right
+        )
+        || native_file_identity_matches(left, right)
+}
+
+// same-file compares dev/inode on Unix and volume serial + file index on
+// Windows. The Windows half cannot be written against std on stable: the
+// MetadataExt equivalents are still unstable behind `windows_by_handle`
+// (rust-lang/rust#63010), which is why the previous hand-rolled cfg(windows)
+// branch never compiled.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
+    same_file::is_same_file(left, right).unwrap_or(false)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
+    false
+}
+
+/// Write `bytes` to `path` atomically (`.part` + rename).
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), RomWeaverError> {
+    let part = path.with_extension("part");
+    fs::write(&part, bytes).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to write `{}`: {error}", part.display()))
+    })?;
+    fs::rename(&part, path).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to finalize `{}`: {error}", path.display()))
+    })
+}
+
 #[cfg(test)]
 #[path = "../tests/unit/path_access.rs"]
 mod tests;

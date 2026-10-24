@@ -1,7 +1,9 @@
+import { DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { Localizer } from "../presentation/localization/index.ts";
 import type { MessageId } from "../presentation/localization/catalog.ts";
 import { getSettingsLabel } from "../presentation/settings.ts";
 import { createLogger } from "../lib/logging.ts";
+import { lookupExpectedRom, searchExpectedRomTitles } from "../lib/apply/expected-rom-lookup.ts";
 import type { WorkflowTab } from "./components/shell.tsx";
 import { searchDocs } from "./docs-search.mjs";
 import { SETTINGS_FIELD_METADATA, SETTINGS_PANEL_SECTIONS } from "./settings/settings-metadata.ts";
@@ -78,7 +80,6 @@ const loadIdentifyFindEntries = async (
   const algorithm = identifyHashAlgorithm(hex);
   if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) {
     if (!algorithm) return [];
-    const { lookupExpectedRom } = await import("../lib/apply/expected-rom-lookup.ts");
     const result = await lookupExpectedRom({ checksums: { [algorithm]: hex } }, { signal });
     if (!result || result.status === "unavailable") return [];
     return result.matches.slice(0, IDENTIFY_RESULT_LIMIT).map((match, index) => ({
@@ -90,7 +91,6 @@ const loadIdentifyFindEntries = async (
       label: match.name,
     }));
   }
-  const { searchExpectedRomTitles } = await import("../lib/apply/expected-rom-lookup.ts");
   const result = await searchExpectedRomTitles(normalized, { limit: IDENTIFY_RESULT_LIMIT, signal });
   if (result.status === "unavailable") return [];
   return result.titles.map((title) => ({
@@ -115,7 +115,7 @@ const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> =
   },
   compress: {
     hint: "ui.hero.compressDescription",
-    keywords: "compress pack archive disc image CHD RVZ Z3DS ZIP 7z",
+    keywords: "compress convert pack archive disc image CHD RVZ Z3DS ZIP 7z",
   },
   creator: {
     hint: "ui.hero.createDescription",
@@ -124,9 +124,10 @@ const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> =
   identify: { hint: "ui.hero.identifyDescription", keywords: "identify ROM checksum hash" },
   patcher: {
     hint: "ui.hero.applyDescription",
-    keywords: "apply patch apply weave xdelta xdelta3 vcdiff bdf bsdiff bsdiff40",
+    keywords: "apply patch apply xdelta xdelta3 vcdiff bdf bsdiff bsdiff40",
   },
-  bundle: { hint: "ui.find.bundleHint", keywords: "bundle bundle apply saved patch sequence" },
+  weave: { hint: "ui.find.weaveHint", keywords: "weave bundle apply saved patch sequence" },
+  "save-editor": { hint: "ui.hero.saveDescription", keywords: "save editor saves savegame sram edit generate" },
   test: { hint: "ui.hero.testDescription", keywords: "test ROM play emulator" },
   trim: { hint: "ui.hero.trimDescription", keywords: "trim ROM padding" },
 };
@@ -156,7 +157,7 @@ const CLI_GUIDES: readonly CliGuide[] = [
     command: "compress",
     hint: "ui.find.cliArchiveHint",
     href: "/docs/work-with-archives",
-    keywords: "CLI compress pack archive CHD RVZ ZIP 7z",
+    keywords: "CLI compress convert pack archive CHD RVZ ZIP 7z",
   },
   { command: "setup", hint: "ui.find.cliSetupHint", href: "/docs/install", keywords: "CLI setup install database" },
   {
@@ -166,10 +167,10 @@ const CLI_GUIDES: readonly CliGuide[] = [
     keywords: "CLI patch validate check",
   },
   {
-    command: "bundle parse",
+    command: "weave parse",
     hint: "ui.find.cliPatchHint",
     href: "/docs/cli-bundles",
-    keywords: "CLI bundle parse",
+    keywords: "CLI weave parse",
   },
   {
     command: "trim --untrim / --restore",
@@ -198,7 +199,7 @@ const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs
       id: `tool:${tab.id}`,
       keywords: `${tab.label} ${tab.id} ${tab.href} ${details?.keywords ?? ""}`,
       kind: "tool",
-      label: tab.id === "bundle" ? message("ui.find.bundlesApplyPatch") : tab.label,
+      label: tab.id === "weave" ? message("ui.find.weavesApplyPatch") : tab.label,
     };
   });
   const cliGuides: FindEntry[] = CLI_GUIDES.map(({ command, hint, href, keywords }) => {
@@ -278,9 +279,9 @@ const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs
   const settings: FindEntry[] = SETTINGS_PANEL_SECTIONS.flatMap((section) =>
     section.fields.map((key) => ({
       action: { type: "settings" as const, fieldId: SETTINGS_FIELD_METADATA[key].id },
-      hint: `${message("ui.settings.title")} · ${section.title}`,
+      hint: `${message("ui.settings.title")} · ${section.titleId ? message(section.titleId) : section.title}`,
       id: `setting:${key}`,
-      keywords: `${getSettingsLabel(key, localizer)} ${key} ${section.title}`,
+      keywords: `${getSettingsLabel(key, localizer)} ${key} ${section.title} ${section.titleId ? message(section.titleId) : section.title}`,
       kind: "setting" as const,
       label: getSettingsLabel(key, localizer),
     })),
@@ -300,11 +301,10 @@ const toRoute = (entry: FindEntry): GuideRoute => ({
 
 let guidesPromise: Promise<readonly GuideRoute[]> | null = null;
 
-/** The guide metadata and its prebuilt text are two lazy chunks; both load on the first search. */
+/** The prebuilt guide search text loads on the first search. */
 const loadGuideRoutes = (): Promise<readonly GuideRoute[]> => {
-  guidesPromise ??= Promise.all([import("virtual:rom-weaver-docs"), import("virtual:rom-weaver-docs-search")]).then(
-    ([{ DOC_ROUTES }, { SEARCH_ENTRIES }]) =>
-      DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
+  guidesPromise ??= import("virtual:rom-weaver-docs-search").then(
+    ({ SEARCH_ENTRIES }) => DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
     (error) => {
       guidesPromise = null;
       logger.warn("Find guide index failed to load", {

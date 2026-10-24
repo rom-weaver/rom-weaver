@@ -255,8 +255,10 @@ const startPracticeFiles = async () => {
 test("sample action applies with one patch disabled", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
@@ -267,7 +269,7 @@ test("sample action applies with one patch disabled", async () => {
     .poll(() => getPatchStackFileNames(), { timeout: 30000 })
     .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
   await expect
-    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length, {
       timeout: 30000,
     })
     .toBe(2);
@@ -282,8 +284,10 @@ test("sample action applies with one patch disabled", async () => {
 test("sample base patches apply after their order changes", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
@@ -294,7 +298,7 @@ test("sample base patches apply after their order changes", async () => {
     .poll(() => getPatchStackFileNames(), { timeout: 30000 })
     .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
   await expect
-    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length, {
+    .poll(() => document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length, {
       timeout: 30000,
     })
     .toBe(2);
@@ -357,5 +361,20 @@ test("remote fetch rejects a pre-aborted request before starting network or OPFS
     expect(fetchSpy).not.toHaveBeenCalled();
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("remote fetch recreates a directory removed through the browser VFS", async () => {
+  const [first] = await fetchRemoteFiles([{ url: `${location.origin}/${RAW_ROM}` }]);
+  const expectedBytes = new Uint8Array(await first.file.arrayBuffer());
+  await first.cleanup?.();
+  await browserVfs.remove(`${browserVfs.rootPath}/remote-fetch`);
+  const [second] = await fetchRemoteFiles([{ url: `${location.origin}/${RAW_ROM}` }]);
+  try {
+    expect(second.file.size).toBe(first.file.size);
+    expect(new Uint8Array(await second.file.arrayBuffer())).toEqual(expectedBytes);
+    expect(await browserVfs.stat(second.filePath)).toMatchObject({ size: first.file.size });
+  } finally {
+    await second.cleanup?.();
   }
 });

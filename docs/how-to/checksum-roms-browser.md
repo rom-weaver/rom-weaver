@@ -1,8 +1,8 @@
-# Checksum a file in the browser
+# Calculate and compare ROM checksums in the browser
 
 Calculate CRC32, MD5, SHA-1, and other file checksums in your browser, then compare them with an expected value. Your file stays on your device.
 
-For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For terminal procedures, see [Hash a file](identify-and-hash-files.md#hash-a-file).
+To identify your file, use [Identify a ROM by checksum](identify-roms-browser.md). Already have a hash? Use [ROM checksum search](search-rom-checksums-browser.md) to find database records. For terminal procedures, see [Hash a file](identify-and-hash-files.md#hash-a-file).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,10 +18,10 @@ For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For termin
 1. Open [Checksum file](https://rom-weaver.com/checksum).
 2. Select the algorithms in **Options**. CRC32, MD5, and SHA-1 are selected by default.
 3. Leave **Auto extract** checked to open archives and containers. Clear it to checksum the original file.
-4. Add one file. If an archive contains several files, choose the file to check.
+4. Add one or more files. If an archive contains several files, choose the file to check.
 5. Wait for **Checksums** to show the results.
 
-You can add a text file, patch, ROM, archive, or any other file. Select a checksum row to copy its value.
+Each added file gets its own result card, and a new drop replaces the earlier files. You can add a text file, patch, ROM, archive, or any other file. Select a checksum row to copy its value.
 
 <figure class="docs-screenshot">
   <img src="../screenshots/checksum-initial-light.webp" alt="The checksum page shows 0x01 Input and 0x02 Options, with algorithm choices and Auto extract checked" width="1280" height="960">
@@ -33,7 +33,7 @@ You can add a text file, patch, ROM, archive, or any other file. Select a checks
 1. Select another algorithm, for example **SHA-256**.
 2. Select **Calculate SHA-256**.
 
-With **Auto extract** checked, an archive can ask you to select its file again. Each calculation uses one selected file for all displayed checksums.
+With **Auto extract** checked, an archive can ask you to select its file again. Each calculation covers every file on the page.
 
 To stop a calculation, cancel it from the progress bar. The previous results stay available.
 

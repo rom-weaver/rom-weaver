@@ -2,7 +2,6 @@ import type { SourceMetadata } from "../../types/workflow-source.ts";
 import { parseCueFile, replaceCuePatchFileName } from "../../workers/protocol/cue-file-utils.ts";
 
 const BIN_EXTENSION_REGEX = /\.bin$/i;
-const CUE_EXTENSION_REGEX = /\.cue$/i;
 
 // Map the engine's `disc_format` verdict (Rust `rom_identity::DiscFormat::label()`
 // - "CD"/"GD-ROM"/"DVD") to the optical-media label the CHD output panel shows.
@@ -44,40 +43,48 @@ const chdModeFromMetadata = (metadata: SourceMetadata | null | undefined): ChdCo
   return discFormatToChdMode(metadata?.format);
 };
 
-type ByteProbeableSource = {
-  _u8array?: Uint8Array;
-  fileName?: string;
-  fileSize?: number;
-  size?: number;
-  getExtension?: () => string;
-  readIntoAt?: (buffer: Uint8Array, bufferOffset?: number, len?: number, fileOffset?: number) => number | undefined;
-};
-
-const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceMetadata }): string => {
-  // Prefer the coarse codec mode (available pre-identity) then the Rust identity verdict over a
-  // filename guess; the regex below is a last resort for inputs that never went through identity.
-  const mode = chdModeFromMetadata(source.metadata);
-  if (mode) return mode;
-  if (source.metadata?.cuePath) return "cd";
-  const fileName = String(source.fileName || "");
-  const size = source.fileSize ?? source.size;
-  // The fallback MUST match ChdContainerHandler::infer_create_kind in crates/rom-weaver-containers/src/chd/infer.rs.
+const getChdStructuralMode = (source: { fileName?: string; metadata?: SourceMetadata }): ChdCodecMode | undefined => {
+  const metadata = source.metadata;
+  if (metadata?.mode === "cd" || metadata?.mode === "dvd") return metadata.mode;
   if (
-    /\.iso$/i.test(fileName) &&
-    typeof size === "number" &&
-    size > 0 &&
-    size <= 450_000 * 2048 &&
-    (size % 2048 === 0 || size % 2352 === 0)
+    metadata?.cuePath ||
+    metadata?.cueText ||
+    metadata?.gdiText ||
+    /\.(cue|gdi)$/i.test(source.fileName || "") ||
+    /\.(cue|gdi)$/i.test(metadata?.sourceFileName || "")
   )
     return "cd";
-  return CUE_EXTENSION_REGEX.test(fileName) || BIN_EXTENSION_REGEX.test(fileName) ? "cd" : "dvd";
+  return undefined;
 };
 
+const isLooseChdAutoSource = (source: { fileName?: string; metadata?: SourceMetadata }): boolean =>
+  !getChdStructuralMode(source) &&
+  (BIN_EXTENSION_REGEX.test(source.fileName || "") || !/\.[^./\\]+$/.test(source.fileName || ""));
+
+/**
+ * CHD create mode for a source: the structural/metadata verdicts, then the Rust ingest/probe verdict
+ * (`metadata.chdCreateMode`, read from the file's bytes by native `chd` auto-inference). Without any
+ * verdict a loose image stays "raw".
+ */
+const getChdAutoCreateMode = (source: { fileName?: string; metadata?: SourceMetadata }): string => {
+  const structuralMode = getChdStructuralMode(source);
+  if (structuralMode) return structuralMode;
+  const mode = chdModeFromMetadata(source.metadata);
+  if (mode && !isLooseChdAutoSource(source)) return mode;
+  return source.metadata?.chdCreateMode || mode || "raw";
+};
+
+/** Codec-mode hint for a Rust create-mode verdict: DVD and hard-disk images take the DVD codec set. */
+const chdCodecModeFromCreateMode = (createMode: string | null | undefined): "dvd" | undefined =>
+  createMode === "dvd" || createMode === "hd" ? "dvd" : undefined;
+
 export {
+  chdCodecModeFromCreateMode,
   chdModeFromMetadata,
   discFormatToChdMode,
   getChdAutoCreateMode,
   getDiscFormatLabel,
+  isLooseChdAutoSource,
   parseCueFile,
   replaceCuePatchFileName,
 };

@@ -42,31 +42,35 @@ afterEach(async () => {
   host?.remove();
 });
 
-test("theme preference lives in Settings as a dropdown", async () => {
+const themeButton = (choice) => document.querySelector(`#settings-theme [data-theme-choice="${choice}"]`);
+
+test("theme preference lives in Settings as a three-icon toggle", async () => {
   mountSettings();
 
   await expect.poll(() => document.querySelector("#settings-theme")).not.toBeNull();
-  const select = document.querySelector("#settings-theme");
-  expect([...select.options].map((option) => option.value)).toEqual(["auto", "light", "dark"]);
+  const buttons = [...document.querySelectorAll("#settings-theme .seg-btn")];
+  expect(buttons.map((button) => button.dataset.themeChoice)).toEqual(["light", "dark", "auto"]);
+  expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual(["Light", "Dark", "Match system"]);
+  expect(themeButton("auto").querySelector(".theme-auto-badge")).not.toBeNull();
 
-  select.value = "auto";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  themeButton("auto").click();
   await expect.poll(() => localStorage.getItem("rom-weaver-theme")).toBe("auto");
+  await expect.poll(() => themeButton("auto").getAttribute("aria-pressed")).toBe("true");
 
-  select.value = "dark";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  themeButton("dark").click();
   await expect.poll(() => document.documentElement.getAttribute("data-theme")).toBe("dark");
   expect(localStorage.getItem("rom-weaver-theme")).toBe("dark");
+  await expect.poll(() => themeButton("dark").getAttribute("aria-pressed")).toBe("true");
+  expect(themeButton("auto").getAttribute("aria-pressed")).toBe("false");
 });
 
-test("Settings reveals the theme from its selector with a native snapshot", async () => {
+test("Settings reveals the theme from its toggle with a native snapshot", async () => {
   mountSettings();
   await expect.poll(() => document.querySelector("#settings-theme")).not.toBeNull();
-  const select = document.querySelector("#settings-theme");
-  const rect = select.getBoundingClientRect();
   const preference = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-  select.value = preference;
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  const button = themeButton(preference);
+  const rect = button.getBoundingClientRect();
+  button.click();
   const findAnimation = () =>
     document.getAnimations().find((animation) => animation.effect?.pseudoElement === "::view-transition-new(root)");
   await expect.poll(findAnimation).toBeTruthy();

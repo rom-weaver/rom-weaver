@@ -21,9 +21,11 @@ import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-sta
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
+import { loadGuideRoutes } from "../../src/webapp/find-index.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
-import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
+import { Masthead } from "../../src/webapp/components/shell.tsx";
+import { UpdateBannerView } from "../../src/webapp/components/update-banner.tsx";
 import {
   getDefaultSettings,
   getSettingsUiState,
@@ -773,11 +775,32 @@ const openAllDrawers = async (root) => {
 };
 
 // ── Banners ──────────────────────────────────────────────────────────────────
+// Both kinds of the update banner, with a highlight long enough to clamp.
+const BANNER_HIGHLIGHT =
+  "The home page's first screen now has a single Choose files button, a link to patch a practice ROM step by step, and a labeled diagram showing how patches are woven into a game";
 const Banners = () =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenWhatsNew: noop, open: true })),
+    createElement(
+      "div",
+      { className: "rw-app" },
+      createElement(UpdateBannerView, {
+        highlight: BANNER_HIGHLIGHT,
+        onDismiss: noop,
+        onOpenWhatsNew: noop,
+        onReload: noop,
+        open: true,
+        title: "v0.23.0 is ready",
+      }),
+      createElement(UpdateBannerView, {
+        highlight: BANNER_HIGHLIGHT,
+        onDismiss: noop,
+        onOpenWhatsNew: noop,
+        open: true,
+        title: "Updated from v0.21.0 to v0.22.2",
+      }),
+    ),
   );
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────
@@ -970,7 +993,9 @@ describe("webapp keyboard navigation", () => {
     await renderMasthead(noop);
     host.querySelector(".dock-menu").click();
     await settleUntil(() => !!host.querySelector("#menu-sheet .find-input"));
-    expect(document.activeElement).toBe(host.querySelector("#menu-sheet .find-input"));
+    // Menu opens for browsing; tapping its Find box is what brings the keyboard.
+    expect(document.activeElement).not.toBe(host.querySelector("#menu-sheet .find-input"));
+    host.querySelector("#menu-sheet .find-input").focus();
 
     host
       .querySelector("#menu-sheet .find-input")
@@ -1178,7 +1203,6 @@ describe("webapp responsive navigation", () => {
       label: "Docs",
     },
     {
-      beta: true,
       group: "patches",
       href: "ppf-undo",
       icon: createElement("span", { "aria-hidden": "true" }),
@@ -1224,23 +1248,45 @@ describe("webapp responsive navigation", () => {
       await renderMastheadOnly(ALL_TABS);
       if (width > 999) host.querySelector(".topbar-find").click();
       else host.querySelector(".dock-menu").click();
-      await settle();
+      await vi.waitFor(() => expect(host.querySelector(".find-input")).not.toBeNull());
       const input = host.querySelector(".find-input");
       // The phone's box lists the sheet's nav until it holds a query.
       if (width <= 999) {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "e");
         input.dispatchEvent(new Event("input", { bubbles: true }));
-        await settle();
-        expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
+        // Docs-search results load asynchronously after the first query. Static
+        // CLI shortcuts also have kind "Guide", so wait for a highlighted docs
+        // link before capturing the ordered keyboard options. Await the actual
+        // chunk load first rather than timing a cold import with the DOM poll.
+        await loadGuideRoutes();
+        await vi.waitFor(() => {
+          expect(host.querySelector('.find-option[href*="?highlight=e"]')).not.toBeNull();
+          expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
+        });
       }
       const options = host.querySelectorAll(".find-option");
-      for (let index = 1; index < options.length; index += 1) {
+      const expectVisibleSelection = async (index) => {
+        // Two animation frames do not guarantee React's passive scroll effect
+        // has run. Wait for the requested selection AND its unchanged bounds.
+        await vi.waitFor(() => {
+          const option = host.querySelector(".find-option.is-active");
+          expect(option).toBe(options[index]);
+          expect(option.getAttribute("aria-selected")).toBe("true");
+          expect(input.getAttribute("aria-activedescendant")).toBe(option.id);
+          const selected = option.getBoundingClientRect();
+          const list = host.querySelector(".find-results").getBoundingClientRect();
+          expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
+          expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+        });
+      };
+      await expectVisibleSelection(0);
+      for (let index = 1; index <= options.length; index += 1) {
         input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
-        await settle();
-        const selected = host.querySelector(".find-option.is-active").getBoundingClientRect();
-        const list = host.querySelector(".find-results").getBoundingClientRect();
-        expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
-        expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+        await expectVisibleSelection(index % options.length);
+      }
+      for (let index = options.length - 1; index >= 0; index -= 1) {
+        input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowUp" }));
+        await expectVisibleSelection(index);
       }
     }
   });
@@ -1302,9 +1348,9 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Menu and Controls, each with a word under its glyph.
+      // The fixture's three dock workflows, then Menu, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
-      expect(slots.length).toBe(5);
+      expect(slots.length).toBe(4);
       for (const slot of slots) {
         const label = slot.lastElementChild;
         expect(label.textContent.trim().length).toBeGreaterThan(0);
@@ -1335,7 +1381,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("Menu lists every sidebar row but theme and accent, and the dock ends with Controls", async () => {
+  test("Menu lists every sidebar row but theme and accent, and the dock ends with Menu", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
@@ -1349,7 +1395,8 @@ describe("webapp responsive navigation", () => {
     expect(sortLabels(labels(".menu-sheet"))).toEqual(
       sortLabels(labels(".side-nav").filter((label) => !appearance.has(label))),
     );
-    expect(host.querySelector(".dock-app")?.textContent).toBe("Controls");
+    expect(host.querySelector(".dock-app")).toBeNull();
+    expect(host.querySelector(".dock .dock-tab:last-child")?.classList.contains("dock-menu")).toBe(true);
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );

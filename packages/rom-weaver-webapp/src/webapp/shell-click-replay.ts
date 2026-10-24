@@ -1,8 +1,14 @@
+import { dispatchSelectionDelivery } from "../lib/input/selection-delivery.ts";
+import {
+  createFileDataTransfer,
+  type DroppedFilesTransfer,
+  readDataTransferFiles,
+} from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
 
 /**
  * Buffer clicks on the prerendered shell until hydration attaches React handlers.
- * Capture stops before hydration, and replay excludes actions that require trusted user activation.
+ * Click capture stops before hydration; file selections stay deferred until replay.
  */
 
 const logger = createLogger("shell-click-replay");
@@ -29,7 +35,23 @@ const INTERACTIVE_SELECTOR = [
 // Replayed clicks have no trusted user activation, so omit file pickers, new windows, and downloads.
 const GESTURE_GATED_SELECTOR = 'input[type="file"], a[download], a[target="_blank"]';
 
-type ShellClickBuffer = { clicks: { target: EventTarget | null; time: number }[]; stop: () => void };
+type ShellSelection = {
+  files: File[];
+  transfer?: DroppedFilesTransfer;
+  kind: "drop" | "pick";
+  target: EventTarget | null;
+};
+type ShellClickBuffer = {
+  clicks: { target: EventTarget | null; time: number }[];
+  selections?: ShellSelection[];
+  deferSelections?: boolean;
+  replaying?: boolean;
+  stop: () => void;
+  stopSelections?: () => void;
+};
+
+const readShellBuffer = () =>
+  (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
 
 let pending: HTMLElement[] = [];
 
@@ -54,13 +76,15 @@ const interactiveTarget = (target: EventTarget | null): HTMLElement | null => {
 };
 
 /**
- * Drains the inline buffer into retained shell nodes and stops capturing.
+ * Retains buffered clicks and defers file selections before hydration attaches handlers.
  * Call once, immediately before hydration begins.
  */
 const captureShellClicks = () => {
-  const buffer = (window as Window & { ROM_WEAVER_SHELL_CLICKS?: ShellClickBuffer }).ROM_WEAVER_SHELL_CLICKS;
+  const buffer = readShellBuffer();
   if (!buffer) return;
   buffer.stop();
+  // File selections MUST stay ordered until replay drains them, including events during hydration.
+  buffer.deferSelections = true;
   const now = Date.now();
   pending = buffer.clicks
     .filter((click) => now - click.time <= MAX_REPLAY_AGE_MS)
@@ -86,4 +110,93 @@ const replayShellClicks = (appRootElement: HTMLElement) => {
   }
 };
 
-export { captureShellClicks, replayShellClicks };
+const deliverPick = (appRootElement: HTMLElement, selection: ShellSelection, consumed: boolean) => {
+  const original = selection.target instanceof HTMLInputElement ? selection.target : null;
+  if (!original) return;
+  const retained = appRootElement.contains(original);
+  const input = retained
+    ? original
+    : original.id
+      ? appRootElement.querySelector<HTMLInputElement>(`input[type="file"]#${CSS.escape(original.id)}`)
+      : null;
+  if (!input || input.disabled) {
+    logger.debug("Dropped a pre-mount file pick whose hydrated input is unavailable", { id: original.id });
+    return;
+  }
+  // The mounted tree's change handler already took this input's latest pick and reset the value.
+  if (retained && consumed) return;
+  input.files = createFileDataTransfer(selection.files).files;
+  logger.debug("Delivering a file pick that landed before the first mount", { count: selection.files.length });
+  return dispatchSelectionDelivery(input, new Event("change", { bubbles: true }));
+};
+
+const deliverDrop = (appRootElement: HTMLElement, selection: ShellSelection) => {
+  const original = selection.target instanceof Element ? selection.target : null;
+  const target = original && appRootElement.contains(original) ? original : appRootElement;
+  logger.debug("Delivering a file drop that landed before the first mount", { count: selection.files.length });
+  return dispatchSelectionDelivery(
+    target,
+    new DragEvent("drop", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: createFileDataTransfer(selection.files),
+    }),
+  );
+};
+
+const discardShellSelections = () => {
+  readShellBuffer()?.selections?.splice(0);
+};
+
+/**
+ * Re-delivers buffered files in order after the first render commits.
+ * Capture MUST stay active through the delayed frame and task so new selections cannot overtake replay.
+ */
+const replayShellSelections = (appRootElement: HTMLElement) => {
+  const buffer = readShellBuffer();
+  if (!buffer?.selections) return;
+  const queue = buffer.selections;
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      void (async () => {
+        logger.debug("Captured file selections that landed before the first mount", { count: queue.length });
+        // Only each input's latest pick is still on it; a reset input means React took that one.
+        const lastPickByInput = new Map<EventTarget | null, ShellSelection>();
+        for (const selection of queue) if (selection.kind === "pick") lastPickByInput.set(selection.target, selection);
+        const consumedPicks = new Set<ShellSelection>();
+        for (const [target, selection] of lastPickByInput) {
+          if (target instanceof HTMLInputElement && target.files?.length === 0) consumedPicks.add(selection);
+        }
+        try {
+          while (queue.length) {
+            const selection = queue.shift();
+            if (!selection) break;
+            if (selection.kind === "drop" && selection.transfer) {
+              try {
+                selection.files = await readDataTransferFiles(selection.transfer);
+              } catch (error) {
+                logger.warn("Failed to read a buffered file drop", { error });
+                continue;
+              }
+            }
+            let delivery: Promise<void> | undefined;
+            buffer.replaying = true;
+            try {
+              if (selection.kind === "pick")
+                delivery = deliverPick(appRootElement, selection, consumedPicks.has(selection));
+              else delivery = deliverDrop(appRootElement, selection);
+            } finally {
+              buffer.replaying = false;
+            }
+            await delivery;
+          }
+        } finally {
+          buffer.stopSelections?.();
+          buffer.deferSelections = false;
+        }
+      })();
+    }, 0);
+  });
+};
+
+export { captureShellClicks, discardShellSelections, replayShellClicks, replayShellSelections };

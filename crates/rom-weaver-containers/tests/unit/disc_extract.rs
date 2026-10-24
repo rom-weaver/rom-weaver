@@ -5,7 +5,7 @@
 //! single-bin/split-track/GD-ROM writers, sector-mode byte handling, and the
 //! CD output-selection plan. None of these require a real CHD binary.
 
-use rom_weaver_core::ArchiveEntryKindFilter;
+use rom_weaver_core::{ArchiveEntryKindFilter, OperationStatus};
 
 use super::*;
 
@@ -24,6 +24,9 @@ fn track(number: u32, mode: DiscTrackMode, frames: u32, pad_frames: u32) -> Disc
         pregap_has_data: false,
         has_subcode: false,
         pad_frames,
+        align_pad_frames: 0,
+        pgtype_track_mode: false,
+        tail: None,
         swap_audio_on_read: false,
     }
 }
@@ -285,16 +288,23 @@ fn apply_cd_track_padding_rounds_up_to_four_frame_boundary() {
 }
 
 #[test]
-fn apply_cd_track_padding_is_a_no_op_for_gd_rom() {
-    // GD-ROM layouts declare padding explicitly via the PAD field and must
-    // not have this CD-only rounding applied on top.
+fn apply_cd_track_padding_aligns_gd_rom_tracks_on_top_of_explicit_pad() {
+    // chdman aligns every GD track to 4 frames; the explicit PAD frames are kept
+    // and the alignment tail is tracked separately so metadata can omit it.
     let mut layout = DiscLayout {
         kind: DiscKind::GdRom,
-        tracks: vec![track(1, DiscTrackMode::Mode1, 10, 0)],
+        tracks: vec![
+            track(1, DiscTrackMode::Mode1, 10, 6),
+            track(2, DiscTrackMode::Mode1, 8, 0),
+        ],
     };
     layout.apply_cd_track_padding();
-    assert_eq!(layout.tracks[0].frames, 10);
-    assert_eq!(layout.tracks[0].pad_frames, 0);
+    assert_eq!(layout.tracks[0].frames, 12);
+    assert_eq!(layout.tracks[0].pad_frames, 8);
+    assert_eq!(layout.tracks[0].align_pad_frames, 2);
+    assert_eq!(layout.tracks[1].frames, 8);
+    assert_eq!(layout.tracks[1].pad_frames, 0);
+    assert_eq!(layout.tracks[1].align_pad_frames, 0);
 }
 
 // --- CD selection plan: single-bin vs split-track mode dispatch -------------
@@ -319,7 +329,7 @@ fn plan_cd_selection_uses_single_bin_when_modes_match_and_not_forced_split() {
 }
 
 #[test]
-fn plan_cd_selection_splits_when_track_modes_differ() {
+fn plan_cd_selection_merges_tracks_with_different_sector_sizes_like_chdman() {
     let handler = ChdContainerHandler;
     let layout = DiscLayout {
         kind: DiscKind::CdRom,
@@ -332,18 +342,10 @@ fn plan_cd_selection_splits_when_track_modes_differ() {
     let plan = handler
         .plan_cd_selection(&layout, &request, "game")
         .unwrap();
-    assert!(
-        !plan.single_bin,
-        "mixed track modes cannot share one .bin layout"
-    );
-    assert_eq!(
-        plan.split_track_names,
-        vec![
-            handler.track_output_name("game", 1),
-            handler.track_output_name("game", 2),
-        ]
-    );
-    assert_eq!(plan.write_split_tracks, vec![true, true]);
+    // chdman `extractcd` writes one bin even when the sector sizes differ.
+    assert!(plan.single_bin, "mixed sector sizes still share one .bin");
+    assert!(plan.write_single_bin);
+    assert!(plan.split_track_names.is_empty());
 }
 
 #[test]
@@ -377,7 +379,7 @@ fn plan_cd_selection_filters_to_a_specific_track_selection() {
         ],
     };
     let track_two_name = handler.track_output_name("game", 2);
-    let request = extract_request(vec![track_two_name.as_str()], false);
+    let request = extract_request(vec![track_two_name.as_str()], true);
     let plan = handler
         .plan_cd_selection(&layout, &request, "game")
         .unwrap();
@@ -410,12 +412,12 @@ fn track_output_name_formats_with_track_number() {
 // --- Cue / gdi sheet parsing ------------------------------------------------
 
 /// Per-test scratch directory. The label keeps parallel tests from sharing a
-/// path; the caller removes the tree when the test ends.
-fn scratch_dir(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
+/// path; the guard removes the tree when the test ends, even on panic.
+fn scratch_dir(label: &str) -> crate::test_support::TempPath {
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-disc-extract-{}-{label}",
         std::process::id()
-    ));
+    )));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create scratch dir");
     dir
@@ -558,6 +560,89 @@ fn parse_cue_file_treats_index_00_as_a_pregap_with_data() {
     assert_eq!(second.file_offset_bytes, 8 * 2352);
     assert_eq!(second.pregap_frames, 2);
     assert!(second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_reads_the_first_track_of_each_file_from_the_file_start() {
+    // chdman ignores the INDEX times of a file's first track when placing its
+    // data: the whole file is the track and the pregap is `INDEX 01 - INDEX 00`.
+    let dir = scratch_dir("cue-first-in-file");
+    write_file(&dir, "track01.bin", &raw_frames(8));
+    write_file(&dir, "track02.bin", &raw_frames(10));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"track01.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "FILE \"track02.bin\" BINARY\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 00 00:00:05\n",
+            "    INDEX 01 00:00:07\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    let second = &layout.tracks[1];
+    assert_eq!(second.file_offset_bytes, 0);
+    assert_eq!(second.frames - second.align_pad_frames, 10);
+    assert_eq!(second.pregap_frames, 2);
+    assert!(second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gd_cue_index00_pregap_moves_onto_the_previous_track() {
+    // chdman files a GD cue track's pregap frames under the end of the previous
+    // track: the hunk stream is unchanged, the boundary moves.
+    let dir = scratch_dir("gd-cue-pregap-move");
+    write_file(&dir, "track01.bin", &raw_frames(6));
+    write_file(&dir, "track02.bin", &raw_frames(9));
+    write_file(&dir, "track03.bin", &raw_frames(8));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "REM SINGLE-DENSITY AREA\n",
+            "FILE \"track01.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "FILE \"track02.bin\" BINARY\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 00 00:00:00\n",
+            "    INDEX 01 00:00:03\n",
+            "REM HIGH-DENSITY AREA\n",
+            "FILE \"track03.bin\" BINARY\n",
+            "  TRACK 03 MODE1/2352\n",
+            "    INDEX 00 00:00:00\n",
+            "    INDEX 01 00:00:02\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&cue)
+        .expect("parse gd cue");
+    let [first, second, third] = &layout.tracks[..] else {
+        panic!("expected three tracks");
+    };
+    // Track 2's 3 pregap frames end track 1; track 3's 2 end track 2.
+    assert_eq!(first.frames - first.align_pad_frames, 9);
+    assert_eq!(first.tail.as_ref().map(|tail| tail.frames), Some(3));
+    assert_eq!(second.file_offset_bytes, 3 * 2352);
+    assert_eq!(second.frames - second.align_pad_frames, 45_000 - 9);
+    assert_eq!(second.tail.as_ref().map(|tail| tail.frames), Some(2));
+    assert_eq!(third.file_offset_bytes, 2 * 2352);
+    assert_eq!(third.frames - third.align_pad_frames, 6);
+    for track in &layout.tracks {
+        assert_eq!(track.pregap_frames, 0);
+        assert!(!track.pregap_has_data);
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -732,20 +817,10 @@ fn parse_cue_file_rejects_inconsistent_track_geometry() {
     let handler = ChdContainerHandler;
     let cue = dir.join("game.cue");
 
-    let cases: [(&str, &str); 4] = [
+    let cases: [(&str, &str); 3] = [
         (
             "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:10\n",
             "starts past the end of",
-        ),
-        (
-            concat!(
-                "FILE \"game.bin\" BINARY\n",
-                "  TRACK 01 MODE1/2352\n",
-                "    INDEX 01 00:00:00\n",
-                "  TRACK 02 MODE1/2048\n",
-                "    INDEX 01 00:00:01\n",
-            ),
-            "across tracks with different sector sizes",
         ),
         (
             concat!(
@@ -806,8 +881,9 @@ fn parse_disc_input_synthesizes_a_gd_rom_from_high_density_markers() {
     // becomes padding rather than stored frames.
     assert_eq!(layout.tracks[0].pad_frames, 45000 - 10);
     assert_eq!(layout.tracks[0].frames, 45000);
-    assert_eq!(layout.tracks[1].frames, 5);
-    assert_eq!(layout.tracks[1].pad_frames, 0);
+    // 5 frames align up to 8 (chdman's 4-frame track alignment).
+    assert_eq!(layout.tracks[1].frames, 8);
+    assert_eq!(layout.tracks[1].pad_frames, 3);
     assert_eq!(layout.tracks[1].pregap_frames, 0);
 
     let _ = fs::remove_dir_all(&dir);
@@ -907,18 +983,22 @@ fn parse_gdi_file_resolves_physical_offsets_into_pad_frames() {
     assert!(!layout.tracks[0].swap_audio_on_read);
     assert_eq!(
         (layout.tracks[0].frames, layout.tracks[0].pad_frames),
-        (10, 6)
+        // 10 frames up to the next track, then aligned to 4 frames like chdman.
+        (12, 8)
     );
 
     assert_eq!(layout.tracks[1].mode, DiscTrackMode::Audio);
     assert!(layout.tracks[1].swap_audio_on_read);
     assert_eq!(
         (layout.tracks[1].frames, layout.tracks[1].pad_frames),
-        (45000 - 10, 45000 - 12)
+        (45000 - 8, 45000 - 12 + 2)
     );
 
     assert_eq!(layout.tracks[2].frames, 4);
-    assert_eq!(layout.tracks[2].pad_frames, 0, "the last track never pads");
+    assert_eq!(
+        layout.tracks[2].pad_frames, 0,
+        "the last track has no explicit gdi pad"
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -933,7 +1013,9 @@ fn parse_gdi_file_accepts_cooked_sectors_and_a_file_offset() {
     let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
     assert_eq!(layout.tracks[0].mode, DiscTrackMode::Mode1);
     assert_eq!(layout.tracks[0].file_offset_bytes, 2048);
-    assert_eq!(layout.tracks[0].frames, 3);
+    // 3 data frames, aligned up to 4 like chdman.
+    assert_eq!(layout.tracks[0].frames, 4);
+    assert_eq!(layout.tracks[0].pad_frames, 1);
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -1081,6 +1163,7 @@ fn test_context(temp_root: &Path) -> OperationContext {
 
 fn create_request(input: &Path, output: &Path) -> ContainerCreateRequest {
     ContainerCreateRequest {
+        rvz_block_size: None,
         archive_names: None,
         inputs: vec![input.to_path_buf()],
         output: output.to_path_buf(),
@@ -1418,6 +1501,7 @@ fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
     handler
         .create(
             &ContainerCreateRequest {
+                rvz_block_size: None,
                 archive_names: None,
                 inputs: vec![iso],
                 output: chd_path.clone(),
@@ -1448,4 +1532,155 @@ fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+// --- gd-rom chdman parity (track alignment and PGTYPE) -----------------------
+
+fn gd_metadata_lines(layout: DiscLayout) -> Vec<String> {
+    ChdContainerHandler
+        .rust_metadata_entries(&ChdCreateKind::Disc(layout))
+        .expect("metadata")
+        .into_iter()
+        .map(|entry| {
+            String::from_utf8(entry.data)
+                .expect("utf8")
+                .trim_end_matches('\0')
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn gdi_tracks_are_aligned_to_four_frames_like_chdman() {
+    // Mirrors chdman createcd on a gdi: every track is rounded up to a multiple
+    // of 4 frames in the hunk stream while metadata keeps the unaligned counts.
+    let dir = scratch_dir("gdi-align");
+    write_file(&dir, "t1.bin", &raw_frames(5));
+    write_file(&dir, "t2.bin", &raw_frames(3));
+    write_file(&dir, "t3.bin", &raw_frames(7));
+    let gdi = write_file(
+        &dir,
+        "a.gdi",
+        b"3\n1 0 4 2352 t1.bin 0\n2 10 0 2352 t2.bin 0\n3 45000 4 2352 t3.bin 0\n",
+    );
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    let stream_frames: Vec<u32> = layout.tracks.iter().map(|t| t.frames).collect();
+    assert_eq!(stream_frames, vec![12, 44992, 8]);
+    assert_eq!(layout.logical_bytes().expect("bytes"), 45012 * 2448);
+
+    // Reference values captured from chdman 0.289 `createcd -c none`.
+    assert_eq!(
+        gd_metadata_lines(layout),
+        vec![
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:10 PAD:5 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44990 PAD:44987 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:7 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0",
+        ]
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gdi_audio_track_reports_mode1_pgtype_like_chdman() {
+    // chdman's gdi parser never sets a pregap type, so the audio track 2 of a
+    // real GD-ROM is written with `PGTYPE:MODE1`, not `PGTYPE:AUDIO`.
+    let dir = scratch_dir("gdi-pgtype");
+    write_file(&dir, "t1.bin", &raw_frames(4));
+    write_file(&dir, "t2.bin", &raw_frames(4));
+    let gdi = write_file(
+        &dir,
+        "a.gdi",
+        b"2\n1 0 4 2352 t1.bin 0\n2 4 0 2352 t2.bin 0\n",
+    );
+
+    let lines = gd_metadata_lines(ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi"));
+    assert!(lines[1].contains("TYPE:AUDIO"), "{}", lines[1]);
+    assert!(lines[1].contains("PGTYPE:MODE1"), "{}", lines[1]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn gdi_unaligned_last_track_is_padded_in_the_hunk_stream_only() {
+    // Mirrors Sonic Adventure 2 track 3 (504150 frames): chdman streams two
+    // extra frames but keeps FRAMES/PAD in the metadata unchanged.
+    let dir = scratch_dir("gdi-last-track-pad");
+    write_file(&dir, "t1.bin", &raw_frames(6));
+    let gdi = write_file(&dir, "a.gdi", b"1\n1 0 4 2352 t1.bin 0\n");
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    assert_eq!(layout.tracks[0].frames, 8);
+    assert_eq!(layout.tracks[0].pad_frames, 2);
+    let lines = gd_metadata_lines(layout);
+    assert!(lines[0].contains("FRAMES:6 PAD:0 "), "{}", lines[0]);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_disc_tracks_keeps_legacy_unaligned_gd_streams() {
+    // Earlier rom-weaver versions wrote GD CHDs whose hunk stream held exactly
+    // the metadata frames (no 4-frame alignment). They must still read back.
+    let dir = scratch_dir("legacy-unaligned-gd");
+    let input = dir.join("frames.raw");
+    fs::write(&input, vec![0x5A_u8; 3 * 2448]).expect("write frames");
+    let output = dir.join("legacy.chd");
+    let legacy = track(1, DiscTrackMode::Mode1Raw, 3, 0);
+    let layout = DiscLayout {
+        kind: DiscKind::GdRom,
+        tracks: vec![legacy],
+    };
+    let handler = ChdContainerHandler;
+    handler
+        .create_uncompressed_rust_raw(
+            &input,
+            &output,
+            3 * 2448,
+            &ChdCreateKind::Disc(layout),
+            None,
+        )
+        .expect("write legacy gd chd");
+
+    let session = ChdReadSession::open(&output, None).expect("open chd");
+    let layout = handler
+        .read_disc_tracks(&session, DiscKind::GdRom)
+        .expect("read legacy gd layout");
+    assert_eq!(
+        (layout.tracks[0].frames, layout.tracks[0].pad_frames),
+        (3, 0),
+        "a legacy stream must not gain alignment frames"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_splits_a_shared_file_with_mixed_sector_sizes_like_chdman() {
+    // chdman counts INDEX times in frames and starts each later track after
+    // the previous track's bytes, whatever the sector sizes involved.
+    let dir = scratch_dir("cue-mixed-shared");
+    let mut bytes = vec![0_u8; 3 * 2048];
+    bytes.extend_from_slice(&raw_frames(2));
+    write_file(&dir, "game.bin", &bytes);
+    let cue = dir.join("game.cue");
+    fs::write(
+        &cue,
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2048\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 01 00:00:03\n",
+        ),
+    )
+    .expect("write cue");
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("layout");
+    let spans: Vec<(u64, u32)> = layout
+        .tracks
+        .iter()
+        .map(|track| (track.file_offset_bytes, track.frames - track.pad_frames))
+        .collect();
+    assert_eq!(spans, [(0, 3), (3 * 2048, 2)]);
 }

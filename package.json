@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/cli",
-  "version": "0.19.1",
+  "version": "0.22.2",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
   "description": "A command-line ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.",
@@ -70,7 +70,10 @@
     "docs/man/rom-weaver-tools.1",
     "docs/man/rom-weaver-tools-ppf-undo.1",
     "docs/man/rom-weaver-trim.1",
-    "docs/man/rom-weaver-weave.1"
+    "docs/man/rom-weaver-weave.1",
+    "docs/man/rom-weaver-weave-create.1",
+    "docs/man/rom-weaver-weave-parse.1",
+    "docs/man/rom-weaver-weave-schema.1"
   ],
   "files": [
     "bin/rom-weaver.mjs",
@@ -86,15 +89,23 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "@rom-weaver/darwin-arm64": "0.19.1",
-    "@rom-weaver/darwin-x64": "0.19.1",
-    "@rom-weaver/linux-arm64-musl": "0.19.1",
-    "@rom-weaver/linux-ia32-musl": "0.19.1",
-    "@rom-weaver/linux-x64-gnu": "0.19.1",
-    "@rom-weaver/linux-x64-musl": "0.19.1",
-    "@rom-weaver/win32-arm64-msvc": "0.19.1",
-    "@rom-weaver/win32-ia32-msvc": "0.19.1",
-    "@rom-weaver/win32-x64-msvc": "0.19.1"
+    "@rom-weaver/darwin-arm64": "0.22.2",
+    "@rom-weaver/darwin-x64": "0.22.2",
+    "@rom-weaver/linux-arm64-musl": "0.22.2",
+    "@rom-weaver/linux-ia32-musl": "0.22.2",
+    "@rom-weaver/linux-x64-gnu": "0.22.2",
+    "@rom-weaver/linux-x64-musl": "0.22.2",
+    "@rom-weaver/win32-arm64-msvc": "0.22.2",
+    "@rom-weaver/win32-ia32-msvc": "0.22.2",
+    "@rom-weaver/win32-x64-msvc": "0.22.2"
+  },
+  "overrides": {
+    "markdownlint-cli2": {
+      "smol-toml": "1.9.1"
+    },
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
   },
   "scripts": {
     "docs:lint": "markdownlint-cli2",
@@ -108,6 +119,9 @@
     "prepack": "mise run manpages",
     "test": "node --test scripts/*.test.mjs scripts/ci/*.test.mjs scripts/wasm/*.test.mjs",
     "audit:deps": "npm audit --audit-level=high",
+    "vendor:list": "node scripts/vendor-dependencies.mjs list",
+    "vendor:check": "node scripts/vendor-dependencies.mjs check",
+    "vendor:refresh": "node scripts/vendor-dependencies.mjs refresh",
     "typegen": "mise run typegen",
     "typegen:check": "mise run typegen-check",
     "version": "node scripts/sync-version.mjs"
@@ -117,9 +131,9 @@
     "@commitlint/config-conventional": "21.2.3",
     "cross-spawn": "7.0.6",
     "doctoc": "2.5.0",
-    "lefthook": "2.1.16",
-    "markdownlint-cli2": "0.23.3",
-    "oxlint": "1.86.0",
+    "lefthook": "2.2.2",
+    "markdownlint-cli2": "0.24.0",
+    "oxlint": "1.88.0",
     "tar": "7.5.22"
   }
 }

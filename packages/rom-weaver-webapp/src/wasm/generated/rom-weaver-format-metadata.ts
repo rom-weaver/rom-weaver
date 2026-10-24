@@ -56,6 +56,13 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
     "ipsSizeLimitBytes": 16777216,
     "legacySizeLimitBytes": 268435456
   },
+  "noShrinkFormats": [
+    "ebp",
+    "ppf"
+  ],
+  "sourceRestrictedFormats": [
+    "pmsr"
+  ],
   "supportedCreateFormats": [
     "bps",
     "xdelta",
@@ -585,7 +592,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
       "aliases": [],
       "level": {
         "max": 9,
-        "min": 0
+        "min": 1
       },
       "profileKind": "standard"
     },
@@ -645,7 +652,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
       "aliases": [],
       "level": {
         "max": 9,
-        "min": 0
+        "min": 1
       },
       "profileKind": "standard"
     },
@@ -1276,6 +1283,28 @@ export const ROM_WEAVER_CONTAINER_FORMATS = [
       68
     ],
     "name": "chd"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "create": false,
+      "createThreads": {
+        "maxThreads": 1,
+        "parallel": false
+      },
+      "extract": true,
+      "extractThreads": {
+        "maxThreads": null,
+        "parallel": true
+      },
+      "probeDetails": true
+    },
+    "defaultOutput": null,
+    "extensions": [
+      ".ciso"
+    ],
+    "magic": [],
+    "name": "gc-ciso"
   },
   {
     "aliases": [],
@@ -2245,6 +2274,277 @@ export const ROM_WEAVER_Z3DS_SUBTYPES = [
     "underlyingMagic": null
   }
 ] as const;
+
+export const ROM_WEAVER_ERROR_KIND_PREFIXES = [
+  {
+    "kind": "validation",
+    "prefix": "validation failed:"
+  },
+  {
+    "kind": "unknown_format",
+    "prefix": "unknown format for path"
+  },
+  {
+    "kind": "unsupported",
+    "prefix": "unsupported operation:"
+  },
+  {
+    "kind": "cancelled",
+    "prefix": "operation cancelled"
+  },
+  {
+    "kind": "io",
+    "prefix": "i/o error:"
+  },
+  {
+    "kind": "thread_pool_build",
+    "prefix": "thread pool build failed:"
+  }
+] as const;
+
+export const ROM_WEAVER_IDENTIFY_PACK_SLUGS = {
+  "extensionSlugs": {
+    "32x": [
+      "sega-32x"
+    ],
+    "3ds": [
+      "nintendo-nintendo-3ds"
+    ],
+    "3dsx": [
+      "nintendo-nintendo-3ds"
+    ],
+    "a26": [
+      "atari-2600"
+    ],
+    "a52": [
+      "atari-5200"
+    ],
+    "a78": [
+      "atari-7800"
+    ],
+    "cci": [
+      "nintendo-nintendo-3ds"
+    ],
+    "cia": [
+      "nintendo-nintendo-3ds"
+    ],
+    "cxi": [
+      "nintendo-nintendo-3ds"
+    ],
+    "fig": [
+      "nintendo-super-nintendo-entertainment-system"
+    ],
+    "gb": [
+      "nintendo-game-boy"
+    ],
+    "gba": [
+      "nintendo-game-boy-advance"
+    ],
+    "gbc": [
+      "nintendo-game-boy-color"
+    ],
+    "gen": [
+      "sega-mega-drive-genesis"
+    ],
+    "gg": [
+      "sega-game-gear"
+    ],
+    "lnx": [
+      "atari-lynx"
+    ],
+    "md": [
+      "sega-mega-drive-genesis"
+    ],
+    "n64": [
+      "nintendo-nintendo-64"
+    ],
+    "nes": [
+      "nintendo-nintendo-entertainment-system"
+    ],
+    "ngc": [
+      "snk-neo-geo-pocket-color"
+    ],
+    "ngp": [
+      "snk-neo-geo-pocket"
+    ],
+    "pce": [
+      "nec-pc-engine-turbografx-16"
+    ],
+    "sfc": [
+      "nintendo-super-nintendo-entertainment-system"
+    ],
+    "sgx": [
+      "nec-pc-engine-turbografx-16"
+    ],
+    "smc": [
+      "nintendo-super-nintendo-entertainment-system"
+    ],
+    "smd": [
+      "sega-mega-drive-genesis"
+    ],
+    "sms": [
+      "sega-master-system-mark-iii"
+    ],
+    "swc": [
+      "nintendo-super-nintendo-entertainment-system"
+    ],
+    "unf": [
+      "nintendo-nintendo-entertainment-system"
+    ],
+    "unif": [
+      "nintendo-nintendo-entertainment-system"
+    ],
+    "v64": [
+      "nintendo-nintendo-64"
+    ],
+    "z3ds": [
+      "nintendo-nintendo-3ds"
+    ],
+    "z3dsx": [
+      "nintendo-nintendo-3ds"
+    ],
+    "z64": [
+      "nintendo-nintendo-64"
+    ],
+    "zcci": [
+      "nintendo-nintendo-3ds"
+    ],
+    "zcia": [
+      "nintendo-nintendo-3ds"
+    ],
+    "zcxi": [
+      "nintendo-nintendo-3ds"
+    ]
+  },
+  "siblingSlugs": {
+    "nintendo-game-boy": [
+      "nintendo-game-boy-color"
+    ],
+    "nintendo-game-boy-color": [
+      "nintendo-game-boy"
+    ],
+    "sega-32x": [
+      "sega-mega-drive-genesis"
+    ],
+    "sega-game-gear": [
+      "sega-master-system-mark-iii"
+    ],
+    "sega-master-system-mark-iii": [
+      "sega-game-gear"
+    ],
+    "sega-mega-drive-genesis": [
+      "sega-32x"
+    ],
+    "snk-neo-geo-pocket": [
+      "snk-neo-geo-pocket-color"
+    ],
+    "snk-neo-geo-pocket-color": [
+      "snk-neo-geo-pocket"
+    ],
+    "sony-playstation": [
+      "sony-playstation-2"
+    ],
+    "sony-playstation-2": [
+      "sony-playstation"
+    ]
+  }
+} as const;
+
+export const ROM_WEAVER_TRIM_INPUT_EXTENSIONS = [
+  "nds",
+  "dsi",
+  "srl",
+  "gba",
+  "3ds",
+  "xiso",
+  "xiso.iso",
+  "iso",
+  "gcm",
+  "wbfs",
+  "rvz"
+] as const;
+
+export const ROM_WEAVER_THREADED_COMMANDS = [
+  "checksum",
+  "compress",
+  "extract",
+  "identify",
+  "ingest",
+  "patch/apply",
+  "patch/create",
+  "patch/validate",
+  "tools/ppf-undo",
+  "trim",
+  "weave/create",
+  "weave/parse"
+] as const;
+
+export const ROM_WEAVER_CHD_CREATE_MODES = {
+  "av": "av",
+  "cd": "cd",
+  "dvd": "dvd",
+  "gd": "gd",
+  "hd": "hd",
+  "ld": "av",
+  "raw": "raw"
+} as const;
+
+export const ROM_WEAVER_SAVE_FILE_EXTENSIONS = {
+  "containers": [
+    {
+      "extensions": [
+        "sps",
+        "xps"
+      ],
+      "id": "shark_port_save"
+    },
+    {
+      "extensions": [
+        "gsv"
+      ],
+      "id": "gameshark_sp_snapshot"
+    },
+    {
+      "extensions": [
+        "dsv"
+      ],
+      "id": "desmume_dsv"
+    },
+    {
+      "extensions": [
+        "gme"
+      ],
+      "id": "dexdrive_gme"
+    },
+    {
+      "extensions": [
+        "mem",
+        "vgs"
+      ],
+      "id": "vgs_mem"
+    }
+  ],
+  "raw": [
+    "sav",
+    "srm",
+    "sra",
+    "eep",
+    "fla",
+    "mpk",
+    "mcr",
+    "mcd"
+  ]
+} as const;
+
+export const ROM_WEAVER_WEAVE_FILE_NAMES = {
+  "bundle": "rom-weaver-bundle.json",
+  "weave": "rom-weaver-weave.json"
+} as const;
+
+export const ROM_WEAVER_VALIDATION_CODES = {
+  "extractNoContainer": "extract.no_container",
+  "wbfsSizeMismatch": "wbfs.size_mismatch"
+} as const;
 
 export const ROM_WEAVER_FORMAT_METADATA = {
   archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,

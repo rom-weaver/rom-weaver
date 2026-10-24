@@ -6,6 +6,8 @@
 //! regression fails here instead of as a deep round-trip parity mismatch.
 
 use super::*;
+use crate::chd_rs::cdrom::CD_MAX_SECTOR_DATA;
+use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
 
 #[test]
 fn split_checksum_workers_share_the_operation_thread_budget() {
@@ -23,24 +25,50 @@ const SYNC_HEADER: [u8; 12] = [
 
 /// Build a Mode 1 raw sector with a deterministic data payload and freshly
 /// generated P/Q ECC so it round-trips through verification.
-fn mode1_sector_with_ecc() -> Vec<u8> {
-    let mut sector = vec![0_u8; ChdContainerHandler::CD_SECTOR_DATA_BYTES];
+fn mode1_sector_with_ecc() -> [u8; CD_MAX_SECTOR_DATA as usize] {
+    let mut sector = [0_u8; CD_MAX_SECTOR_DATA as usize];
     sector[..12].copy_from_slice(&SYNC_HEADER);
     sector[0x0f] = 1; // Mode 1.
     for (index, byte) in sector.iter_mut().enumerate().skip(16) {
         *byte = (index % 251) as u8;
     }
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+    (&mut sector).generate_ecc();
     sector
+}
+
+/// `ErrorCorrectedSector` is implemented for `&mut` sectors only.
+fn verify_ecc(sector: &mut [u8; CD_MAX_SECTOR_DATA as usize]) -> bool {
+    sector.verify_ecc()
+}
+
+/// Known-answer P/Q parity (bytes 0x81c..0x930) for `mode1_sector_with_ecc()`,
+/// computed independently of chd_rs from the ECMA-130 Annex A definition
+/// (GF(2^8) with polynomial 0x11d; P over 86 columns of 24 bytes, Q over 52
+/// diagonals of 43 bytes including P), so a wrong chd_rs table entry fails here.
+const MODE1_SECTOR_P_PARITY_HEX: &str = "3edcdd22e3cd2df9b58ad5a692e7c0498fbdab99d967e8bbc414b0e6cef051a1055fb27d43671e3bc8eef19a5ea7d0744ea5216804937ba7b5e013f11f2cbde97000c1d79371aa1b0db38a0a07408c66fcf95b526ecafa718b1cdbcd15c9ed2a1d767a0728b987dd28347eda4beefbca4e24142677f3b4cc03e2d2f4ff37e4e2ddae6a930fb5ad64c699f7996999abda31a7b28b305ae58f243f73896af3fd2bea726728cc3ecc31fbface52";
+const MODE1_SECTOR_Q_PARITY_HEX: &str = "4c3f271c197053de2091bfdaa7d92aeeaa2bc0963e3392a4781bb837ccedcd8609c74203412e5e471406a32fbcbd3924465714d6a160eb5e3d38f5e924c3fce916676b4163ffb5e1fc72c7857c173c63f81bc27b8f111e63ee1d57832e32afeccaff86f02b377e14";
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).expect("hex digit pair"))
+        .collect()
+}
+
+#[test]
+fn cd_sector_ecc_matches_known_answer_parity() {
+    let sector = mode1_sector_with_ecc();
+    assert_eq!(
+        &sector[0x81c..0x81c + 172],
+        hex_bytes(MODE1_SECTOR_P_PARITY_HEX)
+    );
+    assert_eq!(&sector[0x81c + 172..], hex_bytes(MODE1_SECTOR_Q_PARITY_HEX));
 }
 
 #[test]
 fn cd_sector_ecc_round_trips_through_verification() {
-    let sector = mode1_sector_with_ecc();
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    let mut sector = mode1_sector_with_ecc();
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
@@ -48,210 +76,32 @@ fn cd_sector_ecc_rejects_corrupted_payload() {
     let mut sector = mode1_sector_with_ecc();
     // Flip a byte inside the ECC-covered data region.
     sector[100] ^= 0xff;
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(!verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_ecc_rejects_missing_sync_header() {
+fn cd_sector_ecc_ignores_sync_header() {
     let mut sector = mode1_sector_with_ecc();
-    // ECC is still valid, but a cleared sync header means it is not a
-    // reconstructable sector.
+    // ECC covers only the bytes after the sync header, so clearing it leaves
+    // the ECC valid; callers check the header separately.
     sector[1] = 0;
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_clear_sync_and_ecc_zeroes_only_sync_and_ecc() {
+fn cd_sector_clear_ecc_zeroes_only_ecc() {
     let mut sector = mode1_sector_with_ecc();
-    let data_before = sector[12..0x81c].to_vec();
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut sector);
-    assert!(sector[..12].iter().all(|byte| *byte == 0));
+    let before = sector;
+    (&mut sector).clear_ecc();
     assert!(sector[0x81c..].iter().all(|byte| *byte == 0));
-    // The user-data region between the sync header and the ECC block is left
-    // intact so the sector can be rebuilt on extract.
-    assert_eq!(&sector[12..0x81c], data_before.as_slice());
-}
-
-#[test]
-fn cd_sector_ecc_helpers_reject_wrong_length() {
-    let mut short = vec![0_u8; 100];
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&short));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &short
-    ));
-    // Generation and clearing are no-ops at the wrong length.
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
+    // Sync header and user data are left intact.
+    assert_eq!(&sector[..0x81c], &before[..0x81c]);
+    assert!(!verify_ecc(&mut sector));
 }
 
 // --- V5 compressed-map CRC and integer writers -----------------------------
 
-#[test]
-fn crc16_ibm3740_matches_reference_check_value() {
-    // The canonical CRC-16/CCITT-FALSE check value for "123456789".
-    assert_eq!(ChdContainerHandler::crc16_ibm3740(b"123456789"), 0x29B1);
-    // No bytes leaves the 0xFFFF initial register untouched.
-    assert_eq!(ChdContainerHandler::crc16_ibm3740(&[]), 0xFFFF);
-}
-
-#[test]
-fn write_u24_be_encodes_and_bounds_check() {
-    let mut buf = [0_u8; 3];
-    ChdContainerHandler::write_u24_be(&mut buf, 0x12_3456).expect("in range");
-    assert_eq!(buf, [0x12, 0x34, 0x56]);
-
-    assert!(ChdContainerHandler::write_u24_be(&mut buf, 0x0100_0000).is_err());
-    let mut short = [0_u8; 2];
-    assert!(ChdContainerHandler::write_u24_be(&mut short, 0).is_err());
-}
-
-#[test]
-fn write_u48_be_encodes_and_bounds_check() {
-    let mut buf = [0_u8; 6];
-    ChdContainerHandler::write_u48_be(&mut buf, 0x1234_5678_9ABC).expect("in range");
-    assert_eq!(buf, [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]);
-
-    assert!(ChdContainerHandler::write_u48_be(&mut buf, 0x0001_0000_0000_0000).is_err());
-    let mut short = [0_u8; 5];
-    assert!(ChdContainerHandler::write_u48_be(&mut short, 0).is_err());
-}
-
-#[test]
-fn bits_for_value_counts_significant_bits() {
-    assert_eq!(ChdContainerHandler::bits_for_value(0), 0);
-    assert_eq!(ChdContainerHandler::bits_for_value(1), 1);
-    assert_eq!(ChdContainerHandler::bits_for_value(2), 2);
-    assert_eq!(ChdContainerHandler::bits_for_value(3), 2);
-    assert_eq!(ChdContainerHandler::bits_for_value(255), 8);
-    assert_eq!(ChdContainerHandler::bits_for_value(256), 9);
-    assert_eq!(ChdContainerHandler::bits_for_value(0x00FF_FFFF), 24);
-}
-
 // --- V5 compressed-map huffman / RLE ---------------------------------------
-
-#[test]
-fn canonical_huffman_codes_assigns_sequential_codes() {
-    let mut lengths = [0_u8; 16];
-    lengths[0] = 1;
-    lengths[1] = 1;
-    let codes = ChdContainerHandler::canonical_huffman_codes(&lengths).expect("valid lengths");
-    assert_eq!(codes[0], Some((0, 1)));
-    assert_eq!(codes[1], Some((1, 1)));
-
-    let mut four = [0_u8; 16];
-    four[..4].fill(2);
-    let codes = ChdContainerHandler::canonical_huffman_codes(&four).expect("valid lengths");
-    assert_eq!(codes[0], Some((0, 2)));
-    assert_eq!(codes[1], Some((1, 2)));
-    assert_eq!(codes[2], Some((2, 2)));
-    assert_eq!(codes[3], Some((3, 2)));
-}
-
-#[test]
-fn canonical_huffman_codes_rejects_unbalanced_distribution() {
-    // A single symbol with a 2-bit length leaves the code space incomplete.
-    let mut lengths = [0_u8; 16];
-    lengths[0] = 2;
-    assert!(ChdContainerHandler::canonical_huffman_codes(&lengths).is_err());
-}
-
-#[test]
-fn rle_encode_map_symbols_collapses_runs() {
-    // Distinct symbols pass through untouched.
-    assert_eq!(
-        ChdContainerHandler::rle_encode_map_symbols(&[1, 2, 3]),
-        vec![1, 2, 3]
-    );
-    // A run shorter than 3 is not worth encoding.
-    assert_eq!(
-        ChdContainerHandler::rle_encode_map_symbols(&[9, 9]),
-        vec![9, 9]
-    );
-    // A literal seeds the run, then the remaining 3 collapse into a small RLE.
-    assert_eq!(
-        ChdContainerHandler::rle_encode_map_symbols(&[9, 9, 9, 9]),
-        vec![9, ChdContainerHandler::CHD_V5_MAP_TYPE_RLE_SMALL, 0]
-    );
-    // Ten identical symbols: literal + small RLE of the remaining nine.
-    assert_eq!(
-        ChdContainerHandler::rle_encode_map_symbols(&[4; 10]),
-        vec![4, ChdContainerHandler::CHD_V5_MAP_TYPE_RLE_SMALL, 6]
-    );
-    // Twenty-five identical symbols spill past the small-run ceiling into a
-    // large RLE: literal + large-RLE marker + nibble-split length (24 - 19 = 5).
-    assert_eq!(
-        ChdContainerHandler::rle_encode_map_symbols(&[4; 25]),
-        vec![4, ChdContainerHandler::CHD_V5_MAP_TYPE_RLE_LARGE, 0, 5]
-    );
-}
-
-#[test]
-fn map_symbol_bit_lengths_produce_decodable_trees() {
-    // A single symbol still needs a 1-bit length.
-    let single = ChdContainerHandler::map_symbol_bit_lengths(&[0, 0, 0]).expect("single symbol");
-    assert_eq!(single[0], 1);
-    assert!(single[1..].iter().all(|length| *length == 0));
-    assert!(ChdContainerHandler::canonical_huffman_codes(&single).is_ok());
-
-    // Two symbols share a 1-bit length each and remain canonical.
-    let pair = ChdContainerHandler::map_symbol_bit_lengths(&[0, 0, 0, 1]).expect("two symbols");
-    assert_eq!(pair[0], 1);
-    assert_eq!(pair[1], 1);
-    assert!(ChdContainerHandler::canonical_huffman_codes(&pair).is_ok());
-}
-
-#[test]
-fn fixed_map_symbol_bit_lengths_match_table() {
-    let lengths = ChdContainerHandler::fixed_map_symbol_bit_lengths_for_max_type(0).unwrap();
-    assert_eq!(lengths[0], 1);
-    assert!(lengths[1..].iter().all(|length| *length == 0));
-
-    let lengths = ChdContainerHandler::fixed_map_symbol_bit_lengths_for_max_type(2).unwrap();
-    assert_eq!(&lengths[..3], &[1, 2, 2]);
-
-    let lengths = ChdContainerHandler::fixed_map_symbol_bit_lengths_for_max_type(5).unwrap();
-    assert!(lengths[..8].iter().all(|length| *length == 3));
-
-    let lengths = ChdContainerHandler::fixed_map_symbol_bit_lengths_for_max_type(7).unwrap();
-    assert!(lengths.iter().all(|length| *length == 4));
-
-    assert!(ChdContainerHandler::fixed_map_symbol_bit_lengths_for_max_type(16).is_err());
-}
-
-#[test]
-fn encode_v5_compressed_map_smoke() {
-    // A small, self-consistent map: one compressed hunk plus a self-copy.
-    let entries = [
-        RustCompressedHunkEntry {
-            compression_type: 0,
-            offset: 124,
-            length: 512,
-            crc16: 0xABCD,
-        },
-        RustCompressedHunkEntry {
-            compression_type: ChdContainerHandler::CHD_V5_MAP_TYPE_SELF,
-            offset: 0,
-            length: 0,
-            crc16: 0,
-        },
-    ];
-    let (bytes, map_crc, length_bits, _self_bits, parent_bits, first_offset) =
-        ChdContainerHandler::encode_v5_compressed_map(&entries, 4096, 4096).expect("encode map");
-    assert!(!bytes.is_empty());
-    assert_ne!(map_crc, 0);
-    // 512 needs 10 bits; no parent entries means zero parent bits.
-    assert_eq!(length_bits, 10);
-    assert_eq!(parent_bits, 0);
-    assert_eq!(first_offset, 124);
-}
 
 // --- Codec routing edge branches -------------------------------------------
 
@@ -451,10 +301,10 @@ fn msf_parsing_rejects_minute_overflow() {
 #[test]
 fn parse_wave_file_rejects_oversized_fmt_chunk() {
     let handler = ChdContainerHandler;
-    let path = std::env::temp_dir().join(format!(
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-unit-{}-oversized-fmt.wav",
         std::process::id()
-    ));
+    )));
 
     // A valid RIFF/WAVE header followed by a fmt chunk that declares a ~4 GiB
     // length. The parser must reject it before allocating a read buffer.
@@ -541,137 +391,7 @@ fn extract_name_uses_media_specific_extension() {
 
 // --- Codec encoders (huffman / avhuff / pcm) -------------------------------
 
-#[test]
-fn pcm_i16_interleaved_to_samples_respects_byte_order() {
-    let handler = ChdContainerHandler;
-    let le = handler
-        .pcm_i16_interleaved_to_samples(
-            &[0x34, 0x12, 0x78, 0x56],
-            FlacSampleByteOrder::LittleEndian,
-        )
-        .unwrap();
-    assert_eq!(le, vec![0x1234, 0x5678]);
-
-    let be = handler
-        .pcm_i16_interleaved_to_samples(&[0x12, 0x34, 0x56, 0x78], FlacSampleByteOrder::BigEndian)
-        .unwrap();
-    assert_eq!(be, vec![0x1234, 0x5678]);
-
-    // Sign extension into i32 is preserved.
-    let signed = handler
-        .pcm_i16_interleaved_to_samples(
-            &[0x00, 0x80, 0xFF, 0x7F],
-            FlacSampleByteOrder::LittleEndian,
-        )
-        .unwrap();
-    assert_eq!(signed, vec![-32768, 32767]);
-
-    // Stereo 16-bit PCM must be a multiple of four bytes.
-    assert!(
-        handler
-            .pcm_i16_interleaved_to_samples(&[0x00, 0x01], FlacSampleByteOrder::LittleEndian)
-            .is_err()
-    );
-}
-
-#[test]
-fn canonical_codes_from_lengths_assigns_and_validates() {
-    let handler = ChdContainerHandler;
-    let codes = handler.canonical_codes_from_lengths(&[1, 1]).unwrap();
-    assert_eq!(codes[0], Some((0, 1)));
-    assert_eq!(codes[1], Some((1, 1)));
-
-    let codes = handler.canonical_codes_from_lengths(&[2, 2, 2, 2]).unwrap();
-    assert_eq!(codes[3], Some((3, 2)));
-
-    // A length beyond the 32-bit code ceiling is rejected.
-    assert!(handler.canonical_codes_from_lengths(&[33]).is_err());
-    // A single 2-bit symbol leaves the code space incomplete.
-    assert!(handler.canonical_codes_from_lengths(&[2]).is_err());
-}
-
-#[test]
-fn write_huffman_tree_rle_lengths_validates_configuration() {
-    let handler = ChdContainerHandler;
-
-    let mut writer = MsbBitWriter::new();
-    assert!(
-        handler
-            .write_huffman_tree_rle_lengths(&mut writer, &[1, 1, 1], 0)
-            .is_err()
-    );
-
-    let mut writer = MsbBitWriter::new();
-    assert!(
-        handler
-            .write_huffman_tree_rle_lengths(&mut writer, &[1], 9)
-            .is_err()
-    );
-
-    // A symbol value that exceeds the rle_bits range is rejected.
-    let mut writer = MsbBitWriter::new();
-    assert!(
-        handler
-            .write_huffman_tree_rle_lengths(&mut writer, &[5], 2)
-            .is_err()
-    );
-
-    // A valid run emits bytes.
-    let mut writer = MsbBitWriter::new();
-    handler
-        .write_huffman_tree_rle_lengths(&mut writer, &[2, 2, 2, 2], 4)
-        .unwrap();
-    assert!(!writer.finish().is_empty());
-}
-
-#[test]
-fn encode_huffman_identity_payload_emits_fixed_tree_header() {
-    let handler = ChdContainerHandler;
-    // The 28-bit small/main tree header packs into four bytes for an empty hunk.
-    let header = handler.encode_huffman_identity_payload(&[]);
-    assert_eq!(header, vec![0x3C, 0x1F, 0x7F, 0x60]);
-
-    // Each input byte appends eight bits to the identity stream.
-    let one = handler.encode_huffman_identity_payload(&[0xAB]);
-    assert_eq!(one.len(), header.len() + 1);
-    // The header is deterministic and the payload distinguishes inputs.
-    assert_ne!(
-        handler.encode_huffman_identity_payload(&[0x00]),
-        handler.encode_huffman_identity_payload(&[0x01])
-    );
-}
-
 // --- V5 header / metadata builders -----------------------------------------
-
-#[test]
-fn build_chd_v5_header_lays_out_fixed_fields() {
-    let handler = ChdContainerHandler;
-    let codecs = [
-        ChdCodec::LZMA,
-        ChdCodec::ZLIB,
-        ChdCodec::NONE,
-        ChdCodec::NONE,
-    ];
-    let parent = [0x11_u8; 20];
-    let header = handler.build_chd_v5_header(0x1234, 0x5678, 4096, 2048, codecs, Some(parent));
-
-    assert_eq!(&header[0..8], b"MComprHD");
-    assert_eq!(&header[8..12], &124_u32.to_be_bytes());
-    assert_eq!(&header[12..16], &5_u32.to_be_bytes());
-    // Codec tags are stored as their fourcc bytes in order.
-    assert_eq!(&header[16..20], b"lzma");
-    assert_eq!(&header[20..24], b"zlib");
-    assert_eq!(&header[24..28], &[0, 0, 0, 0]);
-    assert_eq!(&header[32..40], &0x1234_u64.to_be_bytes());
-    assert_eq!(&header[40..48], &0x5678_u64.to_be_bytes());
-    assert_eq!(&header[56..60], &4096_u32.to_be_bytes());
-    assert_eq!(&header[60..64], &2048_u32.to_be_bytes());
-    assert_eq!(&header[104..124], &parent);
-
-    // Without a parent the parent-sha1 slot stays zeroed.
-    let no_parent = handler.build_chd_v5_header(0, 0, 4096, 2048, codecs, None);
-    assert!(no_parent[104..124].iter().all(|byte| *byte == 0));
-}
 
 fn v5_header_for_map_test(
     logical_bytes: u64,
@@ -679,12 +399,18 @@ fn v5_header_for_map_test(
     hunk_bytes: u32,
     compressed: bool,
 ) -> [u8; 124] {
-    let handler = ChdContainerHandler;
-    let mut codecs = [ChdCodec::NONE; CHD_MAX_COMPRESSORS];
+    let mut header = [0_u8; 124];
+    header[0..8].copy_from_slice(&CHD_SIGNATURE);
+    header[8..12].copy_from_slice(&124_u32.to_be_bytes());
+    header[12..16].copy_from_slice(&5_u32.to_be_bytes());
     if compressed {
-        codecs[0] = ChdCodec::ZLIB;
+        header[16..20].copy_from_slice(&ChdCodec::ZLIB.raw().to_be_bytes());
     }
-    handler.build_chd_v5_header(logical_bytes, map_offset, hunk_bytes, 1, codecs, None)
+    header[32..40].copy_from_slice(&logical_bytes.to_be_bytes());
+    header[40..48].copy_from_slice(&map_offset.to_be_bytes());
+    header[56..60].copy_from_slice(&hunk_bytes.to_be_bytes());
+    header[60..64].copy_from_slice(&1_u32.to_be_bytes());
+    header
 }
 
 #[test]
@@ -828,91 +554,6 @@ fn rust_metadata_entries_per_media_kind() {
     assert_eq!(hd[0].data.last(), Some(&0));
 }
 
-#[test]
-fn compute_overall_sha1_hashes_and_orders_metadata() {
-    let raw_sha1 = [0xAB_u8; 20];
-
-    // With no metadata the overall digest is just sha1(raw_sha1).
-    let mut expected = Sha1::new();
-    expected.update(raw_sha1);
-    let mut expected_bytes = [0_u8; 20];
-    expected_bytes.copy_from_slice(&expected.finalize());
-    assert_eq!(
-        ChdContainerHandler::compute_overall_sha1(&raw_sha1, &[]),
-        expected_bytes
-    );
-
-    let entry_a = RustMetadataEntry {
-        tag: 0x41414141,
-        flags: 0x01,
-        data: vec![1, 2, 3],
-    };
-    let entry_b = RustMetadataEntry {
-        tag: 0x42424242,
-        flags: 0x01,
-        data: vec![4, 5, 6],
-    };
-    // Metadata hashes are sorted, so input order does not matter.
-    assert_eq!(
-        ChdContainerHandler::compute_overall_sha1(&raw_sha1, &[entry_a.clone(), entry_b.clone()]),
-        ChdContainerHandler::compute_overall_sha1(&raw_sha1, &[entry_b, entry_a])
-    );
-
-    // Entries without the checksum flag are excluded from the digest.
-    let unchecked = RustMetadataEntry {
-        tag: 0x43434343,
-        flags: 0x00,
-        data: vec![9, 9, 9],
-    };
-    assert_eq!(
-        ChdContainerHandler::compute_overall_sha1(&raw_sha1, &[unchecked]),
-        expected_bytes
-    );
-}
-
-#[test]
-fn patch_chd_header_writes_big_endian_and_restores_cursor() {
-    let handler = ChdContainerHandler;
-    let path = std::env::temp_dir().join(format!(
-        "rw-chd-unit-{}-patch-header.bin",
-        std::process::id()
-    ));
-    let mut file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&path)
-        .unwrap();
-    file.write_all(&[0_u8; 124]).unwrap();
-    // Park the cursor away from the header field being patched.
-    file.seek(SeekFrom::Start(100)).unwrap();
-
-    handler
-        .patch_chd_header_u64(&mut file, &path, 56, 0x1122_3344_5566_7788, "test")
-        .unwrap();
-    // The write cursor is restored to where it was before the patch.
-    assert_eq!(file.stream_position().unwrap(), 100);
-
-    file.seek(SeekFrom::Start(56)).unwrap();
-    let mut buf = [0_u8; 8];
-    file.read_exact(&mut buf).unwrap();
-    assert_eq!(buf, 0x1122_3344_5566_7788_u64.to_be_bytes());
-
-    // A raw byte patch lands at its offset too.
-    let sha1 = [0x5A_u8; 20];
-    handler
-        .patch_chd_header_bytes(&mut file, &path, 64, &sha1, "raw sha1")
-        .unwrap();
-    file.seek(SeekFrom::Start(64)).unwrap();
-    let mut sha1_buf = [0_u8; 20];
-    file.read_exact(&mut sha1_buf).unwrap();
-    assert_eq!(sha1_buf, sha1);
-
-    drop(file);
-    let _ = std::fs::remove_file(&path);
-}
-
 // --- Inference helpers (pure size / layout heuristics) ---------------------
 
 #[test]
@@ -996,28 +637,17 @@ fn unit_bytes_per_create_kind() {
 }
 
 #[test]
-fn hunk_bytes_scales_disc_hunks_with_frame_count() {
+fn hunk_bytes_uses_chdman_hunk_sizes() {
     let handler = ChdContainerHandler;
     // Non-disc media uses the default hunk size.
-    assert_eq!(
-        handler.hunk_bytes(&ChdCreateKind::Raw, 100_000, ChdCodec::NONE),
-        4096
-    );
+    assert_eq!(handler.hunk_bytes(&ChdCreateKind::Raw), 4096);
     let disc = ChdCreateKind::Disc(DiscLayout {
         kind: DiscKind::CdRom,
         tracks: Vec::new(),
     });
-    // Uncompressed disc media uses the full 8-frame hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 100_000, ChdCodec::NONE), 19584);
-    // Four frames compressed: ceil(4/2)=2 frames per hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 2448 * 4, ChdCodec::CD_LZMA), 4896);
-    // A single frame falls back to the full hunk.
-    assert_eq!(handler.hunk_bytes(&disc, 2448, ChdCodec::CD_LZMA), 19584);
-    // Large inputs cap at eight frames per hunk.
-    assert_eq!(
-        handler.hunk_bytes(&disc, 2448 * 100, ChdCodec::CD_LZMA),
-        19584
-    );
+    // chdman 0.289 `createcd` always writes 8-frame hunks, even for a disc
+    // shorter than one hunk (verified for 1..16 frames with cdlz).
+    assert_eq!(handler.hunk_bytes(&disc), 19584);
 }
 
 #[test]
@@ -1300,6 +930,128 @@ fn has_known_volume_boot_sector_recognizes_each_filesystem() {
     assert!(!handler.has_known_volume_boot_sector(&signed_sector(), HD_VOLUME_BYTES));
 }
 
+/// Runs the shared cases on the same prefix the webapp used to check itself.
+#[test]
+fn hard_disk_headers_match_the_shared_cases() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/chd-hard-disk-headers.json"))
+            .expect("hard-disk header cases");
+    let handler = ChdContainerHandler;
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
+        "rw-chd-unit-{}-hard-disk-header.img",
+        std::process::id()
+    )));
+    for case in cases.as_array().expect("cases") {
+        let name = case["name"].as_str().expect("name");
+        let size = case["size"].as_u64().expect("size");
+        let mut prefix = vec![0_u8; 1024];
+        for write in case["writes"].as_array().expect("writes") {
+            let at = usize::try_from(write["at"].as_u64().expect("at")).expect("offset");
+            let hex = write["hex"].as_str().expect("hex");
+            for (index, pair) in hex.as_bytes().chunks(2).enumerate() {
+                let pair = std::str::from_utf8(pair).expect("ascii hex");
+                prefix[at + index] = u8::from_str_radix(pair, 16).expect("hex byte");
+            }
+        }
+        // The webapp reads at most the first two sectors of the image.
+        prefix.truncate(usize::try_from(size.min(1024)).expect("prefix length"));
+        std::fs::write(&path, &prefix).expect("write prefix");
+        assert_eq!(
+            handler.should_auto_infer_hard_disk(&path, size),
+            case["hardDisk"].as_bool().expect("hardDisk"),
+            "{name}"
+        );
+    }
+}
+
+/// Writes `bytes` to a scratch file named `name` and returns the auto-inferred create mode.
+fn auto_create_mode(name: &str, bytes: &[u8]) -> Option<&'static str> {
+    let path = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-auto-{name}", std::process::id())),
+    );
+    std::fs::write(&path, bytes).expect("write image");
+    ChdContainerHandler.infer_auto_create_mode_label(&path)
+}
+
+fn cooked_image(sectors: usize, descriptors: &[(usize, u8, &[u8])]) -> Vec<u8> {
+    let mut bytes = vec![0_u8; sectors * 2048];
+    for (sector, kind, id) in descriptors {
+        bytes[sector * 2048] = *kind;
+        bytes[sector * 2048 + 1..sector * 2048 + 1 + id.len()].copy_from_slice(id);
+    }
+    bytes
+}
+
+#[test]
+fn auto_create_mode_label_follows_native_cooked_image_rules() {
+    let bridge = cooked_image(
+        40,
+        &[
+            (16, 1, b"CD001"),
+            (17, 255, b"CD001"),
+            (18, 0, b"BEA01"),
+            (19, 0, b"NSR02"),
+        ],
+    );
+    for name in ["bridge.bin", "bridge.iso", "bridge"] {
+        assert_eq!(auto_create_mode(name, &bridge), Some("dvd"), "{name}");
+    }
+    let udf = cooked_image(40, &[(16, 0, b"BEA01"), (17, 0, b"NSR03")]);
+    assert_eq!(auto_create_mode("udf.bin", &udf), Some("dvd"));
+    let plain = cooked_image(
+        40,
+        &[(16, 1, b"CD001"), (17, 0, b"BEA01"), (18, 1, b"NSR02")],
+    );
+    assert_eq!(auto_create_mode("plain.bin", &plain), Some("cd"));
+    assert_eq!(auto_create_mode("plain.iso", &plain), Some("cd"));
+    // UDF announced past the scanned volume recognition window is not UDF evidence.
+    let late = cooked_image(40, &[(16, 1, b"CD001"), (32, 0, b"NSR02")]);
+    assert_eq!(auto_create_mode("late.bin", &late), Some("cd"));
+    // A ragged tail is not whole sectors, so there is no CD evidence.
+    let mut ragged = bridge.clone();
+    ragged.push(0);
+    assert_eq!(auto_create_mode("ragged.bin", &ragged), Some("raw"));
+}
+
+#[test]
+fn auto_create_mode_label_recognizes_raw_cd_and_unrecognized_bins() {
+    let mut raw = vec![0_u8; 40 * 2352];
+    raw[1..11].fill(255);
+    assert_eq!(auto_create_mode("raw.bin", &raw), Some("cd"));
+    for size in [13_usize, 4096, 32768, 2352, 2352 * 20] {
+        assert_eq!(
+            auto_create_mode("blank.bin", &vec![0_u8; size]),
+            Some("raw"),
+            "{size}-byte blank bin"
+        );
+    }
+    // A cooked ISO without an ISO9660 descriptor is still a CD-sized single track.
+    assert_eq!(auto_create_mode("disc.iso", &vec![0_u8; 2048]), Some("cd"));
+}
+
+#[test]
+fn auto_create_mode_label_prefers_hard_disk_headers_over_cd_evidence() {
+    let mut bytes = vec![0_u8; 204_800];
+    bytes[32_769..32_774].copy_from_slice(b"CD001");
+    // A boot signature alone is not hard-disk evidence.
+    bytes[510] = 0x55;
+    bytes[511] = 0xaa;
+    assert_eq!(auto_create_mode("hybrid.bin", &bytes), Some("cd"));
+    // One valid MBR partition entry makes it a hard disk.
+    bytes[450] = 0x83;
+    bytes[454..458].copy_from_slice(&1_u32.to_le_bytes());
+    bytes[458..462].copy_from_slice(&399_u32.to_le_bytes());
+    for name in ["hybrid.bin", "hybrid"] {
+        assert_eq!(auto_create_mode(name, &bytes), Some("hd"), "{name}");
+    }
+}
+
+#[test]
+fn auto_create_mode_label_skips_other_extensions() {
+    assert_eq!(auto_create_mode("game.nes", &[0_u8; 4096]), None);
+    assert_eq!(auto_create_mode("game.cue", &[0_u8; 4096]), None);
+}
+
 #[test]
 fn should_auto_infer_single_track_cd_keys_on_extension() {
     let handler = ChdContainerHandler;
@@ -1347,6 +1099,28 @@ fn parse_create_mode_override_maps_known_modes() {
     // A format lacking the `chd-` prefix and an unknown mode both error.
     assert!(handler.parse_create_mode_override("zip").is_err());
     assert!(handler.parse_create_mode_override("chd-xyz").is_err());
+}
+
+#[test]
+fn create_mode_table_entries_parse_and_resolve_to_canonical_modes() {
+    let handler = ChdContainerHandler;
+    for (mode, canonical) in CHD_CREATE_MODES {
+        let parsed = handler
+            .parse_create_mode_override(&format!("chd-{mode}"))
+            .unwrap_or_else(|error| panic!("chd-{mode} must parse: {error}"));
+        let canonical_parsed = handler
+            .parse_create_mode_override(&format!("chd-{canonical}"))
+            .expect("canonical mode parses");
+        assert!(parsed.is_some(), "chd-{mode}");
+        assert_eq!(
+            parsed, canonical_parsed,
+            "chd-{mode} aliases chd-{canonical}"
+        );
+        assert!(
+            CHD_CREATE_MODES.contains(&(*canonical, *canonical)),
+            "{canonical} must map to itself"
+        );
+    }
 }
 
 // --- Create-kind / media mapping -------------------------------------------
@@ -1495,6 +1269,9 @@ fn cd_track(number: u32, mode: DiscTrackMode, frames: u32) -> DiscTrack {
         pregap_has_data: false,
         has_subcode: false,
         pad_frames: 0,
+        align_pad_frames: 0,
+        pgtype_track_mode: false,
+        tail: None,
         swap_audio_on_read: false,
     }
 }
@@ -1541,13 +1318,13 @@ fn apply_cd_track_padding_rounds_frames_to_multiple() {
         (8, 0)
     );
 
-    // GD-ROM carries explicit pad metadata, so the helper is a no-op there.
+    // GD-ROM tracks are aligned the same way (chdman pads every track).
     let mut gd = DiscLayout {
         kind: DiscKind::GdRom,
         tracks: vec![cd_track(1, DiscTrackMode::Mode1Raw, 10)],
     };
     gd.apply_cd_track_padding();
-    assert_eq!((gd.tracks[0].frames, gd.tracks[0].pad_frames), (10, 0));
+    assert_eq!((gd.tracks[0].frames, gd.tracks[0].pad_frames), (12, 2));
 }
 
 #[test]
@@ -1568,11 +1345,6 @@ fn disc_track_mode_label_tables_are_exhaustive() {
         "MODE2_FORM_MIX"
     );
 
-    // Raw modes collapse to their cooked label inside pregap metadata.
-    assert_eq!(DiscTrackMode::Mode1Raw.pregap_metadata_label(), "MODE1");
-    assert_eq!(DiscTrackMode::Mode2Raw.pregap_metadata_label(), "MODE2");
-    assert_eq!(DiscTrackMode::Mode1.pregap_metadata_label(), "MODE1");
-
     assert_eq!(DiscTrackMode::Mode1.data_bytes(), 2048);
     assert_eq!(DiscTrackMode::Mode2.data_bytes(), 2336);
     assert_eq!(DiscTrackMode::Mode2Form2.data_bytes(), 2324);
@@ -1580,22 +1352,21 @@ fn disc_track_mode_label_tables_are_exhaustive() {
 }
 
 #[test]
-fn gdi_track_descriptor_supports_only_gdrom_modes() {
-    assert_eq!(
-        DiscTrackMode::Mode1Raw.gdi_track_descriptor().unwrap(),
-        (4, 2352)
-    );
-    assert_eq!(
-        DiscTrackMode::Mode1.gdi_track_descriptor().unwrap(),
-        (4, 2048)
-    );
-    assert_eq!(
-        DiscTrackMode::Audio.gdi_track_descriptor().unwrap(),
-        (0, 2352)
-    );
-    // GD-ROM output rejects the Mode2 family.
-    assert!(DiscTrackMode::Mode2.gdi_track_descriptor().is_err());
-    assert!(DiscTrackMode::Mode2Form1.gdi_track_descriptor().is_err());
+fn gdi_track_descriptor_matches_chdman_extractcd() {
+    // chdman writes track type 0 for audio and 4 for every other track type,
+    // with the track's own data size.
+    for (mode, expected) in [
+        (DiscTrackMode::Mode1Raw, (4, 2352)),
+        (DiscTrackMode::Mode1, (4, 2048)),
+        (DiscTrackMode::Audio, (0, 2352)),
+        (DiscTrackMode::Mode2Raw, (4, 2352)),
+        (DiscTrackMode::Mode2, (4, 2336)),
+        (DiscTrackMode::Mode2Form1, (4, 2048)),
+        (DiscTrackMode::Mode2Form2, (4, 2324)),
+        (DiscTrackMode::Mode2FormMix, (4, 2336)),
+    ] {
+        assert_eq!(mode.gdi_track_descriptor(), expected, "{mode:?}");
+    }
 }
 
 #[test]
@@ -1618,36 +1389,6 @@ fn swap_audio_bytes_only_swaps_audio_tracks() {
 // --- MSB bit writer + token parsing ----------------------------------------
 
 #[test]
-fn msb_bit_writer_packs_most_significant_first() {
-    // Whole bytes pass straight through in order.
-    let mut writer = MsbBitWriter::new();
-    writer.write_bits(0xAB, 8);
-    writer.write_bits(0xCD, 8);
-    assert_eq!(writer.finish(), vec![0xAB, 0xCD]);
-
-    // Sub-byte writes land in the high bits and a zero-width write is a no-op.
-    let mut partial = MsbBitWriter::new();
-    partial.write_bits(0b110, 3);
-    partial.write_bits(0, 0);
-    partial.align_to_byte();
-    assert_eq!(partial.finish(), vec![0b1100_0000]);
-
-    // Aligning an already byte-aligned writer adds nothing.
-    let mut aligned = MsbBitWriter::new();
-    aligned.write_bits(0xFF, 8);
-    aligned.align_to_byte();
-    assert_eq!(aligned.finish(), vec![0xFF]);
-
-    // Bits spanning a byte boundary split across two bytes.
-    let mut spanning = MsbBitWriter::new();
-    spanning.write_bits(0b1111, 4);
-    spanning.write_bits(0b1111, 4);
-    spanning.write_bits(0b1, 1);
-    spanning.align_to_byte();
-    assert_eq!(spanning.finish(), vec![0xFF, 0b1000_0000]);
-}
-
-#[test]
 fn split_token_handles_quotes_and_whitespace() {
     assert_eq!(split_token("hello world"), Some(("hello", " world")));
     // Leading whitespace is trimmed before the split.
@@ -1666,112 +1407,6 @@ fn split_token_handles_quotes_and_whitespace() {
 
 // --- FLAC config + avhuff frame encoders -----------------------------------
 
-#[test]
-fn build_flac_encoder_config_maps_levels() {
-    let handler = ChdContainerHandler;
-
-    // Non-positive levels return the library default untouched.
-    let default_lpc_order = flacenc::config::Encoder::default()
-        .subframe_coding
-        .qlpc
-        .lpc_order;
-    let zero = handler.build_flac_encoder_config(0);
-    assert_eq!(zero.subframe_coding.qlpc.lpc_order, default_lpc_order);
-    let negative = handler.build_flac_encoder_config(-5);
-    assert_eq!(negative.subframe_coding.qlpc.lpc_order, default_lpc_order);
-
-    // Level 1 is the fixed-only, no-LPC tier.
-    let level1 = handler.build_flac_encoder_config(1);
-    assert!(!level1.stereo_coding.use_midside);
-    assert!(!level1.subframe_coding.use_lpc);
-    assert_eq!(level1.subframe_coding.fixed.max_order, 1);
-    assert_eq!(level1.subframe_coding.qlpc.lpc_order, 6);
-    assert_eq!(level1.subframe_coding.prc.max_parameter, 9);
-
-    // Level 3 turns on mid-side and LPC.
-    let level3 = handler.build_flac_encoder_config(3);
-    assert!(level3.stereo_coding.use_midside);
-    assert!(level3.subframe_coding.use_lpc);
-    assert_eq!(level3.subframe_coding.qlpc.lpc_order, 8);
-
-    // Levels above the maximum clamp to the level-9 mapping.
-    let level9 = handler.build_flac_encoder_config(9);
-    let clamped = handler.build_flac_encoder_config(50);
-    assert_eq!(level9.subframe_coding.qlpc.lpc_order, 24);
-    assert_eq!(
-        clamped.subframe_coding.qlpc.lpc_order,
-        level9.subframe_coding.qlpc.lpc_order
-    );
-    assert_eq!(
-        clamped.subframe_coding.prc.max_parameter,
-        level9.subframe_coding.prc.max_parameter
-    );
-}
-
-#[test]
-fn encode_avhuff_video_payload_validates_dimensions() {
-    let handler = ChdContainerHandler;
-
-    // A zero dimension yields the single-byte "no video" marker.
-    assert_eq!(
-        handler.encode_avhuff_video_payload(0, 4, &[]).unwrap(),
-        vec![0x80]
-    );
-    assert_eq!(
-        handler.encode_avhuff_video_payload(4, 0, &[]).unwrap(),
-        vec![0x80]
-    );
-
-    // An odd frame width is rejected outright.
-    assert!(handler.encode_avhuff_video_payload(3, 1, &[]).is_err());
-
-    // The payload length must equal width * height * 2.
-    assert!(handler.encode_avhuff_video_payload(2, 1, &[0; 3]).is_err());
-
-    // A correctly sized frame encodes and leads with the 0x80 frame marker.
-    let encoded = handler.encode_avhuff_video_payload(2, 1, &[0; 4]).unwrap();
-    assert_eq!(encoded.first(), Some(&0x80));
-    assert!(encoded.len() > 1);
-}
-
-#[test]
-fn encode_avhuff_chav_hunk_validates_and_emits_header() {
-    let handler = ChdContainerHandler;
-
-    // Too short / wrong magic are rejected before any geometry is read.
-    assert!(handler.encode_avhuff_chav_hunk(&[0; 8]).is_err());
-    let mut bad_magic = vec![0_u8; 14];
-    bad_magic[..4].copy_from_slice(b"xxxx");
-    assert!(handler.encode_avhuff_chav_hunk(&bad_magic).is_err());
-
-    // A header whose declared sizes disagree with the payload length errors.
-    let mut mismatched = vec![0_u8; 12];
-    mismatched[..4].copy_from_slice(b"chav");
-    mismatched[5] = 1; // channels
-    mismatched[6..8].copy_from_slice(&1_u16.to_be_bytes()); // samples
-    assert!(handler.encode_avhuff_chav_hunk(&mismatched).is_err());
-
-    // A minimal valid frame: no metadata, one channel, one sample, no video.
-    // expected_len = 12 header + (1 channel * 1 sample * 2) audio = 14 bytes.
-    let mut hunk = vec![0_u8; 14];
-    hunk[..4].copy_from_slice(b"chav");
-    hunk[4] = 0; // metadata_size
-    hunk[5] = 1; // channels
-    hunk[6..8].copy_from_slice(&1_u16.to_be_bytes()); // samples
-    hunk[8..10].copy_from_slice(&0_u16.to_be_bytes()); // width
-    hunk[10..12].copy_from_slice(&0_u16.to_be_bytes()); // height
-    hunk[12..14].copy_from_slice(&[0x12, 0x34]); // single audio sample
-
-    let encoded = handler.encode_avhuff_chav_hunk(&hunk).unwrap();
-    // Header echo: metadata_size, channels, samples, width, height, tree size 0,
-    // then the per-channel byte count (2); the first sample's delta from zero is
-    // the sample itself, and the empty-video payload is the lone 0x80 marker.
-    assert_eq!(
-        encoded,
-        vec![0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0x12, 0x34, 0x80]
-    );
-}
-
 // --- Partial-output cleanup guard ------------------------------------------
 
 /// The CHD extract/create paths wrap their produced outputs in
@@ -1780,8 +1415,9 @@ fn encode_avhuff_chav_hunk_validates_and_emits_header() {
 /// so success output stays byte-identical.
 #[test]
 fn chd_output_cleanup_removes_partials_only_when_uncommitted() {
-    let dir =
-        std::env::temp_dir().join(format!("rw-chd-unit-{}-cleanup-guard", std::process::id()));
+    let dir = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-cleanup-guard", std::process::id())),
+    );
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let dropped = dir.join("dropped.bin");
@@ -1815,10 +1451,10 @@ fn chd_output_cleanup_removes_partials_only_when_uncommitted() {
 /// path before the (failing) create would have destroyed protected data.
 #[test]
 fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
-    let dir = std::env::temp_dir().join(format!(
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rw-chd-unit-{}-cleanup-no-overwrite",
         std::process::id()
-    ));
+    )));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let existing = dir.join("existing.bin");
@@ -1845,105 +1481,70 @@ fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// Deterministic incompressible bytes (xorshift64), standing in for encrypted or random sectors.
-fn incompressible_bytes(len: usize) -> Vec<u8> {
-    let mut state = 0x2545_f491_4f6c_dd1d_u64;
-    (0..len)
-        .map(|_| {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            (state >> 24) as u8
-        })
-        .collect()
-}
-
-/// A CD hunk of `frames` frames: incompressible sector bytes followed by zeroed subcode.
-fn incompressible_cd_hunk(frames: usize) -> Vec<u8> {
-    let sectors = incompressible_bytes(frames * 2352);
-    let mut hunk = Vec::with_capacity(frames * 2448);
-    for sector in sectors.chunks_exact(2352) {
-        hunk.extend_from_slice(sector);
-        hunk.extend_from_slice(&[0_u8; 96]);
+#[test]
+fn chd_raw_extract_sizes_output_before_streaming() {
+    struct OutputSizes {
+        path: PathBuf,
+        lengths: std::sync::Mutex<Vec<u64>>,
     }
-    hunk
-}
-
-#[test]
-fn chd_lzma_raw_encode_reports_a_stream_that_exceeds_its_limit() {
-    let sectors = incompressible_bytes(8 * 2352);
-    assert_eq!(
-        ChdContainerHandler::encode_lzma_raw_no_header_no_eopm(
-            &sectors,
-            9,
-            "cd lzma",
-            sectors.len()
-        )
-        .expect("encode runs"),
-        None
+    impl rom_weaver_core::ProgressSink for OutputSizes {
+        fn emit(&self, event: rom_weaver_core::ProgressEvent) {
+            if event.stage == "extract" && self.path.exists() {
+                self.lengths
+                    .lock()
+                    .unwrap()
+                    .push(fs::metadata(&self.path).unwrap().len());
+            }
+        }
+    }
+    let dir = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-sized-output", std::process::id())),
     );
-
-    let compressible = (0..8 * 2352)
-        .map(|index| (index % 211) as u8)
-        .collect::<Vec<_>>();
-    let limited = ChdContainerHandler::encode_lzma_raw_no_header_no_eopm(
-        &compressible,
-        9,
-        "cd lzma",
-        compressible.len(),
-    )
-    .expect("encode runs")
-    .expect("compressible sectors fit");
-    let bounded =
-        ChdContainerHandler::compress_lzma_raw_no_header_no_eopm(&compressible, 9, "cd lzma")
-            .expect("compressible sectors encode");
-    assert_eq!(
-        limited, bounded,
-        "the limit MUST NOT change the stream bytes"
-    );
-}
-
-#[test]
-fn chd_cd_codec_trial_skips_cdlz_for_incompressible_sectors() {
+    fs::create_dir_all(&dir).unwrap();
+    let source = vec![0x5a; 1024 * 1024 + 123];
+    let input = dir.join("input.bin");
+    let archive = dir.join("output.chd");
+    let out_dir = dir.join("extracted");
+    fs::write(&input, &source).unwrap();
     let handler = ChdContainerHandler;
-    let disc = ChdCreateKind::Disc(DiscLayout {
-        kind: DiscKind::CdRom,
-        tracks: Vec::new(),
+    handler
+        .create_raw_store_with_rust_backend_for_tests(&input, &archive)
+        .unwrap();
+    let observed = Arc::new(OutputSizes {
+        path: out_dir.join("output.bin"),
+        lengths: std::sync::Mutex::new(Vec::new()),
     });
-    let hunk = incompressible_cd_hunk(8);
-    let mut scratch = ChdCompressionScratch::default();
-
-    // cdlz alone used to fail the whole create, then (with a bigger buffer) stored an expanded
-    // cdlz payload that chdman never writes. chdman drops the codec and stores the hunk raw.
-    let (slot, payload) = handler
-        .compress_best_rust_hunk(
-            &disc,
-            ChdCodec::CD_LZMA,
-            &[(0, ChdCodec::CD_LZMA)],
-            0,
-            hunk.clone(),
-            &mut scratch,
+    let context = OperationContext::new(
+        rom_weaver_core::ThreadBudget::Fixed(1),
+        dir.join("temp"),
+        observed.clone(),
+        rom_weaver_core::CancellationToken::new(),
+    );
+    handler
+        .extract(
+            &ContainerExtractRequest {
+                source: archive,
+                selections: Vec::new(),
+                kind_filter: Default::default(),
+                out_dir,
+                split_bin: false,
+                ignore_common_files: false,
+                overwrite: false,
+                parent: None,
+                containing_archive: None,
+            },
+            &context,
         )
-        .expect("cdlz-only trial succeeds");
-    assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
-    assert_eq!(payload, hunk);
-
-    // chdman's zlib and zstd compressors fail the same way on a sector stream that does not
-    // shrink, so no CD codec carries incompressible sectors.
-    let (slot, payload) = handler
-        .compress_best_rust_hunk(
-            &disc,
-            ChdCodec::CD_LZMA,
-            &[
-                (0, ChdCodec::CD_LZMA),
-                (1, ChdCodec::CD_ZLIB),
-                (2, ChdCodec::CD_ZSTD),
-            ],
-            0,
-            hunk.clone(),
-            &mut scratch,
-        )
-        .expect("cdlz+cdzl+cdzs trial succeeds");
-    assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
-    assert_eq!(payload, hunk);
+        .unwrap();
+    assert_eq!(fs::read(&observed.path).unwrap(), source);
+    let lengths = observed.lengths.lock().unwrap();
+    assert!(
+        !lengths.is_empty(),
+        "extraction must emit progress during streaming"
+    );
+    assert!(
+        lengths.iter().all(|length| *length == source.len() as u64),
+        "known-size output must have its final length throughout streaming: {lengths:?}"
+    );
+    fs::remove_dir_all(&dir).unwrap();
 }

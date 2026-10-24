@@ -210,7 +210,7 @@ test("tracks edits, resets one or all fields, previews, and downloads", async ()
   await expect.element(page.getByText("5000 → 7000")).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Preview changes" }).click();
-  await expect.element(page.getByText(/field changes/)).toBeInTheDocument();
+  await expect.element(page.getByText(/1 field change,/)).toBeInTheDocument();
   expect(mocks.previewSaveFields).toHaveBeenCalledWith(
     expect.objectContaining({ assignments: expect.arrayContaining(["trainer.name=MAY", "trainer.money=7000"]) }),
   );

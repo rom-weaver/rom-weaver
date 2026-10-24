@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION } from "../build-version.ts";
+import { isNewRelease, type UpdatedSince } from "../last-seen-version.ts";
 import {
   type ChangelogEntry,
+  type CompareRange,
+  type ReleaseNote,
   commitGroups,
-  EntryGroups,
   fetchChangelog,
+  ReleaseDate,
+  ReleaseGroups,
   type ReleaseChangelog,
   releaseTagUrl,
   REPOSITORY_URL,
@@ -31,29 +35,48 @@ type FetchState =
 // from the log's length, which is only where the emitter capped it.
 const AHEAD_COUNT = typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? COMMITS_SINCE_VERSION : 0;
 
+// The range from the release listed just below this one; the oldest listed release has none.
+const previousNoteRange = (notes: ReleaseNote[], index: number): CompareRange | undefined => {
+  const previous = notes[index + 1];
+  const current = notes[index];
+  return previous && current ? { from: previous.version, to: current.version } : undefined;
+};
+
 const ReleaseSection = ({
+  compare,
+  date,
   defaultOpen,
   groups,
+  isNew = false,
+  locale,
   note,
   repositoryUrl,
   title,
   versionHref,
 }: {
+  compare?: CompareRange;
+  /** The release day, `YYYY-MM-DD`; unreleased sections have none. */
+  date?: string;
   defaultOpen: boolean;
   groups: ReturnType<typeof commitGroups>;
+  /** Arrived with the update this page load brought a returning visitor. */
+  isNew?: boolean;
+  locale: string;
   /** Trails the title where it says something the title does not. */
   note?: string;
   repositoryUrl: string;
   title: string;
   versionHref?: string;
 }) => (
-  <details className="rel" open={defaultOpen}>
+  <details className={isNew ? "rel is-new" : "rel"} open={defaultOpen}>
     <summary className="rel-summary">
       <h2 className="mono">{title}</h2>
+      <ReleaseDate className="rel-date" date={date} locale={locale} />
+      {isNew ? <span className="rel-new">New</span> : null}
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
     <div className="rel-body">
-      <EntryGroups groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
+      <ReleaseGroups compare={compare} groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
       {versionHref ? (
         <a className="rel-link" href={versionHref} rel="noreferrer" target="_blank">
           View release ↗
@@ -67,12 +90,15 @@ const ChangelogPanel = ({
   active,
   localizer,
   onReload,
+  since = null,
   updateReady = false,
 }: {
   active: boolean;
   localizer: Localizer;
   /** Reloads into the waiting deploy; only offered while one is waiting. */
   onReload?: () => void;
+  /** The update this page load brought; its releases stand open and are marked new. */
+  since?: UpdatedSince | null;
   updateReady?: boolean;
 }) => {
   const [state, setState] = useState<FetchState>({ status: "loading" });
@@ -131,26 +157,35 @@ const ChangelogPanel = ({
         <ReleaseSection
           defaultOpen
           groups={commitGroups(unreleased)}
+          locale={localizer.locale}
           note={`since v${APP_VERSION}`}
           repositoryUrl={repositoryUrl}
           title={`Unreleased · +${AHEAD_COUNT}`}
         />
       ) : null}
-      {notes.map((note, index) => (
-        <ReleaseSection
-          defaultOpen={!unreleased.length && index === 0}
-          groups={note.groups}
-          key={note.version}
-          note={note.version === APP_VERSION ? "running" : undefined}
-          repositoryUrl={repositoryUrl}
-          title={`v${note.version}`}
-          versionHref={releaseTagUrl(repositoryUrl, note.version)}
-        />
-      ))}
+      {notes.map((note, index) => {
+        const isNew = since !== null && isNewRelease(note.version, since);
+        return (
+          <ReleaseSection
+            compare={previousNoteRange(notes, index)}
+            date={note.date}
+            defaultOpen={isNew || (!unreleased.length && index === 0)}
+            groups={note.groups}
+            isNew={isNew}
+            key={note.version}
+            locale={localizer.locale}
+            note={note.version === APP_VERSION ? "running" : undefined}
+            repositoryUrl={repositoryUrl}
+            title={`v${note.version}`}
+            versionHref={releaseTagUrl(repositoryUrl, note.version)}
+          />
+        );
+      })}
       {earlier.length ? (
         <ReleaseSection
           defaultOpen={false}
           groups={commitGroups(earlier)}
+          locale={localizer.locale}
           note="already released"
           repositoryUrl={repositoryUrl}
           title="Earlier"

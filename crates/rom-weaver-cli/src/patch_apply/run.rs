@@ -1,30 +1,32 @@
-//! The stages of `patch apply` after bundle resolution: settle the command,
+//! The stages of `patch apply` after weave resolution: settle the command,
 //! resolve the route and sources, run the patch chain, then finalize, publish,
 //! and report the output.
 
 use super::*;
+use crate::path_access::path_basename;
+use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
-#[cfg(not(target_arch = "wasm32"))]
-use super::super::bundle_cheats::SkippedBundleCheat;
 use super::super::cheats_apply::CheatApplySummary;
+#[cfg(not(target_arch = "wasm32"))]
+use super::super::weave_cheats::SkippedWeaveCheat;
 
 /// The state shared by the stages of [`CliApp::run_patch_apply_resolved`].
 /// Each stage fills its fields in order; a field that a later stage sets holds
 /// an empty default before that stage runs.
 struct PatchApplyRun {
     args: PatchApplyCommand,
-    bundle_resolution: Option<BundleApplyResolution>,
+    weave_resolution: Option<WeaveApplyResolution>,
     original_input: PathBuf,
-    local_bundle: Option<PathBuf>,
+    local_weave: Option<PathBuf>,
     patch_step_metadata: Vec<PatchApplyStepMetadata>,
-    bundle_step_metadata_selected: bool,
+    weave_step_metadata_selected: bool,
     direct_has_step_selectors: bool,
     direct_selectors_align: bool,
     has_manual_cheats: bool,
     #[cfg(not(target_arch = "wasm32"))]
     native_cheat_selection: bool,
     #[cfg(not(target_arch = "wasm32"))]
-    bundle_cheats: Vec<BundleCheatEntry>,
+    weave_cheats: Vec<WeaveCheatEntry>,
     has_cheats: bool,
     discover_implicit_patches: bool,
     input_kind_filter: ArchiveEntryKindFilter,
@@ -47,6 +49,11 @@ struct PatchApplyRun {
     resolved_input: PathBuf,
     extracted_archives: usize,
     name_warning: Option<String>,
+    /// Labels for the weave `rom.checks` verified against the resolved ROM.
+    weave_rom_check_labels: Vec<String>,
+    /// The transformed form of the resolved ROM that the weave `rom.checks`
+    /// matched when the raw file did not, for the header and N64 decision.
+    weave_rom_form: Option<patch_plan::BaseRepresentation>,
     output: PathBuf,
     output_was_inferred: bool,
     temp_paths: Vec<PathBuf>,
@@ -55,7 +62,7 @@ struct PatchApplyRun {
     resolved_patches: Vec<ResolvedPatch>,
     extracted_patch_notes: Vec<String>,
     #[cfg(not(target_arch = "wasm32"))]
-    skipped_bundle_cheats: Vec<SkippedBundleCheat>,
+    skipped_weave_cheats: Vec<SkippedWeaveCheat>,
     cheat_summary: Option<CheatApplySummary>,
     // Set by `publish_patch_apply_output` when the run succeeds.
     terminal_output: Option<PathBuf>,
@@ -64,6 +71,24 @@ struct PatchApplyRun {
 impl PatchApplyRun {
     fn is_disc(&self) -> bool {
         self.disc_context.is_some()
+    }
+
+    fn source_paths(&self) -> Vec<PathBuf> {
+        let mut sources = vec![
+            self.original_input.clone(),
+            self.args.input.clone(),
+            self.resolved_input.clone(),
+        ];
+        sources.extend(self.local_weave.iter().cloned());
+        sources.extend(self.args.patches.iter().cloned());
+        sources.extend(self.rom_member_inputs.values().cloned());
+        for patch in &self.resolved_patches {
+            sources.extend([patch.source.clone(), patch.resolved.clone()]);
+        }
+        if let Some(disc) = &self.disc_context {
+            sources.extend(CliApp::disc_source_paths(disc));
+        }
+        sources
     }
 
     fn cheat_patch_count(&self) -> usize {
@@ -120,7 +145,7 @@ struct PatchApplyOutputPaths {
 }
 
 impl CliApp {
-    /// The body of `patch apply` after bundle resolution: `args` is a plain,
+    /// The body of `patch apply` after weave resolution: `args` is a plain,
     /// fully-merged command.
     pub(super) fn run_patch_apply_resolved(
         &self,
@@ -128,18 +153,18 @@ impl CliApp {
     ) -> OperationReport {
         let RunPatchApplyResolvedInputs {
             args,
-            bundle_resolution,
+            weave_resolution,
             original_input,
-            local_bundle,
+            local_weave,
             final_output,
             emit_steps,
             applied_cheats,
         } = inputs;
         let mut run = match self.settle_patch_apply_run(
             args,
-            bundle_resolution,
+            weave_resolution,
             original_input,
-            local_bundle,
+            local_weave,
         ) {
             Ok(run) => run,
             Err(report) => return *report,
@@ -149,6 +174,7 @@ impl CliApp {
             .and_then(|()| self.resolve_patch_apply_target(&mut run))
             .and_then(|()| self.resolve_patch_apply_rom_members(&mut run))
             .and_then(|()| self.resolve_patch_apply_patches(&mut run, applied_cheats))
+            .and_then(|()| Self::validate_patch_apply_disc_destinations(&run))
         {
             return *report;
         }
@@ -156,14 +182,33 @@ impl CliApp {
         Self::finish_patch_apply_run(report, run, final_output)
     }
 
+    fn validate_patch_apply_disc_destinations(
+        run: &PatchApplyRun,
+    ) -> std::result::Result<(), Box<OperationReport>> {
+        let Some(disc) = run
+            .disc_context
+            .as_ref()
+            .filter(|_| !run.compression_options.enabled)
+        else {
+            return Ok(());
+        };
+        Self::validate_disc_output_destinations(
+            disc,
+            &run.output,
+            &run.source_paths(),
+            run.args.force,
+        )
+        .map_err(|error| run.fail_error("validate", error))
+    }
+
     /// Split the command into the run state and settle every flag that does not
     /// need the file system.
     fn settle_patch_apply_run(
         &self,
         mut args: PatchApplyCommand,
-        bundle_resolution: Option<BundleApplyResolution>,
+        weave_resolution: Option<WeaveApplyResolution>,
         original_input: PathBuf,
-        local_bundle: Option<PathBuf>,
+        local_weave: Option<PathBuf>,
     ) -> std::result::Result<PatchApplyRun, Box<OperationReport>> {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -177,26 +222,26 @@ impl CliApp {
             std::mem::take(&mut args.patch_id),
             args.patches.len(),
         );
-        let bundle_step_metadata_selected = bundle_resolution.is_some();
-        let patch_step_metadata = bundle_resolution
+        let weave_step_metadata_selected = weave_resolution.is_some();
+        let patch_step_metadata = weave_resolution
             .as_ref()
             .map(|resolution| resolution.steps.clone())
             .unwrap_or(direct_step_metadata);
         let has_manual_cheats = !args.codes.is_empty();
         // `--cheat` resolves to records only once the input ROM is resolved, so
         // the flag - not the (still empty) record list - decides whether this
-        // run has database cheats. A bundle's recorded cheats count the same.
+        // run has database cheats. A weave's recorded cheats count the same.
         let native_cheat_selection = !args.cheat_selection.cheats.is_empty();
-        // Native-only: resolving a bundle cheat reads the local cheat database.
+        // Native-only: resolving a weave cheat reads the local cheat database.
         #[cfg(not(target_arch = "wasm32"))]
-        let bundle_cheats = bundle_resolution
+        let weave_cheats = weave_resolution
             .as_ref()
             .map(|resolution| resolution.cheats.clone())
             .unwrap_or_default();
         #[cfg(target_arch = "wasm32")]
-        let bundle_cheats: Vec<BundleCheatEntry> = Vec::new();
+        let weave_cheats: Vec<WeaveCheatEntry> = Vec::new();
         let has_database_cheats =
-            !args.cheat_records.is_empty() || native_cheat_selection || !bundle_cheats.is_empty();
+            !args.cheat_records.is_empty() || native_cheat_selection || !weave_cheats.is_empty();
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = args.patches.is_empty() && !has_cheats && !args.no_extract;
         let input_kind_filter =
@@ -256,18 +301,18 @@ impl CliApp {
         .map_err(|error| fail_error("validate", error))?;
         Ok(PatchApplyRun {
             args,
-            bundle_resolution,
+            weave_resolution,
             original_input,
-            local_bundle,
+            local_weave,
             patch_step_metadata,
-            bundle_step_metadata_selected,
+            weave_step_metadata_selected,
             direct_has_step_selectors,
             direct_selectors_align,
             has_manual_cheats,
             #[cfg(not(target_arch = "wasm32"))]
             native_cheat_selection,
             #[cfg(not(target_arch = "wasm32"))]
-            bundle_cheats,
+            weave_cheats,
             has_cheats,
             discover_implicit_patches,
             input_kind_filter,
@@ -288,6 +333,8 @@ impl CliApp {
             resolved_input: PathBuf::new(),
             extracted_archives: 0,
             name_warning: None,
+            weave_rom_check_labels: Vec::new(),
+            weave_rom_form: None,
             output: PathBuf::new(),
             output_was_inferred: false,
             temp_paths: Vec::new(),
@@ -295,7 +342,7 @@ impl CliApp {
             resolved_patches: Vec::new(),
             extracted_patch_notes: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
-            skipped_bundle_cheats: Vec::new(),
+            skipped_weave_cheats: Vec::new(),
             cheat_summary: None,
             terminal_output: None,
         })
@@ -317,13 +364,32 @@ impl CliApp {
             return Err(Box::new(report));
         }
         if run.args.dry_run {
-            let report = self.run_patch_apply_dry_run(
+            let mut report = self.run_patch_apply_dry_run(
                 &run.args.input,
                 &run.args.patches,
                 run.args.output.as_deref(),
                 &run.compression_options,
+                run.args.output_header,
                 run.probe_threads.clone(),
             );
+            // Device codes apply as one extra step beside the listed patches.
+            let listed = run.args.patches.len();
+            let planned = listed + run.cheat_patch_count();
+            if planned != listed {
+                report.label = report.label.replacen(
+                    &format!("would apply {listed} patch(es)"),
+                    &format!("would apply {planned} patch(es)"),
+                    1,
+                );
+                if let Some(patches) = report
+                    .details
+                    .as_mut()
+                    .and_then(|details| details.get_mut("patches"))
+                    .and_then(Value::as_array_mut)
+                {
+                    patches.push(json!(format!("device code: {}", run.args.codes.join(", "))));
+                }
+            }
             return Err(Box::new(report));
         }
         run.disc_context = self.resolve_patch_apply_disc(PatchApplyDiscInputs {
@@ -364,12 +430,12 @@ impl CliApp {
                     "patch apply requires at least one --patch file, --code, or RetroArch-style sidecar patch inside the input archive".to_string(),
                 ));
         }
-        // Input-check precedence is CLI > bundle > file name; any conflict
-        // names the bundle source that introduced it.
+        // Input-check precedence is CLI > weave > file name; any conflict
+        // names the weave source that introduced it.
         if let Some(report) =
             self.merge_patch_apply_requirements(MergePatchApplyRequirementsInputs {
                 ignore_checksum_validation: run.args.ignore_checksum_validation,
-                bundle_resolution: run.bundle_resolution.as_ref(),
+                weave_resolution: run.weave_resolution.as_ref(),
                 is_disc,
                 patches: &run.args.patches,
                 expected_input_checksums: &mut run.expected_input_checksums,
@@ -381,6 +447,154 @@ impl CliApp {
             return Err(Box::new(report));
         }
         Ok(())
+    }
+
+    /// Compare the weave's `rom.checks` with the ROM file it resolved to.
+    /// A weave may be recorded from another dump of the same game, so a
+    /// match against the header-stripped or another N64 byte-order form of
+    /// that file is accepted too. A raw match never steers the header or
+    /// byte-order decision; a transformed match may, as described on
+    /// `WeaveApplyResolution::rom_checks`. `--ignore-checksum-validation`
+    /// skips the checks.
+    /// Returns the verification labels for the report and the matched
+    /// transformed form, if the raw file did not match.
+    fn verify_weave_rom_checks(
+        run: &PatchApplyRun,
+    ) -> Result<(Vec<String>, Option<patch_plan::BaseRepresentation>)> {
+        let Some((source_label, requirements)) = run
+            .weave_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.rom_checks.as_ref())
+        else {
+            return Ok((Vec::new(), None));
+        };
+        if run.args.ignore_checksum_validation {
+            debug!(source = %source_label, "weave ROM checks skipped by --ignore-checksum-validation");
+            return Ok((Vec::new(), None));
+        }
+        trace!(
+            source = %source_label,
+            input = %run.resolved_input.display(),
+            algorithms = ?requirements.checksums.keys().collect::<Vec<_>>(),
+            size = ?requirements.size,
+            "verifying weave ROM checks against the resolved ROM"
+        );
+        // Disc cached checksums describe the whole disc, not the track.
+        let no_hints = BTreeMap::new();
+        let hints = if run.disc_context.is_none() {
+            &run.cached_input_checksums
+        } else {
+            &no_hints
+        };
+        let raw_size = fs::metadata(&run.resolved_input)?.len();
+        let raw = (|| -> Result<Vec<String>> {
+            let mut labels = Vec::new();
+            if requirements.size.is_some() {
+                labels.push(Self::validate_patch_size(
+                    &run.resolved_input,
+                    "input",
+                    requirements.size,
+                    None,
+                )?);
+            }
+            if !requirements.checksums.is_empty() {
+                let mut raw_values = requirements
+                    .checksums
+                    .keys()
+                    .filter_map(|algorithm| {
+                        hints
+                            .get(algorithm)
+                            .map(|value| (algorithm.clone(), value.clone()))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                let missing = requirements
+                    .checksums
+                    .keys()
+                    .filter(|algorithm| !raw_values.contains_key(*algorithm))
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                if !missing.is_empty() {
+                    raw_values.extend(checksum_file_values(
+                        &run.resolved_input,
+                        &missing,
+                        &run.context,
+                    )?);
+                }
+                // These are the file's own checksums whether or not they
+                // match, so the transformed-form fallback reuses them.
+                run.context.seed_checksums(&run.resolved_input, &raw_values);
+                labels.push(Self::validate_patch_apply_expected_checksums(
+                    &run.resolved_input,
+                    &requirements.checksums,
+                    &raw_values,
+                    "input",
+                    &run.context,
+                )?);
+            }
+            Ok(labels)
+        })();
+        let raw_error = match raw {
+            Ok(labels) => return Ok((labels, None)),
+            Err(error @ RomWeaverError::Validation(_)) if run.disc_context.is_none() => error,
+            Err(error) => return Err(error),
+        };
+        // Only a strippable header or an N64 byte order gives another form,
+        // and its size is known before hashing.
+        let size_fits = |size: u64| requirements.size.is_none_or(|expected| expected == size);
+        let headerless_fits = Self::detect_strippable_rom_header(&run.resolved_input)
+            .ok()
+            .and_then(|header_match| header_match.stripped_bytes())
+            .is_some_and(|stripped| size_fits(raw_size.saturating_sub(stripped as u64)));
+        let n64_byte_order = Self::detect_n64_byte_order_path(&run.resolved_input)?;
+        let reorder_fits = n64_byte_order.is_some()
+            && !requirements.checksums.is_empty()
+            && raw_size.is_multiple_of(4)
+            && size_fits(raw_size);
+        if !headerless_fits && !reorder_fits {
+            debug!(%raw_error, "weave ROM checks fit no transformed form of the resolved ROM");
+            return Err(raw_error);
+        }
+        let declared = patch_plan::PlanState {
+            checksums: requirements.checksums.clone(),
+            size: requirements.size,
+        };
+        let algorithms = requirements.checksums.keys().cloned().collect::<Vec<_>>();
+        let representation = Self::base_representation(&run.resolved_input, None, n64_byte_order)?;
+        let variants = Self::base_variants_for_algorithms(
+            &run.resolved_input,
+            &algorithms,
+            &run.context,
+            false,
+            "",
+            representation,
+        )?;
+        // The raw form already failed the exact comparison above.
+        let Some(variant) = variants.iter().find(|variant| {
+            variant.name != "raw"
+                && patch_plan::base_state_verdict(&declared, std::slice::from_ref(variant))
+                    == patch_plan::PatchInputVerdict::Passed
+        }) else {
+            debug!(%raw_error, "weave ROM checks match no form of the resolved ROM");
+            return Err(raw_error);
+        };
+        debug!(
+            variant = %variant.name,
+            "weave ROM checks match a transformed form of the resolved ROM"
+        );
+        let rendered = declared
+            .checksums
+            .iter()
+            .map(|(algorithm, value)| format!("{algorithm}={value}"))
+            .chain(declared.size.map(|size| format!("size={size}")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        Ok((
+            vec![format!(
+                "input checks verified against the ROM's {} form ({rendered})",
+                variant.name
+            )],
+            Some(variant.representation),
+        ))
     }
 
     /// Resolve the ROM the chain starts from and the output it writes, then
@@ -397,7 +611,7 @@ impl CliApp {
                 (disc.target_file.clone(), 0usize, Vec::new())
             } else {
                 let input_select = run
-                    .bundle_resolution
+                    .weave_resolution
                     .as_ref()
                     .and_then(|resolution| resolution.rom_member.as_ref())
                     .map(std::slice::from_ref)
@@ -420,6 +634,7 @@ impl CliApp {
                             kind_filter: run.input_kind_filter,
                             stop_on_single_payload_codec: false,
                         },
+                        false,
                     )
                     .map_err(|error| run.fail_error("prepare", error))?;
                 let ResolvedChecksumSource {
@@ -432,7 +647,7 @@ impl CliApp {
         run.resolved_input = resolved_input;
         run.extracted_archives = extracted_archives;
         run.name_warning = warn_on_rom_name_mismatch(
-            run.bundle_resolution
+            run.weave_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref()),
             &run.resolved_input,
@@ -452,19 +667,32 @@ impl CliApp {
             &run.args.input,
             &run.args.patches,
             &run.original_input,
-            run.local_bundle.as_deref(),
+            run.local_weave.as_deref(),
             &run.output,
         ) {
             return Err(run.fail("validate", message));
         }
+        // The implicit `<stem>-patched.<ext>` sibling keeps the ROM's own extension, so without
+        // compression flags it is the raw ROM even for an otherwise ambiguous `.bin`.
+        let implicit_raw_output = run.output_was_inferred
+            && run.args.compress_format.is_none()
+            && run.args.compress_codec.is_empty()
+            && run.args.compress_level.is_none();
+        if implicit_raw_output {
+            debug!(output = %run.output.display(), "inferred patch output keeps the raw ROM bytes");
+        }
         run.compression_options = self
             .resolve_patch_apply_compression_options(
-                run.args.no_compress,
+                run.args.no_compress || implicit_raw_output,
                 run.args.compress_format.clone(),
                 run.args.compress_codec.clone(),
                 run.args.compress_level,
                 &run.output,
-                &run.resolved_input,
+                &Self::output_extension_source(
+                    &run.resolved_input,
+                    &run.output,
+                    run.args.output_header,
+                ),
             )
             .map_err(|error| run.fail_error("validate", error))?;
         // Compressing can append an extension; the compression step re-checks
@@ -487,6 +715,13 @@ impl CliApp {
                 .seed_checksums(&run.resolved_input, &run.cached_input_checksums);
         }
         run.temp_paths = input_cleanup_paths;
+        // Hashing the ROM waits until the cheap output and access checks pass.
+        (run.weave_rom_check_labels, run.weave_rom_form) = Self::verify_weave_rom_checks(run)
+            .map_err(|error| {
+                let mut report = run.fail_error("validate", error);
+                Self::append_report_warnings(&mut report, run.name_warning.clone());
+                report
+            })?;
         Ok(())
     }
 
@@ -495,8 +730,8 @@ impl CliApp {
         &self,
         run: &mut PatchApplyRun,
     ) -> std::result::Result<(), Box<OperationReport>> {
-        let bundle_rom_member = run
-            .bundle_resolution
+        let weave_rom_member = run
+            .weave_resolution
             .as_ref()
             .and_then(|resolution| resolution.rom_member.as_ref());
         let explicit_rom_members: BTreeSet<&str> = run
@@ -504,7 +739,7 @@ impl CliApp {
             .iter()
             .flat_map(|step| [&step.input, &step.target])
             .filter_map(|input| match input.as_ref() {
-                Some(BundlePatchInput::Rom {
+                Some(WeavePatchInput::Rom {
                     member: Some(member),
                     ..
                 }) => Some(member.as_str()),
@@ -520,6 +755,14 @@ impl CliApp {
                 run.probe_threads.clone(),
             ))
         };
+        // A bare input always stands in for the weave's `rom.member`, whether or
+        // not a selected step reads that lane, and it MUST NOT stand in for any
+        // second member: the bound set is `rom.member` plus every member below
+        // that matches the file by name or checks.
+        let mut bare_bound_member: Option<&str> =
+            weave_rom_member.map(String::as_str).filter(|_| {
+                run.disc_context.is_none() && self.input_is_bare_member_file(&run.args.input)
+            });
         for member in explicit_rom_members {
             if let Some(disc) = run.disc_context.as_ref() {
                 let path = self
@@ -528,40 +771,76 @@ impl CliApp {
                 run.rom_member_inputs.insert(member.to_owned(), path);
                 continue;
             }
-            if bundle_rom_member.is_some_and(|root_member| root_member == member) {
+            if weave_rom_member.is_some_and(|root_member| root_member == member) {
                 run.rom_member_inputs
                     .insert(member.to_owned(), run.resolved_input.clone());
                 continue;
             }
-            let resolved = self
-                .resolve_exact_member_source(
-                    &run.args.input,
-                    member,
-                    &run.context,
-                    AutoExtractResolutionLabels {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: None,
-                        source_label: "bundle ROM member",
-                        temp_prefix: "patch-apply-bundle-rom-member",
-                    },
-                    AutoExtractResolutionFlags {
-                        no_extract: run.args.no_extract,
-                        no_ignore: run.args.no_ignore,
-                        kind_filter: run.input_kind_filter,
-                        stop_on_single_payload_codec: false,
-                    },
-                )
-                .map_err(|error| fail_error("prepare", error))?;
-            if resolved.extracted_archives == 0 {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    None,
-                    "prepare",
-                    format!("bundle ROM input has no extractable member `{member}`"),
-                    run.probe_threads.clone(),
-                )));
+            // A bare file whose name and checks do not match the member may
+            // still be an archive the probe missed (a tar with a non-tar name),
+            // so fall through to the exact-member resolution below.
+            let bare_input = self.input_is_bare_member_file(&run.args.input);
+            if bare_input
+                && self
+                    .bare_input_matches_member(run, member)
+                    .map_err(|error| fail_error("prepare", error))?
+            {
+                if let Some(first) = bare_bound_member {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "the bare input file `{}` matches several weave ROM members (`{first}`, `{member}`) and can stand in for only one; provide an archive or disc containing them",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                bare_bound_member = Some(member);
+                debug!(member, input = %run.args.input.display(), "using the bare input file as the weave ROM member");
+                run.rom_member_inputs
+                    .insert(member.to_owned(), run.resolved_input.clone());
+                continue;
             }
+            trace!(member, input = %run.args.input.display(), "resolving the weave ROM member from the input by format");
+            let resolved = self.resolve_exact_member_source(
+                &run.args.input,
+                member,
+                &run.context,
+                AutoExtractResolutionLabels {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: None,
+                    source_label: "weave ROM member",
+                    temp_prefix: "patch-apply-weave-rom-member",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract: run.args.no_extract,
+                    no_ignore: run.args.no_ignore,
+                    kind_filter: run.input_kind_filter,
+                    stop_on_single_payload_codec: false,
+                },
+            );
+            let resolved = match resolved {
+                Ok(resolved) if resolved.extracted_archives > 0 => resolved,
+                _ if bare_input => {
+                    return Err(fail_error(
+                        "prepare",
+                        RomWeaverError::Validation(format!(
+                            "weave ROM member `{member}` was not found in `{}`: the input is not an archive and neither its file name nor its checks match the member",
+                            run.args.input.display()
+                        )),
+                    ));
+                }
+                Ok(_) => {
+                    return Err(Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "prepare",
+                        format!("weave ROM input has no extractable member `{member}`"),
+                        run.probe_threads.clone(),
+                    )));
+                }
+                Err(error) => return Err(fail_error("prepare", error)),
+            };
             run.temp_paths.extend(resolved.cleanup_paths);
             run.rom_member_inputs
                 .insert(member.to_owned(), resolved.source);
@@ -569,12 +848,66 @@ impl CliApp {
         Ok(())
     }
 
+    /// Whether the input is a single bare file: no container handler and not
+    /// a tar stream recognizes it, so no member can be extracted from it.
+    /// The tar probe runs only for tar-family names, since libarchive reads an
+    /// all-zero first block of any binary file as an empty tar archive.
+    fn input_is_bare_member_file(&self, input: &Path) -> bool {
+        let tar_family_name = self.containers.handlers().iter().any(|handler| {
+            let descriptor = handler.descriptor();
+            descriptor.name.starts_with("tar") && descriptor.matches_path(input)
+        });
+        input.is_file()
+            && self.containers.probe(input).is_none()
+            && !(tar_family_name
+                && probe_regular_archive_format(input, "tar", RegularArchiveProbeFormat::Tar)
+                    .unwrap_or(false))
+    }
+
+    /// Whether the bare input file stands in for `member`: its file name
+    /// matches the member's, or it satisfies the checks the weave declares for
+    /// that member (a step's declared input checks, or `rom.checks` when the
+    /// weave names no `rom.member`, since those checks then describe the root
+    /// ROM rather than a member).
+    fn bare_input_matches_member(&self, run: &PatchApplyRun, member: &str) -> Result<bool> {
+        let name_of = |value: &str| path_basename(value).to_lowercase();
+        let input_name = run
+            .resolved_input
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_lowercase);
+        if input_name.is_some_and(|name| name == name_of(member)) {
+            return Ok(true);
+        }
+        let mut candidates: Vec<(Option<u64>, BTreeMap<String, String>)> = run
+            .patch_step_metadata
+            .iter()
+            .filter(|step| {
+                [&step.input, &step.target].into_iter().any(|reference| {
+                    matches!(reference, Some(WeavePatchInput::Rom { member: Some(m), .. }) if m == member)
+                })
+            })
+            .filter_map(|step| step.verification.as_ref()?.declared_input.as_ref())
+            .map(|state| (state.size, state.checksums.clone()))
+            .collect();
+        if let Some((_, requirements)) = run.weave_resolution.as_ref().and_then(|resolution| {
+            resolution
+                .rom_member
+                .is_none()
+                .then_some(resolution.rom_checks.as_ref())
+                .flatten()
+        }) {
+            candidates.push((requirements.size, requirements.checksums.clone()));
+        }
+        bare_input_satisfies_any(&run.resolved_input, &candidates, &run.context)
+    }
+
     /// Resolve the patch files, check the step metadata against them, and add
     /// the cheats: database cheats as records, `--code` as a synthetic patch.
     fn resolve_patch_apply_patches(
         &self,
         run: &mut PatchApplyRun,
-        applied_cheats: &mut Vec<BundleCheatEntry>,
+        applied_cheats: &mut Vec<WeaveCheatEntry>,
     ) -> std::result::Result<(), Box<OperationReport>> {
         run.temp_paths
             .extend(std::mem::take(&mut run.sidecar_cleanup_paths));
@@ -608,7 +941,7 @@ impl CliApp {
         if let Err(report) = validate_resolved_patch_apply_step_metadata(
             &run.patch_step_metadata,
             run.resolved_patches.len(),
-            run.bundle_step_metadata_selected,
+            run.weave_step_metadata_selected,
             run.direct_has_step_selectors,
             run.direct_selectors_align,
             &run.probe_threads,
@@ -617,13 +950,13 @@ impl CliApp {
             return Err(report);
         }
 
-        // Resolve the bundle's recorded cheats and `--cheat` against the
+        // Resolve the weave's recorded cheats and `--cheat` against the
         // resolved input ROM. Both bake after the patch chain, like the
         // webapp's. Native-only: the cheat database lives on disk.
         #[cfg(not(target_arch = "wasm32"))]
         match self.resolve_patch_apply_cheats(
             &run.resolved_input,
-            &run.bundle_cheats,
+            &run.weave_cheats,
             &run.args.cheat_selection,
             run.native_cheat_selection,
             &run.context,
@@ -631,7 +964,7 @@ impl CliApp {
             Ok(cheats) => {
                 run.args.cheat_records.extend(cheats.rom_records);
                 applied_cheats.extend(cheats.applied);
-                run.skipped_bundle_cheats = cheats.skipped;
+                run.skipped_weave_cheats = cheats.skipped;
             }
             Err(error) => {
                 Self::cleanup_temp_paths(&run.temp_paths);
@@ -682,18 +1015,18 @@ impl CliApp {
         // says whether this run bakes anything.
         let has_database_cheats = !run.args.cheat_records.is_empty();
         #[cfg(not(target_arch = "wasm32"))]
-        let every_bundle_cheat_skipped = run.resolved_patches.is_empty()
+        let every_weave_cheat_skipped = run.resolved_patches.is_empty()
             && !has_database_cheats
-            && !run.skipped_bundle_cheats.is_empty();
+            && !run.skipped_weave_cheats.is_empty();
         #[cfg(target_arch = "wasm32")]
-        let every_bundle_cheat_skipped = false;
-        if every_bundle_cheat_skipped {
+        let every_weave_cheat_skipped = false;
+        if every_weave_cheat_skipped {
             // Every recorded cheat was optional and unresolvable, so the run
             // has no patch and no cheat left: say which ones went missing
             // rather than report a bare "not executed".
             #[cfg(not(target_arch = "wasm32"))]
             let detail = run
-                .skipped_bundle_cheats
+                .skipped_weave_cheats
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
@@ -705,7 +1038,7 @@ impl CliApp {
                 Some("cheat".to_string()),
                 "validate",
                 format!(
-                    "every cheat this bundle records was skipped, so there is nothing to apply: \
+                    "every cheat this weave records was skipped, so there is nothing to apply: \
                      {detail}"
                 ),
                 run.probe_threads.clone(),
@@ -852,6 +1185,7 @@ impl CliApp {
             cached_input_checksums: &run.cached_input_checksums,
             expected_input_size: run.expected_input_size,
             repair_checksum: run.args.repair_checksum,
+            weave_rom_form: run.weave_rom_form,
             context: &run.context,
             temp_paths: &mut run.temp_paths,
         })?;
@@ -920,15 +1254,21 @@ impl CliApp {
         )
         .map_err(|error| failed("prepare", error))?;
 
-        // Resolve every step's input basis (CLI flag > bundle declaration >
+        // Resolve every step's input basis (CLI flag > weave declaration >
         // inference against the prepared input) and verify declared
         // base-basis steps against the base once, before the chain runs.
         let cheat_patch_count = run.cheat_patch_count();
+        let shared_patch_basis = run
+            .weave_resolution
+            .as_ref()
+            .map(|resolution| resolution.patch_basis)
+            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         merge_apply_step_declarations(
             &mut run.patch_step_metadata,
             &run.args.patch_input_check,
             &run.args.patch_output_check,
             run.resolved_patches.len().saturating_sub(cheat_patch_count),
+            shared_patch_basis,
         )
         .map_err(|error| failed("validate", error))?;
         let mut patch_steps = normalize_patch_apply_steps(
@@ -939,11 +1279,6 @@ impl CliApp {
             &chain_n64_modes,
             cheat_patch_count,
         );
-        let shared_patch_basis = run
-            .bundle_resolution
-            .as_ref()
-            .map(|resolution| resolution.patch_basis)
-            .unwrap_or(run.args.default_patch_basis.unwrap_or(PatchBasisMode::Auto));
         // A target lane may begin from another ROM member or from a
         // generated output. Plan it only after that seed is available;
         // using the command's root input here would verify its authored
@@ -952,6 +1287,21 @@ impl CliApp {
             .iter()
             .any(|step| step.metadata.target.is_some());
         if !target_lanes_present {
+            // Mirrors the chain loop's source selection: an explicit ROM
+            // member reads the root input only when it names the weave ROM's
+            // own member.
+            let first_step_reads_base =
+                patch_steps
+                    .first()
+                    .is_some_and(|step| match step.metadata.input.as_ref() {
+                        None | Some(WeavePatchInput::Rom { member: None, .. }) => true,
+                        Some(WeavePatchInput::Rom {
+                            member: Some(member),
+                            ..
+                        }) => run.rom_member_inputs.get(member) == Some(&run.resolved_input),
+                        Some(WeavePatchInput::Patch { .. }) => false,
+                    });
+            trace!(first_step_reads_base, "planning apply step verifications");
             self.plan_apply_step_verifications(
                 &mut patch_steps,
                 cheat_patch_count,
@@ -963,14 +1313,23 @@ impl CliApp {
                     prepared_headerless: header_state.headerless.then_some(true),
                     prepared_n64_byte_order: n64_order.map(|order| order.from),
                     original_n64_byte_order: n64_order.map(|order| order.to),
+                    first_step_reads_base,
                 },
                 &run.context,
             )
             .map_err(|error| failed("validate", error))?;
-            Self::update_emit_bundle_bases(emit_steps, &patch_steps);
+            Self::update_emit_weave_bases(emit_steps, &patch_steps);
+        }
+        // A first patch's inputChecks often repeat rom.checks; report the
+        // same verification once.
+        let mut labels = std::mem::take(&mut run.weave_rom_check_labels);
+        for label in checksum_verification_labels {
+            if !labels.contains(&label) {
+                labels.push(label);
+            }
         }
         Ok(PatchApplyChain {
-            checksum_verification_labels,
+            checksum_verification_labels: labels,
             apply_input,
             header_state,
             n64_order,
@@ -1104,7 +1463,7 @@ impl CliApp {
             &run.output
         };
         let note = self
-            .write_disc_output(disc, &staged_sheet, disc_output)
+            .write_disc_output(disc, &staged_sheet, disc_output, run.args.force)
             .map_err(|error| failed(report.format.clone(), "compat", error))?;
         report.label = format!("{}; {}", report.label, note);
         paths.raw_ready_output = staged_sheet;
@@ -1149,18 +1508,33 @@ impl CliApp {
             return *error_report;
         }
 
-        if report.status == OperationStatus::Succeeded
-            && run.compression_options.enabled
-            && let Err(error_report) = self.resolve_guarded_patch_apply_compression_plan(
+        if report.status == OperationStatus::Succeeded && run.compression_options.enabled {
+            let plan = match self.resolve_guarded_patch_apply_compression_plan(
                 &run.output,
                 &run.resolved_input,
                 &run.compression_options,
                 run.args.force,
                 report.format.clone(),
                 &run.context,
-            )
-        {
-            return *error_report;
+            ) {
+                Ok(plan) => plan,
+                Err(error_report) => return *error_report,
+            };
+            // Explicit compression writes directly to its extension-adjusted
+            // destination. Inferred outputs instead use private staging and
+            // no-clobber publication with suffix retry.
+            if !run.output_was_inferred {
+                let mut sources = run.source_paths();
+                // Chain planning has already consumed run.resolved_patches.
+                for step in &chain.patch_steps {
+                    sources.extend([step.patch.source.clone(), step.patch.resolved.clone()]);
+                }
+                if let Err(error) =
+                    Self::ensure_patch_output_preserves_sources(&plan.output_path, &sources)
+                {
+                    return *run.fail_error("compress", error);
+                }
+            }
         }
         if let Some(error_report) = self.compress_patch_apply_output(PatchApplyCompressionInputs {
             report: &mut report,
@@ -1221,12 +1595,12 @@ impl CliApp {
             report.label = format!("{}; {}", report.label, summary.label());
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if report.status == OperationStatus::Succeeded && !run.skipped_bundle_cheats.is_empty() {
+        if report.status == OperationStatus::Succeeded && !run.skipped_weave_cheats.is_empty() {
             report.label = format!(
-                "{}; skipped {} optional bundle cheat(s): {}",
+                "{}; skipped {} optional weave cheat(s): {}",
                 report.label,
-                run.skipped_bundle_cheats.len(),
-                run.skipped_bundle_cheats
+                run.skipped_weave_cheats.len(),
+                run.skipped_weave_cheats
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
@@ -1235,8 +1609,8 @@ impl CliApp {
             Self::append_report_warnings(
                 &mut report,
                 [format!(
-                    "skipped optional bundle cheats: {}",
-                    run.skipped_bundle_cheats
+                    "skipped optional weave cheats: {}",
+                    run.skipped_weave_cheats
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
@@ -1249,4 +1623,50 @@ impl CliApp {
         Self::cleanup_temp_paths(&run.temp_paths);
         report
     }
+}
+
+/// Whether `input` satisfies any of the `(size, checksums)` requirements.
+/// Checksums already seeded on `context` (from the weave ROM check or the
+/// host's cached values) are reused; the rest are computed once and seeded so
+/// later candidates and members do not re-read the file.
+pub(super) fn bare_input_satisfies_any(
+    input: &Path,
+    candidates: &[(Option<u64>, BTreeMap<String, String>)],
+    context: &OperationContext,
+) -> Result<bool> {
+    let size = fs::metadata(input)?.len();
+    for (expected_size, checksums) in candidates {
+        if expected_size.is_none() && checksums.is_empty() {
+            continue;
+        }
+        if expected_size.is_some_and(|expected| expected != size) {
+            continue;
+        }
+        if checksums.is_empty() {
+            return Ok(true);
+        }
+        let mut actual = BTreeMap::new();
+        let mut missing = Vec::new();
+        for algorithm in checksums.keys() {
+            match context.seeded_checksum(input, algorithm) {
+                Some(value) => {
+                    actual.insert(algorithm.clone(), value);
+                }
+                None => missing.push(algorithm.as_str()),
+            }
+        }
+        if !missing.is_empty() {
+            let computed = checksum_file_values(input, &missing, context)?;
+            context.seed_checksums(input, &computed);
+            actual.extend(computed);
+        }
+        if checksums.iter().all(|(algorithm, expected)| {
+            actual
+                .get(algorithm)
+                .is_some_and(|value| value.eq_ignore_ascii_case(expected))
+        }) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

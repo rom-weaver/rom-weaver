@@ -89,7 +89,7 @@ test("deployment purges only successful custom-domain uploads", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert.match(
     workflow,
-    /name: Purge negotiated page cache after custom-domain deployment\n\s+if: success\(\) && matrix.target.channel != 'preview' && steps.pages.outputs.url != ''/,
+    /name: Purge negotiated page cache after custom-domain deployment\n\s+if: steps.freshness.outputs.fresh == 'true' && \(success\(\) && matrix.target.channel != 'preview' && steps.pages.outputs.url != ''\)/,
   );
   assert.match(workflow, /DEPLOYMENT_DOMAIN: \$\{\{ matrix.target.env \}\}/);
 });

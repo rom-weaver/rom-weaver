@@ -14,7 +14,7 @@ const createSchedulerAbortError = () => {
  *
  * - Non-I/O ops use local concurrency, thread, memory, and OPFS-path gates.
  * - I/O ops use Rust's shared `plan-extract-batch` policy, plus browser-only
- *   concurrency and path-exclusivity gates.
+ *   concurrency, fixed thread reservations, and path-exclusivity gates.
  *
  * {@link OperationScheduler.noteIoBatch} declares staggered multi-file drops
  * up front so the first Rust plan assigns threads across the whole batch.
@@ -42,8 +42,8 @@ type ScheduledOperation = {
   exclusive?: boolean;
   /** Short label (the command type) used only for trace lines. */
   label?: string;
-  /** When true the op is admitted via the Rust batch plan (extract/ingest/checksum) rather than the
-   * local thread/memory gates. */
+  /** When true the op's thread count and memory fit come from the Rust batch plan
+   * (extract/ingest/checksum), with shared reservations checked at admission. */
   io?: boolean;
   /** Source size in bytes fed to the Rust planner for an I/O op. */
   jobSizeBytes?: number;
@@ -259,10 +259,9 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
   };
 
   // Without a usable plan, admit at most one I/O job with the full thread budget.
-  // This fallback checks I/O idleness, path conflicts, and concurrency; non-I/O jobs can remain active.
+  // The fallback MUST run alone because no usable plan establishes its memory fit.
   const admitIoFallbackOne = (): void => {
-    if (hasIoInFlight()) return;
-    if (inFlight.size >= maxConcurrency) return;
+    if (inFlight.size > 0) return;
     const waiter = waiters.find(
       (candidate) => candidate.operation.io && !intersectsInFlightPaths(candidate.operation.paths),
     );
@@ -281,6 +280,7 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     waveJobs: ReadonlySet<number>,
     offset: number,
     threadsPerJob: number,
+    availableMemory: number,
   ): boolean => {
     // Index against the plan up front; anything outside the wave waits for the
     // current one to drain, so the admit walk below is a straight line.
@@ -288,10 +288,10 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     let admittedAny = false;
     for (const waiter of planned) {
       if (inFlight.size >= maxConcurrency) break;
+      if (inFlight.size > 0 && memoryCeiling - allocatedBytes() < availableMemory) break;
       const position = waiters.indexOf(waiter);
-      // A missing position means it left the queue meanwhile; the path check is
-      // the OPFS exclusivity safety net.
-      if (position < 0 || intersectsInFlightPaths(waiter.operation.paths)) continue;
+      // Admission MUST preserve active reservations after the asynchronous plan returns.
+      if (position < 0 || !canAdmit({ ...waiter.operation, threads: threadsPerJob })) continue;
       waiters.splice(position, 1);
       waiter.admit(threadsPerJob);
       admittedAny = true;
@@ -317,10 +317,17 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     ];
     // Plan against the threads not already held by non-I/O ops, so the two lanes never oversubscribe.
     const availableThreads = Math.max(1, totalThreadBudget - nonIoAllocatedThreads());
-    const planned = await plan(sizes, { memoryCeilingBytes: memoryCeiling, threadBudget: availableThreads });
+    const availableMemory = Math.max(1, memoryCeiling - allocatedBytes());
+    const planned = await plan(sizes, { memoryCeilingBytes: availableMemory, threadBudget: availableThreads });
     const wave = planned.waves[0];
     const threadsPerJob = Math.max(1, Math.floor(wave?.threadsPerJob ?? availableThreads));
-    const admittedAny = admitPlannedWave(ioWaiters, new Set(wave?.jobs ?? []), inFlightIo.length, threadsPerJob);
+    const admittedAny = admitPlannedWave(
+      ioWaiters,
+      new Set(wave?.jobs ?? []),
+      inFlightIo.length,
+      threadsPerJob,
+      availableMemory,
+    );
     trace("io wave planned", {
       admitted: admittedAny,
       inFlightIo: inFlightIo.length,

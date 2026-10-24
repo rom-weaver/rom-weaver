@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BundleApplySession } from "../../src/lib/bundle/bundle-session-model.ts";
+import type { WeaveApplySession } from "../../src/lib/weave/weave-session-model.ts";
 import { useUrlSessionBoot } from "../../src/webapp/url-session/use-url-session-boot.ts";
 
-const { fetchRemoteFiles, loadBundleUrlSession, RemoteFetchError } = vi.hoisted(() => ({
+const { fetchRemoteFiles, loadWeaveUrlSession, RemoteFetchError } = vi.hoisted(() => ({
   fetchRemoteFiles: vi.fn(),
-  loadBundleUrlSession: vi.fn(),
+  loadWeaveUrlSession: vi.fn(),
   RemoteFetchError: class extends Error {
     kind: "blocked" | "http" | "too-large" | "aborted";
     constructor(kind: "blocked" | "http" | "too-large" | "aborted", message: string) {
@@ -17,20 +17,20 @@ const { fetchRemoteFiles, loadBundleUrlSession, RemoteFetchError } = vi.hoisted(
 }));
 
 vi.mock("../../src/lib/remote/remote-file-fetch.ts", () => ({ fetchRemoteFiles, RemoteFetchError }));
-vi.mock("../../src/webapp/url-session/bundle-url-session.ts", () => ({ loadBundleUrlSession }));
+vi.mock("../../src/webapp/url-session/weave-url-session.ts", () => ({ loadWeaveUrlSession }));
 
 const requestDirect = {
   kind: "direct" as const,
   patchUrls: ["https://cdn.example/patch.ips"],
   romUrl: "https://cdn.example/game.nes",
 };
-const requestBundle = { bundleUrl: "https://cdn.example/bundle.json", kind: "bundle" as const };
+const requestWeave = { weaveUrl: "https://cdn.example/weave.json", kind: "weave" as const };
 const session = {
   entries: [{ fileName: "patch.ips", id: "patch-1", optional: false }],
-  key: "https://cdn.example/bundle.json",
+  key: "https://cdn.example/weave.json",
   outputDefaults: {},
   warnings: [],
-} as unknown as BundleApplySession;
+} as unknown as WeaveApplySession;
 
 const fetched = (name: string) => ({
   cleanup: vi.fn(async () => undefined),
@@ -40,7 +40,7 @@ const fetched = (name: string) => ({
 describe("useUrlSessionBoot", () => {
   beforeEach(() => {
     fetchRemoteFiles.mockReset();
-    loadBundleUrlSession.mockReset();
+    loadWeaveUrlSession.mockReset();
   });
 
   it("fetches direct ROM and patches together, reports progress, and delivers order", async () => {
@@ -98,27 +98,27 @@ describe("useUrlSessionBoot", () => {
     expect(fetchRemoteFiles).toHaveBeenCalledTimes(2);
   });
 
-  it("loads bundles, forwards names and progress, and suffixes session keys on retry", async () => {
+  it("loads weaves, forwards names and progress, and suffixes session keys on retry", async () => {
     const files = [new File(["rom"], "game.nes"), new File(["patch"], "patch.ips")];
     const cleanup = vi.fn(async () => undefined);
-    loadBundleUrlSession.mockImplementation(
+    loadWeaveUrlSession.mockImplementation(
       async (
         _url: string,
-        hooks: { onBundleName?: (name: string) => void; onProgress?: (id: string, progress: unknown) => void },
+        hooks: { onWeaveName?: (name: string) => void; onProgress?: (id: string, progress: unknown) => void },
       ) => {
-        hooks.onBundleName?.("Example bundle");
+        hooks.onWeaveName?.("Example weave");
         hooks.onProgress?.("rom", { loadedBytes: 3, totalBytes: 3 });
         return { cleanup, files, session };
       },
     );
     const deliver = vi.fn();
-    const onBundleSession = vi.fn();
-    const { result } = renderHook(() => useUrlSessionBoot(requestBundle, deliver, onBundleSession));
+    const onWeaveSession = vi.fn();
+    const { result } = renderHook(() => useUrlSessionBoot(requestWeave, deliver, onWeaveSession));
     await waitFor(() => expect(result.current.state.phase).toBe("done"));
 
     expect(deliver).toHaveBeenCalledWith(files);
-    expect(onBundleSession).toHaveBeenCalledWith({ ...session, key: `${session.key}#0` });
-    expect(result.current.state).toMatchObject({ bundleName: "Example bundle", loadedBytes: 3, totalBytes: 3 });
+    expect(onWeaveSession).toHaveBeenCalledWith({ ...session, key: `${session.key}#0` });
+    expect(result.current.state).toMatchObject({ weaveName: "Example weave", loadedBytes: 3, totalBytes: 3 });
     expect(cleanup).not.toHaveBeenCalled();
   });
 

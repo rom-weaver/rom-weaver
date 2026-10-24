@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MARKDOWN_ROUTES } from "../functions/markdown-routes.js";
 import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
-import { WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import {
+  WORKFLOW_ENTRY_ROUTES,
+  readWorkflowEntryFromPathname,
+  WORKFLOW_SEO_ROUTES,
+} from "../src/webapp/workflow-seo.mjs";
 import {
   createRobotsSource,
   createSitemapSource,
   createWorkflowRouteHtml,
   createWorkflowMarkdown,
   injectLdJson,
+  makeBetaRouteNoindex,
 } from "./vite-config/seo-html.mjs";
 
 const routeShell = `<!doctype html><html><head>
@@ -23,7 +28,7 @@ const routeShell = `<!doctype html><html><head>
 </head><body></body></html>`;
 
 test("workflow descriptions propagate to metadata and structured data", () => {
-  for (const key of ["home", "identify", "patcher", "creator"]) {
+  for (const key of ["home", "identify", "patcher", "creator", "ppf-undo"]) {
     const route = WORKFLOW_SEO_ROUTES[key];
     const html = injectLdJson(createWorkflowRouteHtml(routeShell, route, "prod", "Production"), route, key === "home");
     const expectedCanonical = `https://rom-weaver.com/${route.slug}`;
@@ -45,7 +50,7 @@ test("public workflow descriptions advertise standard cheat capabilities", () =>
   assert.ok(WORKFLOW_SEO_ROUTES.patcher.description.includes("Add supported cheat codes"));
   assert.ok(WORKFLOW_SEO_ROUTES.creator.description.includes("from modified ROMs or supported cheat codes"));
   assert.ok(WORKFLOW_SEO_ROUTES.identify.description.includes("inspect known cheat codes"));
-  for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
     assert.ok(!route.description.toLocaleLowerCase().includes("beta"), route.slug || "home");
   }
 });
@@ -60,16 +65,17 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
   assert.equal(locations.length, new Set(locations).size);
   for (const slug of [
     "apply-patches",
-    "bundle-patches",
+    "weave-patches",
     "checksum",
-    "create-patch",
+    "create-rom-patch",
     "extract",
     "identify-rom",
+    "ppf-undo",
     "test-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["trim", "ppf-undo", "save-editor"]) {
+  for (const slug of ["trim-rom", "save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
@@ -88,7 +94,7 @@ for (const channel of ["prod", "beta", "nightly", "preview", "dev"]) {
 
 test("published Markdown routes match workflow and documentation sources", () => {
   const expected = [
-    ...Object.values(WORKFLOW_SEO_ROUTES).map(({ slug }) => `/${slug}`),
+    ...[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)].map(({ slug }) => `/${slug}`),
     ...DOC_SOURCES.map(({ slug }) => `/${slug}`),
   ];
   assert.deepEqual(MARKDOWN_ROUTES.map(({ path }) => path).sort(), expected.sort());
@@ -103,7 +109,7 @@ test("published Markdown routes match workflow and documentation sources", () =>
 });
 
 test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
-  for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
     const markdown = createWorkflowMarkdown(route);
     const markdownPath = `/${route.slug || "index"}.md`;
     assert.ok(markdown.startsWith(`Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n`));
@@ -115,4 +121,35 @@ test("workflow Markdown and discovery reuse each route's SEO metadata", () => {
       assert.equal(html.split('type="text/markdown"').length - 1, 1);
     }
   }
+});
+
+test("beta tool pages get their own title, social titles, and channel badge", () => {
+  const shell = `${routeShell.replace("</head>", '<meta name="robots" content="index, follow" />\n</head>')}`;
+  for (const [slug, name] of [
+    ["save-editor", "Save Editor"],
+    ["trim-rom", "Trim ROM"],
+    ["whats-new", "What's new"],
+  ]) {
+    const prod = makeBetaRouteNoindex(shell, slug, "prod", "Production");
+    assert.ok(prod.includes(`<title>${name} | rom-weaver</title>`), `${slug} title`);
+    assert.ok(prod.includes(`<meta property="og:title" content="${name} | rom-weaver">`), `${slug} og:title`);
+    assert.ok(prod.includes(`<meta name="twitter:title" content="${name} | rom-weaver">`), `${slug} twitter:title`);
+    assert.ok(prod.includes('content="noindex, nofollow"'), `${slug} noindex`);
+    const beta = makeBetaRouteNoindex(shell, slug, "beta", "Beta");
+    assert.ok(beta.includes(`<title>${name} | rom-weaver Beta</title>`), `${slug} beta title`);
+  }
+});
+
+test("task entries resolve static-host variants and avoid documentation paths", () => {
+  for (const [slug, route] of Object.entries(WORKFLOW_ENTRY_ROUTES)) {
+    for (const pathname of [`/${slug}`, `/${slug}/`, `/roms/${slug}.html`, `/roms/${slug}/index.html`]) {
+      assert.equal(readWorkflowEntryFromPathname(pathname), slug);
+    }
+    assert.equal(readWorkflowEntryFromPathname(`/docs/${slug}`), null);
+    assert.ok(createSitemapSource().includes(`<loc>https://rom-weaver.com/${slug}</loc>`));
+    const html = createWorkflowRouteHtml(routeShell, route, "prod", "");
+    assert.ok(html.includes(`<title>${route.title}</title>`));
+    assert.ok(html.includes(`href="https://rom-weaver.com/${slug}"`));
+  }
+  assert.equal(readWorkflowEntryFromPathname("/create-rom-patch"), null);
 });

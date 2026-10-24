@@ -20,9 +20,9 @@ The browser needs no account or installation. The CLI is the terminal version, u
 | --- | --- | --- | --- |
 | Apply patches | Combine your game with someone else's changes, such as a translation. | [Apply](../how-to/apply-rom-patches.md) | [Apply](../how-to/cli-apply.md) |
 | Create patches | Compare an original file with your edited file to make a patch. | [Create](../how-to/create-rom-patches.md) | [Create](../how-to/cli-create.md) |
-| Ordered patches | Run several changes in order, with input and output checks when available. | [Patch order](../how-to/apply-rom-patches.md#put-several-patches-in-order) | [Patch chains](../how-to/cli-apply.md) |
+| Ordered patches | Run several changes in order, with input and output checks when available. | [Patch order](../how-to/apply-rom-patches.md#apply-multiple-patches-in-order) | [Patch chains](../how-to/cli-apply.md) |
 | Cheat codes | Bake supported codes into a ROM, or turn them into a patch. | [Cheats](../how-to/use-browser-cheats.md) | [Cheats](../how-to/bake-cheat-codes.md) |
-| Patch bundles | Package patches with their order, names, choices, and expected ROM checks. | [Bundles](../how-to/create-bundles.md) | [Bundles](../how-to/cli-bundles.md) |
+| Patch weaves | Package patches with their order, names, choices, and expected ROM checks. | [Weaves](../how-to/create-bundles.md) | [Weaves](../how-to/cli-bundles.md) |
 
 Applying and creating have different format limits. The [patch format table](formats.md#patch-formats) lists both, including the specialized Dreamcast DCP workflow.
 
@@ -35,10 +35,10 @@ Cheat support covers writes to the ROM. Codes that need live game memory cannot 
 | Identify | Match a file's fingerprint to a known game, region, and revision. Search by name or checksum without a file, too. | [Identify](../how-to/identify-roms-browser.md) | [Identify](../how-to/identify-and-hash-files.md) |
 | Checksums | Calculate a fingerprint to compare two files, even if their names differ. | [Checksum a file](../how-to/checksum-roms-browser.md) | [Hash files](../how-to/identify-and-hash-files.md#hash-a-file) |
 | Extract | Take files out of an archive or disc image. Nested archives are supported. | [Extract files](../how-to/extract-files-browser.md) | [Extract files](../how-to/work-with-archives.md#extract-an-archive) |
-| Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Convert a ROM](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
+| Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Extract or compress files in the browser](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
 | Trim | Remove padding from supported files. Padding is space around the useful data. | [Trim](../how-to/trim-roms-browser.md) | [Trim and restore padding](../how-to/cli-trim.md) |
 | Headers and byte order | Handle supported dump layouts so patches receive the bytes they expect. | [Resolve layout differences](../how-to/fix-checksum-errors.md#cartridge-header-differences) | [Header options](cli.md#header-and-byte-order-flags) |
-| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
+| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data; unpack ROM and patch inputs and compress the restored output. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
 
 The browser's Extract tool downloads selected files, or several files as one ZIP. The CLI also creates archives from directories.
 
@@ -63,9 +63,9 @@ Patching support, emulator support, cheat support, and save editing support are 
 | --- | --- |
 | Offline use | Cached app files, databases, and emulator cores work offline. Remote links and uncached assets need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
-| Guided practice runs | Step-by-step cards for Apply, Create, Bundle, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
-| Beta tools | Trim, PPF Undo, and Save Editor are behind the browser's beta setting. Cheat tools in Apply, Create, and Identify are available without it. |
+| Guided practice runs | Step-by-step cards for Apply, Create, Weave, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
+| Beta tools | Trim and Save Editor are behind the browser's beta setting. PPF Undo and cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
-| Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, bundles, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
+| Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, weaves, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 
 There is no account, cloud synchronization, or ROM download library. The supplied [practice files](guided-runs.md#practice-files) are homebrew samples. [Privacy](../legal/privacy.md) lists storage and network behavior.

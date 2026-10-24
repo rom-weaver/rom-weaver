@@ -1,5 +1,7 @@
 import type { SetStateAction } from "react";
-import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
+import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
+import { getLiteralFileNameExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -27,33 +29,34 @@ const getRequestedOutputName = (outputName: string): string | undefined => {
   return normalizedOutputName || undefined;
 };
 
-const getFileNameExtension = (fileName: string | null | undefined) =>
-  getSharedFileNameExtension(fileName, { includeDot: true });
-
 const resolvePendingDownloadFileName = ({
   automaticOutputName,
   fallbackOutputName,
+  preferAutomaticName,
   requestedOutputName,
   resultOutputName,
 }: {
   automaticOutputName?: string;
   fallbackOutputName?: string;
+  /** The result was named by a manual name that is now gone, so its file name is stale. */
+  preferAutomaticName?: boolean;
   requestedOutputName?: string;
   resultOutputName?: string;
 }) => {
-  const normalizedRequestedOutputName = requestedOutputName ? getRequestedOutputName(requestedOutputName) : undefined;
+  const normalizedRequestedOutputName = sanitizeTypedOutputName(requestedOutputName);
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
-  if (normalizedRequestedOutputName) {
-    if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
-    const resultExtension = getFileNameExtension(normalizedResultOutputName);
-    return resultExtension ? `${normalizedRequestedOutputName}${resultExtension}` : normalizedRequestedOutputName;
+  if (normalizedRequestedOutputName)
+    return withOutputExtension(normalizedRequestedOutputName, getLiteralFileNameExtension(normalizedResultOutputName));
+  // The result's file name is stale when it came from a manual name that has
+  // since been cleared; then the automatic name wins and the result only
+  // supplies the real extension (.bin, .zip, ...).
+  const automaticBaseName = sanitizeTypedOutputName(automaticOutputName) || sanitizeTypedOutputName(fallbackOutputName);
+  if (preferAutomaticName && automaticBaseName) {
+    const resultExtension = getLiteralFileNameExtension(normalizedResultOutputName);
+    if (getLiteralFileNameExtension(automaticBaseName) === resultExtension) return automaticBaseName;
+    return appendFileNameExtension(automaticBaseName, resultExtension);
   }
-  return (
-    normalizedResultOutputName ||
-    (automaticOutputName ? getRequestedOutputName(automaticOutputName) : undefined) ||
-    (fallbackOutputName ? getRequestedOutputName(fallbackOutputName) : undefined) ||
-    "output"
-  );
+  return normalizedResultOutputName || automaticBaseName || "output";
 };
 
 const formatElapsedTiming = (elapsedMs: number | null) => {

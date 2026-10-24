@@ -456,6 +456,14 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
 /// reader verifies every pack's size and SHA-256 against `index.json`, so the
 /// fixture builds real RWFP1 packs and records their real digests.
 fn identify_data_archive(platforms: &[(&str, &str)]) -> Vec<u8> {
+    identify_data_archive_for_group(platforms, None, false)
+}
+
+fn identify_data_archive_for_group(
+    platforms: &[(&str, &str)],
+    group: Option<&str>,
+    invalid_raw_hash: bool,
+) -> Vec<u8> {
     let sha256 = |bytes: &[u8]| {
         let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
             .expect("sha256 setup")
@@ -482,7 +490,7 @@ fn identify_data_archive(platforms: &[(&str, &str)]) -> Vec<u8> {
             "slug": slug,
             "file": format!("packs/{slug}.pack"),
             "rawBytes": pack.len(),
-            "sha256": sha256(&pack),
+            "sha256": if invalid_raw_hash { "0".repeat(64) } else { sha256(&pack) },
             "brotliFile": format!("packs/{slug}.pack.br"),
             "brotliBytes": compressed.len(),
             "brotliSha256": sha256(&compressed),
@@ -499,13 +507,16 @@ fn identify_data_archive(platforms: &[(&str, &str)]) -> Vec<u8> {
         packs.push((format!("packs/{slug}.pack.br"), compressed));
     }
 
+    let mut index = serde_json::json!({ "systems": systems });
+    if let Some(group) = group {
+        index["groups"] = serde_json::json!([{
+            "id": group,
+            "default": false,
+            "systems": platforms.iter().map(|(_, slug)| *slug).collect::<Vec<_>>(),
+        }]);
+    }
     let mut files = vec![
-        (
-            "index.json".to_string(),
-            serde_json::json!({ "systems": systems })
-                .to_string()
-                .into_bytes(),
-        ),
+        ("index.json".to_string(), index.to_string().into_bytes()),
         (
             "catalog.json".to_string(),
             serde_json::json!({
@@ -1000,6 +1011,291 @@ fn redump_dat(games: &[(&str, &[u8])]) -> Vec<u8> {
 }
 
 #[test]
+fn database_update_empty_database_fails_and_local_update_recovers() {
+    let temp = setup_temp_dir();
+    let dir = temp.child("identify-db");
+    fs::create_dir(dir.path()).unwrap();
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "update",
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(report["status"], "failed");
+    assert!(
+        report["label"]
+            .as_str()
+            .unwrap()
+            .contains("no installed Redump packs to update")
+    );
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+    let archive = temp.child("update.zip");
+    let dat = redump_dat(&[("Updated Game", b"updated payload")]);
+    fs::write(
+        archive.path(),
+        store_zip(&[("Sony - PlayStation.dat", &dat)]),
+    )
+    .unwrap();
+    let archive_bytes = fs::read(archive.path()).unwrap();
+    let update = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "update",
+            "psx",
+            "--from",
+            archive.to_str().unwrap(),
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(update["status"], "succeeded");
+    assert_eq!(update["details"]["imported"].as_array().unwrap().len(), 1);
+    assert!(dir.path().join("sony-playstation.pack").is_file());
+    let rom = temp.child("updated.bin");
+    fs::write(rom.path(), b"updated payload").unwrap();
+    let identified = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "--input",
+            rom.to_str().unwrap(),
+            "--system",
+            "psx",
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(identified["details"]["identify"]["status"], "matched");
+    assert_eq!(
+        identified["details"]["identify"]["matches"][0]["name"],
+        "Updated Game"
+    );
+    let missing = temp.child("missing.zip");
+    let installed = fs::read(dir.path().join("sony-playstation.pack")).unwrap();
+    let failed = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "update",
+            "psx",
+            "--from",
+            missing.to_str().unwrap(),
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(failed["status"], "failed");
+    assert_eq!(
+        fs::read(dir.path().join("sony-playstation.pack")).unwrap(),
+        installed
+    );
+    assert_eq!(fs::read(archive.path()).unwrap(), archive_bytes);
+}
+
+#[test]
+fn database_install_group_rejects_invalid_names_and_wrong_archives_without_writes() {
+    let temp = setup_temp_dir();
+    let dir = full_database_fixture(&temp);
+    let pack = dir.join("full-v1/packs/sony-playstation.pack.br");
+    let original = fs::read(&pack).unwrap();
+    let index = fs::read(dir.join("full-v1/index.json")).unwrap();
+    let archive = temp.child("full.tar.br");
+    for (group, expected) in [
+        ("../escape", "invalid identify pack group"),
+        ("optional-computers", "does not contain group"),
+    ] {
+        let report = parse_single_json_line(&command_stdout(
+            &[
+                "identify",
+                "database",
+                "install-group",
+                group,
+                "--from",
+                archive.to_str().unwrap(),
+                "--database-dir",
+                dir.to_str().unwrap(),
+                "--json",
+            ],
+            1,
+        ));
+        assert_eq!(report["status"], "failed");
+        assert!(
+            report["label"].as_str().unwrap().contains(expected),
+            "{report}"
+        );
+        assert_eq!(fs::read(&pack).unwrap(), original);
+        assert_eq!(fs::read(dir.join("full-v1/index.json")).unwrap(), index);
+        assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".identify-group-")
+        }));
+    }
+}
+
+fn database_file_snapshot(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    fn collect(
+        root: &Path,
+        directory: &Path,
+        files: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        for entry in fs::read_dir(directory).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if entry.file_type().unwrap().is_dir() {
+                collect(root, &path, files);
+            } else {
+                files.insert(
+                    path.strip_prefix(root).unwrap().to_path_buf(),
+                    fs::read(&path).unwrap(),
+                );
+            }
+        }
+    }
+    let mut files = std::collections::BTreeMap::new();
+    collect(root, root, &mut files);
+    files
+}
+
+fn assert_database_payloads_preserved(
+    before: &std::collections::BTreeMap<PathBuf, Vec<u8>>,
+    after: &std::collections::BTreeMap<PathBuf, Vec<u8>>,
+) {
+    for (path, bytes) in before {
+        if path == Path::new("index.json") || path == Path::new("catalog.json") {
+            continue;
+        }
+        assert_eq!(after.get(path), Some(bytes), "preserve {}", path.display());
+    }
+}
+
+#[test]
+fn database_install_group_merges_reinstalls_and_preserves_data_on_digest_failure() {
+    let temp = setup_temp_dir();
+    let dir = full_database_fixture(&temp);
+    fs::write(dir.join("user-note.txt"), b"keep user data").unwrap();
+    let seed = temp.child("optional-consoles.tar.br");
+    fs::write(
+        seed.path(),
+        identify_data_archive_for_group(
+            &[("Sega Saturn", "sega-saturn")],
+            Some("optional-consoles"),
+            false,
+        ),
+    )
+    .unwrap();
+    let seeded = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "install-group",
+            "optional-consoles",
+            "--from",
+            seed.to_str().unwrap(),
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(seeded["status"], "succeeded");
+    let before = database_file_snapshot(&dir);
+    let archive = temp.child("optional-computers.tar.br");
+    let platforms = [("Commodore 64", "commodore-64")];
+    let valid = identify_data_archive_for_group(&platforms, Some("optional-computers"), false);
+    fs::write(archive.path(), &valid).unwrap();
+    let args = [
+        "identify",
+        "database",
+        "install-group",
+        "optional-computers",
+        "--from",
+        archive.to_str().unwrap(),
+        "--database-dir",
+        dir.to_str().unwrap(),
+        "--json",
+    ];
+    let report = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(report["details"]["group"], "optional-computers");
+    assert_eq!(report["details"]["packs"], 1);
+    let after = database_file_snapshot(&dir);
+    assert_database_payloads_preserved(&before, &after);
+    assert_eq!(
+        fs::read(dir.join("commodore-64.pack")).unwrap(),
+        pack_v1("Commodore 64", "nointro-single-image-v1", &[]),
+    );
+    let status = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "status",
+            "--database-dir",
+            dir.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    ));
+    let packs = status["details"]["packs"].as_array().unwrap();
+    let index: Value = serde_json::from_slice(&fs::read(dir.join("index.json")).unwrap()).unwrap();
+    assert_eq!(index["systems"].as_array().unwrap().len(), 2);
+    assert_eq!(index["groups"].as_array().unwrap().len(), 2);
+    let catalog: Value =
+        serde_json::from_slice(&fs::read(dir.join("catalog.json")).unwrap()).unwrap();
+    assert_eq!(catalog["platforms"].as_array().unwrap().len(), 2);
+    assert_eq!(packs.len(), 3);
+    for slug in ["sony-playstation", "sega-saturn", "commodore-64"] {
+        assert!(
+            packs
+                .iter()
+                .any(|pack| pack["slug"] == slug && pack["format"] == "RWFP1")
+        );
+    }
+    let repeated = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(repeated["details"]["packs"], 1);
+    assert_eq!(database_file_snapshot(&dir), after);
+    let bad = identify_data_archive_for_group(&platforms, Some("optional-computers"), true);
+    fs::write(archive.path(), &bad).unwrap();
+    let rejected = parse_single_json_line(&command_stdout(&args, 1));
+    assert_eq!(rejected["status"], "failed");
+    assert_eq!(rejected["error_kind"], "validation");
+    assert!(
+        rejected["label"]
+            .as_str()
+            .unwrap()
+            .contains("invalid decompressed data"),
+        "{rejected}"
+    );
+    assert_eq!(database_file_snapshot(&dir), after);
+    assert_eq!(fs::read(archive.path()).unwrap(), bad);
+    assert!(fs::read_dir(temp.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".identify-group-")
+    }));
+    fs::write(archive.path(), &valid).unwrap();
+    let recovered = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(recovered["status"], "succeeded");
+    assert_eq!(database_file_snapshot(&dir), after);
+    assert_eq!(fs::read(archive.path()).unwrap(), valid);
+}
+
+#[test]
 fn install_from_imports_only_the_requested_redump_system() {
     let temp = setup_temp_dir();
     let playstation = redump_dat(&[("PlayStation Game", b"playstation")]);
@@ -1301,4 +1597,45 @@ fn database_remove_accepts_a_setup_only_pack() {
         0,
     );
     assert!(!dir.join("full-v1/packs/sony-playstation.pack.br").exists());
+}
+
+#[test]
+fn database_import_redump_rejects_a_non_zip_file() {
+    let temp = setup_temp_dir();
+    let dump = temp.child("notzip.zip");
+    fs::write(dump.path(), b"plain text, not an archive").expect("fixture");
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "import-redump",
+            dump.path().to_str().unwrap(),
+            "--database-dir",
+            temp.child("db").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    assert!(report.to_string().contains("not a ZIP"), "{report}");
+}
+
+#[test]
+fn database_install_group_rejects_unknown_groups_before_downloading() {
+    let temp = setup_temp_dir();
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "install-group",
+            "bogus",
+            "--database-dir",
+            temp.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    ));
+    let text = report.to_string();
+    assert!(text.contains("unknown identify pack group"), "{report}");
+    assert!(text.contains("optional-computers"), "{report}");
+    assert!(!text.contains("download"), "{report}");
 }

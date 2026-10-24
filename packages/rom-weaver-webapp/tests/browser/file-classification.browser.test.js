@@ -17,15 +17,15 @@ test("name predicates recognize patches, archives, and roms (case-insensitive)",
   expect(isPatchFileName("hack.ips1")).toBe(true);
   expect(isPatchFileName("game.sfc")).toBe(false);
 
-  expect(isArchiveFileName("bundle.zip")).toBe(true);
+  expect(isArchiveFileName("weave.zip")).toBe(true);
   expect(isArchiveFileName("disc.7Z")).toBe(true);
   expect(isRomFileName("game.sfc")).toBe(true);
-  expect(isRomFileName("bundle.zip")).toBe(false);
+  expect(isRomFileName("weave.zip")).toBe(false);
 });
 
 test("classifyFileName follows patch > archive > rom precedence", () => {
   expect(classifyFileName("hack.ips")).toBe("patch");
-  expect(classifyFileName("bundle.zip")).toBe("archive");
+  expect(classifyFileName("weave.zip")).toBe("archive");
   expect(classifyFileName("game.sfc")).toBe("rom");
   // .chd is both a container and a rom extension; archive precedence wins so the
   // extract pipeline can probe it.
@@ -37,12 +37,12 @@ test("classifyDroppedFiles splits a mixed drop into buckets", () => {
   const result = classifyDroppedFiles([
     file("game.sfc"),
     file("hack.ips"),
-    file("bundle.zip"),
+    file("weave.zip"),
     file("disc.chd"),
     file("notes.txt"),
   ]);
   expect(names(result.patches)).toEqual(["hack.ips"]);
-  expect(names(result.archives)).toEqual(["bundle.zip", "disc.chd"]);
+  expect(names(result.archives)).toEqual(["weave.zip", "disc.chd"]);
   // rom + unknown both fall into inputs
   expect(names(result.inputs)).toEqual(["game.sfc", "notes.txt"]);
 });

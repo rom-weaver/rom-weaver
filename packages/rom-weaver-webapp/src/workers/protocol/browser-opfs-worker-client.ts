@@ -1,6 +1,7 @@
+import OPFS_PROXY_WORKER_URL from "../../wasm/workers/browser-opfs-proxy-worker.ts?worker&url";
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
 // `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
-import BUNDLED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
+import WEAVED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
 
 type WorkerAssetRoot = typeof globalThis & {
   __romWeaverWorkerBaseUrl?: string;
@@ -28,7 +29,7 @@ type BrowserOpfsStorageRequest = {
 
 type BrowserOpfsStorageResponse = {
   action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
-  error?: { message?: string };
+  error?: { message?: string; name?: string };
   entries?: BrowserOpfsEntry[];
   filePath?: string;
   requestId?: string;
@@ -51,7 +52,7 @@ const createOpfsWorker = () => {
       // Fall through to the bundled worker.
     }
   }
-  return new Worker(BUNDLED_STAGING_WORKER_URL, {
+  return new Worker(WEAVED_STAGING_WORKER_URL, {
     name: "rpjs-opfs-storage-worker",
     type: "module",
   });
@@ -105,5 +106,68 @@ const requestBrowserOpfsStorage = (request: BrowserOpfsStorageRequest): Promise<
   });
 };
 
+const readBrowserOpfsPrefix = (filePath: string, length: number, signal?: AbortSignal): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException("OPFS prefix read aborted", "AbortError"));
+      return;
+    }
+    if (!Number.isInteger(length) || length < 0 || length > 32 * 2048) {
+      reject(new Error("OPFS prefix length must be an integer between 0 and 65536"));
+      return;
+    }
+    let worker: Worker;
+    try {
+      worker = new Worker(OPFS_PROXY_WORKER_URL, {
+        name: "rpjs-opfs-prefix-worker",
+        type: "module",
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    const requestId = createWorkerRequestId("opfs-prefix");
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", handleAbort);
+      worker.removeEventListener("message", handleMessage);
+      worker.removeEventListener("error", handleError);
+      worker.removeEventListener("messageerror", handleMessageError);
+      worker.terminate();
+    };
+    const fail = (error: unknown) => {
+      cleanup();
+      reject(error);
+    };
+    const handleAbort = () => fail(signal?.reason ?? new DOMException("OPFS prefix read aborted", "AbortError"));
+    const handleError = (event: ErrorEvent) => fail(new Error(event.message || "OPFS prefix worker failed"));
+    const handleMessageError = () => fail(new Error("OPFS prefix worker returned an unreadable message"));
+    const handleMessage = (
+      event: MessageEvent<{ requestId?: string; type?: string; bytes?: Uint8Array; message?: string }>,
+    ) => {
+      if (event.data?.requestId !== requestId) return;
+      if (
+        event.data.type !== "read-prefix-complete" ||
+        !(event.data.bytes instanceof Uint8Array) ||
+        event.data.bytes.length > length
+      ) {
+        fail(new Error(event.data.message || "OPFS prefix worker returned an invalid response"));
+        return;
+      }
+      cleanup();
+      resolve(event.data.bytes);
+    };
+    const timer = setTimeout(() => fail(new Error("OPFS prefix read timed out")), 30_000);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    worker.addEventListener("message", handleMessage);
+    worker.addEventListener("error", handleError);
+    worker.addEventListener("messageerror", handleMessageError);
+    try {
+      worker.postMessage({ type: "read-prefix", filePath, length, requestId });
+    } catch (error) {
+      fail(error);
+    }
+  });
+
 export type { BrowserOpfsEntry };
-export { requestBrowserOpfsStorage };
+export { readBrowserOpfsPrefix, requestBrowserOpfsStorage };

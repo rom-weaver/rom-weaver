@@ -8,7 +8,7 @@ import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.ts
 import { useUiLocalizer } from "./settings-context.tsx";
 
 /**
- * Presentational shell for the create-patch workflow. The stateful
+ * Presentational shell for the create-rom-patch workflow. The stateful
  * CreatePatchForm controller builds these prop bundles and hands them over; the
  * view owns nothing but layout - the page section, the unified drop zone, the
  * empty vs. staged source branch, the swap row, the output step and any active
@@ -16,6 +16,8 @@ import { useUiLocalizer } from "./settings-context.tsx";
  * galleries) without booting the workflow, wasm or worker pool.
  */
 type CreatePatchFormViewModel = {
+  /** False while Patches & cheats is the visible Create mode. */
+  active?: boolean;
   /** Active candidate-selection dialog (or nothing). */
   dialog?: ReactNode;
   /** True once a create run has produced a downloadable patch. */
@@ -32,11 +34,13 @@ type CreatePatchFormViewModel = {
   output: ComponentProps<typeof WorkflowOutputStep>;
   /** No source staged yet - show only the hero. */
   sourcesEmpty: boolean;
+  sourceModeControls?: ReactNode;
   /** Swap original/modified - present only when both sources are staged. */
   swap: { disabled: boolean; onSwap: () => void } | null;
 };
 
 const CreatePatchFormView = ({
+  active,
   dialog,
   done,
   dropZone,
@@ -45,6 +49,7 @@ const CreatePatchFormView = ({
   originalStep,
   output,
   sourcesEmpty,
+  sourceModeControls,
   swap,
 }: CreatePatchFormViewModel) => {
   const localizer = useUiLocalizer();
@@ -52,20 +57,23 @@ const CreatePatchFormView = ({
     <section className="panel" id="patch-builder-container">
       <UnifiedDropZone
         {...dropZone}
+        heading={active !== false}
         lead={{
           line1: "ui.hero.createThesis",
-          line2: "ui.hero.createThesis2",
           description: "ui.hero.createDescription",
         }}
       />
       {sourcesEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.original") },
-            { num: "0x03", title: localizer.message("ui.step.modified") },
-            { num: "0x04", title: localizer.message("ui.step.output") },
-          ]}
-        />
+        <>
+          {sourceModeControls}
+          <GhostSteps
+            steps={[
+              { num: "0x02", title: localizer.message("ui.step.original") },
+              { num: "0x03", title: localizer.message("ui.step.modified") },
+              { num: "0x04", title: localizer.message("ui.step.output") },
+            ]}
+          />
+        </>
       ) : (
         <>
           <WorkflowRomInputStep {...originalStep} />

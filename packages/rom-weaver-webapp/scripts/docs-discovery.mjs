@@ -2,17 +2,23 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Marked } from "marked";
-import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { DOC_SOURCES, SAMPLE_URL_PATTERN, SITE_ORIGIN, siteSamplePath } from "../src/webapp/docs-routing.mjs";
 
 const repositoryOrigin = "https://github.com/rom-weaver/rom-weaver/blob/main";
 
-export function createDocsMarkdown(source, markdown) {
+// Links point at `siteOrigin`, the deployment that serves the file. The
+// Canonical line stays on production: it names the page, not where this copy lives.
+export function createDocsMarkdown(source, markdown, siteOrigin = SITE_ORIGIN) {
   const resolveHref = (href) => {
+    const absolute = /^https?:\/\//i.test(href) && URL.canParse(href) ? new URL(href) : null;
+    if (absolute?.origin === SITE_ORIGIN) return `${siteOrigin}${absolute.pathname}${absolute.search}${absolute.hash}`;
     if (/^(?:[a-z]+:|\/\/|#)/i.test(href)) return href;
-    if (href.startsWith("/")) return `${SITE_ORIGIN}${href}`;
+    if (href.startsWith("/")) return `${siteOrigin}${href}`;
     const url = new URL(href, `https://repository.invalid/docs/${source.file}`);
     const route = DOC_SOURCES.find((entry) => `/docs/${entry.file}` === url.pathname);
-    if (route) return `${SITE_ORIGIN}/${route.slug}.md${url.search}${url.hash}`;
+    if (route) return `${siteOrigin}/${route.slug}.md${url.search}${url.hash}`;
+    const samplePath = siteSamplePath(url.pathname.slice(1));
+    if (samplePath) return `${siteOrigin}${samplePath}${url.search}${url.hash}`;
     return `${repositoryOrigin}${url.pathname}${url.search}${url.hash}`;
   };
   const parser = new Marked();
@@ -26,7 +32,15 @@ export function createDocsMarkdown(source, markdown) {
         `${token.type === "image" ? "!" : ""}[${token.text}](<${resolveHref(token.href)}>${title})`,
       );
     }
-    if (["code", "codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
+    // Sample commands in code blocks follow the serving origin, like the rendered page.
+    // Inline code and prose keep naming the project.
+    if (token.type === "code") {
+      replacements.set(
+        token.raw,
+        token.raw.replace(SAMPLE_URL_PATTERN, (_match, name) => `${siteOrigin}/${name}`),
+      );
+    }
+    if (["codespan", "html"].includes(token.type)) replacements.set(token.raw, token.raw);
   });
   // Longest matches MUST consume code samples before any links inside them.
   const patterns = [...replacements.keys()].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -53,6 +67,6 @@ export function readDocLastmod(file, cwd) {
   }
 }
 
-export function writeDocsMarkdown(outputPath, source, sourcePath) {
-  fs.writeFileSync(outputPath, createDocsMarkdown(source, fs.readFileSync(sourcePath, "utf8")));
+export function writeDocsMarkdown(outputPath, source, sourcePath, siteOrigin) {
+  fs.writeFileSync(outputPath, createDocsMarkdown(source, fs.readFileSync(sourcePath, "utf8"), siteOrigin));
 }

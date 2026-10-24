@@ -1,6 +1,75 @@
 use super::shared::*;
 
 #[test]
+fn patch_create_rejects_input_output_aliases_with_force() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let original_bytes = b"original ROM bytes";
+    let modified_bytes = b"modified ROM bytes";
+    fs::write(original.path(), original_bytes).expect("original fixture");
+    fs::write(modified.path(), modified_bytes).expect("modified fixture");
+    let nested = temp.child("nested");
+    fs::create_dir(nested.path()).expect("nested directory");
+
+    for input in [original.path(), modified.path()] {
+        let hardlink = temp.child("alias.ips");
+        fs::hard_link(input, hardlink.path()).expect("hard link");
+        let mut aliases = vec![
+            input.to_path_buf(),
+            nested.path().join("..").join(input.file_name().unwrap()),
+            hardlink.path().to_path_buf(),
+        ];
+        #[cfg(unix)]
+        let symlink = temp.child("symlink.ips");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(input, symlink.path()).expect("symlink");
+            aliases.push(symlink.path().to_path_buf());
+        }
+        for output in aliases {
+            let event = run_single_json_event(
+                &[
+                    "patch",
+                    "create",
+                    "--original",
+                    original.path().to_str().expect("original path"),
+                    "--modified",
+                    modified.path().to_str().expect("modified path"),
+                    "--format",
+                    "ips",
+                    "--output",
+                    output.to_str().expect("output path"),
+                    "--force",
+                    "--jsonl",
+                ],
+                1,
+            );
+            assert_eq!(event["stage"], "validate", "{event}");
+            assert_eq!(event["error_kind"], "validation", "{event}");
+            assert!(
+                event["label"]
+                    .as_str()
+                    .expect("label")
+                    .contains("input and output resolve to the same file"),
+                "{event}"
+            );
+            assert_eq!(
+                fs::read(original.path()).expect("original remains"),
+                original_bytes
+            );
+            assert_eq!(
+                fs::read(modified.path()).expect("modified remains"),
+                modified_bytes
+            );
+        }
+        fs::remove_file(hardlink.path()).expect("remove hard link");
+        #[cfg(unix)]
+        fs::remove_file(symlink.path()).expect("remove symlink");
+    }
+}
+
+#[test]
 fn patch_apply_chain_transition_preserves_contextual_error_kind() {
     let temp = setup_temp_dir();
     let input = temp.child("base.z64");
@@ -53,14 +122,14 @@ fn patch_apply_chain_transition_preserves_contextual_error_kind() {
 }
 
 #[test]
-fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
+fn patch_apply_dry_run_does_not_emit_weave_or_create_output_directory() {
     let temp = setup_temp_dir();
     let source = temp.child("source.sfc");
     source.write_str("source bytes").expect("fixture");
     let patch = temp.child("change.ips");
     patch.write_str("PATCHEOF").expect("patch fixture");
     let destination = temp.child("missing/patched.sfc");
-    let bundle = temp.child("preview.json");
+    let weave = temp.child("preview.json");
     let output = command_stdout(
         &[
             "patch",
@@ -71,8 +140,8 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
             patch.path().to_str().expect("path"),
             "--output",
             destination.path().to_str().expect("path"),
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--no-compress",
             "--dry-run",
             "--jsonl",
@@ -84,7 +153,7 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
     let terminal = &events[0];
     assert_eq!(terminal["details"]["dry_run"], true);
     assert!(!temp.child("missing").path().exists());
-    assert!(!bundle.path().exists());
+    assert!(!weave.path().exists());
     assert_eq!(fs::read(source.path()).expect("source"), b"source bytes");
 }
 
@@ -1319,6 +1388,10 @@ fn patch_apply_validates_output_checksum() {
             .expect("label")
             .contains("output checksum mismatch for crc32")
     );
+    assert!(
+        !temp.child("bad-output.bin").path().exists(),
+        "a ROM that failed --expect-out must not be left at the output path"
+    );
 }
 
 #[test]
@@ -1443,6 +1516,16 @@ fn patch_apply_warns_when_ips_does_not_change_output() {
             .as_str()
             .expect("label")
             .contains("warning=IPS patch did not change output")
+    );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch did not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
     );
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
@@ -1906,10 +1989,10 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_inferred_container_output() {
+fn patch_apply_emit_weave_records_inferred_container_output() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
-    let bundle = temp.child("rom-weaver-bundle.json");
+    let weave = temp.child("rom-weaver-weave.json");
     let output = temp.child("old-patched.zip");
 
     let events = parse_json_lines(&command_stdout(
@@ -1924,8 +2007,8 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
             "zip",
             "--default-patch-basis",
             "previous",
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--jsonl",
         ],
         0,
@@ -1937,17 +2020,17 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
     assert_patch_envelope(apply_json, "patch-apply", "BPS", "succeeded");
     assert!(output.path().is_file());
 
-    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
-        .expect("valid emitted bundle");
+    let emitted: Value = serde_json::from_slice(&fs::read(weave.path()).expect("weave bytes"))
+        .expect("valid emitted weave");
     assert_eq!(emitted["patchBasis"], "previous");
     assert_eq!(emitted["output"]["name"], "old-patched.zip");
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_appended_output_extension() {
+fn patch_apply_emit_weave_records_appended_output_extension() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
-    let bundle = temp.child("rom-weaver-bundle.json");
+    let weave = temp.child("rom-weaver-weave.json");
     let requested_output = temp.child("custom-output");
 
     command_stdout(
@@ -1962,15 +2045,15 @@ fn patch_apply_emit_bundle_records_appended_output_extension() {
             requested_output.path().to_str().expect("path"),
             "--format",
             "zip",
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--jsonl",
         ],
         0,
     );
 
-    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
-        .expect("valid emitted bundle");
+    let emitted: Value = serde_json::from_slice(&fs::read(weave.path()).expect("weave bytes"))
+        .expect("valid emitted weave");
     assert_eq!(emitted["output"]["name"], "custom-output.zip");
     assert!(temp.child("custom-output.zip").path().is_file());
 }
@@ -2636,6 +2719,16 @@ fn patch_create_warns_for_identical_ips_inputs() {
             .expect("label")
             .contains("warning=IPS patch will not change output")
     );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch will not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
+    );
     assert_eq!(fs::read(patch.path()).expect("patch"), b"PATCHEOF");
 }
 
@@ -2672,11 +2765,134 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
         vec![
-            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
+            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "ppf", "rup", "ups",
         ]
     );
     assert_eq!(candidates["source_values"]["original"]["size"], 15);
     assert_eq!(candidates["source_values"]["modified"]["size"], 15);
+}
+
+#[test]
+fn patch_create_candidates_drop_formats_that_cannot_shrink_the_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world, longer").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "create",
+            "--plan",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    let formats = json["details"]["patch_create_format_candidates"]["formats"]
+        .as_array()
+        .expect("formats array")
+        .iter()
+        .map(|value| value.as_str().expect("format"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        formats,
+        vec!["bps", "xdelta", "aps", "bdf", "ips", "rup", "ups"]
+    );
+}
+
+#[test]
+fn patch_create_candidates_do_not_infer_shrink_from_compressed_file_sizes() {
+    for (original_name, modified_name) in [
+        ("old.zip", "new.7z"),
+        ("old.zip", "new.bin"),
+        ("old.bin", "new.7z"),
+        ("old.chd", "new.bin"),
+        ("old.bin", "new.rvz"),
+    ] {
+        let temp = setup_temp_dir();
+        let original = temp.child(original_name);
+        let modified = temp.child(modified_name);
+        fs::write(original.path(), [0; 128]).expect("fixture");
+        fs::write(modified.path(), [1; 64]).expect("fixture");
+
+        let home = temp.path().to_str().expect("home path");
+        let output = command_stdout_with_env(
+            &[
+                "patch",
+                "create",
+                "--plan",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            &[
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let candidates = &json["details"]["patch_create_format_candidates"];
+        assert_eq!(candidates["source_values"]["original"]["size"], 128);
+        assert_eq!(candidates["source_values"]["modified"]["size"], 64);
+        let formats = candidates["formats"].as_array().expect("formats array");
+        for format in ["ebp", "ppf"] {
+            assert!(
+                formats.iter().any(|value| value == format),
+                "{original_name} -> {modified_name} lost {format}: {json}"
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world, longer").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    for format in ["ebp", "ppf"] {
+        let patch = temp.child(format!("new.{format}"));
+        let output = command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--jsonl",
+            ],
+            1,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["status"], "failed", "{format}");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("cannot shrink the output"),
+            "{format}: {json}"
+        );
+        assert!(!patch.path().exists(), "{format} left an output file");
+    }
 }
 
 #[test]
@@ -2790,7 +3006,7 @@ fn patch_create_candidates_default_to_xdelta_from_128_mib() {
             .iter()
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
-        vec!["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]
+        vec!["xdelta", "bps", "aps", "bdf", "ppf", "rup", "ups"]
     );
 }
 
@@ -4766,9 +4982,9 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
 
     write_tar_gz_fixture(
         &[
-            (original.path(), "bundle/game.bin"),
-            (patch.path(), "bundle/game [Hack].bps"),
-            (patch.path(), "bundle/other.bps"),
+            (original.path(), "weave/game.bin"),
+            (patch.path(), "weave/game [Hack].bps"),
+            (patch.path(), "weave/other.bps"),
         ],
         archive.path(),
     );
@@ -4871,7 +5087,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
     let alpha_modified = temp.child("alpha-modified.bin");
     let beta = temp.child("beta.bin");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
@@ -5004,7 +5220,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
     let alpha_modified = temp.child("alpha-modified.bin");
     let beta = temp.child("beta.bin");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
@@ -5081,8 +5297,8 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
     let original = temp.child("game.bin");
     let modified = temp.child("game-modified.bin");
     let patch = temp.child("update.bps");
-    let input_archive = temp.child("input-bundle.zip");
-    let patch_archive = temp.child("patch-bundle.zip");
+    let input_archive = temp.child("input-weave.zip");
+    let patch_archive = temp.child("patch-weave.zip");
     let output = temp.child("output.bin");
     fs::write(original.path(), b"game payload").expect("original fixture");
     fs::write(modified.path(), b"game payload patched").expect("modified fixture");
@@ -5501,6 +5717,150 @@ fn patch_apply_patch_select_binds_to_the_preceding_patch() {
 /// `patch validate` resolves patches through the same helper, so it takes the
 /// selector too.
 #[test]
+fn patch_validate_chain_honors_patches_authored_against_the_original_rom() {
+    let temp = setup_temp_dir();
+    let original: Vec<u8> = (0..4096u32).map(|index| (index * 7 % 251) as u8).collect();
+    let mut first = original.clone();
+    first[100..110].copy_from_slice(b"HELLOWORLD");
+    let mut second = original.clone();
+    second[2000..2004].copy_from_slice(b"ABCD");
+    fs::write(temp.child("original.bin").path(), &original).expect("fixture");
+    fs::write(temp.child("first.bin").path(), &first).expect("fixture");
+    fs::write(temp.child("second.bin").path(), &second).expect("fixture");
+    // Both patches were made from the ORIGINAL ROM, so the second one's
+    // embedded source checksum does not describe the first one's output.
+    create_bps_patch(
+        temp.child("original.bin").path(),
+        temp.child("first.bin").path(),
+        temp.child("first.bps").path(),
+    );
+    create_bps_patch(
+        temp.child("original.bin").path(),
+        temp.child("second.bin").path(),
+        temp.child("second.bps").path(),
+    );
+
+    let original_path = temp.child("original.bin");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    for extra in [
+        &[][..],
+        &["--default-patch-basis", "base"][..],
+        &["--patch-basis", "auto", "--patch-basis", "base"][..],
+    ] {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--input",
+            original_path.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--jsonl",
+        ];
+        args.extend_from_slice(extra);
+        let json = parse_single_json_line(&command_stdout(&args, 0));
+        assert_eq!(json["status"], "succeeded", "{extra:?}");
+    }
+
+    // Declared `previous` keeps the strict chain, so the second patch's source
+    // checksum is rejected against the first patch's output.
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            original_path.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "previous",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(parse_single_json_line(&output)["status"], "failed");
+}
+
+#[test]
+fn patch_validate_base_chain_honors_ignored_checksums() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let other = temp.child("other.bin");
+    let modified = temp.child("modified.bin");
+    let first_patch = temp.child("first.bps");
+    let other_patch = temp.child("other.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    other.write_str("Z123456789abcdefghij").unwrap();
+    modified.write_str("Z1234567W9abcdefghij").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_bps_patch(other.path(), modified.path(), other_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch",
+        other_patch.path().to_str().unwrap(),
+        "--default-patch-basis",
+        "base",
+        "--ignore-checksum-validation",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn patch_validate_base_chain_preserves_reverse_endpoint() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let short = temp.child("short.bin");
+    let combined = temp.child("combined.bin");
+    let final_rom = temp.child("final.bin");
+    let first_patch = temp.child("first.bps");
+    let reverse_patch = temp.child("reverse.rup");
+    let final_patch = temp.child("final.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    short.write_str("01234567Y9ab").unwrap();
+    combined.write_str("01X34567Y9ab").unwrap();
+    final_rom.write_str("Q1X34567Y9ab").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_rup_patch(short.path(), original.path(), reverse_patch.path());
+    create_bps_patch(combined.path(), final_rom.path(), final_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--patch",
+        reverse_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "base",
+        "--patch",
+        final_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
 fn patch_validate_accepts_a_patch_select_per_patch() {
     let temp = setup_temp_dir();
     let original = temp.child("game.bin");
@@ -5544,7 +5904,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
     let sidecar_txt = temp.child("notes.txt");
     let sidecar_json = temp.child("meta.json");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(original.path(), b"game payload").expect("fixture");
     fs::write(modified.path(), b"game payload patched").expect("fixture");
@@ -7021,7 +7381,7 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
         patch_bad.path(),
     );
 
-    // Independent mode exits 0 even though one patch fails, so the caller can read both verdicts.
+    // A failing verdict exits 1, but every verdict is still reported.
     let output = command_stdout(
         &[
             "patch",
@@ -7035,12 +7395,12 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
             "--independent",
             "--jsonl",
         ],
-        0,
+        1,
     );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "patch-validate");
-    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["status"], "failed");
     let validation = &json["details"]["patch_validation"];
     assert_eq!(validation["independent"], true);
     assert_eq!(validation["status"], "mixed");
@@ -7059,6 +7419,73 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
             .expect("failure message")
             .is_empty()
     );
+}
+
+fn independent_validate_fixture(temp: &assert_fs::TempDir, fail: bool) -> Vec<String> {
+    let input = temp.child("input.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(temp.child("mod-good.bin").path(), b"hello new world").expect("fixture");
+    fs::write(temp.child("other.bin").path(), b"totally other src").expect("fixture");
+    fs::write(temp.child("mod-other.bin").path(), b"totally other dst").expect("fixture");
+    let good = temp.child("good.bps");
+    let second = temp.child("second.bps");
+    create_bps_patch(input.path(), temp.child("mod-good.bin").path(), good.path());
+    if fail {
+        create_bps_patch(
+            temp.child("other.bin").path(),
+            temp.child("mod-other.bin").path(),
+            second.path(),
+        );
+    } else {
+        create_bps_patch(
+            input.path(),
+            temp.child("mod-other.bin").path(),
+            second.path(),
+        );
+    }
+    [
+        "patch",
+        "validate",
+        "--input",
+        input.path().to_str().expect("path"),
+        "--patch",
+        good.path().to_str().expect("path"),
+        "--patch",
+        second.path().to_str().expect("path"),
+        "--independent",
+    ]
+    .map(str::to_string)
+    .to_vec()
+}
+
+#[test]
+fn patch_validate_independent_exit_code_follows_verdicts() {
+    for (fail, code) in [(true, 1), (false, 0)] {
+        let temp = setup_temp_dir();
+        let base = independent_validate_fixture(&temp, fail);
+        let run = |extra: Option<&str>| {
+            let mut args: Vec<&str> = base.iter().map(String::as_str).collect();
+            args.extend(extra);
+            command_stdout(&args, code)
+        };
+        run(None);
+        let json: serde_json::Value =
+            serde_json::from_slice(&run(Some("--json"))).expect("json document");
+        assert_eq!(json["exit_code"], code);
+        assert_eq!(
+            json["status"],
+            if fail { "failed" } else { "succeeded" },
+            "{json}"
+        );
+        let verdicts = &json["details"]["patch_validation"];
+        assert_eq!(verdicts["failed_count"], u64::from(fail));
+        assert_eq!(
+            verdicts["per_patch"].as_array().expect("per_patch").len(),
+            2
+        );
+        let line = parse_single_json_line(&run(Some("--jsonl")));
+        assert_eq!(line["status"], if fail { "failed" } else { "succeeded" });
+    }
 }
 
 #[test]
@@ -7609,6 +8036,118 @@ fn patch_validate_plan_accepts_declared_headerless_size() {
     assert_eq!(verdict["basis"], "base");
     assert_eq!(verdict["input_verdict"], "passed");
     assert_eq!(verdict["matched"]["variant"], "headerless");
+}
+
+/// APSGBA and DPS pin only endpoint sizes. A patch made against the headered
+/// ROM fits its raw size; the headerless sibling's different size must not
+/// turn that into an input mismatch.
+#[test]
+fn patch_validate_plan_accepts_size_only_endpoints_of_headered_nes() {
+    let temp = setup_temp_dir();
+    let payload: Vec<u8> = (0..24 * 1024).map(|index| (index * 7 + 1) as u8).collect();
+    let input = temp.child("original.nes");
+    let headered = with_nes_header(&payload);
+    fs::write(input.path(), &headered).expect("fixture");
+    let mut expected = headered.clone();
+    expected[0x10 + 300] ^= 0x5a;
+    let modified = temp.child("expected.nes");
+    fs::write(modified.path(), &expected).expect("fixture");
+    let mut wrong_content = headered.clone();
+    wrong_content[0x10 + 301] ^= 0x01;
+    let wrong_content_input = temp.child("wrong-content.nes");
+    fs::write(wrong_content_input.path(), wrong_content).expect("fixture");
+    let wrong_size_input = temp.child("wrong-size.nes");
+    fs::write(wrong_size_input.path(), &headered[..headered.len() - 1024]).expect("fixture");
+
+    let plan_verdict = |input: &std::path::Path, patch: &std::path::Path, basis: &[&str]| {
+        let args = [
+            &["patch", "validate", "--input"][..],
+            &[input.to_str().expect("path")],
+            &[
+                "--patch",
+                patch.to_str().expect("path"),
+                "--plan",
+                "--jsonl",
+            ],
+            basis,
+        ]
+        .concat();
+        let plan = parse_single_json_line(
+            &Command::cargo_bin("rom-weaver")
+                .expect("binary")
+                .args(normalize_cli_args(&args))
+                .output()
+                .expect("run")
+                .stdout,
+        );
+        plan["details"]["patch_validation"]["per_patch"][0]["input_verdict"].clone()
+    };
+
+    for format in ["apsgba", "dps"] {
+        let patch = temp.child(format!("change.{format}"));
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                input.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                format,
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+
+        for basis in [&[][..], &["--patch-basis", "base"][..]] {
+            assert_eq!(
+                plan_verdict(input.path(), patch.path(), basis),
+                "passed",
+                "{format} {basis:?}"
+            );
+        }
+        assert_eq!(
+            plan_verdict(wrong_size_input.path(), patch.path(), &[]),
+            "failed",
+            "{format} wrong size"
+        );
+
+        let output = temp.child(format!("roundtrip-{format}.nes"));
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--patch-basis",
+                "base",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            expected,
+            "{format}"
+        );
+    }
+    // APSGBA's per-block crc16s still reject same-size wrong content.
+    assert_eq!(
+        plan_verdict(
+            wrong_content_input.path(),
+            temp.child("change.apsgba").path(),
+            &[]
+        ),
+        "failed"
+    );
 }
 
 #[test]
@@ -11156,4 +11695,1487 @@ fn patch_apply_auto_n64_order_leaves_a_checksummed_patch_alone() {
         fs::read(temp.child("output.v64").path()).expect("output"),
         byte_swap_pairs(&modified_z64)
     );
+}
+
+fn xdelta_create_in(cwd: &Path, index: usize) -> std::process::Output {
+    let original = cwd.join(format!("original-{index}.bin"));
+    let modified = cwd.join(format!("modified-{index}.bin"));
+    let patch = cwd.join(format!("update-{index}.xdelta"));
+    fs::write(&original, pseudo_random_bytes(64 * 1024, 1)).expect("original");
+    let mut changed = pseudo_random_bytes(64 * 1024, 1);
+    changed[1000] ^= 0xff;
+    fs::write(&modified, changed).expect("modified");
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command
+        .current_dir(cwd)
+        // The CLI resolves its temp parent from PWD, which a child does not update itself.
+        .env("PWD", cwd)
+        .args(["--json", "patch", "create", "--original"])
+        .arg(&original)
+        .arg("--modified")
+        .arg(&modified)
+        .args(["--format", "xdelta", "--output"])
+        .arg(&patch)
+        .args(["--force"]);
+    let output = command.output().expect("run rom-weaver");
+    assert!(
+        output.status.success(),
+        "run {index} failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(patch.exists(), "run {index} wrote its patch");
+    output
+}
+
+fn assert_no_temp_folder_left(cwd: &Path) {
+    let leftovers: Vec<_> = fs::read_dir(cwd)
+        .expect("read cwd")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("rom-weaver-out")
+        })
+        .collect();
+    assert!(leftovers.is_empty(), "leftover temp folders: {leftovers:?}");
+}
+
+#[test]
+fn xdelta_create_leaves_no_temp_folder_in_the_working_directory() {
+    let temp = setup_temp_dir();
+    xdelta_create_in(temp.path(), 0);
+    assert_no_temp_folder_left(temp.path());
+}
+
+#[test]
+fn concurrent_xdelta_runs_in_one_directory_all_succeed_and_clean_up() {
+    let temp = setup_temp_dir();
+    let cwd = temp.path().to_path_buf();
+    let handles: Vec<_> = (0..8)
+        .map(|index| {
+            let cwd = cwd.clone();
+            std::thread::spawn(move || {
+                for round in 0..3 {
+                    xdelta_create_in(&cwd, index * 10 + round);
+                }
+            })
+        })
+        .collect();
+    for handle in handles {
+        handle.join().expect("worker run");
+    }
+    assert_no_temp_folder_left(&cwd);
+}
+
+#[cfg(unix)]
+mod termination_signals {
+    use super::*;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    /// A long compressing apply in `cwd`, returned once it has created its private temp folder.
+    fn spawn_long_apply(cwd: &Path, ignore_hup: bool) -> std::process::Child {
+        let original = cwd.join("original.bin");
+        let modified = cwd.join("modified.bin");
+        let patch = cwd.join("update.xdelta");
+        fs::write(&original, pseudo_random_bytes(48 * 1024 * 1024, 7)).expect("original");
+        let mut changed = pseudo_random_bytes(48 * 1024 * 1024, 7);
+        changed[1000] ^= 0xff;
+        fs::write(&modified, changed).expect("modified");
+        let bin = assert_cmd::cargo::cargo_bin("rom-weaver");
+        let status = std::process::Command::new(&bin)
+            .current_dir(cwd)
+            .env("PWD", cwd)
+            .args(["patch", "create", "--original"])
+            .arg(&original)
+            .arg("--modified")
+            .arg(&modified)
+            .args(["--format", "xdelta", "--output"])
+            .arg(&patch)
+            .output()
+            .expect("create")
+            .status;
+        assert!(status.success());
+        let mut command = std::process::Command::new(&bin);
+        command
+            .current_dir(cwd)
+            .env("PWD", cwd)
+            .args(["patch", "apply", "--input"])
+            .arg(&original)
+            .arg("--patch")
+            .arg(&patch)
+            .args(["--output"])
+            .arg(cwd.join("out.7z"))
+            .args(["--compress-level", "max"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // Set both signals either way so the result does not depend on the runner's inherited dispositions.
+        let disposition = if ignore_hup {
+            libc::SIG_IGN
+        } else {
+            libc::SIG_DFL
+        };
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(move || {
+                libc::signal(libc::SIGHUP, disposition);
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let child = command.spawn().expect("spawn apply");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !fs::read_dir(cwd).expect("read cwd").flatten().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with("rom-weaver-out")
+        }) {
+            assert!(Instant::now() < deadline, "temp folder never appeared");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        child
+    }
+
+    #[test]
+    fn sigterm_cancels_cleanly_and_leaves_no_temp_folder() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), false);
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    #[test]
+    fn inherited_ignored_sighup_still_lets_the_run_finish() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), true);
+        unsafe { libc::kill(child.id() as i32, libc::SIGHUP) };
+        let status = child.wait().expect("wait");
+        assert!(status.success(), "{status:?} signal {:?}", status.signal());
+        assert!(temp.path().join("out.7z").exists());
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// The second signal takes the forced `process::exit(130)` path, which skips every `Drop`; the
+    /// gap lets the first signal land first (back-to-back kills merge into one delivery).
+    #[test]
+    fn second_sigterm_after_a_gap_exits_130_and_leaves_no_temp_folder() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), false);
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(30));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// A stdin compress stages the piped bytes under `$TMPDIR/rom-weaver-stream-*`; the forced exit
+    /// must remove that too.
+    #[test]
+    fn second_sigterm_during_a_stdin_compress_leaves_no_staging() {
+        use std::io::Write;
+
+        let temp = setup_temp_dir();
+        let scratch = temp.path().join("tmp");
+        fs::create_dir_all(&scratch).expect("scratch tmp");
+        let payload = pseudo_random_bytes(48 * 1024 * 1024, 11);
+        let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+        command
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .env("TMPDIR", &scratch)
+            .args([
+                "compress", "--input", "-", "--format", "7z", "--level", "max",
+            ])
+            .arg("--output")
+            .arg(temp.path().join("out.7z"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn compress");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(&payload);
+        });
+        // The spool reaching its full size means stdin is drained and the compress is running.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        loop {
+            let spooled = fs::read_dir(&scratch)
+                .expect("read scratch")
+                .flatten()
+                .any(|dir| {
+                    dir.path()
+                        .join("input")
+                        .join("stdin.bin")
+                        .metadata()
+                        .is_ok_and(|meta| meta.len() == 48 * 1024 * 1024)
+                });
+            if spooled {
+                break;
+            }
+            assert!(Instant::now() < deadline, "stdin was never fully staged");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        std::thread::sleep(Duration::from_millis(30));
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        writer.join().expect("writer");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        let leftovers: Vec<_> = fs::read_dir(&scratch)
+            .expect("read scratch")
+            .flatten()
+            .map(|entry| entry.file_name())
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp entries: {leftovers:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    /// `checksum --input -` spools stdin to `$TMPDIR/rom-weaver-stdin-*.tmp`, then hashes that file.
+    /// While the hash runs the forced exit skips `Drop`, so only the live-temp registration can
+    /// remove the spool. (A spool still being drained cancels cleanly within milliseconds and would
+    /// not exercise it.)
+    #[test]
+    fn second_sigterm_while_hashing_a_stdin_spool_leaves_no_spool_file() {
+        use std::io::Write;
+
+        const PAYLOAD: usize = 256 * 1024 * 1024;
+        let temp = setup_temp_dir();
+        let scratch = temp.path().join("tmp");
+        fs::create_dir_all(&scratch).expect("scratch tmp");
+        let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"));
+        command
+            .current_dir(temp.path())
+            .env("PWD", temp.path())
+            .env("TMPDIR", &scratch)
+            .args([
+                "checksum",
+                "--input",
+                "-",
+                "--algo",
+                "sha256,sha1,md5,blake3,crc32",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        // SAFETY: only async-signal-safe signal() runs between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("spawn checksum");
+        let mut stdin = child.stdin.take().expect("stdin");
+        let payload = pseudo_random_bytes(PAYLOAD, 13);
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(&payload);
+        });
+        let spool_len = || {
+            fs::read_dir(&scratch)
+                .expect("read scratch")
+                .flatten()
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("rom-weaver-stdin-") && name.ends_with(".tmp")
+                })
+                .filter_map(|entry| entry.metadata().ok())
+                .map(|meta| meta.len())
+                .max()
+        };
+        // A full-size spool means stdin hit EOF and the hash is running.
+        let deadline = Instant::now() + Duration::from_secs(120);
+        while spool_len() != Some(PAYLOAD as u64) {
+            assert!(Instant::now() < deadline, "stdin spool never filled");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Cancellation unwinds within milliseconds, so a spaced second signal would arrive after a
+        // clean exit; burst signals until the process is gone so one lands mid-unwind.
+        let status = loop {
+            unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+            if let Some(status) = child.try_wait().expect("try_wait") {
+                break status;
+            }
+            std::thread::sleep(Duration::from_micros(200));
+        };
+        writer.join().expect("writer");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        let leftovers: Vec<_> = fs::read_dir(&scratch)
+            .expect("read scratch")
+            .flatten()
+            .map(|entry| entry.file_name())
+            .collect();
+        assert!(leftovers.is_empty(), "leftover temp entries: {leftovers:?}");
+    }
+}
+
+#[test]
+fn patch_validate_explains_that_stdin_input_is_unsupported() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "-i",
+            "-",
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        json["label"],
+        "patch validate does not read from stdin; pass a file path"
+    );
+}
+
+#[test]
+fn patch_apply_explains_that_stdin_input_is_unsupported() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let output = temp.child("out.bin");
+    for extra in [&[][..], &["--dry-run"][..]] {
+        let mut args = vec![
+            "patch",
+            "apply",
+            "-i",
+            "-",
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ];
+        args.extend_from_slice(extra);
+        let json = run_single_json_event(&args, 1);
+        assert_eq!(
+            json["label"],
+            "patch apply does not read from stdin; pass a file path"
+        );
+    }
+}
+
+#[test]
+fn patch_apply_output_header_strip_accepts_headerless_extension() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.smc");
+    let patch = temp.child("hack.ips");
+    let output = temp.child("patched.sfc");
+    // 512-byte copier header + 256 KiB ROM body.
+    let rom = vec![0_u8; 512 + 256 * 1024];
+    fs::write(input.path(), &rom).expect("rom fixture");
+    // IPS: one byte at headerless offset 0x100.
+    let mut ips = b"PATCH".to_vec();
+    ips.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x01, 0xAA]);
+    ips.extend_from_slice(b"EOF");
+    fs::write(patch.path(), ips).expect("patch fixture");
+
+    let args = [
+        "patch",
+        "apply",
+        "--input",
+        input.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+        "--output",
+        output.path().to_str().expect("path"),
+        "--patch-header",
+        "strip",
+        "--output-header",
+        "strip",
+        "--jsonl",
+    ];
+    // A dry run must accept the same output name as the real run.
+    let mut dry_run = args.to_vec();
+    dry_run.push("--dry-run");
+    command_stdout(&dry_run, 0);
+    assert!(!output.path().exists(), "dry run must not write");
+
+    command_stdout(&args, 0);
+
+    let written = fs::read(output.path()).expect("headerless output");
+    assert_eq!(written.len(), 256 * 1024);
+    assert_eq!(written[0x100], 0xAA);
+
+    // A requested headered `.smc` output is still renamed to `.sfc`.
+    let headered_request = temp.child("renamed.smc");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            headered_request.path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert!(!headered_request.path().exists());
+    let renamed = fs::read(temp.child("renamed.sfc").path()).expect("renamed headerless output");
+    assert_eq!(renamed.len(), 256 * 1024);
+}
+
+#[test]
+fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), b"hello old world").expect("rom fixture");
+    let good = temp.child("good.bps");
+    let modified = temp.child("new.bin");
+    fs::write(modified.path(), b"hello new world").expect("modified fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            input.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            good.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    // A patch made for a different source fails its source check.
+    let other = temp.child("other.bin");
+    let bad = temp.child("bad.bps");
+    fs::write(other.path(), b"entirely different").expect("other fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            other.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            bad.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+
+    // A failed run reports on stderr.
+    let stdout = String::from_utf8(
+        command_output_with_env(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--independent",
+                "--patch",
+                good.path().to_str().expect("path"),
+                "--patch",
+                bad.path().to_str().expect("path"),
+            ],
+            &[],
+            1,
+        )
+        .stderr,
+    )
+    .expect("utf8 stderr");
+
+    assert!(stdout.contains("1/2 passed"), "{stdout}");
+    assert!(stdout.contains("; pass good.bps"), "{stdout}");
+    assert!(stdout.contains("; FAIL bad.bps: "), "{stdout}");
+    assert!(
+        !stdout.contains("\\n"),
+        "verdicts must not carry escaped newlines: {stdout}"
+    );
+}
+
+fn run_patch_check_command(
+    command: &str,
+    original: &assert_fs::fixture::ChildPath,
+    patch: &assert_fs::fixture::ChildPath,
+    output: Option<&assert_fs::fixture::ChildPath>,
+    checks: &[(&str, String)],
+    expected_code: i32,
+) -> serde_json::Value {
+    let mut args = vec![
+        "patch",
+        command,
+        "--input",
+        original.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+    ];
+    if let Some(output) = output {
+        args.extend([
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ]);
+    }
+    for (flag, value) in checks {
+        args.extend([*flag, value.as_str()]);
+    }
+    args.push("--jsonl");
+    run_single_json_event(&args, expected_code)
+}
+
+#[test]
+fn patch_apply_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for (name, checks, expected_flag) in [
+        (
+            "bad-input.bin",
+            vec![("--patch-input-check", "crc32=deadbeef".to_string())],
+            "--patch-input-check",
+        ),
+        (
+            "bad-output.bin",
+            vec![("--patch-output-check", "crc32=deadbeef".to_string())],
+            "--patch-output-check",
+        ),
+        (
+            "bad-both.bin",
+            vec![
+                ("--patch-input-check", format!("crc32={input_crc}")),
+                ("--patch-output-check", "crc32=deadbeef".to_string()),
+            ],
+            "--patch-output-check",
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 1);
+        assert_eq!(event["status"], "failed", "{name}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(expected_flag), "{name}: {label}");
+        assert!(label.contains("update.bps"), "{name}: {label}");
+        assert!(label.contains("expected deadbeef"), "{name}: {label}");
+        assert!(label.contains("actual"), "{name}: {label}");
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+
+    // Either flag may be given alone.
+    for (name, checks) in [
+        (
+            "ok-input.bin",
+            vec![("--patch-input-check", format!("crc32={input_crc}"))],
+        ),
+        (
+            "ok-output.bin",
+            vec![("--patch-output-check", format!("crc32={output_crc}"))],
+        ),
+    ] {
+        let output = temp.child(name);
+        let event = run_patch_check_command("apply", &original, &patch, Some(&output), &checks, 0);
+        assert_eq!(event["status"], "succeeded", "{name}");
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            b"hello new world",
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let checks = [(flag, "crc32=deadbeef".to_string())];
+        let event = run_patch_check_command("validate", &original, &patch, None, &checks, 1);
+        assert_eq!(event["status"], "failed", "{flag}");
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains(flag), "{flag}: {label}");
+        assert!(label.contains("update.bps"), "{flag}: {label}");
+        assert!(label.contains("expected deadbeef"), "{flag}: {label}");
+    }
+
+    let checks = [
+        ("--patch-input-check", format!("crc32={input_crc}")),
+        ("--patch-output-check", format!("crc32={output_crc}")),
+    ];
+    let event = run_patch_check_command("validate", &original, &patch, None, &checks, 0);
+    assert_eq!(event["status"], "succeeded");
+}
+
+/// 64 zero bytes (crc32 758d6336) plus two IPS patches written against it:
+/// `first.ips` sets byte 0 to 1, `second.ips` sets byte 10 to 2.
+fn write_zero_rom_and_two_ips(temp: &TempDir, rom_name: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let rom = temp.child(rom_name).path().to_path_buf();
+    fs::write(&rom, [0u8; 64]).expect("rom fixture");
+    let first = temp.child("first.ips").path().to_path_buf();
+    let second = temp.child("second.ips").path().to_path_buf();
+    for (path, offset, value) in [(&first, 0, 1u8), (&second, 10, 2u8)] {
+        let records = vec![TestIpsRecord::Literal {
+            offset,
+            data: vec![value],
+        }];
+        fs::write(path, build_ips_patch(records, None)).expect("ips fixture");
+    }
+    (rom, first, second)
+}
+
+#[test]
+fn patch_validate_checks_a_base_step_input_against_the_base_rom_like_apply() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let path = |path: &Path| path.to_str().expect("path").to_string();
+    let chain = |command: &str, check: &str| {
+        let mut args = vec![
+            "patch".to_string(),
+            command.to_string(),
+            "--input".to_string(),
+            path(&rom),
+            "--patch".to_string(),
+            path(&first),
+            "--patch".to_string(),
+            path(&second),
+            "--patch-basis".to_string(),
+            "base".to_string(),
+            "--patch-input-check".to_string(),
+            check.to_string(),
+        ];
+        if command == "apply" {
+            args.extend(["--no-compress", "--force", "-o"].map(str::to_string));
+            args.push(path(output.path()));
+        }
+        args
+    };
+    for (check, code) in [("crc32=758d6336", 0), ("crc32=deadbeef", 1)] {
+        for command in ["apply", "validate"] {
+            let args = chain(command, check);
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            command_output_with_env(&args, &[], code);
+        }
+    }
+}
+
+#[test]
+fn default_patch_basis_base_checks_a_step_input_against_the_base_rom_in_apply_and_validate() {
+    let temp = setup_temp_dir();
+    let (rom, first, second) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let second = second.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    // Base ROM 758d6336 passes; the intermediate after first.ips (fab84ea3)
+    // is not what the base-basis step reads, so it fails.
+    for (check, code) in [("crc32=758d6336", 0), ("crc32=fab84ea3", 1)] {
+        let chain = [
+            "--input",
+            rom,
+            "--patch",
+            first,
+            "--patch-input-check",
+            "",
+            "--patch",
+            second,
+            "--default-patch-basis",
+            "base",
+            "--patch-input-check",
+            check,
+        ];
+        let mut apply = vec!["patch", "apply"];
+        apply.extend(chain);
+        apply.extend(["--no-compress", "--force", "-o", out]);
+        command_output_with_env(&apply, &[], code);
+        let mut validate = vec!["patch", "validate"];
+        validate.extend(chain);
+        command_output_with_env(&validate, &[], code);
+    }
+}
+
+#[test]
+fn patch_validate_accepts_and_enforces_size_checks_like_apply() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        for (check, code) in [
+            ("size=64", 0),
+            ("crc32=758d6336,size=64", 0),
+            ("size=65", 1),
+        ] {
+            if !check.contains(',') {
+                command_output_with_env(
+                    &[
+                        "patch",
+                        "apply",
+                        "--input",
+                        rom,
+                        "--patch",
+                        first,
+                        flag,
+                        check,
+                        "--no-compress",
+                        "--force",
+                        "-o",
+                        out,
+                    ],
+                    &[],
+                    code,
+                );
+            }
+            let check = if flag == "--patch-output-check" {
+                check.replace("758d6336", "fab84ea3")
+            } else {
+                check.to_string()
+            };
+            command_output_with_env(
+                &[
+                    "patch", "validate", "--input", rom, "--patch", first, flag, &check,
+                ],
+                &[],
+                code,
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_apply_accepts_comma_separated_patch_check_values() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for (flag, check, code) in [
+        ("--patch-input-check", "crc32=758d6336,size=64", 0),
+        ("--patch-input-check", "crc32=758d6336, size=65", 1),
+        ("--patch-output-check", "crc32=fab84ea3,size=64", 0),
+        ("--patch-output-check", "crc32=758d6336,size=64", 1),
+    ] {
+        command_output_with_env(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                rom,
+                "--patch",
+                first,
+                flag,
+                check,
+                "--no-compress",
+                "--force",
+                "-o",
+                out,
+            ],
+            &[],
+            code,
+        );
+    }
+}
+
+#[test]
+fn patch_checks_reject_min_size_in_apply_and_validate() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "base.bin");
+    let output = temp.child("out.bin");
+    let rom = rom.to_str().expect("path");
+    let first = first.to_str().expect("path");
+    let out = output.path().to_str().expect("path");
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let apply = [
+            "patch",
+            "apply",
+            "--input",
+            rom,
+            "--patch",
+            first,
+            flag,
+            "min-size=10",
+            "--no-compress",
+            "--force",
+            "-o",
+            out,
+        ];
+        let validate = [
+            "patch",
+            "validate",
+            "--input",
+            rom,
+            "--patch",
+            first,
+            flag,
+            "min-size=10",
+        ];
+        for args in [apply.as_slice(), validate.as_slice()] {
+            let stderr = command_output_with_env(args, &[], 1).stderr;
+            let stderr = String::from_utf8_lossy(&stderr);
+            assert!(
+                stderr.contains(&format!("{flag} does not accept min-size=N")),
+                "{args:?}: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_apply_uses_a_raw_rom_whose_bytes_start_like_a_container_signature() {
+    let temp = setup_temp_dir();
+    let (rom, first, _) = write_zero_rom_and_two_ips(&temp, "weird.gba");
+    // A gzip signature by chance; the .gba name says this is not a gzip file.
+    let mut bytes = vec![0x1f, 0x8b, 0x08];
+    bytes.resize(256, 0);
+    fs::write(&rom, &bytes).expect("rom fixture");
+    let output = temp.child("weird-out.gba");
+    command_output_with_env(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            rom.to_str().expect("path"),
+            "--patch",
+            first.to_str().expect("path"),
+            "--no-compress",
+            "-o",
+            output.path().to_str().expect("path"),
+        ],
+        &[],
+        0,
+    );
+    let mut expected = bytes;
+    expected[0] = 1;
+    assert_eq!(fs::read(output.path()).expect("output"), expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_create_rejects_non_regular_modified_input_without_leaving_output() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    fs::write(original.path(), b"original ROM bytes").expect("original fixture");
+    let fifo = temp.child("modified.fifo");
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(fifo.path())
+            .status()
+            .expect("mkfifo")
+            .success()
+    );
+    // Holding the FIFO open read-write keeps any open by the command from blocking.
+    let _hold = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(fifo.path())
+        .expect("open fifo");
+
+    for name in ["from-fifo.bps", "from-fifo.ips"] {
+        let output = temp.child(name);
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                fifo.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            1,
+        );
+        assert_eq!(event["status"], "failed", "{name}");
+        assert!(
+            event["label"]
+                .as_str()
+                .expect("label")
+                .contains("not a regular file"),
+            "{name}: {}",
+            event["label"]
+        );
+        assert!(!output.path().exists(), "{name} left an output behind");
+    }
+}
+
+#[test]
+fn patch_validate_independent_enforces_patch_input_and_output_checks() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let input_crc = checksum_value(original.path(), "crc32");
+    let output_crc = checksum_value(temp.child("new.bin").path(), "crc32");
+    let run = |checks: &[(&str, String)], code: i32| {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--independent",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+        ];
+        for (flag, value) in checks {
+            args.extend([*flag, value.as_str()]);
+        }
+        args.push("--jsonl");
+        run_single_json_event(&args, code)
+    };
+
+    for flag in ["--patch-input-check", "--patch-output-check"] {
+        let event = run(&[(flag, "crc32=deadbeef".to_string())], 1);
+        let label = event["label"].as_str().expect("label");
+        assert!(label.contains("FAIL update.bps"), "{flag}: {label}");
+        assert!(label.contains(flag), "{flag}: {label}");
+    }
+    let event = run(
+        &[
+            ("--patch-input-check", format!("crc32={input_crc}")),
+            ("--patch-output-check", format!("crc32={output_crc}")),
+        ],
+        0,
+    );
+    assert!(
+        event["label"]
+            .as_str()
+            .expect("label")
+            .contains("pass update.bps")
+    );
+}
+
+#[test]
+fn patch_create_mod_warns_when_original_is_not_paper_mario() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let output = temp.child("out.mod");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let text = json.to_string();
+    assert!(text.contains("Paper Mario (USA) v1.0"), "{text}");
+}
+
+#[test]
+fn patch_apply_auto_n64_warns_when_ips_order_is_a_guess_on_v64_input() {
+    let temp = setup_temp_dir();
+    let mut z64: Vec<u8> = (0..0x2000_u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    z64[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    let mut modified_z64 = z64.clone();
+    for offset in (0x1000..0x1800).step_by(0x101) {
+        modified_z64[offset] ^= 0xff;
+    }
+    fs::write(temp.child("a.z64").path(), &z64).expect("fixture");
+    fs::write(temp.child("b.z64").path(), &modified_z64).expect("fixture");
+    fs::write(temp.child("a.v64").path(), byte_swap_pairs(&z64)).expect("fixture");
+    create_ips_patch(
+        temp.child("a.z64").path(),
+        temp.child("b.z64").path(),
+        temp.child("p.ips").path(),
+    );
+
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("a.v64").path().to_str().expect("path"),
+            "--patch",
+            temp.child("p.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("out.v64").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    ));
+    let warnings = json["details"]["warnings"].to_string();
+    assert!(warnings.contains("--n64-byte-order"), "{json}");
+    assert!(warnings.contains("byte-swapped"), "{json}");
+}
+
+#[test]
+fn patch_apply_dry_run_plan_lists_device_code_step() {
+    let temp = setup_temp_dir();
+    let input = temp.child("g.nes");
+    let mut rom = b"NES\x1a\x01\x01\x00\x00".to_vec();
+    rom.resize(16 + 16384 + 8192, 0);
+    fs::write(input.path(), rom).expect("fixture");
+    let output = temp.child("d.nes");
+    let json = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "SXIOPO",
+            "-n",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    ))
+    .pop()
+    .expect("event");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("would apply 1 patch(es)")
+    );
+    let patches = json["details"]["patches"].as_array().expect("patches");
+    assert_eq!(patches.len(), 1, "{json}");
+    assert!(
+        patches[0].as_str().expect("entry").contains("SXIOPO"),
+        "{json}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_apply_and_validate_reject_a_piped_rom_input() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: vec![0xaa; 4],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.bin");
+    let patch_arg = patch.path().to_str().expect("path");
+    let output_arg = output.path().to_str().expect("path");
+    let rom = vec![0x11_u8; 64];
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "/dev/stdin",
+            "--patch",
+            patch_arg,
+            "--output",
+            output_arg,
+            "--no-compress",
+        ],
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            "/dev/stdin",
+            "--patch",
+            patch_arg,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .write_stdin(rom.clone())
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(stderr.contains("is not a regular file"), "{stderr}");
+        assert!(!output.path().exists(), "{args:?} wrote an output");
+    }
+}
+
+#[test]
+fn corrupt_solid_patch_fails_apply_without_output_and_fails_validate() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x11_u8; 64]).expect("rom fixture");
+    // SOLID v4, 2-byte base addresses, one literal primitive at a base offset of 0xff00,
+    // far past the 64-byte ROM, as a flipped address byte produces.
+    let mut solid = b"SP\x04\x01".to_vec();
+    solid.extend_from_slice(&1_u32.to_le_bytes());
+    solid.extend_from_slice(&[0; 16 + 3]);
+    solid.extend_from_slice(&[0, 0, 0]);
+    solid.extend_from_slice(&[0x00, 0x01, 0x00, 0xff, b'Z']);
+    let patch = temp.child("corrupt.solid");
+    fs::write(patch.path(), solid).expect("solid fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--ignore-checksum-validation",
+        ],
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--ignore-checksum-validation",
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(stderr.contains("corrupt.solid` is corrupt"), "{stderr}");
+        assert!(!output.path().exists(), "{args:?} left an output");
+    }
+}
+
+#[test]
+fn patch_apply_keeps_an_existing_output_when_a_forced_apply_fails() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("rom.bin");
+    fs::write(rom.path(), pseudo_random_bytes(4096, 3)).expect("rom");
+    let output = temp.child("out.bin");
+    fs::write(output.path(), b"keep").expect("existing output");
+    let patch = temp.child("broken.bps");
+    fs::write(patch.path(), b"BPS1 not a real patch").expect("patch");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--force",
+        ])
+        .assert()
+        .code(1);
+    assert_eq!(fs::read(output.path()).expect("output kept"), b"keep");
+}
+
+#[test]
+fn patch_apply_removes_the_output_when_the_handler_fails_after_writing() {
+    let temp = setup_temp_dir();
+    let original = temp.child("orig.bin");
+    let modified = temp.child("mod.bin");
+    fs::write(original.path(), pseudo_random_bytes(4096, 7)).expect("original");
+    let mut changed = pseudo_random_bytes(4096, 7);
+    changed[100] ^= 0xff;
+    fs::write(modified.path(), changed).expect("modified");
+    let patch = temp.child("change.bps");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    // Break the declared target CRC but keep the patch CRC valid, so BPS only fails after
+    // writing the output.
+    let mut bps = fs::read(patch.path()).expect("bps");
+    let footer = bps.len() - 8;
+    bps[footer] ^= 0xff;
+    let mut crc = flate2::Crc::new();
+    crc.update(&bps[..bps.len() - 4]);
+    let patch_crc_at = bps.len() - 4;
+    bps[patch_crc_at..].copy_from_slice(&crc.sum().to_le_bytes());
+    fs::write(patch.path(), bps).expect("bad target crc bps");
+
+    let output = temp.child("out.bin");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+        1,
+    );
+    assert!(
+        !output.path().exists(),
+        "a failed apply left a partial output"
+    );
+}
+
+#[test]
+fn patch_apply_without_output_writes_a_raw_bin_sibling() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("modified.rom");
+    fs::write(original.path(), pseudo_random_bytes(2048, 11)).expect("original");
+    let mut changed = pseudo_random_bytes(2048, 11);
+    changed[7] ^= 0x5a;
+    fs::write(modified.path(), &changed).expect("modified");
+    let patch = temp.child("change.bps");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    assert_eq!(
+        fs::read(temp.child("game-patched.bin").path()).expect("inferred sibling"),
+        changed
+    );
+}
+
+#[test]
+fn patch_output_size_check_mismatch_names_the_output() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x22_u8; 32]).expect("rom fixture");
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 2,
+                data: vec![0x33; 2],
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "validate",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--patch-output-check",
+            "size=1",
+        ],
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--patch-output-check",
+            "size=1",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(1)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            stderr.contains("output size mismatch; expected 1 byte(s), actual 32"),
+            "{stderr}"
+        );
+    }
+}
+
+#[test]
+fn zero_window_vcdiff_applies_and_validates_with_an_empty_rom_warning() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.bin");
+    fs::write(rom.path(), [0x44_u8; 64]).expect("rom fixture");
+    // A VCDIFF header with no windows, as `patch create` writes for an empty target.
+    let patch = temp.child("empty.vcdiff");
+    fs::write(patch.path(), [0xd6, 0xc3, 0xc4, 0x00, 0x00]).expect("vcdiff fixture");
+    let output = temp.child("out.bin");
+    let rom_arg = rom.path().to_str().expect("path");
+    let patch_arg = patch.path().to_str().expect("path");
+    for args in [
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            rom_arg,
+            "--patch",
+            patch_arg,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+        ],
+        vec![
+            "patch", "validate", "--input", rom_arg, "--patch", patch_arg,
+        ],
+    ] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args(&args)
+            .assert()
+            .code(0)
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(
+            stderr.contains("warning: VCDIFF patch `")
+                && stderr.contains("has no delta windows; it produces an empty ROM"),
+            "{args:?}: {stderr}"
+        );
+    }
+    assert_eq!(fs::metadata(output.path()).expect("output").len(), 0);
+}
+
+/// Apply a structurally neutral IPS patch (one record deep inside the payload) whose file name
+/// declares `[crc32:<token>]`, and report whether `--patch-header auto` stripped the input header.
+fn apply_auto_header_with_filename_crc32(declare_headerless: bool) -> bool {
+    let temp = setup_temp_dir();
+    let payload = vec![0xA5_u8; 32768];
+    let headered = with_header(&payload);
+    let mut modified = headered.clone();
+    modified[1000] = b'Z';
+    fs::write(temp.child("base.smc").path(), &headered).expect("fixture");
+    fs::write(temp.child("modified.smc").path(), &modified).expect("fixture");
+    fs::write(temp.child("input.smc").path(), &headered).expect("fixture");
+    fs::write(temp.child("payload.sfc").path(), &payload).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("base.smc").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.smc").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let declared_source = temp.child(if declare_headerless {
+        "payload.sfc"
+    } else {
+        "input.smc"
+    });
+    let declared = checksum_value(declared_source.path(), "crc32");
+    let patch = temp.child(format!("hack [crc32:{declared}].ips"));
+    fs::copy(temp.child("update.ips").path(), patch.path()).expect("rename patch");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.smc").path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("output.smc").path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input header stripped")
+}
+
+#[test]
+fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
+    assert!(apply_auto_header_with_filename_crc32(true));
+}
+
+#[test]
+fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
+    assert!(!apply_auto_header_with_filename_crc32(false));
 }

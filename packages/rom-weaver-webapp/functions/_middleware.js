@@ -34,6 +34,10 @@ export const onRequest = async ({ request, env, next }) => {
     response = await next();
   }
   const headers = new Headers(response.headers);
+  // _headers stays under Pages' 100-rule cap by leaving these page Links to the middleware.
+  if (!markdown && response.ok && route.alternateLink) {
+    headers.append("Link", `<${route.markdownPath}>; rel="alternate"; type="text/markdown"`);
+  }
   const vary = new Set(
     (headers.get("Vary") ?? "")
       .split(",")

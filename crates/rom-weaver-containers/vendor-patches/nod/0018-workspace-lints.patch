@@ -1,0 +1,16 @@
+diff --git a/mod.rs b/mod.rs
+index 80f4eddab..7fdf46115 100644
+--- a/mod.rs
++++ b/mod.rs
+@@ -1,4 +1,10 @@
+-#![allow(clippy::new_ret_no_self)]
++// Keep upstream nod's current control-flow style while the surrounding crate
++// enforces its stricter workspace lint policy.
++#![allow(
++    clippy::collapsible_if,
++    clippy::manual_is_multiple_of,
++    clippy::new_ret_no_self
++)]
+ #![warn(missing_docs)]
+ //! Library for reading and writing Nintendo Optical Disc (GameCube and Wii) images.
+ //!

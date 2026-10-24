@@ -6,6 +6,7 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
+import { parseRvzBlockSize } from "../../platform/shared/compression-options.ts";
 import type { CompressionLevelProfile } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { getPathBaseName } from "../path-utils.ts";
@@ -48,6 +49,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     levelProfile?: string | null;
     logLevel?: LogLevel | string;
     outputFileName: string;
+    rvzBlockSize?: string | number | null;
     signal?: AbortSignal;
     totalBytes?: number | null;
     virtualFiles?: RuntimeValue[];
@@ -66,6 +68,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
   if (entryNames.length && entryNames.length !== inputPaths.length) {
     throw new Error("Compression create entry names must align with input paths");
   }
+  const rvzBlockSize = parseRvzBlockSize(input.rvzBlockSize);
   return runWithRomWeaverOutputScope(inputPaths[0] || "", input.outputFileName, inputPaths, async (outputPath) => {
     const format = String(input.format || "").trim();
     const normalizedFormat = format.toLowerCase();
@@ -91,6 +94,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
       input: inputPaths,
       level: (levelProfile || "max") as CompressionLevelProfile,
       output: outputPath,
+      ...(rvzBlockSize === null ? {} : { rvz_block_size: rvzBlockSize }),
       ...(threadArg ? { threads: threadArg } : {}),
     });
     emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress dispatch", {
@@ -223,6 +227,7 @@ const runRomWeaverProbeWorker = async (
     romFilter?: boolean;
     patchFilter?: boolean;
     sourcePath: string;
+    knownInputPaths?: string[];
     splitBin?: boolean;
     signal?: AbortSignal;
   },
@@ -247,6 +252,7 @@ const runRomWeaverProbeWorker = async (
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
+      knownInputPaths: input.knownInputPaths,
       onEvent: relaySimpleProgress(onProgress),
       onLog,
       signal: input.signal,
@@ -257,7 +263,20 @@ const runRomWeaverProbeWorker = async (
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const platform = typeof details?.platform === "string" ? details.platform.trim() : "";
   const chd = getChdProbeDetails(details?.chd);
-  return { entries: getContainerEntriesFromProbe(result), ...(platform ? { platform } : {}), ...(chd ? { chd } : {}) };
+  const container = asRecord(details?.container);
+  const discFormat = typeof details?.disc_format === "string" ? details.disc_format.trim() : "";
+  const recommendedFormat = String(
+    container?.recommended_compress_format ?? details?.recommended_compress_format ?? "",
+  ).trim();
+  const chdCreateMode = typeof details?.chd_create_mode === "string" ? details.chd_create_mode.trim() : "";
+  return {
+    entries: getContainerEntriesFromProbe(result),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
+    ...(platform ? { platform } : {}),
+    ...(discFormat ? { discFormat } : {}),
+    ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chd ? { chd } : {}),
+  };
 };
 
 // The CHD header's own digests: `raw_sha1` covers the decoded payload, `sha1` the payload plus

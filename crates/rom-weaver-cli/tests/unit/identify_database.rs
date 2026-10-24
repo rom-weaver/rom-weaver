@@ -1,4 +1,5 @@
 use super::*;
+use crate::{identify_builtin::sha256 as sha256_hex, path_access::write_atomic};
 
 #[test]
 fn slugify_matches_the_builder_script() {

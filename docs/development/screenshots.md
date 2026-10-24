@@ -12,9 +12,10 @@ Documentation images show real app controls with homebrew samples or a generated
 - [Create a patch](#create-a-patch)
   - [Original and Modified](#original-and-modified)
   - [Patch output](#patch-output)
-- [Create a bundle](#create-a-bundle)
+- [Create a weave](#create-a-weave)
 - [Sample ROMs](#sample-roms)
 - [Regenerate the captures](#regenerate-the-captures)
+- [Refresh the README video](#refresh-the-readme-video)
 
 <!-- END doctoc -->
 
@@ -22,11 +23,12 @@ Documentation images show real app controls with homebrew samples or a generated
 
 | Subject | Owning guide | What the image explains |
 | --- | --- | --- |
+| `apply-page` | [README](../../README.md#screenshots) | The whole first Apply screen with two ordered patches |
 | `apply-patches` | [Apply patches](../how-to/apply-rom-patches.md#read-the-rom-and-patch-cards) | Patch order, input basis, and checks |
 | `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
 | `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
 | `create-output` | [Create output](../how-to/create-rom-patches.md) | Patch format and output controls |
-| `bundle-output` | [Share a bundle](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
+| `bundle-output` | [Share a weave](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
 | `identify-checks` | [Identify a ROM](../how-to/identify-roms-browser.md) | An unknown homebrew ROM with usable checksums |
 | `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
 | `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |
@@ -56,9 +58,11 @@ The [Create guide](../how-to/create-rom-patches.md) owns both input and output c
 
 The output capture shows format selection. It does not show a second workflow.
 
-## Create a bundle
+<a id="create-a-bundle"></a>
 
-The [bundle guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
+## Create a weave
+
+The [weave guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
 
 ## Sample ROMs
 
@@ -92,12 +96,26 @@ Clear that filter before the next full capture:
 unset ROM_WEAVER_SCREENSHOT_CASE
 ```
 
-The capture script waits for the displayed result and crops the relevant controls. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
+The capture script waits for the displayed result and crops the relevant controls. `apply-page` instead keeps the whole first screen, dock included. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
 
 The crop hides the floating navigation dock so it cannot cover tool controls. ImageMagick crops images and encodes WebP; the bundled WebAssembly encoder creates AVIF.
 
 Keep image paths relative to the Markdown page. The documentation renderer rewrites Markdown images and HTML picture sources for the published site.
 
-After regeneration, update each image's `width` and `height` to its measured pixel size. Keep alt text and captions specific to the state shown.
+After a full capture, the script rewrites each image's `width` and `height` in `README.md` and `docs/` to its measured pixel size. Run `node packages/rom-weaver-webapp/scripts/sync-docs-screenshot-sizes.mjs` after replacing images by hand. Keep alt text and captions specific to the state shown.
 
 The build checks that each subject has every required format, viewport, and theme variant, and that its owning guide references them.
+
+## Refresh the README video
+
+Start the production preview server, then run:
+
+```bash
+npm --prefix packages/rom-weaver-webapp run capture:video
+```
+
+Install FFmpeg and `bsdtar` first (`ffmpeg` and `libarchive-tools` on Ubuntu). Set `ROM_WEAVER_VIDEO_BASE_URL` when the preview uses a different address. Set `ROM_WEAVER_FFMPEG` when FFmpeg is outside your executable search path. The default preview address is `https://localhost:4173/`.
+
+The capture imports the bundled test archive, applies both patches, and selects 7z. It ends with the download ready, then verifies the downloaded archive's ROM bytes. The MP4 uses H.264, 30 fps, and 1200 × 900 pixels. Output and capture evidence live under `.cache/agents/scratch/release-video/`.
+
+Release dispatch captures this video alongside screenshots on the release PR. It uploads the validated MP4 and replaces the README's `apply-video` marker block. The upload uses `RELEASE_PLEASE_TOKEN`; GitHub attachments require a user token. The installation `GITHUB_TOKEN` cannot upload these attachments. Capture or upload failures stop the refresh before the documentation commit. Re-dispatch creates a new attachment; previous links remain valid.

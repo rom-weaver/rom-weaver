@@ -109,6 +109,11 @@ html:has(.rw-modal) {
   width: 100%;
   min-width: 0;
 }
+/* On the pressed accent fill the dye badge would vanish: invert it. */
+.rw-app [aria-pressed="true"] .theme-auto-badge {
+  color: var(--thread-fill);
+  background: var(--thread-ink);
+}
 .rw-app .setrow .sctl .select {
   height: 34px;
   font-size: var(--dropdown-fs, 0.85rem);
@@ -483,7 +488,6 @@ html:has(.rw-modal) {
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name {
   display: block;
-  min-width: 0;
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
   display: block;
@@ -549,6 +553,17 @@ html:has(.rw-modal) {
   padding: var(--step-pt) 0 2px;
   border: 0;
   border-radius: 0;
+}
+/* When the panel head's bare controls still reach the title (panel-head-fit.ts),
+   the title row stops short of them and the title takes an ellipsis. */
+.rw-app .panel.workflow .step > .step-head[data-head-crowded] {
+  padding-inline-end: var(--panel-head-room);
+}
+.rw-app .panel.workflow .step > .step-head[data-head-crowded] > .step-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rw-app .panel.workflow .step > .step-body {
   padding-inline: 0;

@@ -1,13 +1,13 @@
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import { autosizeTextarea } from "./apply-patch-list-helpers.tsx";
 
 type PatchMetaFieldProps = {
   index: number;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
-  onMetaChange: (updates: Partial<BundlePatchMeta>) => void;
+  meta?: WeavePatchMeta;
+  onMetaChange: (updates: Partial<WeavePatchMeta>) => void;
 };
 
 /** A single-line commit input for the meta form: trims on blur, Enter commits. */

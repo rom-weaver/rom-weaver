@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { getSelectableCreatePatchFormats } from "../../src/lib/create/patch-format-limits.ts";
 import type { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import type { PatchValidationPlan } from "../../src/wasm/index.ts";
-import { createApplyWorkflowSnapshotStore } from "../../src/public/react/apply-workflow-snapshot-store.ts";
+import {
+  createApplyWorkflowSnapshotStore,
+  getEnabledPatchTargetSizes,
+} from "../../src/public/react/apply-workflow-snapshot-store.ts";
 
 type Snapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
 
@@ -182,5 +186,70 @@ describe("Apply workflow snapshot store", () => {
     expect(store.getSnapshot().outputName).toBe("");
     store.setOutputSourceKey("replacement-source-key");
     expect(store.getSnapshot().outputName).toBe("new.chd");
+  });
+
+  it("publishes the ready ROM size and each declared patch output size", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow();
+    store.setWorkflow(workflow);
+    expect(store.getSnapshot()).toMatchObject({ patchTargetSizes: [], romSize: 0 });
+
+    // A loading input reports the dropped file's size, such as a ZIP's, not the ROM's.
+    workflow.change({ input: { size: 9_000_000, status: "loading" } as Snapshot["input"] });
+    expect(store.getSnapshot().romSize).toBe(0);
+
+    workflow.change({
+      input: { selectedCandidateId: "input-1", size: 20_000_000, status: "ready" } as Snapshot["input"],
+      patches: [
+        { requirements: { targetSize: 24_000_000 } },
+        {},
+        { requirements: { targetSize: 22_000_000 } },
+      ] as Snapshot["patches"],
+    });
+    const sized = store.getSnapshot();
+    expect(sized).toMatchObject({ patchTargetSizes: [24_000_000, undefined, 22_000_000], romSize: 20_000_000 });
+    workflow.change({ busy: true, patches: [...workflow.getSnapshot().patches] });
+    expect(store.getSnapshot()).toBe(sized);
+  });
+
+  it("skips disabled patches only while the staged patches line up with the slots", () => {
+    const sizes = [64_000_000, 8_000_000];
+    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set())).toEqual({
+      maxKnownTargetSize: 64_000_000,
+      patchTargetSize: 8_000_000,
+    });
+    expect(getEnabledPatchTargetSizes(sizes, ["slot-1", "slot-2"], new Set(["slot-1"])).patchTargetSize).toBe(
+      8_000_000,
+    );
+    // A filtered run stages only the enabled patches, so none of them is skipped.
+    expect(getEnabledPatchTargetSizes([64_000_000], ["slot-1", "slot-2"], new Set(["slot-2"])).patchTargetSize).toBe(
+      64_000_000,
+    );
+    expect(getEnabledPatchTargetSizes([], [], new Set()).patchTargetSize).toBeUndefined();
+  });
+  it("preserves unknown enabled sizes without confusing an empty target with unknown", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow({
+      patches: [{}, { requirements: { targetSize: 0 } }] as Snapshot["patches"],
+    });
+    store.setWorkflow(workflow);
+    const sizes = store.getSnapshot().patchTargetSizes;
+    expect(sizes).toEqual([undefined, 0]);
+    const formats = (disabled: ReadonlySet<string>) =>
+      getSelectableCreatePatchFormats({
+        originalSize: 4096,
+        modifiedSize: getEnabledPatchTargetSizes(sizes, ["ips", "empty"], disabled).patchTargetSize,
+      });
+    expect(formats(new Set())).not.toContain("ebp");
+    expect(formats(new Set())).not.toContain("ppf");
+    expect(formats(new Set(["ips"]))).not.toContain("ebp");
+    expect(formats(new Set(["ips"]))).not.toContain("ppf");
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set()).patchTargetSize).toBe(0);
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["ips"])).patchTargetSize).toBe(0);
+    expect(getEnabledPatchTargetSizes(sizes, ["ips", "empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();
+    expect(formats(new Set(["empty"]))).toEqual(expect.arrayContaining(["ebp", "ppf"]));
+    expect(getEnabledPatchTargetSizes([4096, undefined], ["bps", "ips"], new Set()).patchTargetSize).toBeUndefined();
+    expect(getEnabledPatchTargetSizes([undefined], ["bps", "ips"], new Set(["ips"])).patchTargetSize).toBeUndefined();
+    expect(getEnabledPatchTargetSizes([0], ["empty"], new Set(["empty"])).patchTargetSize).toBeUndefined();
   });
 });

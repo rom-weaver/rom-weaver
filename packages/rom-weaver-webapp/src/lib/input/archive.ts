@@ -1,3 +1,4 @@
+import { parseGdiFileReferences as parseGdiReferences } from "../../workers/protocol/gdi-file-utils.ts";
 import { normalizeArchiveEntryPath, stripFileNameQuery } from "./path-utils.ts";
 import { parseCueFile } from "./rom-specific-file-utils.ts";
 
@@ -24,22 +25,8 @@ const GDI_EXTENSION_REGEX = /\.gdi$/i;
 const isGdiEntryFileName = (fileName: ArchivePathValue): boolean =>
   GDI_EXTENSION_REGEX.test(stripFileNameQuery(fileName));
 
-// A `.gdi` track line is `num lba type sectorSize filename fileOffset`; the
-// filename (5th column) may be quoted. The first non-empty line is the track
-// count. Returns the referenced data-file names in order.
-const parseGdiFileReferences = (gdiText: string): string[] => {
-  const lines = gdiText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const references: string[] = [];
-  for (const line of lines.slice(1)) {
-    const match = line.match(/^\S+\s+\S+\s+\S+\s+\S+\s+(?:"([^"]+)"|(\S+))/);
-    const name = match?.[1] ?? match?.[2];
-    if (name) references.push(normalizeArchiveEntryPath(name));
-  }
-  return references;
-};
+const parseGdiFileReferences = (gdiText: string): string[] =>
+  parseGdiReferences(gdiText).map(normalizeArchiveEntryPath);
 
 const parseCueFileReferences = (cueText: string): CueReference[] => {
   const parsed = parseCueFile(cueText);

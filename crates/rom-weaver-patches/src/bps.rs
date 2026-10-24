@@ -20,7 +20,6 @@ use rom_weaver_core::{
 use suffix_array::SuffixArray;
 use tracing::{debug, trace};
 
-use crate::checksum_validation_suffix;
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
 use crate::shared::labels::{byuu_metadata_report, byuu_parse_report};
 use crate::shared::threading::run_with_optional_pool;
@@ -205,17 +204,11 @@ impl PatchHandler for BpsPatchHandler {
             context,
         )?;
 
-        let checksum_suffix = checksum_validation_suffix(scopes.source && scopes.target);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_apply_report(
             self.descriptor,
-            "apply",
-            format!(
-                "applied {} patch with {} record(s){}",
-                self.descriptor.name,
-                patch.actions.len(),
-                checksum_suffix
-            ),
-            Some(execution),
+            patch.actions.len(),
+            scopes.source && scopes.target,
+            execution,
         ))
     }
 
@@ -387,7 +380,7 @@ fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
     let footer_offset = file_len
         .checked_sub(BPS_FOOTER_SIZE as u64)
         .expect("validated footer size");
-    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset, path);
     if parser.read_exact(BPS_MAGIC.len())?.as_slice() != BPS_MAGIC {
         return Err(crate::coded_validation(
             "BPS_HEADER_INVALID",
@@ -437,7 +430,7 @@ fn parse_bps_file_with_checksum_validation(
     let footer_offset = file_len
         .checked_sub(BPS_FOOTER_SIZE as u64)
         .expect("validated footer size");
-    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset, path);
 
     if parser.read_exact(BPS_MAGIC.len())?.as_slice() != BPS_MAGIC {
         return Err(crate::coded_validation(
@@ -531,7 +524,8 @@ fn parse_bps_file_with_checksum_validation(
 
     if output_size != target_size {
         return Err(RomWeaverError::Validation(format!(
-            "Output size invalid; Expected: {target_size}, Actual: {output_size}"
+            "BPS patch `{}` is truncated or corrupt: Output size invalid; Expected: {target_size}, Actual: {output_size}",
+            path.display()
         )));
     }
 
@@ -638,7 +632,7 @@ fn parse_bps_bytes_with_checksum_validation(
 
     if output_size != target_size {
         return Err(RomWeaverError::Validation(format!(
-            "Output size invalid; Expected: {target_size}, Actual: {output_size}"
+            "BPS patch is truncated or corrupt: Output size invalid; Expected: {target_size}, Actual: {output_size}"
         )));
     }
 
@@ -707,7 +701,6 @@ impl<'a> BpsApplyProgress<'a> {
             format: Some(self.format_name.to_string()),
             stage: "apply".to_string(),
             label: format!("applying patch using {}", self.format_name),
-            details: None,
             percent: Some(bucket as f32),
             elapsed_ms: None,
             status: OperationStatus::Running,
@@ -2323,14 +2316,16 @@ struct BpsFileParser<R> {
     reader: R,
     offset: u64,
     end: u64,
+    patch: String,
 }
 
 impl<R: Read> BpsFileParser<R> {
-    fn new(reader: R, end: u64) -> Self {
+    fn new(reader: R, end: u64, patch: &Path) -> Self {
         Self {
             reader,
             offset: 0,
             end,
+            patch: patch.display().to_string(),
         }
     }
 
@@ -2346,9 +2341,10 @@ impl<R: Read> BpsFileParser<R> {
             .checked_add(len_u64)
             .ok_or_else(|| RomWeaverError::Validation("BPS parser offset overflowed".into()))?;
         if next > self.end {
-            return Err(RomWeaverError::Validation(
-                "BPS patch ended unexpectedly while reading record data".into(),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "BPS patch `{}` is truncated or corrupt: it ended unexpectedly while reading record data",
+                self.patch
+            )));
         }
 
         let mut bytes = vec![0u8; len];

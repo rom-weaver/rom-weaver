@@ -16,7 +16,10 @@ import { setByteUnitSystem } from "../presentation/formatting/index.ts";
 import { resetBrowserTransientOpfs, startBrowserOpfsBootCleanup } from "../storage/browser/browser-opfs-cleanup.ts";
 import { markRomWeaverRunnerStale, resetRomWeaverRunner } from "../workers/rom-weaver/runner-control.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "./build-version.ts";
+import { type CreatorMode, readCreatorModeFromSearch, removeCreatorModeFromSearch } from "./app-routes.ts";
+import { readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { readDocsSlugFromPathname } from "./docs-routing.mjs";
+import { recordFirstVisit } from "./last-seen-version.ts";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -24,7 +27,7 @@ import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { preloadCatalog } from "../presentation/localization/index.ts";
 import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
-import { captureShellClicks, replayShellClicks } from "./shell-click-replay.ts";
+import { captureShellClicks, replayShellClicks, replayShellSelections } from "./shell-click-replay.ts";
 import {
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
@@ -77,6 +80,9 @@ if (typeof window !== "undefined") {
   void startBrowserOpfsBootCleanup().catch((error: unknown) => {
     logger.warn("Initial OPFS cleanup failed", { message: error instanceof Error ? error.message : String(error) });
   });
+  // Before the gate below can hold rendering for a service worker reload, after
+  // which a first visit would look like a returning one.
+  recordFirstVisit();
 }
 // Suppresses the first render until cross-origin isolation settles so the un-isolated first document
 // never flashes before the service worker reloads the page. Decided synchronously at construction.
@@ -215,16 +221,16 @@ const applySettingsToRuntime = (settings: SettingsState) => {
   });
 };
 
-const isNotFoundPage = document.documentElement.dataset.page === "not-found";
-// Old bundle links used the Apply route's query/hash state. Keep guided
+let isNotFoundPage = document.documentElement.dataset.page === "not-found";
+// Old weave links used the Apply route's query/hash state. Keep guided
 // samples and URL sessions shareable, but replace their route before React
 // chooses a workflow. Direct ROM/patch sessions remain on Apply.
-const replaceLegacyBundleRoute = (): boolean => {
+const replaceLegacyWeaveRoute = (): boolean => {
   if (isNotFoundPage) return false;
   let currentUrl = new URL(window.location.href);
   const renamedPath = currentUrl.pathname
     .replace(/\/apply-patch(?:\.html|\/index\.html|\/)?$/iu, "/apply-patches")
-    .replace(/\/bundle(?:\.html|\/index\.html|\/)?$/iu, "/bundle-patches");
+    .replace(/\/(?:bundle-patches|bundle|weave)(?:\.html|\/index\.html|\/)?$/iu, "/weave-patches");
   const routeWasRenamed = renamedPath !== currentUrl.pathname;
   if (routeWasRenamed) {
     currentUrl.pathname = renamedPath;
@@ -233,24 +239,46 @@ const replaceLegacyBundleRoute = (): boolean => {
   }
   const params = currentUrl.searchParams;
   const currentView = readWorkflowViewFromPath(currentUrl.pathname);
-  const hasBundleSession = params.has("bundle");
-  const hasDirectSession = !hasBundleSession && (params.has("rom") || params.has("patch"));
-  const hasLegacyBundleGuide = currentView === "patcher" && params.get("guide") === "bundle";
-  const hasLegacyBundleHash = currentView === "patcher" && currentUrl.hash.toLowerCase() === "#bundle";
+  const hasWeaveSession = params.has("weave") || params.has("bundle");
+  const hasDirectSession = !hasWeaveSession && (params.has("rom") || params.has("patch"));
+  const hasLegacyWeaveGuide = currentView === "patcher" && ["weave", "bundle"].includes(params.get("guide") || "");
+  const hasLegacyWeaveHash = currentView === "patcher" && ["#weave", "#bundle"].includes(currentUrl.hash.toLowerCase());
   const targetView =
-    hasBundleSession || hasLegacyBundleGuide || hasLegacyBundleHash ? "bundle" : hasDirectSession ? "patcher" : null;
+    hasWeaveSession || hasLegacyWeaveGuide || hasLegacyWeaveHash ? "weave" : hasDirectSession ? "patcher" : null;
   if (!targetView || currentView === targetView) return routeWasRenamed;
-  const nextUrl = new URL(targetView === "bundle" ? "bundle-patches" : "apply-patches", readAppBaseUrl());
+  const nextUrl = new URL(targetView === "weave" ? "weave-patches" : "apply-patches", readAppBaseUrl());
   nextUrl.search = currentUrl.search;
   window.history.replaceState(window.history.state, "", nextUrl);
   return true;
 };
-const bundleRouteWasReplaced = replaceLegacyBundleRoute();
-// Which static document the host actually served, captured after legacy bundle
+const weaveRouteWasReplaced = replaceLegacyWeaveRoute();
+
+// `?mode=` on a Create URL is one-shot: it leaves the address bar once a render hands it to
+// the root, so Back or Forward to that entry cannot reapply it over the reader's own choice.
+// Until then it stays in the URL, so a boot-gate reload for cross-origin isolation reads it
+// again. The request is held until the reader leaves Create, so a form that mounts later
+// still receives it.
+let pendingCreatorMode: CreatorMode | null = null;
+let creatorModeInUrl = false;
+const takeCreatorModeFromUrl = () => {
+  const mode = readCreatorModeFromSearch(window.location.search);
+  if (!mode || readWorkflowViewFromPath() !== "creator") return;
+  pendingCreatorMode = mode;
+  creatorModeInUrl = true;
+};
+const dropCreatorModeFromUrl = () => {
+  if (!creatorModeInUrl) return;
+  creatorModeInUrl = false;
+  const url = new URL(window.location.href);
+  url.search = removeCreatorModeFromSearch(url.search);
+  window.history.replaceState(window.history.state, "", url);
+};
+takeCreatorModeFromUrl();
+// Which static document the host actually served, captured after legacy weave
 // links have been normalized but before the controller writes its route.
 const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
 
-// `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
+// `?weave=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
 // this boot-time read consumes them.
 const urlSessionParse =
@@ -316,6 +344,7 @@ const markWebappMounted = () => {
   if (!firstMount) return;
   // Last, so any state change it triggers lands on a fully settled first frame.
   replayShellClicks(appRootElement);
+  replayShellSelections(appRootElement);
 };
 
 const WebappClientRoot = (props: WebappRootProps) => {
@@ -412,7 +441,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Every direct route gets a shell for its own view. A route shell MUST match
 // the view used for hydration or React discards the server-rendered content.
 const PRERENDERED_VIEWS = new Set<WebappView>([
-  "bundle",
+  "weave",
   "checksum",
   "compress",
   "creator",
@@ -453,17 +482,21 @@ const renderWebappRoot = (): undefined => {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
-      shouldHydrate = hadPrerenderedShell && !bundleRouteWasReplaced;
+      shouldHydrate = hadPrerenderedShell && !weaveRouteWasReplaced;
       if (!shouldHydrate) appRoot = createRoot(appRootElement);
     }
   }
   const serviceWorkerCache = serviceWorkerClient.getState();
   const state = webappController.getState();
+  if (state.currentView !== "creator") pendingCreatorMode = null;
+  if (!shouldHydrate) dropCreatorModeFromUrl();
   const hydrationSettings = shouldHydrate
     ? {
         ...getDefaultSettings(),
         betaToolsEnabled: readHydrationBetaToolsEnabled(),
         language: document.documentElement.lang || "en",
+        // index.html also paints the runtime chip from this flag, so the first client render must agree.
+        offlineCopyEnabled: document.documentElement.dataset.offlineCopyEnabled !== "false",
         threads: state.settings.threads,
       }
     : state.settings;
@@ -521,7 +554,7 @@ const renderWebappRoot = (): undefined => {
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOfflineCopyEnabledChange: (enabled) => webappController.setOfflineCopyEnabled(enabled),
       onOpenSettings: () => webappController.openSettings(),
-      onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
+      onPatcherWeavePackageChange: (value) => webappController.setWeavePackage(value),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
       onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
       onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),
@@ -553,7 +586,11 @@ const renderWebappRoot = (): undefined => {
       onSaveClose: () => {
         webappController.saveDraftSettings();
       },
-      onSelectView: (view) => webappController.selectView(view),
+      onSelectView: (view) => {
+        // A routed drop can recover the missing-page document without losing its files.
+        isNotFoundPage = false;
+        webappController.selectView(view);
+      },
       onStartGuide: (guide) => {
         const view = GUIDED_SAMPLE_VIEWS[guide];
         if (webappController.selectView(view) !== view) return;
@@ -563,9 +600,11 @@ const renderWebappRoot = (): undefined => {
         window.history.replaceState(window.history.state, "", url);
         requestGuidedSampleStart(guide);
       },
-      onPpfUndoSessionChange: (active) => webappController.setPpfUndoSessionState(active),
-      onCompressSessionChange: (active) => webappController.setCompressSessionState(active),
-      onSaveEditorSessionChange: (active) => webappController.setSaveEditorSessionState(active),
+      // The forms report these from passive effects, where the controller's synchronous
+      // re-render (flushSync) is not allowed, so each is applied one microtask later.
+      onPpfUndoSessionChange: (active) => queueMicrotask(() => webappController.setPpfUndoSessionState(active)),
+      onCompressSessionChange: (active) => queueMicrotask(() => webappController.setCompressSessionState(active)),
+      onSaveEditorSessionChange: (active) => queueMicrotask(() => webappController.setSaveEditorSessionState(active)),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
@@ -577,6 +616,9 @@ const renderWebappRoot = (): undefined => {
       onConfirm: () => closeAgentApprovalDialog(true),
     },
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
+    workflowEntry: readWorkflowEntryFromPathname(window.location.pathname),
+    // The prerendered shell cannot know the query; the render after hydration applies it.
+    creatorMode: shouldHydrate ? null : pendingCreatorMode,
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
       ? getPageUpdateState({
@@ -641,72 +683,75 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  // "Hide this button" on the New here? beacon persists through the
+  // "Hide practice-run links" on the sample link persists through the
   // settings so the Settings panel checkbox can bring it back.
   window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
-  if (!isNotFoundPage) {
-    // A real page unload - reload, address bar, closing the tab - is the one
-    // exit the app cannot soft-navigate. Everything else that could lose staged
-    // work already asks first; this was the hole. The browser writes its own
-    // wording, so preventDefault is the whole API.
-    window.addEventListener("beforeunload", (event) => {
-      if (!shouldWarnBeforeUnload(getNavigationGuardState())) return;
-      event.preventDefault();
-    });
-    const syncRouteFromUrl = (scrollTo?: () => void) => {
-      replaceLegacyBundleRoute();
-      const view = readWorkflowViewFromPath();
-      if (!view) return;
-      const guide = readGuidedSampleFromSearch(window.location.search);
-      const applyRoute = () => {
-        const selectedView = webappController.selectView(view, { historyMode: "none" });
-        if (selectedView !== view) {
-          webappController.selectView(selectedView, { historyMode: "replace" });
-          return;
-        }
-        // Visited workflows stay mounted, so their guide hook cannot reread a new query.
-        // Dispatch the same event used by in-place guide starts.
-        if (guide) requestGuidedSampleStart(guide);
-      };
-      // Guide to guide is a page turn inside one route, not a mode switch. The
-      // masthead, trail, and dock are identical either side of it while the
-      // reader's scroll position is not, so a root crossfade dissolves the whole
-      // screen and reads as a reload. The article carries the transition on its
-      // own instead (`docs-page-in` in docs.css), and the scroll lands in the
-      // same synchronous render, so the new guide is never painted at the old
-      // guide's offset first.
-      const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
-      if (withinDocs) {
-        applyRoute();
-        scrollTo?.();
+  // A real page unload - reload, address bar, closing the tab - is the one
+  // exit the app cannot soft-navigate. Everything else that could lose staged
+  // work already asks first; this was the hole. The browser writes its own
+  // wording, so preventDefault is the whole API.
+  window.addEventListener("beforeunload", (event) => {
+    if (isNotFoundPage || !shouldWarnBeforeUnload(getNavigationGuardState())) return;
+    event.preventDefault();
+  });
+  const syncRouteFromUrl = (scrollTo?: () => void) => {
+    if (isNotFoundPage) return;
+    replaceLegacyWeaveRoute();
+    const view = readWorkflowViewFromPath();
+    if (!view) return;
+    const guide = readGuidedSampleFromSearch(window.location.search);
+    const applyRoute = () => {
+      const selectedView = webappController.selectView(view, { historyMode: "none" });
+      if (selectedView !== view) {
+        webappController.selectView(selectedView, { historyMode: "replace" });
         return;
       }
-      selectViewWithTransition(applyRoute);
-      // A mode switch updates inside a view transition, so the DOM the scroll
-      // target lives in only exists on the next frame.
-      if (scrollTo) window.requestAnimationFrame(scrollTo);
+      // Visited workflows stay mounted, so their guide hook cannot reread a new query.
+      // Dispatch the same event used by in-place guide starts.
+      if (guide) requestGuidedSampleStart(guide);
     };
+    // Guide to guide is a page turn inside one route, not a mode switch. The
+    // masthead, trail, and dock are identical either side of it while the
+    // reader's scroll position is not, so a root crossfade dissolves the whole
+    // screen and reads as a reload. The article carries the transition on its
+    // own instead (`docs-page-in` in docs.css), and the scroll lands in the
+    // same synchronous render, so the new guide is never painted at the old
+    // guide's offset first.
+    const withinDocs = view === "docs" && webappController.getState().currentView === "docs";
+    if (withinDocs) {
+      applyRoute();
+      scrollTo?.();
+      return;
+    }
+    selectViewWithTransition(applyRoute);
+    // A mode switch updates inside a view transition, so the DOM the scroll
+    // target lives in only exists on the next frame.
+    if (scrollTo) window.requestAnimationFrame(scrollTo);
+  };
 
-    // Back/forward carries the browser's own scroll restoration; only a click
-    // decides where the reader lands.
-    window.addEventListener("popstate", () => syncRouteFromUrl());
-    document.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) return;
-      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
-      if (!anchor) return;
-      const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
-      if (!url) return;
-      event.preventDefault();
-      window.history.pushState(window.history.state, "", url);
-      syncRouteFromUrl(() => {
-        if (url.hash) {
-          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
-        } else {
-          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        }
-      });
+  // Back/forward carries the browser's own scroll restoration; only a click
+  // decides where the reader lands.
+  window.addEventListener("popstate", () => syncRouteFromUrl());
+  document.addEventListener("click", (event) => {
+    if (isNotFoundPage) return;
+    if (!(event.target instanceof Element)) return;
+    const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+    if (!anchor) return;
+    const url = getSoftNavigationUrl(event, anchor, new URL(window.location.href));
+    if (!url) return;
+    event.preventDefault();
+    window.history.pushState(window.history.state, "", url);
+    takeCreatorModeFromUrl();
+    syncRouteFromUrl(() => {
+      if (url.hash) {
+        const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+        target?.scrollIntoView({ block: "start" });
+        target?.focus({ preventScroll: true });
+      } else {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      }
     });
-  }
+  });
 }
 
 const initializeWebapp = () => {
@@ -719,8 +764,8 @@ const initializeWebapp = () => {
   webappController.setStartupState("loading");
   renderWebappRoot();
 
-  // Bundle sessions open the bundle workflow. Direct ROM/patch sessions use Apply.
-  const initialMode = urlSessionParse.request?.kind === "bundle" ? "bundle" : readWorkflowViewFromPath() || "patcher";
+  // Weave sessions open the weave workflow. Direct ROM/patch sessions use Apply.
+  const initialMode = urlSessionParse.request?.kind === "weave" ? "weave" : readWorkflowViewFromPath() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, {
     fallbackOnError: true,

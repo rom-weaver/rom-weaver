@@ -6,6 +6,8 @@ import { getFileNameParts, getPathBaseName, joinPath } from "../path-utils.ts";
 
 const WORK_ROOT_PATH = "/work";
 const OPERATION_ROOT_NAME = "operations";
+// A cancelled run terminates its worker, whose OPFS handles are released shortly after.
+const SCOPE_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600];
 
 // A `createVfsPathId()` segment: a `crypto.randomUUID()` (dashed) or the 32-hex fallback.
 const VFS_PATH_ID_REGEX = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
@@ -46,7 +48,9 @@ type RomWeaverOutputScope = {
 
 const createRomWeaverOutputScope = (): RomWeaverOutputScope => {
   const rootPath = joinVfsPath(WORK_ROOT_PATH, OPERATION_ROOT_NAME, createVfsPathId());
-  const cleanup = createCleanupOnce(() => removeManagedOpfsPath(rootPath));
+  const cleanup = createCleanupOnce(() =>
+    removeManagedOpfsPath(rootPath, undefined, { busyRetryDelaysMs: SCOPE_REMOVE_BUSY_RETRY_DELAYS_MS }),
+  );
   const createOutputCleanups: RomWeaverOutputScope["createOutputCleanups"] = async (outputPaths, removeOutputPath) => {
     if (!outputPaths.length) {
       await cleanup();

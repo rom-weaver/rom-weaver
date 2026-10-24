@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";
 import { setAdvancedSettings } from "../../src/webapp/advanced-settings.ts";
@@ -66,7 +67,7 @@ describe("SettingsPanel sections", () => {
     );
     const groupFor = (id: string) => container.querySelector(id)?.closest(".setgroup");
     const webappGroup = groupFor("#settings-theme");
-    const behaviorGroup = groupFor("#settings-bundle-package");
+    const behaviorGroup = groupFor("#settings-weave-package");
 
     expect(webappGroup?.querySelector(".gtitle")?.textContent).toBe("Webapp");
     for (const id of [
@@ -92,5 +93,36 @@ describe("SettingsPanel sections", () => {
 
     expect(webappGroup).not.toBe(behaviorGroup);
     expect(container.querySelector("#settings-apply-play-button-enabled")).toBeNull();
+  });
+});
+
+describe("SettingsPanel localization", () => {
+  it("renders group titles, option labels, and details in German", async () => {
+    await preloadCatalog("de");
+    setAdvancedSettings(true);
+    const draftSettings = { ...getDefaultSettings(), language: "de" };
+    const { container, getAllByRole } = render(
+      <RomWeaverSettingsProvider settings={draftSettings}>
+        <SettingsPanel
+          draftSettings={draftSettings}
+          onDraftChange={() => undefined}
+          uiState={getSettingsUiState(draftSettings)}
+          validation={createEmptyValidationState()}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const titles = Array.from(container.querySelectorAll(".setgroup .gtitle"), (title) => title.textContent);
+    expect(titles).toEqual(expect.arrayContaining(["Web-App", "Verhalten", "Komprimierung"]));
+    // Group anchors keep their stable English ids in every locale.
+    expect(container.querySelector("#settings-group-compression")).not.toBeNull();
+    const logLevel = container.querySelector("#settings-log-level") as HTMLSelectElement;
+    expect(Array.from(logLevel.options, (option) => option.textContent)).toContain("Fehler");
+    const byteUnits = container.querySelector("#settings-byte-units") as HTMLSelectElement;
+    expect(byteUnits.options[0]?.textContent).toBe("Dezimal (KB, MB, GB) (Standard)");
+    expect(getAllByRole("button", { name: /Info zu / }).length).toBeGreaterThan(0);
+    // The slider announces its level name, not the bare index.
+    const slider = container.querySelector("#settings-compression-profile") as HTMLInputElement;
+    expect(slider.getAttribute("aria-valuetext")).toBeTruthy();
+    setAdvancedSettings(false);
   });
 });

@@ -35,9 +35,7 @@
   .rw-app .card-name {
     gap: var(--sp-2xs);
   }
-  .rw-app .card-actions {
-    gap: var(--sp-xs);
-  }
+  .rw-app .card-actions,
   /* Retain a 30px drawer-header tap floor; phone controls and padding are
      smaller, so less is held back from the check value. */
   .rw-app .cks {
@@ -49,9 +47,6 @@
     min-height: var(--drawer-head-h);
     padding-block: 1px;
   }
-  .rw-app .cks > .cks-head .readouts {
-    gap: var(--sp-xs);
-  }
   .rw-app .cks .cks-inner > :last-child {
     margin-block-end: 6px;
   }
@@ -60,11 +55,21 @@
     padding-block: 6px 0;
   }
   .rw-app .optsgrid {
-    gap: var(--sp-s) var(--sp-m);
+    gap: var(--sp-s);
   }
   .rw-app .optsgroup {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-s) var(--sp-m);
+  }
+  /* Chips follow the label and wrap only when the line is full. */
+  .rw-app .outopts > .cks-head .lab {
+    margin-inline-end: 0;
+  }
+  .rw-app .outopts > .cks-head .readouts {
+    display: contents;
+  }
+  .apply-output .outopts.is-open .readouts {
+    display: none;
   }
   .rw-app .fname .outname,
   .rw-app .fname .select {
@@ -110,9 +115,7 @@
     padding: 10px 14px;
     font-size: 0.78rem;
   }
-  .rw-app .cards {
-    gap: var(--sp-m);
-  }
+  .rw-app .cards,
   .rw-app .patch-cards {
     gap: var(--sp-m);
   }
@@ -121,7 +124,7 @@
   .rw-app .workflow-file-list:not(:empty) + .drop {
     margin-top: 9px;
   }
-  .rw-app .bundle-rom-expectation {
+  .rw-app .weave-rom-expectation {
     margin-block-start: 9px;
   }
   /* Override user-agent dialog limits with an edge-to-edge sheet on phones.
@@ -144,50 +147,106 @@
     border-block-start: 1px solid var(--seam-soft);
     border-block-end: 0;
   }
-  .rw-app .log-dlg .settings-actions {
-    gap: var(--sp-s);
-    width: 100%;
+  /* The head: the title, the Advanced switch, and the section's head actions
+     share the first row; the description takes the full width below. */
+  .rw-app .log-dlg .console-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 4px var(--sp-s);
+    align-items: center;
   }
-  .rw-app .log-dlg .settings-actions .btn {
-    flex: 1 1 0;
-    min-height: 44px;
+  .rw-app .log-dlg .console-titles {
+    display: contents;
+  }
+  .rw-app .log-dlg .console-title {
+    grid-area: 1 / 1;
+  }
+  .rw-app .log-dlg .console-description {
+    grid-area: 2 / 1 / auto / -1;
+    margin: 0;
+  }
+  .rw-app .log-dlg .console-head .console-advanced {
+    grid-area: 1 / 2;
+    min-height: 36px;
+  }
+  .rw-app .log-dlg .console-head-actions {
+    grid-area: 1 / 3;
+  }
+  .rw-app .log-dlg .console-head-actions::after,
+  .rw-app .log-dlg .log-actions-head {
+    display: none;
+  }
+  .rw-app .log-dlg .console-head-actions .settings-defaults {
+    inline-size: 36px;
+    height: 36px;
+    padding-inline: 0;
+    border-radius: var(--r-m);
+  }
+  .rw-app .log-dlg .settings-defaults .bl {
+    display: none;
+  }
+  /* Save floats over the panel's foot, in thumb reach, instead of spending a
+     bar's height; the panel ends with room enough that it never covers the
+     last field. */
+  .rw-app .log-dlg .console-pane {
+    position: relative;
+  }
+  .rw-app .log-dlg .console-head-actions .settings-save {
+    position: absolute;
+    inset-block-end: var(--sp-l);
+    inset-inline-end: max(var(--sp-l), var(--safe-r));
+    z-index: 2;
+    inline-size: auto;
+    height: 48px;
+    padding-inline: 20px;
+    font-size: 0.95rem;
+    border-radius: var(--r-m);
+    box-shadow: var(--overlay-shadow);
+  }
+  /* The narrow-desktop rule that drops head buttons to icons matches a phone's
+     width too; floating Save keeps its label. */
+  .rw-app .log-dlg .settings-save .bl {
+    display: inline;
+  }
+  .rw-app .log-dlg .settings-body {
+    padding-block-end: calc(48px + 2 * var(--sp-l));
   }
   /**
    * One row of controls: the Now/Last toggle, the level (or refresh on
    * storage) taking the free width, then copy/download. The filter has the
    * row below to itself.
    */
-  .rw-app .log-dlg .dlg-subhead .log-controls {
+  .rw-app .log-dlg .log-controls {
     display: flex;
     flex-wrap: nowrap;
     gap: var(--sp-s);
   }
-  .rw-app .log-dlg .dlg-subhead .logview {
+  .rw-app .log-dlg .logview {
     flex: none;
     min-height: 44px;
   }
-  .rw-app .log-dlg .dlg-subhead .logview .seg-btn {
+  .rw-app .log-dlg .logview .seg-btn {
     height: 38px;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel {
+  .rw-app .log-dlg .loglevel {
     flex: 1 1 auto;
     min-width: 0;
     margin-inline-start: 0;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel .dropdown-select,
-  .rw-app .log-dlg .dlg-subhead .loglevel .select {
+  .rw-app .log-dlg .loglevel .dropdown-select,
+  .rw-app .log-dlg .loglevel .select {
     width: 100%;
   }
-  .rw-app .log-dlg .dlg-subhead .log-refresh {
+  .rw-app .log-dlg .log-refresh {
     inline-size: 44px;
     height: 44px;
     margin-inline-start: 0;
   }
-  .rw-app .log-dlg .dlg-subhead .log-actions {
+  .rw-app .log-dlg .log-actions {
     margin-inline-start: auto;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel .select,
-  .rw-app .log-dlg .dlg-subhead .log-filter {
+  .rw-app .log-dlg .loglevel .select,
+  .rw-app .log-dlg .log-filter {
     height: 44px;
   }
   .rw-app .log-dlg .log-actions .log-icon-btn {
@@ -202,6 +261,34 @@
   .rw-app .log-dlg .tracelog {
     flex: 1 1 auto;
     height: auto;
+    overflow-x: hidden;
+  }
+  /* Each line wraps: time, level, and caller on top, the whole message below,
+     rather than one line scrolling far past the screen's edge. The list
+     measures these rows (log-dialog.tsx). */
+  .rw-app .log-dlg .tracelog-virtual-window {
+    width: auto;
+  }
+  .rw-app .log-dlg .tracelog .ln {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 2px var(--sp-s);
+    align-items: baseline;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding-block: 6px;
+    white-space: normal;
+  }
+  .rw-app .log-dlg .tracelog .caller {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .log-dlg .tracelog .msg {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
   }
   .rw-app .ck {
     gap: var(--sp-2xs) var(--sp-s);
@@ -233,6 +320,84 @@
     height: 20px;
   }
 }
+/* At every width, the apply output groups flatten into one bordered box of
+   wrapping cells. Each label sits inside its cell, and 1px gaps over the seam
+   colour draw the dividers. */
+.apply-output .optsgrid {
+  flex-flow: row wrap;
+  gap: 1px;
+  overflow: hidden;
+  background: var(--seam);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.apply-output .optsgroup {
+  display: contents;
+}
+/* A codec cell grows by about 0.5rem per character of its list, plus room for
+   the arrow, so a long list takes a row of its own instead of clipping. Every
+   cell also grows by about 0.42rem per bold label character, plus 16px for the
+   insets, or 44px with the gap and info button, so the label is not cut off. */
+.apply-output .ofld {
+  --ofld-label-basis: calc(var(--ofld-label-ch, 0) * 0.42rem + 16px);
+  position: relative;
+  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px), var(--ofld-label-basis));
+  background: var(--plate);
+}
+.apply-output .ofld-has-info {
+  --ofld-label-basis: calc(var(--ofld-label-ch, 0) * 0.42rem + 44px);
+}
+.apply-output .ofld-l {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 6px;
+  inset-inline-end: 6px;
+  font-size: 0.66rem;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.apply-output .ofld-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.apply-output .ofld-l .info {
+  pointer-events: auto;
+}
+.apply-output .ofld .select,
+.apply-output .ofld .input {
+  height: 44px;
+  padding-block: 17px 0;
+  padding-inline-start: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.apply-output .post-apply-fields {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+/* Wide enough for "Download after patching" or a longer translated label, so a
+   narrow card stacks the pair instead of clipping the label. */
+.post-apply-fields > .ofld {
+  flex-basis: max(156px, var(--ofld-label-basis));
+}
+/* The identified title gets its own line under the label so it wraps whole. */
+.apply-output .outname-source {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  padding: 6px;
+  background: var(--plate);
+}
+.apply-output .outname-source-name {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 
 /* Forced colors */
 @media (forced-colors: active) {
@@ -245,9 +410,6 @@
   .rw-app .mode[aria-selected="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
-  }
-  .rw-app .mode-thumb {
-    background: Highlight;
   }
   .rw-app .updates-pulse {
     border: 1px solid CanvasText;

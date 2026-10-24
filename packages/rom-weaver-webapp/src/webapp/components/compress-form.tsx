@@ -2,6 +2,8 @@ import { Download, FileArchive } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
+import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -37,6 +39,7 @@ type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (ac
 type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
 type InputInfo = { files: File[]; formats: CompressionFormat[]; source: CompressSource | null };
 const logger = createLogger("compress-form");
+const loadBrowserRuntime = async () => (await import("../../platform/browser/workflow-runtime.ts")).browserRuntime;
 
 const disposeOutput = (output: PublicOutput | null) => {
   void output?.dispose().catch((cause: unknown) => logger.warn("Output cleanup failed", { cause }));
@@ -108,7 +111,10 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   useEffect(() => {
     let current = true;
     if (!files.length) return;
-    void Promise.all([getCompressSource(files), getCompressFormats(files)]).then(
+    void Promise.all([
+      getCompressSource(files, loadBrowserRuntime),
+      getCompressFormats(files, loadBrowserRuntime),
+    ]).then(
       ([nextSource, nextFormats]) => {
         if (current) setInputInfo({ files, formats: nextFormats, source: nextSource });
       },
@@ -127,6 +133,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     if (!pageDrop || pageDrop.id === handledDropRef.current) return;
     handledDropRef.current = pageDrop.id;
     stageFiles(pageDrop.files);
+    pageDrop.onConsumed?.();
   }, [pageDrop, stageFiles]);
 
   useEffect(() => {
@@ -169,7 +176,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         files,
         {
           ...options,
-          output: { ...options.output, compression: format, outputName: name },
+          output: {
+            ...options.output,
+            compression: format,
+            outputName: sanitizeTypedOutputName(name) || generatedName,
+          },
           signal: abort.signal,
           onLog: options.logging?.sink,
           onProgress: (event) => {
@@ -314,7 +325,6 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         inputId="compress-input-picker"
         lead={{
           line1: "ui.hero.compressThesis",
-          line2: "ui.hero.compressThesis2",
           description: "ui.hero.compressDescription",
         }}
         onFiles={stageFiles}
@@ -344,7 +354,6 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           compress={buildOutputCompressionPanel({
             disabled,
             fields: panel?.fields,
-            format: formatOptions.find((option) => option.value === format)?.label,
             note: panel?.note,
             onFieldChange: (key, value, updates) => {
               clearOutput();
@@ -355,6 +364,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           fileName={name}
           fileNameLabel={localizer.message("ui.apply.outputFilename")}
           format={format}
+          // Compress saves the container itself, so its extension leads the warning.
+          outputExtensions={[
+            ...getOutputExtensions([], format, { inputFileName: files[0]?.name }),
+            ...files.map((file) => getLiteralFileNameExtension(file.name)),
+          ]}
           formatOptions={formatOptions}
           meta={<span className="rb mono">{formatByteSize(totalSize)}</span>}
           num="0x02"

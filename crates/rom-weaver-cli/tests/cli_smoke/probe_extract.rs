@@ -319,7 +319,7 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -403,7 +403,7 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
         0,
     );
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -470,7 +470,7 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -540,7 +540,7 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -630,7 +630,7 @@ fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -686,7 +686,7 @@ fn extract_rom_filter_extracts_rom_entries_only() {
         0,
     );
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -908,7 +908,7 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     fs::write(temp.child("._game.bin").path(), b"resource fork").expect("resource fork");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("mac metadata");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -992,7 +992,7 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
     .expect("rom fixture");
     fs::write(temp.child("readme.txt").path(), b"not a rom").expect("sidecar fixture");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -1045,7 +1045,7 @@ fn extract_emits_early_probe_manifest_for_rom_archive() {
     .expect("rom fixture");
     fs::write(temp.child("readme.txt").path(), b"not a rom").expect("sidecar fixture");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -1225,7 +1225,7 @@ fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
         .find(|event| event["stage"] == "probe-manifest")
         .map(|event| &event["details"]["probe_manifest"])
         .expect("expected an early probe-manifest event");
-    // A bundle that carries a patch and no ROM payload routes to the patch bucket.
+    // A weave that carries a patch and no ROM payload routes to the patch bucket.
     assert_eq!(manifest["is_rom"], false);
     let entries = manifest["entries"]
         .as_array()
@@ -2010,4 +2010,468 @@ fn probe_reads_stdin_for_dash_input() {
     assert_eq!(json["status"], "succeeded");
     assert_eq!(json["details"]["container"]["entry_count"], 1);
     assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
+}
+
+#[test]
+fn extract_probe_names_the_unrecognised_payload() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("blob.3ds").path(), vec![0x5A_u8; 4096]).expect("fixture");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            temp.child("blob.3ds").path().to_str().expect("path"),
+            "-o",
+            temp.child("blob.z3ds").path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--json",
+        ],
+        0,
+    );
+    let json = run_single_json_event(
+        &[
+            "extract",
+            "-i",
+            temp.child("blob.z3ds").path().to_str().expect("path"),
+            "-o",
+            temp.child("out").path().to_str().expect("path"),
+            "--probe",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        json["label"],
+        "probe: `blob.3ds` did not resolve to a known platform"
+    );
+}
+
+#[test]
+fn probe_unidentified_file_error_omits_compress_recommendation() {
+    let temp = setup_temp_dir();
+    let unknown = temp.child("unknown.bin");
+    unknown.write_str("payload").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["probe", "--input", unknown.path().to_str().expect("path")])
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no registered handler matched"), "{stderr}");
+    assert!(!stderr.contains("recommended_compress_format"), "{stderr}");
+    assert!(!stderr.contains("reason="), "{stderr}");
+}
+
+fn failed_extract(input: &Path, out: &Path) {
+    command_stdout(
+        &[
+            "extract",
+            input.to_str().expect("path"),
+            "-o",
+            out.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+}
+
+#[test]
+fn extract_truncated_gzip_leaves_no_output_dir() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("r.bin");
+    fs::write(raw.path(), pseudo_random_bytes(50_000, 7)).expect("raw fixture");
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, &fs::read(raw.path()).expect("raw bytes"))
+        .expect("gzip write");
+    let bytes = encoder.finish().expect("gzip finish");
+    let truncated = temp.child("tr.bin.gz");
+    fs::write(truncated.path(), &bytes[..bytes.len() / 2]).expect("truncated fixture");
+    let out = temp.child("nested/out");
+
+    failed_extract(truncated.path(), out.path());
+
+    assert!(!out.path().exists(), "failed extract left the output dir");
+    assert!(
+        !temp.child("nested").path().exists(),
+        "failed extract left a created parent dir"
+    );
+}
+
+#[test]
+fn extract_unsupported_input_leaves_no_output_dir() {
+    let temp = setup_temp_dir();
+    let input = temp.child("foo.xyz");
+    fs::write(input.path(), b"not a known container").expect("input fixture");
+    let out = temp.child("ux");
+
+    failed_extract(input.path(), out.path());
+
+    assert!(!out.path().exists(), "failed extract left the output dir");
+}
+
+#[test]
+fn extract_failure_preserves_preexisting_output_dir() {
+    let temp = setup_temp_dir();
+    let input = temp.child("foo.xyz");
+    fs::write(input.path(), b"not a known container").expect("input fixture");
+    let out = temp.child("existing");
+    fs::create_dir(out.path()).expect("existing dir");
+
+    failed_extract(input.path(), out.path());
+
+    assert!(out.path().is_dir(), "pre-existing output dir was removed");
+}
+
+fn stderr_of_failed(args: &[&str]) -> String {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(args)
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn extract_rejects_empty_zip_and_7z_without_leaving_output() {
+    for name in ["empty.zip", "empty.7z"] {
+        let temp = setup_temp_dir();
+        let input = temp.child(name);
+        input.write_str("").expect("empty fixture");
+        let out = temp.child("out");
+        let stderr = stderr_of_failed(&[
+            "extract",
+            input.path().to_str().expect("path"),
+            "-o",
+            out.path().to_str().expect("path"),
+        ]);
+        assert!(stderr.contains("is empty"), "{name}: {stderr}");
+        assert!(!out.path().exists(), "{name}: empty output dir left behind");
+    }
+}
+
+// The 7z reader decodes into a 64 KiB buffer. A folder that unpacks to a multiple of that fills
+// the buffer with its last byte, before the decoder has read the LZMA2 end marker, so reading
+// the next folder first decodes that marker alone and gets no data.
+#[test]
+fn extract_7z_reads_the_folder_after_one_that_ends_on_a_full_buffer() {
+    let temp = setup_temp_dir();
+    let payloads: Vec<Vec<u8>> = (0..3)
+        .map(|seed| pseudo_random_bytes(1 << 20, seed))
+        .collect();
+    let names = ["a.bin", "b.bin", "c.bin"];
+    let files: Vec<(&str, &[u8])> = names
+        .iter()
+        .zip(&payloads)
+        .map(|(name, payload)| (*name, payload.as_slice()))
+        .collect();
+    let archive = temp.child("roms.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &files, 22);
+
+    for threads in ["1", "2"] {
+        let out_dir = temp.child(format!("out-{threads}"));
+        run_json_events(
+            &[
+                "extract",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--output",
+                out_dir.path().to_str().expect("path"),
+                "--threads",
+                threads,
+                "--jsonl",
+            ],
+            0,
+        );
+        for (name, payload) in names.iter().zip(&payloads) {
+            assert_eq!(
+                &fs::read(out_dir.child(name).path()).expect("read extracted"),
+                payload,
+                "{name} with {threads} threads"
+            );
+        }
+    }
+}
+
+#[test]
+fn checksum_fails_on_truncated_zip_instead_of_hashing_the_container() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("payload.bin").path(),
+        pseudo_random_bytes(200_000, 7),
+    )
+    .expect("payload");
+    let zip = temp.child("full.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("payload.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let bytes = fs::read(zip.path()).expect("zip bytes");
+    let truncated = temp.child("truncated.zip");
+    fs::write(truncated.path(), &bytes[..bytes.len() / 2]).expect("truncated zip");
+    let stderr = stderr_of_failed(&[
+        "checksum",
+        "--input",
+        truncated.path().to_str().expect("path"),
+    ]);
+    assert!(stderr.contains("decompression failed"), "{stderr}");
+}
+
+#[test]
+fn probe_select_of_unrecognised_archive_member_names_the_member() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), b"aaaa").expect("a");
+    fs::write(temp.child("b.bin").path(), b"bbbb").expect("b");
+    let zip = temp.child("multi.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("a.bin").path().to_str().expect("path"),
+            "--input",
+            temp.child("b.bin").path().to_str().expect("path"),
+            "--output",
+            zip.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        0,
+    );
+    let stderr = stderr_of_failed(&[
+        "probe",
+        "--input",
+        zip.path().to_str().expect("path"),
+        "--select",
+        "b.bin",
+    ]);
+    assert!(stderr.contains("archive member `b.bin`"), "{stderr}");
+    assert!(
+        !stderr.contains("no registered handler matched"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn raw_file_with_stream_signature_is_not_decoded_as_itself() {
+    let temp = setup_temp_dir();
+    for (name, magic, stream) in [
+        ("gz-lookalike.bin", &b"\x1f\x8b"[..], "gzip"),
+        ("bz2-lookalike.bin", &b"BZh"[..], "bzip2"),
+    ] {
+        let mut bytes = vec![0_u8; 4096];
+        bytes[..magic.len()].copy_from_slice(magic);
+        let source = temp.child(name);
+        fs::write(source.path(), &bytes).expect("lookalike fixture");
+        let source_arg = source.path().to_str().expect("path");
+
+        let stderr = stderr_of_failed(&["probe", "--input", source_arg]);
+        assert!(
+            stderr.contains(&format!("is not a valid {stream} stream")),
+            "{stderr}"
+        );
+
+        let out = temp.child(format!("{name}.out"));
+        let stderr = stderr_of_failed(&[
+            "extract",
+            "--input",
+            source_arg,
+            "--output",
+            out.path().to_str().expect("path"),
+        ]);
+        assert!(
+            stderr.contains(&format!("is not a valid {stream} stream")),
+            "{stderr}"
+        );
+        assert!(!out.path().exists(), "extract left output for {name}");
+
+        let raw = command_stdout(
+            &["checksum", "--input", source_arg, "--no-extract", "--json"],
+            0,
+        );
+        let resolved = command_stdout(&["checksum", "--input", source_arg, "--json"], 0);
+        assert_eq!(
+            parse_single_json_line(&resolved)["label"],
+            parse_single_json_line(&raw)["label"],
+            "{name} must hash as a raw file"
+        );
+    }
+}
+
+#[test]
+fn extract_nested_empty_psar_pbp_preserves_rom_and_extracts_disc_pbp() {
+    let temp = setup_temp_dir();
+    let homebrew = build_test_empty_psar_pbp();
+    let disc = build_test_pbp_iso(72, 37);
+    let payloads = temp.child("payloads");
+    fs::create_dir_all(payloads.path()).expect("payload directory");
+    fs::write(payloads.child("EBOOT.PBP").path(), &homebrew).expect("homebrew fixture");
+    fs::write(
+        payloads.child("disc.pbp").path(),
+        build_test_pbp_fixture(vec![("SLUS00001", disc.clone())]),
+    )
+    .expect("disc fixture");
+    let inner = temp.child("mixed.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            payloads.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(inner.path(), "mixed.zip")], outer.path());
+    for (depth, archive) in [inner.path(), outer.path()].into_iter().enumerate() {
+        let output = temp.child(format!("extract-{depth}"));
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "extract",
+                "--input",
+                archive.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+        let leaf = emitted_file_entry(&terminal, "EBOOT.PBP");
+        assert_eq!(
+            fs::read(leaf["path"].as_str().expect("homebrew path")).expect("homebrew bytes"),
+            homebrew
+        );
+        let bin = emitted_file_entry(&terminal, "disc.bin");
+        assert_eq!(
+            fs::read(bin["path"].as_str().expect("disc path")).expect("disc bytes"),
+            disc
+        );
+        let files = terminal["details"]["emitted_files"]
+            .as_array()
+            .expect("emitted files");
+        assert_eq!(files.len(), 3, "only the PSP ROM and PS1 cue/bin leaves");
+    }
+}
+
+// A 7z folder may declare a dictionary far larger than the data it holds. A 4 GiB - 1 dictionary
+// cannot be reserved under a 2 GiB address-space limit, the same wall a 1 GiB browser memory puts
+// in front of a 1.5 GiB one, so this extract only succeeds when the decoder sizes its dictionary
+// from the folder's output.
+#[cfg(target_os = "linux")]
+#[test]
+fn extract_7z_with_a_dictionary_larger_than_the_address_space_limit() {
+    use std::os::unix::process::CommandExt;
+
+    const ADDRESS_SPACE_LIMIT_BYTES: libc::rlim_t = 2 << 30;
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(300_000, 0x5eed);
+    let archive = temp.child("rom.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &[("rom.bin", &payload)], 40);
+
+    let out_dir = temp.child("out");
+    let mut command = std::process::Command::new(assert_cmd::cargo::cargo_bin!("rom-weaver"));
+    command.args([
+        "extract",
+        "--input",
+        archive.path().to_str().expect("path"),
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--threads",
+        "1",
+        "--json",
+    ]);
+    // SAFETY: the closure runs in the forked child before exec and only calls setrlimit, which
+    // is async-signal-safe.
+    unsafe {
+        command.pre_exec(|| {
+            let limit = libc::rlimit {
+                rlim_cur: ADDRESS_SPACE_LIMIT_BYTES,
+                rlim_max: ADDRESS_SPACE_LIMIT_BYTES,
+            };
+            if libc::setrlimit(libc::RLIMIT_AS, &limit) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        });
+    }
+    let output = command.output().expect("run extract");
+    assert!(
+        output.status.success(),
+        "extract under a 2 GiB address-space limit failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        fs::read(out_dir.child("rom.bin").path()).expect("read extracted"),
+        payload
+    );
+}
+
+// Every worker opens its own reader, so concurrent solid blocks each allocate their dictionary.
+// A 2,000,000-byte folder needs a dictionary that size, pricing a worker just under 6 MiB; three
+// quarters of a 25 MiB limit fits three. Pricing the declared 4 GiB - 1 would cap extraction at
+// one decoder, which reports the two-thread floor instead.
+#[test]
+fn extract_7z_runs_only_as_many_folder_decoders_as_the_memory_limit_fits() {
+    let temp = setup_temp_dir();
+    let payloads: Vec<Vec<u8>> = (0..4)
+        .map(|seed| pseudo_random_bytes(2_000_000, seed))
+        .collect();
+    let names = ["a.bin", "b.bin", "c.bin", "d.bin"];
+    let files: Vec<(&str, &[u8])> = names
+        .iter()
+        .zip(&payloads)
+        .map(|(name, payload)| (*name, payload.as_slice()))
+        .collect();
+    let archive = temp.child("roms.7z");
+    write_7z_lzma2_folders_fixture(archive.path(), &files, 40);
+
+    for (limit, expected_threads) in [(None, 4), (Some("26214400"), 3)] {
+        let out_dir = temp.child(format!("out-{expected_threads}"));
+        let envs: Vec<(&str, &str)> = limit
+            .map(|bytes| ("ROM_WEAVER_MEMORY_LIMIT_BYTES", bytes))
+            .into_iter()
+            .collect();
+        let events = run_json_events_with_env(
+            &[
+                "extract",
+                "--input",
+                archive.path().to_str().expect("path"),
+                "--output",
+                out_dir.path().to_str().expect("path"),
+                "--threads",
+                "4",
+                "--jsonl",
+            ],
+            &envs,
+            0,
+        );
+        let json = events.last().expect("extract terminal event");
+        assert_eq!(
+            json["effective_threads"], expected_threads,
+            "memory limit {limit:?}"
+        );
+        for (name, payload) in names.iter().zip(&payloads) {
+            assert_eq!(
+                &fs::read(out_dir.child(name).path()).expect("read extracted"),
+                payload
+            );
+        }
+    }
 }

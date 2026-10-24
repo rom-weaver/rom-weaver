@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import logo from "../../design/icon-masters/brand-mark.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
+import { DEFAULT_CHANNEL_ACCENT } from "./build-channel.ts";
 import { renderFavicon } from "./brand-mark-assets.mjs";
 
 /**
@@ -81,7 +82,7 @@ const applyAccent = (value: unknown) => {
 };
 
 /** Subscribe a component to the active accent. */
-const useAccent = (): Accent => useSyncExternalStore(subscribe, getAccent, getAccent);
+const useAccent = (): Accent => useSyncExternalStore(subscribe, getAccent, () => DEFAULT_CHANNEL_ACCENT);
 
 export { ACCENTS, applyAccent, DEFAULT_ACCENT, useAccent };
 export type { Accent };

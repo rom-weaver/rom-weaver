@@ -61,8 +61,8 @@ vi.mock("../../src/public/react/emulator-audio-context.ts", () => ({
 }));
 
 const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
-const BUNDLE_FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
-const BUNDLE_RESPONSIVE_CSS = read("../../src/webapp/design-system/responsive.css");
+const WEAVE_FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
+const WEAVE_RESPONSIVE_CSS = read("../../src/webapp/design-system/responsive.css");
 
 /**
  * Apply-view markup contract. The browser suites drive the form through
@@ -145,11 +145,13 @@ const withTargets = (item: PatchStackItemState): PatchStackItemState => ({
 const cheatsStep = <div data-testid="cheats-step">cheats</div>;
 
 const renderView = ({
-  bundleMetaById,
-  bundleExpectedRomChecks,
+  cheatsOn,
+  cheatsPresent,
+  weaveMetaById,
+  weaveExpectedRomChecks,
   emulatorOutput,
-  onBundleMetaChange,
-  onBundleMetaBulkChange,
+  onWeaveMetaChange,
+  onWeaveMetaBulkChange,
   onUnifiedDrop,
   mode,
   outputControllerOverrides,
@@ -164,11 +166,13 @@ const renderView = ({
   startup,
   ui,
 }: {
-  bundleMetaById?: Parameters<typeof ApplyWorkflowFormView>[0]["bundleMetaById"];
-  bundleExpectedRomChecks?: Parameters<typeof ApplyWorkflowFormView>[0]["bundleExpectedRomChecks"];
+  cheatsOn?: boolean;
+  cheatsPresent?: boolean;
+  weaveMetaById?: Parameters<typeof ApplyWorkflowFormView>[0]["weaveMetaById"];
+  weaveExpectedRomChecks?: Parameters<typeof ApplyWorkflowFormView>[0]["weaveExpectedRomChecks"];
   emulatorOutput?: unknown;
-  onBundleMetaChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaChange"];
-  onBundleMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaBulkChange"];
+  onWeaveMetaChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onWeaveMetaChange"];
+  onWeaveMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onWeaveMetaBulkChange"];
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
   mode?: Parameters<typeof ApplyWorkflowFormView>[0]["mode"];
   outputOverrides?: Partial<PatcherOutputState>;
@@ -199,7 +203,9 @@ const renderView = ({
   return render(
     <RomWeaverSettingsProvider settings={resolvedSettings}>
       <ApplyWorkflowFormView
-        bundleMetaById={bundleMetaById}
+        cheatsOn={cheatsOn}
+        cheatsPresent={cheatsPresent}
+        weaveMetaById={weaveMetaById}
         cheats={({ renderStack }) =>
           renderStack({
             cards: [],
@@ -208,11 +214,11 @@ const renderView = ({
             renderCard: () => null,
           })
         }
-        bundleExpectedRomChecks={bundleExpectedRomChecks}
+        weaveExpectedRomChecks={weaveExpectedRomChecks}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
-        onBundleMetaBulkChange={onBundleMetaBulkChange}
-        onBundleMetaChange={onBundleMetaChange}
+        onWeaveMetaBulkChange={onWeaveMetaBulkChange}
+        onWeaveMetaChange={onWeaveMetaChange}
         onUnifiedDrop={onUnifiedDrop}
         mode={mode}
         patchEnablement={patchEnablement}
@@ -223,6 +229,26 @@ const renderView = ({
     </RomWeaverSettingsProvider>,
   );
 };
+
+describe("checksum mismatch recovery", () => {
+  it("offers recovery before the override while leaving it unchecked", () => {
+    const ui = createEmptyPatcherUiState();
+    ui.romInputs = [romRow("game.bin")];
+    ui.checksumOverride = { ...ui.checksumOverride, visible: true };
+    const { container } = renderView({ ui, patches: [patchItem("fix.ips")] });
+    const recovery = container.querySelector("a[href='/docs/fix-checksum-errors']");
+    const override = container.querySelector("#rom-weaver-checkbox-checksum-override");
+    expect(recovery?.textContent).toContain("Compare the expected ROM");
+    expect(recovery?.getAttribute("target")).toBe("_blank");
+    expect((recovery?.compareDocumentPosition(override as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((override as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("does not offer a mismatch override or recovery when checks pass", () => {
+    const { container } = renderView({ ui: createEmptyPatcherUiState() });
+    expect(container.querySelector("a[href='/docs/fix-checksum-errors']")).toBeNull();
+  });
+});
 
 describe("apply workflow view - empty bench", () => {
   beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
@@ -235,11 +261,11 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
-    const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toContain("New here?");
+    const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
+    expect(chip.textContent).toContain("Patch a practice ROM");
     fireEvent.click(chip);
-    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start a practice run");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start a practice weave");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
@@ -248,11 +274,13 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it.each([
-    ["apply", "/apply-patches?guide=apply", "Start guided Apply", "/docs/apply-rom-patches", "Read the Apply guide"],
-    ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle", "/docs/create-bundles", "Read the Bundle guide"],
-  ] as const)("offers the %s guide and the test bundle download", (mode, href, label, docsHref, docsLabel) => {
+    ["apply", "/apply-patches?guide=apply", "Start a practice run", "/docs/apply-rom-patches", "Read the Apply guide"],
+    ["weave", "/weave-patches?guide=weave", "Start a practice weave", "/docs/create-bundles", "Read the Weave guide"],
+  ] as const)("offers the %s guide and the test weave download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
+    expect(chip.textContent).toBe(mode === "apply" ? "Patch a practice ROM" : "Share practice patches as a weave");
+    fireEvent.click(chip);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
     expect(actions[0].getAttribute("href")).toBe(href);
@@ -271,14 +299,19 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   });
 
-  it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
+  it("does not offer Apply's sample guides on Create", () => {
+    const { container } = renderView({ mode: "create", ui: createEmptyPatcherUiState() });
+    expect(container.querySelector(".sample-tutorial-start")).toBeNull();
+  });
+
+  it("keeps file input hooks unique when Apply and Weave stay mounted", () => {
     const apply = renderView({ ui: createEmptyPatcherUiState() });
-    const bundle = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
+    const weave = renderView({ mode: "weave", ui: createEmptyPatcherUiState() });
 
     expect(apply.container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
-    expect(bundle.container.querySelector("#rom-weaver-input-file-unified-bundle")).toBeTruthy();
+    expect(weave.container.querySelector("#rom-weaver-input-file-unified-weave")).toBeTruthy();
     expect(document.querySelectorAll("#rom-weaver-input-file-unified")).toHaveLength(1);
-    expect(document.querySelectorAll("#rom-weaver-input-file-unified-bundle")).toHaveLength(1);
+    expect(document.querySelectorAll("#rom-weaver-input-file-unified-weave")).toHaveLength(1);
   });
 
   it("shows checksum search immediately, then fills the bench on a match", async () => {
@@ -318,17 +351,15 @@ describe("apply workflow view - empty bench", () => {
       fireEvent.submit(search);
     });
     await vi.waitFor(() => expect(container.querySelector(".identify-search-result-btn--version")).toBeTruthy());
-    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+    expect(container.querySelector("#rom-weaver-weave-rom-expectation")).toBeNull();
     fireEvent.click(container.querySelector(".identify-search-result-btn--version") as HTMLButtonElement);
-    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
-    // A match lays the whole run out, the way a patches-only bundle does.
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-weave-rom-expectation")).toBeTruthy());
+    // A match lays the whole run out, the way a patches-only weave does.
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
-    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
-      "Metroid Fusion (USA)",
-    );
+    expect(container.querySelector("#rom-weaver-weave-rom-expectation")?.textContent).toContain("Metroid Fusion (USA)");
     // The search moves into 0x02 as the refine row, keeping what was typed.
     const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
     const refine = romStep.querySelector("#rom-weaver-rom-search-form") as HTMLElement;
@@ -365,10 +396,8 @@ describe("apply workflow view - empty bench", () => {
       ui: createEmptyPatcherUiState(),
     });
 
-    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
-    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
-      "Metroid Fusion (USA)",
-    );
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-weave-rom-expectation")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-weave-rom-expectation")?.textContent).toContain("Metroid Fusion (USA)");
     expect(lookupExpectedRom).not.toHaveBeenCalled();
   });
 
@@ -393,7 +422,7 @@ describe("apply workflow view - empty bench", () => {
       ui: createEmptyPatcherUiState(),
     };
     const view = renderView(props);
-    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-weave-rom-expectation")).toBeTruthy());
 
     view.rerender(
       <RomWeaverSettingsProvider settings={{}}>
@@ -408,7 +437,7 @@ describe("apply workflow view - empty bench", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull());
+    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-weave-rom-expectation")).toBeNull());
   });
 
   it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {
@@ -442,12 +471,10 @@ describe("apply workflow view - empty bench", () => {
       fireEvent.submit(search);
     });
     await vi.waitFor(() => expect(container.querySelector(".identify-search-result-btn--version")).toBeTruthy());
-    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+    expect(container.querySelector("#rom-weaver-weave-rom-expectation")).toBeNull();
     fireEvent.click(container.querySelector(".identify-search-result-btn--version") as HTMLButtonElement);
-    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
-    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
-      "Metroid Fusion (USA)",
-    );
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-weave-rom-expectation")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-weave-rom-expectation")?.textContent).toContain("Metroid Fusion (USA)");
     // The match replaces the open search with the refine row - one search per step.
     const forms = romStep.querySelectorAll("#rom-weaver-rom-search-form");
     expect(forms).toHaveLength(1);
@@ -463,12 +490,12 @@ describe("apply workflow view - empty bench", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
     fireEvent.click(container.querySelector(".sample-tutorial-start-primary") as HTMLButtonElement);
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
     expect(dialog.textContent).toContain("Add your files");
     expect(dialog.dataset.step).toBe("1");
-    expect(dialog.dataset.stepCount).toBe("4");
+    expect(dialog.dataset.stepCount).toBe("5");
     // Nothing reaches the bench the reader did not put there.
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onUnifiedDrop).not.toHaveBeenCalled();
@@ -498,7 +525,9 @@ describe("apply workflow view - empty bench", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
     await vi.waitFor(() =>
-      expect(within(dialog).getByRole("status").textContent).toBe("Could not load the sample. Try again."),
+      expect(within(dialog).getByRole("status").textContent).toBe(
+        "Couldn't load the practice files. Check your connection and try again.",
+      ),
     );
     expect(document.querySelector(".sample-tutorial-dialog")).toBe(dialog);
     expect(dialog.dataset.step).toBe("1");
@@ -548,10 +577,10 @@ describe("apply workflow view - empty bench", () => {
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
   });
 
-  it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
-    window.history.replaceState(null, "", "/bundle?guide=bundle");
+  it("starts the weave tutorial and selects a patch-only ZIP from a guided Weave URL", async () => {
+    window.history.replaceState(null, "", "/weave?guide=weave");
     const onUnifiedDrop = vi.fn();
-    const setBundlePackage = vi.fn();
+    const setWeavePackage = vi.fn();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -569,8 +598,8 @@ describe("apply workflow view - empty bench", () => {
     render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={{
-            bundleRom: false,
+          weaveExport={{
+            weaveRom: false,
             busy: false,
             cancelExport: () => undefined,
             downloadable: false,
@@ -579,33 +608,33 @@ describe("apply workflow view - empty bench", () => {
             progress: null,
             ready: true,
             runExport: async () => undefined,
-            setBundleRom: () => undefined,
+            setWeaveRom: () => undefined,
             setFormat: () => undefined,
           }}
-          bundleTools={{
+          weaveTools={{
             hasOptionalEntries: false,
             outputVerification: null,
-            setBundlePackage,
+            setWeavePackage,
           }}
           controllers={controllers}
-          mode="bundle"
+          mode="weave"
           onUnifiedDrop={onUnifiedDrop}
         />
       </RomWeaverSettingsProvider>,
     );
 
-    expect(setBundlePackage).toHaveBeenCalledWith("patches");
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
+    expect(setWeavePackage).toHaveBeenCalledWith("patches");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading practice files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 
   it("shapes an identifying archive like the patch card it will most likely become", () => {
     const { container } = renderView({
-      pendingDrops: [{ extracting: true, id: "pending-1", kind: "patch", name: "bundle.zip" }],
+      pendingDrops: [{ extracting: true, id: "pending-1", kind: "patch", name: "weave.zip" }],
       ui: createEmptyPatcherUiState(),
     });
     const card = container.querySelector(".rw-pending .card.pending-card");
-    expect(card?.textContent).toContain("bundle");
+    expect(card?.textContent).toContain("weave");
     expect(card?.textContent).toContain("Identifying");
     expect(card?.textContent).toContain("Files");
     // A still-identifying archive has no parsed requirements, so the skeleton
@@ -630,11 +659,11 @@ describe("apply workflow view - staged bench", () => {
   afterEach(cleanup);
   it("labels the first enabled patch input as the original ROM", () => {
     const { container } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { id: "patch-a" }],
         ["patch-b", {}],
       ]),
-      onBundleMetaChange: vi.fn(),
+      onWeaveMetaChange: vi.fn(),
       patchEnablement: {
         disabledIds: new Set(["patch-a"]),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -647,7 +676,7 @@ describe("apply workflow view - staged bench", () => {
     // The second patch's only enabled predecessor is disabled, so its automatic
     // target is the ROM input rather than a patch output.
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
   });
 
   it("labels the first patch in each target lane as the original ROM", () => {
@@ -658,11 +687,11 @@ describe("apply workflow view - staged bench", () => {
     second.targetOptions = [{ label: "b.bin", value: "rom-b" }];
     second.targetValue = "rom-b";
     const { container } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { id: "patch-a" }],
         ["patch-b", {}],
       ]),
-      onBundleMetaChange: vi.fn(),
+      onWeaveMetaChange: vi.fn(),
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -675,19 +704,19 @@ describe("apply workflow view - staged bench", () => {
     // Each patch targets a different ROM, so neither has an enabled predecessor
     // in its own lane and both automatic targets read the original ROM.
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
   });
 
   it("preserves a member when the patch input source changes", () => {
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const first = withTargets(patchItem("first.ips"));
     const second = withTargets(patchItem("second.ips"));
     const { container } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { name: "First" }],
         ["patch-b", { input: { member: "track02.bin", rom: true }, name: "Second" }],
       ]),
-      onBundleMetaChange,
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -700,14 +729,14 @@ describe("apply workflow view - staged bench", () => {
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
     expect(target.value).toBe("rom");
     fireEvent.change(target, { target: { value: "patch:patch-a" } });
-    // A patch-output member selects an exact generated leaf in native bundle
+    // A patch-output member selects an exact generated leaf in native weave
     // apply, so changing the source must not silently broaden the reference.
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+    expect(onWeaveMetaChange).toHaveBeenLastCalledWith("patch-b", {
       input: { member: "track02.bin", patch: "patch-a" },
     });
 
     fireEvent.change(target, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+    expect(onWeaveMetaChange).toHaveBeenLastCalledWith("patch-b", {
       input: { member: "track02.bin", rom: true },
     });
   });
@@ -715,8 +744,8 @@ describe("apply workflow view - staged bench", () => {
   it("offers the runs-on choice before a ROM is staged", () => {
     const patch = patchItem("add-on.bps");
     const { container } = renderView({
-      bundleMetaById: new Map([["patch-a", {}]]),
-      onBundleMetaChange: vi.fn(),
+      weaveMetaById: new Map([["patch-a", {}]]),
+      onWeaveMetaChange: vi.fn(),
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a"],
@@ -726,19 +755,19 @@ describe("apply workflow view - staged bench", () => {
       ui: { ...createEmptyPatcherUiState(), romInputs: [] },
     });
 
-    // A bundle author can pin the basis before choosing a ROM, as the old basis select allowed.
+    // A weave author can pin the basis before choosing a ROM, as the old basis select allowed.
     expect(container.querySelector("#rom-weaver-select-patch-target-0")).toBeInstanceOf(HTMLSelectElement);
   });
 
   it("edits shared patch details from the patches header", async () => {
-    const onBundleMetaBulkChange = vi.fn();
+    const onWeaveMetaBulkChange = vi.fn();
     const onToggle = vi.fn();
     const { container, getByLabelText, getByRole } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { author: "Author", version: "1.0" }],
         ["patch-b", { author: "Author", version: "1.0" }],
       ]),
-      onBundleMetaBulkChange,
+      onWeaveMetaBulkChange,
       patchEnablement: {
         disabledIds: new Set(["patch-b"]),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -760,7 +789,7 @@ describe("apply workflow view - staged bench", () => {
     fireEvent.change(getByLabelText("Default selection"), { target: { value: "none" } });
     fireEvent.submit(versionInput.closest("form") as HTMLFormElement);
 
-    expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
+    expect(onWeaveMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
       author: "New author",
       version: "2.0",
     });
@@ -773,7 +802,7 @@ describe("apply workflow view - staged bench", () => {
     fireEvent.submit(getByLabelText("Version").closest("form") as HTMLFormElement);
     expect(onToggle).toHaveBeenCalledTimes(2);
     expect(onToggle).toHaveBeenNthCalledWith(2, 1);
-    expect(onBundleMetaBulkChange).toHaveBeenNthCalledWith(2, ["patch-a", "patch-b"], {});
+    expect(onWeaveMetaBulkChange).toHaveBeenNthCalledWith(2, ["patch-a", "patch-b"], {});
 
     fireEvent.click(button);
     fireEvent.keyDown(getByLabelText("Version"), { key: "Escape" });
@@ -782,13 +811,13 @@ describe("apply workflow view - staged bench", () => {
   });
 
   it("keeps mixed patch versions when only the shared author changes", () => {
-    const onBundleMetaBulkChange = vi.fn();
+    const onWeaveMetaBulkChange = vi.fn();
     const { getByLabelText, getByRole } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { author: "First author", version: "1.0" }],
         ["patch-b", { author: "Second author", version: "2.0" }],
       ]),
-      onBundleMetaBulkChange,
+      onWeaveMetaBulkChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -803,7 +832,7 @@ describe("apply workflow view - staged bench", () => {
     fireEvent.change(getByLabelText("Author"), { target: { value: "Shared author" } });
     fireEvent.submit(getByLabelText("Author").closest("form") as HTMLFormElement);
 
-    expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
+    expect(onWeaveMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
       author: "Shared author",
     });
   });
@@ -917,13 +946,13 @@ describe("apply workflow view - staged bench", () => {
     addOn.targetValue = "rom-1";
     addOn.validationState = "deferred";
     addOn.validationValues = ["in crc32=12345678", "out crc32=87654321"];
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const { container } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { name: "Base patch", outputChecks: { checksums: { crc32: "12345678" } } }],
         ["patch-b", { basis: "base", input: { patch: "patch-a" }, name: "Add-on" }],
       ]),
-      onBundleMetaChange,
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -934,23 +963,23 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
-    expect(addOnCard?.textContent).toContain("Authored input checks: Original ROM");
-    expect(addOnCard?.textContent).toContain("Embedded output checks: Standalone patch result");
-    expect(addOnCard?.textContent).toContain("Stack output checks: Combined result");
-    expect(addOnCard?.textContent).toContain("Shared input checks: Base patch");
+    expect(addOnCard?.textContent).toContain("Input: Original ROM");
+    expect(addOnCard?.textContent).toContain("Patch result");
+    expect(addOnCard?.textContent).toContain("Combined result");
+    expect(addOnCard?.textContent).toContain("Shared input: Base patch");
     expect(addOnCard?.textContent).toContain("Checks during apply: Base patch");
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
     // The target select writes the explicit choice; the automatic value stays unset.
     const target = addOnCard?.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Previous patch output)");
+    expect(target.options[0]?.textContent).toBe("Previous patch's result (detected)");
     expect(target.value).toBe("patch:patch-a");
     fireEvent.change(target, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
   });
 
   it("routes a track choice through the workflow target instead of a member path", () => {
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const setPatchTarget = vi.fn();
     const patch = patchItem("track.ips");
     patch.targetOptions = [
@@ -959,8 +988,8 @@ describe("apply workflow view - staged bench", () => {
     ];
     patch.targetValue = "disc (Track 1).bin";
     const { container } = renderView({
-      bundleMetaById: new Map([["patch-a", {}]]),
-      onBundleMetaChange,
+      weaveMetaById: new Map([["patch-a", {}]]),
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a"],
@@ -975,13 +1004,13 @@ describe("apply workflow view - staged bench", () => {
     expect(track.value).toBe("disc (Track 1).bin");
     fireEvent.change(track, { target: { value: "disc (Track 2).bin" } });
     // The row value is a file name, not a member locator, so the workflow resolves
-    // it to its input asset instead of the bundle metadata storing it as a member.
+    // it to its input asset instead of the weave metadata storing it as a member.
     expect(setPatchTarget).toHaveBeenCalledWith(0, "disc (Track 2).bin");
-    expect(onBundleMetaChange).not.toHaveBeenCalled();
+    expect(onWeaveMetaChange).not.toHaveBeenCalled();
   });
 
   it("drops an imported track member when the user picks another track", () => {
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const setPatchTarget = vi.fn();
     const patch = patchItem("track.ips");
     patch.targetOptions = [
@@ -990,8 +1019,8 @@ describe("apply workflow view - staged bench", () => {
     ];
     patch.targetValue = "disc (Track 1).bin";
     const { container } = renderView({
-      bundleMetaById: new Map([["patch-a", { input: { member: "disc (Track 1).bin", rom: true } }]]),
-      onBundleMetaChange,
+      weaveMetaById: new Map([["patch-a", { input: { member: "disc (Track 1).bin", rom: true } }]]),
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a"],
@@ -1006,12 +1035,12 @@ describe("apply workflow view - staged bench", () => {
       target: { value: "disc (Track 2).bin" },
     });
     // The stale member would re-resolve the old track on the next metadata sync.
-    expect(onBundleMetaChange).toHaveBeenCalledWith("patch-a", { input: { rom: true } });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith("patch-a", { input: { rom: true } });
     expect(setPatchTarget).toHaveBeenCalledWith(0, "disc (Track 2).bin");
   });
 
   it("hides original-ROM tracks for a patch-output source", () => {
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const first = patchItem("first.ips");
     const second = patchItem("second.ips");
     second.targetOptions = [
@@ -1019,11 +1048,11 @@ describe("apply workflow view - staged bench", () => {
       { label: "track04.bin", value: "generated/track04.bin" },
     ];
     const { container } = renderView({
-      bundleMetaById: new Map([
+      weaveMetaById: new Map([
         ["patch-a", { name: "First" }],
         ["patch-b", { input: { member: "generated/track03.bin", patch: "patch-a" }, name: "Second" }],
       ]),
-      onBundleMetaChange,
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a", "patch-b"],
@@ -1040,14 +1069,14 @@ describe("apply workflow view - staged bench", () => {
     // write a different meaning than the Track label promises.
     expect(container.querySelector("#rom-weaver-patch-track-1")).toBeNull();
     fireEvent.change(target, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+    expect(onWeaveMetaChange).toHaveBeenLastCalledWith("patch-b", {
       input: { member: "generated/track03.bin", rom: true },
     });
   });
 
   it("shows an unavailable named stack input before Apply", () => {
     const { container } = renderView({
-      bundleMetaById: new Map([["patch-a", { input: { patch: "missing-base" } }]]),
+      weaveMetaById: new Map([["patch-a", { input: { patch: "missing-base" } }]]),
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a"],
@@ -1068,11 +1097,11 @@ describe("apply workflow view - staged bench", () => {
     patch.targetOptions = [{ label: "game.sfc", value: "rom-1" }];
     patch.targetValue = "rom-1";
     patch.validationValues = ["in crc32=C6FB1252"];
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const { container } = renderView({
-      bundleExpectedRomChecks: { checksums: { crc32: "C6FB1252" } },
-      bundleMetaById: new Map([["patch-a", { input: { member: "program.rom", rom: true } }]]),
-      onBundleMetaChange,
+      weaveExpectedRomChecks: { checksums: { crc32: "C6FB1252" } },
+      weaveMetaById: new Map([["patch-a", { input: { member: "program.rom", rom: true } }]]),
+      onWeaveMetaChange,
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-a"],
@@ -1083,17 +1112,17 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const sharedChecks = container.querySelector("#rom-weaver-patch-shared-input-checks-0");
-    expect(sharedChecks?.textContent).toContain("Shared input checks: Original ROM / program.rom");
+    expect(sharedChecks?.textContent).toContain("Shared input: Original ROM / program.rom");
     expect(sharedChecks?.textContent).toContain("c6fb1252");
     expect(sharedChecks?.querySelector(".ck-mark")).toBeNull();
 
     // The automatic option names the resolved source; picking it clears the pin.
     const target = container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement;
-    expect(target.options[0]?.textContent).toBe("auto (Original ROM)");
+    expect(target.options[0]?.textContent).toBe("Original ROM (detected)");
     expect(target.options[1]?.textContent).toBe("Original ROM");
     expect(target.value).toBe("rom");
     fireEvent.change(target, { target: { value: "auto" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-a", { input: undefined });
+    expect(onWeaveMetaChange).toHaveBeenLastCalledWith("patch-a", { input: undefined });
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
@@ -1362,15 +1391,12 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
     expect(download.value).toBe("auto-show");
-    expect(Array.from(download.options, (option) => option.textContent)).toEqual([
-      "Auto Start & DL Again Button (Default)",
-      "DL Again Button",
-    ]);
+    expect(Array.from(download.options, (option) => option.textContent)).toEqual(["Automatically", "With a button"]);
     expect(test.value).toBe("show");
     expect(Array.from(test.options, (option) => option.textContent)).toEqual([
-      "Show After Apply (Default)",
-      "Auto Test & Show After Apply",
-      "Hide Button",
+      "With a button",
+      "Automatically",
+      "Never",
     ]);
   });
 
@@ -1438,6 +1464,32 @@ describe("apply workflow view - output and diagnostics notices", () => {
     expect(setOutputHeader).toHaveBeenCalledWith("keep");
   });
 
+  it("accepts either header extension and a literal # in the ROM name for the output-name warning", () => {
+    const warningFor = (romFileName: string, displayFileName: string) => {
+      const rom = romRow(romFileName);
+      rom.info.checksumVariants = [
+        {
+          applyCompatibility: { removeHeader: true },
+          checksums: { crc32: "C6FB1252" },
+          id: "raw",
+          transforms: { removeHeader: { headeredExtension: ".smc", headerlessExtension: ".sfc" } },
+        },
+      ];
+      const { container, unmount } = renderView({
+        outputOverrides: { compressionFormat: "zip", disabled: false, displayFileName },
+        ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+      });
+      const text = container.querySelector(".outname-ext-warn")?.textContent ?? null;
+      unmount();
+      return text;
+    };
+
+    expect(warningFor("Super Mario World.smc", "My Hack.sfc")).toBeNull();
+    expect(warningFor("Super Mario World.smc", "My Hack.smc")).toBeNull();
+    expect(warningFor("Kaizo Mario #2.smc", "Kaizo 2.smc")).toBeNull();
+    expect(warningFor("Super Mario World.smc", "My Hack.gba")).toBe("The name ends in .gba, but the output is .smc.");
+  });
+
   it("renders apply and compression timing chips after completion", () => {
     const { container } = renderView({
       outputOverrides: {
@@ -1471,10 +1523,10 @@ describe("apply workflow view - output and diagnostics notices", () => {
     expect(dismiss).toHaveBeenCalledOnce();
   });
 
-  it("reports malformed bundle checksums before Apply can run", () => {
+  it("reports malformed weave checksums before Apply can run", () => {
     const patch = patchItem("change.ips");
     const { container } = renderView({
-      bundleMetaById: new Map([["patch-1", { inputChecks: { checksums: { crc32: "not-hex" } } }]]),
+      weaveMetaById: new Map([["patch-1", { inputChecks: { checksums: { crc32: "not-hex" } } }]]),
       patchEnablement: {
         disabledIds: new Set(),
         getPatchIds: () => ["patch-1"],
@@ -1490,12 +1542,10 @@ describe("apply workflow view - output and diagnostics notices", () => {
 });
 
 describe("apply workflow view - output options notice", () => {
-  it("tells the user the options are not saved and Settings holds the defaults", () => {
+  it("omits the defaults notice from output options", () => {
     const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
-    const note = container.querySelector(".outopts .optsnote");
-    expect(note?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
-    // It leads the body, so it covers every option below it rather than one field.
-    expect(note?.nextElementSibling?.className).toContain("optsgrid");
+    expect(container.querySelector(".outopts .optsnote")).toBeNull();
+    expect(container.querySelector(".outopts .optsgrid")).toBeTruthy();
   });
 });
 
@@ -1638,6 +1688,44 @@ describe("apply workflow view - completed output actions", () => {
 });
 
 describe("apply workflow view - patch enable toggles", () => {
+  it.each([
+    { cheatsPresent: false, cheatsOn: false, disabled: false },
+    { cheatsPresent: true, cheatsOn: false, disabled: true },
+    { cheatsPresent: true, cheatsOn: true, disabled: false },
+  ])("gates patchless Apply with cheat presence $cheatsPresent and selection $cheatsOn", (selection) => {
+    const { container } = renderView({
+      ...selection,
+      outputOverrides: { applyButton: { ...outputState().applyButton, disabled: false } },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect((container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement).disabled).toBe(
+      selection.disabled,
+    );
+  });
+
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])("gates Apply with patch %s and cheat %s", (patchEnabled, cheatsOn) => {
+    const { container } = renderView({
+      cheatsOn,
+      cheatsPresent: true,
+      outputOverrides: { applyButton: { ...outputState().applyButton, disabled: false } },
+      patchEnablement: {
+        disabledIds: new Set(patchEnabled ? [] : ["patch-1"]),
+        getPatchIds: () => ["patch-1"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("change.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    expect((container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement).disabled).toBe(
+      !(patchEnabled || cheatsOn),
+    );
+  });
+
   it("collapses disabled patches, surfaces the off-note, and gates the run", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({
@@ -1657,14 +1745,14 @@ describe("apply workflow view - patch enable toggles", () => {
     const run = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
     expect(run.disabled).toBe(true);
     // the step header reports the enabled/disabled split
-    expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta")?.textContent).toContain("1 disabled");
+    expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta")?.textContent).toContain("1 off");
   });
 });
 
-describe("apply workflow view - bundle controls", () => {
-  const bundleExport = (bundleRom = false, busy = false) => {
+describe("apply workflow view - weave controls", () => {
+  const weaveExport = (weaveRom = false, busy = false) => {
     const state = {
-      bundleRom,
+      weaveRom,
       format: "zip",
     };
     return {
@@ -1672,17 +1760,17 @@ describe("apply workflow view - bundle controls", () => {
       cancelExport: () => undefined,
       downloadable: false,
       error: "",
-      progress: busy ? createProgressViewModel({ label: "Creating bundle", percent: 42 }) : null,
+      progress: busy ? createProgressViewModel({ label: "Creating weave", percent: 42 }) : null,
       ready: true,
       runExport: async () => undefined,
-      setBundleRom: (value: boolean) => {
-        state.bundleRom = value;
+      setWeaveRom: (value: boolean) => {
+        state.weaveRom = value;
       },
       setFormat: (value: string) => {
         state.format = value;
       },
-      get bundleRom() {
-        return state.bundleRom;
+      get weaveRom() {
+        return state.weaveRom;
       },
       get format() {
         return state.format;
@@ -1690,38 +1778,38 @@ describe("apply workflow view - bundle controls", () => {
     };
   };
 
-  const bundleTools = (setBundlePackage: (value: string) => void) => ({
+  const weaveTools = (setWeavePackage: (value: string) => void) => ({
     hasOptionalEntries: false,
     outputVerification: null,
-    setBundlePackage,
+    setWeavePackage,
   });
 
   it("keeps the sharing action full width at every panel size", () => {
-    const shareRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-share\s*\{([^}]*)\}/)?.[1];
-    const fullRowRule = BUNDLE_FIELDS_CSS.match(
-      /\.rw-app \.bundle-share,\s*\.rw-app \.bundle-job-content > \.runprog\s*\{([^}]*)\}/,
+    const shareRule = WEAVE_FIELDS_CSS.match(/\.rw-app \.weave-share\s*\{([^}]*)\}/)?.[1];
+    const fullRowRule = WEAVE_FIELDS_CSS.match(
+      /\.rw-app \.weave-share,\s*\.rw-app \.weave-job-content > \.runprog\s*\{([^}]*)\}/,
     )?.[1];
-    const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
+    const romOptionRule = WEAVE_FIELDS_CSS.match(/\.rw-app \.weave-rom-option\s*\{([^}]*)\}/)?.[1];
 
     expect(romOptionRule).toContain("align-self: end");
-    expect(BUNDLE_FIELDS_CSS).not.toContain("grid-template-columns: minmax(160px, 0.85fr)");
-    expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job-fields");
+    expect(WEAVE_FIELDS_CSS).not.toContain("grid-template-columns: minmax(160px, 0.85fr)");
+    expect(WEAVE_RESPONSIVE_CSS).not.toContain(".weave-job-fields");
     expect(fullRowRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");
-    expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
+    expect(WEAVE_RESPONSIVE_CSS).not.toContain(".weave-job .weave-share");
   });
 
   it("persists ROM inclusion from the sharing controls", () => {
-    const exported = bundleExport();
-    const setBundlePackage = vi.fn((value: string) => {
-      exported.setBundleRom(value === "rom");
+    const exported = weaveExport();
+    const setWeavePackage = vi.fn((value: string) => {
+      exported.setWeaveRom(value === "rom");
     });
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const view = () => (
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={exported}
-          bundleTools={bundleTools(setBundlePackage)}
+          weaveExport={exported}
+          weaveTools={weaveTools(setWeavePackage)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1733,8 +1821,8 @@ describe("apply workflow view - bundle controls", () => {
     const { container, rerender } = render(view());
 
     rerender(view());
-    fireEvent.click(container.querySelector("#rom-weaver-bundle-export-bundle-rom") as HTMLInputElement);
-    expect(setBundlePackage).toHaveBeenCalledWith("rom");
+    fireEvent.click(container.querySelector("#rom-weaver-weave-export-weave-rom") as HTMLInputElement);
+    expect(setWeavePackage).toHaveBeenCalledWith("rom");
   });
 
   it("names the export action when the ROM is included", () => {
@@ -1742,8 +1830,8 @@ describe("apply workflow view - bundle controls", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport(true)}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport(true)}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1753,23 +1841,23 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    const shareButton = container.querySelector("#rom-weaver-button-export-bundle");
-    expect(shareButton?.textContent).toContain("Share bundle");
-    expect(shareButton?.classList).toContain("bundle-share");
-    expect(shareButton?.parentElement?.classList).toContain("bundle-job-content");
-    expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
+    const shareButton = container.querySelector("#rom-weaver-button-export-weave");
+    expect(shareButton?.textContent).toContain("Share weave");
+    expect(shareButton?.classList).toContain("weave-share");
+    expect(shareButton?.parentElement?.classList).toContain("weave-job-content");
+    expect(container.querySelector("#rom-weaver-weave-export-weave-rom")).toBeTruthy();
+    expect(container.querySelector(".weave-rom-warning .notice")?.textContent).toContain("right to distribute it");
   });
 
-  it("defaults each patch input to automatic and locks it during bundle export", () => {
+  it("defaults each patch input to automatic and locks it during weave export", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const onPatchInputBasisChange = vi.fn();
     const compress = { fields: [], note: "Compression note" };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={{ ...bundleExport(), busy: true }}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={{ ...weaveExport(), busy: true }}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(
               outputState({ compress: compress as never, disabled: false }),
@@ -1790,9 +1878,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(selects).toHaveLength(2);
     expect(selects.every((select) => select.value === "auto")).toBe(true);
     expect(selects.every((select) => select.disabled)).toBe(true);
-    expect((container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement)?.disabled).toBe(
-      true,
-    );
+    expect((container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement)?.disabled).toBe(true);
     fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "rom" } });
     expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
@@ -1802,8 +1888,8 @@ describe("apply workflow view - bundle controls", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport(false, true)}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport(false, true)}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1813,18 +1899,18 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    const progress = container.querySelector("#rom-weaver-bundle-export-progress");
+    const progress = container.querySelector("#rom-weaver-weave-export-progress");
     expect(progress?.classList).toContain("runprog");
-    expect(progress?.parentElement?.classList).toContain("bundle-job-content");
+    expect(progress?.parentElement?.classList).toContain("weave-job-content");
   });
 
-  it("keeps bundle settings out of ordinary Apply options", () => {
+  it("keeps weave settings out of ordinary Apply options", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport()}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1834,10 +1920,10 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    expect(container.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
-    expect(container.querySelector("#rom-weaver-bundle-job")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-bundle-export-format")).toBeNull();
-    expect(container.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+    expect(container.querySelector(".outopts #rom-weaver-weave-export-format")).toBeNull();
+    expect(container.querySelector("#rom-weaver-weave-job")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-weave-export-format")).toBeNull();
+    expect(container.querySelector("#rom-weaver-button-export-weave")).toBeTruthy();
   });
 
   it("offers sharing after a successful Apply, after the primary result controls", () => {
@@ -1845,8 +1931,8 @@ describe("apply workflow view - bundle controls", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport()}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState({ pendingDownloadFileName: "game.bin" })) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1856,24 +1942,24 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    const job = container.querySelector("#rom-weaver-bundle-job");
+    const job = container.querySelector("#rom-weaver-weave-job");
     const toggle = job?.querySelector(".cks-head");
-    expect(toggle?.textContent).toContain("Share this patch recipe (for patch creators)");
+    expect(toggle?.textContent).toContain("Download the weave");
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(toggle?.querySelector(".readouts")?.textContent).toBe("optional");
-    expect(job?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    expect(job?.querySelector(".weave-job")?.classList).not.toContain("is-open");
     fireEvent.click(toggle as HTMLButtonElement);
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
+    expect(job?.querySelector(".weave-job")?.classList).toContain("is-open");
     expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-weave-export-weave-rom")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-button-export-weave")).toBeTruthy();
   });
 
-  it("presents Bundle as 0x04 with Apply as its optional alternate job", () => {
-    const exported = bundleExport();
+  it("presents Weave as 0x04 with Apply as its optional alternate job", () => {
+    const exported = weaveExport();
     const setOutputCompression = vi.fn();
     const rom = romRow("game.nes");
     rom.info.checksumVariants = [
@@ -1888,8 +1974,8 @@ describe("apply workflow view - bundle controls", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={exported}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={exported}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: {
               ...storeOf(outputState()),
@@ -1898,58 +1984,58 @@ describe("apply workflow view - bundle controls", () => {
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
-          mode="bundle"
+          mode="weave"
         />
       </RomWeaverSettingsProvider>,
     );
 
-    const job = container.querySelector("#rom-weaver-bundle-job");
+    const job = container.querySelector("#rom-weaver-weave-job");
     const applyJob = container.querySelector("#rom-weaver-apply-job");
     expect(job?.querySelector(".step-num")?.textContent).toBe("0x04");
-    expect(job?.querySelector(".step-title")?.textContent).toBe("Bundle");
-    expect(job?.querySelector("#rom-weaver-input-bundle-file-name")).toBeTruthy();
-    expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
-    expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
-    fireEvent.change(job?.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
+    expect(job?.querySelector(".step-title")?.textContent).toBe("Weave");
+    expect(job?.querySelector("#rom-weaver-input-weave-file-name")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-weave-export-format")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-button-export-weave")).toBeTruthy();
+    fireEvent.change(job?.querySelector("#rom-weaver-weave-export-format") as HTMLSelectElement, {
       target: { value: "7z" },
     });
     expect(exported.format).toBe("7z");
     expect(setOutputCompression).toHaveBeenCalledWith("7z");
     fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
-    expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
-    expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
+    expect(job?.querySelector("#rom-weaver-weave-export-weave-rom")).toBeTruthy();
+    expect(job?.querySelector(".optsnote")).toBeNull();
+    expect(job?.querySelectorAll("#rom-weaver-select-weave-output-header")).toHaveLength(1);
     expect(job?.contains(applyJob)).toBe(true);
-    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");
+    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Download this ROM");
     expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
     expect(container.textContent).not.toContain("0x05");
-    expect(applyJob?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    expect(applyJob?.querySelector(".weave-job")?.classList).not.toContain("is-open");
     fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
     expect(container.querySelectorAll("#rom-weaver-select-output-header")).toHaveLength(1);
-    expect(container.querySelectorAll('[id="rom-weaver-select-bundle-output-header"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[id="rom-weaver-select-weave-output-header"]')).toHaveLength(1);
   });
 
-  it("labels Bundle as 0x04 in the empty route outline", () => {
-    const { container } = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
-    const bundleStep = Array.from(container.querySelectorAll(".ghost-next-step")).find(
+  it("labels Weave as 0x04 in the empty route outline", () => {
+    const { container } = renderView({ mode: "weave", ui: createEmptyPatcherUiState() });
+    const weaveStep = Array.from(container.querySelectorAll(".ghost-next-step")).find(
       (step) => step.querySelector(".ghost-next-num")?.textContent === "0x04",
     );
-    expect(bundleStep?.querySelector(".ghost-next-title")?.textContent).toBe("Bundle");
+    expect(weaveStep?.querySelector(".ghost-next-title")?.textContent).toBe("Weave");
   });
 
-  it("opens the optional Apply section on bundle pages", () => {
+  it("opens the optional Apply section on weave pages", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport()}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
-          mode="bundle"
+          mode="weave"
         />
       </RomWeaverSettingsProvider>,
     );
@@ -1960,14 +2046,14 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
   });
 
-  it("opens and focuses the bundle step for a direct hash URL", async () => {
-    window.location.hash = "#bundle";
+  it("opens and focuses the weave step for a direct hash URL", async () => {
+    window.location.hash = "#weave";
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport()}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1976,21 +2062,21 @@ describe("apply workflow view - bundle controls", () => {
         />
       </RomWeaverSettingsProvider>,
     );
-    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    const toggle = container.querySelector("#rom-weaver-weave-job .cks-head") as HTMLButtonElement;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     expect(document.activeElement).toBe(toggle);
     window.location.hash = "";
   });
 
-  it("reopens the bundle step when the same hash is selected again", () => {
+  it("reopens the weave step when the same hash is selected again", () => {
     window.location.hash = "";
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
-          bundleTools={bundleTools(() => undefined)}
+          weaveExport={weaveExport()}
+          weaveTools={weaveTools(() => undefined)}
           controllers={{
             output: storeOf(outputState()) as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
@@ -1999,13 +2085,13 @@ describe("apply workflow view - bundle controls", () => {
         />
       </RomWeaverSettingsProvider>,
     );
-    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    const toggle = container.querySelector("#rom-weaver-weave-job .cks-head") as HTMLButtonElement;
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     act(() => {
-      window.location.hash = "#bundle";
+      window.location.hash = "#weave";
       window.dispatchEvent(new Event("hashchange"));
     });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -2067,7 +2153,7 @@ describe("apply workflow view - staging checks reservation", () => {
     expect(checksHeads(settled.container)).toEqual([]);
   });
 
-  it("renders the bundle's Expected group while the ROM is still hashing", () => {
+  it("renders the weave's Expected group while the ROM is still hashing", () => {
     const patch = patchItem("change.bps");
     patch.validationValues = ["in crc32=C6FB1252"];
     const { container } = renderView({
@@ -2077,7 +2163,7 @@ describe("apply workflow view - staging checks reservation", () => {
 
     // Expected slots between the base group and the variants, exactly where it resolves.
     expect(checksHeads(container)).toEqual(["Unchanged", "Expected", "N64 byte order: big-endian"]);
-    // The bundle supplies the value; only the match mark waits for the hash.
+    // The weave supplies the value; only the match mark waits for the hash.
     const expectedGroup = container.querySelector("#rom-weaver-rom-expected-checks");
     expect(expectedGroup?.querySelector(".ck-v")?.textContent).toBe("C6FB1252");
     expect(expectedGroup?.querySelector(".ck-mark")).toBeNull();
@@ -2096,7 +2182,7 @@ describe("apply workflow view - staging checks reservation", () => {
     patch.validateInputChecksum = "deadbeef";
     patch.validationValues = ["in crc32=deadbeef", "in size=13"];
     const { container } = renderView({
-      bundleExpectedRomChecks: { checksums: { crc32: "C6FB1252" }, size: 13 },
+      weaveExpectedRomChecks: { checksums: { crc32: "C6FB1252" }, size: 13 },
       patches: [patch],
       ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
     });
@@ -2149,10 +2235,10 @@ describe("apply workflow view - staging checks reservation", () => {
     const compress = {
       fields: [
         {
-          chip: { label: "Level", value: "Fast" },
+          chip: { label: "Compression level", value: "Fast" },
           key: "level",
           kind: "select",
-          label: "Level",
+          label: "Compression level",
           options: [{ label: "Fast", value: "fast" }],
           value: "fast",
         },
@@ -2171,7 +2257,7 @@ describe("apply workflow view - staging checks reservation", () => {
       },
       ui: { ...createEmptyPatcherUiState(), clearRomInput, romInputs: [track] },
     });
-    fireEvent.click(container.querySelector('button[aria-label="Clear ROM input"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('button[aria-label="Remove ROM"]') as HTMLButtonElement);
     expect(clearRomInput).toHaveBeenCalledOnce();
     fireEvent.change(container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement, {
       target: { value: "renamed" },
@@ -2179,7 +2265,7 @@ describe("apply workflow view - staging checks reservation", () => {
     fireEvent.change(container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement, {
       target: { value: "none" },
     });
-    fireEvent.change(container.querySelector('[aria-label="Level"]') as HTMLSelectElement, {
+    fireEvent.change(container.querySelector('[aria-label="Compression level"]') as HTMLSelectElement, {
       target: { value: "fast" },
     });
     expect(setDisplayFileName).toHaveBeenCalledWith("renamed");

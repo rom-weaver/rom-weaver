@@ -1,5 +1,5 @@
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
@@ -33,10 +33,10 @@ export type RomRowDeps = {
   romInputs: RomInputRowState[];
   verificationStates: Map<string, "bad" | "ok">;
   ui: PatcherUiController;
-  /** The bundle's expected base-ROM checks - an "Expected" group with match
+  /** The weave's expected base-ROM checks - an "Expected" group with match
    * marks inside the staged ROM's Checks drawer (single-ROM sessions only). */
-  expectedChecks?: ParsedBundleChecks;
-  /** Advisory expected logical ROM basename from bundle `rom.name`. */
+  expectedChecks?: ParsedWeaveChecks;
+  /** Advisory expected logical ROM basename from weave `rom.name`. */
   expectedName?: string;
   /** Checksums the identify database adds for the same record; informational. */
   expectedDatabaseChecksums?: Record<string, string>;
@@ -240,7 +240,7 @@ export const renderRomInputRow = (
             : { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
           ...(database ? { database } : {}),
-          // Also while staging: the bundle already declares these, so they reserve their own group
+          // Also while staging: the weave already declares these, so they reserve their own group
           // (and read) before the hashes land instead of appearing with them.
           ...(expected ? { expected } : {}),
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),

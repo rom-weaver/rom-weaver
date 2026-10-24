@@ -12,28 +12,10 @@ fn location_preview(bytes: &[u8]) -> Result<i64> {
 // Layout and checksum: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/pokemon-trading-card-game/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut fields = vec![
-        FieldDefinition::new(
-            "playtime.seconds".into(),
-            "Playtime seconds".into(),
-            0x580b,
-            Storage::U8,
-        )
-        .max(59),
-        FieldDefinition::new(
-            "playtime.minutes".into(),
-            "Playtime minutes".into(),
-            0x580c,
-            Storage::U8,
-        )
-        .max(59),
-        FieldDefinition::new(
-            "playtime.hours".into(),
-            "Playtime hours".into(),
-            0x580d,
-            Storage::U16Le,
-        )
-        .max(999),
-        FieldDefinition::new("location".into(), "Location".into(), 0x5810, Storage::U8)
+        catalog_field("playtime.seconds", "Playtime seconds", 0x580b, Storage::U8).max(59),
+        catalog_field("playtime.minutes", "Playtime minutes", 0x580c, Storage::U8).max(59),
+        catalog_field("playtime.hours", "Playtime hours", 0x580d, Storage::U16Le).max(999),
+        catalog_field("location", "Location", 0x5810, Storage::U8)
             .max(0x21)
             .behavior(field::FieldBehavior {
                 on_edit: [0x5809, 0x580f]
@@ -50,16 +32,16 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                     .collect(),
                 ..Default::default()
             }),
-        FieldDefinition::new(
-            "position_x_raw".into(),
-            "Position X (half-tile units)".into(),
+        catalog_field(
+            "position_x_raw",
+            "Position X (half-tile units)",
             0x5811,
             Storage::U8,
         )
         .max(28),
-        FieldDefinition::new(
-            "position_y_raw".into(),
-            "Position Y (half-tile units)".into(),
+        catalog_field(
+            "position_y_raw",
+            "Position Y (half-tile units)",
             0x5812,
             Storage::U8,
         )

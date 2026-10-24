@@ -25,8 +25,10 @@ const CD_SYNC: [u8; 12] = [
 const RAW_SECTOR_BYTES: usize = 2352;
 /// Logical (user-data) sector size.
 const USER_SECTOR_BYTES: usize = 2048;
-/// PS2 discs at or above this size are DVDs; smaller ones are CDs. PS2 CD-ROM
-/// titles top out around 700 MiB (a single CD), DVD titles start well above it.
+/// Largest 2048-byte-sector image that still fits a CD (450,000 sectors); larger is DVD.
+const CD_ISO_MAX_BYTES: u64 = 450_000 * 2048;
+/// PlayStation family split for a PVD-only identity (SYSTEM.CNF beyond the prefix): cooked
+/// images without UDF below this size are PS1. PS2 CD-ROM titles top out around 700 MiB.
 const PS2_DVD_THRESHOLD_BYTES: u64 = 800 * 1024 * 1024;
 
 /// Optical medium of a disc image. Cartridge/card dumps have no medium.
@@ -118,13 +120,20 @@ impl DiscSectorSource for PrefixDisc<'_> {
 /// be masked by weak cartridge heuristics (e.g. a zeroed prefix or a leading
 /// `"AB"`).
 pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str>) -> RomIdentity {
-    if let Some(identity) = detect_disc_identity(prefix, total_len) {
+    if let Some(identity) = detect_disc_identity(prefix, total_len, extension) {
         trace!(
             platform = ?identity.platform,
             disc_format = ?identity.disc_format,
             "detected disc identity"
         );
         return identity;
+    }
+    if pbp_has_empty_psar(prefix, total_len) {
+        trace!("detected PSP homebrew PBP (empty DATA.PSAR)");
+        return RomIdentity {
+            platform: Some(platform::PSP),
+            disc_format: None,
+        };
     }
     if let Some(console) = detect_cartridge_platform(prefix, extension) {
         trace!(platform = console, "detected cartridge platform");
@@ -138,6 +147,18 @@ pub fn detect_rom_identity(prefix: &[u8], total_len: u64, extension: Option<&str
         total_len, "no rom identity detected"
     );
     RomIdentity::default()
+}
+
+/// True for a `\0PBP` file whose DATA.PSAR offset (header field 0x24) equals the file size:
+/// PSP homebrew `EBOOT.PBP` with no PSAR. PlayStation PBPs always carry a PSAR, so this never
+/// matches a PS1 disc image.
+fn pbp_has_empty_psar(prefix: &[u8], total_len: u64) -> bool {
+    const PBP_HEADER_LEN: usize = 0x28;
+    if prefix.len() < PBP_HEADER_LEN || prefix[..4] != [0x00, b'P', b'B', b'P'] {
+        return false;
+    }
+    let psar_offset = u32::from_le_bytes([prefix[0x24], prefix[0x25], prefix[0x26], prefix[0x27]]);
+    u64::from(psar_offset) == total_len
 }
 
 /// A streaming sink that captures the first ≤[`DETECT_PREFIX_BYTES`] of a byte
@@ -218,7 +239,11 @@ pub fn detect_rom_identity_for_path(path: &Path) -> RomIdentity {
 
 /// Returns a disc identity when the prefix looks like an optical disc image
 /// (CD raw framing, an ISO 9660 PVD, or a recognised system-area signature).
-fn detect_disc_identity(prefix: &[u8], total_len: u64) -> Option<RomIdentity> {
+fn detect_disc_identity(
+    prefix: &[u8],
+    total_len: u64,
+    extension: Option<&str>,
+) -> Option<RomIdentity> {
     let cd_raw = prefix.len() >= CD_SYNC.len() && prefix[..CD_SYNC.len()] == CD_SYNC;
     let (frame, data_offset) = if cd_raw {
         // Mode byte lives at raw offset 15; Mode 2 user data starts after an
@@ -238,25 +263,44 @@ fn detect_disc_identity(prefix: &[u8], total_len: u64) -> Option<RomIdentity> {
         data_offset,
     };
     let console = detect_disc_platform(&source);
+    // UDF only separates media on cooked 2048-byte images; raw framing is already CD.
+    let udf = !cd_raw && platform_detection::has_udf_descriptor(&source);
     // SYSTEM.CNF can lie beyond the bounded prefix (its BOOT/BOOT2 line is what
     // separates PS1 from PS2), but the PVD system identifier still names the
-    // PlayStation family; split the two by CD framing and size.
+    // PlayStation family; split the two by CD framing, UDF, and size.
     let console = console.or_else(|| {
         platform_detection::pvd_names_playstation(&source).then_some(
-            if cd_raw || total_len < PS2_DVD_THRESHOLD_BYTES {
+            if cd_raw || (!udf && total_len < PS2_DVD_THRESHOLD_BYTES) {
                 platform::PS1
             } else {
                 platform::PS2
             },
         )
     });
-    let is_disc = cd_raw || console.is_some() || has_iso9660_pvd(&source);
+    let has_pvd = has_iso9660_pvd(&source);
+    let is_disc = cd_raw || console.is_some() || has_pvd || udf;
     if !is_disc {
         return None;
     }
+    // A cooked ISO9660 image of an unknown console is still a disc, but only a `.bin` or
+    // extensionless file needs the medium (a cartridge `.bin` of whole sectors is not a disc, so the
+    // descriptor is the evidence): whole 2048-byte sectors with a descriptor at sector 16, as in
+    // `compress`'s CHD layout rule. Other extensions keep their medium-less identity.
+    let plain_iso_bin = !cd_raw
+        && console.is_none()
+        && (has_pvd || udf)
+        && total_len.is_multiple_of(USER_SECTOR_BYTES as u64)
+        && extension.is_none_or(|ext| ext.eq_ignore_ascii_case(".bin"));
+    let disc_format = medium_for(console, cd_raw, udf, total_len).or_else(|| {
+        plain_iso_bin.then_some(if udf || total_len > CD_ISO_MAX_BYTES {
+            DiscFormat::Dvd
+        } else {
+            DiscFormat::Cd
+        })
+    });
     Some(RomIdentity {
         platform: console,
-        disc_format: medium_for(console, cd_raw, total_len),
+        disc_format,
     })
 }
 
@@ -268,15 +312,21 @@ fn has_iso9660_pvd(source: &dyn DiscSectorSource) -> bool {
     )
 }
 
-/// Map a detected platform (and the framing/size fallbacks) to an optical medium.
-fn medium_for(console: Option<&str>, cd_raw: bool, total_len: u64) -> Option<DiscFormat> {
+/// Map a detected platform (and the framing/UDF/size fallbacks) to an optical medium.
+fn medium_for(
+    console: Option<&str>,
+    cd_raw: bool,
+    udf: bool,
+    total_len: u64,
+) -> Option<DiscFormat> {
     match console {
         Some(platform::DREAMCAST) => Some(DiscFormat::GdRom),
         Some(platform::GAMECUBE | platform::WII | platform::PSP) => Some(DiscFormat::Dvd),
         Some(platform::PS1 | platform::SATURN | platform::SEGA_CD | platform::PCE_CD) => {
             Some(DiscFormat::Cd)
         }
-        Some(platform::PS2) => Some(if total_len >= PS2_DVD_THRESHOLD_BYTES {
+        // Raw 2352-byte framing only exists on CDs, even when a full CD exceeds the size cut.
+        Some(platform::PS2) => Some(if !cd_raw && (udf || total_len > CD_ISO_MAX_BYTES) {
             DiscFormat::Dvd
         } else {
             DiscFormat::Cd
@@ -332,6 +382,21 @@ mod tests {
     }
 
     #[test]
+    fn detects_psp_homebrew_pbp_with_empty_psar() {
+        let mut pbp = vec![0u8; 0x100];
+        write(&mut pbp, 0, &[0x00, b'P', b'B', b'P']);
+        write(&mut pbp, 0x24, &0x100u32.to_le_bytes());
+        let identity = detect_rom_identity(&pbp, pbp.len() as u64, Some(".PBP"));
+        assert_eq!(identity.platform, Some(platform::PSP));
+        // A PSAR inside the file (a PlayStation disc PBP) is not PSP homebrew.
+        write(&mut pbp, 0x24, &0x80u32.to_le_bytes());
+        assert_eq!(
+            detect_rom_identity(&pbp, pbp.len() as u64, Some(".pbp")).platform,
+            None
+        );
+    }
+
+    #[test]
     fn detects_dreamcast_gdrom_from_raw_sector() {
         // A 2352 raw sector with CD sync; Dreamcast header in the user data.
         let mut image = vec![0u8; RAW_SECTOR_BYTES * 8];
@@ -341,6 +406,39 @@ mod tests {
         let identity = detect_rom_identity(&image, image.len() as u64, Some(".bin"));
         assert_eq!(identity.platform, Some(platform::DREAMCAST));
         assert_eq!(identity.disc_format, Some(DiscFormat::GdRom));
+    }
+
+    #[test]
+    fn plain_iso9660_bin_reports_a_cd_medium_only_for_bin_or_no_extension() {
+        let mut image = logical_image(20);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES, &[1]);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        let len = image.len() as u64;
+        for extension in [Some(".bin"), Some(".BIN"), None] {
+            let identity = detect_rom_identity(&image, len, extension);
+            assert_eq!(identity.disc_format, Some(DiscFormat::Cd), "{extension:?}");
+        }
+        // `.iso` keeps its medium-less identity, and a size off the sector grid is not a disc image.
+        assert_eq!(
+            detect_rom_identity(&image, len, Some(".iso")).disc_format,
+            None
+        );
+        assert_eq!(
+            detect_rom_identity(&image, len + 1, Some(".bin")).disc_format,
+            None
+        );
+        // The medium follows the total length: up to 450,000 sectors is a CD, one sector more a DVD.
+        assert_eq!(
+            detect_rom_identity(&image, CD_ISO_MAX_BYTES, Some(".bin")).disc_format,
+            Some(DiscFormat::Cd)
+        );
+        assert_eq!(
+            detect_rom_identity(&image, CD_ISO_MAX_BYTES + 2048, Some(".bin")).disc_format,
+            Some(DiscFormat::Dvd)
+        );
+        // A cartridge-sized `.bin` of whole sectors with no descriptor is not a disc.
+        let cartridge = vec![0x5a_u8; 2048 * 256];
+        assert!(detect_rom_identity(&cartridge, cartridge.len() as u64, Some(".bin")).is_empty());
     }
 
     #[test]
@@ -393,6 +491,71 @@ mod tests {
 
         let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
         assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
+
+        // Without UDF the medium follows CD capacity, as native CHD inference does.
+        let full_cd = detect_rom_identity(&image, CD_ISO_MAX_BYTES, Some(".bin"));
+        assert_eq!(full_cd.disc_format, Some(DiscFormat::Cd));
+        let past_cd = detect_rom_identity(&image, CD_ISO_MAX_BYTES + 2048, Some(".bin"));
+        assert_eq!(past_cd.disc_format, Some(DiscFormat::Dvd));
+    }
+
+    #[test]
+    fn udf_marks_small_cooked_images_as_dvd_and_raw_framing_stays_cd() {
+        let udf_sector = 17 * USER_SECTOR_BYTES;
+        // A PS2 DVD below the size cut is a DVD when it carries the ISO9660/UDF bridge.
+        let mut ps2 = ps2_iso_image();
+        write(&mut ps2, udf_sector + 1, b"NSR02");
+        let small = detect_rom_identity(&ps2, 600 * 1024 * 1024, Some(".iso"));
+        assert_eq!(small.platform, Some(platform::PS2));
+        assert_eq!(small.disc_format, Some(DiscFormat::Dvd));
+
+        // The PVD fallback names PS2, not PS1, for a small UDF image.
+        let mut fallback = logical_image(32);
+        write(&mut fallback, PVD_LBA * USER_SECTOR_BYTES, &[1]);
+        write(&mut fallback, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        write(
+            &mut fallback,
+            PVD_LBA * USER_SECTOR_BYTES + 8,
+            b"PLAYSTATION",
+        );
+        // Without UDF the fallback splits PS1 from PS2 exactly at the size cut.
+        let below = detect_rom_identity(&fallback, PS2_DVD_THRESHOLD_BYTES - 1, Some(".bin"));
+        assert_eq!(below.platform, Some(platform::PS1));
+        let at = detect_rom_identity(&fallback, PS2_DVD_THRESHOLD_BYTES, Some(".bin"));
+        assert_eq!(at.platform, Some(platform::PS2));
+        write(&mut fallback, udf_sector + 1, b"NSR03");
+        let identity = detect_rom_identity(&fallback, 600 * 1024 * 1024, Some(".bin"));
+        assert_eq!(identity.platform, Some(platform::PS2));
+        assert_eq!(identity.disc_format, Some(DiscFormat::Dvd));
+
+        // Unknown console: a UDF `.bin` is a DVD, with or without ISO9660.
+        let mut plain = logical_image(32);
+        write(&mut plain, udf_sector + 1, b"NSR02");
+        let len = plain.len() as u64;
+        assert_eq!(
+            detect_rom_identity(&plain, len, Some(".bin")).disc_format,
+            Some(DiscFormat::Dvd)
+        );
+        write(&mut plain, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        assert_eq!(
+            detect_rom_identity(&plain, len, None).disc_format,
+            Some(DiscFormat::Dvd)
+        );
+
+        // A raw PS2 CD past the size cut keeps its CD medium.
+        let mut raw = vec![0u8; RAW_SECTOR_BYTES * 32];
+        for sector in 0..32 {
+            write(&mut raw, sector * RAW_SECTOR_BYTES, &CD_SYNC);
+            raw[sector * RAW_SECTOR_BYTES + 15] = 0x02;
+        }
+        let ps2_cd = ps2_iso_image();
+        for sector in 0..32 {
+            let user = &ps2_cd[sector * USER_SECTOR_BYTES..(sector + 1) * USER_SECTOR_BYTES];
+            write(&mut raw, sector * RAW_SECTOR_BYTES + 24, user);
+        }
+        let identity = detect_rom_identity(&raw, 900 * 1024 * 1024, Some(".bin"));
+        assert_eq!(identity.platform, Some(platform::PS2));
+        assert_eq!(identity.disc_format, Some(DiscFormat::Cd));
     }
 
     #[test]
@@ -534,3 +697,7 @@ mod tests {
         assert!(empty.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/rom_identity.rs"]
+mod pbp_tests;

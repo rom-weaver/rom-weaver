@@ -28,8 +28,8 @@ mod identify_database;
 #[path = "cli_smoke/ingest.rs"]
 mod ingest;
 
-#[path = "cli_smoke/bundle.rs"]
-mod bundle;
+#[path = "cli_smoke/weave.rs"]
+mod weave;
 
 #[path = "cli_smoke/compress.rs"]
 mod compress;
@@ -45,6 +45,9 @@ mod patch;
 
 #[path = "cli_smoke/patch_disc.rs"]
 mod patch_disc;
+
+#[path = "cli_smoke/patch_compression_safety.rs"]
+mod patch_compression_safety;
 
 #[path = "cli_smoke/cheats.rs"]
 mod cheats;
@@ -69,3 +72,9 @@ mod save;
 
 #[path = "cli_smoke/report_output.rs"]
 mod report_output;
+
+#[path = "cli_smoke/wbfs_split.rs"]
+mod wbfs_split;
+
+#[path = "cli_smoke/pbp.rs"]
+mod pbp;

@@ -425,6 +425,241 @@ fn cheat_entry(description: &str, code: &str, index: usize) -> Value {
     })
 }
 
+fn copy_cheat_cli(temp: &TempDir) {
+    let executable = temp.child(format!(
+        "install/bin/rom-weaver{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    fs::create_dir_all(executable.path().parent().expect("binary directory"))
+        .expect("binary directory");
+    fs::copy(env!("CARGO_BIN_EXE_rom-weaver"), executable.path()).expect("installed binary");
+
+    // Concurrent process spawns can inherit the copy's writable descriptor until their exec completes.
+    // Probe only executable readiness; workflow commands and assertions MUST run without retries.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match cheat_data_command(temp).arg("--version").output() {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => {
+                let output = result.expect("installed binary is executable");
+                assert!(
+                    output.status.success(),
+                    "installed binary version failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                break;
+            }
+        }
+    }
+}
+
+fn cheat_data_command(temp: &TempDir) -> Command {
+    let mut command = Command::new(
+        temp.child(format!(
+            "install/bin/rom-weaver{}",
+            std::env::consts::EXE_SUFFIX
+        ))
+        .path(),
+    );
+    command
+        .env("ROM_WEAVER_DATA_DIR", temp.child("data").path())
+        .env_remove("ROM_WEAVER_CHEAT_DATABASE")
+        .env("HOME", temp.child("home").path())
+        .env("XDG_CONFIG_HOME", temp.child("config").path())
+        .env("XDG_DATA_HOME", temp.child("data").path())
+        .env("XDG_CACHE_HOME", temp.child("cache").path())
+        .env("XDG_STATE_HOME", temp.child("state").path());
+    command
+}
+
+fn install_cheat_shard(temp: &TempDir, directory: &str) {
+    let database = write_cheat_database(temp, &nes_rom());
+    let shard = fs::read(Path::new(&database).join("nintendo-nintendo-entertainment-system.json"))
+        .expect("cheat shard");
+    let destination = temp.child(directory);
+    fs::create_dir_all(destination.path()).expect("installed cheat directory");
+    let output = File::create(
+        destination
+            .child("nintendo-nintendo-entertainment-system.json.br")
+            .path(),
+    )
+    .expect("compressed shard");
+    let mut encoder = brotli::CompressorWriter::new(output, 4096, 5, 22);
+    encoder.write_all(&shard).expect("compress cheat shard");
+}
+
+fn assert_default_cheat_workflows(temp: &TempDir) {
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("ROM fixture");
+    let list = cheat_data_command(temp)
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report = parse_single_json_line(&list);
+    assert_eq!(report["details"]["cheat_list"]["game_id"], "game_test");
+    assert_eq!(
+        report["details"]["cheat_list"]["entries"][0]["id"],
+        CHEAT_ROM
+    );
+
+    let applied = temp.child("applied.nes");
+    cheat_data_command(temp)
+        .args(["patch", "apply", "--input"])
+        .arg(input.path())
+        .args(["--cheat", CHEAT_ROM, "--output"])
+        .arg(applied.path())
+        .arg("--no-compress")
+        .assert()
+        .success();
+    let mut expected = nes_rom();
+    expected[0x3D96] = 0x48;
+    assert_eq!(fs::read(applied.path()).expect("applied ROM"), expected);
+
+    let patch = temp.child("cheat.ips");
+    cheat_data_command(temp)
+        .args(["patch", "create", "--original"])
+        .arg(input.path())
+        .args(["--cheat", CHEAT_ROM, "--output"])
+        .arg(patch.path())
+        .assert()
+        .success();
+    let roundtrip = temp.child("roundtrip.nes");
+    cheat_data_command(temp)
+        .args(["patch", "apply", "--input"])
+        .arg(input.path())
+        .arg("--patch")
+        .arg(patch.path())
+        .arg("--output")
+        .arg(roundtrip.path())
+        .arg("--no-compress")
+        .assert()
+        .success();
+    assert_eq!(fs::read(roundtrip.path()).expect("roundtrip ROM"), expected);
+}
+
+#[test]
+fn cheat_data_default_reads_setup_shards() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[cfg(feature = "bundled-identify-data")]
+#[test]
+fn cheat_data_default_reads_packaged_shards() {
+    for directory in [
+        "install/bin/share/rom-weaver/identify/v1/cheats",
+        "install/share/rom-weaver/identify/v1/cheats",
+    ] {
+        let temp = setup_temp_dir();
+        copy_cheat_cli(&temp);
+        install_cheat_shard(&temp, directory);
+        assert_default_cheat_workflows(&temp);
+    }
+}
+
+#[test]
+fn cheat_data_default_skips_user_directories_without_the_system_shard() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let legacy = temp.child("data/identify/cheats");
+    fs::create_dir_all(legacy.path()).expect("legacy cheat directory");
+    fs::write(legacy.child("nintendo-game-boy.json").path(), b"{}").expect("other system shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[test]
+fn cheat_data_default_prefers_legacy_user_shards() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/cheats");
+    let setup = temp.child("data/identify/full-v1/cheats");
+    fs::create_dir_all(setup.path()).expect("setup cheat directory");
+    fs::write(
+        setup
+            .child("nintendo-nintendo-entertainment-system.json")
+            .path(),
+        b"{}",
+    )
+    .expect("invalid lower-priority shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[cfg(feature = "bundled-identify-data")]
+#[test]
+fn cheat_data_default_prefers_setup_shards_over_packaged_data() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let packaged = temp.child("install/bin/share/rom-weaver/identify/v1/cheats");
+    fs::create_dir_all(packaged.path()).expect("packaged cheat directory");
+    fs::write(
+        packaged
+            .child("nintendo-nintendo-entertainment-system.json")
+            .path(),
+        b"{}",
+    )
+    .expect("invalid lower-priority shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[test]
+fn cheat_data_explicit_and_environment_overrides_remain_authoritative() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("ROM fixture");
+    let missing = temp.child("missing-cheats");
+    let installed = temp.child("data/identify/full-v1/cheats");
+    for explicit in [false, true] {
+        let mut command = cheat_data_command(&temp);
+        command
+            .args(["cheat", "list", "--input"])
+            .arg(input.path())
+            .arg("--json");
+        if explicit {
+            command.arg("--cheat-database").arg(missing.path());
+        } else {
+            command.env("ROM_WEAVER_CHEAT_DATABASE", missing.path());
+        }
+        let output = command.assert().code(1).get_output().stdout.clone();
+        let report = parse_single_json_line(&output);
+        assert!(
+            report["error"]["message"]
+                .as_str()
+                .expect("error")
+                .contains("missing-cheats")
+        );
+    }
+    cheat_data_command(&temp)
+        .env("ROM_WEAVER_CHEAT_DATABASE", missing.path())
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .arg("--cheat-database")
+        .arg(installed.path())
+        .assert()
+        .success();
+    cheat_data_command(&temp)
+        .env("ROM_WEAVER_CHEAT_DATABASE", installed.path())
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .assert()
+        .success();
+}
+
 #[test]
 fn cheat_list_matches_by_checksum_and_reports_delivery() {
     let temp = setup_temp_dir();
@@ -659,14 +894,16 @@ fn conflicting_rom_cheats_fail_until_allowed() {
     assert_eq!(patched[0x3D96], 0x4A);
 }
 
+/// `--cheat-system` is validated by clap against every system the decoders know,
+/// so an unknown name fails as a usage error (exit 2) before any work.
 #[test]
-fn an_unknown_cheat_system_names_the_flag_that_set_it() {
+fn cheat_system_rejects_unknown_systems_as_usage_errors() {
     let temp = setup_temp_dir();
     let input = temp.child("game.nes");
     fs::write(input.path(), nes_rom()).expect("fixture");
     let input_s = input.path().to_str().expect("path").to_owned();
 
-    let report = parse_single_json_line(&command_stdout(
+    let output = command_output_with_env(
         &[
             "cheat",
             "list",
@@ -674,28 +911,100 @@ fn an_unknown_cheat_system_names_the_flag_that_set_it() {
             &input_s,
             "--cheat-system",
             "bogus",
-            "--jsonl",
         ],
-        1,
-    ));
-    let label = report["label"].as_str().expect("label");
-    assert!(label.contains("--cheat-system"), "{label}");
-    assert!(!label.contains("--code-system"), "{label}");
-    assert!(label.contains("gameboy-color"), "{label}");
+        &[],
+        2,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--cheat-system"), "{stderr}");
+    assert!(stderr.contains("gameboy-color"), "{stderr}");
+    assert!(
+        stderr.contains("sg1000") && stderr.contains("psx"),
+        "{stderr}"
+    );
+    assert!(output.stdout.is_empty(), "{:?}", output.stdout);
 }
 
-/// `bundle create --cheat` for [`nes_rom`], recording one bakeable cheat and
-/// one the ROM's bytes cannot bake. Returns `(bundle path, database path)`.
-fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
+/// `psx` and `sg1000` decode codes but have no database shard, so a command that
+/// needs the database fails at run time with exit 1 and a clear message.
+#[test]
+fn cheat_list_for_a_system_without_a_database_fails_at_run_time() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), vec![0u8; 0x8000]).expect("fixture");
+    let input_s = input.path().to_str().expect("path").to_owned();
+
+    for (value, name) in [("psx", "PlayStation"), ("sg1000", "SG-1000")] {
+        let report = parse_single_json_line(&command_stdout(
+            &[
+                "cheat",
+                "list",
+                "--input",
+                &input_s,
+                "--cheat-system",
+                value,
+                "--jsonl",
+            ],
+            1,
+        ));
+        let label = report["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!("no cheat database exists for {name} ({value})")),
+            "{label}"
+        );
+        assert!(label.contains("weave with code snapshots"), "{label}");
+    }
+}
+
+/// A weave whose cheats carry code snapshots applies on an SG-1000 ROM with
+/// `--cheat-system sg1000` and no database.
+#[test]
+fn weave_apply_with_code_snapshots_accepts_a_system_without_a_database() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.sg");
+    fs::write(input.path(), vec![0u8; 0x8000]).expect("fixture");
+    let weave = write_cheats_only_weave(
+        &temp,
+        "sg.json",
+        serde_json::json!([{"id": "genie", "code": "11A-C3B", "codeKind": "game-genie"}]),
+    );
+    let database = temp.child("no-database");
+    fs::create_dir_all(database.path()).expect("directory");
+    let output = temp.child("patched.sg");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--weave",
+            &weave,
+            "--cheat-system",
+            "sg1000",
+            "--cheat-database",
+            database.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_ne!(fs::read(output.path()).expect("output")[0x4AC3], 0);
+}
+
+/// `weave create --cheat` for [`nes_rom`], recording one bakeable cheat and
+/// one the ROM's bytes cannot bake. Returns `(weave path, database path)`.
+fn write_cheat_weave(temp: &TempDir, rom: &[u8]) -> (String, String) {
     let database = write_cheat_database(temp, rom);
     let input = temp.child("game.nes");
     fs::write(input.path(), rom).expect("fixture");
-    let bundle = temp.child("rom-weaver-bundle.json");
-    let bundle_s = bundle.path().to_str().expect("path").to_owned();
+    let weave = temp.child("rom-weaver-weave.json");
+    let weave_s = weave.path().to_str().expect("path").to_owned();
 
     let report = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--input",
             input.path().to_str().expect("path"),
@@ -704,13 +1013,13 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             "--cheat",
             CHEAT_ROM,
             "--output",
-            &bundle_s,
+            &weave_s,
             "--jsonl",
         ],
         0,
     ));
     assert_eq!(report["status"], "succeeded");
-    let cheats = &report["details"]["bundle_create"]["bundle"]["cheats"];
+    let cheats = &report["details"]["weave_create"]["weave"]["cheats"];
     assert_eq!(cheats[0]["id"], CHEAT_ROM);
     assert_eq!(cheats[0]["code"], "AKE-LVS");
     assert_eq!(cheats[0]["revision"], "testrevision");
@@ -718,7 +1027,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
     // A cheat the ROM cannot bake is refused, not recorded.
     let refused = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--input",
             input.path().to_str().expect("path"),
@@ -734,18 +1043,18 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
     ));
     let label = refused["label"].as_str().expect("label");
     assert!(label.contains("High score"), "{label}");
-    (bundle_s, database)
+    (weave_s, database)
 }
 
 #[test]
-fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
+fn weave_apply_reproduces_a_cheat_apply_byte_for_byte() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let (weave, database) = write_cheat_weave(&temp, &rom);
     let input = temp.child("game.nes");
     let input_s = input.path().to_str().expect("path").to_owned();
-    let via_bundle = temp.child("via-bundle.nes");
-    let via_bundle_s = via_bundle.path().to_str().expect("path").to_owned();
+    let via_weave = temp.child("via-weave.nes");
+    let via_weave_s = via_weave.path().to_str().expect("path").to_owned();
     let direct = temp.child("direct.nes");
     let direct_s = direct.path().to_str().expect("path").to_owned();
 
@@ -755,12 +1064,12 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
             "apply",
             "--input",
             &input_s,
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--output",
-            &via_bundle_s,
+            &via_weave_s,
             "--no-compress",
             "--jsonl",
         ],
@@ -768,7 +1077,7 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
     ));
     assert_eq!(report["status"], "succeeded");
     // AKE-LVS -> $BD86:48; header (16) + (0xBD86 - 0x8000) = 0x3D96.
-    assert_eq!(fs::read(via_bundle.path()).expect("output")[0x3D96], 0x48);
+    assert_eq!(fs::read(via_weave.path()).expect("output")[0x3D96], 0x48);
 
     command_stdout(
         &[
@@ -788,17 +1097,17 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
         0,
     );
     assert_eq!(
-        fs::read(via_bundle.path()).expect("bundle output"),
+        fs::read(via_weave.path()).expect("weave output"),
         fs::read(direct.path()).expect("direct output"),
-        "a bundle apply must reproduce the direct cheat apply byte-for-byte"
+        "a weave apply must reproduce the direct cheat apply byte-for-byte"
     );
 }
 
 #[test]
-fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
+fn weave_apply_without_the_database_bakes_from_the_snapshot() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+    let (weave, _) = write_cheat_weave(&temp, &rom);
     let empty = temp.child("no-database");
     fs::create_dir_all(empty.path()).expect("directory");
     let empty_s = empty.path().to_str().expect("path").to_owned();
@@ -810,14 +1119,14 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
         .to_owned();
     let output = temp.child("patched.nes");
     let output_s = output.path().to_str().expect("path").to_owned();
-    let args = |bundle: &str| {
+    let args = |weave: &str| {
         vec![
             "patch".to_owned(),
             "apply".to_owned(),
             "--input".to_owned(),
             input_s.clone(),
-            "--bundle".to_owned(),
-            bundle.to_owned(),
+            "--weave".to_owned(),
+            weave.to_owned(),
             "--cheat-database".to_owned(),
             empty_s.clone(),
             "--output".to_owned(),
@@ -832,21 +1141,21 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
     }
 
     // The recorded entry bakes from its own code snapshot with no database.
-    let report = parse_single_json_line(&command_stdout(&borrowed(&args(&bundle)), 0));
+    let report = parse_single_json_line(&command_stdout(&borrowed(&args(&weave)), 0));
     assert_eq!(report["status"], "succeeded");
     assert_eq!(fs::read(output.path()).expect("output")[0x3D96], 0x48);
 
     // An entry with no snapshot and no database fails, unless it is optional.
-    let stripped = temp.child("stripped-bundle.json");
+    let stripped = temp.child("stripped-weave.json");
     let mut parsed: Value =
-        serde_json::from_str(&fs::read_to_string(&bundle).expect("bundle")).expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(&weave).expect("weave")).expect("weave json");
     parsed["cheats"][0]["code"] = Value::Null;
     parsed["cheats"][0]["id"] = Value::String("cheat_missing".to_owned());
     fs::write(
         stripped.path(),
-        serde_json::to_vec(&parsed).expect("bundle json"),
+        serde_json::to_vec(&parsed).expect("weave json"),
     )
-    .expect("bundle");
+    .expect("weave");
     let failed = parse_single_json_line(&command_stdout(
         &borrowed(&args(stripped.path().to_str().expect("path"))),
         1,
@@ -857,20 +1166,20 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
 }
 
 #[test]
-fn bundle_parse_lists_the_cheats_a_bundle_carries() {
+fn weave_parse_lists_the_cheats_a_weave_carries() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+    let (weave, _) = write_cheat_weave(&temp, &rom);
 
     let report = parse_single_json_line(&command_stdout(
-        &["bundle", "parse", "--input", &bundle, "--jsonl"],
+        &["weave", "parse", "--input", &weave, "--jsonl"],
         0,
     ));
     assert_eq!(report["status"], "succeeded");
     let label = report["label"].as_str().expect("label");
     assert!(label.contains("1 cheat entry"), "{label}");
     assert!(label.contains("Team runs faster"), "{label}");
-    let cheats = report["details"]["bundle"]["bundle"]["cheats"]
+    let cheats = report["details"]["weave"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1);
@@ -878,16 +1187,16 @@ fn bundle_parse_lists_the_cheats_a_bundle_carries() {
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_the_cheat_selection() {
+fn patch_apply_emit_weave_records_the_cheat_selection() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let database = write_cheat_database(&temp, &rom);
     let input = temp.child("game.nes");
     fs::write(input.path(), &rom).expect("fixture");
     let output = temp.child("patched.nes");
-    let emitted = temp.child("emitted-bundle.json");
+    let emitted = temp.child("emitted-weave.json");
 
-    // The bundle is written after the terminal apply event, so the last JSON
+    // The weave is written after the terminal apply event, so the last JSON
     // line is not the one that reports the apply.
     let events = parse_json_lines(&command_stdout(
         &[
@@ -901,7 +1210,7 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
             CHEAT_ROM,
             "--output",
             output.path().to_str().expect("path"),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().expect("path"),
             "--no-compress",
             "--jsonl",
@@ -915,17 +1224,17 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
         "{events:?}"
     );
     let parsed: Value =
-        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
-            .expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted weave"))
+            .expect("weave json");
     assert_eq!(parsed["cheats"][0]["id"], CHEAT_ROM);
     assert_eq!(parsed["cheats"][0]["code"], "AKE-LVS");
     assert!(parsed["patches"].as_array().expect("patches").is_empty());
 }
 
-/// Write a hand-authored cheats-only bundle beside [`nes_rom`], so the shapes
-/// `bundle create` never emits can be applied too.
-fn write_cheats_only_bundle(temp: &TempDir, name: &str, cheats: Value) -> String {
-    let bundle = temp.child(name);
+/// Write a hand-authored cheats-only weave beside [`nes_rom`], so the shapes
+/// `weave create` never emits can be applied too.
+fn write_cheats_only_weave(temp: &TempDir, name: &str, cheats: Value) -> String {
+    let weave = temp.child(name);
     let document = serde_json::json!({
         "version": 1,
         "rom": { "path": "game.nes" },
@@ -933,24 +1242,24 @@ fn write_cheats_only_bundle(temp: &TempDir, name: &str, cheats: Value) -> String
         "cheats": cheats,
     });
     fs::write(
-        bundle.path(),
-        serde_json::to_vec(&document).expect("bundle json"),
+        weave.path(),
+        serde_json::to_vec(&document).expect("weave json"),
     )
-    .expect("bundle");
-    bundle.path().to_str().expect("path").to_owned()
+    .expect("weave");
+    weave.path().to_str().expect("path").to_owned()
 }
 
 #[test]
-fn an_all_skipped_optional_bundle_names_what_it_dropped() {
+fn an_all_skipped_optional_weave_names_what_it_dropped() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let input = temp.child("game.nes");
     fs::write(input.path(), &rom).expect("fixture");
     let empty = temp.child("no-database");
     fs::create_dir_all(empty.path()).expect("directory");
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
-        "optional-only-bundle.json",
+        "optional-only-weave.json",
         serde_json::json!([{ "id": CHEAT_RAM, "optional": true }]),
     );
     let output = temp.child("patched.nes");
@@ -961,8 +1270,8 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             empty.path().to_str().expect("path"),
             "--output",
@@ -974,7 +1283,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
     ));
     let label = report["label"].as_str().expect("label");
     assert!(
-        label.contains("every cheat this bundle records was skipped"),
+        label.contains("every cheat this weave records was skipped"),
         "{label}"
     );
     assert!(label.contains(CHEAT_RAM), "{label}");
@@ -983,7 +1292,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
 }
 
 #[test]
-fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
+fn emit_weave_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let input = temp.child("game.nes");
@@ -994,16 +1303,16 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
     // Both entries name `cheat_rom`. With no database the second has no code
     // to fall back on, so it is skipped while the first applies from its
     // snapshot - the skip is tracked by index, not by id.
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
-        "twin-bundle.json",
+        "twin-weave.json",
         serde_json::json!([
             { "id": CHEAT_ROM, "code": "AKE-LVS" },
             { "id": CHEAT_ROM, "optional": true },
         ]),
     );
     let output = temp.child("patched.nes");
-    let emitted = temp.child("emitted-bundle.json");
+    let emitted = temp.child("emitted-weave.json");
 
     let events = parse_json_lines(&command_stdout(
         &[
@@ -1011,13 +1320,13 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--output",
             output.path().to_str().expect("path"),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().expect("path"),
             "--no-compress",
             "--jsonl",
@@ -1031,15 +1340,15 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
         "{events:?}"
     );
     let parsed: Value =
-        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
-            .expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted weave"))
+            .expect("weave json");
     let cheats = parsed["cheats"].as_array().expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
     assert_eq!(cheats[0]["id"], CHEAT_ROM);
 }
 
 #[test]
-fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
+fn weave_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let database = write_cheat_database(&temp, &rom);
@@ -1057,18 +1366,18 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         .expect("spec json"),
     )
     .expect("spec");
-    let output = temp.child("rom-weaver-bundle.json");
+    let output = temp.child("rom-weaver-weave.json");
     let spec_s = spec.path().to_str().expect("path").to_owned();
     let output_s = output.path().to_str().expect("path").to_owned();
 
     // Without --cheat the spec's own entries carry through.
     let kept = parse_single_json_line(&command_stdout(
         &[
-            "bundle", "create", "--from", &spec_s, "--output", &output_s, "--jsonl",
+            "weave", "create", "--from", &spec_s, "--output", &output_s, "--jsonl",
         ],
         0,
     ));
-    let cheats = kept["details"]["bundle_create"]["bundle"]["cheats"]
+    let cheats = kept["details"]["weave_create"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1);
@@ -1077,7 +1386,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     // With --cheat the selection replaces them rather than appending.
     let replaced = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--from",
             &spec_s,
@@ -1092,7 +1401,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         ],
         0,
     ));
-    let cheats = replaced["details"]["bundle_create"]["bundle"]["cheats"]
+    let cheats = replaced["details"]["weave_create"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
@@ -1101,22 +1410,22 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
 }
 
 #[test]
-fn without_cheats_runs_the_bundle_patch_chain_alone() {
+fn without_cheats_runs_the_weave_patch_chain_alone() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let (weave, database) = write_cheat_weave(&temp, &rom);
     let input = temp.child("game.nes");
     let output = temp.child("patched.nes");
 
-    // A cheats-only bundle has nothing left once the cheats are dropped.
+    // A cheats-only weave has nothing left once the cheats are dropped.
     let refused = parse_single_json_line(&command_stdout(
         &[
             "patch",
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--without-cheats",
@@ -1335,7 +1644,7 @@ fn new_cheat_formats_bake_exact_bytes_and_export_patches() {
 }
 
 #[test]
-fn explicit_code_kind_survives_bundle_snapshot_replay() {
+fn explicit_code_kind_survives_weave_snapshot_replay() {
     let temp = setup_temp_dir();
     let mut rom = nes_rom();
     rom[16 + 0x1123] = 0xDE;
@@ -1343,7 +1652,7 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
     fs::write(input.path(), &rom).unwrap();
     let database = temp.child("no-database");
     fs::create_dir_all(database.path()).unwrap();
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
         "rocky.json",
         serde_json::json!([
@@ -1358,11 +1667,11 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
             "apply",
             "--input",
             input.path().to_str().unwrap(),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             database.path().to_str().unwrap(),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().unwrap(),
             "--output",
             first.path().to_str().unwrap(),
@@ -1381,7 +1690,7 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
             "apply",
             "--input",
             input.path().to_str().unwrap(),
-            "--bundle",
+            "--weave",
             emitted.path().to_str().unwrap(),
             "--cheat-database",
             database.path().to_str().unwrap(),
@@ -1436,4 +1745,49 @@ fn cheat_list_names_the_missing_rom_and_preserves_io_kind() {
         assert!(label.contains(input_s), "{label}");
         assert_eq!(report["error_kind"], "io");
     }
+}
+
+#[test]
+fn cheat_list_names_its_own_system_flag_when_the_rom_system_is_unknown() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("unknown.bin");
+    fs::write(rom.path(), vec![0x22_u8; 48]).expect("rom fixture");
+    let json = run_single_json_event(
+        &[
+            "cheat",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "list",
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().expect("error message");
+    assert!(message.contains("--cheat-system"), "{message}");
+    assert!(!message.contains("--code-system"), "{message}");
+}
+
+#[test]
+fn patch_apply_dry_run_counts_device_codes() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("fixture");
+    let report = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--code",
+            "AKE-LVS",
+            "--output",
+            temp.child("out.nes").path().to_str().unwrap(),
+            "--no-compress",
+            "--dry-run",
+            "--jsonl",
+        ],
+        0,
+    ));
+    let label = report.last().expect("event")["label"].as_str().unwrap();
+    assert!(label.contains("would apply 1 patch(es)"), "{label}");
 }

@@ -1,5 +1,6 @@
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
+use rom_weaver_core::{VALIDATION_CODE_EXTRACT_NO_CONTAINER, ValidationCodeError};
 
 pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub format_name: &'a str,
@@ -25,6 +26,34 @@ struct ExtractRun<'a> {
     overwrite: bool,
     no_nested_extract: bool,
     context: &'a OperationContext,
+}
+
+/// Lists the output directory and any missing ancestors (deepest first) that the preflight
+/// will create, so a failed run can undo exactly what it made and nothing pre-existing.
+pub(crate) fn missing_dirs_to_create(out_dir: &Path) -> Vec<PathBuf> {
+    if out_dir.as_os_str().is_empty() {
+        return Vec::new();
+    }
+    out_dir
+        .ancestors()
+        .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())
+        .map(Path::to_path_buf)
+        .collect()
+}
+
+/// Removes directories this run created if they are still empty. `remove_dir` refuses
+/// non-empty directories, so partial output is never deleted.
+pub(crate) fn remove_created_empty_dirs(dirs: &[PathBuf]) {
+    for dir in dirs {
+        match std::fs::remove_dir(dir) {
+            Ok(()) => {
+                debug!(path = %dir.display(), "removed empty output directory after failed extract")
+            }
+            Err(error) => {
+                debug!(path = %dir.display(), %error, "kept output directory after failed extract");
+            }
+        }
+    }
 }
 
 impl CliApp {
@@ -70,9 +99,13 @@ impl CliApp {
             .context(threads)
             .with_extract_checksum_algorithms(checksum_algorithms)
             .with_extract_checksum_rom_only(checksum_rom_only);
+        let created_dirs = missing_dirs_to_create(&out_dir);
         let handler = match self.probe_extract_source(&source, &out_dir, &context) {
             Ok(handler) => handler,
-            Err(report) => return self.finish("extract", *report),
+            Err(report) => {
+                remove_created_empty_dirs(&created_dirs);
+                return self.finish("extract", *report);
+            }
         };
 
         let (extract_split_bin, split_bin_warning) =
@@ -99,6 +132,9 @@ impl CliApp {
             context: &context,
         };
         let mut report = self.run_extract_stages(&run, selections, split_bin_warning);
+        if report.status != OperationStatus::Succeeded {
+            remove_created_empty_dirs(&created_dirs);
+        }
         if probe {
             // Fold the container/platform probe metadata into the extract result so the
             // caller does not need a separate probe roundtrip. `is_single_payload_codec_container`
@@ -143,12 +179,32 @@ impl CliApp {
             return Err(Box::new(report));
         }
 
+        if std::fs::metadata(source).is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0)
+        {
+            debug!(source = %source.display(), "extract refused: input file is empty");
+            return Err(Box::new(OperationReport::failed(
+                OperationFamily::Container,
+                None,
+                "probe",
+                format!(
+                    "input `{}` is empty (0 bytes); not a valid archive",
+                    source.display()
+                ),
+                probe_threads,
+            )));
+        }
+
         self.containers.probe(source).ok_or_else(|| {
             Box::new(OperationReport::failed(
                 OperationFamily::Container,
                 None,
                 "probe",
-                format!("no registered container matched `{}`", source.display()),
+                ValidationCodeError::new(VALIDATION_CODE_EXTRACT_NO_CONTAINER)
+                    .with_message(format!(
+                        "no registered container matched `{}`",
+                        source.display()
+                    ))
+                    .to_string(),
                 probe_threads,
             ))
         })
@@ -455,6 +511,7 @@ impl CliApp {
             }
         };
         let mut resolved_identity = false;
+        let mut unresolved_names = Vec::new();
         for entry in &mut emitted {
             let Some(map) = entry.as_object_mut() else {
                 continue;
@@ -475,6 +532,8 @@ impl CliApp {
             if !identity.is_empty() {
                 identity.write_into(map);
                 resolved_identity = true;
+            } else if let Some(name) = std::path::Path::new(&path).file_name() {
+                unresolved_names.push(format!("`{}`", name.to_string_lossy()));
             }
         }
         details.insert(
@@ -489,7 +548,14 @@ impl CliApp {
             report.family,
             report.format.clone(),
             "probe",
-            "probe: source did not resolve to a known platform",
+            if unresolved_names.is_empty() {
+                "probe: source did not resolve to a known platform".to_string()
+            } else {
+                format!(
+                    "probe: {} did not resolve to a known platform",
+                    unresolved_names.join(", ")
+                )
+            },
             report.thread_execution.clone(),
         )
     }

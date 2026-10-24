@@ -1,10 +1,19 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { documentNodes, parseDocument } from "../../scripts/html-document.mjs";
 import {
   createEmulatorDocument,
   createEmulatorGameIdentity,
 } from "../../src/public/react/components/emulator-document.ts";
-import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
+import {
+  coreReadsChd,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  hasFdsDiskSignature,
+  requiresUnsuppliedBios,
+} from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
   it("maps save editor platform ids to playable cores", () => {
@@ -57,7 +66,144 @@ describe("getEmulatorJsAspectRatio", () => {
   });
 });
 
+/** The libretro core EmulatorJS 4.2.3 picks first for each system the app can select. */
+const EMULATORJS_SYSTEM_CORES: Readonly<Record<string, string>> = {
+  atari7800: "prosystem",
+  gb: "gambatte",
+  gba: "mgba",
+  lynx: "handy",
+  n64: "mupen64plus_next",
+  nds: "melonds",
+  nes: "fceumm",
+  psp: "ppsspp",
+  psx: "pcsx_rearmed",
+  segaGG: "genesis_plus_gx",
+  segaMD: "genesis_plus_gx",
+  segaMS: "smsplus",
+  segaSaturn: "yabause",
+  snes: "snes9x",
+};
+
+const vendoredEmulatorFiles = Object.keys(
+  JSON.parse(readFileSync(fileURLToPath(new URL("../../vendor/emulatorjs.lock.json", import.meta.url)), "utf8")).files,
+);
+
+const readEmulatorConfig = (system: string) => {
+  const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game", system);
+  const script = document.slice(document.indexOf("<script>") + "<script>".length, document.indexOf("</script>"));
+  const window: Record<string, unknown> = {};
+  window.parent = window;
+  const context: Record<string, unknown> = { navigator: { maxTouchPoints: 0 }, window };
+  runInNewContext(script, context);
+  return context as { EJS_threads: boolean; EJS_defaultOptions: Record<string, string> };
+};
+
 describe("createEmulatorDocument", () => {
+  it("runs Saturn on the single-threaded yabause build", () => {
+    const config = readEmulatorConfig("segaSaturn");
+
+    expect(config.EJS_threads).toBe(false);
+    expect(config.EJS_defaultOptions.ejs_threads).toBe("disabled");
+  });
+
+  it.each(Object.entries(EMULATORJS_SYSTEM_CORES))("requests a vendored WebGL 2 build for %s", (system, core) => {
+    const config = readEmulatorConfig(system);
+    const threads = config.EJS_defaultOptions.ejs_threads === "enabled";
+
+    expect(config.EJS_threads).toBe(threads);
+    expect(config.EJS_defaultOptions.webgl2Enabled).toBe("enabled");
+    expect(vendoredEmulatorFiles).toContain(`cores/${core}${threads ? "-thread" : ""}-wasm.data`);
+  });
+
+  it("sends CHD saves and load requests under the canonical checksum", () => {
+    const checksum = "a".repeat(40);
+    const document = createEmulatorDocument("/data/", "blob:game", `${checksum}.chd`, "psx", { saveId: checksum });
+    expect(document).toContain(`EJS_gameName = "${checksum}.chd"`);
+    const source = document.indexOf('const source = "rom-weaver-emulator"');
+    const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
+    const messages: unknown[] = [];
+    const window = {
+      parent: { postMessage: (message: unknown) => messages.push(message) },
+      addEventListener: () => undefined,
+    };
+    const handlers = runInNewContext(`${script}; [EJS_onSaveSave, EJS_onLoadSave];`, {
+      window,
+      Uint8Array,
+      ArrayBuffer,
+    }) as [(payload: unknown) => void, () => void];
+    handlers[0]({ save: new Uint8Array([1, 2]) });
+    handlers[1]();
+    expect(messages).toEqual([
+      {
+        source: "rom-weaver-emulator",
+        kind: "save-sram",
+        gameId: checksum,
+        gameName: checksum,
+        gameLabel: `${checksum}.chd`,
+        data: new Uint8Array([1, 2]),
+      },
+      { source: "rom-weaver-emulator", kind: "request-load-sram", gameId: checksum, gameName: checksum },
+    ]);
+  });
+
+  it("keeps an ISO's saves under the bare checksum written before the name kept its extension", () => {
+    const checksum = "b".repeat(40);
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.iso" });
+    const document = createEmulatorDocument("/data/", "blob:game", identity.gameName, "segaSaturn", {
+      gameId: identity.gameId,
+      saveId: identity.saveId,
+    });
+    expect(document).toContain(`EJS_gameName = "${checksum}.iso"`);
+    expect(document).toContain(`const gameId = "${checksum}"`);
+    expect(document).toContain(`EJS_gameID = ${identity.gameId}`);
+  });
+
+  it("copies settings saved under the bare checksum to the extension-bearing key", () => {
+    const checksum = "b".repeat(40);
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.iso" });
+    const document = createEmulatorDocument("/data/", "blob:game", identity.gameName, "segaSaturn", {
+      gameId: identity.gameId,
+      saveId: identity.saveId,
+    });
+    const script = document.split("<script>").find((part) => part.includes("const bare ="));
+    const store = new Map([[`ejs-${identity.gameId}-saturn-${checksum}-settings`, "saved"]]);
+    const localStorage = {
+      get length() {
+        return store.size;
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    };
+    runInNewContext(script?.split("</script>")[0] ?? "", { console, localStorage });
+    expect(store.get(`ejs-${identity.gameId}-saturn-${checksum}.iso-settings`)).toBe("saved");
+    expect(store.get(`ejs-${identity.gameId}-saturn-${checksum}-settings`)).toBe("saved");
+  });
+
+  it.each([
+    ["lowercase", "<script>", "</script>"],
+    ["uppercase", "<SCRIPT>", "</SCRIPT>"],
+    ["mixed case with attributes", '<ScRiPt type="text/javascript">', "</sCrIpT >"],
+  ])("resolves a denied screen wake lock with %s script tags", async (_label, openingTag, closingTag) => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes")
+      .replaceAll("<script>", openingTag)
+      .replaceAll("</script>", closingTag);
+    const script = [...documentNodes(parseDocument(document))]
+      .filter((node) => node.tagName === "script" && node.sourceCodeLocation?.startTag)
+      .map((node) => {
+        const location = node.sourceCodeLocation;
+        return document.slice(location.startTag.endOffset, location.endTag?.startOffset ?? location.endOffset);
+      })
+      .find((body) => body.includes("wakeLock"));
+    expect(script).toBeDefined();
+    const wakeLock = { request: vi.fn().mockRejectedValue(new DOMException("denied", "NotAllowedError")) };
+    runInNewContext(script ?? "", { navigator: { wakeLock } });
+
+    const sentinel = await wakeLock.request("screen");
+    expect(sentinel.released).toBe(true);
+    await expect(sentinel.release()).resolves.toBeUndefined();
+  });
+
   it("selects the self-hosted threaded WebGL 2 core", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
 
@@ -98,6 +244,24 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain("const hidden = ['ejs_threads', 'webgl2Enabled'];");
     expect(document).toContain("for (const name of stale) delete stored.settings[name];");
     expect(document.indexOf("const hidden = [")).toBeLessThan(document.indexOf("loader.js"));
+  });
+
+  it("names every EmulatorJS bar button from its own text", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const script = document.slice(
+      document.indexOf("const label = () => {"),
+      document.indexOf("new MutationObserver(label)"),
+    );
+    const attributes = new Map<string, string>();
+    const mute = {
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      hasAttribute: (name: string) => attributes.has(name),
+      setAttribute: (name: string, value: string) => attributes.set(name, value),
+      textContent: " Mute ",
+    };
+    runInNewContext(`${script}; label();`, { document: { querySelectorAll: () => [mute] } });
+    expect(attributes.get("aria-label")).toBe("Mute");
+    expect(document.indexOf("new MutationObserver(label)")).toBeLessThan(document.indexOf("loader.js"));
   });
 
   it("requests app-owned SRAM when the emulator starts", () => {
@@ -208,17 +372,90 @@ describe("emulator game identity", () => {
     const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
     const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.CHD" });
     expect(identity.gameName).toBe(`${checksum}.chd`);
+    expect(identity.saveId).toBe(checksum);
     expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
   });
 
-  it("leaves every other format on the bare checksum", () => {
+  it.each(["iso", "cue", "img", "mds", "ccd", "cso", "pbp", "m3u", "gdi", "toc", "mdf"])(
+    "keeps the .%s extension of a disc image",
+    (extension) => {
+      const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+      const identity = createEmulatorGameIdentity({ checksum, fileName: `Game.${extension.toUpperCase()}` });
+      expect(identity.gameName).toBe(`${checksum}.${extension}`);
+      expect(identity.saveId).toBe(checksum);
+      expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
+    },
+  );
+
+  it.each(["psx", "segaSaturn"])("keeps the .bin extension of a %s disc track", (core) => {
     const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
-    expect(createEmulatorGameIdentity({ checksum, fileName: "game.bin" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, core, fileName: "Game.bin" }).gameName).toBe(`${checksum}.bin`);
+  });
+
+  it.each(["segaMD", "atari7800", undefined])(
+    "keeps a .bin cartridge on the bare checksum so its saved settings survive (%s)",
+    (core) => {
+      const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+      expect(createEmulatorGameIdentity({ checksum, core, fileName: "Game.bin" }).gameName).toBe(checksum);
+    },
+  );
+
+  it("leaves cartridge ROMs and extensionless names on the bare checksum", () => {
+    const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game.nes" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game.iso.txt" }).gameName).toBe(checksum);
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game" }).gameName).toBe(checksum);
   });
 
   it("rejects a non-SHA-1 identity", () => {
     expect(() => createEmulatorGameIdentity({ checksum: "12345678" })).toThrow(
       "The emulator game identity requires a SHA-1 checksum.",
     );
+  });
+});
+
+describe("CHD pass-through cores", () => {
+  it("passes a CHD to the cores whose reader handles it", () => {
+    expect(coreReadsChd("psx")).toBe(true);
+    expect(coreReadsChd("segaMD")).toBe(true);
+  });
+
+  it("extracts a Saturn CHD because yabause has no CHD reader", () => {
+    expect(coreReadsChd("segaSaturn")).toBe(false);
+  });
+
+  it("extracts a CHD for every other core", () => {
+    expect(coreReadsChd("psp")).toBe(false);
+    expect(coreReadsChd(undefined)).toBe(false);
+  });
+});
+
+describe("requiresUnsuppliedBios", () => {
+  it("flags Famicom Disk System images by platform or extension", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.bin", platform: "Nintendo Famicom Disk System" })).toBe(true);
+    expect(requiresUnsuppliedBios({ fileName: "GAME.FDS" })).toBe(true);
+  });
+
+  it("leaves cartridge systems alone", () => {
+    expect(requiresUnsuppliedBios({ fileName: "game.nes", platform: "Nintendo Entertainment System" })).toBe(false);
+    expect(requiresUnsuppliedBios({ fileName: "game.sfc" })).toBe(false);
+  });
+});
+
+describe("hasFdsDiskSignature", () => {
+  const disk = (headerBytes: number) => {
+    const bytes = new Uint8Array(headerBytes + 64);
+    bytes.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")], headerBytes);
+    return new Blob([bytes]);
+  };
+
+  it("finds the disk marker with and without the FDS header", async () => {
+    expect(await hasFdsDiskSignature(disk(0))).toBe(true);
+    expect(await hasFdsDiskSignature(disk(16))).toBe(true);
+  });
+
+  it("ignores other images", async () => {
+    expect(await hasFdsDiskSignature(new Blob([new Uint8Array(128)]))).toBe(false);
+    expect(await hasFdsDiskSignature(new Blob(["NES\x1a"]))).toBe(false);
   });
 });

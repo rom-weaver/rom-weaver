@@ -3,73 +3,19 @@ use super::*;
 fn default() -> GameDefinition {
     {
         let fields = vec![
-            FieldDefinition::new(
-                "slot_1.marker".into(),
-                "Slot active marker".into(),
-                0,
-                Storage::U8,
-            )
-            .editable(false),
-            FieldDefinition::new("slot_1.money".into(), "Money".into(), 109, Storage::U24Le),
-            FieldDefinition::new(
-                "slot_1.mana.water".into(),
-                "Water Mana power".into(),
-                203,
-                Storage::Bit,
-            )
-            .bit(4),
-            FieldDefinition::new(
-                "slot_1.mana.earth".into(),
-                "Earth Mana power".into(),
-                203,
-                Storage::Bit,
-            )
-            .bit(0),
-            FieldDefinition::new(
-                "slot_1.mana.wind".into(),
-                "Wind Mana power".into(),
-                204,
-                Storage::Bit,
-            )
-            .bit(4),
-            FieldDefinition::new(
-                "slot_1.mana.fire".into(),
-                "Fire Mana power".into(),
-                204,
-                Storage::Bit,
-            )
-            .bit(0),
-            FieldDefinition::new(
-                "slot_1.mana.light".into(),
-                "Light Mana power".into(),
-                205,
-                Storage::Bit,
-            )
-            .bit(4),
-            FieldDefinition::new(
-                "slot_1.mana.dark".into(),
-                "Dark Mana power".into(),
-                205,
-                Storage::Bit,
-            )
-            .bit(0),
-            FieldDefinition::new(
-                "slot_1.mana.moon".into(),
-                "Moon Mana power".into(),
-                206,
-                Storage::Bit,
-            )
-            .bit(4),
-            FieldDefinition::new(
-                "slot_1.mana.wood".into(),
-                "Wood Mana power".into(),
-                206,
-                Storage::Bit,
-            )
-            .bit(0),
-            FieldDefinition::new(
-                "slot_1.location.spawn".into(),
-                "Location spawn ID".into(),
+            catalog_field("slot_1.marker", "Slot active marker", 0, Storage::U8).editable(false),
+            catalog_field("slot_1.money", "Money", 109, Storage::U24Le),
+            catalog_field("slot_1.mana.water", "Water Mana power", 203, Storage::Bit).bit(4),
+            catalog_field("slot_1.mana.earth", "Earth Mana power", 203, Storage::Bit).bit(0),
+            catalog_field("slot_1.mana.wind", "Wind Mana power", 204, Storage::Bit).bit(4),
+            catalog_field("slot_1.mana.fire", "Fire Mana power", 204, Storage::Bit).bit(0),
+            catalog_field("slot_1.mana.light", "Light Mana power", 205, Storage::Bit).bit(4),
+            catalog_field("slot_1.mana.dark", "Dark Mana power", 205, Storage::Bit).bit(0),
+            catalog_field("slot_1.mana.moon", "Moon Mana power", 206, Storage::Bit).bit(4),
+            catalog_field("slot_1.mana.wood", "Wood Mana power", 206, Storage::Bit).bit(0),
+            catalog_field(
+                "slot_1.location.spawn",
+                "Location spawn ID",
                 682,
                 Storage::U16Le,
             )
@@ -81,15 +27,10 @@ fn default() -> GameDefinition {
                 .into(),
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.save_count".into(),
-                "Slot save count".into(),
-                695,
-                Storage::U8,
-            ),
-            FieldDefinition::new(
-                "slot_1.total_save_count".into(),
-                "Total save count".into(),
+            catalog_field("slot_1.save_count", "Slot save count", 695, Storage::U8),
+            catalog_field(
+                "slot_1.total_save_count",
+                "Total save count",
                 696,
                 Storage::U8,
             ),
@@ -152,73 +93,19 @@ fn game_secret_of_mana_slot_2() -> GameDefinition {
         ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le, 1025)
     }];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_2.marker".into(),
-            "Slot active marker".into(),
-            1024,
-            Storage::U8,
-        )
-        .editable(false),
-        FieldDefinition::new("slot_2.money".into(), "Money".into(), 1133, Storage::U24Le),
-        FieldDefinition::new(
-            "slot_2.mana.water".into(),
-            "Water Mana power".into(),
-            1227,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_2.mana.earth".into(),
-            "Earth Mana power".into(),
-            1227,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_2.mana.wind".into(),
-            "Wind Mana power".into(),
-            1228,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_2.mana.fire".into(),
-            "Fire Mana power".into(),
-            1228,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_2.mana.light".into(),
-            "Light Mana power".into(),
-            1229,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_2.mana.dark".into(),
-            "Dark Mana power".into(),
-            1229,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_2.mana.moon".into(),
-            "Moon Mana power".into(),
-            1230,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_2.mana.wood".into(),
-            "Wood Mana power".into(),
-            1230,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_2.location.spawn".into(),
-            "Location spawn ID".into(),
+        catalog_field("slot_2.marker", "Slot active marker", 1024, Storage::U8).editable(false),
+        catalog_field("slot_2.money", "Money", 1133, Storage::U24Le),
+        catalog_field("slot_2.mana.water", "Water Mana power", 1227, Storage::Bit).bit(4),
+        catalog_field("slot_2.mana.earth", "Earth Mana power", 1227, Storage::Bit).bit(0),
+        catalog_field("slot_2.mana.wind", "Wind Mana power", 1228, Storage::Bit).bit(4),
+        catalog_field("slot_2.mana.fire", "Fire Mana power", 1228, Storage::Bit).bit(0),
+        catalog_field("slot_2.mana.light", "Light Mana power", 1229, Storage::Bit).bit(4),
+        catalog_field("slot_2.mana.dark", "Dark Mana power", 1229, Storage::Bit).bit(0),
+        catalog_field("slot_2.mana.moon", "Moon Mana power", 1230, Storage::Bit).bit(4),
+        catalog_field("slot_2.mana.wood", "Wood Mana power", 1230, Storage::Bit).bit(0),
+        catalog_field(
+            "slot_2.location.spawn",
+            "Location spawn ID",
             1706,
             Storage::U16Le,
         )
@@ -230,15 +117,10 @@ fn game_secret_of_mana_slot_2() -> GameDefinition {
             .into(),
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.save_count".into(),
-            "Slot save count".into(),
-            1719,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_2.total_save_count".into(),
-            "Total save count".into(),
+        catalog_field("slot_2.save_count", "Slot save count", 1719, Storage::U8),
+        catalog_field(
+            "slot_2.total_save_count",
+            "Total save count",
             1720,
             Storage::U8,
         ),
@@ -265,73 +147,19 @@ fn game_secret_of_mana_slot_3() -> GameDefinition {
         ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le, 2049)
     }];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_3.marker".into(),
-            "Slot active marker".into(),
-            2048,
-            Storage::U8,
-        )
-        .editable(false),
-        FieldDefinition::new("slot_3.money".into(), "Money".into(), 2157, Storage::U24Le),
-        FieldDefinition::new(
-            "slot_3.mana.water".into(),
-            "Water Mana power".into(),
-            2251,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_3.mana.earth".into(),
-            "Earth Mana power".into(),
-            2251,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_3.mana.wind".into(),
-            "Wind Mana power".into(),
-            2252,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_3.mana.fire".into(),
-            "Fire Mana power".into(),
-            2252,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_3.mana.light".into(),
-            "Light Mana power".into(),
-            2253,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_3.mana.dark".into(),
-            "Dark Mana power".into(),
-            2253,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_3.mana.moon".into(),
-            "Moon Mana power".into(),
-            2254,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_3.mana.wood".into(),
-            "Wood Mana power".into(),
-            2254,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_3.location.spawn".into(),
-            "Location spawn ID".into(),
+        catalog_field("slot_3.marker", "Slot active marker", 2048, Storage::U8).editable(false),
+        catalog_field("slot_3.money", "Money", 2157, Storage::U24Le),
+        catalog_field("slot_3.mana.water", "Water Mana power", 2251, Storage::Bit).bit(4),
+        catalog_field("slot_3.mana.earth", "Earth Mana power", 2251, Storage::Bit).bit(0),
+        catalog_field("slot_3.mana.wind", "Wind Mana power", 2252, Storage::Bit).bit(4),
+        catalog_field("slot_3.mana.fire", "Fire Mana power", 2252, Storage::Bit).bit(0),
+        catalog_field("slot_3.mana.light", "Light Mana power", 2253, Storage::Bit).bit(4),
+        catalog_field("slot_3.mana.dark", "Dark Mana power", 2253, Storage::Bit).bit(0),
+        catalog_field("slot_3.mana.moon", "Moon Mana power", 2254, Storage::Bit).bit(4),
+        catalog_field("slot_3.mana.wood", "Wood Mana power", 2254, Storage::Bit).bit(0),
+        catalog_field(
+            "slot_3.location.spawn",
+            "Location spawn ID",
             2730,
             Storage::U16Le,
         )
@@ -343,15 +171,10 @@ fn game_secret_of_mana_slot_3() -> GameDefinition {
             .into(),
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.save_count".into(),
-            "Slot save count".into(),
-            2743,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_3.total_save_count".into(),
-            "Total save count".into(),
+        catalog_field("slot_3.save_count", "Slot save count", 2743, Storage::U8),
+        catalog_field(
+            "slot_3.total_save_count",
+            "Total save count",
             2744,
             Storage::U8,
         ),
@@ -378,73 +201,19 @@ fn game_secret_of_mana_slot_4() -> GameDefinition {
         ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Le, 3073)
     }];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_4.marker".into(),
-            "Slot active marker".into(),
-            3072,
-            Storage::U8,
-        )
-        .editable(false),
-        FieldDefinition::new("slot_4.money".into(), "Money".into(), 3181, Storage::U24Le),
-        FieldDefinition::new(
-            "slot_4.mana.water".into(),
-            "Water Mana power".into(),
-            3275,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_4.mana.earth".into(),
-            "Earth Mana power".into(),
-            3275,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_4.mana.wind".into(),
-            "Wind Mana power".into(),
-            3276,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_4.mana.fire".into(),
-            "Fire Mana power".into(),
-            3276,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_4.mana.light".into(),
-            "Light Mana power".into(),
-            3277,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_4.mana.dark".into(),
-            "Dark Mana power".into(),
-            3277,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_4.mana.moon".into(),
-            "Moon Mana power".into(),
-            3278,
-            Storage::Bit,
-        )
-        .bit(4),
-        FieldDefinition::new(
-            "slot_4.mana.wood".into(),
-            "Wood Mana power".into(),
-            3278,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "slot_4.location.spawn".into(),
-            "Location spawn ID".into(),
+        catalog_field("slot_4.marker", "Slot active marker", 3072, Storage::U8).editable(false),
+        catalog_field("slot_4.money", "Money", 3181, Storage::U24Le),
+        catalog_field("slot_4.mana.water", "Water Mana power", 3275, Storage::Bit).bit(4),
+        catalog_field("slot_4.mana.earth", "Earth Mana power", 3275, Storage::Bit).bit(0),
+        catalog_field("slot_4.mana.wind", "Wind Mana power", 3276, Storage::Bit).bit(4),
+        catalog_field("slot_4.mana.fire", "Fire Mana power", 3276, Storage::Bit).bit(0),
+        catalog_field("slot_4.mana.light", "Light Mana power", 3277, Storage::Bit).bit(4),
+        catalog_field("slot_4.mana.dark", "Dark Mana power", 3277, Storage::Bit).bit(0),
+        catalog_field("slot_4.mana.moon", "Moon Mana power", 3278, Storage::Bit).bit(4),
+        catalog_field("slot_4.mana.wood", "Wood Mana power", 3278, Storage::Bit).bit(0),
+        catalog_field(
+            "slot_4.location.spawn",
+            "Location spawn ID",
             3754,
             Storage::U16Le,
         )
@@ -456,15 +225,10 @@ fn game_secret_of_mana_slot_4() -> GameDefinition {
             .into(),
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_4.save_count".into(),
-            "Slot save count".into(),
-            3767,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_4.total_save_count".into(),
-            "Total save count".into(),
+        catalog_field("slot_4.save_count", "Slot save count", 3767, Storage::U8),
+        catalog_field(
+            "slot_4.total_save_count",
+            "Total save count",
             3768,
             Storage::U8,
         ),

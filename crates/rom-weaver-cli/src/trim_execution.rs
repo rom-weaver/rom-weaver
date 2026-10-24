@@ -1,5 +1,5 @@
-use super::patch_apply::paths_refer_to_same_file;
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.
@@ -445,6 +445,7 @@ impl CliApp {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source.to_path_buf()],
                     output: destination.to_path_buf(),
@@ -481,6 +482,7 @@ impl CliApp {
         handler
             .create_dry_run_size(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source.to_path_buf()],
                     output: source.with_extension("rvz"),
@@ -599,10 +601,10 @@ impl CliApp {
         let mut input = BufReader::new(File::open(source)?);
         let mut output = BufWriter::new(File::create(destination)?);
         let copy_len = original_size.min(target_size);
-        let copied = io::copy(
-            &mut std::io::Read::by_ref(&mut input).take(copy_len),
-            &mut output,
-        )?;
+        let mut limited = std::io::Read::by_ref(&mut input).take(copy_len);
+        rom_weaver_core::copy_retrying_interrupted(&mut limited, &mut output)?;
+        // `Take` counts down across retried attempts, so what remains is what was never copied.
+        let copied = copy_len - limited.limit();
         if copied != copy_len {
             return Err(RomWeaverError::Validation(format!(
                 "trim source ended after {copied} bytes; expected {copy_len} bytes"

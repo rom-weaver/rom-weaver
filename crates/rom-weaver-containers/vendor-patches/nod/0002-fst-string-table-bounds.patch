@@ -1,0 +1,19 @@
+diff --git a/disc/fst.rs b/disc/fst.rs
+index 49899f8b3..d02c93640 100644
+--- a/disc/fst.rs
++++ b/disc/fst.rs
+@@ -142,9 +142,11 @@ impl<'a> Fst<'a> {
+         let Ok((root_node, _)) = Node::ref_from_prefix(buf) else {
+             return Err("FST root node not found");
+         };
+-        // String table starts after the last node
+-        let string_base = root_node.length() * size_of::<Node>() as u32;
+-        if string_base > buf.len() as u32 {
++        // String table starts after the last node. The root length is an
++        // attacker-controlled u32, so the product MUST be computed in u64 or a
++        // length above u32::MAX / 12 wraps to a small in-bounds value.
++        let string_base = u64::from(root_node.length()) * size_of::<Node>() as u64;
++        if string_base > buf.len() as u64 {
+             return Err("FST string table out of bounds");
+         }
+         let (node_buf, string_table) = buf.split_at(string_base as usize);

@@ -1,5 +1,7 @@
 # Cheat database reference
 
+Supported cheat-code systems, match types, and ROM patch export limits in rom-weaver, with database sources and local storage behavior.
+
 <!-- START doctoc -->
 ## Table of contents
 
@@ -12,7 +14,7 @@
 - [Storage and network behavior](#storage-and-network-behavior)
 - [Shard file](#shard-file)
 - [Preserved source fields](#preserved-source-fields)
-- [Bundles](#bundles)
+- [Weaves](#weaves)
 
 <!-- END doctoc -->
 
@@ -52,7 +54,7 @@ An unsupported row shows its reason and cannot be selected. Reasons include: the
 | Match | Meaning |
 | --- | --- |
 | Exact | A known checksum matched a canonical release record and its cheat set. |
-| Title | A normalized title matched, but the ROM checksum did not match. |
+| Title | The normalized file name matched, but the ROM checksum did not match. |
 | Manual | The user selected a game record. |
 | None | rom-weaver found no automatic game match. |
 
@@ -86,7 +88,7 @@ The distribution includes the full license text and the source revision in the t
 
 Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
-Before packaging, the build removes structured RetroArch entries, empty or placeholder codes, and entries whose every subcode has a known runtime-memory address. Gold Finger `XX` data slots are unused bytes, not parameters. Encrypted and versioned GBA blocks remain intact for the Rust decoder. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
+Before packaging, the build removes structured RetroArch entries, empty or placeholder codes (`?`, or `XX` except in Game Genie codes on NES, Genesis, and 32X, where `X` is a code letter), and entries whose every subcode has a known runtime-memory address. Gold Finger `XX` data slots are unused bytes, not parameters. Encrypted and versioned GBA blocks remain intact for the Rust decoder. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
 
 ## CLI database directory
 
@@ -105,11 +107,13 @@ The CLI reads the same shards the webapp serves, from a directory on disk.
 | `nintendo-game-boy-advance.json.br` | Game Boy Advance shard. |
 | `manifest.json` | Source name, source revision, source URL, and license. Optional. |
 
+There is no shard for PlayStation (`psx`) or SG-1000 (`sg1000`). Those systems decode codes but have no database, so `cheat list` and database lookups for them fail with exit code 1.
+
 Each shard may also be a plain `<slug>.json`, or carry the `cheats-<slug>` prefix the repository's own data directory uses. When several forms are present the CLI reads the `.json.br` copy.
 
-The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then `cheats` inside the [identify database directory](cli.md#identify-database-directory). `ROM_WEAVER_DATA_DIR` moves the base the same way it moves the identify data.
+The [CLI reference](cli.md#cheats) lists directory overrides and discovery order. `ROM_WEAVER_DATA_DIR` moves the user data base.
 
-`rom-weaver setup` installs the shards there along with the identify packs; they travel in the same archive. A missing shard is an error naming the file it looked for and the command that installs it.
+`rom-weaver setup` installs `<identify database directory>/full-v1/cheats` from the identify archive. Missing-shard errors name the file and installation command.
 
 [ROM identify data](../development/identify-data.md) documents how to build the identify packs and cheat shards from their pinned sources.
 
@@ -145,7 +149,7 @@ The file stores each cheat record without the values a reader derives. The CLI a
 | `rawFields.enable` | stored only when it is not `false` |
 | `id` | `cheat_` plus the first 24 hex digits of SHA-256 over `system`, `gameId`, `codeKind`, and the raw fields without `enable`, as key-sorted JSON, joined by NUL bytes |
 
-Record IDs do not depend on the file layout, so a bundle written against an earlier layout still names the same records.
+Record IDs do not depend on the file layout, so a weave written against an earlier layout still names the same records.
 
 ## Preserved source fields
 
@@ -153,11 +157,13 @@ Each imported record keeps the original code, every `cheatN_*` value, unknown fi
 
 rom-weaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
-## Bundles
+<a id="bundles"></a>
 
-A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot with its optional `codeKind`.
+## Weaves
 
-`bundle create --cheat` and `patch apply --emit-bundle` write the array. Applying the bundle resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
+A weave's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot with its optional `codeKind`.
+
+`weave create --cheat` and `patch apply --emit-weave` write the array. Applying the weave resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
 
 For the field list, see [CLI reference](cli.md#bundle-cheats).
 

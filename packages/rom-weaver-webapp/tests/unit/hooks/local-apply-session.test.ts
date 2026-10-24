@@ -365,7 +365,7 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
       })),
     );
     const { result, applyPatches, options, rerender } = renderSession({
-      defaultSettings: { output: { outputName: "same-bundle-output" } },
+      defaultSettings: { output: { outputName: "same-weave-output" } },
       disabledPatchIds: initialDisabledPatchIds,
       patches,
       stagePatches,

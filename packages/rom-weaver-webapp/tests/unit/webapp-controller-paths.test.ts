@@ -7,6 +7,7 @@ import {
   type SettingsState,
 } from "../../src/webapp/settings/settings-state.ts";
 import { createWebappRootController, readWorkflowViewFromPath } from "../../src/webapp/webapp-controller.ts";
+import { readCreatorModeFromSearch, removeCreatorModeFromSearch } from "../../src/webapp/app-routes.ts";
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -154,15 +155,28 @@ describe("selectView with a leave guard", () => {
 });
 
 describe("the landing route at the app base", () => {
+  it.each(["constructor", "toString", "__proto__"])("rejects inherited route names %s", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
+    expect(readWorkflowViewFromPath(`/roms/${slug}`)).toBeNull();
+  });
+
+  it.each(["weave", "weave-patches", "bundle", "bundle-patches"])("preserves the HTML alias for %s", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe("weave");
+  });
+  it.each(["ppf-undo", "save-editor", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
+  });
+
   it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
     expect(readWorkflowViewFromPath("/")).toBe("home");
     expect(readWorkflowViewFromPath("/index.html")).toBe("home");
     for (const [route, view] of [
       ["/apply", "patcher"],
       ["/apply-patch", "patcher"],
-      ["/bundle", "bundle"],
+      ["/weave", "weave"],
       ["/create", "creator"],
       ["/create-patch", "creator"],
+      ["/create-rom-patch", "creator"],
       ["/checksum", "checksum"],
       ["/checksum.html", "checksum"],
       ["/compress", "compress"],
@@ -183,7 +197,7 @@ describe("the landing route at the app base", () => {
   });
 
   it("writes the app base back to the address bar when the landing page is selected", () => {
-    window.history.replaceState({}, "", "/rom-weaver/create-patch");
+    window.history.replaceState({}, "", "/rom-weaver/create-rom-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
 
@@ -203,5 +217,36 @@ describe("stable Identify routing", () => {
     window.history.replaceState({}, "", path);
     const controller = createController({ storage });
     expect(controller.getState().currentView).toBe("identify");
+  });
+});
+
+describe("Create mode requests", () => {
+  it("reads only the supported modes", () => {
+    expect(readCreatorModeFromSearch("?mode=rom")).toBe("rom");
+    expect(readCreatorModeFromSearch("?guide=create&mode=cheats")).toBe("cheats");
+    expect(readCreatorModeFromSearch("?mode=codes")).toBeNull();
+    expect(readCreatorModeFromSearch("")).toBeNull();
+  });
+
+  it("drops only the mode and keeps the rest of the query as written", () => {
+    expect(removeCreatorModeFromSearch("?mode=rom&weave=/weaves/a.zip")).toBe("weave=/weaves/a.zip");
+    expect(removeCreatorModeFromSearch("?guide=create&mode&modes=1")).toBe("guide=create&modes=1");
+    expect(removeCreatorModeFromSearch("?mode=cheats")).toBe("");
+  });
+});
+
+describe("task entry routes", () => {
+  it.each([
+    ["apply-cheats", "patcher"],
+    ["create-rom-cheat-patch", "creator"],
+  ] as const)("keeps %s on initialization and selecting its view", (slug, view) => {
+    window.history.replaceState({}, "", `/roms/${slug}/index.html`);
+    const controller = createController({});
+    expect(controller.getState().currentView).toBe(view);
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe(view);
+    expect(controller.selectView(view)).toBe(view);
+    expect(window.location.pathname).toBe(`/roms/${slug}/index.html`);
+    controller.selectView("checksum");
+    expect(window.location.pathname).toBe("/roms/checksum");
   });
 });

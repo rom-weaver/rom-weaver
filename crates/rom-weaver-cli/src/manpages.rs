@@ -32,10 +32,21 @@ fn assert_documented(command: &Command, path: &[String]) {
     }
 }
 
-fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String, Vec<u8>>) {
+/// Subcommands carry no version of their own, so every page takes the root's.
+/// Without it the `.TH` header ends in an empty source string.
+fn collect_pages(
+    command: &Command,
+    version: &str,
+    path: &[String],
+    pages: &mut BTreeMap<String, Vec<u8>>,
+) {
     let page_name = path.join("-");
     let invocation = path.join(" ");
-    let mut page_command = command.clone().name(page_name.clone()).bin_name(invocation);
+    let mut page_command = command
+        .clone()
+        .name(page_name.clone())
+        .bin_name(invocation)
+        .version(version.to_string());
     for subcommand in page_command
         .get_subcommands_mut()
         .filter(|subcommand| subcommand.get_name() == "help")
@@ -63,7 +74,7 @@ fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String
     {
         let mut subcommand_path = path.to_vec();
         subcommand_path.push(subcommand.get_name().to_string());
-        collect_pages(subcommand, &subcommand_path, pages);
+        collect_pages(subcommand, version, &subcommand_path, pages);
     }
 }
 
@@ -74,7 +85,16 @@ pub fn generated_man_pages() -> BTreeMap<String, Vec<u8>> {
     let root = command.get_name().to_string();
     assert_documented(&command, std::slice::from_ref(&root));
     let mut pages = BTreeMap::new();
-    collect_pages(&command, &[root], &mut pages);
+    let version = command
+        .get_version()
+        .expect("root command carries the package version")
+        .to_string();
+    collect_pages(&command, &version, &[root], &mut pages);
+    for suffix in ["", "-create", "-parse", "-schema"] {
+        let canonical = format!("rom-weaver-weave{suffix}.1");
+        let legacy = format!("rom-weaver-bundle{suffix}.1");
+        pages.insert(legacy, pages[&canonical].clone());
+    }
     pages
 }
 
@@ -89,31 +109,28 @@ pub fn page_name(topics: &[String]) -> String {
     format!("{}.1", path.join("-"))
 }
 
-pub fn default_man_dir() -> PathBuf {
+/// The man page install directory, or `None` when no user data directory can be resolved.
+pub fn default_man_dir() -> Option<PathBuf> {
     if let Some(path) = env::var_os("ROM_WEAVER_MAN_DIR") {
-        return PathBuf::from(path);
+        return Some(PathBuf::from(path));
     }
 
     #[cfg(windows)]
     {
-        if let Some(path) = env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(path)
+        return env::var_os("LOCALAPPDATA").map(|path| {
+            PathBuf::from(path)
                 .join("rom-weaver")
                 .join("docs")
-                .join("man");
-        }
-        return PathBuf::from("docs").join("man");
+                .join("man")
+        });
     }
 
     #[cfg(not(windows))]
     {
         if let Some(path) = env::var_os("XDG_DATA_HOME") {
-            return PathBuf::from(path).join("man").join("man1");
+            return Some(PathBuf::from(path).join("man").join("man1"));
         }
-        if let Some(path) = env::var_os("HOME") {
-            return PathBuf::from(path).join(".local/share/man/man1");
-        }
-        PathBuf::from("man").join("man1")
+        env::var_os("HOME").map(|path| PathBuf::from(path).join(".local/share/man/man1"))
     }
 }
 
@@ -134,6 +151,31 @@ pub fn write_man_pages(
     Ok(count)
 }
 
+/// Like [`page_name`], but maps alternate command names (`inspect`, `bundle`, ...) onto
+/// the canonical command the page is generated for.
+pub fn page_name_with_aliases(topics: &[String]) -> String {
+    let mut command = crate::cli::cli_command();
+    command.build();
+    let mut canonical = Vec::new();
+    let mut current = &command;
+    for (index, topic) in topics.iter().enumerate() {
+        if index == 0 && topic == current.get_name() {
+            continue;
+        }
+        let Some(sub) = current
+            .get_subcommands()
+            .find(|sub| sub.get_name() == topic || sub.get_all_aliases().any(|a| a == topic))
+        else {
+            canonical.extend(topics[index..].iter().cloned());
+            break;
+        };
+        canonical.push(sub.get_name().to_string());
+        current = sub;
+    }
+    tracing::debug!(?topics, ?canonical, "resolved man page alias");
+    page_name(&canonical)
+}
+
 #[cfg(test)]
 mod tests {
     use assert_fs::TempDir;
@@ -145,6 +187,36 @@ mod tests {
         let pages = generated_man_pages();
         assert!(pages.contains_key("rom-weaver.1"));
         assert!(pages.contains_key("rom-weaver-man.1"));
+    }
+
+    #[test]
+    fn every_page_header_carries_the_version() {
+        let version = format!("\"rom-weaver-checksum {}\"", env!("CARGO_PKG_VERSION"));
+        let pages = generated_man_pages();
+        let checksum = String::from_utf8(pages["rom-weaver-checksum.1"].clone()).expect("utf-8");
+        assert!(checksum.contains(&version), "{checksum}");
+        for (name, page) in &pages {
+            let page = String::from_utf8(page.clone()).expect("utf-8");
+            let header = page
+                .lines()
+                .find(|line| line.starts_with(".TH"))
+                .expect("header");
+            assert!(
+                header.ends_with(&format!("{}\"", env!("CARGO_PKG_VERSION"))),
+                "{name}: {header}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_recipe_pages_match_canonical_pages() {
+        let pages = generated_man_pages();
+        for suffix in ["", "-create", "-parse", "-schema"] {
+            assert_eq!(
+                pages[&format!("rom-weaver-bundle{suffix}.1")],
+                pages[&format!("rom-weaver-weave{suffix}.1")],
+            );
+        }
     }
 
     #[test]
@@ -183,7 +255,8 @@ mod tests {
 
     #[test]
     fn default_path_has_a_user_scope() {
-        let path = default_man_dir();
-        assert!(!path.as_os_str().is_empty());
+        if let Some(path) = default_man_dir() {
+            assert!(!path.as_os_str().is_empty());
+        }
     }
 }

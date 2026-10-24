@@ -87,14 +87,14 @@ describe("getProgressStagedInputInfo checksumVariantPlan from probe-variant-plan
       event({
         checksum_variant_plan: [
           { id: "raw", label: "Raw" },
-          { id: "remove-header", label: "Remove header" },
+          { id: "remove-header", label: "Header removed" },
         ],
         sourceId: "input-1",
       }),
     );
     expect(info.checksumVariantPlan).toEqual([
       { id: "raw", label: "Raw" },
-      { id: "remove-header", label: "Remove header" },
+      { id: "remove-header", label: "Header removed" },
     ]);
   });
 
@@ -127,7 +127,7 @@ describe("getProgressStagedInputInfo isRom from probe-manifest", () => {
     expect(info.isRom).toBe(true);
   });
 
-  it("surfaces is_rom=false for a patch-only bundle (drives reclassification to the patch bucket)", () => {
+  it("surfaces is_rom=false for a patch-only weave (drives reclassification to the patch bucket)", () => {
     const info = getProgressStagedInputInfo(event({ probe_manifest: { is_rom: false }, sourceId: "input-1" }));
     expect(info.isRom).toBe(false);
   });

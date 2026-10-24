@@ -7,10 +7,29 @@ pub(super) fn decode_exact(
     let expected = usize::try_from(expected_len).map_err(|_| {
         RomWeaverError::Validation(format!("{codec} expected size overflowed usize"))
     })?;
-    let mut output = vec![0u8; expected];
-    decoder
-        .read_exact(&mut output)
-        .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
+    // The declared size can come from an untrusted patch header. Grow only as
+    // decoding progresses so a short stream cannot force that entire allocation
+    // before it is rejected. Large valid outputs still have no artificial cap.
+    const DECODE_CHUNK_BYTES: usize = 64 * 1024;
+    let mut output = Vec::new();
+    while output.len() < expected {
+        let start = output.len();
+        let chunk_len = (expected - start).min(DECODE_CHUNK_BYTES);
+        if output.capacity() - start < chunk_len {
+            // Double like `try_reserve`, but never past the declared size: amortized
+            // growth would overshoot it by up to 2x and overflow 32-bit wasm at 1 GiB.
+            let grow = (expected - start).min(start.max(DECODE_CHUNK_BYTES));
+            output.try_reserve_exact(grow).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{codec} decoded output allocation failed: {error}"
+                ))
+            })?;
+        }
+        output.resize(start + chunk_len, 0);
+        decoder.read_exact(&mut output[start..]).map_err(|error| {
+            RomWeaverError::Validation(format!("{codec} decode failed: {error}"))
+        })?;
+    }
     let mut trailing = [0u8; 1];
     let trailing_bytes = decoder
         .read(&mut trailing)

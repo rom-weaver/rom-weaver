@@ -19,28 +19,28 @@ type ApplyWorkflowParentCompression = {
   decompressionTimeMs?: number;
 };
 
-type ApplyWorkflowBundleSource = {
+type ApplyWorkflowWeaveSource = {
   /** The already-prepared leaf used by apply (usually an OPFS/VFS path). */
   source: SourceRef;
-  /** The original dropped source, retained for optional ROM bundling. */
+  /** The original dropped source, retained for optional ROM inclusion. */
   originalSource: SourceRef;
   fileName: string;
   size?: number;
   /** Exact logical ROM member/track locator when this source is a disc/archive leaf. */
   member?: string;
-  /** Concrete execution target used by bundle export. */
+  /** Concrete execution target used by weave export. */
   target?: PatchInputRef;
 };
 
-type ApplyWorkflowBundleRomSource = ApplyWorkflowBundleSource & {
+type ApplyWorkflowWeaveRomSource = ApplyWorkflowWeaveSource & {
   checksums?: ApplyWorkflowChecksums;
   recommendedFormat?: string;
 };
 
-type ApplyWorkflowBundleSources = {
+type ApplyWorkflowWeaveSources = {
   error?: string;
-  rom: ApplyWorkflowBundleRomSource | null;
-  patches: ApplyWorkflowBundleSource[];
+  rom: ApplyWorkflowWeaveRomSource | null;
+  patches: ApplyWorkflowWeaveSource[];
 };
 
 type ApplyWorkflowResolvedInput = {
@@ -65,6 +65,7 @@ type ApplyWorkflowResolvedInput = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   splitBinAvailable?: boolean;
   cueText?: string;
   gdiText?: string;
@@ -88,6 +89,7 @@ type ApplyWorkflowInputState = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
@@ -96,11 +98,11 @@ type ApplyWorkflowInputState = {
 
 type ApplyWorkflowPatchState = {
   id: string;
-  /** Stable bundle/session identity; distinct from the transient source id. */
+  /** Stable weave/session identity; distinct from the transient source id. */
   patchId?: string;
-  /** Concrete execution input recorded by a bundle or session. */
+  /** Concrete execution input recorded by a weave or session. */
   patchInput?: PatchInputRef;
-  /** Cumulative output lane recorded by a bundle or session. */
+  /** Cumulative output lane recorded by a weave or session. */
   patchTarget?: PatchInputRef;
   inputChecks?: string;
   outputChecks?: string;
@@ -121,6 +123,8 @@ type ApplyWorkflowPatchState = {
     /** Required input crc32 parsed from the patch file name's `[crc32:..]` token. */
     filenameCrc32?: string;
     format?: string;
+    /** The patch embeds checksums of its source in some algorithm (a BPS CRC32, a RUP MD5). */
+    hasSourceChecksums?: boolean;
     minimumSourceSize?: number;
     patchCrc32?: string;
     recordCount?: number;
@@ -136,6 +140,8 @@ type ApplyWorkflowPatchState = {
     mismatchReason?: "crc32" | "size" | "size+crc32";
     minimumSourceSize?: number;
     requiredCrc32?: string;
+    /** The required crc32 came from the patch file name's `[crc32:..]` token. */
+    requiredCrc32FromFilename?: boolean;
     requiredSize?: number;
     status: "invalid" | "pending" | "unknown" | "valid";
   };
@@ -146,6 +152,8 @@ type ApplyWorkflowPatchState = {
      * failures). Terminal for caching, advisory in the UI. */
     status: "deferred" | "invalid" | "pending" | "unknown" | "valid";
     targetInputId?: string;
+    /** The patch file itself could not be read, so no ROM choice can fix it. */
+    unreadable?: boolean;
     validationKey?: string;
   };
   /** This patch's slice of the chain verification plan (advisory; drives the chain chip). */
@@ -191,7 +199,7 @@ type ApplyWorkflowPatchState = {
 };
 
 export type {
-  ApplyWorkflowBundleSources,
+  ApplyWorkflowWeaveSources,
   ApplyWorkflowChecksums,
   ApplyN64ByteOrderMode,
   ApplyWorkflowInputState,
@@ -199,3 +207,5 @@ export type {
   ApplyWorkflowPatchState,
   ApplyWorkflowResolvedInput,
 };
+
+export type { ApplyWorkflowWeaveSources as ApplyWorkflowBundleSources };

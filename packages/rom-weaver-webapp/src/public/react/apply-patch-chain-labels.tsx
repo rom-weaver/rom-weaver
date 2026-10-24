@@ -1,5 +1,5 @@
 import type { Localizer } from "../../presentation/localization/index.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -17,6 +17,14 @@ export const chainChipText = (
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
+  // The patch itself is unreadable, so no ROM was checked and the chip must not blame the ROM.
+  if (item.validationUnreadable) return { text: localizer.message("ui.patchChecks.unreadable"), warn: true };
+  // "Verified" claims a checksum matched; a patch that merely applied (IPS, or no checksum to
+  // compare) is only "Checked".
+  const passedText = (matchedKnownState: boolean) =>
+    localizer.message(
+      matchedKnownState || item.checksumCompared ? "ui.patchChecks.verified" : "ui.patchChecks.applied",
+    );
   const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
   const checkedTarget =
     targetLabel ||
@@ -26,9 +34,12 @@ export const chainChipText = (
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
     }
     if (item.validationState === "valid") {
-      return { text: localizer.message("ui.patchChecks.verified") };
+      return { text: passedText(false) };
     }
-    return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
+    if (item.validationState === "invalid") {
+      return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
+    }
+    return { text: localizer.message("ui.patchChecks.unknown") };
   }
   const displayNumber = (enabledPosition: number) => (enabledIndexes[enabledPosition] ?? enabledPosition) + 1;
   const displayPatch = (enabledPosition: number) => {
@@ -44,24 +55,30 @@ export const chainChipText = (
       warn: true,
     };
   }
+  if (item.validationState === "invalid") {
+    return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
+  }
   if (verdict.matched.kind === "patch_output") {
     const predecessor = displayPatch(verdict.matched.index);
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: predecessor }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
+      : { text: passedText(true) };
   }
   if (verdict.matched.kind === "base") {
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
+      : { text: passedText(true) };
   }
   if (item.validationState === "deferred") {
     return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
   }
   if (item.validationState === "valid") {
-    return { text: localizer.message("ui.patchChecks.verified") };
+    return { text: passedText(false) };
   }
-  return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
+  if (item.validationState === "invalid") {
+    return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
+  }
+  return { text: localizer.message("ui.patchChecks.unknown") };
 };
 
 export const resolvedBasisLabel = (
@@ -95,7 +112,7 @@ export const checkInputBasisLabel = (
  * only partially, and the title is still the right one, so any `matched`
  * resolution is shown.
  */
-export const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedBundleChecks; enabled: boolean }) => {
+export const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedWeaveChecks; enabled: boolean }) => {
   const localizer = useUiLocalizer();
   const hasChecksums = !!Object.keys(checks?.checksums || {}).length;
   const identification = useExpectedRomIdentification(hasChecksums ? checks : undefined, enabled && hasChecksums);

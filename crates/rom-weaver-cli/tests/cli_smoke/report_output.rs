@@ -116,12 +116,12 @@ fn report_output_patch_create_names_output_without_checksum_name() {
 }
 
 #[test]
-fn report_output_apply_reports_failed_bundle_sidecar_before_terminal_success() {
+fn report_output_apply_reports_failed_weave_sidecar_before_terminal_success() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");
     let patch = temp.child("change.ips");
     let output = temp.child("patched.bin");
-    let blocked_bundle = temp.child("bundle-directory");
+    let blocked_weave = temp.child("weave-directory");
     fs::write(input.path(), b"hello world").expect("input fixture");
     fs::write(
         patch.path(),
@@ -134,7 +134,7 @@ fn report_output_apply_reports_failed_bundle_sidecar_before_terminal_success() {
         ),
     )
     .expect("patch fixture");
-    fs::create_dir(blocked_bundle.path()).expect("blocked bundle destination");
+    fs::create_dir(blocked_weave.path()).expect("blocked weave destination");
     let result = report(&[
         "patch",
         "apply",
@@ -145,8 +145,8 @@ fn report_output_apply_reports_failed_bundle_sidecar_before_terminal_success() {
         "-o",
         output.path().to_str().expect("output path"),
         "--no-compress",
-        "--emit-bundle",
-        blocked_bundle.path().to_str().expect("bundle path"),
+        "--emit-weave",
+        blocked_weave.path().to_str().expect("weave path"),
         "--json",
     ]);
     assert_eq!(result["status"], "succeeded");
@@ -160,7 +160,7 @@ fn report_output_apply_reports_failed_bundle_sidecar_before_terminal_success() {
             .expect("warnings")
             .iter()
             .any(|warning| warning.as_str().is_some_and(|warning| {
-                warning.contains("--emit-bundle") && warning.contains("failed")
+                warning.contains("--emit-weave") && warning.contains("failed")
             }))
     );
     assert_eq!(emitted_paths(&result), [expected_event_path(output.path())]);
@@ -192,12 +192,12 @@ fn report_output_trim_reports_final_path_and_size() {
 }
 
 #[test]
-fn report_output_bundle_create_reports_definition_and_archive() {
+fn report_output_weave_create_reports_definition_and_archive() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");
     let patch = temp.child("change.ips");
-    let definition = temp.child("rom-weaver-bundle.json");
-    let archive = temp.child("bundle.zip");
+    let definition = temp.child("rom-weaver-weave.json");
+    let archive = temp.child("weave.zip");
     fs::write(input.path(), b"hello world").expect("input fixture");
     fs::write(
         patch.path(),
@@ -211,7 +211,7 @@ fn report_output_bundle_create_reports_definition_and_archive() {
     )
     .expect("patch fixture");
     let result = report(&[
-        "bundle",
+        "weave",
         "create",
         "-i",
         input.path().to_str().expect("input path"),
@@ -219,7 +219,7 @@ fn report_output_bundle_create_reports_definition_and_archive() {
         patch.path().to_str().expect("patch path"),
         "-o",
         definition.path().to_str().expect("definition path"),
-        "--bundle",
+        "--weave",
         archive.path().to_str().expect("archive path"),
         "--json",
     ]);
@@ -234,12 +234,12 @@ fn report_output_bundle_create_reports_definition_and_archive() {
 
 #[cfg(unix)]
 #[test]
-fn report_output_bundle_sidecar_preserves_whitespace_in_rom_paths() {
+fn report_output_weave_sidecar_preserves_whitespace_in_rom_paths() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");
     let patch = temp.child("change.ips");
     let output = temp.child("patched.bin ");
-    let bundle = temp.child("bundle.json");
+    let weave = temp.child("weave.json");
     fs::write(input.path(), b"hello world").expect("input fixture");
     fs::write(
         patch.path(),
@@ -262,19 +262,19 @@ fn report_output_bundle_sidecar_preserves_whitespace_in_rom_paths() {
         "-o",
         output.path().to_str().unwrap(),
         "--no-compress",
-        "--emit-bundle",
-        bundle.path().to_str().unwrap(),
+        "--emit-weave",
+        weave.path().to_str().unwrap(),
         "--json",
     ]);
     assert_eq!(
         emitted_paths(&result),
         [
             expected_event_path(output.path()),
-            expected_event_path(bundle.path()),
+            expected_event_path(weave.path()),
         ]
     );
     assert_eq!(fs::read(output.path()).unwrap(), b"Hello world");
-    assert!(serde_json::from_slice::<Value>(&fs::read(bundle.path()).unwrap()).is_ok());
+    assert!(serde_json::from_slice::<Value>(&fs::read(weave.path()).unwrap()).is_ok());
 }
 
 #[cfg(unix)]
@@ -314,9 +314,9 @@ fn report_output_sidecar_warning_escapes_controls_and_prints_once() {
                 "-o",
                 output.path().to_str().unwrap(),
                 "--no-compress",
-                "--emit-bundle",
+                "--emit-weave",
             ])
-            .arg(blocked.child("bundle.json").path())
+            .arg(blocked.child("weave.json").path())
             .args(&flags)
             .assert()
             .success()

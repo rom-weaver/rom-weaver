@@ -12,56 +12,51 @@ const COMPLETION_DESCRIPTION: &str = concat!(
 fn slot_fields(slot: usize) -> Vec<FieldDefinition> {
     let base = (slot - 1) * 64;
     let mut fields = vec![
-        FieldDefinition::new(
-            "slot_1.current_course".into(),
-            "Slot 1 Current Course".into(),
+        catalog_field(
+            "slot_1.current_course",
+            "Slot 1 Current Course",
             4,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_1.gold_bcd_byte_1".into(),
-            "Slot 1 Gold packed-BCD byte 1".into(),
+        catalog_field(
+            "slot_1.gold_bcd_byte_1",
+            "Slot 1 Gold packed-BCD byte 1",
             5,
             Storage::U8,
         )
         .description(PACKED_BCD_DESCRIPTION.into()),
-        FieldDefinition::new(
-            "slot_1.gold_bcd_byte_2".into(),
-            "Slot 1 Gold packed-BCD byte 2".into(),
+        catalog_field(
+            "slot_1.gold_bcd_byte_2",
+            "Slot 1 Gold packed-BCD byte 2",
             6,
             Storage::U8,
         )
         .description(PACKED_BCD_DESCRIPTION.into()),
-        FieldDefinition::new(
-            "slot_1.gold_bcd_byte_3".into(),
-            "Slot 1 Gold packed-BCD byte 3".into(),
+        catalog_field(
+            "slot_1.gold_bcd_byte_3",
+            "Slot 1 Gold packed-BCD byte 3",
             7,
             Storage::U8,
         )
         .description(PACKED_BCD_DESCRIPTION.into()),
-        FieldDefinition::new(
-            "slot_1.hearts_bcd".into(),
-            "Slot 1 Hearts packed BCD".into(),
+        catalog_field(
+            "slot_1.hearts_bcd",
+            "Slot 1 Hearts packed BCD",
             8,
             Storage::U8,
         )
         .description("Raw packed-BCD storage byte.".into()),
-        FieldDefinition::new(
-            "slot_1.lives_bcd".into(),
-            "Slot 1 Lives packed BCD".into(),
+        catalog_field(
+            "slot_1.lives_bcd",
+            "Slot 1 Lives packed BCD",
             9,
             Storage::U8,
         )
         .description("Raw packed-BCD storage byte.".into()),
-        FieldDefinition::new(
-            "slot_1.power_up".into(),
-            "Slot 1 Power Up".into(),
-            10,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_1.completed_level_count_bcd".into(),
-            "Slot 1 Completed Level Count packed BCD".into(),
+        catalog_field("slot_1.power_up", "Slot 1 Power Up", 10, Storage::U8),
+        catalog_field(
+            "slot_1.completed_level_count_bcd",
+            "Slot 1 Completed Level Count packed BCD",
             13,
             Storage::U8,
         )
@@ -73,519 +68,514 @@ fn slot_fields(slot: usize) -> Vec<FieldDefinition> {
             .into(),
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.checkpoint_enabled".into(),
-            "Slot 1 Checkpoint Enabled".into(),
+        catalog_field(
+            "slot_1.checkpoint_enabled",
+            "Slot 1 Checkpoint Enabled",
             21,
             Storage::Bool,
         ),
-        FieldDefinition::new(
-            "slot_1.checkpoint_course".into(),
-            "Slot 1 Checkpoint Course".into(),
+        catalog_field(
+            "slot_1.checkpoint_course",
+            "Slot 1 Checkpoint Course",
             22,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_1.progression".into(),
-            "Slot 1 Progression".into(),
-            23,
-            Storage::U8,
-        ),
-        FieldDefinition::new(
-            "slot_1.treasures.a".into(),
-            "Slot 1 Treasure A: Golden Horn".into(),
+        catalog_field("slot_1.progression", "Slot 1 Progression", 23, Storage::U8),
+        catalog_field(
+            "slot_1.treasures.a",
+            "Slot 1 Treasure A: Golden Horn",
             14,
             Storage::Bit,
         )
         .bit(5),
-        FieldDefinition::new(
-            "slot_1.treasures.b".into(),
-            "Slot 1 Treasure B: Harp".into(),
+        catalog_field(
+            "slot_1.treasures.b",
+            "Slot 1 Treasure B: Harp",
             15,
             Storage::Bit,
         )
         .bit(3),
-        FieldDefinition::new(
-            "slot_1.treasures.c".into(),
-            "Slot 1 Treasure C: Crown".into(),
+        catalog_field(
+            "slot_1.treasures.c",
+            "Slot 1 Treasure C: Crown",
             14,
             Storage::Bit,
         )
         .bit(1),
-        FieldDefinition::new(
-            "slot_1.treasures.d".into(),
-            "Slot 1 Treasure D: Shield".into(),
+        catalog_field(
+            "slot_1.treasures.d",
+            "Slot 1 Treasure D: Shield",
             15,
             Storage::Bit,
         )
         .bit(4),
-        FieldDefinition::new(
-            "slot_1.treasures.e".into(),
-            "Slot 1 Treasure E: Bell".into(),
+        catalog_field(
+            "slot_1.treasures.e",
+            "Slot 1 Treasure E: Bell",
             15,
             Storage::Bit,
         )
         .bit(7),
-        FieldDefinition::new(
-            "slot_1.treasures.f".into(),
-            "Slot 1 Treasure F: Lamp".into(),
+        catalog_field(
+            "slot_1.treasures.f",
+            "Slot 1 Treasure F: Lamp",
             14,
             Storage::Bit,
         )
         .bit(3),
-        FieldDefinition::new(
-            "slot_1.treasures.g".into(),
-            "Slot 1 Treasure G: Crystal Ball".into(),
+        catalog_field(
+            "slot_1.treasures.g",
+            "Slot 1 Treasure G: Crystal Ball",
             15,
             Storage::Bit,
         )
         .bit(5),
-        FieldDefinition::new(
-            "slot_1.treasures.h".into(),
-            "Slot 1 Treasure H: Chalice".into(),
+        catalog_field(
+            "slot_1.treasures.h",
+            "Slot 1 Treasure H: Chalice",
             14,
             Storage::Bit,
         )
         .bit(7),
-        FieldDefinition::new(
-            "slot_1.treasures.i".into(),
-            "Slot 1 Treasure I: Dagger".into(),
+        catalog_field(
+            "slot_1.treasures.i",
+            "Slot 1 Treasure I: Dagger",
             14,
             Storage::Bit,
         )
         .bit(2),
-        FieldDefinition::new(
-            "slot_1.treasures.j".into(),
-            "Slot 1 Treasure J: Axe".into(),
+        catalog_field(
+            "slot_1.treasures.j",
+            "Slot 1 Treasure J: Axe",
             15,
             Storage::Bit,
         )
         .bit(6),
-        FieldDefinition::new(
-            "slot_1.treasures.k".into(),
-            "Slot 1 Treasure K: Football".into(),
+        catalog_field(
+            "slot_1.treasures.k",
+            "Slot 1 Treasure K: Football",
             15,
             Storage::Bit,
         )
         .bit(2),
-        FieldDefinition::new(
-            "slot_1.treasures.l".into(),
-            "Slot 1 Treasure L: Idol".into(),
+        catalog_field(
+            "slot_1.treasures.l",
+            "Slot 1 Treasure L: Idol",
             15,
             Storage::Bit,
         )
         .bit(1),
-        FieldDefinition::new(
-            "slot_1.treasures.m".into(),
-            "Slot 1 Treasure M: Golden Glove".into(),
+        catalog_field(
+            "slot_1.treasures.m",
+            "Slot 1 Treasure M: Golden Glove",
             15,
             Storage::Bit,
         )
         .bit(0),
-        FieldDefinition::new(
-            "slot_1.treasures.n".into(),
-            "Slot 1 Treasure N: Whale".into(),
+        catalog_field(
+            "slot_1.treasures.n",
+            "Slot 1 Treasure N: Whale",
             14,
             Storage::Bit,
         )
         .bit(6),
-        FieldDefinition::new(
-            "slot_1.treasures.o".into(),
-            "Slot 1 Treasure O: Diamond Ring".into(),
+        catalog_field(
+            "slot_1.treasures.o",
+            "Slot 1 Treasure O: Diamond Ring",
             14,
             Storage::Bit,
         )
         .bit(4),
-        FieldDefinition::new(
-            "slot_1.completed.course_01".into(),
-            "Slot 1 Course 01 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_01",
+            "Slot 1 Course 01 completed",
             11,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_02".into(),
-            "Slot 1 Course 02 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_02",
+            "Slot 1 Course 02 completed",
             11,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_03".into(),
-            "Slot 1 Course 03 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_03",
+            "Slot 1 Course 03 completed",
             11,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_03_alt".into(),
-            "Slot 1 Course 03' completed".into(),
+        catalog_field(
+            "slot_1.completed.course_03_alt",
+            "Slot 1 Course 03' completed",
             11,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_04".into(),
-            "Slot 1 Course 04 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_04",
+            "Slot 1 Course 04 completed",
             11,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_05".into(),
-            "Slot 1 Course 05 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_05",
+            "Slot 1 Course 05 completed",
             11,
             Storage::Bit,
         )
         .bit(5)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_06".into(),
-            "Slot 1 Course 06 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_06",
+            "Slot 1 Course 06 completed",
             11,
             Storage::Bit,
         )
         .bit(6)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_07".into(),
-            "Slot 1 Course 07 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_07",
+            "Slot 1 Course 07 completed",
             12,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_08".into(),
-            "Slot 1 Course 08 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_08",
+            "Slot 1 Course 08 completed",
             12,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_08_alt".into(),
-            "Slot 1 Course 08' completed".into(),
+        catalog_field(
+            "slot_1.completed.course_08_alt",
+            "Slot 1 Course 08' completed",
             12,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_09".into(),
-            "Slot 1 Course 09 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_09",
+            "Slot 1 Course 09 completed",
             12,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_10".into(),
-            "Slot 1 Course 10 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_10",
+            "Slot 1 Course 10 completed",
             12,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_11".into(),
-            "Slot 1 Course 11 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_11",
+            "Slot 1 Course 11 completed",
             12,
             Storage::Bit,
         )
         .bit(5)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_12".into(),
-            "Slot 1 Course 12 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_12",
+            "Slot 1 Course 12 completed",
             12,
             Storage::Bit,
         )
         .bit(6)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_13".into(),
-            "Slot 1 Course 13 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_13",
+            "Slot 1 Course 13 completed",
             12,
             Storage::Bit,
         )
         .bit(7)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_14".into(),
-            "Slot 1 Course 14 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_14",
+            "Slot 1 Course 14 completed",
             19,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_15".into(),
-            "Slot 1 Course 15 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_15",
+            "Slot 1 Course 15 completed",
             19,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_15_alt".into(),
-            "Slot 1 Course 15' completed".into(),
+        catalog_field(
+            "slot_1.completed.course_15_alt",
+            "Slot 1 Course 15' completed",
             19,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_16".into(),
-            "Slot 1 Course 16 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_16",
+            "Slot 1 Course 16 completed",
             19,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_16_alt".into(),
-            "Slot 1 Course 16' completed".into(),
+        catalog_field(
+            "slot_1.completed.course_16_alt",
+            "Slot 1 Course 16' completed",
             19,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_17".into(),
-            "Slot 1 Course 17 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_17",
+            "Slot 1 Course 17 completed",
             19,
             Storage::Bit,
         )
         .bit(5)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_18".into(),
-            "Slot 1 Course 18 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_18",
+            "Slot 1 Course 18 completed",
             19,
             Storage::Bit,
         )
         .bit(6)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_19".into(),
-            "Slot 1 Course 19 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_19",
+            "Slot 1 Course 19 completed",
             19,
             Storage::Bit,
         )
         .bit(7)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_20".into(),
-            "Slot 1 Course 20 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_20",
+            "Slot 1 Course 20 completed",
             16,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_21".into(),
-            "Slot 1 Course 21 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_21",
+            "Slot 1 Course 21 completed",
             16,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_22".into(),
-            "Slot 1 Course 22 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_22",
+            "Slot 1 Course 22 completed",
             16,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_23".into(),
-            "Slot 1 Course 23 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_23",
+            "Slot 1 Course 23 completed",
             16,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_23_alt".into(),
-            "Slot 1 Course 23' completed".into(),
+        catalog_field(
+            "slot_1.completed.course_23_alt",
+            "Slot 1 Course 23' completed",
             16,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_24".into(),
-            "Slot 1 Course 24 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_24",
+            "Slot 1 Course 24 completed",
             16,
             Storage::Bit,
         )
         .bit(5)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_25".into(),
-            "Slot 1 Course 25 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_25",
+            "Slot 1 Course 25 completed",
             16,
             Storage::Bit,
         )
         .bit(6)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_26".into(),
-            "Slot 1 Course 26 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_26",
+            "Slot 1 Course 26 completed",
             17,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_27".into(),
-            "Slot 1 Course 27 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_27",
+            "Slot 1 Course 27 completed",
             17,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_28".into(),
-            "Slot 1 Course 28 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_28",
+            "Slot 1 Course 28 completed",
             17,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_29".into(),
-            "Slot 1 Course 29 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_29",
+            "Slot 1 Course 29 completed",
             17,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_30".into(),
-            "Slot 1 Course 30 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_30",
+            "Slot 1 Course 30 completed",
             17,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_31".into(),
-            "Slot 1 Course 31 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_31",
+            "Slot 1 Course 31 completed",
             18,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_32".into(),
-            "Slot 1 Course 32 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_32",
+            "Slot 1 Course 32 completed",
             18,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_33".into(),
-            "Slot 1 Course 33 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_33",
+            "Slot 1 Course 33 completed",
             18,
             Storage::Bit,
         )
         .bit(2)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_34".into(),
-            "Slot 1 Course 34 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_34",
+            "Slot 1 Course 34 completed",
             18,
             Storage::Bit,
         )
         .bit(3)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_35".into(),
-            "Slot 1 Course 35 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_35",
+            "Slot 1 Course 35 completed",
             18,
             Storage::Bit,
         )
         .bit(4)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_36".into(),
-            "Slot 1 Course 36 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_36",
+            "Slot 1 Course 36 completed",
             18,
             Storage::Bit,
         )
         .bit(5)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_37".into(),
-            "Slot 1 Course 37 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_37",
+            "Slot 1 Course 37 completed",
             20,
             Storage::Bit,
         )
         .bit(0)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_38".into(),
-            "Slot 1 Course 38 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_38",
+            "Slot 1 Course 38 completed",
             20,
             Storage::Bit,
         )
         .bit(1)
         .description(COMPLETION_DESCRIPTION.into())
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.completed.course_39".into(),
-            "Slot 1 Course 39 completed".into(),
+        catalog_field(
+            "slot_1.completed.course_39",
+            "Slot 1 Course 39 completed",
             20,
             Storage::Bit,
         )

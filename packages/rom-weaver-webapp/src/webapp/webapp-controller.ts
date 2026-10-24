@@ -1,3 +1,4 @@
+import { WORKFLOW_ENTRY_ROUTES, readWorkflowEntryFromPathname } from "./workflow-seo.mjs";
 import { applyAccent } from "./accent.ts";
 import {
   copySettings,
@@ -13,6 +14,8 @@ import {
   serializeSettingsForStorage,
   validateSettingsDraft,
 } from "./settings/settings-state.ts";
+import { setThemePreference } from "./theme.ts";
+import { readAppBaseUrl, readRouteSegments, readWorkflowViewFromPath, VIEW_TO_ROUTE_SLUG } from "./app-routes.ts";
 import { createStore } from "./vanilla-store.ts";
 import {
   type CompressSessionState,
@@ -36,7 +39,7 @@ import {
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "home",
-  "bundle",
+  "weave",
   "patcher",
   "creator",
   "checksum",
@@ -53,125 +56,14 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "bundle") return "weave";
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean =>
-  view === "trim" || view === "ppf-undo" || view === "save-editor";
+const isBetaWorkflowView = (view: WebappView): boolean => view === "trim" || view === "save-editor";
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
-
-const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
-  bundle: "bundle-patches",
-  creator: "create-patch",
-  checksum: "checksum",
-  compress: "compress",
-  // The landing page is the app base itself, so its slug is empty and
-  // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
-  home: "",
-  docs: "docs",
-  extract: "extract",
-  identify: "identify-rom",
-  patcher: "apply-patches",
-  "ppf-undo": "ppf-undo",
-  "save-editor": "save-editor",
-  test: "test-rom",
-  trim: "trim-rom",
-  "whats-new": "whats-new",
-};
-const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
-  "apply-patches": "patcher",
-  "apply-patches.html": "patcher",
-  "bundle-patches": "bundle",
-  "bundle-patches.html": "bundle",
-  "apply-patch": "patcher",
-  "apply-patch.html": "patcher",
-  bundle: "bundle",
-  "bundle.html": "bundle",
-  "create-patch": "creator",
-  "create-patch.html": "creator",
-  checksum: "checksum",
-  "checksum.html": "checksum",
-  compress: "compress",
-  "compress.html": "compress",
-  extract: "extract",
-  "extract.html": "extract",
-  "identify-rom": "identify",
-  "identify-rom.html": "identify",
-  "test-rom": "test",
-  "test-rom.html": "test",
-  "trim-rom": "trim",
-  "trim-rom.html": "trim",
-  apply: "patcher",
-  "apply.html": "patcher",
-  create: "creator",
-  "create.html": "creator",
-  docs: "docs",
-  "docs.html": "docs",
-  identify: "identify",
-  "identify.html": "identify",
-  "ppf-undo": "ppf-undo",
-  "save-editor": "save-editor",
-  test: "test",
-  "test.html": "test",
-  trim: "trim",
-  "trim.html": "trim",
-  "whats-new": "whats-new",
-  "whats-new.html": "whats-new",
-  // Keep old links usable when a host has not applied the server redirect.
-  tools: "ppf-undo",
-  weave: "patcher",
-  "weave.html": "patcher",
-};
-
-const readRouteSegments = (pathname?: string): string[] => {
-  const path = pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
-  const segments = path.trim().toLowerCase().split("/").filter(Boolean);
-  if (segments.at(-1) === "index.html") segments.pop();
-  return segments;
-};
-
-const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
-  const segments = readRouteSegments(pathname);
-  if (segments.includes("docs")) return "docs";
-  const slug = segments.at(-1) || "";
-  // No route segment left means the app base itself, which is the landing page.
-  // This only resolves at the apex: a sub-path deployment's own base
-  // ("/rom-weaver/") is indistinguishable from a missing page by pathname
-  // alone, so it stays unresolved and callers fall back to DEFAULT_WORKFLOW_VIEW.
-  if (!slug) return "home";
-  return ROUTE_SLUG_TO_VIEW[slug] || null;
-};
-
-/**
- * Where the app itself is served, with the route segment stripped: `/apply/`
- * and `/create` both resolve to `/`, and a sub-path deployment keeps its
- * prefix. Anything the app addresses by a bare name - route links, `?bundle=`
- * targets, sample assets - has to resolve against this rather than
- * `location.href`, which points inside the current route.
- */
-const readAppBaseUrl = (): string => {
-  if (typeof window === "undefined") return "/";
-  // The 404 page is served at whatever path missed, so its location says
-  // nothing about the app base. The build stamps that page with a <base>
-  // tag for the same reason, and its assets already resolve through it.
-  if (document.documentElement.dataset.page === "not-found") return document.baseURI;
-  const baseUrl = new URL(window.location.href);
-  const pathSegments = baseUrl.pathname.split("/");
-  while (pathSegments.at(-1) === "") pathSegments.pop();
-  if (pathSegments.at(-1) === "index.html") pathSegments.pop();
-  const docsIndex = pathSegments.lastIndexOf("docs");
-  if (docsIndex >= 0) pathSegments.splice(docsIndex);
-  else {
-    const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
-    if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
-  }
-  baseUrl.pathname = `${pathSegments.join("/")}/`;
-  baseUrl.hash = "";
-  baseUrl.search = "";
-  return baseUrl.href;
-};
 
 type RouteHistoryMode = "none" | "push" | "replace";
 
@@ -179,9 +71,14 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (typeof window === "undefined") return;
   if (historyMode === "none") return;
   if (view === "docs" && readRouteSegments().includes("docs")) return;
+  const entry = readWorkflowEntryFromPathname(window.location.pathname);
+  if (entry && WORKFLOW_ENTRY_ROUTES[entry].view === view) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
-  if (nextUrl.href === window.location.href) return;
+  // Already on this route: a rewrite would only drop a console deep link hash. Other hashes are legacy routes.
+  const currentUrl = new URL(window.location.href);
+  if (currentUrl.hash.startsWith("#console-")) currentUrl.hash = "";
+  if (nextUrl.href === currentUrl.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };
 
@@ -450,11 +347,16 @@ const createWebappRootController = (options: ControllerOptions) => {
       });
     },
     restoreDefaults() {
-      setState({
-        draftSettings: getDefaultSettings(),
+      const draftSettings = getDefaultSettings();
+      // Theme and accent apply immediately everywhere else in the dialog, so resetting them does too.
+      setThemePreference("auto");
+      const nextSettings = { ...copySettings(store.getState().settings), accent: draftSettings.accent };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings,
         validation: {
           invalidFields: [],
-          messages: ["Defaults staged. Save and close to apply them."],
+          messages: ["Defaults staged. Theme and accent reset now; save and close to apply the rest."],
         },
       });
     },
@@ -507,15 +409,15 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, accent },
       });
     },
-    setBundlePackage(value: string) {
+    setWeavePackage(value: string) {
       const state = store.getState();
-      if (state.settings.bundlePackage === value) return;
-      const validValues = new Set(SETTINGS_FIELD_METADATA.bundlePackage.validValues || []);
+      if (state.settings.weavePackage === value) return;
+      const validValues = new Set(SETTINGS_FIELD_METADATA.weavePackage.validValues || []);
       if (!validValues.has(value)) return;
-      const nextSettings = { ...copySettings(state.settings), bundlePackage: value };
+      const nextSettings = { ...copySettings(state.settings), weavePackage: value };
       persistSettings(nextSettings);
       applyCommittedSettings(nextSettings, {
-        draftSettings: { ...state.draftSettings, bundlePackage: value },
+        draftSettings: { ...state.draftSettings, weavePackage: value },
       });
     },
     setCreatorModifiedState(file: unknown) {

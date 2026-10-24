@@ -49,8 +49,8 @@ describe("ApplyPatchListStep identified check titles", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyPatchListStep
-          bundleMeta={[{ id: "patch-0", inputChecks: { checksums: { crc32: "1234abcd" } } }]}
-          bundleSessionMatches
+          weaveMeta={[{ id: "patch-0", inputChecks: { checksums: { crc32: "1234abcd" } } }]}
+          weaveSessionMatches
           patches={[item()]}
           patchStack={{ setPatchOption: vi.fn(), setPatchTarget: vi.fn() } as unknown as PatcherStackController}
         />
@@ -79,8 +79,8 @@ describe("ApplyPatchListStep identified check titles", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyPatchListStep
-          bundleMeta={[{ id: "patch-0", inputChecks: { checksums: { crc32: "1234abcd" } } }]}
-          bundleSessionMatches
+          weaveMeta={[{ id: "patch-0", inputChecks: { checksums: { crc32: "1234abcd" } } }]}
+          weaveSessionMatches
           patches={[item()]}
           patchStack={{ setPatchOption: vi.fn(), setPatchTarget: vi.fn() } as unknown as PatcherStackController}
         />

@@ -1,6 +1,6 @@
 import { Plus, TriangleAlert } from "lucide-react";
-import { Fragment, useState } from "react";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import {
   CHECK_FIELDS_PAIRED,
   CHECK_LABELS,
@@ -15,17 +15,17 @@ import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
   CHECKSUM_TIMING_LABEL,
   getPatchVerificationRows,
   PreflightSuccess,
   getEmbeddedChecks,
-  bundleCheckRows,
+  weaveCheckRows,
 } from "./apply-patch-list-helpers.tsx";
 import { checkInputBasisLabel, IdentifiedCheckTitle } from "./apply-patch-chain-labels.tsx";
-import { type RomCheckActuals, matchInputCheck } from "./apply-patch-input-checks.ts";
+import { type RomCheckActuals, matchInputCheck, checkErrorMessage } from "./apply-patch-input-checks.ts";
 import { EditableCheckRow } from "./apply-patch-check-row.tsx";
 
 const PatchChecksDrawer = ({
@@ -39,6 +39,7 @@ const PatchChecksDrawer = ({
   item,
   meta,
   onMetaChange,
+  onDraftValidityChange,
   outputCheckHint,
   patchType,
   patchStack,
@@ -64,8 +65,9 @@ const PatchChecksDrawer = ({
   isChainInput?: boolean;
   isChainOutput?: boolean;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  meta?: WeavePatchMeta;
+  onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (error: string | null) => void;
   /** Chain-output card of a run with optional/skipped patches: remind that the
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
@@ -75,7 +77,7 @@ const PatchChecksDrawer = ({
    * user-entered INPUT check is compared against for its per-row match mark. */
   romActuals?: RomCheckActuals;
   /** Checks declared by the predecessor for the same explicit input state. */
-  sharedInputChecks?: ParsedBundleChecks;
+  sharedInputChecks?: ParsedWeaveChecks;
   sharedInputLabel?: string;
 }) => {
   const setOption = patchStack.setPatchOption;
@@ -83,9 +85,28 @@ const PatchChecksDrawer = ({
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
+  // Committed fields the user has opened or typed into: they stay editors when
+  // the patch's embedded value arrives, but never take focus like an added field.
+  const [editedFields, setEditedFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
-  const setInvalid = (fieldKey: string, invalid: boolean) =>
-    setInvalidChecks((previous) => (previous[fieldKey] === invalid ? previous : { ...previous, [fieldKey]: invalid }));
+  const invalidChecksRef = useRef(invalidChecks);
+  const validityCallbackRef = useRef(onDraftValidityChange);
+  validityCallbackRef.current = onDraftValidityChange;
+  useEffect(() => () => validityCallbackRef.current?.(null), []);
+  const setInvalid = (fieldKey: string, invalid: boolean) => {
+    if (invalidChecksRef.current[fieldKey] === invalid) return;
+    const next = { ...invalidChecksRef.current, [fieldKey]: invalid };
+    invalidChecksRef.current = next;
+    setInvalidChecks(next);
+    const invalidKey = Object.keys(next).find((key) => next[key]);
+    onDraftValidityChange?.(invalidKey ? checkErrorMessage(invalidKey.split(":")[1] as CheckField, localizer) : null);
+  };
+  const validateDraft = (side: "input" | "output", field: CheckField, raw: string) => {
+    const value = field === "bytes" ? raw.trim() : normalizeCheckInput(raw);
+    const valid =
+      field === "bytes" ? /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) : isValidCheckValue(field, value);
+    setInvalid(`${side}:${field}`, !!value && !valid);
+  };
   // A valid check on a chain endpoint feeds the run's validation option so the
   // ROM re-verifies immediately (card coloring) and the apply enforces it.
   const syncEndpointValidation = (side: "input" | "output", checksums: Record<string, string>) => {
@@ -111,11 +132,11 @@ const PatchChecksDrawer = ({
     onMetaChange?.({ [field]: { ...meta?.[field], checksums } });
     syncEndpointValidation(side, checksums);
   };
-  // The bytes field carries the endpoint's exact size into the bundle metadata
-  // (inputChecks/outputChecks.size); it is descriptive, not a live run gate.
+  // Bytes MUST remain exact in the exported metadata; malformed drafts block
+  // readiness without replacing the previously committed size.
   const commitSize = (side: "input" | "output", raw: string) => {
     const value = raw.trim();
-    const invalid = !!value && !/^\d+$/.test(value);
+    const invalid = !!value && !(/^\d+$/.test(value) && Number.isSafeInteger(Number(value)));
     setInvalid(`${side}:bytes`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
@@ -123,8 +144,11 @@ const PatchChecksDrawer = ({
     if ((meta?.[field]?.size ?? undefined) === size) return;
     onMetaChange?.({ [field]: { ...meta?.[field], size } });
   };
+  const markEdited = (key: string) =>
+    setEditedFields((previous) => (previous[key] ? previous : { ...previous, [key]: true }));
   const removeCheck = (side: "input" | "output", field: CheckField) => {
     setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+    setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
     setInvalid(`${side}:${field}`, false);
     if (field === "bytes") {
       commitSize(side, "");
@@ -143,7 +167,11 @@ const PatchChecksDrawer = ({
       return userChecks[field] || "";
     };
     const editableFields = CHECK_FIELDS_PAIRED.filter(
-      (field) => !embedded[field] && (!!userValue(field) || !!draftFields[`${side}:${field}`]),
+      (field) =>
+        !!draftFields[`${side}:${field}`] ||
+        !!editedFields[`${side}:${field}`] ||
+        !!invalidChecks[`${side}:${field}`] ||
+        (!embedded[field] && !!userValue(field)),
     );
     const addableFields = CHECK_FIELDS_PAIRED.filter((field) => !(embedded[field] || editableFields.includes(field)));
     // Only the chain-input side's checks describe the ROM we actually hold, so
@@ -153,7 +181,14 @@ const PatchChecksDrawer = ({
       side === "input" && isChainInput && !invalidChecks[`${side}:${field}`]
         ? matchInputCheck(field, userValue(field), romActuals)
         : undefined;
-    return { addableFields, builtInRows, editableFields, markFor, metaField, side, userValue };
+    // A row kept open beside the patch's own check warns when the two disagree.
+    const warningFor = (field: CheckField): string | undefined => {
+      const value = userValue(field);
+      return embedded[field] && value && embedded[field].toLowerCase() !== value.toLowerCase()
+        ? localizer.message("ui.patch.differsFromPatch", { check: CHECK_LABELS[field] })
+        : undefined;
+    };
+    return { addableFields, builtInRows, editableFields, markFor, metaField, side, userValue, warningFor };
   });
   const hasUserChecks = sides.some((entry) => entry.editableFields.length > 0);
   // A user-entered input check that disagrees with the real ROM fails the drawer
@@ -165,7 +200,7 @@ const PatchChecksDrawer = ({
   const ok = !disabled && item.validationState === "valid" && !userMismatch;
   const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
   const hasBuiltIn = !!(inputRows.length || outputRows.length);
-  const sharedInputRows = bundleCheckRows(sharedInputChecks);
+  const sharedInputRows = weaveCheckRows(sharedInputChecks);
   const compact =
     !hasUserChecks &&
     inputRows.length > 0 &&
@@ -192,7 +227,7 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, localizer.message("ui.patch.checks"))}
       verifying={verifying}
     >
-      {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue }) => {
+      {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue, warningFor }) => {
         const inputHeading =
           side === "input"
             ? localizer.message("ui.patchChecks.input", {
@@ -244,6 +279,7 @@ const PatchChecksDrawer = ({
             <div className="ck-group">
               <div className="ck-group-head">
                 <span>{side === "output" ? localizer.message("ui.patchChecks.stackOutput") : inputHeading}</span>
+                {addControl}
               </div>
               <IdentifiedCheckTitle checks={meta?.[metaField]} enabled={!disabled} />
               {side === "input"
@@ -259,12 +295,24 @@ const PatchChecksDrawer = ({
                   invalid={!!invalidChecks[`${side}:${field}`]}
                   key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
                   mark={markFor(field)}
-                  onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
+                  onDraftChange={(raw) => {
+                    // Typing keeps the row an editor when its embedded value arrives mid-edit.
+                    markEdited(`${side}:${field}`);
+                    validateDraft(side, field, raw);
+                  }}
+                  onCommit={(raw) => {
+                    // Clearing a committed check removes its row, as before it was edited.
+                    if (!raw.trim()) setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+                    if (field === "bytes") commitSize(side, raw);
+                    else commitCheck(side, field, raw);
+                  }}
+                  // So does opening it, even before the first keystroke.
+                  onOpen={() => markEdited(`${side}:${field}`)}
                   onRemove={() => removeCheck(side, field)}
                   value={userValue(field)}
+                  warning={warningFor(field)}
                 />
               ))}
-              {addControl}
             </div>
           </Fragment>
         );

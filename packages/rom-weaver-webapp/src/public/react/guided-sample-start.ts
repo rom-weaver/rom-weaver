@@ -1,7 +1,7 @@
 const GUIDED_SAMPLE_VIEWS = {
   apply: "patcher",
   "apply-cheats": "patcher",
-  bundle: "bundle",
+  weave: "weave",
   create: "creator",
   "create-cheats": "creator",
   test: "test",
@@ -12,14 +12,15 @@ type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 const GUIDED_SAMPLE_HREFS = {
   apply: "/apply-patches?guide=apply",
   "apply-cheats": "/apply-patches?guide=apply-cheats",
-  bundle: "/bundle-patches?guide=bundle",
-  create: "/create-patch?guide=create",
-  "create-cheats": "/create-patch?guide=create-cheats",
+  weave: "/weave-patches?guide=weave",
+  create: "/create-rom-patch?guide=create",
+  "create-cheats": "/create-rom-patch?guide=create-cheats",
   test: "/test-rom?guide=test",
 } as const;
 
 const readGuidedSampleFromSearch = (search: string): GuidedSample | null => {
   const value = new URLSearchParams(search).get("guide");
+  if (value === "bundle") return "weave";
   return value && Object.prototype.hasOwnProperty.call(GUIDED_SAMPLE_VIEWS, value) ? (value as GuidedSample) : null;
 };
 
@@ -55,7 +56,7 @@ const clearGuidedSampleQuery = () => {
   window.history.replaceState(window.history.state, "", url);
 };
 
-/** "Hide this button" on the New here? beacon. The webapp shell persists it
+/** "Hide practice-run links" on the sample link. The webapp shell persists it
     into the onboardingEnabled setting; embeds without a listener lose nothing -
     the beacon still hides itself for the session. */
 const requestOnboardingDismiss = () => {

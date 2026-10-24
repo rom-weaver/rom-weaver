@@ -14,7 +14,7 @@ use rom_weaver_core::{
     Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
-use crate::checksum_validation_suffix;
+use crate::shared::checked::checked_add;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
@@ -128,7 +128,7 @@ impl PatchHandler for PmsrPatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -169,17 +169,11 @@ impl PatchHandler for PmsrPatchHandler {
             }
             execution
         };
-        let checksum_suffix = checksum_validation_suffix(validate_source);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_apply_report(
             self.descriptor,
-            "apply",
-            format!(
-                "applied {} patch with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
-            Some(execution),
+            patch.records.len(),
+            validate_source,
+            execution,
         ))
     }
 
@@ -199,16 +193,10 @@ impl PatchHandler for PmsrPatchHandler {
         let output_len = patch.min_target_size.max(source_len);
         let _ = pmsr_records_are_non_overlapping(&patch, output_len)?;
 
-        let checksum_suffix = checksum_validation_suffix(validate_source);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_validate_report(
             self.descriptor,
-            "validate",
-            format!(
-                "validated {} patch source with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
+            patch.records.len(),
+            validate_source,
             context.single_thread_execution(),
         ))
     }
@@ -245,11 +233,26 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(crate::shared::labels::patch_create_report(
+        let mut report = crate::shared::labels::patch_create_report(
             self.descriptor,
             patch.record_count,
             execution,
-        ))
+        );
+        // MOD patches always declare the Paper Mario (USA) v1.0 source, so a
+        // patch made from any other original fails a strict apply.
+        if context.validate_source_checks()
+            && validate_paper_mario_source(&request.original).is_err()
+        {
+            debug!(
+                format = self.descriptor.name,
+                "pmsr create original is not Paper Mario (USA) v1.0"
+            );
+            report.label = crate::shared::labels::append_warning_labels(
+                report.label,
+                &["MOD patches target Paper Mario (USA) v1.0, so applying this one needs --ignore-checksum-validation".to_string()],
+            );
+        }
+        Ok(report)
     }
 
     fn capabilities(&self) -> PatchCapabilities {
@@ -592,7 +595,7 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
     let mut hasher = Hasher::new();
     let mut buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
     loop {
-        let read = source.read(&mut buffer)?;
+        let read = rom_weaver_core::read_full(&mut source, &mut buffer)?;
         if read == 0 {
             break;
         }
@@ -883,12 +886,6 @@ fn read_exact<'a>(
     })?;
     *cursor = end;
     Ok(slice)
-}
-
-fn checked_add(offset: u64, len: u64, label: &str) -> Result<u64> {
-    offset
-        .checked_add(len)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
 }
 
 #[cfg(test)]

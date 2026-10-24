@@ -1,6 +1,8 @@
-# References
+# ROM patch and disc format specifications: BPS, IPS, xdelta, PPF, and CHD
 
-This page lists format specifications and implementations used to check rom-weaver. Where a format has no stable specification, the linked implementation and compatibility tests define the behavior rom-weaver follows.
+This page lists the format specifications and implementations used to check rom-weaver.
+
+<a id="references"></a> Where a format has no stable specification, the linked implementation and compatibility tests define the behavior rom-weaver follows.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -78,6 +80,7 @@ This page lists format specifications and implementations used to check rom-weav
 - XZ format specification: <https://tukaani.org/xz/format.html>
 - Zstandard format: RFC 8878 <https://datatracker.ietf.org/doc/html/rfc8878>
 - CHD tooling/docs (`chdman`): <https://docs.mamedev.org/tools/chdman.html>
+- Z3DS (no formal spec; the Azahar implementation defines the header): the compression CLI at <https://github.com/azahar-emu/azahar/blob/master/src/citra_cli/compression_cli.cpp> and the loaders that report `underlying_magic` (`NCSD`, `NCCH`, `CIA\0`, `3DSX`) in <https://github.com/azahar-emu/azahar/tree/master/src/core/loader>
 
 ## Quick mapping for `rom-weaver` patch families
 

@@ -1,7 +1,5 @@
 use super::*;
 
-use super::bundle_apply::BundleApplyResolution;
-use super::bundle_parse::{bundle_validation, normalized_member_path};
 use super::cheats_apply::CheatIpsRequest;
 use super::patch_apply_disc::DiscContext;
 use super::patch_basis_decision::ChecksumBasisProof;
@@ -9,21 +7,15 @@ use super::patch_commands::{
     DiscoveredPatchApplySidecars, PatchApplyProgressSink, PatchApplyProgressTracker,
     patch_progress_segment_start,
 };
+use super::weave_apply::WeaveApplyResolution;
+use super::weave_parse::{normalized_member_path, weave_validation};
+use crate::path_access::paths_refer_to_same_file;
 
 use rom_weaver_patches::basis_probe::PatchBasis;
 
 mod chain_loop;
 mod run;
 mod step_plan;
-
-pub(super) fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
-    left == right
-        || matches!(
-            (fs::canonicalize(left), fs::canonicalize(right)),
-            (Ok(left), Ok(right)) if left == right
-        )
-        || native_file_identity_matches(left, right)
-}
 
 #[cfg(test)]
 mod cheat_ordering_tests {
@@ -165,7 +157,7 @@ mod cheat_ordering_tests {
 
         assert_eq!(status, OperationStatus::Failed);
         assert!(
-            labels.contains("bundle patch targets require one resolved file per selected patch"),
+            labels.contains("weave patch targets require one resolved file per selected patch"),
             "{labels}"
         );
     }
@@ -184,7 +176,7 @@ mod cheat_ordering_tests {
 
         assert_eq!(status, OperationStatus::Failed);
         assert!(
-            labels.contains("bundle patch targets require one resolved file per selected patch"),
+            labels.contains("weave patch targets require one resolved file per selected patch"),
             "{labels}"
         );
     }
@@ -325,7 +317,7 @@ fn validate_patch_step_selectors(steps: &[PatchApplyStepMetadata]) -> Result<()>
                 continue;
             };
             match selector {
-                BundlePatchInput::Rom { rom, member } => {
+                WeavePatchInput::Rom { rom, member } => {
                     if !rom {
                         return Err(RomWeaverError::Validation(format!(
                             "patch {kind} at index {index} has rom=false"
@@ -339,7 +331,7 @@ fn validate_patch_step_selectors(steps: &[PatchApplyStepMetadata]) -> Result<()>
                         )));
                     }
                 }
-                BundlePatchInput::Patch { patch, member } => {
+                WeavePatchInput::Patch { patch, member } => {
                     if patch.trim().is_empty() || !producers.contains(patch) {
                         return Err(RomWeaverError::Validation(format!(
                             "patch {kind} at index {index} must reference an earlier patch ID"
@@ -369,12 +361,12 @@ fn validate_patch_step_selectors(steps: &[PatchApplyStepMetadata]) -> Result<()>
 fn validate_resolved_patch_apply_step_metadata(
     steps: &[PatchApplyStepMetadata],
     resolved_patch_count: usize,
-    bundle_step_metadata_selected: bool,
+    weave_step_metadata_selected: bool,
     direct_has_step_selectors: bool,
     direct_selectors_align: bool,
     thread_execution: &Option<ThreadExecution>,
 ) -> std::result::Result<(), Box<OperationReport>> {
-    let has_step_selectors = if bundle_step_metadata_selected {
+    let has_step_selectors = if weave_step_metadata_selected {
         !steps.is_empty()
     } else {
         direct_has_step_selectors
@@ -383,13 +375,13 @@ fn validate_resolved_patch_apply_step_metadata(
         return Ok(());
     }
     if steps.len() != resolved_patch_count
-        || (!bundle_step_metadata_selected && !direct_selectors_align)
+        || (!weave_step_metadata_selected && !direct_selectors_align)
     {
         return Err(Box::new(OperationReport::failed(
             OperationFamily::Patch,
             None,
             "prepare",
-            "bundle patch targets require one resolved file per selected patch",
+            "weave patch targets require one resolved file per selected patch",
             thread_execution.clone(),
         )));
     }
@@ -404,13 +396,13 @@ fn validate_resolved_patch_apply_step_metadata(
     })
 }
 
-/// Direct JSON/WASM selectors bypass bundle parsing, so normalize their member
+/// Direct JSON/WASM selectors bypass weave parsing, so normalize their member
 /// keys before they become lane-map keys. Invalid values remain for the shared
 /// validator to report with the command's normal error shape.
-fn normalize_patch_step_member_selectors(selectors: &mut [Option<BundlePatchInput>]) {
+fn normalize_patch_step_member_selectors(selectors: &mut [Option<WeavePatchInput>]) {
     for selector in selectors.iter_mut().flatten() {
         let member = match selector {
-            BundlePatchInput::Rom { member, .. } | BundlePatchInput::Patch { member, .. } => member,
+            WeavePatchInput::Rom { member, .. } | WeavePatchInput::Patch { member, .. } => member,
         };
         if let Some(value) = member
             && let Ok(normalized) = normalized_member_path(value, "patch member")
@@ -428,8 +420,8 @@ struct DirectPatchStepSelectors {
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct PatchApplyStepMetadata {
-    pub(super) input: Option<BundlePatchInput>,
-    pub(super) target: Option<BundlePatchInput>,
+    pub(super) input: Option<WeavePatchInput>,
+    pub(super) target: Option<WeavePatchInput>,
     pub(super) id: Option<String>,
     pub(super) verification: Option<patch_plan::PatchStepVerification>,
     pub(super) cli_basis: Option<PatchBasisMode>,
@@ -449,8 +441,8 @@ struct PatchApplyStep {
 }
 
 fn prepare_direct_patch_step_selectors(
-    mut inputs: Vec<Option<BundlePatchInput>>,
-    mut targets: Vec<Option<BundlePatchInput>>,
+    mut inputs: Vec<Option<WeavePatchInput>>,
+    mut targets: Vec<Option<WeavePatchInput>>,
     ids: Vec<String>,
     patch_count: usize,
 ) -> DirectPatchStepSelectors {
@@ -533,31 +525,16 @@ pub(super) fn warn_on_rom_name_mismatch(
     warn!(
         expected_rom_name = expected,
         actual_rom_name = actual,
-        "bundle ROM name mismatch; continuing because file-name checks are advisory"
+        "weave ROM name mismatch; continuing because file-name checks are advisory"
     );
     Some(format!(
-        "bundle ROM name mismatch: expected `{expected}`, found `{actual}`; file-name checks are advisory"
+        "weave ROM name mismatch: expected `{expected}`, found `{actual}`; file-name checks are advisory"
     ))
 }
 
-// same-file compares dev/inode on Unix and volume serial + file index on
-// Windows. The Windows half cannot be written against std on stable: the
-// MetadataExt equivalents are still unstable behind `windows_by_handle`
-// (rust-lang/rust#63010), which is why the previous hand-rolled cfg(windows)
-// branch never compiled.
-#[cfg(not(target_arch = "wasm32"))]
-fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
-    same_file::is_same_file(left, right).unwrap_or(false)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
-    false
-}
-
 /// Snapshot of a resolved apply, captured before `args` moves into the run, so
-/// `--emit-bundle` can describe exactly what was applied.
-struct EmitBundleInputs {
+/// `--emit-weave` can describe exactly what was applied.
+struct EmitWeaveInputs {
     input: PathBuf,
     patches: Vec<PathBuf>,
     steps: Vec<PatchApplyStepMetadata>,
@@ -565,7 +542,7 @@ struct EmitBundleInputs {
     output: Option<PathBuf>,
     threads: ThreadBudget,
     /// The cheat selection this run applied, filled in after the apply.
-    cheats: Vec<BundleCheatEntry>,
+    cheats: Vec<WeaveCheatEntry>,
 }
 
 struct PatchApplyPrepareChainInputs<'a> {
@@ -580,8 +557,19 @@ struct PatchApplyPrepareChainInputs<'a> {
     cached_input_checksums: &'a BTreeMap<String, String>,
     expected_input_size: Option<u64>,
     repair_checksum: bool,
+    /// The transformed ROM form the weave `rom.checks` matched; it settles
+    /// the header and N64 decision only when the patch gives no clue.
+    weave_rom_form: Option<patch_plan::BaseRepresentation>,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+}
+
+/// What the automatic header decision weighs for the first patch.
+struct AutoHeaderEvidence<'a> {
+    expected_input_checksums: &'a BTreeMap<String, String>,
+    cached_input_checksums: &'a BTreeMap<String, String>,
+    /// The weave `rom.checks` matched only the header-stripped bytes.
+    weave_rom_headerless: bool,
 }
 
 struct PatchApplyPreparedChain {
@@ -656,7 +644,43 @@ impl<'a> PatchSelectors<'a> {
 }
 
 impl CliApp {
+    /// Patch handlers seek within and size the ROM, so a pipe or device input would read as empty
+    /// or fail mid-apply. Returns the failure report for such an input.
+    pub(super) fn unseekable_rom_input_failure(
+        command: &str,
+        input: &Path,
+    ) -> Option<OperationReport> {
+        let metadata = fs::metadata(input).ok()?;
+        if metadata.is_file() || metadata.is_dir() {
+            return None;
+        }
+        debug!(command, input = %input.display(), "rejected a non-regular ROM input");
+        Some(OperationReport::failed(
+            OperationFamily::Patch,
+            None,
+            "validate",
+            format!(
+                "{command} input `{}` is not a regular file; patches need a seekable ROM, so write the stream to a file first",
+                input.display()
+            ),
+            None,
+        ))
+    }
+
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+        if args.input == Path::new("-") {
+            let report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "patch apply does not read from stdin; pass a file path".to_string(),
+                None,
+            );
+            return self.finish("patch-apply", report);
+        }
+        if let Some(report) = Self::unseekable_rom_input_failure("patch apply", &args.input) {
+            return self.finish("patch-apply", report);
+        }
         if args.dry_run {
             let command = Commands::Patch(PatchCommands::Apply(Box::new(args.clone())));
             if let Some(outcome) = self.plan_dry_run(&command) {
@@ -670,9 +694,9 @@ impl CliApp {
             }
             let report = self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
-                bundle_resolution: None,
+                weave_resolution: None,
                 original_input,
-                local_bundle: None,
+                local_weave: None,
                 final_output: &mut None,
                 emit_steps: None,
                 applied_cheats: &mut Vec::new(),
@@ -689,7 +713,7 @@ impl CliApp {
             patch_filter,
             patch_count = args.patches.len(),
             output = ?args.output,
-            bundle = ?args.bundle,
+            weave = ?args.bundle,
             with_patches = args.with_patches.len(),
             without_patches = args.without_patches.len(),
             no_extract = args.no_extract,
@@ -713,16 +737,16 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-apply command"
         );
-        // The bundle context owns the temp namespace for bundle-extracted
+        // The weave context owns the temp namespace for weave-extracted
         // archive members, so it must outlive the whole apply.
         let mut args = args;
         let original_input = args.input.clone();
-        let local_bundle = args.bundle.as_ref().filter(|path| path.exists()).cloned();
-        let bundle_context = self.context(args.threads);
-        let bundle_resolution = match self.resolve_bundle_apply(&mut args, &bundle_context) {
+        let local_weave = args.bundle.as_ref().filter(|path| path.exists()).cloned();
+        let weave_context = self.context(args.threads);
+        let weave_resolution = match self.resolve_weave_apply(&mut args, &weave_context) {
             Ok(resolution) => resolution,
             Err(error) => {
-                let thread_execution = bundle_context.single_thread_execution();
+                let thread_execution = weave_context.single_thread_execution();
                 return self.finish(
                     "patch-apply",
                     OperationReport::failed_with_error(
@@ -735,16 +759,23 @@ impl CliApp {
                 );
             }
         };
+        // A ZIP/7z holding a `.dcp` applies like the bare `.dcp`: route on the resolved name.
+        let zipped_dcp_temp_paths = if weave_resolution.is_none() && args.emit_bundle.is_none() {
+            self.unwrap_zipped_dcp_patch(&mut args, &weave_context)
+        } else {
+            Vec::new()
+        };
         if let Some(outcome) = self.validate_patch_apply_output_preflight(
             &args,
-            bundle_resolution.as_ref(),
+            weave_resolution.as_ref(),
             &original_input,
-            local_bundle.as_deref(),
+            local_weave.as_deref(),
         ) {
+            Self::cleanup_temp_paths(&zipped_dcp_temp_paths);
             return outcome;
         }
         let emit_bundle = args.emit_bundle.clone();
-        let mut emit_steps = bundle_resolution
+        let mut emit_steps = weave_resolution
             .as_ref()
             .map(|resolution| resolution.steps.clone())
             .unwrap_or_else(|| {
@@ -762,11 +793,11 @@ impl CliApp {
             step.emit_header = args.patch_header.get(index).copied();
             step.emit_basis = args.patch_basis.get(index).copied();
         }
-        let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
+        let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitWeaveInputs {
             input: args.input.clone(),
             patches: args.patches.clone(),
             steps: emit_steps,
-            default_basis: bundle_resolution
+            default_basis: weave_resolution
                 .as_ref()
                 .map(|resolution| resolution.patch_basis)
                 .unwrap_or(args.default_patch_basis.unwrap_or(PatchBasisMode::Auto)),
@@ -776,27 +807,30 @@ impl CliApp {
         });
         let mut final_output = None;
         let mut applied_cheats = Vec::new();
-        let bundle_warnings = bundle_resolution
+        let weave_warnings = weave_resolution
             .as_ref()
             .map(|resolution| resolution.warnings.clone())
             .unwrap_or_default();
         let mut report = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
-            let expected_rom_name = bundle_resolution
+            let expected_rom_name = weave_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref());
-            self.run_dcp_apply(args, expected_rom_name)
+            let mut sources = vec![original_input];
+            sources.extend(local_weave);
+            self.run_dcp_apply(args, expected_rom_name, &sources)
         } else {
             self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
-                bundle_resolution,
+                weave_resolution,
                 original_input,
-                local_bundle,
+                local_weave,
                 final_output: &mut final_output,
                 emit_steps: emit_inputs.as_mut().map(|inputs| &mut inputs.steps),
                 applied_cheats: &mut applied_cheats,
             })
         };
-        Self::append_report_warnings(&mut report, bundle_warnings);
+        Self::cleanup_temp_paths(&zipped_dcp_temp_paths);
+        Self::append_report_warnings(&mut report, weave_warnings);
         // A failed sidecar MUST preserve the completed ROM and report its warning
         // before the terminal result is emitted.
         if let (Some(emit_path), Some(mut inputs)) = (emit_bundle, emit_inputs)
@@ -804,7 +838,7 @@ impl CliApp {
         {
             inputs.output = final_output.or(inputs.output);
             inputs.cheats = applied_cheats;
-            match self.emit_apply_bundle(&emit_path, inputs) {
+            match self.emit_apply_weave(&emit_path, inputs) {
                 Ok(result) => {
                     Self::append_report_warnings(&mut report, result.warnings);
                     let mut paths = Self::emitted_file_detail_paths(report.details.as_ref());
@@ -814,13 +848,13 @@ impl CliApp {
                 Err(error) => {
                     tracing::debug!(
                         %error,
-                        bundle = %emit_path.display(),
-                        "apply succeeded but --emit-bundle failed",
+                        weave = %emit_path.display(),
+                        "apply succeeded but --emit-weave failed",
                     );
                     Self::append_report_warnings(
                         &mut report,
                         [format!(
-                            "apply succeeded but --emit-bundle `{}` failed: {error}",
+                            "apply succeeded but --emit-weave `{}` failed: {error}",
                             emit_path.display()
                         )],
                     );
@@ -830,17 +864,17 @@ impl CliApp {
         self.finish("patch-apply", report)
     }
 
-    /// Write a bundle describing a just-completed apply. Reuses
-    /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
-    /// `bundle create` would write for the same inputs.
-    fn emit_apply_bundle(
+    /// Write a weave describing a just-completed apply. Reuses
+    /// `weave_create_inner`, so the emitted weave is byte-for-byte what
+    /// `weave create` would write for the same inputs.
+    fn emit_apply_weave(
         &self,
         emit_path: &Path,
-        inputs: EmitBundleInputs,
-    ) -> Result<BundleCreateResult> {
+        inputs: EmitWeaveInputs,
+    ) -> Result<WeaveCreateResult> {
         if inputs.patches.is_empty() && inputs.cheats.is_empty() {
             return Err(RomWeaverError::Validation(
-                "--emit-bundle needs at least one applied --patch or --cheat".to_string(),
+                "--emit-weave needs at least one applied --patch or --cheat".to_string(),
             ));
         }
         let context = self.context(inputs.threads);
@@ -848,14 +882,14 @@ impl CliApp {
             .patches
             .iter()
             .zip(&inputs.steps)
-            .map(|(path, step)| BundleCreatePatchSpec {
+            .map(|(path, step)| WeaveCreatePatchSpec {
                 path: path.clone(),
                 id: step.id.clone(),
                 input: step.input.clone(),
                 target: step.target.clone(),
                 header: step.emit_header,
                 basis: step.emit_basis.and_then(PatchBasisMode::declared),
-                ..BundleCreatePatchSpec::default()
+                ..WeaveCreatePatchSpec::default()
             })
             .collect();
         let output = inputs.output.as_deref().filter(|path| path.is_file());
@@ -873,7 +907,7 @@ impl CliApp {
             .and_then(|path| path.file_name())
             .and_then(|name| name.to_str())
             .map(str::to_owned);
-        let create = BundleCreateCommand {
+        let create = WeaveCreateCommand {
             default_patch_basis: Some(inputs.default_basis),
             rom: Some(inputs.input),
             output: emit_path.to_path_buf(),
@@ -882,14 +916,14 @@ impl CliApp {
             threads: inputs.threads,
             patch_specs,
             cheats: inputs.cheats,
-            ..BundleCreateCommand::default()
+            ..WeaveCreateCommand::default()
         };
-        let result = self.bundle_create_inner(&create, &context)?;
-        trace!(bundle = %emit_path.display(), "emitted bundle from apply");
+        let result = self.weave_create_inner(&create, &context)?;
+        trace!(weave = %emit_path.display(), "emitted weave from apply");
         Ok(result)
     }
 
-    fn update_emit_bundle_bases(
+    fn update_emit_weave_bases(
         emit_steps: Option<&mut Vec<PatchApplyStepMetadata>>,
         steps: &[PatchApplyStep],
     ) {
@@ -952,9 +986,9 @@ impl CliApp {
         )
     }
 
-    /// Fold the bundle's declared checks and then the first patch's file name
+    /// Fold the weave's declared checks and then the first patch's file name
     /// into the expected input/output requirements. Precedence runs CLI, then
-    /// bundle, then file name, so the bundle merges first and the file name
+    /// weave, then file name, so the weave merges first and the file name
     /// only fills what is still unset. Returns the first conflicting report.
     fn merge_patch_apply_requirements(
         &self,
@@ -962,7 +996,7 @@ impl CliApp {
     ) -> Option<OperationReport> {
         let MergePatchApplyRequirementsInputs {
             ignore_checksum_validation,
-            bundle_resolution,
+            weave_resolution,
             is_disc,
             patches,
             expected_input_checksums,
@@ -973,8 +1007,8 @@ impl CliApp {
         if ignore_checksum_validation {
             return None;
         }
-        if let Some(resolution) = bundle_resolution
-            && let Some(report) = self.merge_patch_apply_bundle_requirements(
+        if let Some(resolution) = weave_resolution
+            && let Some(report) = self.merge_patch_apply_weave_requirements(
                 resolution,
                 is_disc,
                 expected_input_checksums,
@@ -1001,9 +1035,9 @@ impl CliApp {
         None
     }
 
-    fn merge_patch_apply_bundle_requirements(
+    fn merge_patch_apply_weave_requirements(
         &self,
-        resolution: &BundleApplyResolution,
+        resolution: &WeaveApplyResolution,
         is_disc: bool,
         expected_input_checksums: &mut BTreeMap<String, String>,
         expected_input_size: &mut Option<u64>,
@@ -1027,7 +1061,7 @@ impl CliApp {
         if is_disc {
             trace!(
                 source = %source_label,
-                "bundle output checks skipped: disc apply emits no single checksummable output"
+                "weave output checks skipped: disc apply emits no single checksummable output"
             );
             return None;
         }
@@ -1062,14 +1096,14 @@ impl CliApp {
     fn validate_patch_apply_output_preflight(
         &self,
         args: &PatchApplyCommand,
-        bundle_resolution: Option<&BundleApplyResolution>,
+        weave_resolution: Option<&WeaveApplyResolution>,
         original_input: &Path,
-        local_bundle: Option<&Path>,
+        local_weave: Option<&Path>,
     ) -> Option<AppRunOutcome> {
-        // Bundle-driven runs retain their existing output requirement. DCP
+        // Weave-driven runs retain their existing output requirement. DCP
         // rebuilds a disc sheet and also needs an explicit destination; plain
         // file applies can infer one after the ROM leaf is selected.
-        let requires_explicit_output = bundle_resolution.is_some()
+        let requires_explicit_output = weave_resolution.is_some()
             || args.patches.iter().any(|patch| Self::is_dcp_patch(patch));
         if args.output.is_none() && requires_explicit_output {
             let thread_execution = self.context(args.threads).single_thread_execution();
@@ -1080,9 +1114,9 @@ impl CliApp {
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        bundle_validation(
+                        weave_validation(
                             "bundle.output.missing",
-                            "patch apply requires --output or a bundle output.name",
+                            "patch apply requires --output or a weave output.name",
                         )
                         .to_string(),
                         thread_execution,
@@ -1095,7 +1129,7 @@ impl CliApp {
             &args.input,
             &args.patches,
             original_input,
-            local_bundle,
+            local_weave,
             output,
         )?;
         let thread_execution = self.context(args.threads).single_thread_execution();
@@ -1124,11 +1158,28 @@ impl CliApp {
             .map(|_| ())
     }
 
+    pub(super) fn ensure_patch_output_preserves_sources(
+        output: &Path,
+        sources: &[PathBuf],
+    ) -> Result<()> {
+        if let Some(source) = sources
+            .iter()
+            .find(|source| paths_refer_to_same_file(source, output))
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "patch apply output `{}` and source `{}` resolve to the same file; choose a different --output path",
+                output.display(),
+                source.display()
+            )));
+        }
+        Ok(())
+    }
+
     fn patch_apply_output_alias_message(
         input: &Path,
         patches: &[PathBuf],
         original_input: &Path,
-        local_bundle: Option<&Path>,
+        local_weave: Option<&Path>,
         output: &Path,
     ) -> Option<String> {
         if paths_refer_to_same_file(original_input, output)
@@ -1148,12 +1199,12 @@ impl CliApp {
                 patch.display()
             ));
         }
-        local_bundle
-            .filter(|bundle| paths_refer_to_same_file(bundle, output))
-            .map(|bundle| {
+        local_weave
+            .filter(|weave| paths_refer_to_same_file(weave, output))
+            .map(|weave| {
                 format!(
-                    "patch apply output and bundle source `{}` resolve to the same file; choose a different --output path",
-                    bundle.display()
+                    "patch apply output and weave source `{}` resolve to the same file; choose a different --output path",
+                    weave.display()
                 )
             })
     }
@@ -1373,7 +1424,7 @@ impl CliApp {
             .create_new(true)
             .open(destination)?;
         let copy_result = (|| {
-            io::copy(&mut source_file, &mut destination_file)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut destination_file)?;
             destination_file.sync_all()
         })();
         drop(destination_file);
@@ -1421,7 +1472,7 @@ impl CliApp {
         Self::copy_file_create_new(staged_path, destination_path)
     }
 
-    fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
+    pub(super) fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
         let mut source_file = File::open(source)?;
         let (staged_path, mut staged_file) = loop {
             let counter =
@@ -1448,7 +1499,7 @@ impl CliApp {
             }
         };
         let publish_result = (|| -> io::Result<()> {
-            io::copy(&mut source_file, &mut staged_file)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut source_file, &mut staged_file)?;
             staged_file.sync_all()?;
             drop(staged_file);
             Self::install_staged_no_overwrite(&staged_path, destination)
@@ -1542,6 +1593,7 @@ impl CliApp {
             compression_plan.codec.as_deref().unwrap_or("default")
         );
         let (compress_report, codec_label) = match self.run_patch_apply_compression(
+            "patch-apply",
             &compression_plan,
             vec![archive_input],
             disc_track_overrides,
@@ -1618,6 +1670,7 @@ impl CliApp {
             cached_input_checksums,
             expected_input_size,
             repair_checksum,
+            weave_rom_form,
             context,
             temp_paths,
         } = inputs;
@@ -1651,6 +1704,23 @@ impl CliApp {
         let first_patch = resolved_patches
             .first()
             .map(|patch| patch.resolved.as_path());
+        // Any declared input checksum or embedded source check, of any
+        // algorithm, is the patch's own layout evidence and outranks the form
+        // the weave ROM checks matched.
+        let weave_rom_form = weave_rom_form.filter(|form| {
+            let own_evidence = !expected_input_checksums.is_empty()
+                || self
+                    .embedded_input_states(first_patch, context)
+                    .iter()
+                    .any(patch_plan::PlanState::has_checksum_evidence);
+            if own_evidence {
+                debug!(
+                    ?form,
+                    "weave ROM form ignored: the first patch carries its own input checks"
+                );
+            }
+            !own_evidence
+        });
         let (strip_header, inferred_basis_note) =
             match chain_header_modes.first().copied().unwrap_or_default() {
                 PatchApplyHeaderMode::Strip => (true, None),
@@ -1658,8 +1728,12 @@ impl CliApp {
                 PatchApplyHeaderMode::Auto => self.auto_header_strip_decision(
                     resolved_input,
                     first_patch,
-                    expected_input_checksums,
-                    cached_input_checksums,
+                    AutoHeaderEvidence {
+                        expected_input_checksums,
+                        cached_input_checksums,
+                        weave_rom_headerless: weave_rom_form
+                            .is_some_and(|form| form.headerless == Some(true)),
+                    },
                     context,
                     temp_paths,
                 ),
@@ -1681,7 +1755,8 @@ impl CliApp {
                     N64AutoInference::ChecksumOnly
                 },
                 first_patch,
-                expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
+                expected_input_checksums,
+                weave_rom_n64_order: weave_rom_form.and_then(|form| form.n64_byte_order),
                 repair_checksum,
                 context,
                 temp_paths,
@@ -1701,7 +1776,7 @@ impl CliApp {
         let mut checksum_verification_labels = Vec::from_iter(inferred_basis_note);
         checksum_verification_labels.extend(n64_order_note);
         if let Some(expected_size) = expected_input_size {
-            let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
+            let label = Self::validate_patch_size(&apply_input, "input", Some(expected_size), None)
                 .map_err(|error| {
                     Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
@@ -1750,6 +1825,14 @@ impl CliApp {
                     context.single_thread_execution(),
                 ))
             })?;
+            // The values just verified equal the input's real checksums, so
+            // base planning can reuse them instead of hashing the input again.
+            trace!(
+                input = %apply_input.display(),
+                algorithms = ?expected_input_checksums.keys().collect::<Vec<_>>(),
+                "seeding verified input checksums"
+            );
+            context.seed_checksums(&apply_input, expected_input_checksums);
             checksum_verification_labels.push(label);
         }
 
@@ -1950,6 +2033,9 @@ impl CliApp {
                 decoration.context,
             )
             .map_err(|error| {
+                // The patched ROM failed the caller's --expect-out gate, so do
+                // not leave a ROM they asked us to reject sitting at the output.
+                let _ = fs::remove_file(decoration.raw_ready_output);
                 Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     report.format.clone(),
@@ -1966,6 +2052,12 @@ impl CliApp {
                 report.label,
                 checksum_verification_labels.join("; ")
             );
+            let warnings = checksum_verification_labels
+                .iter()
+                .filter_map(|label| label.strip_prefix("warning="))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            Self::append_report_warnings(report, warnings);
         }
         Ok(())
     }
@@ -2007,6 +2099,59 @@ impl CliApp {
         Ok(staged_path)
     }
 
+    /// When the single `--patch` is an archive whose resolved patch is a `.dcp`, swap the extracted
+    /// `.dcp` in as the patch so the DCP route handles it. `context` owns the temp namespace and must outlive the apply. Returns the temp paths to clean up
+    /// (empty when nothing was swapped; resolution errors fall through to the normal path).
+    fn unwrap_zipped_dcp_patch(
+        &self,
+        args: &mut PatchApplyCommand,
+        context: &OperationContext,
+    ) -> Vec<PathBuf> {
+        let [patch] = args.patches.as_slice() else {
+            return Vec::new();
+        };
+        if args.no_extract || Self::is_dcp_patch(patch) {
+            return Vec::new();
+        }
+        let mut temp_paths = Vec::new();
+        let resolved = self.resolve_patches(
+            std::slice::from_ref(patch),
+            PatchSelectors {
+                select: &args.select,
+                per_patch: &args.patch_select,
+            },
+            context,
+            AutoExtractResolutionFlags {
+                no_extract: false,
+                no_ignore: args.no_ignore,
+                kind_filter: Self::archive_entry_kind_filter(false, args.patch_filter()),
+                stop_on_single_payload_codec: false,
+            },
+            PatchResolveLabels {
+                command: "patch-apply",
+                noun: "patch apply",
+                temp_prefix: "patch-apply-patch-extract",
+            },
+            &mut temp_paths,
+        );
+        match resolved {
+            Ok(list) => match list.patches.as_slice() {
+                [only] if Self::is_dcp_patch(&only.resolved) => {
+                    args.patches[0] = only.resolved.clone();
+                }
+                _ => {
+                    Self::cleanup_temp_paths(&temp_paths);
+                    temp_paths.clear();
+                }
+            },
+            Err(_) => {
+                Self::cleanup_temp_paths(&temp_paths);
+                temp_paths.clear();
+            }
+        }
+        temp_paths
+    }
+
     fn is_dcp_patch(path: &Path) -> bool {
         path.extension()
             .and_then(|extension| extension.to_str())
@@ -2018,18 +2163,24 @@ impl CliApp {
     /// in the patch, under whatever algorithm the patch offers - proves the
     /// patch was authored against the headerless bytes
     /// ([`Self::checksum_basis_proof`]). A patch with no checksum to prove it
-    /// falls back to structural evidence ([`Self::structural_strip_decision`]);
-    /// any remaining doubt keeps the input as-is. Later chain steps decide per
+    /// falls back to structural evidence, record geometry then the ROM-header
+    /// tiebreak ([`Self::structural_strip_decision`]). When nothing decides,
+    /// a weave whose `rom.checks` matched only the headerless bytes strips the
+    /// header; otherwise the input stays as-is. Later chain steps decide per
     /// patch in [`Self::chain_header_transition`].
     fn auto_header_strip_decision(
         &self,
         resolved_input: &Path,
         first_resolved_patch: Option<&Path>,
-        expected_input_checksums: &BTreeMap<String, String>,
-        cached_input_checksums: &BTreeMap<String, String>,
+        evidence: AutoHeaderEvidence<'_>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> (bool, Option<String>) {
+        let AutoHeaderEvidence {
+            expected_input_checksums,
+            cached_input_checksums,
+            weave_rom_headerless,
+        } = evidence;
         let Ok(header_match) = Self::detect_strippable_rom_header(resolved_input) else {
             trace!(
                 input = %resolved_input.display(),
@@ -2076,25 +2227,44 @@ impl CliApp {
             header = ?header_match.header,
             "auto header: strippable header present but no required input checksum; falling back to structural evidence"
         );
-        let Some(patch) = first_resolved_patch else {
-            return (false, None);
-        };
-        match self.structural_strip_decision(
-            resolved_input,
-            patch,
-            header_match,
-            context,
-            temp_paths,
-        ) {
-            Some((strip, note)) => (strip, Some(note)),
-            None => (false, None),
+        let header = header_match.header;
+        if let Some(patch) = first_resolved_patch
+            && let Some((strip, note)) = self.structural_strip_decision(
+                resolved_input,
+                patch,
+                header_match,
+                context,
+                temp_paths,
+            )
+        {
+            return (strip, Some(note));
         }
+        // Nothing from the patch decides. On the ROM the weave was recorded
+        // from, the patch could only meet these headerless bytes.
+        if weave_rom_headerless {
+            debug!(
+                ?header,
+                header_bytes = header_len,
+                "auto header: the weave ROM checks match the headerless bytes; stripping header before apply"
+            );
+            return (
+                true,
+                Some(
+                    "patch header basis taken as headerless (the weave ROM checks match the header-stripped ROM)"
+                        .to_string(),
+                ),
+            );
+        }
+        trace!(input = %resolved_input.display(), "auto header: no evidence decides; keeping input as-is");
+        (false, None)
     }
 
     /// Resolve the N64 order a patch should see. Auto acts on checksum proof
-    /// first; a patch with no source CRC32 falls back to structural evidence
-    /// ([`Self::structural_n64_order_decision`]) when the caller allows it, and
-    /// any remaining doubt keeps the current bytes.
+    /// first; a patch with no source checksum falls back to structural evidence
+    /// ([`Self::structural_n64_order_decision`]: record structure, then the
+    /// boot-checksum tiebreak) when the caller allows it. When nothing decides,
+    /// the order the weave `rom.checks` matched is used if there is one;
+    /// otherwise the current bytes stay.
     pub(super) fn resolve_patch_n64_target(
         &self,
         request: N64TargetRequest<'_>,
@@ -2104,7 +2274,8 @@ impl CliApp {
         let N64TargetRequest {
             input,
             patch,
-            expected_crc32,
+            expected_input_checksums,
+            weave_rom_order,
             mode,
             inference,
         } = request;
@@ -2121,20 +2292,30 @@ impl CliApp {
         let (target, inferred_note) = match mode {
             PatchN64ByteOrderMode::Keep => (source, None),
             PatchN64ByteOrderMode::Auto => {
-                let required_crc32 = expected_crc32.map(str::to_owned).or_else(|| {
-                    patch.and_then(|path| self.embedded_patch_source_crc32(path, context))
-                });
-                match required_crc32 {
-                    // A checksum that matches no variant means the input is not
-                    // the patch's base at all. Structural evidence assumes it is,
-                    // so proof that says otherwise ends the decision.
-                    Some(required) => (
-                        Self::resolve_n64_byte_order_for_crc32(input, &required, context)?
+                let required = if expected_input_checksums.is_empty() {
+                    self.embedded_input_states(patch, context)
+                } else {
+                    vec![patch_plan::PlanState {
+                        checksums: expected_input_checksums.clone(),
+                        size: None,
+                    }]
+                };
+                match required.is_empty() {
+                    false => (
+                        Self::resolve_n64_byte_order_for_checks(input, &required, context)?
                             .unwrap_or(source),
                         None,
                     ),
-                    None => self.infer_patch_n64_target(
-                        input, patch, source, inference, context, temp_paths,
+                    true => self.infer_patch_n64_target(
+                        N64Inference {
+                            input,
+                            patch,
+                            source,
+                            inference,
+                            weave_rom_order,
+                        },
+                        context,
+                        temp_paths,
                     ),
                 }
             }
@@ -2148,17 +2329,21 @@ impl CliApp {
     }
 
     /// The checksumless half of `auto`: structural evidence plus the note that
-    /// reports it, or the current order and no note when nothing separates the
-    /// three.
+    /// reports it. When nothing separates the three, the order the weave
+    /// `rom.checks` matched, with its note, or else the current order.
     fn infer_patch_n64_target(
         &self,
-        input: &Path,
-        patch: Option<&Path>,
-        source: N64ByteOrder,
-        inference: N64AutoInference,
+        request: N64Inference<'_>,
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> (N64ByteOrder, Option<String>) {
+        let N64Inference {
+            input,
+            patch,
+            source,
+            inference,
+            weave_rom_order,
+        } = request;
         let (N64AutoInference::Structural, Some(patch)) = (inference, patch) else {
             trace!(
                 input = %input.display(),
@@ -2172,15 +2357,44 @@ impl CliApp {
             trace!(
                 input = %input.display(),
                 patch = %patch.display(),
-                "auto n64: nothing separates the three orders; keeping the current one"
+                "auto n64: nothing separates the three orders"
             );
-            return (source, None);
+            // The weave was recorded from this order, so without evidence
+            // from the patch it beats keeping the current order.
+            if let Some(order) = weave_rom_order {
+                debug!(
+                    input = %input.display(),
+                    order = order.id(),
+                    "auto n64: the weave ROM checks match this byte order; converting before apply"
+                );
+                return (
+                    order,
+                    Some(format!(
+                        "patch N64 byte order taken as {} (the weave ROM checks match that form of the ROM)",
+                        order.id()
+                    )),
+                );
+            }
+            trace!(input = %input.display(), "auto n64: keeping the current order");
+            return (source, Self::n64_order_guess_warning(source));
         };
         let note = format!(
             "patch N64 byte order inferred as {} ({reason})",
-            target.label()
+            target.id()
         );
         (target, Some(note))
+    }
+
+    /// Keeping the input's order when no evidence separates the orders is a guess. Big-endian
+    /// is the common authoring order, so only a kept v64 or n64 input warns.
+    fn n64_order_guess_warning(source: N64ByteOrder) -> Option<String> {
+        if source == N64ByteOrder::BigEndian {
+            return None;
+        }
+        Some(format!(
+            "warning=N64 byte order could not be determined from the patch; assuming {} (the input's order). If the output is wrong, rerun with --n64-byte-order set to the order the patch was made for",
+            source.id()
+        ))
     }
 
     pub(super) fn transition_n64_byte_order(
@@ -2240,7 +2454,8 @@ impl CliApp {
                 N64TargetRequest {
                     input: current_input,
                     patch: Some(resolved_patch),
-                    expected_crc32: None,
+                    expected_input_checksums: &BTreeMap::new(),
+                    weave_rom_order: None,
                     mode,
                     inference: N64AutoInference::ChecksumOnly,
                 },
@@ -2271,6 +2486,49 @@ impl CliApp {
             to: original,
         });
         Ok(())
+    }
+
+    /// The ROM leaf path whose extension the output-extension check should
+    /// compare against. With an explicit output-header strip the written ROM is
+    /// headerless, so its conventional extension is the headerless counterpart
+    /// of the source's (SNES `.smc` becomes `.sfc`), matching what
+    /// `resolve_header_extension_swap` does for a requested `.smc` output.
+    /// Only a requested headerless extension switches the source; a requested
+    /// headered extension (`.smc`) keeps it so that swap still renames it.
+    /// Anything else keeps the source path unchanged.
+    pub(super) fn output_extension_source(
+        resolved_input: &Path,
+        output: &Path,
+        output_header: Option<PatchApplyOutputHeaderMode>,
+    ) -> PathBuf {
+        if output_header != Some(PatchApplyOutputHeaderMode::Strip) {
+            return resolved_input.to_path_buf();
+        }
+        let Ok(header_match) = Self::detect_strippable_rom_header(resolved_input) else {
+            return resolved_input.to_path_buf();
+        };
+        let headered = header_match.header.headered_extension();
+        let headerless = header_match.header.headerless_extension();
+        let source_matches_headered = resolved_input
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                headered
+                    .strip_prefix('.')
+                    .is_some_and(|from| extension.eq_ignore_ascii_case(from))
+            });
+        let output_matches_headerless = output
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                headerless
+                    .strip_prefix('.')
+                    .is_some_and(|to| extension.eq_ignore_ascii_case(to))
+            });
+        if headered == headerless || !source_matches_headered || !output_matches_headerless {
+            return resolved_input.to_path_buf();
+        }
+        resolved_input.with_extension(headerless.trim_start_matches('.'))
     }
 
     /// Adjust the requested output path when the final header state changes the
@@ -2603,6 +2861,7 @@ impl CliApp {
                     temp_prefix,
                 },
                 flags,
+                false,
             )?;
             if resolved_patch_extracted_archives > 0 {
                 let note = if patches.len() == 1 {
@@ -2666,6 +2925,16 @@ impl CliApp {
                     patch_label
                 ),
             ),
+            None if Self::is_dcp_patch(patch_path) || Self::is_dcp_patch(resolved_patch_path) => (
+                Some("DCP".to_string()),
+                format!(
+                    "patch {}/{}: {} is a Dreamcast DCP patch, which {}",
+                    index + 1,
+                    patch_count,
+                    patch_label,
+                    DCP_UNSUPPORTED_HERE
+                ),
+            ),
             None => (
                 None,
                 format!(
@@ -2685,6 +2954,16 @@ impl CliApp {
         )))
     }
 }
+
+/// Why a `.dcp` has no per-patch handler. A DCP rebuilds a GD-ROM filesystem from a `.cue`/`.gdi`
+/// disc instead of patching one ROM file, so it never goes through the generic preflight or chain.
+#[cfg(target_arch = "wasm32")]
+const DCP_UNSUPPORTED_HERE: &str = "is not supported in browser Apply yet; apply it with the \
+     native CLI (`rom-weaver patch apply`) using a Dreamcast .cue or .gdi input \
+     (https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch)";
+#[cfg(not(target_arch = "wasm32"))]
+const DCP_UNSUPPORTED_HERE: &str = "rebuilds a Dreamcast disc, so it cannot be validated or \
+     chained like a byte patch; apply it alone with a .cue or .gdi input using `patch apply`";
 
 /// Parsed-and-validated patch-apply inputs: the compression options and the
 /// three checksum maps (cache, expected-input, expected-output).
@@ -2746,52 +3025,77 @@ struct PatchApplyBaseInputs<'a> {
     prepared_headerless: Option<bool>,
     prepared_n64_byte_order: Option<N64ByteOrder>,
     original_n64_byte_order: Option<N64ByteOrder>,
+    /// Whether the first step reads these base bytes. A step that reads
+    /// another ROM member or patch output MUST NOT be verified against them.
+    first_step_reads_base: bool,
 }
 
-/// Merge JSON-wire per-step checks into bundle declarations. These values are
+/// Merge JSON-wire per-step checks into weave declarations. These values are
 /// authored requirements only; execution inputs are selected separately.
 fn merge_apply_step_declarations(
     steps: &mut Vec<PatchApplyStepMetadata>,
     input_checks: &[String],
     output_checks: &[String],
     patch_count: usize,
+    shared_basis: PatchBasisMode,
 ) -> Result<()> {
     if input_checks.is_empty() && output_checks.is_empty() {
         return Ok(());
     }
-    for (name, checks) in [
-        ("patch_input_check", input_checks),
-        ("patch_output_check", output_checks),
+    for (flag, checks) in [
+        ("--patch-input-check", input_checks),
+        ("--patch-output-check", output_checks),
     ] {
-        if checks.len() != patch_count {
+        if !checks.is_empty() && checks.len() != patch_count {
             return Err(RomWeaverError::Validation(format!(
-                "{name} must contain one value per patch (or be omitted); got {} value(s) for {patch_count} patch(es)",
+                "{flag} binds to the preceding --patch; got {} value(s) for {patch_count} patch(es)",
                 checks.len()
             )));
         }
     }
+    let check_at = |checks: &[String], index: usize| -> String {
+        checks.get(index).cloned().unwrap_or_default()
+    };
     if steps.is_empty() {
         steps.resize_with(patch_count, PatchApplyStepMetadata::default);
     } else if steps.len() != patch_count {
         return Err(RomWeaverError::Validation(
-            "bundle patch declarations do not align with the resolved patches".to_string(),
+            "weave patch declarations do not align with the resolved patches".to_string(),
         ));
     }
-    for index in 0..patch_count {
-        let verification = steps[index]
-            .verification
-            .get_or_insert_with(patch_plan::PatchStepVerification::default);
-        if !input_checks[index].trim().is_empty() {
+    for (index, step) in steps.iter_mut().enumerate() {
+        // A step no weave declared still takes the shared basis
+        // (--default-patch-basis); creating its verification here would
+        // otherwise read as a weave declaration and skip that basis.
+        let verification = step.verification.get_or_insert_with(|| {
+            let basis = shared_basis.declared();
+            trace!(
+                index,
+                ?basis,
+                "check flags: undeclared step takes the shared basis"
+            );
+            patch_plan::PatchStepVerification {
+                basis,
+                basis_source: basis.map(|_| PatchBasisSource::Declared),
+                ..patch_plan::PatchStepVerification::default()
+            }
+        });
+        verification.enforce_declared_checks = true;
+        let input_check = check_at(input_checks, index);
+        if !input_check.trim().is_empty() {
             let parsed =
-                parse_expect_tokens(&[input_checks[index].clone()], "patch_input_check", true)?;
+                crate::expect_tokens::parse_patch_check_value(&input_check, "--patch-input-check")?;
             verification.declared_input = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
             });
         }
-        if !output_checks[index].trim().is_empty() {
-            let parsed =
-                parse_expect_tokens(&[output_checks[index].clone()], "patch_output_check", true)?;
+        let output_check = check_at(output_checks, index);
+        if !output_check.trim().is_empty() {
+            let parsed = crate::expect_tokens::parse_patch_check_value(
+                &output_check,
+                "--patch-output-check",
+            )?;
             verification.declared_output = Some(patch_plan::PlanState {
                 checksums: parsed.checksums,
                 size: parsed.size,
@@ -2886,7 +3190,7 @@ fn database_cheat_stage_output(
     output
 }
 
-/// Which end of a bundle chain step a `BundlePatchInput` reference names. The
+/// Which end of a weave chain step a `WeavePatchInput` reference names. The
 /// two roles resolve identically and differ only in the validation codes and
 /// messages reported when a reference cannot be resolved.
 #[derive(Clone, Copy)]
@@ -2905,8 +3209,8 @@ impl ChainSourceRole {
 
     fn rom_member_message(self) -> &'static str {
         match self {
-            Self::Target => "target ROM member was not resolved from the bundle input",
-            Self::Input => "input ROM member was not resolved from the bundle input",
+            Self::Target => "target ROM member was not resolved from the weave input",
+            Self::Input => "input ROM member was not resolved from the weave input",
         }
     }
 
@@ -2937,17 +3241,17 @@ struct ChainSourceInputs<'a> {
 
 struct RunPatchApplyResolvedInputs<'a> {
     args: PatchApplyCommand,
-    bundle_resolution: Option<BundleApplyResolution>,
+    weave_resolution: Option<WeaveApplyResolution>,
     original_input: PathBuf,
-    local_bundle: Option<PathBuf>,
+    local_weave: Option<PathBuf>,
     final_output: &'a mut Option<PathBuf>,
     emit_steps: Option<&'a mut Vec<PatchApplyStepMetadata>>,
-    applied_cheats: &'a mut Vec<BundleCheatEntry>,
+    applied_cheats: &'a mut Vec<WeaveCheatEntry>,
 }
 
 struct MergePatchApplyRequirementsInputs<'a> {
     ignore_checksum_validation: bool,
-    bundle_resolution: Option<&'a BundleApplyResolution>,
+    weave_resolution: Option<&'a WeaveApplyResolution>,
     is_disc: bool,
     patches: &'a [PathBuf],
     expected_input_checksums: &'a mut BTreeMap<String, String>,
@@ -2960,10 +3264,10 @@ struct LaneVerificationInputs<'a> {
     index: usize,
     steps: &'a [PatchApplyStep],
     plan_target_lanes: bool,
-    lane_key: &'a Option<BundlePatchInput>,
-    lane_seeds: &'a BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput>,
+    lane_key: &'a Option<WeavePatchInput>,
+    lane_seeds: &'a BTreeMap<Option<WeavePatchInput>, ProducedPatchOutput>,
     lane_plans: &'a mut BTreeMap<
-        Option<BundlePatchInput>,
+        Option<WeavePatchInput>,
         BTreeMap<usize, patch_plan::PatchStepVerification>,
     >,
     shared_patch_basis: PatchBasisMode,
@@ -2976,7 +3280,8 @@ struct PreparePatchApplyInputInputs<'a> {
     n64_byte_order: PatchN64ByteOrderMode,
     inference: N64AutoInference,
     first_patch: Option<&'a Path>,
-    expected_crc32: Option<&'a str>,
+    expected_input_checksums: &'a BTreeMap<String, String>,
+    weave_rom_n64_order: Option<N64ByteOrder>,
     repair_checksum: bool,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
@@ -3000,9 +3305,23 @@ pub(super) enum N64AutoInference {
 pub(super) struct N64TargetRequest<'a> {
     pub(super) input: &'a Path,
     pub(super) patch: Option<&'a Path>,
-    pub(super) expected_crc32: Option<&'a str>,
+    pub(super) expected_input_checksums: &'a BTreeMap<String, String>,
+    /// The order of the form the weave `rom.checks` matched, used only when
+    /// neither a checksum nor the patch's record structure settles the order.
+    pub(super) weave_rom_order: Option<N64ByteOrder>,
     pub(super) mode: PatchN64ByteOrderMode,
     pub(super) inference: N64AutoInference,
+}
+
+/// What the checksumless half of `--n64-byte-order auto` weighs.
+struct N64Inference<'a> {
+    input: &'a Path,
+    patch: Option<&'a Path>,
+    source: N64ByteOrder,
+    inference: N64AutoInference,
+    /// The order of the form the weave `rom.checks` matched; used only when
+    /// the patch's record structure decides nothing.
+    weave_rom_order: Option<N64ByteOrder>,
 }
 
 /// The order the input is in, the order the patch needs, and how that was
@@ -3151,6 +3470,10 @@ impl CliApp {
                 .filter(|step| step.metadata.cli_basis.is_some())
                 .count();
             let lane_seed = lane_seeds.get(lane_key).expect("lane seed initialized");
+            // An explicit input replaces the lane seed at run time.
+            let first_step_reads_base = lane_steps
+                .first()
+                .is_some_and(|step| step.metadata.input.is_none());
             self.plan_apply_step_verifications(
                 &mut lane_steps,
                 lane_cheat_steps,
@@ -3162,6 +3485,7 @@ impl CliApp {
                     prepared_headerless: lane_seed.header_state.headerless.then_some(true),
                     prepared_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
                     original_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
+                    first_step_reads_base,
                 },
                 context,
             )?;
@@ -3188,7 +3512,7 @@ impl CliApp {
     /// report so the caller can return it unchanged.
     fn resolve_chain_source(
         &self,
-        reference: &BundlePatchInput,
+        reference: &WeavePatchInput,
         role: ChainSourceRole,
         sources: ChainSourceInputs<'_>,
     ) -> std::result::Result<ProducedPatchOutput, Box<OperationReport>> {
@@ -3210,7 +3534,7 @@ impl CliApp {
             ))
         };
         match reference {
-            BundlePatchInput::Rom { member, .. } => match member {
+            WeavePatchInput::Rom { member, .. } => match member {
                 Some(member) => {
                     let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
                         failed(
@@ -3227,7 +3551,7 @@ impl CliApp {
                 }
                 None => Ok(initial.clone()),
             },
-            BundlePatchInput::Patch { patch, member } => {
+            WeavePatchInput::Patch { patch, member } => {
                 let producer = producer_outputs.get(patch).ok_or_else(|| {
                     failed(
                         "validate",
@@ -3314,14 +3638,15 @@ impl CliApp {
 
     /// Verify a chain intermediate against declared checks: every declared
     /// digest plus the exact size when pinned. A fresh read of the temp file -
-    /// only runs at declared boundaries, which bundles rarely carry.
-    fn verify_chain_step_state(
+    /// only runs at declared boundaries, which weaves rarely carry.
+    pub(super) fn verify_chain_step_state(
         state_path: &Path,
+        side: &str,
         declared: &patch_plan::PlanState,
         context: &OperationContext,
     ) -> Result<()> {
         if let Some(expected_size) = declared.size {
-            Self::validate_patch_input_size(state_path, Some(expected_size), None)?;
+            Self::validate_patch_size(state_path, side, Some(expected_size), None)?;
         }
         if !declared.checksums.is_empty() {
             Self::validate_patch_apply_expected_checksums(
@@ -3338,25 +3663,26 @@ impl CliApp {
     fn verify_declared_chain_output(
         &self,
         context: &OperationContext,
-        target: Option<&BundlePatchInput>,
+        target: Option<&WeavePatchInput>,
         is_last: bool,
         step: Option<&patch_plan::PatchStepVerification>,
-        explicit_input: Option<&BundlePatchInput>,
+        explicit_input: Option<&WeavePatchInput>,
         output: &Path,
     ) -> Result<()> {
         let Some(step) = step else {
             return Ok(());
         };
         if !(context.strict_patch_checksums()
-            && (target.is_some() || !is_last)
-            && (step.is_chain_prefix || explicit_input.is_some()))
+            && (step.enforce_declared_checks
+                || ((target.is_some() || !is_last)
+                    && (step.is_chain_prefix || explicit_input.is_some()))))
         {
             return Ok(());
         }
         let Some(declared) = step.declared_output.as_ref() else {
             return Ok(());
         };
-        Self::verify_chain_step_state(output, declared, context)
+        Self::verify_chain_step_state(output, "output", declared, context)
     }
 
     /// Resolve the compression plan and re-check the resolved output path: the
@@ -3415,6 +3741,7 @@ impl CliApp {
         patches: &[PathBuf],
         output: Option<&Path>,
         compression_options: &PatchApplyCompressionOptions,
+        output_header: Option<PatchApplyOutputHeaderMode>,
         probe_threads: Option<ThreadExecution>,
     ) -> OperationReport {
         let Some(output) = output else {
@@ -3437,7 +3764,14 @@ impl CliApp {
                 return report;
             }
         }
-        self.patch_apply_dry_run(input, patches, output, compression_options, probe_threads)
+        self.patch_apply_dry_run(
+            input,
+            patches,
+            output,
+            compression_options,
+            output_header,
+            probe_threads,
+        )
     }
 
     fn patch_apply_dry_run(
@@ -3446,8 +3780,11 @@ impl CliApp {
         patches: &[PathBuf],
         output: &Path,
         compression_options: &PatchApplyCompressionOptions,
+        output_header: Option<PatchApplyOutputHeaderMode>,
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
+        // Validate the output extension the same way the real run does.
+        let extension_source = Self::output_extension_source(input, output, output_header);
         let explicit_compression = compression_options.requested_format.is_some()
             || compression_options.codec.is_some()
             || compression_options.level_explicit;
@@ -3481,7 +3818,7 @@ impl CliApp {
         let compression_options = match self.resolve_patch_apply_output_options(
             compression_options.clone(),
             output,
-            input,
+            &extension_source,
         ) {
             Ok(options) => options,
             Err(error) => {
@@ -3495,7 +3832,11 @@ impl CliApp {
             }
         };
         let planned_output = if compression_options.enabled {
-            match self.resolve_patch_apply_compression_plan(output, input, &compression_options) {
+            match self.resolve_patch_apply_compression_plan(
+                output,
+                &extension_source,
+                &compression_options,
+            ) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     return OperationReport::failed_with_error(
@@ -3588,6 +3929,7 @@ impl CliApp {
 
     pub(super) fn run_patch_apply_compression(
         &self,
+        command: &str,
         plan: &PatchApplyCompressionPlan,
         inputs: Vec<PathBuf>,
         overrides: &[CreateInputOverride],
@@ -3603,7 +3945,7 @@ impl CliApp {
         let compress_threads = Some(context.plan_threads(handler.capabilities().create_threads));
         self.emit_running(
             OperationLabel {
-                command: "patch-apply",
+                command,
                 family: OperationFamily::Patch,
                 format: Some(plan.format.as_str()),
             },
@@ -3613,6 +3955,7 @@ impl CliApp {
             compress_threads,
         );
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs,
             output: plan.output_path.clone(),
@@ -3687,7 +4030,8 @@ impl CliApp {
             n64_byte_order,
             inference,
             first_patch,
-            expected_crc32,
+            expected_input_checksums,
+            weave_rom_n64_order,
             repair_checksum,
             context,
             temp_paths,
@@ -3722,7 +4066,8 @@ impl CliApp {
             N64TargetRequest {
                 input: &apply_input,
                 patch: first_patch,
-                expected_crc32,
+                expected_input_checksums,
+                weave_rom_order: weave_rom_n64_order,
                 mode: n64_byte_order,
                 inference,
             },
@@ -3751,10 +4096,7 @@ impl CliApp {
                             format: None,
                         },
                         "compat",
-                        format!(
-                            "transforming N64 input byte order to {}",
-                            target_order.label()
-                        ),
+                        format!("transforming N64 input byte order to {}", target_order.id()),
                         None,
                         context.single_thread_execution(),
                     );

@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createElement, useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GUIDED_SAMPLE_START_EVENT } from "../../src/public/react/guided-sample-start.ts";
@@ -24,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   preloadDocsRouteHtml: vi.fn(() => Promise.resolve()),
   preloadWorkflowRoute: vi.fn(() => Promise.resolve()),
   readPwaState: vi.fn(() => false),
+  bootGated: false,
   renderDuringHydration: false,
   renders: [] as WebappRootProps[],
   resetBrowserTransientOpfs: vi.fn(() => Promise.resolve()),
@@ -34,7 +38,6 @@ const mocks = vi.hoisted(() => ({
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   } as ServiceWorkerCacheState,
   serviceWorkerClient: {
     forceCacheAndReload: vi.fn(() => Promise.resolve(true)),
@@ -65,6 +68,15 @@ vi.mock("../../src/webapp/pwa/pwa-service-worker-client.ts", () => ({
     return mocks.serviceWorkerClient;
   },
 }));
+vi.mock("../../src/webapp/pwa/service-worker-boot-gate.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/webapp/pwa/service-worker-boot-gate.ts")>();
+  return {
+    createServiceWorkerBootGate: (...args: Parameters<typeof actual.createServiceWorkerBootGate>) => {
+      const gate = actual.createServiceWorkerBootGate(...args);
+      return { ...gate, isGated: () => mocks.bootGated || gate.isGated() };
+    },
+  };
+});
 vi.mock("../../src/webapp/components/shell.tsx", () => ({ readPwaState: mocks.readPwaState }));
 vi.mock("../../src/webapp/workflow-routes.tsx", () => ({
   preloadDocsRouteHtml: mocks.preloadDocsRouteHtml,
@@ -144,6 +156,7 @@ const withListenerTracking = async (load: () => Promise<void>) => {
 
 const loadWebapp = async (options?: {
   betaTools?: boolean;
+  offlineCopy?: boolean;
   notFound?: boolean;
   prerendered?: boolean;
   url?: string;
@@ -153,6 +166,7 @@ const loadWebapp = async (options?: {
   window.history.replaceState({}, "", options?.url ?? "/apply-patches");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
+  document.documentElement.dataset.offlineCopyEnabled = options?.offlineCopy === false ? "false" : "true";
   document.body.innerHTML = `<div id="webapp-root" aria-busy="true">${
     options?.prerendered ? '<div id="shell"></div>' : ""
   }</div>`;
@@ -168,7 +182,7 @@ const latest = () => {
   return props;
 };
 
-const otherOptionValue = (field: "accent" | "bundlePackage" | "language" | "logLevel") => {
+const otherOptionValue = (field: "accent" | "weavePackage" | "language" | "logLevel") => {
   const current = String(getDefaultSettings()[field]);
   const metadata = SETTINGS_FIELD_METADATA[field];
   const values = metadata.options
@@ -203,7 +217,6 @@ beforeEach(() => {
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   };
   consoleSpies = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => undefined),
@@ -234,7 +247,7 @@ describe("boot", () => {
   });
 
   it("hydrates the prerendered shell with the served document's view and settings", async () => {
-    await loadWebapp({ betaTools: true, prerendered: true, url: "/create-patch" });
+    await loadWebapp({ betaTools: true, prerendered: true, url: "/create-rom-patch" });
 
     const hydrationProps = mocks.renders[0];
     expect(hydrationProps?.state.currentView).toBe("creator");
@@ -243,6 +256,19 @@ describe("boot", () => {
     expect(hydrationProps?.urlSession).toBeNull();
     expect(hydrationProps?.pageUpdate.ready).toBe(false);
     expect(document.getElementById("webapp-root")?.dataset.shellSettled).toBe("true");
+  });
+
+  it("hydrates with the offline copy off when the served document's chip was resolved as off", async () => {
+    await loadWebapp({ offlineCopy: false, prerendered: true });
+
+    expect(mocks.renders[0]?.state.settings.offlineCopyEnabled).toBe(false);
+    expect(mocks.renders[0]?.state.draftSettings.offlineCopyEnabled).toBe(false);
+  });
+
+  it("hydrates with the offline copy on when the served document's chip was resolved as on", async () => {
+    await loadWebapp({ offlineCopy: true, prerendered: true });
+
+    expect(mocks.renders[0]?.state.settings.offlineCopyEnabled).toBe(true);
   });
 
   it("hydrates the What's new document instead of falling back to the patcher", async () => {
@@ -311,10 +337,10 @@ describe("boot", () => {
   });
 
   it("logs the url session warnings it parsed at boot", async () => {
-    await loadWebapp({ url: "/apply-patch?bundle=notaurl&rom=/rom.sfc" });
+    await loadWebapp({ url: "/apply-patch?weave=notaurl&rom=/rom.sfc" });
 
-    expect(consoleText()).toContain("url session: bundle= takes precedence; rom=/patch= params are ignored");
-    expect(latest().urlSession?.warnings).toContain("bundle= takes precedence; rom=/patch= params are ignored");
+    expect(consoleText()).toContain("url session: weave= takes precedence; rom=/patch= params are ignored");
+    expect(latest().urlSession?.warnings).toContain("weave= takes precedence; rom=/patch= params are ignored");
   });
 
   it("hands a parsed url session request to the root", async () => {
@@ -325,28 +351,48 @@ describe("boot", () => {
     expect(window.location.pathname).toBe("/apply-patches");
   });
 
-  it("replaces the retired Bundle route", async () => {
-    await loadWebapp({ url: "/bundle?guide=bundle" });
+  it("replaces the retired Weave route", async () => {
+    await loadWebapp({ url: "/weave?guide=weave" });
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?guide=bundle");
-    expect(latest().state.currentView).toBe("bundle");
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?guide=weave");
+    expect(latest().state.currentView).toBe("weave");
   });
 
-  it("moves bundle sessions to the Bundle route", async () => {
-    await loadWebapp({ url: "/apply-patch?bundle=/bundles/first-weave.zip" });
+  it.each(["hosting/webapp-integration.md", "how-to/create-bundles.md"])(
+    "boots the published recipient links in %s with the expected weave",
+    async (file) => {
+      const markdown = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../docs", file), "utf8");
+      const links = markdown.match(/https:\/\/rom-weaver\.com\/[a-z-]+\?weave=[^\s"<>)]*/g) ?? [];
+      expect(links.length).toBeGreaterThan(0);
+      for (const href of links) {
+        const url = new URL(href);
+        expect(url.pathname).toBe("/weave-patches");
+        await loadWebapp({ url: `${url.pathname}${url.search}` });
+        expect(latest().urlSession?.request).toEqual({
+          kind: "weave",
+          weaveUrl: "https://example.com/release.zip",
+        });
+        expect(latest().state.currentView).toBe("weave");
+        expect(window.location.pathname).toBe("/weave-patches");
+      }
+    },
+  );
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?bundle=/bundles/first-weave.zip");
-    expect(latest().state.currentView).toBe("bundle");
+  it.each(["/apply-patch", "/apply-patches"])("moves weave sessions from %s to the Weave route", async (route) => {
+    await loadWebapp({ url: `${route}?weave=/weaves/first-weave.zip` });
+
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?weave=/weaves/first-weave.zip");
+    expect(latest().state.currentView).toBe("weave");
   });
 
-  it("moves the legacy bundle guide to Bundle and keeps its guide query", async () => {
-    await loadWebapp({ url: "/apply-patch?guide=bundle" });
+  it("moves the legacy weave guide to Weave and keeps its guide query", async () => {
+    await loadWebapp({ url: "/apply-patch?guide=weave" });
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?guide=bundle");
-    expect(latest().state.currentView).toBe("bundle");
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?guide=weave");
+    expect(latest().state.currentView).toBe("weave");
   });
 
   it("reports the browser storage estimate it could not read", async () => {
@@ -531,20 +577,20 @@ describe("settings actions", () => {
     expect(latest().state.draftSettings.accent).toBe(accent);
   });
 
-  it("commits accent, language, log level, and bundle package changes", async () => {
+  it("commits accent, language, log level, and weave package changes", async () => {
     await loadWebapp();
     const accent = otherOptionValue("accent");
     const language = otherOptionValue("language");
     const logLevel = otherOptionValue("logLevel");
-    const bundlePackage = otherOptionValue("bundlePackage");
+    const weavePackage = otherOptionValue("weavePackage");
 
     latest().actions.onAccentChange(accent);
     latest().actions.onLanguageChange(language);
     latest().actions.onLogLevelChange(logLevel);
-    latest().actions.onPatcherBundlePackageChange(bundlePackage);
+    latest().actions.onPatcherWeavePackageChange(weavePackage);
     await flush();
 
-    expect(latest().state.settings).toMatchObject({ accent, bundlePackage, language, logLevel });
+    expect(latest().state.settings).toMatchObject({ accent, weavePackage, language, logLevel });
   });
 
   it("focuses the first invalid field when the draft cannot be saved", async () => {
@@ -638,6 +684,23 @@ describe("session actions", () => {
     expect(latest().state.trimSession).toMatchObject({ outputFormat: "iso", sourceFilePresent: true });
   });
 
+  it("applies form session flags after the calling effect returns", async () => {
+    await loadWebapp();
+
+    latest().actions.onSaveEditorSessionChange(true);
+    latest().actions.onCompressSessionChange(true);
+    latest().actions.onPpfUndoSessionChange(true);
+
+    // Forms report from passive effects, where a synchronous re-render is a React error.
+    expect(latest().state.saveEditorSession.active).toBe(false);
+    expect(latest().state.compressSession.active).toBe(false);
+    expect(latest().state.ppfUndoSession.active).toBe(false);
+    await flush();
+    expect(latest().state.saveEditorSession.active).toBe(true);
+    expect(latest().state.compressSession.active).toBe(true);
+    expect(latest().state.ppfUndoSession.active).toBe(true);
+  });
+
   it("warns before unload only once work is staged", async () => {
     await loadWebapp();
     const guarded = new Event("beforeunload", { cancelable: true });
@@ -706,7 +769,7 @@ describe("routing", () => {
     await flush();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
   });
 
   it("starts a guided sample on its own view", async () => {
@@ -724,16 +787,74 @@ describe("routing", () => {
     expect(started).toEqual(["create"]);
   });
 
+  it("hands a Create mode request to the root once and takes it out of the address bar", async () => {
+    await loadWebapp({ url: "/create-rom-patch?mode=cheats&ref=a%20b" });
+
+    expect(latest().creatorMode).toBe("cheats");
+    expect(window.location.search).toBe("?ref=a%20b");
+
+    latest().actions.onSelectView("patcher");
+    await flush();
+    expect(latest().creatorMode).toBeNull();
+
+    latest().actions.onSelectView("creator");
+    await flush();
+    expect(latest().creatorMode).toBeNull();
+  });
+
+  it("keeps a Create mode in the address bar while the boot gate holds rendering", async () => {
+    mocks.bootGated = true;
+    try {
+      await loadWebapp({ url: "/create-rom-patch?mode=cheats" });
+    } finally {
+      mocks.bootGated = false;
+    }
+
+    // A reload for cross-origin isolation reuses this URL, so the request must survive it.
+    expect(mocks.renders).toHaveLength(0);
+    expect(window.location.search).toBe("?mode=cheats");
+  });
+
+  it("applies the Create mode only after hydrating the prerendered shell", async () => {
+    await loadWebapp({ prerendered: true, url: "/create-rom-patch?mode=rom" });
+
+    expect(mocks.renders[0]?.creatorMode).toBeNull();
+    latest().actions.onSelectView("creator");
+    await flush();
+    expect(latest().creatorMode).toBe("rom");
+  });
+
+  it("takes a Create mode from a followed link but not from Back or Forward", async () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    await loadWebapp();
+
+    clickAnchor("/create-rom-patch?mode=rom");
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("creator");
+    expect(latest().creatorMode).toBe("rom");
+    expect(window.location.search).toBe("");
+
+    latest().actions.onSelectView("patcher");
+    await flush();
+    window.history.replaceState({}, "", "/create-rom-patch?mode=rom");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("creator");
+    expect(latest().creatorMode).toBeNull();
+  });
+
   it("soft-navigates a same-origin workflow link and scrolls to the top", async () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     await loadWebapp();
 
-    clickAnchor("/create-patch");
+    clickAnchor("/create-rom-patch");
     await flush();
     await nextFrame();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create-patch");
+    expect(window.location.pathname).toBe("/create-rom-patch");
     expect(scrollTo).toHaveBeenCalledWith({ behavior: "auto", left: 0, top: 0 });
   });
 
@@ -766,7 +887,7 @@ describe("routing", () => {
   it("follows back and forward navigation", async () => {
     await loadWebapp();
 
-    window.history.pushState({}, "", "/create-patch");
+    window.history.pushState({}, "", "/create-rom-patch");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
@@ -791,19 +912,40 @@ describe("routing", () => {
       started.push(String((event as CustomEvent<string>).detail));
     });
 
-    window.history.pushState({}, "", "/apply-patch?guide=bundle");
+    window.history.pushState({}, "", "/apply-patch?guide=weave");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
-    expect(started).toEqual(["bundle"]);
+    expect(started).toEqual(["weave"]);
   });
 
   it("does not soft-navigate from the not-found document", async () => {
     await loadWebapp({ notFound: true, url: "/nope" });
 
-    clickAnchor("/create-patch");
+    clickAnchor("/create-rom-patch");
     await flush();
 
     expect(window.location.pathname).toBe("/nope");
+  });
+
+  it("restores navigation and unload protection after a missing-page drop selects a workflow", async () => {
+    await loadWebapp({ notFound: true, url: "/nope" });
+    latest().actions.onSelectView("patcher");
+    latest().actions.onPatcherInputsChange([{ name: "rom.sfc" }]);
+    await flush();
+    expect(latest().notFound).toBe(false);
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+
+    latest().actions.onSelectView("compress");
+    window.history.replaceState(null, "", "/apply-patches");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("patcher");
+
+    clickAnchor("/docs");
+    await flush();
+    await nextFrame();
+    expect(latest().state.currentView).toBe("docs");
   });
 });

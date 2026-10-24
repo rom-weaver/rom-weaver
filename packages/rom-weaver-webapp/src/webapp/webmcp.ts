@@ -20,8 +20,8 @@ const progressKeys = new Set(["progress", "percent", "timingText", "throughputTe
 const approvalSnapshotReplacer = (key: string, value: unknown) => (progressKeys.has(key) ? undefined : value);
 const workflowPages = {
   patcher: "apply-patches",
-  creator: "create-patch",
-  bundle: "bundle-patches",
+  creator: "create-rom-patch",
+  weave: "weave-patches",
   compress: "compress",
   extract: "extract",
   checksum: "checksum",
@@ -32,7 +32,7 @@ const workflowPages = {
   test: "test-rom",
 };
 const routes = [
-  ...["trim-rom", "ppf-undo", "save-editor"].map((slug) => ({
+  ...["trim-rom", "save-editor"].map((slug) => ({
     slug,
     title: slug,
     description: "Beta browser workflow",
@@ -92,7 +92,7 @@ export function installWebMcp(actions?: WorkflowActions) {
         const slug = stringArgument(input, "slug");
         if (!routes.some((route) => route.slug === slug)) throw new Error("Unknown page slug");
         const betaView = Object.entries(workflowPages).find(
-          ([view, route]) => ["trim", "ppf-undo", "save-editor"].includes(view) && route === slug,
+          ([view, route]) => ["trim", "save-editor"].includes(view) && route === slug,
         )?.[0];
         if (betaView && actions?.openBetaWorkflow) {
           actions.openBetaWorkflow(betaView);

@@ -27,6 +27,8 @@ describe("Drawer", () => {
     const bodyId = head?.getAttribute("aria-controls") || "";
     expect(bodyId).toBeTruthy();
     expect(container.querySelector(".cks-body")?.id).toBe(bodyId);
+    expect(container.querySelector(".cks-body")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".cks-body")?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("toggles is-open + aria-expanded on header clicks (uncontrolled)", () => {
@@ -39,8 +41,11 @@ describe("Drawer", () => {
     fireEvent.click(head);
     expect(container.querySelector(".cks")?.classList.contains("is-open")).toBe(true);
     expect(head.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".cks-body")?.hasAttribute("inert")).toBe(false);
+    expect(container.querySelector(".cks-body")?.getAttribute("aria-hidden")).toBe("false");
     fireEvent.click(head);
     expect(container.querySelector(".cks")?.classList.contains("is-open")).toBe(false);
+    expect(container.querySelector(".cks-body")?.hasAttribute("inert")).toBe(true);
   });
 
   it("respects a controlled open prop and reports toggles", () => {

@@ -52,6 +52,14 @@
 .rw-app .btn.ghost {
   background: transparent;
 }
+.rw-app .btn.docs-tool {
+  height: auto;
+  min-height: 44px;
+  padding: var(--sp-xs) var(--sp-m);
+  font-weight: 550;
+  color: var(--ink-2);
+  text-decoration: none;
+}
 /* Landing-page hero size. It lives here rather than in home.css because
    buttons.css sits in a later cascade layer, where a size set anywhere earlier
    would lose on layer order however specific it was. */
@@ -74,7 +82,8 @@
   padding-inline: 12px;
   font-size: 0.76rem;
 }
-.rw-app .btn:disabled {
+.rw-app .btn:disabled,
+.rw-app .btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.45;
   transform: none;
@@ -82,6 +91,13 @@
 .rw-app .sample-tutorial-actions .btn[aria-disabled="true"] {
   cursor: default;
   opacity: 0.45;
+  transform: none;
+}
+/* A home route card's button stretches its ::after over the card (home.css).
+   Any transform would make the button that overlay's containing block and
+   shrink it back to the button mid-hover or mid-press, so a click on the card
+   text would miss the link. The card's own press colour is the feedback. */
+.rw-app .btn.home-route-go {
   transform: none;
 }
 /* The finished run scrolls this button into view (see `RunButton`); the margin is
@@ -136,6 +152,12 @@
   transition:
     background 0.18s,
     color 0.18s;
+}
+/* Content-width segments for labels of uneven length (the home install
+   picker). The parent scrolls instead of clipping a label when space runs out. */
+.rw-app .seg.seg-fit .seg-btn {
+  flex: none;
+  padding-inline: 12px;
 }
 @media (hover: hover) {
   .rw-app .seg .seg-btn:not(:disabled):hover {

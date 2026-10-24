@@ -80,7 +80,7 @@ describe("ApplyPatchListStep", () => {
         </div>
       ),
     };
-    const { container } = renderList({ cheats });
+    const { container } = renderList({ cheats, disabledFlags: [true, false] });
     const cardNames = () =>
       Array.from(container.querySelector("#rom-weaver-list-patch-stack")?.children || []).map((card) =>
         card.classList.contains("cheat-test-card") ? "cheat" : "patch",
@@ -92,10 +92,10 @@ describe("ApplyPatchListStep", () => {
     expect(list?.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 3" }), { key: "ArrowUp" });
     await waitFor(() => expect(cardNames()).toEqual(["patch", "cheat", "patch"]));
-    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 1 }]);
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0, weavePosition: 1 }]);
     fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 2" }), { key: "ArrowUp" });
     await waitFor(() => expect(cardNames()).toEqual(["cheat", "patch", "patch"]));
-    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0 }]);
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0, weavePosition: 0 }]);
   });
 
   it("renders an empty stack with its supplied empty state", () => {
@@ -125,13 +125,13 @@ describe("ApplyPatchListStep", () => {
     });
     const { container } = renderList({
       patches: [first, second],
-      bundleOutputCheckHint: true,
-      bundleSessionMatches: true,
+      weaveOutputCheckHint: true,
+      weaveSessionMatches: true,
       disabledFlags: [false, true],
       fault: true,
       notice: <p id="list-notice">Patch source loaded</p>,
       overrideAvailable: true,
-      bundleMeta: [
+      weaveMeta: [
         {
           id: "patch-0",
           name: "First update",
@@ -147,30 +147,91 @@ describe("ApplyPatchListStep", () => {
     });
 
     expect(container.textContent).toContain("1 file");
-    expect(container.textContent).toContain("1 disabled");
+    expect(container.textContent).toContain("1 off");
     expect(container.textContent).toContain("First update");
     expect(container.textContent).toContain("Tester");
-    expect(container.textContent).toContain("Validation failed");
+    expect(container.textContent).toContain("Checks failed");
     expect(container.textContent).toContain("Patch does not match");
     expect(container.textContent).toContain("CRC32");
     expect(container.textContent).toContain("SHA-1");
     expect(container.textContent).toContain(
-      "The expected output is verified only when every patch in the bundle is applied.",
+      "The expected output is verified only when every patch in the weave is applied.",
     );
     expect(container.textContent).toContain("Patch source loaded");
   });
 
-  it("labels a successful preflight as verified when its chain verdict has no source match", () => {
-    const verifiedWithoutIdentity = item(0, {
+  it("labels a successful preflight with no compared checksum as checked", () => {
+    const appliedWithoutChecksum = item(0, {
       chainVerdict: {
         basis: "base",
         basisSource: "default",
         matched: { kind: "none" },
       },
     });
-    const { container } = renderList({ patches: [verifiedWithoutIdentity] });
+    const { container } = renderList({ patches: [appliedWithoutChecksum] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Checked");
+  });
+
+  it("labels a successful preflight as verified when a checksum was compared or matched", () => {
+    const compared = item(0, { checksumCompared: true });
+    const matched = item(1, {
+      chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
+    });
+    const { container } = renderList({ patches: [compared, matched] });
 
     expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Verified");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-1")?.textContent).toBe("Verified");
+  });
+
+  it("labels a failed preflight as a failed check instead of not checked yet", () => {
+    const failedWithoutVerdict = item(0, { validationState: "invalid" });
+    const { container } = renderList({ patches: [failedWithoutVerdict] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed: Game A");
+
+    for (const matched of [{ kind: "base" }, { index: 0, kind: "patch_output" }] as const) {
+      const failedAfterMatch = item(0, {
+        chainVerdict: { basis: "base", basisSource: "chain", matched },
+        validationState: "invalid",
+      });
+      const matchedRender = renderList({ patches: [failedAfterMatch] });
+      expect(matchedRender.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain(
+        "Check failed",
+      );
+    }
+
+    const failedWithDefaultVerdict = item(0, {
+      chainVerdict: { basis: "base", basisSource: "default", matched: { kind: "none" } },
+      validationState: "invalid",
+    });
+    const rendered = renderList({ patches: [failedWithDefaultVerdict] });
+    expect(rendered.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed");
+  });
+
+  it("labels a failed preflight as a failed check instead of not checked yet", () => {
+    const failedWithoutVerdict = item(0, { validationState: "invalid" });
+    const { container } = renderList({ patches: [failedWithoutVerdict] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed: Game A");
+
+    for (const matched of [{ kind: "base" }, { index: 0, kind: "patch_output" }] as const) {
+      const failedAfterMatch = item(0, {
+        chainVerdict: { basis: "base", basisSource: "chain", matched },
+        validationState: "invalid",
+      });
+      const matchedRender = renderList({ patches: [failedAfterMatch] });
+      expect(matchedRender.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain(
+        "Check failed",
+      );
+    }
+
+    const failedWithDefaultVerdict = item(0, {
+      chainVerdict: { basis: "base", basisSource: "default", matched: { kind: "none" } },
+      validationState: "invalid",
+    });
+    const rendered = renderList({ patches: [failedWithDefaultVerdict] });
+    expect(rendered.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed");
   });
 
   it("takes the strip header option away while cheats are on", () => {
@@ -188,14 +249,14 @@ describe("ApplyPatchListStep", () => {
 
   it("updates patch options, metadata, replacement, removal, and toggles", async () => {
     const patchStack = stack();
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const onTogglePatch = vi.fn();
-    const { container } = renderList({ patchStack, onBundleMetaChange, onTogglePatch });
+    const { container } = renderList({ patchStack, onWeaveMetaChange, onTogglePatch });
 
     fireEvent.change(container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement, {
       target: { value: "rom" },
     });
-    expect(onBundleMetaChange).toHaveBeenCalledWith(0, { input: { rom: true } });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(0, { input: { rom: true } });
     expect(patchStack.setPatchOption).toHaveBeenCalledWith(0, { basis: "base", revalidate: true });
     fireEvent.change(container.querySelector("#rom-weaver-patch-track-0") as HTMLSelectElement, {
       target: { value: "rom-b" },
@@ -226,7 +287,7 @@ describe("ApplyPatchListStep", () => {
     const name = container.querySelector("#rom-weaver-patch-name-0") as HTMLInputElement;
     fireEvent.change(name, { target: { value: " Renamed " } });
     fireEvent.blur(name);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(0, { name: "Renamed" });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(0, { name: "Renamed" });
     fireEvent.click(container.querySelector("#rom-weaver-patch-meta-edit-0") as HTMLButtonElement);
 
     const checkAdd = container.querySelector("#rom-weaver-patch-input-add-check-0") as HTMLSelectElement;
@@ -237,7 +298,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector("#rom-weaver-patch-input-md5-0-err")?.textContent).toContain("hex characters");
     fireEvent.change(check, { target: { value: "0123456789abcdef0123456789abcdef" } });
     fireEvent.blur(check);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       0,
       expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: expect.any(Object) }) }),
     );
@@ -283,11 +344,11 @@ describe("ApplyPatchListStep", () => {
 
   it("supports bulk metadata, order editing, and an order repair action", () => {
     const patchStack = stack();
-    const onBundleMetaBulkChange = vi.fn();
+    const onWeaveMetaBulkChange = vi.fn();
     const onTogglePatch = vi.fn();
     const { container } = renderList({
       patchStack,
-      onBundleMetaBulkChange,
+      onWeaveMetaBulkChange,
       onTogglePatch,
       disabledFlags: [false, false],
       patches: [
@@ -301,7 +362,7 @@ describe("ApplyPatchListStep", () => {
           },
         }),
       ],
-      bundleMeta: [{ version: "1" }, { version: "2" }],
+      weaveMeta: [{ version: "1" }, { version: "2" }],
     });
 
     fireEvent.click(container.querySelector(".patch-bulk-edit-button") as HTMLButtonElement);
@@ -313,7 +374,7 @@ describe("ApplyPatchListStep", () => {
       target: { value: "none" },
     });
     fireEvent.submit(container.querySelector("#rom-weaver-bulk-patch-meta") as HTMLFormElement);
-    expect(onBundleMetaBulkChange).toHaveBeenCalledWith({ author: "Team", version: "3.0" });
+    expect(onWeaveMetaBulkChange).toHaveBeenCalledWith({ author: "Team", version: "3.0" });
     expect(onTogglePatch).toHaveBeenCalledWith(0);
     expect(onTogglePatch).toHaveBeenCalledWith(1);
 
@@ -331,7 +392,7 @@ describe("ApplyPatchListStep", () => {
 
   it("edits N64 order and both sides of user verification checks", async () => {
     const patchStack = stack();
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const n64 = item(0, {
       fileName: "game.bps",
       format: "BPS",
@@ -348,8 +409,8 @@ describe("ApplyPatchListStep", () => {
       ],
     });
     const { container } = renderList({
-      bundleMeta: [{}, undefined],
-      onBundleMetaChange,
+      weaveMeta: [{}, undefined],
+      onWeaveMetaChange,
       patches: [n64, item(1)],
       patchStack,
       romActuals: { bytes: 2048, crc32: "1234abcd", md5: "0".repeat(32) },
@@ -370,7 +431,7 @@ describe("ApplyPatchListStep", () => {
     fireEvent.keyDown(inputCheck, { key: "Enter" });
     await waitFor(() => expect(container.querySelector("#rom-weaver-patch-input-md5-0")).toBeNull());
     expect(container.querySelector("#rom-weaver-patch-input-md5-0-open")).toBeTruthy();
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       0,
       expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: { md5: "0".repeat(32) } }) }),
     );
@@ -383,7 +444,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector("#rom-weaver-patch-output-bytes-1-err")?.textContent).toContain("whole number");
     fireEvent.change(outputSize, { target: { value: "2048" } });
     fireEvent.blur(outputSize);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ outputChecks: expect.objectContaining({ size: 2048 }) }),
     );

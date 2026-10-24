@@ -1,3 +1,4 @@
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import type { BrowserSaveDestination, RuntimePatchCreateFormatCandidates } from "../../platform/browser/browser-api.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -8,7 +9,7 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
 import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
 
 /**
- * Pure output/source presentation helpers for the create-patch form, extracted
+ * Pure output/source presentation helpers for the create-rom-patch form, extracted
  * from `CreatePatchForm`. These derive the completed-output download face
  * (format / size / compression-ratio label), the execution output name, the
  * displayed source-info projections, and the static hero/support lists - all
@@ -16,7 +17,7 @@ import type { WorkflowFormProgressState } from "./workflow-run-hooks.ts";
  */
 
 const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
-  const normalizedOutputName = outputName.trim();
+  const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
   // Ensure the name ends with the real patch extension, not just any dotted
   // segment: a version like "Game 2.2" reads as extension ".2" to a generic
@@ -87,6 +88,24 @@ type CompletedCreateOutput = {
   rawSize?: number;
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
+  warnings?: string[];
+};
+/** True when both staged ROMs are ready and every checksum they share (and their size) agree. */
+const areCreateSourcesIdentical = (
+  original: CreateDisplaySourceState | null | undefined,
+  modified: CreateDisplaySourceState | null | undefined,
+): boolean => {
+  if (original?.status !== "ready" || modified?.status !== "ready") return false;
+  if (typeof original.size !== "number" || original.size !== modified.size) return false;
+  const originalChecksums = original.checksums || {};
+  const modifiedChecksums = modified.checksums || {};
+  const shared = Object.keys(originalChecksums).filter((algorithm) => algorithm in modifiedChecksums);
+  return (
+    shared.length > 0 &&
+    shared.every(
+      (algorithm) => originalChecksums[algorithm]?.toLowerCase() === modifiedChecksums[algorithm]?.toLowerCase(),
+    )
+  );
 };
 type CreateMessagePlacement = "modified" | "original" | "output";
 
@@ -114,6 +133,7 @@ const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
   !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
 
 export {
+  areCreateSourcesIdentical,
   type CompletedCreateOutput,
   CREATE_SUPPORTED_FILES,
   type CreateDisplaySourceState,

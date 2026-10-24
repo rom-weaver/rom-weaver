@@ -27,8 +27,11 @@ const EditableCheckRow = ({
   invalid,
   mark,
   onCommit,
+  onDraftChange,
+  onOpen,
   onRemove,
   value,
+  warning,
 }: {
   /** A field just opened via "Add check": move focus into it (a user-gesture
    * focus handoff, not a page-load autofocus). */
@@ -40,11 +43,18 @@ const EditableCheckRow = ({
    * when there is nothing to compare against yet. */
   mark?: "bad" | "ok";
   onCommit: (raw: string) => void;
+  onDraftChange?: (raw: string) => void;
+  /** The user opened the at-rest value for editing. */
+  onOpen?: () => void;
   onRemove: () => void;
   value: string;
+  /** A non-blocking note under the row, e.g. the value differs from the patch's own check. */
+  warning?: string;
 }) => {
   const localizer = useUiLocalizer();
   const errorId = `${id}-err`;
+  const warnId = `${id}-warn`;
+  const describedBy = invalid ? errorId : warning ? warnId : undefined;
   /* The ref callback is a fresh identity every render, so React detaches and
      reattaches it each time. Without this latch the handoff would re-focus on
      every render, and two freshly added rows would then trade focus forever -
@@ -70,7 +80,6 @@ const EditableCheckRow = ({
         isHalfRowField(field) && "ck-half",
         isHashRowField(field) && "ck-hash",
       )}
-      key={`${id}:${value}`}
     >
       {showField ? (
         <label className="ofld-l" htmlFor={id}>
@@ -81,11 +90,15 @@ const EditableCheckRow = ({
       )}
       {showField ? (
         <input
-          aria-describedby={invalid ? errorId : undefined}
+          aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           className="input mono popt-input"
           defaultValue={value}
           id={id}
+          onChange={(event) => {
+            setEditing(true);
+            onDraftChange?.(event.currentTarget.value);
+          }}
           onBlur={(event) => {
             const raw = event.currentTarget.value;
             /* Keep an unfillable row open rather than collapsing to a blank button. */
@@ -115,14 +128,16 @@ const EditableCheckRow = ({
         />
       ) : (
         <button
-          aria-describedby={invalid ? errorId : undefined}
-          aria-label={localizer.message("ui.patch.editCheck", { check: label })}
+          aria-describedby={describedBy}
+          // The name ends with the shown value so it holds the button's visible text.
+          aria-label={`${localizer.message("ui.patch.editCheck", { check: label })}${value ? `: ${value}` : ""}`}
           className="ck-open mono"
           /* Derived from the field's own id so either state of the row is addressable. */
           id={`${id}-open`}
           onClick={() => {
             openedByUser.current = true;
             setEditing(true);
+            onOpen?.();
           }}
           title={invalid ? checkErrorMessage(field, localizer) : value}
           type="button"
@@ -154,6 +169,10 @@ const EditableCheckRow = ({
       {invalid ? (
         <p className="ck-err" id={errorId}>
           {checkErrorMessage(field, localizer)}
+        </p>
+      ) : warning ? (
+        <p className="ck-warn" id={warnId}>
+          {warning}
         </p>
       ) : null}
     </div>

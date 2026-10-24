@@ -58,16 +58,12 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             })
     })
     .chain(std::iter::once(
-        FieldDefinition::new(
-            "death_race_time".into(),
-            "Death Race time".into(),
-            0x14,
-            Storage::U32Be,
-        )
-        .behavior(field::FieldBehavior {
-            group: Some("header".into()),
-            ..Default::default()
-        }),
+        catalog_field("death_race_time", "Death Race time", 0x14, Storage::U32Be).behavior(
+            field::FieldBehavior {
+                group: Some("header".into()),
+                ..Default::default()
+            },
+        ),
     ))
     .collect();
     let ranges = [

@@ -25,6 +25,8 @@ type OutputApplyButtonState = {
   label: string;
   title: string;
   disabled: boolean;
+  /** Validation blocks Apply: shown aria-disabled with a reason, cleared by the "Apply anyway" override. */
+  blocked: boolean;
   loading: boolean;
   progress: ProgressViewModel | null;
 };
@@ -35,6 +37,7 @@ type PatcherOutputState = {
   identifiedName?: { name: string; on: boolean } | null;
   resolvedOutputName: string;
   compressionFormat: string;
+  formatPending: boolean;
   applyTiming: string;
   compressTiming: string;
   /** Combined wall time for every completed action (apply + compress). */
@@ -76,6 +79,8 @@ type PatchStackItemState = {
   progress?: InputProgressState;
   checksumTiming?: string;
   validationState: string;
+  /** A checksum was available to compare for this patch; otherwise a passing check only means it applied. */
+  checksumCompared?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip; indices are
    * 0-based positions in the ENABLED chain, mapped to display numbers by the view). */
   chainVerdict?: {
@@ -91,6 +96,7 @@ type PatchStackItemState = {
   validationLabel: string;
   validationValues: string[];
   validationMessage: string;
+  validationUnreadable: boolean;
   validationActualValue: string;
   targetDisabled?: boolean;
   targetOptions?: PatchTargetOption[];
@@ -148,6 +154,7 @@ const createEmptyPatcherOutputState = ({
   options?: OutputOption[];
 } = {}): PatcherOutputState => ({
   applyButton: {
+    blocked: false,
     disabled: true,
     label: applyButtonLabel,
     loading: false,
@@ -156,6 +163,7 @@ const createEmptyPatcherOutputState = ({
   },
   applyTiming: "",
   compressionFormat: "zip",
+  formatPending: false,
   compressTiming: "",
   disabled: true,
   displayFileName: "",

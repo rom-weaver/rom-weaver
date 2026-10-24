@@ -27,8 +27,8 @@ use rom_weaver_core::{
     ArchiveEntryKindFilter, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerListEntry, OperationContext, OperationFamily, OperationReport, ProbeConfidence,
     Result, RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
-    bounded_items_for_threads, create_extract_output_file, emit_container_running_progress,
-    maybe_emit_container_byte_progress, normalize_archive_name,
+    bounded_items_for_threads, create_extract_output_file, decode_memory_budget_bytes,
+    emit_container_running_progress, maybe_emit_container_byte_progress, normalize_archive_name,
     should_ignore_common_container_file,
 };
 use tracing::{debug, trace};
@@ -593,7 +593,7 @@ pub(crate) fn libarchive_open_read_stream(
                 source.display()
             ),
         )?;
-        Ok(())
+        archive.require_filter(filter, source)
     })();
 
     setup_result?;
@@ -732,6 +732,27 @@ struct LibarchiveExtractTask {
     // 7z solid block this entry's data lives in; `None` for other formats and for
     // stream-less entries. See `libarchive_extract_solid_block_ids`.
     solid_block: Option<u64>,
+    // Decoder working state that solid block declares; `None` exactly when `solid_block` is.
+    // See `libarchive_extract_decoder_cap`.
+    decoder_bytes: Option<u64>,
+}
+
+// Memory an extract worker holds besides its decoder state: its reader's 2 MiB read block, the
+// 1 MiB output chunk it fills, and libarchive's own small buffers.
+const LIBARCHIVE_EXTRACT_WORKER_BASE_BYTES: u64 = 4 << 20;
+
+// How many solid blocks may decode at once within `budget_bytes`. Each worker opens its own
+// reader, so every concurrent decode allocates its block's decoder state again. The largest state
+// any task declares prices every worker, which keeps the estimate an upper bound whichever blocks
+// land together. Without declared state (every format but 7z) decoders are small and uncapped.
+fn libarchive_extract_decoder_cap(tasks: &[LibarchiveExtractTask], budget_bytes: u64) -> usize {
+    let Some(largest) = tasks.iter().filter_map(|task| task.decoder_bytes).max() else {
+        return usize::MAX;
+    };
+    let per_worker = largest.saturating_add(LIBARCHIVE_EXTRACT_WORKER_BASE_BYTES);
+    usize::try_from(budget_bytes / per_worker)
+        .unwrap_or(usize::MAX)
+        .max(1)
 }
 
 // Below this total uncompressed size a multi-file archive extract runs serially instead of spawning a
@@ -964,6 +985,7 @@ fn build_libarchive_extract_tasks(
             is_dir,
             logical_bytes: if is_dir { Some(0) } else { entry.size },
             solid_block: entry.solid_block,
+            decoder_bytes: entry.decoder_bytes,
         };
         if kind_filter.enabled() {
             if kind_filter.matches_payload_name(&archive_name) {
@@ -1672,6 +1694,7 @@ fn extract_libarchive_tasks_parallel(
     context: &OperationContext,
     pool: Option<&SharedThreadPool>,
     file_task_count: usize,
+    decoder_cap: usize,
     progress: &LibarchiveExtractProgress<'_>,
 ) -> Result<(u64, Vec<ExtractedFileChecksum>)> {
     let format_name = progress.format_name;
@@ -1683,10 +1706,13 @@ fn extract_libarchive_tasks_parallel(
     // these workers, not subtracted from them, so a configured budget of N decodes with N
     // workers.
     let worker_count = execution.effective_threads.max(1);
-    let task_chunks = libarchive_extract_chunks(tasks, worker_count);
+    // One chunk is one reader and one decoder; the decoder cap may leave fewer chunks than
+    // workers, which still keeps the write-and-hash consumer off the decode thread.
+    let task_chunks = libarchive_extract_chunks(tasks, worker_count.min(decoder_cap));
     trace!(
         format = format_name,
         worker_count,
+        decoder_cap,
         chunks = task_chunks.len(),
         "libarchive parallel extract chunk split"
     );
@@ -1797,12 +1823,19 @@ fn run_libarchive_extract(
     let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
     let total_logical_bytes = libarchive_extract_total_logical_bytes(tasks);
     let parallel_units = libarchive_extract_parallel_units(tasks);
-    let achievable_threads =
-        libarchive_extract_achievable_threads(total_logical_bytes, file_task_count, parallel_units);
+    let decode_budget_bytes = decode_memory_budget_bytes();
+    let decoder_cap = libarchive_extract_decoder_cap(tasks, decode_budget_bytes);
+    let achievable_threads = libarchive_extract_achievable_threads(
+        total_logical_bytes,
+        file_task_count,
+        parallel_units.min(decoder_cap),
+    );
     trace!(
         format = format_name,
         file_task_count,
         parallel_units,
+        decode_budget_bytes,
+        decoder_cap,
         achievable_threads,
         "libarchive extract parallel unit plan"
     );
@@ -1839,6 +1872,7 @@ fn run_libarchive_extract(
             context,
             pool.as_ref(),
             file_task_count,
+            decoder_cap,
             &progress,
         )?
     } else {
@@ -1961,15 +1995,15 @@ mod tests {
 
     use rom_weaver_core::{CancellationToken, NoopProgressSink, ThreadBudget};
 
-    fn unique_temp_dir(tag: &str) -> PathBuf {
+    fn unique_temp_dir(tag: &str) -> crate::test_support::TempPath {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock is after the unix epoch")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
+        let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
             "rom-weaver-libarchive-cleanup-{tag}-{}-{nanos}",
             std::process::id()
-        ));
+        )));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
     }
@@ -1983,7 +2017,7 @@ mod tests {
     }
 
     #[test]
-    fn sevenz_entries_report_their_real_solid_block() {
+    fn sevenz_entries_report_their_real_solid_block_and_capped_decoder() {
         let dir = unique_temp_dir("solid-block");
         let archive_path = dir.join("solid.7z");
         let mut archive = WriteArchive::new("create test 7z").expect("allocate writer");
@@ -1999,8 +2033,10 @@ mod tests {
         archive
             .set_format_option(None, "threads", "1", "select one thread")
             .expect("select one thread");
+        // An overstated size hint keeps the declared dictionary far above the 6 bytes written,
+        // so only the decoder cap brings the reported size down to LZMA's 4 KiB floor.
         archive
-            .set_7zip_size_hint(6, "set test size hint")
+            .set_7zip_size_hint(16 << 20, "set test size hint")
             .expect("set size hint");
         archive
             .open_filename(&archive_path, "test output", "open test 7z")
@@ -2037,6 +2073,14 @@ mod tests {
             [Some(0), Some(0)],
             "both files in the one-folder archive must expose libarchive's folder index"
         );
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry.decoder_bytes)
+                .collect::<Vec<_>>(),
+            [Some(4096), Some(4096)],
+            "the folder's dictionary is capped at its 6-byte output, raised to LZMA's 4 KiB minimum"
+        );
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -2052,6 +2096,7 @@ mod tests {
             is_dir: false,
             logical_bytes: Some(3),
             solid_block: None,
+            decoder_bytes: None,
         }
     }
 
@@ -2416,6 +2461,7 @@ mod tests {
             is_dir,
             logical_bytes: (!is_dir).then_some(logical_bytes),
             solid_block: None,
+            decoder_bytes: None,
         }
     }
 
@@ -2431,6 +2477,42 @@ mod tests {
             solid_block,
             ..sized_task(index, logical_bytes, is_dir)
         }
+    }
+
+    fn decoder_task(index: usize, decoder_bytes: Option<u64>) -> LibarchiveExtractTask {
+        LibarchiveExtractTask {
+            decoder_bytes,
+            ..solid_task(index, MB, false, decoder_bytes.map(|_| index as u64))
+        }
+    }
+
+    #[test]
+    fn decoder_cap_prices_every_worker_at_the_largest_declared_decoder() {
+        let tasks = [
+            decoder_task(0, Some(4 * MB)),
+            decoder_task(1, Some(60 * MB)),
+            decoder_task(2, None),
+        ];
+        let per_worker = 60 * MB + LIBARCHIVE_EXTRACT_WORKER_BASE_BYTES;
+
+        assert_eq!(libarchive_extract_decoder_cap(&tasks, 3 * per_worker), 3);
+        assert_eq!(
+            libarchive_extract_decoder_cap(&tasks, 3 * per_worker - 1),
+            2
+        );
+    }
+
+    #[test]
+    fn decoder_cap_always_admits_one_worker_and_leaves_undeclared_decoders_uncapped() {
+        assert_eq!(
+            libarchive_extract_decoder_cap(&[decoder_task(0, Some(u64::MAX))], 64 * MB),
+            1,
+            "a block larger than the budget must still decode on one worker"
+        );
+        assert_eq!(
+            libarchive_extract_decoder_cap(&[decoder_task(0, None), decoder_task(1, None)], 0),
+            usize::MAX
+        );
     }
 
     fn chunk_indices(chunks: &[&[LibarchiveExtractTask]]) -> Vec<Vec<usize>> {
@@ -2724,6 +2806,7 @@ mod tests {
 
         let output = dir.join("archive.zip");
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs: archive_entries
                 .iter()

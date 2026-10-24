@@ -42,15 +42,15 @@ const buildZip = async (entries, outputName) => {
 
 /** Each built zip gets a unique name - back-to-back tests staging identically
  * named archives race the previous test's OPFS cleanup. */
-let bundleZipSeq = 0;
+let weaveZipSeq = 0;
 
-/** A checks-only (without-ROM) bundle zip: index + core patch + optional patch. */
-const buildWithoutRomBundle = async ({ romCrc32, outputCrc32, romName = "game.bin" }) => {
+/** A checks-only (without-ROM) weave zip: index + core patch + optional patch. */
+const buildWithoutRomWeave = async ({ romCrc32, outputCrc32, romName = "game.bin" }) => {
   const patchFile = await loadFixtureFile(RAW_PATCH);
   const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
     type: "application/octet-stream",
   });
-  const bundleJson = {
+  const weaveJson = {
     output: {
       ...(outputCrc32 ? { checks: { checksums: { crc32: outputCrc32 } } } : {}),
       name: "bundled-output",
@@ -62,14 +62,14 @@ const buildWithoutRomBundle = async ({ romCrc32, outputCrc32, romName = "game.bi
     rom: { checks: { checksums: { crc32: romCrc32 } }, name: romName },
     version: 1,
   };
-  const bundleFile = new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" });
+  const weaveFile = new File([JSON.stringify(weaveJson)], "rom-weaver-weave.json", { type: "application/json" });
   return buildZip(
     [
-      { file: bundleFile, fileName: "rom-weaver-bundle.json" },
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
       { file: patchFile, fileName: "change.ips" },
       { file: alternateFile, fileName: "alternate.ips" },
     ],
-    `without-rom-${++bundleZipSeq}.zip`,
+    `without-rom-${++weaveZipSeq}.zip`,
   );
 };
 
@@ -83,9 +83,9 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   // Plain weave view: no inline editors yet; the sharing job is below Apply.
   expect(document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
-  expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
-  expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-rom-weave-crc32")).toBeNull();
+  expect(document.getElementById("rom-weaver-weave-export-format")).toBeNull();
+  expect(document.getElementById("rom-weaver-button-export-weave")).not.toBeNull();
 
   // Compact patch cards must let the open menu escape the card's paint boundary.
   const patchMenuButton = document.getElementById("rom-weaver-patch-menu-0");
@@ -120,7 +120,7 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
 
   // The sharing job stays visible without an archive-format dropdown.
-  expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-button-export-weave")).not.toBeNull();
 });
 
 test("the open patch menu stays reachable above the next card", async () => {
@@ -147,12 +147,12 @@ test("the open patch menu stays reachable above the next card", async () => {
   expect(document.querySelector("#rom-weaver-list-patch-stack .nm").textContent).toContain("second");
 });
 
-test("bundle-renamed patch keeps its source file in the Files drawer", async () => {
-  const [romFile, bundleArchive] = await Promise.all([
+test("weave-renamed patch keeps its source file in the Files drawer", async () => {
+  const [romFile, weaveArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
-    buildWithoutRomBundle({ romCrc32: ROM_CRC32 }),
+    buildWithoutRomWeave({ romCrc32: ROM_CRC32 }),
   ]);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
   await waitForApplyButtonEnabled();
 
   const filesDrawer = await waitForState(() => {
@@ -170,12 +170,12 @@ test("bundle-renamed patch keeps its source file in the Files drawer", async () 
     .toContain("change.ips");
 });
 
-test("bundle-expected ROM checks fold into the staged ROM card without a name row", async () => {
-  const [romFile, bundleArchive] = await Promise.all([
+test("weave-expected ROM checks fold into the staged ROM card without a name row", async () => {
+  const [romFile, weaveArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
-    buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "GAME.BIN" }),
+    buildWithoutRomWeave({ romCrc32: ROM_CRC32, romName: "GAME.BIN" }),
   ]);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
 
   // The expected group unmounts while the ROM stages (its computed values are
   // pending), so settle the bench first, then re-query the live DOM per poll.
@@ -191,11 +191,11 @@ test("bundle-expected ROM checks fold into the staged ROM card without a name ro
 });
 
 test("a mismatching ROM flags the expected rows", async () => {
-  const [romFile, bundleArchive] = await Promise.all([
+  const [romFile, weaveArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
-    buildWithoutRomBundle({ romCrc32: "deadbeef" }),
+    buildWithoutRomWeave({ romCrc32: "deadbeef" }),
   ]);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
 
   await waitForApplyButtonEnabled();
   const expectedGroup = () => document.getElementById("rom-weaver-rom-expected-checks");
@@ -204,12 +204,12 @@ test("a mismatching ROM flags the expected rows", async () => {
   expect(expectedGroup().querySelector(".ck-mark.ok")).toBeNull();
 });
 
-test("a bundle ROM name does not appear in Checks or block weave", async () => {
-  const [romFile, bundleArchive] = await Promise.all([
+test("a weave ROM name does not appear in Checks or block weave", async () => {
+  const [romFile, weaveArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
-    buildWithoutRomBundle({ romCrc32: ROM_CRC32, romName: "expected.bin" }),
+    buildWithoutRomWeave({ romCrc32: ROM_CRC32, romName: "expected.bin" }),
   ]);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
 
   await waitForApplyButtonEnabled();
   const expectedGroup = await waitForState(() => document.getElementById("rom-weaver-rom-expected-checks"), 30000);
@@ -219,27 +219,23 @@ test("a bundle ROM name does not appear in Checks or block weave", async () => {
   expect(document.getElementById("rom-weaver-button-apply")?.disabled).toBe(false);
 });
 
-test("bundle output verification stands down for partial selections and diverged chains", async () => {
-  const [romFile, extraPatch, bundleArchive] = await Promise.all([
+test("weave output verification stands down for partial selections and diverged chains", async () => {
+  const [romFile, extraPatch, weaveArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),
     loadFixtureFile(RAW_PATCH),
-    buildWithoutRomBundle({ outputCrc32: "00000000", romCrc32: ROM_CRC32 }),
+    buildWithoutRomWeave({ outputCrc32: "00000000", romCrc32: ROM_CRC32 }),
   ]);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive, romFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
 
   // The optional patch seeds OFF, so the selection starts partial: the
-  // bundle's expected output can't gate it, and it stands down silently
+  // weave's expected output can't gate it, and it stands down silently
   // (a partial selection raises no notice).
   await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
-  await expect
-    .poll(() => document.getElementById("rom-weaver-bundle-output-unverified"), { timeout: 30000 })
-    .toBeNull();
+  await expect.poll(() => document.getElementById("rom-weaver-weave-output-unverified"), { timeout: 30000 }).toBeNull();
 
   // Enabling the full authored chain keeps it quiet: still no notice.
   getPatchToggles()[1]?.click();
-  await expect
-    .poll(() => document.getElementById("rom-weaver-bundle-output-unverified"), { timeout: 30000 })
-    .toBeNull();
+  await expect.poll(() => document.getElementById("rom-weaver-weave-output-unverified"), { timeout: 30000 }).toBeNull();
 
   // Appending a foreign patch diverges the chain: now the notice appears and
   // names the divergence.
@@ -247,11 +243,8 @@ test("bundle output verification stands down for partial selections and diverged
     type: "application/octet-stream",
   });
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), foreignPatch);
-  const divergedNotice = await waitForState(
-    () => document.getElementById("rom-weaver-bundle-output-unverified"),
-    30000,
-  );
-  expect(divergedNotice.textContent).toContain("differs from the bundle");
+  const divergedNotice = await waitForState(() => document.getElementById("rom-weaver-weave-output-unverified"), 30000);
+  expect(divergedNotice.textContent).toContain("differs from the weave");
 });
 
 test("two freshly added checks hand off focus once each instead of trading it forever", async () => {

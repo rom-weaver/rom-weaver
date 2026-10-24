@@ -11,12 +11,12 @@ describe("input identification policy", () => {
     expect(shouldIdentifySource(new Blob(["rom"]))).toBe(true);
   });
 
-  it("carries a skipped policy into a derived bundle ROM", () => {
-    const bundle = new Blob(["bundle"]);
+  it("carries a skipped policy into a derived weave ROM", () => {
+    const weave = new Blob(["weave"]);
     const rom = new Blob(["rom"]);
 
-    skipSourceIdentification(bundle);
-    inheritSourceIdentificationPolicy(bundle, rom);
+    skipSourceIdentification(weave);
+    inheritSourceIdentificationPolicy(weave, rom);
 
     expect(shouldIdentifySource(rom)).toBe(false);
   });

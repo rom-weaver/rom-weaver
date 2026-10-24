@@ -17,6 +17,11 @@ pub(super) struct OperationLabel<'a> {
     pub(super) format: Option<&'a str>,
 }
 
+/// Every codec name `--codec` accepts for CHD output; `formats` lists the same set.
+pub(crate) const CHD_CREATE_CODECS: &[&str] = &[
+    "store", "zstd", "lzma", "zlib", "huff", "flac", "cdzs", "cdlz", "cdzl", "cdfl", "avhuff",
+];
+
 impl CliApp {
     pub(super) fn emit_running(
         &self,
@@ -87,12 +92,30 @@ impl CliApp {
         };
         // The process token, so a Ctrl-C reaches work already running. On wasm
         // and in tests nothing ever trips it, so it behaves like a fresh one.
-        OperationContext::new(
-            thread_budget,
-            temp_root,
-            reporter,
-            process_cancellation_token(),
-        )
+        //
+        // Natively every run spools into its own `rom-weaver-out-<unique>` directory that is
+        // removed when the context drops, so no empty shared folder is left in the working
+        // directory and concurrent runs never touch each other's directories. The browser keeps
+        // the shared `rom-weaver-out` OPFS root, which its own cleanup sweeps by run id.
+        #[cfg(not(target_family = "wasm"))]
+        {
+            OperationContext::new_with_private_temp_root(
+                thread_budget,
+                temp_root.parent().unwrap_or_else(|| Path::new("")),
+                "rom-weaver-out",
+                reporter,
+                process_cancellation_token(),
+            )
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            OperationContext::new(
+                thread_budget,
+                temp_root,
+                reporter,
+                process_cancellation_token(),
+            )
+        }
     }
 
     pub(super) fn default_temp_root() -> PathBuf {
@@ -216,11 +239,40 @@ impl CliApp {
         let codec_kind = codec
             .and_then(Self::profile_codec_kind_for_codec_name)
             .or_else(|| Self::default_profile_codec_kind_for_format(format_name));
-        match codec_kind {
+        let level = match codec_kind {
             Some(ProfileCodecKind::Standard) => Some(profile.standard_level()),
             Some(ProfileCodecKind::Zstd) => Some(profile.zstd_level()),
             Some(ProfileCodecKind::NoLevel) | None => None,
-        }
+        };
+        let range = Self::primary_codec_name(codec).and_then(Self::codec_level_range);
+        let level = match (level, range) {
+            (Some(level), Some((min, max))) => Some(level.clamp(min, max)),
+            (level, _) => level,
+        };
+        tracing::debug!(
+            format_name,
+            ?codec,
+            ?profile,
+            ?level,
+            "resolved profile level"
+        );
+        level
+    }
+
+    fn codec_level_range(codec_name: &str) -> Option<(i32, i32)> {
+        let codec = codec_name.trim();
+        compression_metadata()
+            .codecs
+            .iter()
+            .find(|metadata| {
+                metadata.name.eq_ignore_ascii_case(codec)
+                    || metadata
+                        .aliases
+                        .iter()
+                        .any(|alias| alias.eq_ignore_ascii_case(codec))
+            })
+            .and_then(|metadata| metadata.level)
+            .map(|level| (level.min, level.max))
     }
 
     pub(super) fn default_profile_codec_kind_for_format(
@@ -427,8 +479,10 @@ impl CliApp {
                     if matches {
                         None
                     } else {
+                        // Name the canonical format when the flag was an alias (`3ds` -> `z3ds`).
+                        let written = flag_canonical_name.unwrap_or(&normalized);
                         Some(format!(
-                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{normalized}`"
+                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{written}`"
                         ))
                     }
                 }
@@ -584,11 +638,7 @@ impl CliApp {
             "zip" | "zipx" => ["deflate", "store", "zstd"].as_slice(),
             "7z" => ["lzma2"].as_slice(),
             "rvz" | "z3ds" => ["zstd"].as_slice(),
-            "chd" => [
-                "store", "zstd", "lzma", "zlib", "huff", "flac", "cdzs", "cdlz", "cdzl", "cdfl",
-                "avhuff",
-            ]
-            .as_slice(),
+            "chd" => CHD_CREATE_CODECS,
             _ => {
                 return Err(RomWeaverError::Validation(format!(
                     "{format} does not accept --compress-codec"
@@ -679,18 +729,17 @@ impl CliApp {
             return (requested_output.to_path_buf(), false);
         };
 
-        let preferred_extension = if extensions
+        let z3ds_extension = if extensions
             .iter()
             .any(|extension| extension.eq_ignore_ascii_case(".z3ds"))
         {
-            Self::z3ds_compressed_extension_for_path(requested_output)
-                .or_else(|| {
-                    source_extension_hint.and_then(Self::z3ds_compressed_extension_for_path)
-                })
-                .unwrap_or(primary_extension)
+            Self::z3ds_compressed_extension_for_path(requested_output).or_else(|| {
+                source_extension_hint.and_then(Self::z3ds_compressed_extension_for_path)
+            })
         } else {
-            primary_extension
+            None
         };
+        let preferred_extension = z3ds_extension.as_deref().unwrap_or(primary_extension);
 
         let Some(file_name) = requested_output.file_name() else {
             return (requested_output.to_path_buf(), false);
@@ -710,16 +759,16 @@ impl CliApp {
         (appended_path, true)
     }
 
-    pub(super) fn z3ds_compressed_extension_for_path(path: &Path) -> Option<&'static str> {
+    pub(super) fn z3ds_compressed_extension_for_path(path: &Path) -> Option<String> {
         let extension = path.extension()?.to_str()?.trim().to_ascii_lowercase();
-        match extension.as_str() {
-            "cia" | "zcia" => Some(".zcia"),
-            "3ds" | "z3d" | "z3ds" => Some(".z3ds"),
-            "cci" | "zcci" => Some(".zcci"),
-            "cxi" | "app" | "zcxi" => Some(".zcxi"),
-            "3dsx" | "z3dsx" => Some(".z3dsx"),
-            _ => None,
-        }
+        rom_weaver_containers::z3ds_subtype_metadata()
+            .iter()
+            .find(|subtype| {
+                subtype.underlying_extension == extension
+                    || subtype.compressed_extension == extension
+                    || subtype.underlying_aliases.contains(&extension.as_str())
+            })
+            .map(|subtype| format!(".{}", subtype.compressed_extension))
     }
 
     pub(super) fn normalize_trim_extension(extension: &str) -> Result<String> {

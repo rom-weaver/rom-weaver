@@ -1,7 +1,7 @@
-import { Marked, Parser, Renderer } from "marked";
-import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
+import { Lexer, Marked, Parser, Renderer } from "marked";
+import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN, siteSamplePath } from "./docs-routing.mjs";
 
-// Build-time only. `marked` must never reach a browser bundle: the client
+// Build-time only. `marked` must never reach a browser weave: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
 // tooling sits outside the webapp's shipped dependency graph, so anything
 // imported here is absent from the generated attribution inventories.
@@ -12,6 +12,7 @@ const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver/blob/main";
  * @typedef {{ id: string, label: string }} DocSection
  * @typedef {{
  *   description: string,
+ *   editable?: false,
  *   group: string,
  *   html: string,
  *   label: string,
@@ -150,9 +151,11 @@ const rewriteDocHref = (href, slug, sourceFile) => {
 
   const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
   const repositoryPath = resolved.pathname.slice(1);
-  if (repositoryPath === "docs/rom-weaver-bundle-v2.schema.json") {
-    return `/rom-weaver-bundle-v2.schema.json${resolved.hash}`;
+  if (/^docs\/rom-weaver-(?:weave|bundle)-v[12]\.schema\.json$/.test(repositoryPath)) {
+    return `/${repositoryPath.slice("docs/".length)}${resolved.hash}`;
   }
+  const samplePath = siteSamplePath(repositoryPath);
+  if (samplePath) return samplePath;
   const docsPath = repositoryPath.startsWith("docs/") ? repositoryPath.slice("docs/".length) : "";
   const route = DOC_SOURCES.find((entry) => entry.file === docsPath);
   if (route) return `/${route.slug}${resolved.hash}`;
@@ -270,21 +273,20 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
 };
 
 /**
- * @param {{ file: string, group?: string, label: string, slug: string }} source
+ * @param {{ editable?: false, file: string, group?: string, label: string, slug: string }} source
  * @param {string} markdown
  * @returns {Readonly<DocRoute>}
  */
-const createDocRoute = ({ file, group, label, slug }, markdown) => {
+const createDocRoute = ({ editable, file, group, label, slug }, markdown) => {
   const title = markdown.match(/^#\s+(.+)$/m)?.[1];
   if (!title) throw new Error(`${file} must have one level-one heading`);
-  const description = stripDoctoc(markdown, false)
-    .split(/\n\s*\n/)
-    .map(stripMarkdown)
-    .find((block) => block && !block.startsWith("#") && !block.startsWith("<!--"));
+  const paragraph = Lexer.lex(stripDoctoc(markdown, false)).find((token) => token.type === "paragraph");
+  const description = paragraph && "tokens" in paragraph && paragraph.tokens ? plainHeading(paragraph.tokens) : "";
   if (!description) throw new Error(`${file} must start with a descriptive paragraph`);
   const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({
     description,
+    ...(editable === false ? { editable } : {}),
     group: group ?? docGroupTitle(file),
     html,
     label,

@@ -32,6 +32,11 @@ const VGS_MAGIC: &[u8] = b"VgsM";
 const VGS_HEADER_SIZE: usize = 0x40;
 const MEMORY_CARD_SIZE: usize = 128 * 1024;
 
+/// Raw (unwrapped) save file extensions (lowercase, no dot) the editor accepts.
+/// Wrapper extensions come from [`SaveContainerKind::file_extensions`].
+pub const RAW_SAVE_FILE_EXTENSIONS: &[&str] =
+    &["sav", "srm", "sra", "eep", "fla", "mpk", "mcr", "mcd"];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveContainerKind {
     /// GameShark SP / SharkPort export (`.sps`, `.xps`): length-prefixed
@@ -57,6 +62,26 @@ impl SaveContainerKind {
             Self::DesmumeFooter => "desmume_dsv",
             Self::DexDrive => "dexdrive_gme",
             Self::VirtualGameStation => "vgs_mem",
+        }
+    }
+
+    /// Every wrapper kind, in picker order.
+    pub const ALL: [Self; 5] = [
+        Self::SharkPortSave,
+        Self::GameSharkSpSnapshot,
+        Self::DesmumeFooter,
+        Self::DexDrive,
+        Self::VirtualGameStation,
+    ];
+
+    /// File extensions (lowercase, no dot) that name this wrapper.
+    pub const fn file_extensions(self) -> &'static [&'static str] {
+        match self {
+            Self::SharkPortSave => &["sps", "xps"],
+            Self::GameSharkSpSnapshot => &["gsv"],
+            Self::DesmumeFooter => &["dsv"],
+            Self::DexDrive => &["gme"],
+            Self::VirtualGameStation => &["mem", "vgs"],
         }
     }
 
@@ -293,6 +318,23 @@ pub fn shark_port_checksum(payload: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_extensions_are_lowercase_unique_and_cover_every_kind() {
+        let mut seen: Vec<&str> = RAW_SAVE_FILE_EXTENSIONS.to_vec();
+        for kind in SaveContainerKind::ALL {
+            assert!(!kind.file_extensions().is_empty(), "{}", kind.id());
+            seen.extend(kind.file_extensions());
+        }
+        let mut unique = seen.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), seen.len(), "duplicate extension in {seen:?}");
+        assert!(
+            seen.iter()
+                .all(|ext| ext.chars().all(|c| c.is_ascii_lowercase()))
+        );
+    }
 
     fn desmume_fixture(save: &[u8]) -> Vec<u8> {
         let mut bytes = save.to_vec();

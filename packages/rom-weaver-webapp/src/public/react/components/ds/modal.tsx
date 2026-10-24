@@ -1,5 +1,5 @@
 import { Check, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { join } from "./cx.ts";
 
@@ -24,28 +24,15 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
   });
 
 /**
- * Design-system modal primitives. A generic overlay (header + scrollable body)
- * and a confirmation dialog. Both portal into the `.rw-app` root (falling back to
- * <body>) so the design system's `.rw-app`-scoped control styles (.input/.select/
- * .btn/…) reach the modal content; `.rw-modal` is `position: fixed`, so stacking
- * and overflow are unaffected by where it sits in the tree. Shared by settings,
- * candidate selection, and every confirm flow.
+ * Keep overlays inside the active native dialog's top layer. Portaling beside
+ * a showModal() dialog makes the overlay inert, regardless of its z-index.
+ * Otherwise use the styled app root so design-system controls inherit it.
  */
-
-/** The styled app root the design system scopes its rules under; modals portal here so controls inherit it. */
 const getModalPortalTarget = (): Element =>
-  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
-
-const useEscapeKey = (active: boolean, onEscape: () => void) => {
-  useEffect(() => {
-    if (!active) return undefined;
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onEscape();
-    };
-    document.addEventListener("keydown", handle);
-    return () => document.removeEventListener("keydown", handle);
-  }, [active, onEscape]);
-};
+  document.activeElement?.closest("dialog:modal") ??
+  document.querySelector("dialog:modal") ??
+  document.querySelector(".rw-app") ??
+  document.body;
 
 const ModalShell = ({
   open,
@@ -63,14 +50,23 @@ const ModalShell = ({
   children: ReactNode;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useEscapeKey(open && !!onBackdrop, () => {
-    if (!dialogRef.current?.inert) onBackdrop?.();
-  });
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!(open && onBackdrop)) return undefined;
+    const handle = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || dialogRef.current?.inert) return;
+      // Consume Escape here so it cannot also cancel the containing native dialog.
+      event.preventDefault();
+      onBackdrop();
+    };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+  }, [open, onBackdrop]);
+  useLayoutEffect(() => {
     if (!open) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
+    const nativeDialog = dialog.closest("dialog:modal");
     const previousInert = new Map<HTMLElement, boolean>();
     for (const sibling of Array.from(dialog.parentElement?.children ?? [])) {
       if (sibling === dialog || !(sibling instanceof HTMLElement)) continue;
@@ -108,13 +104,20 @@ const ModalShell = ({
     };
     document.addEventListener("focusin", keepFocusInside);
     document.addEventListener("keydown", wrapTabFocus);
-    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
+    dialog.focus();
     return () => {
-      cancelAnimationFrame(frame);
       document.removeEventListener("focusin", keepFocusInside);
       document.removeEventListener("keydown", wrapTabFocus);
       for (const [sibling, inert] of previousInert) sibling.inert = inert;
       previousFocus?.focus();
+      // History traversal can leave focus outside the still-open Settings dialog.
+      if (
+        nativeDialog instanceof HTMLElement &&
+        nativeDialog.matches(":modal") &&
+        !nativeDialog.contains(document.activeElement)
+      ) {
+        nativeDialog.focus();
+      }
     };
   }, [open]);
   if (!open || typeof document === "undefined") return null;

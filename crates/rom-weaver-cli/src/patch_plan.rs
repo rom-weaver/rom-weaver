@@ -1,6 +1,6 @@
 // The verification planner: pure and I/O-free. Callers supply the base ROM's
 // variant checksums and everything known about each enabled patch (embedded
-// endpoints, filename/bundle/user expectations, declared basis); the planner
+// endpoints, filename/weave/user expectations, declared basis); the planner
 // resolves each patch's input basis, diagnoses chain order, and decides which
 // output expectations are enforceable. `patch validate --plan` and the apply
 // pipeline share it.
@@ -113,7 +113,7 @@ pub struct PatchPlanVerdict {
 pub struct OutputEnforceableEntry {
     pub patch_index: u32,
     pub source: String,
-    pub checks: BundleChecks,
+    pub checks: WeaveChecks,
     pub enforceable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -146,7 +146,7 @@ pub(crate) struct PlanState {
 }
 
 impl PlanState {
-    pub(crate) fn from_bundle_checks(checks: &BundleChecks) -> Self {
+    pub(crate) fn from_weave_checks(checks: &WeaveChecks) -> Self {
         Self {
             checksums: checks.checksums.clone(),
             size: checks.size,
@@ -161,8 +161,8 @@ impl PlanState {
         self.checksums.is_empty() && self.size.is_none()
     }
 
-    pub(crate) fn to_bundle_checks(&self) -> BundleChecks {
-        BundleChecks {
+    pub(crate) fn to_weave_checks(&self) -> WeaveChecks {
+        WeaveChecks {
             checksums: self.checksums.clone(),
             size: self.size,
         }
@@ -175,10 +175,10 @@ pub(crate) struct PlanPatchInput {
     pub name: String,
     pub format: Option<String>,
     pub declared_basis: Option<PatchInputBasis>,
-    /// Merged filename/bundle/user expectations for the input state.
+    /// Merged filename/weave/user expectations for the input state.
     pub declared_input: PlanState,
     /// Whether a matching declaration may independently infer base basis.
-    /// Bundle `inputChecks` without an explicit basis are mid-chain gates: they
+    /// Weave `inputChecks` without an explicit basis are mid-chain gates: they
     /// constrain base inference but do not opt a checksumless patch into it.
     pub declared_input_infers_base: bool,
     /// Declared expectations for the state after this patch.
@@ -306,7 +306,7 @@ pub(crate) struct PatchStepVerification {
     pub base_variant: Option<String>,
     /// Typed execution state for the selected base representation.
     pub base_representation: Option<BaseRepresentation>,
-    /// Declared (bundle/CLI) checks for the state this step consumes,
+    /// Declared (weave/CLI) checks for the state this step consumes,
     /// verified against the real intermediate before the step runs (strict
     /// mode, previous basis, mid-chain).
     pub declared_input: Option<PlanState>,
@@ -315,12 +315,16 @@ pub(crate) struct PatchStepVerification {
     /// mode, not the final step - the final output keeps its own gate).
     pub declared_output: Option<PlanState>,
     /// Whether the selection up to and including this step is exactly the
-    /// bundle's chain prefix ending here.
+    /// weave's chain prefix ending here.
     pub is_chain_prefix: bool,
     /// `declared_input` describes the lane's own source bytes (filled from the
     /// identify database), so it verifies at the lane start even when earlier
     /// optional entries of the lane are deselected.
     pub lane_source_input: bool,
+    /// `declared_input`/`declared_output` came from `--patch-input-check` /
+    /// `--patch-output-check`, so they are verified for this step wherever
+    /// it sits in the chain rather than only at weave chain boundaries.
+    pub enforce_declared_checks: bool,
 }
 
 /// The planner's resolution before dry-run results are merged in.
@@ -332,7 +336,7 @@ pub(crate) struct ResolvedPlan {
 }
 
 /// Copy the planner's basis decisions onto apply's declaration-carrying step
-/// records without disturbing bundle checks or chain-prefix metadata.
+/// records without disturbing weave checks or chain-prefix metadata.
 pub(crate) fn apply_resolved_bases(
     resolved: &ResolvedPlan,
     base_variants: &[BaseVariant],
@@ -409,7 +413,7 @@ pub(crate) enum EvidenceMatch {
     /// A shared algorithm (or both-pinned size) disagrees.
     Conflict,
     /// No shared checksum algorithm. Size-only agreement is still disjoint:
-    /// size alone is never evidence. (`bundle_checks_agree`, by contrast,
+    /// size alone is never evidence. (`weave_checks_agree`, by contrast,
     /// lets disjoint declarations "agree" - unusable for inference.)
     Disjoint,
 }
@@ -526,19 +530,37 @@ fn match_embedded_base(
     allow_reverse_handler_match: bool,
 ) -> (Option<String>, bool, Option<PatchEndpointSelection>) {
     let candidates = patch.embedded_base_input_candidates(allow_reverse_handler_match);
+    match_base_candidates(
+        patch,
+        &candidates,
+        base_variants,
+        allow_reverse_handler_match,
+    )
+}
+
+/// Match `candidates` against every representation of the base. The variants
+/// are alternative views of one ROM, so a conflict with one (a headerless
+/// sibling's size) is a base conflict only when no other view is compatible.
+fn match_base_candidates(
+    patch: &PlanPatchInput,
+    candidates: &[&PlanState],
+    base_variants: &[BaseVariant],
+    allow_reverse_handler_match: bool,
+) -> (Option<String>, bool, Option<PatchEndpointSelection>) {
     let mut conflicted = false;
-    for (index, variant) in base_variants.iter().enumerate() {
-        match compare_candidates(&candidates, &variant.state) {
+    let mut compatible = false;
+    for variant in base_variants {
+        match compare_candidates(candidates, &variant.state) {
             EvidenceMatch::Match => {
                 let execution = if patch.base_executions.is_empty() {
                     matching_base_execution(patch, &variant.state, allow_reverse_handler_match)
                 } else {
                     unique_execution(&patch.base_executions)
                 };
-                return (Some(base_variants[index].name.clone()), false, execution);
+                return (Some(variant.name.clone()), false, execution);
             }
             EvidenceMatch::Conflict => conflicted = true,
-            EvidenceMatch::Disjoint => {}
+            EvidenceMatch::Disjoint => compatible = true,
         }
     }
     let handler_can_infer_base = patch.has_forward_base_execution();
@@ -550,7 +572,7 @@ fn match_embedded_base(
             unique_execution(&patch.base_executions),
         );
     }
-    (None, conflicted, None)
+    (None, conflicted && !compatible, None)
 }
 
 /// Verdict for one required state against every compatible representation of
@@ -612,31 +634,12 @@ fn match_base(
         }
     }
     let candidates = patch.base_input_candidates(allow_reverse_handler_match);
-    let mut conflicted = false;
-    for (index, variant) in base_variants.iter().enumerate() {
-        match compare_candidates(&candidates, &variant.state) {
-            EvidenceMatch::Match => {
-                let execution = if patch.base_executions.is_empty() {
-                    matching_base_execution(patch, &variant.state, allow_reverse_handler_match)
-                } else {
-                    unique_execution(&patch.base_executions)
-                };
-                return (Some(base_variants[index].name.clone()), false, execution);
-            }
-            EvidenceMatch::Conflict => conflicted = true,
-            EvidenceMatch::Disjoint => {}
-        }
-    }
-    let handler_can_infer_base = patch.has_forward_base_execution();
-    if !patch.base_executions.is_empty() && (allow_reverse_handler_match || handler_can_infer_base)
-    {
-        return (
-            Some("handler-normalized".to_string()),
-            false,
-            unique_execution(&patch.base_executions),
-        );
-    }
-    (None, conflicted, None)
+    match_base_candidates(
+        patch,
+        &candidates,
+        base_variants,
+        allow_reverse_handler_match,
+    )
 }
 
 pub(crate) fn should_resolve_base_endpoints(
@@ -932,7 +935,7 @@ pub(crate) fn resolve_output_verification(
         entries.push(OutputEnforceableEntry {
             patch_index: index as u32,
             source: "declared output checks".to_string(),
-            checks: patch.declared_output.to_bundle_checks(),
+            checks: patch.declared_output.to_weave_checks(),
             enforceable: intact,
             standdown_reason: (!intact).then(|| {
                 "an upstream patch is out of order or failed its input checks".to_string()
@@ -1001,7 +1004,7 @@ pub(crate) fn resolve_output_verification(
             entries.push(OutputEnforceableEntry {
                 patch_index: last_index as u32,
                 source: "embedded target checks".to_string(),
-                checks: output.to_bundle_checks(),
+                checks: output.to_weave_checks(),
                 enforceable,
                 standdown_reason,
             });
@@ -1473,6 +1476,76 @@ mod tests {
                 variant: "headerless".to_string()
             }
         );
+    }
+
+    fn headered_size_only_base() -> Vec<BaseVariant> {
+        base(&[
+            ("raw", &[], Some(24_592)),
+            ("headerless", &[], Some(24_576)),
+        ])
+    }
+
+    fn size_only_patch(name: &str, input_size: u64) -> PlanPatchInput {
+        let mut sized = patch(name);
+        sized.embedded = embedded(state(&[], Some(input_size)), state(&[], Some(24_592)));
+        sized
+    }
+
+    #[test]
+    fn size_only_endpoint_fitting_raw_base_is_not_a_headerless_conflict() {
+        let plan = resolve_verification_plan(
+            &headered_size_only_base(),
+            &[size_only_patch("change.apsgba", 24_592)],
+        );
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Unknown);
+        assert_eq!(plan.per_patch[0].matched, PatchInputMatch::None);
+    }
+
+    #[test]
+    fn declared_base_size_only_endpoint_fitting_raw_base_is_not_a_conflict() {
+        let head = patch("head.ips");
+        let mut declared = size_only_patch("change.dps", 24_592);
+        declared.declared_basis = Some(PatchInputBasis::Base);
+
+        let plan = resolve_verification_plan(&headered_size_only_base(), &[head, declared]);
+
+        assert_eq!(plan.per_patch[1].basis, PatchInputBasis::Base);
+        assert_eq!(plan.per_patch[1].input_verdict, PatchInputVerdict::Unknown);
+    }
+
+    #[test]
+    fn size_only_endpoint_fitting_no_base_representation_fails() {
+        let plan = resolve_verification_plan(
+            &headered_size_only_base(),
+            &[size_only_patch("change.dps", 24_000)],
+        );
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
+    }
+
+    #[test]
+    fn no_base_representation_is_not_a_conflict() {
+        let plan = resolve_verification_plan(&[], &[size_only_patch("change.dps", 24_592)]);
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Unknown);
+    }
+
+    #[test]
+    fn checksum_conflict_on_raw_is_not_hidden_by_size_fit() {
+        let variants = base(&[
+            ("raw", &[("crc32", BASE_CRC)], Some(1024)),
+            ("headerless", &[("crc32", HEADERLESS_CRC)], Some(1008)),
+        ]);
+        let mut a = patch("a.bps");
+        a.embedded = embedded(
+            state(&[("crc32", OTHER_CRC)], Some(1024)),
+            PlanState::default(),
+        );
+
+        let plan = resolve_verification_plan(&variants, &[a]);
+
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
     }
 
     #[test]

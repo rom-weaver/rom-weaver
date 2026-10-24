@@ -74,9 +74,6 @@ try {
     $ProgressPreference = $previousProgress
   }
 
-  # The downloaded file's SHA-256 is the key for the repository attestation lookup.
-  $actual = (Get-FileHash -Path $downloadPath -Algorithm SHA256).Hash
-
   # This API lookup does not verify signatures or restrict the build workflow.
   # See docs/how-to/verify-downloads.md for manual signature verification.
   $skipAttestation = $env:ROM_WEAVER_SKIP_ATTESTATION -eq '1'
@@ -86,46 +83,50 @@ try {
   # past it.
   function Deny-Install([string]$message) {
     Write-Error $message -ErrorAction Continue
-    throw "refusing to install ${asset}: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1"
+    throw "refusing to install ${provenanceAsset}: to install it anyway, re-run with ROM_WEAVER_SKIP_ATTESTATION=1"
   }
 
-  if ($skipAttestation) {
-    Write-Warning 'skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)'
-  } else {
-    $attestations = @()
-    $answered = $false
-    try {
-      # The predicate filter MUST exclude release-membership attestations.
-      # See install.sh for the query contract.
-      $response = Invoke-RestMethod -UseBasicParsing `
-        -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())?predicate_type=https://slsa.dev/provenance/v1"
-      # An unexpected response shape MUST count as a missing attestation.
-      # An unchecked property access could throw and enter the warn-and-install path.
-      if ($null -ne $response -and $response.PSObject.Properties['attestations']) {
-        $attestations = @($response.attestations)
+  function Confirm-Provenance([string]$path, [string]$provenanceAsset) {
+    $actual = (Get-FileHash -Path $path -Algorithm SHA256).Hash
+    if ($skipAttestation) {
+      Write-Warning 'skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)'
+    } else {
+      $attestations = @()
+      $answered = $false
+      try {
+        # The predicate filter MUST exclude release-membership attestations.
+        # See install.sh for the query contract.
+        $response = Invoke-RestMethod -UseBasicParsing `
+          -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())?predicate_type=https://slsa.dev/provenance/v1"
+        # An unexpected response shape MUST count as a missing attestation.
+        # An unchecked property access could throw and enter the warn-and-install path.
+        if ($null -ne $response -and $response.PSObject.Properties['attestations']) {
+          $attestations = @($response.attestations)
+        }
+        $answered = $true
+      } catch {
+        # 404 is GitHub answering "nothing attested these bytes", which is a
+        # verdict; anything else (rate limit, 5xx, no network) left the question
+        # unanswered.
+        if ((Get-StatusCode $_.Exception) -eq 404) {
+          Deny-Install "no build provenance from $repo for $provenanceAsset"
+        }
+        $message = "could not reach the attestations API for ${provenanceAsset}: $($_.Exception.Message)"
+        if ($requireAttestation) { Deny-Install $message }
+        Write-Warning $message
+        Write-Warning 'continuing - this download is unverified'
       }
-      $answered = $true
-    } catch {
-      # 404 is GitHub answering "nothing attested these bytes", which is a
-      # verdict; anything else (rate limit, 5xx, no network) left the question
-      # unanswered.
-      if ((Get-StatusCode $_.Exception) -eq 404) {
-        Deny-Install "no build provenance from $repo for $asset"
-      }
-      $message = "could not reach the attestations API for ${asset}: $($_.Exception.Message)"
-      if ($requireAttestation) { Deny-Install $message }
-      Write-Warning $message
-      Write-Warning 'continuing - this download is unverified'
-    }
 
-    if ($answered) {
-      if ($attestations.Count -gt 0) {
-        Write-Host "Verified build provenance for $asset"
-      } else {
-        Deny-Install "no build provenance from $repo for $asset"
+      if ($answered) {
+        if ($attestations.Count -gt 0) {
+          Write-Host "Verified build provenance for $provenanceAsset"
+        } else {
+          Deny-Install "no build provenance from $repo for $provenanceAsset"
+        }
       }
     }
   }
+  Confirm-Provenance "$downloadPath" $asset
 
   $docsPath = Join-Path $tempDir $docsAsset
   try {
@@ -194,6 +195,7 @@ try {
     Write-Warning "run 'rom-weaver setup' to install the identify database"
   }
   if ($docsPath) {
+    Confirm-Provenance "$docsPath" $docsAsset
     $docsDir = Join-Path $tempDir 'docs'
     Expand-Archive -LiteralPath $docsPath -DestinationPath $docsDir -Force
     $manDir = Join-Path $installDir 'docs/man'

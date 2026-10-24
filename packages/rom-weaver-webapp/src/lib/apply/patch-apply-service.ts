@@ -13,6 +13,14 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { isXdeltaPatchExtension } from "../patch-format-classification.ts";
 import { getExpectedPatchHeaderMagic } from "../patch-header-magic.ts";
 import { getFileNameExtension } from "../path-utils.ts";
+import {
+  type BareMemberRule,
+  createBareMemberRule,
+  describeBareMemberFailure,
+  describeUnboundInputMember,
+  findMemberAssets,
+  loneBareFile,
+} from "./bare-member-target.ts";
 
 type PatchSourceValidator = {
   validateSourceAsync?: (file: PatchFileInstance) => boolean | Promise<boolean>;
@@ -24,6 +32,8 @@ type PatchProbeRequirements = {
    */
   filenameCrc32?: string;
   format?: string;
+  /** The patch embeds checksums of its source in some algorithm (a BPS CRC32, a RUP MD5). */
+  hasSourceChecksums?: boolean;
   minimumSourceSize?: number;
   patchCrc32?: string;
   recordCount?: number;
@@ -155,12 +165,14 @@ const patchProbeRequirementsFromDescriptor = (
   const targetCrc32 = toOptionalCrc32Hex(descriptor.targetCrc32);
   const patchCrc32 = toOptionalCrc32Hex(descriptor.patchCrc32);
   const filenameCrc32 = toOptionalCrc32Hex(descriptor.filenameChecksums?.crc32);
+  const hasSourceChecksums = !!descriptor.sourceChecksumVariants?.length;
   const sourceTitles = [
     ...new Set(descriptor.sourceIdentification?.matches.map((match) => match.name.trim()).filter(Boolean) || []),
   ];
   if (
     !(
       format ||
+      hasSourceChecksums ||
       minimumSourceSize !== undefined ||
       sourceSize !== undefined ||
       targetSize !== undefined ||
@@ -175,6 +187,7 @@ const patchProbeRequirementsFromDescriptor = (
   return {
     ...(filenameCrc32 ? { filenameCrc32 } : {}),
     ...(format ? { format } : {}),
+    ...(hasSourceChecksums ? { hasSourceChecksums } : {}),
     ...(minimumSourceSize === undefined ? {} : { minimumSourceSize }),
     ...(patchCrc32 ? { patchCrc32 } : {}),
     ...(recordCount === undefined ? {} : { recordCount }),
@@ -190,7 +203,7 @@ const patchProbeRequirementsFromDescriptor = (
 // (classify + parse in one call), which describes the embedded source/target metadata. Archive leaves
 // already carry the descriptor's requirements (stashed by the patch enumeration); a bare patch runs
 // ingest here once over its own bytes.
-const resolvePatchRequirementsForApply = async (
+const resolveIngestPatchRequirements = async (
   patchFile: PatchFileInstance,
   runtime?: WorkflowRuntime,
 ): Promise<PatchProbeRequirements | undefined> => {
@@ -211,6 +224,11 @@ const resolvePatchRequirementsForApply = async (
     return undefined;
   }
 };
+
+const resolvePatchRequirementsForApply = async (
+  patchFile: PatchFileInstance,
+  runtime?: WorkflowRuntime,
+): Promise<PatchProbeRequirements | undefined> => resolveIngestPatchRequirements(patchFile, runtime);
 
 const parsePatchForApply = async (
   patchFile: PatchFileInstance,
@@ -271,21 +289,31 @@ const resolvePatchTarget = async (
 const describeAssetLeaf = (asset: InputAsset) =>
   `${asset.kind === "track" ? "track" : "member"} ${asset.member || asset.fileName}`;
 
-const findMemberTarget = (index: number, member: string, patchableAssets: InputAsset[]): InputAsset | undefined => {
-  const matches = patchableAssets.filter((asset) => {
-    if (asset.member === member) return true;
-    if (asset.discGroupId && asset.trackNumber !== undefined)
-      return `${asset.discGroupId}:${asset.trackNumber}` === member;
-    return false;
-  });
+const findMemberTarget = (
+  index: number,
+  member: string,
+  patchableAssets: InputAsset[],
+  rule: BareMemberRule,
+): InputAsset | undefined => {
+  const matches = findMemberAssets(member, patchableAssets, rule);
   if (matches.length > 1) throw new Error(`Patch ${index + 1} ROM member is ambiguous: ${member}`);
   return matches[0];
 };
 
-const resolveMemberTarget = (index: number, member: string, patchableAssets: InputAsset[]): InputAsset => {
-  const match = findMemberTarget(index, member, patchableAssets);
-  if (!match) throw new Error(`Patch ${index + 1} ROM member was not found: ${member}`);
-  return match;
+const resolveMemberTarget = (
+  index: number,
+  member: string,
+  patchableAssets: InputAsset[],
+  rule: BareMemberRule,
+): InputAsset => {
+  const match = findMemberTarget(index, member, patchableAssets, rule);
+  if (match) return match;
+  const bare = loneBareFile(patchableAssets);
+  throw new Error(
+    bare
+      ? `Patch ${index + 1} ROM member was not found: ${member}; ${describeBareMemberFailure(member, bare, rule)}`
+      : `Patch ${index + 1} ROM member was not found: ${member}`,
+  );
 };
 
 const resolvePatchTargets = async (
@@ -295,10 +323,16 @@ const resolvePatchTargets = async (
   patchInputs?: Array<PatchInputRef | undefined>,
   patchIds?: Array<string | undefined>,
   patchTargetRefs?: Array<PatchInputRef | undefined>,
+  bareMemberRule?: BareMemberRule,
 ): Promise<InputAsset[]> => {
   const patchableAssets = assets.filter((asset) => asset.patchable);
   if (!patchableAssets.length) throw new Error("No patchable input was provided");
 
+  const rule =
+    bareMemberRule ??
+    createBareMemberRule(
+      patches.map((_, index) => ({ input: patchInputs?.[index], target: patchTargetRefs?.[index] })),
+    );
   const targets: InputAsset[] = [];
   const patchIndexById = new Map<string, number>();
   for (let index = 0; index < patches.length; index++) {
@@ -322,7 +356,7 @@ const resolvePatchTargets = async (
       continue;
     }
     if (laneRef && "rom" in laneRef && laneRef.member) {
-      targets.push(resolveMemberTarget(index, laneRef.member, patchableAssets));
+      targets.push(resolveMemberTarget(index, laneRef.member, patchableAssets, rule));
       continue;
     }
     targets.push(await resolvePatchTarget(index, patches[index], patchableAssets, patchTargets?.[index]));
@@ -343,9 +377,13 @@ const resolvePatchTargets = async (
       if (!readTarget)
         throw new Error(`Patch ${index + 1} input producer has no resolved ROM target: ${inputRef.patch}`);
     } else if (inputRef.member) {
-      // An unknown member stays with the worker, which resolves members
+      readTarget = findMemberTarget(index, inputRef.member, patchableAssets, rule);
+      // The worker receives the lone leaf as a bare file and would bind the unknown member to it,
+      // so reject a member the leaf does not stand in for, as the CLI does.
+      const unbound = readTarget ? undefined : describeUnboundInputMember(inputRef.member, patchableAssets, rule);
+      if (unbound) throw new Error(`Patch ${index + 1} ROM member was not found: ${inputRef.member}; ${unbound}`);
+      // Otherwise an unknown member stays with the worker, which resolves members
       // against the leaf it receives.
-      readTarget = findMemberTarget(index, inputRef.member, patchableAssets);
     }
     if (!readTarget || readTarget.id === writeTarget.id) continue;
     // The worker receives one leaf file per target, so a read from another

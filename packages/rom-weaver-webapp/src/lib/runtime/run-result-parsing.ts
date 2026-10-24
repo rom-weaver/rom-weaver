@@ -71,6 +71,26 @@ const getRunResultTiming = (result: RomWeaverRunJsonResult) => {
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 
+/**
+ * Handler warnings of a finished run (for example "IPS patch did not change output"). The
+ * engine copies every warning it puts in the terminal label into `details.warnings`, so the
+ * label is never parsed.
+ */
+const getRunResultWarnings = (result: RomWeaverRunJsonResult): string[] => {
+  const terminal = getTerminalEvent(result);
+  if (!terminal) return [];
+  const details = asRecord(getRomWeaverRunEventDetails(terminal));
+  const warnings = Array.isArray(details?.warnings)
+    ? details.warnings.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const unique = new Set<string>();
+  for (const warning of warnings) {
+    const text = warning.trim();
+    if (text) unique.add(text);
+  }
+  return [...unique];
+};
+
 const getEmittedFileDetails = (
   result: RomWeaverRunJsonResult,
 ): { fileName?: string; path?: string; sizeBytes?: number } | null => {
@@ -185,16 +205,18 @@ const parseChecksumVariants = (details: unknown): ChecksumVariant[] | undefined 
 };
 
 const romTypeFromEmittedFile = (
-  entry: { platform?: string; discFormat?: string; recommendedFormat?: string } | undefined,
+  entry: { platform?: string; discFormat?: string; recommendedFormat?: string; chdCreateMode?: string } | undefined,
 ): RomTypeTag | undefined => {
   const platform = entry?.platform?.trim() ? entry.platform.trim() : undefined;
   const discFormat = entry?.discFormat?.trim() ? entry.discFormat.trim() : undefined;
   const recommendedFormat = entry?.recommendedFormat?.trim() ? entry.recommendedFormat.trim() : undefined;
-  if (!(platform || discFormat || recommendedFormat)) return undefined;
+  const chdCreateMode = entry?.chdCreateMode?.trim() ? entry.chdCreateMode.trim() : undefined;
+  if (!(platform || discFormat || recommendedFormat || chdCreateMode)) return undefined;
   return {
     ...(platform ? { platform } : {}),
     ...(discFormat ? { discFormat } : {}),
     ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
   };
 };
 
@@ -332,6 +354,7 @@ export {
   getEmittedFiles,
   getLastEvent,
   getRunResultTiming,
+  getRunResultWarnings,
   getTerminalEvent,
   parseChecksumVariants,
   normalizeEmittedFileChecksums,

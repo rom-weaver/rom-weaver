@@ -1,5 +1,8 @@
 import { createLogger } from "../../lib/logging.ts";
-import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
+import {
+  ROM_WEAVER_FILE_FILTERS,
+  ROM_WEAVER_WEAVE_FILE_NAMES,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 /**
  * Single source of truth for classifying a dropped file by name into a patch,
@@ -37,6 +40,37 @@ const hasKnownExtension = (fileName: string, extensions: readonly string[]) => {
 const isPatchFileName = (fileName: string) => hasKnownExtension(fileName, PATCH_FILE_EXTENSION_VARIANTS);
 const isArchiveFileName = (fileName: string) => hasKnownExtension(fileName, ARCHIVE_FILE_EXTENSIONS);
 const isRomFileName = (fileName: string) => hasKnownExtension(fileName, ROM_FILE_EXTENSIONS);
+
+// The canonical name is the trusted fast-path: it marks a weave by name
+// alone, and its parse errors surface. `rom-weaver-weave.json[.codec]`.
+const WEAVE_FILE_NAME_REGEX = new RegExp(
+  `^(?:${Object.values(ROM_WEAVER_WEAVE_FILE_NAMES)
+    .map((name) => name.replaceAll(".", "\\."))
+    .join("|")})(?:\\.[^.]+)?$`,
+  "i",
+);
+const isWeaveFileName = (name: string) => WEAVE_FILE_NAME_REGEX.test(name.split(/[\\/]/).pop() || "");
+
+/**
+ * Decide a dropped archive's bucket from its entry names, mirroring Rust's probe-weave verdict
+ * (`is_rom = has_rom || !has_patch`). Defaults to the ROM bucket on any listing failure - the safe
+ * direction, since Rust's reclassify still moves a misrouted patch weave afterwards.
+ */
+const classifyArchiveBucket = (archive: { name: string }, names: readonly string[]): "rom" | "patch" => {
+  const hasRom = names.some(isRomFileName);
+  const hasPatch = names.some((name) => isPatchFileName(name) || isWeaveFileName(name));
+  const hasNestedArchive = names.some(isArchiveFileName);
+  const bucket = hasRom ? "rom" : hasPatch ? "patch" : "rom";
+  logger.trace("archive content classified", {
+    bucket,
+    entryCount: names.length,
+    hasNestedArchive,
+    hasPatch,
+    hasRom,
+    name: archive.name,
+  });
+  return bucket;
+};
 
 type DroppedFileClass = "patch" | "archive" | "rom" | "unknown";
 
@@ -92,11 +126,13 @@ const classifyDroppedFiles = (files: File[]): DroppedFileClassification => {
 
 export {
   ARCHIVE_FILE_EXTENSIONS,
+  classifyArchiveBucket,
   classifyDroppedFiles,
   classifyFileName,
   isArchiveFileName,
   isPatchFileName,
   isRomFileName,
+  isWeaveFileName,
   PATCH_FILE_EXTENSION_VARIANTS,
   PATCH_FILE_EXTENSIONS,
   ROM_FILE_EXTENSIONS,

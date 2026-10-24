@@ -186,7 +186,7 @@ export const PatchActionsMenu = ({
   onMoveUp: () => void;
   onReplace: (file: File) => void;
   onOpenChange: (open: boolean) => void;
-  /** Absent while the details form cannot be edited (no bundle meta channel). */
+  /** Absent while the details form cannot be edited (no weave meta channel). */
   onEdit?: () => void;
   onRemove: () => void;
   open: boolean;

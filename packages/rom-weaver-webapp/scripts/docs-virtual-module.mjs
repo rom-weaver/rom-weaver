@@ -8,20 +8,23 @@ import { createDocsSearchIndex } from "../src/webapp/docs-search.mjs";
 // honestly a devDependency - `scripts/gen-third-party-licenses.mjs` walks the
 // shipped dependency graph, so a bundled parser would be missing from NOTICE.
 //
-// The rendered output is split across three module kinds so a docs visit only
+// The rendered output is split across four module kinds so a docs visit only
 // downloads what it uses:
 // - `virtual:rom-weaver-docs` - route metadata (nav shelves, titles, sections)
 //   plus one dynamic-import loader per page, so each guide's HTML becomes its
 //   own lazy chunk instead of every visit shipping all of them.
 // - `virtual:rom-weaver-docs-page/<slug>` - one guide's rendered HTML.
+// - `virtual:rom-weaver-docs-html` - shared heading, table, and code markup, restored
+//   by page modules without changing their HTML.
 // - `virtual:rom-weaver-docs-search` - the prebuilt search entries (plain text,
 //   no HTML), loaded only when the reader interacts with search.
 const VIRTUAL_ID = "virtual:rom-weaver-docs";
 const PAGE_VIRTUAL_PREFIX = "virtual:rom-weaver-docs-page/";
 const SEARCH_VIRTUAL_ID = "virtual:rom-weaver-docs-search";
+const HTML_VIRTUAL_ID = "virtual:rom-weaver-docs-html";
 const RESOLVED_PREFIX = "\0";
-const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-page\/)/;
-const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-page/)`);
+const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-html$|-page\/)/;
+const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-html$|-page/)`);
 
 // Escape HTML delimiters and Unicode line separators in generated JavaScript.
 // This also keeps the serialized values safe if a caller later embeds them in HTML.
@@ -37,11 +40,13 @@ const serializeIntoCode = (value) =>
 const SAFE_SLUG = /^[a-z0-9]+(?:[-/][a-z0-9]+)*$/;
 
 /** @param {string} id */
-const isDocsVirtualId = (id) => id === VIRTUAL_ID || id === SEARCH_VIRTUAL_ID || id.startsWith(PAGE_VIRTUAL_PREFIX);
+const isDocsVirtualId = (id) =>
+  id === VIRTUAL_ID || id === SEARCH_VIRTUAL_ID || id === HTML_VIRTUAL_ID || id.startsWith(PAGE_VIRTUAL_PREFIX);
 
 const resolvedDocsVirtualIds = () => [
   `${RESOLVED_PREFIX}${VIRTUAL_ID}`,
   `${RESOLVED_PREFIX}${SEARCH_VIRTUAL_ID}`,
+  `${RESOLVED_PREFIX}${HTML_VIRTUAL_ID}`,
   ...DOC_SOURCES.map((source) => `${RESOLVED_PREFIX}${PAGE_VIRTUAL_PREFIX}${source.slug}`),
 ];
 
@@ -56,9 +61,50 @@ const invalidateDocsModules = (server) => {
   }
 };
 
+// Only omit an ID when this exact derivation reproduces it; custom and duplicate IDs stay explicit.
+const SECTION_ID_CODE = '(label) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")';
+const sectionId = (label) =>
+  label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+const compactId = (id, label) => (id === sectionId(label) ? 0 : id);
+const sectionIcon = (routes) =>
+  routes.flatMap(({ html }) => html.match(/<svg\b[^>]*class="docs-section-link-icon"[^>]*>[\s\S]*?<\/svg>/g) ?? [])[0];
+
+const sharedHtmlFragments = (routes) => {
+  const icon = sectionIcon(routes) ?? "";
+  return [
+    icon ? `${icon}<span class="docs-section-title">` : "",
+    '<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0">',
+    '<div class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single">',
+    '<div class="docs-code-block" data-docs-copy-container>',
+    icon,
+    '<a class="docs-section-link" href="/',
+    "</span></a></h2>",
+    '<a href="/docs/',
+  ];
+};
+
+// Restoration MUST preserve literal text, including digits and replacement-pattern characters.
+const splitHtmlFragments = (html, fragments) => {
+  let parts = [html];
+  for (const [index, fragment] of fragments.entries()) {
+    if (!fragment) continue;
+    parts = parts.flatMap((part) => {
+      if (typeof part !== "string") return [part];
+      return part.split(fragment).flatMap((text, position) => (position === 0 ? [text] : [index, text]));
+    });
+  }
+  return parts;
+};
+
 /** @param {readonly import("../src/webapp/docs-content.mjs").DocRoute[]} routes */
 const createMetadataModuleSource = (routes) => {
-  const metadata = routes.map(({ html: _html, ...route }) => route);
+  const metadata = routes.map(({ html: _html, sections, ...route }) => ({
+    ...route,
+    sections: sections?.map(({ id, label }) => [compactId(id, label), label]),
+  }));
   const loaders = routes
     .map(({ slug }) => {
       if (!SAFE_SLUG.test(slug)) throw new Error(`docs virtual module: docs slug '${slug}' is not a safe route slug`);
@@ -66,7 +112,8 @@ const createMetadataModuleSource = (routes) => {
     })
     .join("\n");
   return [
-    `export const DOC_ROUTES = ${serializeIntoCode(metadata)};`,
+    `const sectionId = ${SECTION_ID_CODE};`,
+    `export const DOC_ROUTES = ${serializeIntoCode(metadata)}.map(route => route.sections ? ({ ...route, sections: route.sections.map(([id, label]) => ({ id: id === 0 ? sectionId(label) : id, label })) }) : route);`,
     "export const DOC_PAGE_LOADERS = {",
     loaders,
     "};",
@@ -79,11 +126,15 @@ const createSearchModuleSource = (routes) => {
   const entries = Object.fromEntries(
     createDocsSearchIndex(routes).map((route) => [
       route.slug,
-      route.searchEntries.map(({ id, label, text }) => [id, label, text]),
+      route.searchEntries.map(({ id, label, text }) =>
+        text.startsWith(label)
+          ? [compactId(id, label), label, text.slice(label.length)]
+          : [compactId(id, label), label, text, 0],
+      ),
     ]),
   );
-  // The downloaded index MUST retain every entry without repeating field names per section.
-  return `export const SEARCH_ENTRIES = Object.fromEntries(Object.entries(${serializeIntoCode(entries)}).map(([slug, entries]) => [slug, entries.map(([id, label, text]) => ({ id, label, text }))]));\n`;
+  // The downloaded index MUST retain every entry while storing a repeated heading only once.
+  return `const sectionId = ${SECTION_ID_CODE};\nexport const SEARCH_ENTRIES = Object.fromEntries(Object.entries(${serializeIntoCode(entries)}).map(([slug, entries]) => [slug, entries.map(([id, label, text, full]) => ({ id: id === 0 ? sectionId(label) : id, label, text: full === 0 ? text : label + text }))]));\n`;
 };
 
 /** Serves the rendered guides to the app as `virtual:rom-weaver-docs*` modules. */
@@ -123,9 +174,15 @@ const docsVirtualModule = (initialRoutes = null) => {
         if (!isDocsVirtualId(virtualId)) return undefined;
         if (virtualId === VIRTUAL_ID) return createMetadataModuleSource(getRoutes());
         if (virtualId === SEARCH_VIRTUAL_ID) return createSearchModuleSource(getRoutes());
+        if (virtualId === HTML_VIRTUAL_ID)
+          return `const fragments = ${serializeIntoCode(sharedHtmlFragments(getRoutes()))};\nexport const icon = fragments[4];\nexport const restore = parts => parts.map(part => typeof part === "number" ? fragments[part] : part).join("");\n`;
         const slug = virtualId.slice(PAGE_VIRTUAL_PREFIX.length);
         const route = getRoutes().find((entry) => entry.slug === slug);
         if (!route) throw new Error(`docs virtual module: no docs route for slug '${slug}'`);
+        const parts = splitHtmlFragments(route.html, sharedHtmlFragments(getRoutes()));
+        if (parts.length > 1) {
+          return `import { restore } from "${HTML_VIRTUAL_ID}";\nexport const html = restore(${serializeIntoCode(parts)});\n`;
+        }
         return `export const html = ${serializeIntoCode(route.html)};\n`;
       },
     },

@@ -37,6 +37,7 @@ const inertStackController: PatcherStackController = {
 const inertOutputController: PatcherOutputController = {
   ...createStaticStoreController({
     applyButton: {
+      blocked: false,
       disabled: true,
       label: "Apply patch",
       loading: false,
@@ -46,6 +47,7 @@ const inertOutputController: PatcherOutputController = {
     applyTiming: "",
     compress: null,
     compressionFormat: "zip",
+    formatPending: false,
     compressTiming: "",
     disabled: true,
     displayFileName: "",

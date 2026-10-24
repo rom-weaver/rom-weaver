@@ -112,6 +112,7 @@ const toStagedInputInfo = (
     archiveName: resolved
       ? getResolvedInputArchiveName(resolved, originalName)
       : getWorkflowArchiveName(source, originalName),
+    chdCodecMode: resolved?.chdCodecMode ?? null,
     chdMode: resolved?.chdMode || getStagedInputField(source, "chdMode"),
     checksums: checksums || resolved?.checksums || getStagedInputField(source, "checksums"),
     checksumVariants: resolved?.checksumVariants || getStagedInputField(source, "checksumVariants"),

@@ -14,9 +14,9 @@ export const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 export const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 export const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
 export const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
-// Nested patch bundles: B_bundle = three nested zips with one patch each; C_root = a nested zip with
+// Nested patch weaves: B_weave = three nested zips with one patch each; C_root = a nested zip with
 // two sibling patches plus a deeper nested patch; A_outer = a deep single-patch chain.
-export const NESTED_BUNDLE_ZIP = "tests/fixtures/archives/B_bundle.zip";
+export const NESTED_WEAVE_ZIP = "tests/fixtures/archives/B_weave.zip";
 export const NESTED_ROOT_ZIP = "tests/fixtures/archives/C_root.zip";
 export const NESTED_CHAIN_ZIP = "tests/fixtures/archives/A_outer.zip";
 export const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";
@@ -93,6 +93,40 @@ export const readStoredZipEntries = (bytes) => {
   }
   return entries;
 };
+
+// Zip `entries` ([{ file, fileName }]) through the real zip writer into one File named `fileName`.
+const zipEntriesToFile = async (entries, fileName) => {
+  const create = browserRuntime.compression.create;
+  if (!create) throw new Error("Runtime compression create capability is unavailable");
+  const result = await create({ entries, format: "zip", options: { outputName: fileName, threads: 1 } });
+  const output = result?.output;
+  if (!output) throw new Error("Zip compression did not return output");
+  try {
+    const blob = await browserRuntime.publicOutput.getBlob(output);
+    return new File([await blob.arrayBuffer()], fileName, { type: "application/octet-stream" });
+  } finally {
+    await output.dispose().catch(() => undefined);
+  }
+};
+
+// A real .dcp is a ZIP holding the files that replace a Dreamcast disc's (IP.BIN, ...) plus modified
+// files stored as `PATH.xdelta` deltas and a `.DAT` data file, which are patch-filter extensions that
+// must not be mistaken for standalone patches. Built through the real zip writer so it is a valid
+// archive rather than "PK" placeholder bytes.
+export const buildDcpFile = (fileName = "real.dcp") =>
+  zipEntriesToFile(
+    [
+      ["IP.BIN", new Uint8Array(2048).fill(1)],
+      ["1ST_READ.BIN.xdelta", new Uint8Array(64).fill(2)],
+      ["DATA/FONT.PVR", new Uint8Array(1024).fill(3)],
+      ["DATA/SOUND.DAT", new Uint8Array(1024).fill(4)],
+    ].map(([entryName, bytes]) => ({ file: new File([bytes], entryName.split("/").pop()), fileName: entryName })),
+    fileName,
+  );
+
+// A distribution ZIP (e.g. translation.zip) whose patch member is a real .dcp.
+export const buildZippedDcpFile = async (archiveName = "translation.zip", dcpName = "game.dcp") =>
+  zipEntriesToFile([{ file: await buildDcpFile(dcpName), fileName: dcpName }], archiveName);
 
 export const selectFileInputs = (input, files) => {
   const dataTransfer = new DataTransfer();

@@ -33,6 +33,12 @@ fn formats_json_reports_capabilities_from_the_registries() {
         .expect("chd is registered");
     assert_eq!(chd["create"], true);
     assert_eq!(chd["extract"], true);
+    // Every codec `compress --codec` accepts for CHD is listed, including the
+    // ones the webapp's codec pickers omit.
+    let codecs = chd["codecs"].as_array().expect("chd codecs");
+    for codec in ["store", "cdzs", "avhuff"] {
+        assert!(codecs.contains(&Value::from(codec)), "{codecs:?}");
+    }
     let rar = containers
         .iter()
         .find(|format| format["name"] == "rar")
@@ -95,7 +101,7 @@ fn closed_stdout_does_not_panic_or_interrupt_file_outputs() {
         vec!["formats", "--json"],
         vec!["completions", "bash"],
         vec!["man", "patch", "apply"],
-        vec!["bundle", "schema"],
+        vec!["weave", "schema"],
         vec!["formats", "--dry-run", "--json"],
         vec!["checksum", "-i", input_path],
         vec!["checksum", "-i", input_path, "--json"],
@@ -465,4 +471,51 @@ fn formats_jsonl_uses_a_terminal_event_and_preserves_the_catalog() {
     assert_eq!(event["command"], "formats");
     assert_eq!(event["status"], "succeeded");
     assert_eq!(event["details"], catalog);
+}
+
+#[test]
+fn json_missing_subcommand_error_hides_internal_commands() {
+    for args in [vec!["--json"], vec!["patch", "--json"]] {
+        let json = run_single_json_event(&args, 2);
+        let message = json["error"]["message"].as_str().expect("message");
+        assert!(message.contains("requires a subcommand"), "{message}");
+        for hidden in ["ingest", "plan-extract-batch", "legacy-weave-apply"] {
+            assert!(!message.contains(hidden), "{hidden} leaked: {message}");
+        }
+    }
+    let json = run_single_json_event(&["--json"], 2);
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message")
+            .contains("compress")
+    );
+}
+
+#[test]
+fn trim_output_help_keeps_the_single_input_note() {
+    let help = String::from_utf8(command_stdout(&["trim", "--help"], 0)).expect("utf-8");
+    assert!(
+        help.contains("Only valid with a single trimmable input"),
+        "{help}"
+    );
+}
+
+#[test]
+fn weave_create_per_patch_flags_all_carry_the_adjacency_note() {
+    let help = String::from_utf8(command_stdout(&["weave", "create", "--help"], 0)).expect("utf-8");
+    let note = "This flag describes the most recent preceding --patch.";
+    let sections: Vec<&str> = help.split("\n      --").collect();
+    let per_patch: Vec<&&str> = sections
+        .iter()
+        .filter(|section| {
+            section.starts_with("patch-")
+                && !section.starts_with("patch <")
+                && !section.starts_with("patch-basis-")
+        })
+        .collect();
+    assert!(per_patch.len() >= 10, "{per_patch:?}");
+    for section in per_patch {
+        assert!(section.contains(note), "missing note: {section}");
+    }
 }

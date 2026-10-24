@@ -136,6 +136,12 @@ pub fn extract_entry<R: Read + Seek>(reader: &mut R, entry: &ZipEntry) -> Result
             entry.name, entry.compressed_size
         )));
     }
+    if entry.method == METHOD_STORED && entry.compressed_size != entry.uncompressed_size {
+        return Err(RomWeaverError::Validation(format!(
+            "ZIP: stored entry `{}` has {} bytes, expected {}",
+            entry.name, entry.compressed_size, entry.uncompressed_size
+        )));
+    }
     let mut compressed = vec![0u8; entry.compressed_size as usize];
     reader.read_exact(&mut compressed)?;
 

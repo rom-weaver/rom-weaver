@@ -31,6 +31,9 @@
   align-items: center;
   min-width: 0;
 }
+.rw-app .brand-mark-wrap {
+  display: contents;
+}
 .rw-app .brand-mark-link {
   display: flex;
   flex: none;
@@ -54,7 +57,9 @@
   fill: var(--thread);
 }
 .rw-app .brand-word-link {
+  display: block;
   min-width: 0;
+  min-block-size: 24px;
   color: inherit;
   border-radius: var(--r-s);
 }
@@ -595,6 +600,9 @@
   border: 1px solid currentcolor;
   border-radius: 999px;
 }
+.rw-app .nav-beta::before {
+  content: attr(data-label);
+}
 .rw-app .nav-row[aria-current="page"] .nav-beta {
   color: inherit;
 }
@@ -903,7 +911,8 @@
   border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .tool-pop-item svg {
+.rw-app .tool-pop-item svg,
+.rw-app .theme-picker svg {
   flex: none;
   width: 17px;
   height: 17px;
@@ -1037,9 +1046,51 @@
   transform: rotate(-90deg) scale(0.5);
 }
 
+/* Auto badge: an "A" on the icon's lower corner. The icon is masked away
+   around it, so the gap reads on any surface; both scale with the icon box. */
+.rw-app .theme-auto-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.rw-app .theme-auto-badge {
+  position: absolute;
+  top: calc(85% - 6.5px);
+  left: calc(85% - 6.5px);
+  width: 13px;
+  height: 13px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 13px;
+  color: var(--thread-ink);
+  text-align: center;
+  background: var(--thread);
+  border-radius: 50%;
+}
+/* The letter is generated content: axe's label-content-name-mismatch reads
+   text nodes even under aria-hidden, and the decorative badge is not part of
+   the control's name. */
+.rw-app .theme-auto-badge::before {
+  content: attr(data-badge);
+}
+.rw-app .theme-auto-icon svg {
+  mask-image: radial-gradient(circle at 85% 85%, #0000 8px, #000 8.5px);
+}
+/* The top-bar button carries the mark always; it shows only while auto. */
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool .theme-auto-badge {
+  display: none;
+}
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool svg {
+  mask-image: none;
+}
+/* In the menu the badge hangs past the icon box: keep it off the label. */
+.rw-app .tool-pop-item .theme-auto-icon {
+  margin-inline-end: 4px;
+}
+
 /* ── the phone dock ──
-   One row: two workflows, Menu, the third workflow, then App, which opens the
-   settings console from that edge. */
+   One row: the dock workflows, then Menu, which reads Close while the sheet or
+   a surface opened from it is up. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
@@ -1232,10 +1283,21 @@
   font-size: 0.66rem;
   text-align: center;
 }
-.rw-app #menu-sheet .nav-row-label {
+.rw-app #menu-sheet .nav-row-label,
+.rw-app #menu-sheet .nav-row-short {
   max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.15;
-  text-wrap: balance;
+  white-space: nowrap;
+}
+/* A tile too narrow for its full label shows the short one; the full one stays its name. */
+.rw-app .nav-row-short,
+.rw-app #menu-sheet .nav-row:has(.nav-row-short) .nav-row-label {
+  display: none;
+}
+.rw-app #menu-sheet .nav-row-short {
+  display: block;
 }
 /* A solid tag on the icon's top-right corner: an outline chip there drew its
    text across the icon's strokes. The ring in the sheet's colour cuts it off

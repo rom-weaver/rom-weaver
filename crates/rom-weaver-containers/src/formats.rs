@@ -1,4 +1,7 @@
-use std::{fs::File, path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use crate::nod::read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader};
 use rom_weaver_core::{
@@ -8,11 +11,11 @@ use rom_weaver_core::{
 };
 
 use crate::{
-    CsoContainerHandler, GczContainerHandler, NfsContainerHandler, PbpContainerHandler,
-    RarContainerHandler, RvzContainerHandler, SevenZContainerHandler, StreamCompression,
-    StreamContainerHandler, TarContainerHandler, TgcContainerHandler, WbfsContainerHandler,
-    WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler, ZipContainerFlavor,
-    ZipContainerHandler,
+    CsoContainerHandler, GcCisoContainerHandler, GczContainerHandler, NfsContainerHandler,
+    PbpContainerHandler, RarContainerHandler, RvzContainerHandler, SevenZContainerHandler,
+    StreamCompression, StreamContainerHandler, TarContainerHandler, TgcContainerHandler,
+    WbfsContainerHandler, WiaContainerHandler, XisoContainerHandler, Z3dsContainerHandler,
+    ZipContainerFlavor, ZipContainerHandler,
 };
 
 pub(crate) const ZIP: FormatDescriptor = FormatDescriptor {
@@ -98,6 +101,14 @@ pub(crate) const PBP: FormatDescriptor = FormatDescriptor {
     name: "pbp",
     aliases: &[],
     extensions: &[".pbp"],
+};
+/// GameCube CISO shares the `CISO` magic and `.ciso` extension with PSP CSO; registry probe
+/// separates them by header (see `handlers/gc_ciso.rs`).
+pub(crate) const GC_CISO: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "gc-ciso",
+    aliases: &[],
+    extensions: &[".ciso"],
 };
 pub(crate) const GCZ: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -321,6 +332,7 @@ enum ContainerHandlerKind {
     Cso,
     Pbp,
     Chd,
+    GcCiso,
     Gcz,
     Wia,
     Tgc,
@@ -343,6 +355,7 @@ impl ContainerHandlerKind {
             Self::Cso
                 | Self::Pbp
                 | Self::Chd
+                | Self::GcCiso
                 | Self::Gcz
                 | Self::Wia
                 | Self::Tgc
@@ -378,6 +391,7 @@ impl ContainerHandlerKind {
             Self::Cso => Arc::new(CsoContainerHandler::new(descriptor)),
             Self::Pbp => Arc::new(PbpContainerHandler),
             Self::Chd => Arc::new(crate::chd::ChdContainerHandler),
+            Self::GcCiso => Arc::new(GcCisoContainerHandler),
             Self::Gcz => Arc::new(GczContainerHandler),
             Self::Wia => Arc::new(WiaContainerHandler),
             Self::Tgc => Arc::new(TgcContainerHandler),
@@ -542,6 +556,12 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
         capabilities: CREATE_AND_EXTRACT_PARALLEL,
         default_output: Some(CHD_DEFAULT_OUTPUT),
         handler: ContainerHandlerKind::Chd,
+    },
+    ContainerFormatRegistration {
+        descriptor: &GC_CISO,
+        capabilities: EXTRACT_ONLY_PARALLEL,
+        default_output: None,
+        handler: ContainerHandlerKind::GcCiso,
     },
     ContainerFormatRegistration {
         descriptor: &GCZ,
@@ -783,13 +803,13 @@ impl ContainerRegistry {
         // header, so prefix-based identity detection above sees no console. Fall back to nod, which
         // decodes the container and reads the disc header - this recovers the RVZ recommendation for
         // an already-compressed GC/Wii image the webapp would otherwise get from the decoded leaf.
+        // Opening by path lets nod join split sets (`.wbfs` + `.wbf1`, ...), whose first part alone
+        // has no decodable disc header.
         let options = NodDiscOptions {
             preloader_threads: 0,
             ..Default::default()
         };
-        if let Ok(file) = File::open(path)
-            && let Ok(disc) = NodDiscReader::new_from_non_cloneable_read(file, &options)
-        {
+        if let Ok(disc) = NodDiscReader::new(path, &options) {
             let header = disc.header();
             if header.is_wii() || header.is_gamecube() {
                 return CompressFormatRecommendation {
@@ -800,6 +820,52 @@ impl ContainerRegistry {
         }
         recommendation
     }
+}
+
+/// The continuation parts (`.wbf1`, `.wbf2`, ...) next to a `.wbfs` file, in order. Follows the
+/// `.wbfN` naming nod uses to join a split set; empty when `path` is not a split WBFS set.
+fn split_wbfs_parts(path: &Path) -> Vec<PathBuf> {
+    let is_wbfs = path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("wbfs"));
+    let Some(name) = path.to_str().filter(|_| is_wbfs) else {
+        return Vec::new();
+    };
+    let prefix = &name[..name.len() - 1];
+    (1..)
+        .map(|index| PathBuf::from(format!("{prefix}{index}")))
+        .take_while(|part| part.is_file())
+        .collect()
+}
+
+/// Rejects a split WBFS set whose parts are not all among `inputs` when the `format` output stores
+/// input files as-is. Only RVZ decodes the set through nod, which joins the parts itself; any other
+/// format would silently keep just the parts it was given.
+pub fn ensure_split_wbfs_inputs_complete(inputs: &[PathBuf], format: &str) -> Result<()> {
+    if RVZ.matches_name(format) {
+        return Ok(());
+    }
+    // Inputs may spell the same file differently (`./disc.wbf1`, an absolute path), so compare
+    // canonical paths, keeping the literal path when it cannot be resolved.
+    let canonical =
+        |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let given: Vec<PathBuf> = inputs.iter().map(|input| canonical(input)).collect();
+    for input in inputs {
+        let missing: Vec<String> = split_wbfs_parts(input)
+            .into_iter()
+            .filter(|part| !given.contains(&canonical(part)))
+            .map(|part| part.display().to_string())
+            .collect();
+        if !missing.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "`{}` is the first part of a split WBFS set; {format} output would leave out `{}`. \
+                 Compress to rvz, or pass every part as an input to a zip or 7z archive",
+                input.display(),
+                missing.join("`, `")
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Map a detected ROM identity (the `platform` label and optical-medium `disc_format`

@@ -283,6 +283,24 @@ mod tests {
     }
 
     #[test]
+    fn crc32_token_edges() {
+        let crc32 = |name: &str| parse_filename_requirements(name).checksums.remove("crc32");
+        assert_eq!(crc32("Game {1A2B3C4D}.ips").as_deref(), Some("1a2b3c4d"));
+        // Unicode letters that case-fold onto ASCII are not part of the label.
+        assert_eq!(
+            crc32("hack \u{017F}crc32:1a2b3c4d.ips").as_deref(),
+            Some("1a2b3c4d")
+        );
+        assert_eq!(
+            crc32("hack \u{212A}crc32:1a2b3c4d.ips").as_deref(),
+            Some("1a2b3c4d")
+        );
+        assert_eq!(crc32("hack [crc32:1a2b3c4d5].ips"), None);
+        assert_eq!(crc32("hack [crc32_1a2b3c4d].ips"), None);
+        assert_eq!(crc32(""), None);
+    }
+
+    #[test]
     fn drops_conflicting_size() {
         let parsed = parse_filename_requirements("hack [size:10] (bytes:20).ips");
         assert_eq!(parsed.size, None);

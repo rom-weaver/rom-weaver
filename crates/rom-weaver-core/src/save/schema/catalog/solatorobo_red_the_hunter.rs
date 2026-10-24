@@ -10,100 +10,50 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 fn game_solatorobo_red_the_hunter_desmume() -> GameDefinition {
     let fields = vec![
-        FieldDefinition::new(
-            "general.play_time_seconds".into(),
-            "Play time (seconds)".into(),
+        catalog_field(
+            "general.play_time_seconds",
+            "Play time (seconds)",
             92,
             Storage::U32Le,
         )
         .description("Total play time in seconds; updates both save previews".into())
         .copies(vec![76, 28]),
-        FieldDefinition::new("general.level".into(), "Level".into(), 114, Storage::U8)
+        catalog_field("general.level", "Level", 114, Storage::U8)
             .description("Current level; updates both save previews".into())
             .copies(vec![84, 36]),
-        FieldDefinition::new(
-            "general.experience".into(),
-            "Experience".into(),
-            116,
-            Storage::U32Le,
-        ),
-        FieldDefinition::new("general.rings".into(), "Rings".into(), 120, Storage::U32Le)
+        catalog_field("general.experience", "Experience", 116, Storage::U32Le),
+        catalog_field("general.rings", "Rings", 120, Storage::U32Le)
             .description("Current rings; updates both save previews".into())
             .copies(vec![80, 32]),
-        FieldDefinition::new(
-            "general.p_crystals".into(),
-            "P Crystals".into(),
-            124,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "general.hunter_rank".into(),
-            "Hunter rank".into(),
-            1598,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "general.quest_points".into(),
-            "Quest points".into(),
-            1600,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "general.new_game_plus_bit_0".into(),
-            "New Game Plus raw bit 0".into(),
+        catalog_field("general.p_crystals", "P Crystals", 124, Storage::U16Le),
+        catalog_field("general.hunter_rank", "Hunter rank", 1598, Storage::U16Le),
+        catalog_field("general.quest_points", "Quest points", 1600, Storage::U16Le),
+        catalog_field(
+            "general.new_game_plus_bit_0",
+            "New Game Plus raw bit 0",
             1395,
             Storage::Bit,
         )
         .bit(4),
-        FieldDefinition::new(
-            "general.new_game_plus_bit_1".into(),
-            "New Game Plus raw bit 1".into(),
+        catalog_field(
+            "general.new_game_plus_bit_1",
+            "New Game Plus raw bit 1",
             1395,
             Storage::Bit,
         )
         .bit(5),
-        FieldDefinition::new(
-            "position.red.x".into(),
-            "Red position X".into(),
-            404,
-            Storage::I32Le,
-        ),
-        FieldDefinition::new(
-            "position.red.y".into(),
-            "Red position Y".into(),
-            408,
-            Storage::I32Le,
-        ),
-        FieldDefinition::new(
-            "position.red.z".into(),
-            "Red position Z".into(),
-            412,
-            Storage::I32Le,
-        ),
-        FieldDefinition::new(
-            "position.red.orientation".into(),
-            "Red orientation".into(),
+        catalog_field("position.red.x", "Red position X", 404, Storage::I32Le),
+        catalog_field("position.red.y", "Red position Y", 408, Storage::I32Le),
+        catalog_field("position.red.z", "Red position Z", 412, Storage::I32Le),
+        catalog_field(
+            "position.red.orientation",
+            "Red orientation",
             416,
             Storage::I16Le,
         ),
-        FieldDefinition::new(
-            "position.dahak.x".into(),
-            "Dahak position X".into(),
-            420,
-            Storage::I32Le,
-        ),
-        FieldDefinition::new(
-            "position.dahak.y".into(),
-            "Dahak position Y".into(),
-            424,
-            Storage::I32Le,
-        ),
-        FieldDefinition::new(
-            "position.dahak.z".into(),
-            "Dahak position Z".into(),
-            428,
-            Storage::I32Le,
-        ),
+        catalog_field("position.dahak.x", "Dahak position X", 420, Storage::I32Le),
+        catalog_field("position.dahak.y", "Dahak position Y", 424, Storage::I32Le),
+        catalog_field("position.dahak.z", "Dahak position Z", 428, Storage::I32Le),
     ];
     GameDefinition {
         fields,

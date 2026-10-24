@@ -1,3 +1,5 @@
+import { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
+
 type FileNameValue = unknown;
 
 const PATH_PART_SPLIT_REGEX = /[/\\]+/;
@@ -5,7 +7,9 @@ const LEADING_EXTENSION_DOT_REGEX = /^\./;
 const EXTENSION_CHARS_ONLY_REGEX = /^[^./\\\s?#]+$/;
 const FILE_NAME_PARTS_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const CHD_EXTENSION_REGEX = /\.chd$/i;
-const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
+const COMPRESSION_PROFILE_NAMES: ReadonlySet<string> = new Set(
+  ROM_WEAVER_COMPRESSION_METADATA.profiles.map((profile) => profile.name),
+);
 
 const findQueryOrHashIndex = (value: string): number => {
   const query = value.indexOf("?");
@@ -89,7 +93,7 @@ const replaceFileNameExtension = (fileName: string, extension: FileNameValue): s
 };
 
 const isCompressionLevelProfile = (value: FileNameValue): boolean =>
-  COMPRESSION_LEVEL_PROFILE_REGEX.test(String(value || ""));
+  COMPRESSION_PROFILE_NAMES.has(String(value || "").toLowerCase());
 
 const joinPath = (directory: string, fileName: string): string => {
   const normalizedDirectory = String(directory || "").trim();
@@ -99,6 +103,29 @@ const joinPath = (directory: string, fileName: string): string => {
     return `${normalizedDirectory}${fileName}`;
   return `${normalizedDirectory}${separator}${fileName}`;
 };
+
+// Characters Windows (and most archive extractors) reject in a file name, plus
+// control characters. Typed and generated output names share this rule.
+const RESERVED_FILE_NAME_CHARS_REGEX = /[<>:"/\\|?*]+/g;
+const WHITESPACE_RUN_REGEX = /\s+/g;
+
+const sanitizeFileNamePart = (value: string | null | undefined, fallback: string): string => {
+  const withoutControlCharacters = Array.from(String(value || ""))
+    .filter((char) => char.charCodeAt(0) >= 32)
+    .join("");
+  const sanitized = withoutControlCharacters
+    .replace(RESERVED_FILE_NAME_CHARS_REGEX, " ")
+    .replace(WHITESPACE_RUN_REGEX, " ")
+    .trim();
+  return sanitized || fallback;
+};
+
+/**
+ * Makes a user-typed output name safe to use as a file name. Returns "" when
+ * nothing usable remains so callers fall back to their default/generated name.
+ */
+const sanitizeTypedOutputName = (value: unknown): string =>
+  typeof value === "string" ? sanitizeFileNamePart(value, "") : "";
 
 export {
   CHD_EXTENSION_REGEX,
@@ -110,6 +137,8 @@ export {
   isCompressionLevelProfile,
   joinPath,
   replaceFileNameExtension,
+  sanitizeFileNamePart,
+  sanitizeTypedOutputName,
   stripFileNameQuery,
   stripLeadingExtensionDot,
 };

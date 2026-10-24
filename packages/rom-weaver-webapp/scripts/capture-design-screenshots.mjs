@@ -9,6 +9,7 @@ import avifEncode, { init as initAvif } from "@jsquash/avif/encode.js";
 import { chromium } from "playwright";
 import { createFirstSampleAssets } from "./first-sample-assets.mjs";
 import { decodeRgba } from "./optimize-png.mjs";
+import { SCREENSHOT_DIR, syncDocsScreenshotSizes } from "./sync-docs-screenshot-sizes.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
@@ -43,17 +44,24 @@ const assertNoDevBadge = async (page) => {
   if (badges.some((badge) => badge.trim() === "DEV")) throw new Error("Screenshot page still shows the DEV badge");
 };
 
-const waitForStableContent = (page) =>
+// Practice files start checking after their cards render, so a quiet moment
+// before the checks begin is not a settled page; wait for the patch verdicts.
+// A patch without a checksum to compare settles on "Checked" rather than "Verified".
+const waitForStableContent = (page, { practiceFiles = false } = {}) =>
   page.waitForFunction(
-    () => {
-      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText)) {
+    (waitForPatchChecks) => {
+      const text = document.body.innerText;
+      const patchChecksPending =
+        waitForPatchChecks &&
+        (!/\b(Verified|Checked)\b/.test(text) || /Not checked yet|Checking(?:…|\.\.\.)/.test(text));
+      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(text) || patchChecksPending) {
         globalThis.__romWeaverScreenshotStableAt = undefined;
         return false;
       }
       globalThis.__romWeaverScreenshotStableAt ??= performance.now();
       return performance.now() - globalThis.__romWeaverScreenshotStableAt >= 500;
     },
-    undefined,
+    practiceFiles,
     { polling: 50, timeout: 30_000 },
   );
 
@@ -92,6 +100,12 @@ const captureRegion = async (page, selector) => {
   };
 };
 
+// Full-screen cases show the first screen exactly as a visitor sees it.
+const captureScreen = async (page) => {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  return { shot: await page.screenshot({ animations: "disabled", type: "png" }) };
+};
+
 const prepareScreenshot = async (page, name) => {
   if (name === "identify-checks") {
     await page.locator("#identify-input-picker").setInputFiles({
@@ -99,7 +113,10 @@ const prepareScreenshot = async (page, name) => {
       mimeType: "application/octet-stream",
       name: "hello-world.nes",
     });
-    await page.getByRole("button", { name: "Copy SHA-1", exact: true }).first().waitFor();
+    await page
+      .getByRole("button", { name: /^Copy SHA-1 / })
+      .first()
+      .waitFor();
     return;
   }
   if (name === "save-editor") {
@@ -108,7 +125,7 @@ const prepareScreenshot = async (page, name) => {
     await page.getByRole("searchbox", { name: "Find a property" }).fill("player name");
     await page.getByRole("textbox", { name: "File 1 player name" }).fill("HERO");
     await page.getByRole("button", { name: "Preview changes", exact: true }).click();
-    await page.getByText(/1 field changes · integrity valid/).waitFor();
+    await page.getByText(/1 field change, integrity valid/).waitFor();
     return;
   }
   if (name === "test-player") {
@@ -176,17 +193,22 @@ const capture = async () => {
               await exitGuide.waitFor({ state: "detached" });
             }
             await prepareScreenshot(page, captureCase.name);
-            await waitForStableContent(page);
+            await waitForStableContent(page, captureCase);
             await assertNoDevBadge(page);
             await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-            await page.locator(".dock").evaluate((element) => {
-              element.style.visibility = "hidden";
-            });
-            const { crop, shot } = await captureRegion(page, captureCase.target);
-            const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
-              input: shot,
-              maxBuffer: 64 * 1024 * 1024,
-            });
+            if (!captureCase.fullScreen) {
+              await page.locator(".dock").evaluate((element) => {
+                element.style.visibility = "hidden";
+              });
+            }
+            const { crop, shot } = captureCase.fullScreen
+              ? await captureScreen(page)
+              : await captureRegion(page, captureCase.target);
+            const cropped = execFileSync(
+              IMAGE_MAGICK,
+              ["png:-", ...(crop ? ["-crop", crop, "+repage"] : []), "-depth", "8", "PNG24:-"],
+              { input: shot, maxBuffer: 64 * 1024 * 1024 },
+            );
             for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
               const image =
                 extension === "avif"
@@ -228,7 +250,16 @@ const capture = async () => {
   }
 };
 
-capture().catch((error) => {
-  process.stderr.write(`${error?.stack || String(error)}\n`);
-  process.exitCode = 1;
-});
+// Crops change size between captures, so rewrite the docs markup to match.
+const syncSizes = () => {
+  if (OUTPUT_DIR !== SCREENSHOT_DIR) return;
+  const changed = syncDocsScreenshotSizes();
+  if (changed.length) console.log(`Synced screenshot sizes in ${changed.join(", ")}`);
+};
+
+capture()
+  .then(syncSizes)
+  .catch((error) => {
+    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.exitCode = 1;
+  });

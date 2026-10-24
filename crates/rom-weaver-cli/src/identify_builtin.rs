@@ -281,7 +281,7 @@ struct PackGroup {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn sha256(bytes: &[u8]) -> String {
+pub(super) fn sha256(bytes: &[u8]) -> String {
     let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
         .expect("sha256 setup")
         .expect("sha256 support");
@@ -609,17 +609,6 @@ fn merged_metadata(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn write_group_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let part = path.with_extension("part");
-    fs::write(&part, bytes).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to write `{}`: {error}", part.display()))
-    })?;
-    fs::rename(&part, path).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to finalize `{}`: {error}", path.display()))
-    })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 struct GroupArchiveEntries {
     packs: Vec<PackIndexEntry>,
     cheats: Vec<CheatIndexEntry>,
@@ -840,23 +829,26 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
             fs::create_dir_all(&install)?;
         }
         for (slug, pack) in &packs {
-            write_group_atomic(&install.join(format!("{slug}.pack")), pack)?;
+            super::path_access::write_atomic(&install.join(format!("{slug}.pack")), pack)?;
         }
         let license = stage.join(LIBRETRO_LICENSE_FILE);
         if license.is_file() {
-            write_group_atomic(&install.join(LIBRETRO_LICENSE_FILE), &fs::read(&license)?)?;
+            super::path_access::write_atomic(
+                &install.join(LIBRETRO_LICENSE_FILE),
+                &fs::read(&license)?,
+            )?;
         }
         if !cheats.is_empty() {
             fs::create_dir_all(install.join("cheats"))?;
         }
         for (slug, shard) in &cheats {
-            write_group_atomic(
+            super::path_access::write_atomic(
                 &install.join("cheats").join(format!("{slug}.json.br")),
                 shard,
             )?;
         }
-        write_group_atomic(&install.join("index.json"), &index_bytes)?;
-        write_group_atomic(&install.join("catalog.json"), &catalog_bytes)?;
+        super::path_access::write_atomic(&install.join("index.json"), &index_bytes)?;
+        super::path_access::write_atomic(&install.join("catalog.json"), &catalog_bytes)?;
         Ok(())
     })();
     if let Err(error) = prepare {
@@ -893,7 +885,7 @@ fn copy_directory(source: &Path, target: &Path) -> Result<()> {
         if file_type.is_dir() {
             copy_directory(&entry.path(), &destination)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), destination)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&entry.path(), &destination)?;
         } else {
             return Err(RomWeaverError::Validation(format!(
                 "identify database contains an unsupported entry `{}`",
@@ -956,6 +948,16 @@ fn download_archive_bytes(url: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// The optional groups the release publishes archives for.
+#[cfg(not(target_arch = "wasm32"))]
+const OPTIONAL_GROUPS: [&str; 5] = [
+    "optional-arcade",
+    "optional-computers",
+    "optional-engines",
+    "optional-mobile",
+    "optional-extended",
+];
+
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn install_group(
     database_dir: &Path,
@@ -966,6 +968,12 @@ pub(super) fn install_group(
     let bytes = if let Some(path) = from {
         local_archive_bytes(path, "identify group archive")?
     } else {
+        if !OPTIONAL_GROUPS.contains(&group) {
+            return Err(RomWeaverError::Validation(format!(
+                "unknown identify pack group `{group}`; valid groups: {}",
+                OPTIONAL_GROUPS.join(", ")
+            )));
+        }
         let version = env!("CARGO_PKG_VERSION");
         let url = format!(
             "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.br"
@@ -1718,6 +1726,20 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn optional_groups_match_the_published_release_groups() {
+        let script =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/build-identify-index.mjs");
+        let script = std::fs::read_to_string(&script).expect("read identify index script");
+        let published: Vec<&str> = script
+            .lines()
+            .filter(|line| line.contains("default: false"))
+            .filter_map(|line| line.split("id: \"").nth(1)?.split('"').next())
+            .collect();
+        assert_eq!(published, OPTIONAL_GROUPS);
+    }
+
     #[test]
     fn group_ids_are_lowercase_alphanumeric_with_hyphens() {
         validate_group_id("optional-computers").expect("a valid group id");
@@ -2052,13 +2074,13 @@ mod tests {
     fn group_atomic_writes_replace_the_target_and_report_a_bad_path() {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
         let path = temp.path().join("index.json");
-        write_group_atomic(&path, b"first").expect("atomic write");
-        write_group_atomic(&path, b"second").expect("atomic overwrite");
+        crate::path_access::write_atomic(&path, b"first").expect("atomic write");
+        crate::path_access::write_atomic(&path, b"second").expect("atomic overwrite");
         assert_eq!(fs::read(&path).expect("written file"), b"second");
         assert!(!temp.path().join("index.part").exists());
 
         assert!(
-            error_text(write_group_atomic(
+            error_text(crate::path_access::write_atomic(
                 &temp.path().join("absent").join("index.json"),
                 b"payload"
             ))

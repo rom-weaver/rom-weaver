@@ -1,3 +1,4 @@
+import { createPatchFileFromPublicOutput } from "../../src/lib/runtime/public-output-bin-file.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createPatchFile } from "../../src/lib/input/binary-service.ts";
@@ -84,6 +85,27 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files[0]?.fileName).toBe("MyRenamedGame.bin");
   });
 
+  it.each([
+    ["Zelda Hack v1.2", "Zelda Hack v1.2.bin"],
+    ["Game 2.2", "Game 2.2.bin"],
+    ["MyRenamedGame.BIN", "MyRenamedGame.BIN"],
+    ["MyRenamedGame.gba", "MyRenamedGame.gba"],
+    ["Hack v1.2b", "Hack v1.2b.bin"],
+    ["Hack v1.0-beta", "Hack v1.0-beta.bin"],
+    ["Game (USA) (v1.1)", "Game (USA) (v1.1).bin"],
+    ["Mario.Bros", "Mario.Bros.bin"],
+  ])("treats requested raw output name %s as a base name", async (outputName, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.bin");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const options: ApplyWorkflowOptions = { output: { compression: "none", outputName } } as never;
+
+    const result = await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(result.files[0]?.fileName).toBe(expected);
+  });
+
   it("uses a requested output name verbatim when it already has an extension", async () => {
     const romFile = await makeFile("rom-bytes", "game.bin");
     const patchedFile = await makeFile("patched-rom-bytes", "patched.bin");
@@ -96,6 +118,70 @@ describe("buildSessionOutputFiles", () => {
     const result = await buildSessionOutputFiles(assets, patchedById, options);
 
     expect(result.files[0]?.fileName).toBe("MyRenamedGame.gba");
+  });
+
+  it("keeps a dotted version in a typed name and appends the ROM extension to the ZIP entry", async () => {
+    const romFile = await makeFile("rom-bytes", "game.sfc");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.sfc");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+    const options: ApplyWorkflowOptions = { output: { compression: "zip", outputName: "Zelda Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile).mock.calls[0]?.[1]).toBe("Zelda Hack v1.2.sfc");
+  });
+
+  it.each([
+    ["chd", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2.rvz"],
+  ])("appends the %s extension to a typed dotted-version name for a single ISO", async (compression, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.iso");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.iso");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+    const options: ApplyWorkflowOptions = { output: { compression, outputName: "Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options, {
+      compression: { create },
+    } as unknown as WorkflowRuntime);
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe(expected);
+  });
+
+  it("keeps a dotted version in a typed name and appends the ROM extension to the ZIP entry", async () => {
+    const romFile = await makeFile("rom-bytes", "game.sfc");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.sfc");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+    const options: ApplyWorkflowOptions = { output: { compression: "zip", outputName: "Zelda Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options);
+
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile).mock.calls[0]?.[1]).toBe("Zelda Hack v1.2.sfc");
+  });
+
+  it.each([
+    ["chd", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2.rvz"],
+  ])("appends the %s extension to a typed dotted-version name for a single ISO", async (compression, expected) => {
+    const romFile = await makeFile("rom-bytes", "game.iso");
+    const patchedFile = await makeFile("patched-rom-bytes", "patched.iso");
+    const assets = [makeAsset("a1", "rom", romFile)];
+    const patchedById = new Map([["a1", patchedFile]]);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+    const options: ApplyWorkflowOptions = { output: { compression, outputName: "Hack v1.2" } } as never;
+
+    await buildSessionOutputFiles(assets, patchedById, options, {
+      compression: { create },
+    } as unknown as WorkflowRuntime);
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe(expected);
   });
 
   it("routes a single patched asset through archive compression and returns the compressed output", async () => {
@@ -199,14 +285,14 @@ describe("buildSessionOutputFiles", () => {
     );
   });
 
-  it("throws when a CHD disc-group output has no CUE or no tracks", async () => {
+  it("throws when a CHD disc-group output has no disc sheet or no tracks", async () => {
     const romA = await makeFile("rom-a-bytes", "gameA.bin");
     const romB = await makeFile("rom-b-bytes", "gameB.bin");
     const assets = [makeAsset("a1", "rom", romA), makeAsset("a2", "rom", romB)];
     const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
 
     await expect(buildSessionOutputFiles(assets, new Map(), options)).rejects.toThrow(
-      "CHD output requires a CUE disc group with tracks",
+      "CHD output requires a disc sheet group with tracks",
     );
   });
 
@@ -226,7 +312,7 @@ describe("buildSessionOutputFiles", () => {
     const cueFile = await makeFile('FILE "t1.bin" BINARY', "disc.cue");
     const trackA = await makeFile("track-a-bytes", "t1.bin");
     const assets = [makeAsset("cue", "cue", cueFile, "group"), makeAsset("t1", "track", trackA, "group")];
-    const options: ApplyWorkflowOptions = { output: { compression: "chd" } } as never;
+    const options: ApplyWorkflowOptions = { output: { compression: "chd", container: { profile: "min" } } } as never;
     const chdOutputFile = await makeFile("chd-bytes", "disc.chd");
     const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
     const runtime = { compression: { create } } as unknown as WorkflowRuntime;
@@ -239,8 +325,32 @@ describe("buildSessionOutputFiles", () => {
     expect(request.format).toBe("chd");
     expect(request.outputName).toBe("disc.chd");
     expect(request.romSpecific.chd.mode).toBe("cd");
+    expect(request.romSpecific.chd.compressionProfile).toBe("min");
     expect(request.romSpecific.chd.imageFiles).toEqual([{ fileName: "t1.bin", source: expect.anything() }]);
     expect(result.files).toEqual([chdOutputFile]);
+  });
+
+  it("drops a typed disc extension from a multi-track CHD name", async () => {
+    const cueFile = await makeFile('FILE "t1.bin" BINARY', "disc.cue");
+    const trackA = await makeFile("track-a-bytes", "t1.bin");
+    const trackB = await makeFile("track-b-bytes", "t2.bin");
+    const assets = [
+      makeAsset("cue", "cue", cueFile, "group"),
+      makeAsset("t1", "track", trackA, "group"),
+      makeAsset("t2", "track", trackB, "group"),
+    ];
+    const create = vi.fn(async () => ({ output: { fileName: "x.chd" } }));
+    const runtime = { compression: { create } } as unknown as WorkflowRuntime;
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("chd-bytes", "x.chd"));
+
+    await buildSessionOutputFiles(
+      assets,
+      new Map(),
+      { output: { compression: "chd", outputName: "My Hack.cue" } } as never,
+      runtime,
+    );
+
+    expect(create.mock.calls[0]?.[0].outputName).toBe("My Hack.chd");
   });
 
   it("renames a single BIN track and its CUE entry to the requested base name", async () => {
@@ -264,6 +374,25 @@ describe("buildSessionOutputFiles", () => {
     expect(new TextDecoder().decode(entries[0]?.data)).toContain('FILE "renamed.bin" BINARY');
   });
 
+  it.each([
+    ["x.cue", "x"],
+    ["Foo.gba", "Foo"],
+    ["Hack v1.2b", "Hack v1.2b"],
+    ["Mario.Bros", "Mario.Bros"],
+  ])("names a single BIN track and CUE for typed name %s", async (outputName, base) => {
+    const cueText = 'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\n';
+    const cueFile = await makeFile(cueText, "original.cue");
+    cueFile.metadata = { cueText };
+    const trackFile = await makeFile("track-bytes", "disc.bin");
+    const assets = [makeAsset("cue", "cue", cueFile, "group"), makeAsset("track", "track", trackFile, "group")];
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "out.zip"));
+
+    await buildSessionOutputFiles(assets, new Map(), { output: { compression: "zip", outputName } } as never);
+
+    const entries = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0].entries as Array<{ filename?: string }>;
+    expect(entries.map((entry) => entry.filename)).toEqual([`${base}.cue`, `${base}.bin`]);
+  });
+
   it("routes a seven-zip multi-asset output through the archive writer and cleans files once", async () => {
     const first = await makeFile("first", "first.bin");
     const second = await makeFile("second", "second.bin");
@@ -271,7 +400,7 @@ describe("buildSessionOutputFiles", () => {
     (first as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     (second as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     const assets = [makeAsset("a", "rom", first), makeAsset("b", "rom", second)];
-    const compressed = await makeFile("7z-bytes", "bundle.7z");
+    const compressed = await makeFile("7z-bytes", "weave.7z");
     mockCreateArchivePatchFileOutput.mockResolvedValue(compressed);
 
     const result = await buildSessionOutputFiles(assets, new Map(), { output: { compression: "7z" } } as never);
@@ -282,6 +411,208 @@ describe("buildSessionOutputFiles", () => {
     });
     expect(cleanup).toHaveBeenCalledOnce();
     expect(result.files).toEqual([compressed]);
+  });
+});
+
+describe("lazy CHD output codec planning", () => {
+  it("does not read an already aborted Blob output", async () => {
+    const blob = new Blob([new Uint8Array(2352)]);
+    const slice = vi.spyOn(blob, "slice");
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.bin", size: blob.size, blob } as never,
+      "disc.bin",
+      { materializeBlob: false },
+    );
+    const controller = new AbortController();
+    const reason = new Error("cancelled");
+    controller.abort(reason);
+    const create = vi.fn();
+    await expect(
+      createSingleFileRomSpecificOutput({
+        compression: "chd",
+        outputFile: file,
+        options: { signal: controller.signal } as never,
+        runtime: { compression: { create } } as unknown as WorkflowRuntime,
+      }),
+    ).rejects.toBe(reason);
+    expect(slice).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("propagates an abort raised while the engine probes the output bytes", async () => {
+    const blob = new Blob([new Uint8Array(2352)]);
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.bin", size: blob.size, blob } as never,
+      "disc.bin",
+      { materializeBlob: false },
+    );
+    const controller = new AbortController();
+    const reason = new Error("aborted");
+    const probe = vi.fn(async () => {
+      controller.abort(reason);
+      throw new Error("probe interrupted");
+    });
+    const create = vi.fn();
+    await expect(
+      createSingleFileRomSpecificOutput({
+        compression: "chd",
+        outputFile: file,
+        options: { signal: controller.signal } as never,
+        runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+      }),
+    ).rejects.toBe(reason);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the generic raw codecs when the engine cannot probe the output bytes", async () => {
+    const blob = new Blob([new Uint8Array(2352)]);
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.bin", size: blob.size, blob } as never,
+      "disc.bin",
+      { materializeBlob: false },
+    );
+    const probe = vi.fn(async () => {
+      throw new Error("no registered handler matched");
+    });
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
+      runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+    });
+    expect(probe).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe("lzma");
+  });
+
+  it("sends no codec set for an unidentified .iso the engine cannot probe", async () => {
+    const blob = new Blob([new Uint8Array(40 * 2048)]);
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.iso", size: blob.size, blob } as never,
+      "disc.iso",
+      { materializeBlob: false },
+    );
+    const probe = vi.fn(async () => {
+      throw new Error("no registered handler matched");
+    });
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma,huff" } } } as never,
+      runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+    });
+    expect(probe).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs).toBeFalsy();
+  });
+
+  it.each(["cd", "dvd"])("preserves explicit %s mode and codecs without probing", async (mode) => {
+    const blob = new Blob([new Uint8Array(100 * 2352)]);
+    const slice = vi.spyOn(blob, "slice");
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.bin", size: blob.size, blob } as never,
+      "disc.bin",
+      { materializeBlob: false },
+    );
+    const probe = vi.fn();
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: {
+        output: { container: { chdOutputMode: mode, chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } },
+      } as never,
+      runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+    });
+    expect(probe).not.toHaveBeenCalled();
+    expect(create.mock.calls[0]?.[0].romSpecific.chd).toMatchObject({ mode });
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(
+      mode === "cd" ? "cdzl" : "lzma",
+    );
+    expect(slice).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["dvd", undefined, "lzma"],
+    ["cd", undefined, "cdzl"],
+    ["dvd", { mode: "cd" }, "cdzl"],
+  ])(
+    "asks the engine for an unidentified lazy ISO's create mode (verdict=%s, metadata=%o)",
+    async (verdict, metadata, codec) => {
+      const blob = new Blob([new Uint8Array(100 * 2048)]);
+      const slice = vi.spyOn(blob, "slice");
+      const file = await createPatchFileFromPublicOutput(
+        { fileName: "disc.iso", size: blob.size, blob } as never,
+        "disc.iso",
+        { materializeBlob: false },
+      );
+      if (metadata) file.metadata = metadata as never;
+      const probe = vi.fn(async () => ({ chdCreateMode: verdict, entries: [] }));
+      const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+      mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+      await createSingleFileRomSpecificOutput({
+        compression: "chd",
+        outputFile: file,
+        options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
+        runtime: { compression: { create, probe } } as unknown as WorkflowRuntime,
+      });
+      expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
+      // An identified source keeps its metadata mode; only an unidentified one needs the engine verdict.
+      expect(probe).toHaveBeenCalledTimes(metadata ? 0 : 1);
+      expect(slice).not.toHaveBeenCalled();
+    },
+  );
+
+  // The Rust verdict (native `chd` auto-inference over the patched bytes) picks the codec set; the
+  // original ROM's identity metadata does not.
+  it.each([
+    ["blob", "cd", "cdzl"],
+    ["vfs", "cd", "cdzl"],
+    ["blob", "dvd", "lzma"],
+    ["vfs", "hd", "lzma"],
+    ["blob", "raw", "lzma"],
+    ["vfs", "raw", "lzma"],
+  ])("uses the engine verdict for patched %s bytes (%s)", async (storage, verdict, codec) => {
+    const bytes = new Uint8Array(100 * 2352);
+    const original = await createPatchFile({ data: new Uint8Array(bytes.length), fileName: "game.bin" }, "game.bin");
+    original.metadata = { format: "CD" };
+    const blob = new Blob([bytes]);
+    const slice = vi.spyOn(blob, "slice");
+    const read = vi.fn();
+    const vfs = { normalizePath: (path: string) => path, read };
+    const patched = await createPatchFileFromPublicOutput(
+      storage === "vfs"
+        ? ({ fileName: "patched.bin", path: "/patched.bin", size: bytes.length, vfs } as never)
+        : ({ fileName: "patched.bin", size: bytes.length, blob } as never),
+      "patched.bin",
+      { materializeBlob: false },
+    );
+    patched.metadata = { format: "CD" };
+    const materialize = vi.spyOn(patched, "materialize");
+    const probe = vi.fn(async () => ({ chdCreateMode: verdict, entries: [] }));
+    const create = vi.fn(async () => ({ output: { fileName: "patched.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "patched.chd"));
+    await buildSessionOutputFiles(
+      [makeAsset("a", "rom", original)],
+      new Map([["a", patched]]),
+      {
+        output: { compression: "chd", container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } },
+      } as never,
+      { compression: { create, probe } } as unknown as WorkflowRuntime,
+    );
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.mode).toBe("auto");
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.sourceMode).toBeUndefined();
+    expect(materialize).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(slice).not.toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledOnce();
+    const probed = (probe.mock.calls[0] as unknown as [{ source: unknown }])[0].source;
+    if (storage === "vfs") expect(JSON.stringify(probed)).toContain("/patched.bin");
+    else expect(probed).toBeInstanceOf(Blob);
   });
 });
 
@@ -300,8 +631,8 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(result).toBeNull();
   });
 
-  it("builds a CHD single-file request, cleans up the source, and returns the compressed output", async () => {
-    const outputFile = await makeFile("rom-bytes", "game.bin");
+  it.each([13, 4096, 32768])("builds a raw %i-byte CHD request with generic default codecs", async (size) => {
+    const outputFile = await makeFile("x".repeat(size), "game.bin");
     const cleanup = vi.fn();
     (outputFile as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     const compressed = await makeFile("chd-bytes", "game.chd");
@@ -311,7 +642,7 @@ describe("createSingleFileRomSpecificOutput", () => {
 
     const result = await createSingleFileRomSpecificOutput({
       compression: "chd",
-      options: { output: { outputName: "game.chd" } } as never,
+      options: { output: { outputName: "game.chd", container: { profile: "min" } } } as never,
       outputFile,
       runtime,
     });
@@ -320,8 +651,34 @@ describe("createSingleFileRomSpecificOutput", () => {
     const request = create.mock.calls[0]?.[0];
     expect(request.format).toBe("chd");
     expect(request.fileName).toBe("game.bin");
+    expect(request.romSpecific.chd.compressionProfile).toBe("min");
+    expect(request.romSpecific.chd.compressionCodecs).toContain("lzma");
+    expect(request.romSpecific.chd.compressionCodecs).not.toMatch(/cd(lz|zl|fl|zs)/);
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
+  });
+
+  it.each([
+    ["chd", "Hack v1.2", "game.iso", "Hack v1.2.chd"],
+    ["rvz", "Hack v1.2", "game.iso", "Hack v1.2.rvz"],
+    ["chd", "Game (USA) (v1.1)", "game.iso", "Game (USA) (v1.1).chd"],
+    ["chd", "Hack.iso", "game.iso", "Hack.chd"],
+    ["chd", "Hack.chd", "game.iso", "Hack.chd"],
+  ])("names a typed %s output %s from %s as %s", async (compression, outputName, sourceName, expected) => {
+    const outputFile = await makeFile("rom-bytes", sourceName);
+    const create = vi.fn(async () => ({ output: { fileName: expected } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", expected));
+
+    await createSingleFileRomSpecificOutput({
+      compression: compression as "chd" | "rvz",
+      options: { output: { outputName } } as never,
+      outputFile,
+      runtime: { compression: { create } } as unknown as WorkflowRuntime,
+    });
+
+    const request = create.mock.calls[0]?.[0];
+    expect(request.outputName).toBe(expected);
+    expect(request.fileName).toBe(outputName.endsWith(".chd") ? "Hack.iso" : `${outputName.replace(/\.iso$/, "")}.iso`);
   });
 
   it("passes configured RVZ settings through the shared output plan", async () => {

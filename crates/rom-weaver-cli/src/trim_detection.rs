@@ -10,7 +10,11 @@ impl CliApp {
         if path
             .extension()
             .and_then(|value| value.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
+            .is_some_and(|extension| {
+                TRIM_CONTENT_SNIFFED_EXTENSIONS
+                    .iter()
+                    .any(|sniffed| extension.eq_ignore_ascii_case(sniffed))
+            })
             && let Ok(source_file) = File::options().read(true).open(path)
         {
             let source_reader = BufReader::new(source_file);
@@ -363,15 +367,7 @@ impl CliApp {
     }
 
     pub(super) fn default_trim_output_path(source: &TrimSource, extension: &str) -> PathBuf {
-        let source_extension = if source.kind == TrimInputKind::RvzConvert {
-            "rvz"
-        } else {
-            source
-                .path
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("bin")
-        };
+        let source_extension = trim_source_extension(source);
         let extension = extension.replace("{ext}", source_extension);
         let mut output = source.path.to_path_buf();
         output.set_extension(extension);
@@ -385,15 +381,7 @@ impl CliApp {
         source: &TrimSource,
         extension: &str,
     ) -> PathBuf {
-        let source_extension = if source.kind == TrimInputKind::RvzConvert {
-            "rvz"
-        } else {
-            source
-                .path
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("bin")
-        };
+        let source_extension = trim_source_extension(source);
         let extension = extension.replace("{ext}", source_extension);
         let directory = archive
             .parent()
@@ -405,5 +393,19 @@ impl CliApp {
             .and_then(|value| value.to_str())
             .unwrap_or("trimmed");
         directory.join(format!("{stem}.{extension}"))
+    }
+}
+
+/// The `{ext}` substitution for a trim source: `rvz` for RVZ conversions,
+/// otherwise the source's own extension (`bin` when it has none).
+fn trim_source_extension(source: &TrimSource) -> &str {
+    if source.kind == TrimInputKind::RvzConvert {
+        "rvz"
+    } else {
+        source
+            .path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("bin")
     }
 }

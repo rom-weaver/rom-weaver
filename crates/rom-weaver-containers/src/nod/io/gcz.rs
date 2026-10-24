@@ -73,8 +73,18 @@ impl BlockReaderGCZ {
             return Err(Error::DiscFormat("Invalid GCZ magic".to_string()));
         }
 
-        // Read block map and hashes
+        let block_size = header.block_size.get();
+        if block_size < SECTOR_SIZE as u32 || block_size % SECTOR_SIZE as u32 != 0 {
+            return Err(Error::DiscFormat("Invalid block size for GCZ".to_string()));
+        }
         let block_count = header.block_count.get();
+        if header.disc_size.get().div_ceil(block_size as u64) != block_count as u64 {
+            return Err(Error::DiscFormat(
+                "GCZ block count does not match disc size".to_string(),
+            ));
+        }
+
+        // Read block map and hashes
         let block_map = read_arc_slice_at(
             inner.as_mut(),
             block_count as usize,
@@ -90,7 +100,7 @@ impl BlockReaderGCZ {
 
         // header + block_count * (u64 + u32)
         let data_offset = size_of::<GCZHeader>() as u64 + block_count as u64 * 12;
-        let block_buf = <[u8]>::new_box_zeroed_with_elems(header.block_size.get() as usize)?;
+        let block_buf = <[u8]>::new_box_zeroed_with_elems(block_size as usize)?;
         Ok(Box::new(Self {
             inner,
             header,

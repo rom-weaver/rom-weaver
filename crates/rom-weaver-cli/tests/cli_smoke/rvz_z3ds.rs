@@ -406,7 +406,7 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
     let mut source = (0..65_536)
         .map(|index| (index % 239) as u8)
         .collect::<Vec<_>>();
-    source[..4].copy_from_slice(b"NCSD");
+    source[0x100..0x104].copy_from_slice(b"NCSD");
     fs::write(temp.child("disc.cci").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");

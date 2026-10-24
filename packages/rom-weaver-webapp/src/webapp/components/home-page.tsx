@@ -1,20 +1,9 @@
-import { useSyncExternalStore } from "react";
-import {
-  Check,
-  Copy,
-  Download,
-  FileDiff,
-  Footprints,
-  Gamepad,
-  Hash,
-  ListChecks,
-  Package,
-  Server,
-  Stamp,
-  Terminal,
-} from "lucide-react";
+import { trackSelectionDelivery } from "../../lib/input/selection-delivery.ts";
+import { useState, useSyncExternalStore } from "react";
+import { Check, Copy, Download, Server, Terminal } from "lucide-react";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
+import { HomeFaq, HomeFormats, HomeRoutes, HomeTrust } from "./home-sections.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 
@@ -28,17 +17,60 @@ import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 type HomePageProps = {
   /** Where the app is served. Route links resolve against it so a sub-path deployment keeps its prefix. */
   baseUrl: string;
+  /** Files chosen in the hero picker; the shell routes them to the workflow that fits. */
+  onFiles?: (files: File[]) => void | Promise<void>;
 };
 
-const SHELL_INSTALL = {
+type InstallMethod = {
+  command: string;
+  id: "brew" | "npm" | "shell" | "windows";
+  name: string;
+  slug: string;
+  /** The segmented-control label; `name` stays the full accessible name. */
+  tab: string;
+};
+
+const SHELL_INSTALL: InstallMethod = {
+  command: "sh -c 'curl -fsSL https://rom-weaver.com/install.sh | sh'",
+  id: "shell",
   name: "macOS / Linux",
   slug: "install-script-macos-linux",
-  command: "sh -c 'curl -fsSL https://rom-weaver.com/install.sh | sh'",
+  tab: "macOS / Linux",
 };
-const WINDOWS_INSTALL = {
-  name: "Windows (PowerShell)",
-  slug: "install-script-windows",
-  command: "irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex",
+const INSTALL_METHODS: readonly InstallMethod[] = [
+  SHELL_INSTALL,
+  {
+    command: "irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex",
+    id: "windows",
+    name: "Windows (PowerShell)",
+    slug: "install-script-windows",
+    tab: "Windows",
+  },
+  {
+    command: "brew install rom-weaver/tap/rom-weaver",
+    id: "brew",
+    name: "Homebrew",
+    slug: "homebrew-macos-arm64intel-linux-arm64x86-64",
+    tab: "Homebrew",
+  },
+  { command: "npm install --global rom-weaver", id: "npm", name: "npm", slug: "npm", tab: "npm" },
+];
+
+type NavigatorWithPlatformHint = Navigator & { userAgentData?: { platform?: string } };
+
+/**
+ * Picks the install tab from the visitor's platform: PowerShell on Windows, the
+ * shell script everywhere else. macOS gets the script rather than Homebrew:
+ * stock macOS has no `brew`, the page cannot tell whether a visitor installed
+ * it, and the script also checks build provenance. Homebrew users pick its tab.
+ * The prerendered page has no navigator, so it renders the shell script and the
+ * hydrated page switches on Windows.
+ */
+const detectInstallMethod = (): InstallMethod["id"] => {
+  const nav = navigator as NavigatorWithPlatformHint;
+  const platform = `${nav.userAgentData?.platform ?? ""} ${nav.userAgent}`;
+  if (/Windows/i.test(platform)) return "windows";
+  return "shell";
 };
 
 const resolveHomeRoute = (baseUrl: string, slug: string): string => {
@@ -49,214 +81,136 @@ const resolveHomeRoute = (baseUrl: string, slug: string): string => {
   }
 };
 
-type HomeCapabilitiesProps = {
-  baseUrl: string;
-  className: string;
-  headingId: string;
+type HomeCliProps = {
+  route: (slug: string) => string;
 };
 
-const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesProps): React.ReactElement => {
+const HomeCli = ({ route }: HomeCliProps): React.ReactElement => {
   const localizer = useUiLocalizer();
-  const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
+  const detected = useSyncExternalStore(
+    () => () => undefined,
+    detectInstallMethod,
+    (): InstallMethod["id"] => "shell",
+  );
+  const [picked, setPicked] = useState<InstallMethod["id"] | null>(null);
+  const install = INSTALL_METHODS.find((method) => method.id === (picked ?? detected)) ?? SHELL_INSTALL;
+  const { copied, copy } = useClipboardCopy(install.command);
 
   return (
-    <section aria-labelledby={headingId} className={className}>
-      <h2 id={headingId}>{localizer.message("ui.home.workflowsTitle")}</h2>
-      <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
-      <div className="home-actions">
-        <a className="btn ghost" href={route("create-patch")}>
-          <FileDiff aria-hidden="true" />
-          {localizer.message("ui.home.flowCreate")}
-        </a>
-        <a className="btn ghost" href={route("bundle-patches")}>
-          <Package aria-hidden="true" />
-          {localizer.message("ui.home.flowBundle")}
-        </a>
-        <a className="btn ghost" href={route("test-rom")}>
-          <Gamepad aria-hidden="true" />
-          {localizer.message("ui.home.flowTest")}
-        </a>
-        <a className="btn ghost" href={route("checksum")}>
-          <Hash aria-hidden="true" />
-          {localizer.message("ui.home.checksums")}
-        </a>
-        <a className="btn ghost" href={resolveGuidedSampleHref(baseUrl, "apply")}>
-          <Footprints aria-hidden="true" />
-          {localizer.message("ui.home.tryLink")}
+    <section aria-labelledby="home-cli-title" className="home-wrap home-section home-rail home-cli" id="home-cli">
+      <div className="home-section-head">
+        <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
+        <p className="home-blurb">{localizer.message("ui.home.cliItem3")}</p>
+        <ul className="home-cli-links">
+          <li>
+            <a href={`${route("docs")}/install`}>
+              <Download aria-hidden="true" />
+              <span>{localizer.message("ui.home.fullInstallGuide")}</span>
+            </a>
+          </li>
+          <li>
+            <a href={`${route("docs")}/cli-get-started`}>
+              <Terminal aria-hidden="true" />
+              <span>{localizer.message("ui.home.cliWalkthrough")}</span>
+            </a>
+          </li>
+          <li>
+            <a href={`${route("docs")}/self-hosting`}>
+              <Server aria-hidden="true" />
+              <span>{localizer.message("ui.home.selfHostingGuide")}</span>
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div className="home-install">
+        <fieldset className="seg seg-fit home-install-methods">
+          <legend className="sr-only">{localizer.message("ui.home.installMethod")}</legend>
+          {INSTALL_METHODS.map((method) => (
+            <button
+              aria-pressed={method.id === install.id}
+              className="seg-btn"
+              key={method.id}
+              onClick={() => setPicked(method.id)}
+              type="button"
+            >
+              {method.tab}
+            </button>
+          ))}
+        </fieldset>
+        <div className="home-install-code-wrap">
+          <pre className="home-install-code">
+            <code>{install.command}</code>
+          </pre>
+          <button
+            aria-label={`${localizer.message("ui.common.copy")} ${install.name}`}
+            className={`home-install-copy${copied ? " copied" : ""}`}
+            onClick={copy}
+            title={localizer.message("ui.common.copy")}
+            type="button"
+          >
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          </button>
+        </div>
+        <a className="home-install-doc" href={`${route("docs")}/install#${install.slug}`}>
+          {install.name}
         </a>
       </div>
     </section>
   );
 };
 
-const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
+const HomePage = ({ baseUrl, onFiles }: HomePageProps): React.ReactElement => {
   const localizer = useUiLocalizer();
-  const windows = useSyncExternalStore(
-    () => () => undefined,
-    () => /Windows/i.test(navigator.userAgent),
-    () => false,
-  );
-  const install = windows ? WINDOWS_INSTALL : SHELL_INSTALL;
-  const { copied, copy } = useClipboardCopy(install.command);
   const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
 
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
         <div className="home-hero-copy">
-          <div className="home-hero-head">
-            <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
-            <h1 id="home-title">
-              {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
-            </h1>
-          </div>
-          <div className="home-hero-body">
-            <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-            <div className="home-actions home-main-actions">
-              <a className="btn primary lg" href={route("apply-patches")}>
-                <Stamp aria-hidden="true" />
-                {localizer.message("ui.home.applyPatchCta")}
-              </a>
-              <a className="btn ghost lg" href={`${route("docs")}/features`}>
-                <ListChecks aria-hidden="true" />
-                {localizer.message("ui.home.formatsEyebrow")}
-              </a>
-            </div>
-            <p className="home-try">
-              {localizer.message("ui.home.tryBefore")}{" "}
+          <h1 id="home-title">
+            {localizer.message("ui.home.title")} {localizer.message("ui.home.titleEmphasis")}
+          </h1>
+          <p className="home-lede">{localizer.message("ui.home.lede")}</p>
+          {/* Drops anywhere on the page reach the shell's page-level handler, so this area only
+              needs the picker; it is not a `.drop`, which the shell leaves to the zone. */}
+          <div className="home-main-actions">
+            <label className="btn primary lg home-pick">
+              {localizer.message("ui.drop.homeChoose")}
+              <input
+                className="sr-only"
+                id="home-file-input"
+                multiple
+                onChange={(event) => {
+                  const files = Array.from(event.currentTarget.files ?? []);
+                  event.currentTarget.value = "";
+                  if (files.length) trackSelectionDelivery(event.nativeEvent, onFiles?.(files));
+                }}
+                type="file"
+              />
+            </label>
+            <span className="home-drop-hint">{localizer.message("ui.drop.homeDrop")}</span>
+            <p className="home-practice">
+              {localizer.message("ui.home.practicePrompt")}{" "}
               <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
-              {localizer.message("ui.home.tryAfter")}
             </p>
-            <p className="home-try">
-              Practice cheat codes with the guided <a href={resolveGuidedSampleHref(baseUrl, "apply-cheats")}>Apply</a>{" "}
-              or <a href={resolveGuidedSampleHref(baseUrl, "create-cheats")}>Create</a> tour.
-            </p>
-            <HomeCapabilities
-              baseUrl={baseUrl}
-              className="home-hero-capabilities"
-              headingId="home-hero-capabilities-title"
-            />
           </div>
+          <ul className="home-facts">
+            <li>{localizer.message("ui.home.factNoUpload")}</li>
+            <li>{localizer.message("ui.home.factOffline")}</li>
+            <li>{localizer.message("ui.home.factNoTelemetry")}</li>
+          </ul>
         </div>
-        <div className="home-loom">
-          <div className="home-loom-frame">
-            <span className="home-loom-tag">{localizer.message("ui.home.loomTag")}</span>
-            <div className="home-loom-result">
-              <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
-              <span>{localizer.message("ui.home.loomResult")}</span>
-            </div>
-            <div className="home-loom-legend">
-              <span className="row home-loom-disc-flow">
-                <i className="home-loom-source-swatch" />
-                <span className="home-loom-flow-copy">
-                  <strong className="k">{localizer.message("ui.home.loomSource")}</strong>
-                  <code>game.chd</code>
-                  <code className="home-loom-flow-result">
-                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</strong>
-                    {"game.iso"}
-                  </code>
-                </span>
-              </span>
-              <span className="row">
-                <i style={{ background: "var(--loom-weft-1)" }} />
-                <span className="home-loom-flow-copy">
-                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</strong>
-                  <code>translation.bps.rar</code>
-                  <code className="home-loom-flow-result">
-                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
-                    {"translation.bps"}
-                  </code>
-                </span>
-              </span>
-              <span className="row">
-                <i style={{ background: "var(--loom-weft-2)" }} />
-                <span className="home-loom-flow-copy">
-                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</strong>
-                  <code>bugfix.ips.zip</code>
-                  <code className="home-loom-flow-result">
-                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
-                    {"bugfix.ips"}
-                  </code>
-                </span>
-              </span>
-              <span className="row">
-                <i style={{ background: "var(--loom-weft-3)" }} />
-                <span className="home-loom-flow-copy">
-                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</strong>
-                  <code>undub.xdelta.7z</code>
-                  <code className="home-loom-flow-result">
-                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
-                    {"undub.xdelta"}
-                  </code>
-                </span>
-              </span>
-              <span className="row home-loom-disc-flow home-loom-output-flow">
-                <i className="home-loom-output-swatch" />
-                <span className="home-loom-flow-copy">
-                  <strong className="k">{localizer.message("ui.home.loomOutput")}</strong>
-                  <code>game.iso</code>
-                  <code className="home-loom-flow-result">
-                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</strong>
-                    {"patched-game.chd"}
-                  </code>
-                  <span className="sum">
-                    {" · "}
-                    <code>sha1 ✓</code>
-                  </span>
-                </span>
-              </span>
-            </div>
-          </div>
-          <p className="home-loom-caption">{localizer.message("ui.home.loomCaption")}</p>
-        </div>
+        <HomeLoom />
       </div>
 
-      <HomeCapabilities
-        baseUrl={baseUrl}
-        className="home-wrap home-section home-webapp"
-        headingId="home-webapp-title"
+      <HomeRoutes featuresHref={`${route("docs")}/features`} route={route} />
+      <HomeFormats docsHref={`${route("docs")}/supported-formats`} />
+      <HomeTrust
+        offlineHref={`${route("docs")}/browser-settings#prepare-for-offline-use`}
+        selfHostingHref={`${route("docs")}/self-hosting`}
       />
-
-      <section aria-labelledby="home-cli-title" className="home-wrap home-section home-cli" id="home-cli">
-        <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
-        <p className="home-blurb">{localizer.message("ui.home.cliItem1")}</p>
-        <div className="home-install">
-          <a href={`${route("docs")}/install#${install.slug}`}>{install.name}</a>
-          <div className="home-install-code-wrap">
-            <textarea
-              aria-label={install.name}
-              className="home-install-code"
-              key={install.name}
-              defaultValue={install.command}
-              readOnly
-              rows={1}
-            />
-            <button
-              aria-label={`${localizer.message("ui.common.copy")} ${install.name}`}
-              className={`home-install-copy${copied ? " copied" : ""}`}
-              onClick={copy}
-              title={localizer.message("ui.common.copy")}
-              type="button"
-            >
-              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            </button>
-          </div>
-        </div>
-        <div className="home-actions">
-          <a className="btn ghost" href={`${route("docs")}/install`}>
-            <Download aria-hidden="true" />
-            {localizer.message("ui.home.fullInstallGuide")}
-          </a>
-          <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
-            <Terminal aria-hidden="true" />
-            {localizer.message("ui.home.cliWalkthrough")}
-          </a>
-          <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
-            <Server aria-hidden="true" />
-            {localizer.message("ui.home.selfHostingGuide")}
-          </a>
-        </div>
-      </section>
+      <HomeCli route={route} />
+      <HomeFaq faqHref={`${route("docs")}/faq`} />
     </section>
   );
 };

@@ -48,6 +48,25 @@ describe("apply workflow staging model", () => {
     expect(toStagedInputInfos(input, []).map((row) => row.checksumTiming)).toEqual(["291ms", "291ms"]);
   });
 
+  it("keeps generic codec hints scoped to each resolved archive asset", () => {
+    const input: ApplyWorkflowInputState = {
+      candidates: [],
+      id: "archive",
+      parentCompressions: [],
+      status: "ready",
+      warnings: [],
+      resolvedInputs: [
+        { id: "cd", fileName: "cd.bin", chdMode: "cd", parentCompressions: [], selected: true },
+        { id: "hd", fileName: "hd.bin", chdCodecMode: "dvd", parentCompressions: [], selected: true },
+      ],
+    };
+    const rows = toStagedInputInfos(input, []);
+    expect(rows[0]?.chdCodecMode).toBeNull();
+    expect(rows[0]?.chdMode).toBe("cd");
+    expect(rows[1]?.chdCodecMode).toBe("dvd");
+    expect(rows[1]?.chdMode).toBeUndefined();
+  });
+
   it("shows the identified ROM title on the staged input row", () => {
     const input: ApplyWorkflowInputState = {
       candidates: [],
@@ -91,6 +110,84 @@ describe("apply workflow staging model", () => {
 
     expect(info?.validationValues).toContain("in rom=Advance Wars (USA)");
     expect(info?.validationState).toBe("unknown");
+  });
+
+  it("lets a preflight mismatch outrank a passing dry run (file-name crc32 token)", () => {
+    const patch = {
+      candidates: [],
+      checksumPreflight: {
+        actualCrc32: "c6fb1252",
+        requiredCrc32: "4af1a4bb",
+        requiredCrc32FromFilename: true,
+        status: "invalid" as const,
+      },
+      id: "patch",
+      parentCompressions: [],
+      patchValidation: { status: "valid" as const },
+      status: "ready" as const,
+      warnings: [],
+    };
+    const info = toPatchStageInfo(patch, "hack [crc32:4af1a4bb].ips", 0, "Input 1");
+    expect(info?.validationState).toBe("invalid");
+    expect(info?.checksumPreflightMismatch).toBe(true);
+    expect(info?.validationMessage).toBe("Source requirements mismatch");
+    // A failing dry run keeps its own message, and a matching preflight leaves the dry run in charge.
+    const deepInvalid = toPatchStageInfo(
+      { ...patch, patchValidation: { message: "Engine says no", status: "invalid" as const } },
+      "hack.ips",
+      0,
+      "Input 1",
+    );
+    expect(deepInvalid?.validationMessage).toBe("Engine says no");
+    const matching = toPatchStageInfo(
+      { ...patch, checksumPreflight: { requiredCrc32: "c6fb1252", status: "valid" as const } },
+      "hack.ips",
+      0,
+      "Input 1",
+    );
+    expect(matching?.validationState).toBe("valid");
+    expect(matching?.checksumPreflightMismatch).toBe(false);
+  });
+
+  it("keeps a passing dry run over a preflight mismatch that did not come from the file name", () => {
+    const info = toPatchStageInfo(
+      {
+        candidates: [],
+        checksumPreflight: { actualCrc32: "c6fb1252", requiredCrc32: "4af1a4bb", status: "invalid" as const },
+        id: "patch",
+        parentCompressions: [],
+        patchValidation: { status: "valid" as const },
+        status: "ready" as const,
+        warnings: [],
+      },
+      "hack.ips",
+      1,
+      "Input 1",
+    );
+    expect(info?.validationState).toBe("valid");
+    expect(info?.checksumPreflightMismatch).toBe(false);
+  });
+
+  it("does not count a pasted SHA-1 as a compared checksum before apply", () => {
+    const patch = {
+      candidates: [],
+      checksumPreflight: { status: "unknown" as const },
+      id: "patch",
+      parentCompressions: [],
+      patchValidation: { status: "valid" as const },
+      status: "ready" as const,
+      validateInputChecksum: "0123456789abcdef0123456789abcdef01234567",
+      warnings: [],
+    };
+    expect(toPatchStageInfo(patch, "t.ips", 0, "Input 1")?.checksumCompared).toBe(false);
+    expect(
+      toPatchStageInfo(
+        { ...patch, checksumPreflight: { requiredCrc32: "4048840b", status: "valid" as const } },
+        "t.ips",
+        0,
+        "Input 1",
+      )?.checksumCompared,
+    ).toBe(true);
   });
 
   it("keeps patch target labels and source names consistent across refreshes", () => {

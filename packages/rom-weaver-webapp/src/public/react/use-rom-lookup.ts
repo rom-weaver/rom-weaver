@@ -7,7 +7,7 @@ import {
 } from "../../lib/apply/expected-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import { baseTitle, normalizeTitle } from "../../lib/identify/title-index.mjs";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
 import { identifyHashAlgorithm } from "../../types/identify.ts";
 
@@ -39,7 +39,7 @@ const MIN_HASH_LENGTH = 8;
 
 /** The ROM the user settled on, shaped the same whichever route found it. */
 type RomLookupResult = {
-  checks: ParsedBundleChecks;
+  checks: ParsedWeaveChecks;
   /** Which route answered; the card's meta line names it. */
   foundBy: "checksum" | "name";
   identification: ParsedIdentifyResolution;
@@ -69,7 +69,7 @@ type RomLookupMessages = {
 
 type RomLookupState = {
   busy: boolean;
-  checksum: ParsedBundleChecks | undefined;
+  checksum: ParsedWeaveChecks | undefined;
   error: string;
   /** A typed query is waiting out the pause before it searches. */
   pending: boolean;
@@ -98,7 +98,7 @@ const IDLE: RomLookupState = {
 };
 
 /** The expectation a chosen release asserts: the record's own checksums and size. */
-const checksForMatch = (match: ParsedIdentifyTitleMatch): ParsedBundleChecks => {
+const checksForMatch = (match: ParsedIdentifyTitleMatch): ParsedWeaveChecks => {
   const record = identifyRecordChecks({ matches: [match], status: "matched" });
   if (!record) return { checksums: {} };
   return { checksums: record.checksums, ...(record.size === undefined ? {} : { size: record.size }) };

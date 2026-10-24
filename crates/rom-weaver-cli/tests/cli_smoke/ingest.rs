@@ -837,7 +837,7 @@ fn ingest_rom_archive_extracts_and_checksums() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
     fs::write(rom.path(), with_nes_header(b"archived rom payload")).expect("rom fixture");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -942,7 +942,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
     // A patch bundled inside a nested archive: the OUTER archive's only entry is the inner container,
     // so the top-level classify sees no patch name and defaults to `is_rom = true`. The rom-filtered
     // descent then finds no ROM in the inner archive - ingest must fall back to patch ingestion and
-    // route the whole bundle as a patch source instead of erroring with "no entries matched --filter rom".
+    // route the whole weave as a patch source instead of erroring with "no entries matched --filter rom".
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
     fs::write(
@@ -990,7 +990,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
             .as_array()
             .expect("assets array")
             .is_empty(),
-        "a nested patch bundle surfaces no ROM assets"
+        "a nested patch weave surfaces no ROM assets"
     );
     let patches = ingest["patches"].as_array().expect("patches array");
     assert_eq!(patches.len(), 1, "the nested patch leaf is surfaced");
@@ -1002,10 +1002,10 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
 
 #[test]
 fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
-    // Same nested-patch-only bundle as above, but ingested WITH a ROM keep-one `--select` glob.
+    // Same nested-patch-only weave as above, but ingested WITH a ROM keep-one `--select` glob.
     // The fallback patch enumeration must ignore that glob (it enumerates with `&[]`): a ROM select
-    // that filters the descent must NOT also filter the bundle's patch leaves, or a select-present
-    // drop of a nested patch bundle regresses to "no ROM". Reverting the fallback to `raw_selections`
+    // that filters the descent must NOT also filter the weave's patch leaves, or a select-present
+    // drop of a nested patch weave regresses to "no ROM". Reverting the fallback to `raw_selections`
     // makes the `*.nes` glob drop the `.ips` leaf, leaving no patches and surfacing the ROM error.
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
@@ -1056,7 +1056,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
             .as_array()
             .expect("assets array")
             .is_empty(),
-        "a nested patch bundle surfaces no ROM assets"
+        "a nested patch weave surfaces no ROM assets"
     );
     let patches = ingest["patches"].as_array().expect("patches array");
     assert_eq!(
@@ -1359,6 +1359,46 @@ fn ingest_patch_parses_filename_requirements() {
 }
 
 #[test]
+fn ingest_patch_reads_filename_requirements_from_input_name() {
+    let temp = setup_temp_dir();
+    // The browser stages files under sanitized names, so `:` arrives as `_`.
+    let patch = temp.child("hack [crc32_1a2b3c4d].ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: b"x".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let out_dir = temp.child("ingest-input-name-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.path().to_str().expect("path"),
+        "--input-name",
+        "hack [crc32:1a2b3c4d] [md5:00112233445566778899aabbccddeeff].ips",
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(descriptor["filename_checksums"]["crc32"], "1a2b3c4d");
+    assert_eq!(
+        descriptor["filename_checksums"]["md5"],
+        "00112233445566778899aabbccddeeff"
+    );
+    assert_eq!(
+        descriptor["file_name"], "hack [crc32_1a2b3c4d].ips",
+        "the descriptor keeps naming the staged leaf"
+    );
+}
+
+#[test]
 fn ingest_patch_archive_extracts_and_describes_leaves() {
     let temp = setup_temp_dir();
     let patch = create_bps_patch(&temp, b"abcdefgh", b"abXYefgh", "fix.bps");
@@ -1436,7 +1476,7 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
         "--json",
     ]);
     let ingest = &terminal["details"]["ingest"];
-    // A bundle carrying a ROM routes to the ROM bucket, but still surfaces the bundled patch.
+    // A weave carrying a ROM routes to the ROM bucket, but still surfaces the bundled patch.
     assert_eq!(ingest["kind"], "rom");
     let assets = ingest["assets"].as_array().expect("assets array");
     assert!(
@@ -1456,7 +1496,7 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
 
 #[test]
 fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
-    // A keep-one ROM `--select` pins which ROM is extracted, but it must NOT suppress the bundle's
+    // A keep-one ROM `--select` pins which ROM is extracted, but it must NOT suppress the weave's
     // sidecar patches: they are enumerated independently so the host can still offer to apply them.
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
@@ -1613,6 +1653,68 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
     assert!(assert.get_output().stderr.is_empty());
 }
 
+/// A cooked image of `sectors` 2048-byte sectors with a UDF `NSR02` descriptor at LBA 19.
+fn udf_cooked_image(sectors: usize) -> Vec<u8> {
+    let mut bytes = vec![0_u8; sectors * 2048];
+    bytes[16 * 2048 + 1..16 * 2048 + 6].copy_from_slice(b"CD001");
+    bytes[19 * 2048 + 1..19 * 2048 + 6].copy_from_slice(b"NSR02");
+    bytes
+}
+
+#[test]
+fn ingest_reports_the_chd_create_mode_for_loose_images() {
+    // Hosts read the native `chd` auto-inference verdict instead of re-deriving it from bytes.
+    let temp = setup_temp_dir();
+    let cases: [(&str, Vec<u8>, &str); 3] = [
+        ("udf.iso", udf_cooked_image(40), "dvd"),
+        (
+            "plain.bin",
+            {
+                let mut bytes = udf_cooked_image(40);
+                bytes[19 * 2048 + 1..19 * 2048 + 6].fill(0);
+                bytes
+            },
+            "cd",
+        ),
+        ("blob.bin", vec![7_u8; 4096], "raw"),
+    ];
+    for (name, bytes, expected) in cases {
+        let rom = temp.child(name);
+        fs::write(rom.path(), bytes).expect("image fixture");
+        let out_dir = temp.child(format!("ingest-chd-mode-{name}"));
+        let terminal = ingest_terminal(&[
+            "ingest",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ]);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        let asset = &terminal["details"]["ingest"]["assets"][0];
+        assert_eq!(asset["chd_create_mode"], expected, "{name}");
+    }
+    // Other extensions carry no verdict.
+    let nes = temp.child("game.nes");
+    fs::write(nes.path(), vec![0_u8; 4096]).expect("nes fixture");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        nes.path().to_str().expect("path"),
+        "--output",
+        temp.child("ingest-chd-mode-nes")
+            .path()
+            .to_str()
+            .expect("path"),
+        "--json",
+    ]);
+    assert!(
+        terminal["details"]["ingest"]["assets"][0]
+            .get("chd_create_mode")
+            .is_none()
+    );
+}
+
 #[test]
 fn ingest_streams_recommended_format_for_bare_disc_before_completion() {
     // The host settles its automatic output format from this event, so it must arrive before the
@@ -1745,5 +1847,229 @@ fn ingest_disc_asset_carries_engine_disc_format() {
     assert_eq!(
         asset["disc_format"], "DVD",
         "a GameCube disc image reports its optical medium as DVD"
+    );
+}
+
+#[test]
+fn ingest_missing_input_uses_the_shared_wording() {
+    let temp = setup_temp_dir();
+    let missing = temp.child("missing.bin");
+    let json = run_single_json_event(
+        &[
+            "ingest",
+            "-i",
+            missing.path().to_str().expect("path"),
+            "-o",
+            temp.child("out").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let label = json["label"].as_str().expect("label");
+    assert!(label.starts_with("input path does not exist: `"), "{label}");
+}
+
+/// PSP homebrew `EBOOT.PBP` files have an empty DATA.PSAR (its offset equals the file size): the
+/// PBP is itself the ROM, so ingest keeps it in place as a PSP ROM instead of rejecting it.
+#[test]
+fn ingest_treats_a_pbp_with_an_empty_psar_as_a_bare_psp_rom() {
+    let temp = setup_temp_dir();
+    let pbp = build_test_empty_psar_pbp();
+    let source = temp.child("EBOOT.PBP");
+    fs::write(source.path(), &pbp).expect("pbp fixture");
+    let out_dir = temp.child("ingest-out");
+
+    let ingest = ingest_terminal(&[
+        "ingest",
+        "--input",
+        source.path().to_str().expect("pbp path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--json",
+    ]);
+
+    let assets = ingest["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets");
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0]["file_name"], "EBOOT.PBP");
+    assert_eq!(assets[0]["platform"], "Sony Playstation Portable");
+    assert_eq!(assets[0]["copied_in_place"], true);
+}
+
+#[test]
+fn ingest_nested_empty_psar_pbp_is_a_rom_leaf() {
+    let temp = setup_temp_dir();
+    let pbp = build_test_empty_psar_pbp();
+    let source = temp.child("EBOOT.PBP");
+    fs::write(source.path(), &pbp).expect("pbp fixture");
+    let checksum = isolated_json_event(
+        &temp,
+        &[
+            "checksum",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    let inner = temp.child("homebrew.zip");
+    isolated_json_event(
+        &temp,
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let outer = temp.child("outer.tar.gz");
+    write_tar_gz_fixture(&[(inner.path(), "homebrew.zip")], outer.path());
+    for (depth, archive) in [inner.path(), outer.path()].into_iter().enumerate() {
+        let output = temp.child(format!("ingest-{depth}"));
+        let terminal = isolated_json_event(
+            &temp,
+            &[
+                "ingest",
+                "--input",
+                archive.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--json",
+            ],
+            0,
+        );
+        let ingest = &terminal["details"]["ingest"];
+        assert_eq!(ingest["kind"], "rom");
+        let assets = ingest["assets"].as_array().expect("assets");
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0]["file_name"], "EBOOT.PBP");
+        assert_eq!(assets[0]["platform"], "Sony Playstation Portable");
+        assert_eq!(assets[0]["copied_in_place"], false);
+        assert_eq!(
+            assets[0]["checksums"]["sha1"],
+            checksum["details"]["checksums"]["sha1"]
+        );
+        let extracted = assets[0]["path"].as_str().expect("asset path");
+        assert_eq!(fs::read(extracted).expect("extracted PBP"), pbp);
+    }
+}
+
+/// Zip `members` (flat entry names taken from each path's file name) into `archive`.
+fn zip_members(temp: &TempDir, archive: &Path, members: &[&Path]) {
+    let mut args = vec!["compress", "--format", "zip"];
+    for member in members {
+        args.push("--input");
+        args.push(member.to_str().expect("member path"));
+    }
+    args.extend([
+        "--output",
+        archive.to_str().expect("archive path"),
+        "--json",
+    ]);
+    isolated_json_event(temp, &args, 0);
+}
+
+/// A real-shaped DCP: a modified file stored as `PATH.xdelta`, a `.DAT` data file, and the bootstrap.
+fn write_dcp(temp: &TempDir, name: &str) -> PathBuf {
+    let dir = temp.child(format!("{name}-members"));
+    fs::create_dir_all(dir.path()).expect("dcp member dir");
+    let members: Vec<PathBuf> = [
+        ("IP.BIN", vec![1u8; 2048]),
+        ("1ST_READ.BIN.xdelta", vec![2u8; 64]),
+        ("SOUND.DAT", vec![3u8; 1024]),
+    ]
+    .into_iter()
+    .map(|(entry, bytes)| {
+        let path = dir.path().join(entry);
+        fs::write(&path, bytes).expect("dcp member");
+        path
+    })
+    .collect();
+    let dcp = temp.child(name);
+    let member_refs: Vec<&Path> = members.iter().map(PathBuf::as_path).collect();
+    zip_members(temp, dcp.path(), &member_refs);
+    dcp.path().to_path_buf()
+}
+
+fn ingest_json(temp: &TempDir, source: &Path, output: &str) -> Value {
+    let output = temp.child(output);
+    isolated_json_event(
+        temp,
+        &[
+            "ingest",
+            "--input",
+            source.to_str().expect("source path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        0,
+    )
+}
+
+fn patch_file_names(ingest: &Value) -> Vec<(String, String)> {
+    ingest["patches"]
+        .as_array()
+        .expect("patches")
+        .iter()
+        .map(|patch| {
+            (
+                patch["file_name"].as_str().expect("file_name").to_string(),
+                patch["format"].as_str().expect("format").to_string(),
+            )
+        })
+        .collect()
+}
+
+/// A `.dcp` stores modified files as `PATH.xdelta` (and `.DAT` data), both patch-filter extensions.
+/// Ingest must report the `.dcp` as one patch leaf, never descend and surface its inner entries.
+#[test]
+fn ingest_reports_a_zipped_dcp_as_one_patch_leaf() {
+    let temp = setup_temp_dir();
+    let dcp = write_dcp(&temp, "game.dcp");
+    let bare = ingest_json(&temp, &dcp, "bare-out");
+    assert_eq!(
+        patch_file_names(&bare["details"]["ingest"]),
+        [("game.dcp".to_string(), "dcp".to_string())]
+    );
+    let zipped = temp.child("translation.zip");
+    zip_members(&temp, zipped.path(), &[dcp.as_path()]);
+    let terminal = ingest_json(&temp, zipped.path(), "zipped-out");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "patch");
+    assert_eq!(
+        patch_file_names(ingest),
+        [("game.dcp".to_string(), "dcp".to_string())]
+    );
+}
+
+/// A ROM bundle zip holding a disc plus a `.dcp` ingests its ROM and reports the `.dcp` as a patch
+/// instead of failing the whole ingest while descending into the `.dcp`.
+#[test]
+fn ingest_rom_bundle_with_a_dcp_reports_the_rom_and_the_dcp_patch() {
+    let temp = setup_temp_dir();
+    let dcp = write_dcp(&temp, "game.dcp");
+    let iso = temp.child("game.iso");
+    fs::write(iso.path(), vec![7u8; 4096]).expect("iso fixture");
+    let bundle = temp.child("bundle.zip");
+    zip_members(&temp, bundle.path(), &[iso.path(), dcp.as_path()]);
+    let terminal = ingest_json(&temp, bundle.path(), "bundle-out");
+    let ingest = &terminal["details"]["ingest"];
+    assert_eq!(ingest["kind"], "rom");
+    let assets = ingest["assets"].as_array().expect("assets");
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0]["file_name"], "game.iso");
+    assert_eq!(
+        patch_file_names(ingest),
+        [("game.dcp".to_string(), "dcp".to_string())]
     );
 }

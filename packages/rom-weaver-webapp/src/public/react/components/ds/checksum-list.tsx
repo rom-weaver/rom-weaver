@@ -53,6 +53,9 @@ const ChecksumRow = ({
   const { copied, copy } = useClipboardCopy(text);
   const fit = typeof value === "string" && value.length >= FIT_VALUE_MIN_CHARS;
   const hasLabel = label !== undefined && label !== null;
+  // The name carries the visible value too: speech users target a control by
+  // what it shows (WCAG 2.5.3, axe label-content-name-mismatch).
+  const visibleValue = typeof value === "string" ? value : text;
 
   return (
     <button
@@ -60,6 +63,7 @@ const ChecksumRow = ({
         ariaLabel ??
         localizer.message("ui.checks.copy", {
           label: typeof label === "string" ? label : localizer.message("ui.checks.value"),
+          value: visibleValue,
         })
       }
       className={join(
@@ -73,6 +77,9 @@ const ChecksumRow = ({
       type="button"
     >
       {hasLabel ? <span className="ck-k">{label}</span> : null}
+      {/* Whitespace between the spans keeps label and value separate words for
+          text extraction (axe joins sibling text verbatim); the grid drops it. */}
+      {hasLabel ? " " : null}
       <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
       {mark ? (
         <span
@@ -134,7 +141,7 @@ const ChecksumList = ({
   label: ReactNode;
   timing?: ReactNode;
   match?: { ok: boolean; label: ReactNode };
-  /** A deferred verification is still running: show a subtle "Verifying…" readout in place of the
+  /** A deferred verification is still running: show a subtle "Checking…" readout in place of the
    * verdict chip (the card's verify-bar carries the motion; the body stays fully visible). */
   verifying?: boolean;
   sublabel?: ReactNode;
@@ -168,7 +175,7 @@ const ChecksumList = ({
             {summary}
             {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
             {verifying ? (
-              <DrawerReadout muted>Verifying…</DrawerReadout>
+              <DrawerReadout muted>Checking…</DrawerReadout>
             ) : (
               <>
                 {shownTiming ? <DrawerReadout time>{shownTiming}</DrawerReadout> : null}
@@ -203,8 +210,8 @@ const ChecksumList = ({
 type ChecksumPendingGroup = {
   id: string;
   label?: ReactNode;
-  /** A group whose values are already known while the file stages (a bundle's "Expected" checks
-   * come from the bundle, not the hash), rendered as-is in place of shimmer rows. */
+  /** A group whose values are already known while the file stages (a weave's "Expected" checks
+   * come from the weave, not the hash), rendered as-is in place of shimmer rows. */
   content?: ReactNode;
   rows?: Array<{ id?: string; label: ReactNode; length: number }>;
 };

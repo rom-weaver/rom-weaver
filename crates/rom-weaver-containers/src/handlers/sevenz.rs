@@ -447,23 +447,7 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         self.descriptor
     }
 
-    fn probe(&self, source: &Path) -> ProbeConfidence {
-        probe_regular_archive_with_libarchive(
-            source,
-            self.descriptor.name,
-            LibarchiveProbeFormat::SevenZ,
-        )
-    }
-
-    fn probe_details(
-        &self,
-        request: &ContainerProbeRequest,
-        _context: &OperationContext,
-    ) -> Result<OperationReport> {
-        regular_archive_probe_report(request, self.descriptor.name, true)
-    }
-
-    regular_archive_read_operations!();
+    regular_archive_read_operations!(SevenZ, true);
 
     fn create(
         &self,
@@ -471,7 +455,12 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let settings = self.resolve_codec_settings(request.codec.as_deref(), request.level)?;
-        let entries = collect_archive_inputs(&request.inputs)?;
+        let entries = match request.archive_names.as_deref() {
+            Some(names) => {
+                crate::archive_entries::collect_named_archive_inputs(&request.inputs, names)?
+            }
+            None => collect_archive_inputs(&request.inputs)?,
+        };
         // Cap planned threads at both the blocks the encoder can actually run and
         // what fits the system memory budget, so the reported parallelism is real
         // and peak RAM scales down on smaller machines.

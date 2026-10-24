@@ -19,7 +19,7 @@ const removeHeaderVariant = (overrides?: Partial<ChecksumVariant>): ChecksumVari
   applyCompatibility: { removeHeader: true, strip_header: true },
   checksums: { crc32: HEADERLESS_CRC },
   id: "remove-header",
-  label: "Remove header",
+  label: "Header removed",
   transforms: { removeHeader: { profile: "No-Intro_NES.xml", strippedBytes: 16 } },
   ...overrides,
 });

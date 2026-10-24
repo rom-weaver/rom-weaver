@@ -22,15 +22,12 @@ function matches(root, prefix, pattern, excluded = () => false) {
   return result;
 }
 
-// src/chd (the folded rom-weaver-chd crate, never in this guard's scope) uses
-// the cfg pair for its decode heap-pregrow, which enables threaded wasm rather
-// than suppressing it. browser-format-matrix.ts legitimately declares per-format
-// `threads: 1` expectations.
+// browser-format-matrix.ts legitimately declares per-format `threads: 1`
+// expectations.
 const GUARDS = [
   {
     prefix: "crates/rom-weaver-containers/src",
     pattern: /wasm_threaded_runtime_.*is_unstable|target_family = "wasm", rom_weaver_wasi_threads/,
-    excluded: (file) => file.includes("/chd/"),
     message: "container handlers should not suppress threaded WASM execution",
   },
   {

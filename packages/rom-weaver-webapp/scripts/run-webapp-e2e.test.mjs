@@ -200,6 +200,10 @@ describe("computeLinkAuditRoutes", () => {
     assert.equal(routes.filter((route) => route === "docs/a").length, 1);
     assert.ok(routes.includes(""));
     assert.ok(routes.includes("apply-patches"));
+    assert.ok(routes.includes("weave-patches"));
+    assert.ok(routes.includes("weave"));
+    assert.ok(routes.includes("bundle-patches"));
+    assert.ok(routes.includes("bundle"));
     assert.ok(routes.includes("docs/b"));
   });
 });
@@ -259,6 +263,13 @@ describe("assertNoProductionDocsSamples", () => {
       /^Error: docs\/get-started still downloads 2 sample\(s\) from production$/,
     );
   });
+
+  it("throws naming the slug and count when an article link still points at production", () => {
+    assert.throws(
+      () => assertNoProductionDocsSamples({ local: 1, production: 0, productionLinks: 3 }, "docs/get-started"),
+      /^Error: docs\/get-started still links to production from 3 anchor\(s\)$/,
+    );
+  });
 });
 
 describe("buildWorkerReuseManifestCase", () => {
@@ -301,6 +312,28 @@ describe("checkCssCoverage", () => {
 });
 
 describe("runE2EScenario", () => {
+  it("reports the underlying click failure when a download error wraps it", async () => {
+    const reports = [];
+    const cause = new Error("locator.click: Timeout 60000ms exceeded; Apply remained aria-disabled");
+    const failure = new Error("Download did not start", { cause });
+    let attempts = 0;
+    await assert.rejects(
+      () =>
+        runE2EScenario(
+          "combined BPS reapply",
+          async () => {
+            attempts += 1;
+            throw failure;
+          },
+          (line) => reports.push(line),
+        ),
+      (error) => error === failure,
+    );
+    assert.equal(attempts, 1);
+    assert.ok(reports.some((line) => line.includes(failure.message)));
+    assert.ok(reports.some((line) => line.includes(cause.message)));
+  });
+
   it("retries a disconnected browser without replaying completed scenarios", async () => {
     const calls = [];
     const reports = [];

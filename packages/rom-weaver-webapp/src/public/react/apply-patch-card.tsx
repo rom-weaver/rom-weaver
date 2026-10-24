@@ -1,6 +1,6 @@
 import { Tag, UserRound } from "lucide-react";
 import { useState } from "react";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
@@ -8,7 +8,7 @@ import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 import { TIMING_LABEL, PatchFaultWell } from "./apply-patch-list-helpers.tsx";
@@ -39,7 +39,7 @@ const getPatchCardVerdict = (validationState: string | undefined, isDisabled: bo
 const PatchCard = ({
   basisChoice,
   basisDisabled,
-  bundleSessionMatches,
+  weaveSessionMatches,
   canReorder,
   chainChip,
   handleProps,
@@ -53,6 +53,7 @@ const PatchCard = ({
   meta,
   onBasisChange,
   onMetaChange,
+  onDraftValidityChange,
   onReorder,
   onTogglePatch,
   outputCheckHint,
@@ -69,8 +70,8 @@ const PatchCard = ({
 }: {
   basisChoice: PatchInputBasis;
   basisDisabled?: boolean;
-  /** A loaded bundle's patch list matches this card list; metadata may still be landing. */
-  bundleSessionMatches?: boolean;
+  /** A loaded weave's patch list matches this card list; metadata may still be landing. */
+  weaveSessionMatches?: boolean;
   canReorder: boolean;
   /** Plain-language chain verdict for the Checks drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
@@ -83,22 +84,23 @@ const PatchCard = ({
   isChainOutput: boolean;
   isDisabled: boolean;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
+  meta?: WeavePatchMeta;
   onBasisChange?: (basis: PatchInputBasis) => void;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (error: string | null) => void;
   onReorder: (from: number, to: number) => void;
   onTogglePatch?: (index: number) => void;
   outputCheckHint?: boolean;
   overrideAvailable?: boolean;
   patchStack: PatcherStackController;
-  predecessors: readonly { id?: string; label: string; outputChecks?: ParsedBundleChecks }[];
+  predecessors: readonly { id?: string; label: string; outputChecks?: ParsedWeaveChecks }[];
   previousBasisAvailable: boolean;
   position: number;
   /** This patch's target ROM computed checks, for verifying input checks. */
   romActuals?: RomCheckActuals;
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
   /** Checks declared for the one root-ROM state, shown only as read-only evidence. */
-  sharedRomChecks?: ParsedBundleChecks;
+  sharedRomChecks?: ParsedWeaveChecks;
   /** The cheat stack has a card switched On, so stripping is not on offer. */
   stripDisabled?: boolean;
   total: number;
@@ -279,12 +281,16 @@ const PatchCard = ({
       <div className="patch-body">
         <div className="patch-body-inner">
           {verdict === "bad" ? (
-            <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
+            <PatchFaultWell
+              message={item.validationMessage}
+              overrideAvailable={overrideAvailable}
+              unreadable={item.validationUnreadable}
+            />
           ) : null}
           {!detailedViewEnabled ||
           isDisabled ||
           (staging && !patchExtracting && !meta) ||
-          (bundleSessionMatches && !meta) ? null : (
+          (weaveSessionMatches && !meta) ? null : (
             <ExtractDrawer
               fileName={item.fileName}
               fileSize={item.fileSize}
@@ -311,6 +317,7 @@ const PatchCard = ({
             item={item}
             meta={meta}
             onMetaChange={onMetaChange}
+            onDraftValidityChange={onDraftValidityChange}
             outputCheckHint={outputCheckHint}
             patchType={detailedViewEnabled ? undefined : item.format?.trim().toUpperCase() || undefined}
             patchStack={patchStack}

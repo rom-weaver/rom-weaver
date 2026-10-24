@@ -23,6 +23,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntime,
 } from "../../types/workflow-runtime-adapter.ts";
+import type { CompressionProbeInput } from "../../types/workflow-runtime-types.ts";
 import { forwardArchiveProgress } from "../shared/workflow-runtime-progress.ts";
 import { stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
 import {
@@ -117,60 +118,20 @@ const normalizeZipLikeArchiveSource = (source: unknown): unknown => {
   };
 };
 
-const stageCompressionEntryForRomWeaver = async (
-  workerIo: RuntimeWorkerIo,
-  entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
-  fileName: string,
-  index: number,
-  pathPrefixRoot: string,
-): Promise<{ cleanup: () => Promise<void>; filePath: string }> => {
-  const source = createArchiveEntrySource(entry, fileName);
-  if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
-  const staged = await workerIo.stageSource({
-    fallbackFileName: fileName,
-    pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
-    pathPrefixInPath: true,
-    scope: "archive",
-    source,
-  });
-
-  return {
-    cleanup: async () => {
-      await staged.cleanup().catch(() => undefined);
-    },
-    filePath: staged.filePath,
-  };
-};
-
 const createArchiveEntrySource = (
   entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
   fileName: string,
 ): Blob | File | string | Uint8Array | ArrayBufferLike | null => {
   if (entry.filePath) return entry.filePath;
   if (entry.file) return entry.file;
-  if (entry.text !== undefined) {
-    if (typeof File !== "undefined") return new File([String(entry.text)], fileName, { type: "text/plain" });
-    return new Blob([String(entry.text)], { type: "text/plain" });
-  }
-  if (entry.u8array) {
-    if (typeof File !== "undefined")
-      return new File([toFileBlobPart(entry.u8array)], fileName, {
-        type: "application/octet-stream",
-      });
-    return new Blob([toFileBlobPart(entry.u8array)], {
-      type: "application/octet-stream",
-    });
-  }
-  if (entry.arrayBuffer) {
-    if (typeof File !== "undefined")
-      return new File([toFileBlobPart(entry.arrayBuffer)], fileName, {
-        type: "application/octet-stream",
-      });
-    return new Blob([toFileBlobPart(entry.arrayBuffer)], {
-      type: "application/octet-stream",
-    });
-  }
-  return null;
+  let part: BlobPart;
+  const bytes = entry.u8array || entry.arrayBuffer;
+  const type = entry.text === undefined ? "application/octet-stream" : "text/plain";
+  if (entry.text !== undefined) part = String(entry.text);
+  else if (bytes) part = toFileBlobPart(bytes);
+  else return null;
+  if (typeof File !== "undefined") return new File([part], fileName, { type });
+  return new Blob([part], { type });
 };
 
 // Split-bin extraction is valid only for CD-class CHDs. The Rust chd-extract REJECTS the flag on DVD
@@ -198,41 +159,98 @@ const isDescendCdChd = async (
   return !!probed?.entries?.some((entry) => /\.cue$/i.test(String(entry.filename || entry.fileName || "")));
 };
 
+const stageArchiveSources = async (
+  workerIo: RuntimeWorkerIo,
+  requests: Parameters<RuntimeWorkerIo["stageSources"]>[0],
+) => {
+  const staged = await workerIo.stageSources(requests);
+  return {
+    archive: staged[0],
+    inputPaths: staged.map((entry) => entry.filePath),
+    cleanup: async () => {
+      await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+    },
+  };
+};
+
 const stageBrowserCompressionEntries = async (
   entries: RuntimeArchiveCreateInput["entries"],
   workerIo: RuntimeWorkerIo,
 ) => {
-  const normalizedEntries = normalizeCompressionWorkerEntries(entries);
   const pathPrefixRoot = `archive-create-${createVfsPathId()}`;
-  const stagedEntries: Array<{
-    cleanup: () => Promise<void>;
-    filePath: string;
-  }> = [];
-  try {
-    const inputPaths: string[] = [];
-    const entryNames: string[] = [];
-    for (let index = 0; index < normalizedEntries.length; index++) {
-      const entry = normalizedEntries[index];
-      if (!entry) continue;
-      const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
-      const stagedEntry = await stageCompressionEntryForRomWeaver(workerIo, entry, fileName, index, pathPrefixRoot);
-      stagedEntries.push(stagedEntry);
-      inputPaths.push(stagedEntry.filePath);
-      entryNames.push(fileName);
-    }
-
-    return {
-      cleanup: async () => {
-        await Promise.all(stagedEntries.map((entry) => entry.cleanup().catch(() => undefined)));
+  const requests = normalizeCompressionWorkerEntries(entries).flatMap((entry, index) => {
+    if (!entry) return [];
+    const fileName = entry.fileName || entry.filename || entry.name || `entry-${index + 1}.bin`;
+    const source = createArchiveEntrySource(entry, fileName);
+    if (!source) throw new Error(`Archive entry data was not provided: ${fileName}`);
+    return [
+      {
+        fallbackFileName: fileName,
+        pathPrefix: `${pathPrefixRoot}/archive-entry-${index + 1}`,
+        pathPrefixInPath: true,
+        scope: "archive" as const,
+        source,
       },
-      inputPaths,
-      entryNames,
-      stagedEntries,
-    };
-  } catch (error) {
-    await Promise.all(stagedEntries.map((entry) => entry.cleanup().catch(() => undefined)));
-    throw error;
+    ];
+  });
+  return {
+    ...(await stageArchiveSources(workerIo, requests)),
+    entryNames: requests.map((request) => request.fallbackFileName),
+  };
+};
+
+const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionProbeInput) => {
+  const trace = { logLevel: input.options?.logLevel, onLog: input.options?.onLog };
+  let requests: Parameters<RuntimeWorkerIo["stageSources"]>[0];
+  if (input.companionFiles?.length) {
+    const { source, companionFiles } = input;
+    if (!(source instanceof File && companionFiles.every((file) => file instanceof File))) {
+      throw new Error("Companion extraction requires a File source and File companions.");
+    }
+    const files = [source, ...companionFiles];
+    const names = new Set<string>();
+    const pathPrefix = `archive-input-${createVfsPathId()}`;
+    // NFS finds its parts by fixed lowercase names, so names are lowercased. Split WBFS parts
+    // instead share the source's stem (`Game.wbfs`, `Game.wbf1`); keeping that stem's case keeps
+    // the extracted ISO named like the source.
+    const sourceName = normalizeArchiveRelativePath(source.name);
+    const stem = sourceName.replace(/\.[^.]*$/, "");
+    const sharesStem = (name: string) => name.toLowerCase().startsWith(`${stem.toLowerCase()}.`);
+    const keepStem = stem !== sourceName && companionFiles.every((file) => sharesStem(file.name));
+    const stagedName = (name: string) =>
+      keepStem ? `${stem}${name.slice(stem.length).toLowerCase()}` : name.toLowerCase();
+    // Grouped uploads MUST use fresh File identities to keep cached standalone stages
+    // from changing the directory or fixed basename of a companion.
+    requests = files.map((file) => {
+      const fileName = stagedName(normalizeArchiveRelativePath(file.name));
+      if (fileName.includes("/")) {
+        throw new Error("Companion filenames cannot contain directories.");
+      }
+      if (names.has(fileName)) throw new Error("Duplicate companion filename.");
+      names.add(fileName);
+      return {
+        fallbackFileName: fileName,
+        pathPrefix,
+        pathPrefixInPath: true,
+        scope: "archive",
+        source: new File([file], fileName),
+        trace,
+      };
+    });
+  } else {
+    requests = [
+      {
+        fallbackFileName: "archive.bin",
+        pathPrefix: "archive-input",
+        scope: "archive",
+        source: normalizeZipLikeArchiveSource(input.source),
+        trace,
+      },
+    ];
   }
+  const staged = await stageArchiveSources(workerIo, requests);
+  if (!staged.archive) throw new Error("Archive was not staged.");
+  return { archive: staged.archive, knownInputPaths: staged.inputPaths, cleanup: staged.cleanup };
 };
 
 const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<WorkflowRuntime["compression"]> => ({
@@ -242,10 +260,11 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
     const format = workflowInput.format || workflowInput.options?.compression || "7z";
     const staged = await stageBrowserCompressionEntries(workflowInput.entries, workerIo);
     try {
-      const entryNames =
-        format === "zip" && workflowInput.options?.preservePaths
-          ? staged.entryNames.map(normalizeArchiveRelativePath)
-          : undefined;
+      const entryNames = staged.entryNames.map((name) => {
+        const relativePath = normalizeArchiveRelativePath(name);
+        if (format === "zip" && workflowInput.options?.preservePaths) return relativePath;
+        return getPathBaseName(relativePath);
+      });
       const codec = format === "zip" ? workflowInput.options?.zipCodec : workflowInput.options?.sevenZipCodec;
       const level = format === "zip" ? workflowInput.options?.zipLevel : workflowInput.options?.sevenZipLevel;
       const levelProfile = toLevelProfile(level);
@@ -291,13 +310,8 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
     }
   },
   extract: async (workflowInput) => {
-    const archive = await workerIo.stageSource({
-      fallbackFileName: "archive.bin",
-      pathPrefix: "archive-input",
-      scope: "archive",
-      source: normalizeZipLikeArchiveSource(workflowInput.source),
-      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
-    });
+    const stagedInputs = await stageArchiveInputs(workerIo, workflowInput);
+    const { archive, knownInputPaths } = stagedInputs;
     try {
       // Extract-selected shares the extract-all output mapping: one pass writes every chosen entry, so a
       // solid archive decodes once. It keeps nested archives packed, since the caller picked them as files.
@@ -315,7 +329,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             {
               inputPath: archive.filePath,
               interactiveSelectionEnabled: false,
-              knownInputPaths: [archive.filePath],
+              knownInputPaths,
               logLevel: workflowInput.options?.logLevel,
               noIgnore: true,
               ...(extractSelected ? { noNestedExtract: true, select: selectedEntries } : {}),
@@ -366,7 +380,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           const extracted = await invokeRomWeaverExtractWorker(
             {
               inputPath: archive.filePath,
-              knownInputPaths: [archive.filePath],
+              knownInputPaths,
               logLevel: workflowInput.options?.logLevel,
               noIgnore: true,
               noNestedExtract: true,
@@ -423,7 +437,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             ...(typeof workflowInput.options?.interactiveSelectionEnabled === "boolean"
               ? { interactiveSelectionEnabled: workflowInput.options.interactiveSelectionEnabled }
               : {}),
-            knownInputPaths: [archive.filePath],
+            knownInputPaths,
             logLevel: workflowInput.options?.logLevel,
             outDirPath,
             select: selectedEntries,
@@ -569,6 +583,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 select: [entryName],
                 signal: workflowInput.options?.signal,
                 sourcePath: archive.filePath,
+                knownInputPaths,
                 threads: workflowInput.options?.threads,
               },
               forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${entryName}...`),
@@ -659,17 +674,12 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       }
       return createCompressionExtractResult(outputs);
     } finally {
-      await archive.cleanup().catch(() => undefined);
+      await stagedInputs.cleanup().catch(() => undefined);
     }
   },
   probe: async (workflowInput) => {
-    const archive = await workerIo.stageSource({
-      fallbackFileName: "archive.bin",
-      pathPrefix: "archive-input",
-      scope: "archive",
-      source: normalizeZipLikeArchiveSource(workflowInput.source),
-      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
-    });
+    const stagedInputs = await stageArchiveInputs(workerIo, workflowInput);
+    const { archive, knownInputPaths } = stagedInputs;
     try {
       return await runRomWeaverProbeWorker(
         {
@@ -678,13 +688,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           romFilter: workflowInput.options?.romFilter,
           signal: workflowInput.options?.signal,
           sourcePath: archive.filePath,
+          knownInputPaths,
           splitBin: workflowInput.options?.chdSplitBin,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress, `Reading ${archive.fileName}...`),
         workflowInput.options?.onLog,
       );
     } finally {
-      await archive.cleanup().catch(() => undefined);
+      await stagedInputs.cleanup().catch(() => undefined);
     }
   },
 });

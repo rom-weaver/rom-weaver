@@ -1,3 +1,4 @@
+import { CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT } from "../../wasm/browser-opfs-proxy-protocol.ts";
 import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getWorkerErrorMessage, postCloneSafeWorkerMessage } from "../shared/worker-message-utils.ts";
 
@@ -17,7 +18,7 @@ type StorageRequest = {
 type StorageResponse = {
   action: "list-complete" | "remove-complete" | "stage-error" | "truncate-complete" | "write-complete";
   entries?: Array<{ kind: "directory" | "file"; path: string; size?: number }>;
-  error?: { message: string };
+  error?: { message: string; name?: string };
   filePath?: string;
   requestId?: string;
   size?: number;
@@ -54,16 +55,18 @@ const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle): Promise<F
 
 // FileSystemSyncAccessHandle.write() may write fewer bytes than requested (the spec permits a
 // short count, e.g. under quota pressure). Loop until the whole buffer lands, failing fast if a
-// write makes no forward progress so a partial write can't silently corrupt the file.
+// write makes no forward progress so a partial write can't silently corrupt the file. A count larger
+// than the chunk MUST fail too.
 const writeAllToSyncAccessHandle = (accessHandle: FileSystemSyncAccessHandle, bytes: Uint8Array, position: number) => {
   let written = 0;
   while (written < bytes.byteLength) {
     const chunk = written === 0 ? bytes : bytes.subarray(written);
     const count = accessHandle.write(chunk, { at: position + written });
-    if (!(count > 0)) {
-      throw new Error(
-        `OPFS sync write made no progress at offset ${position + written} (${written}/${bytes.byteLength} bytes)`,
-      );
+    const progress = `at offset ${position + written} (${written}/${bytes.byteLength} bytes)`;
+    if (count === CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT) throw new Error(`OPFS sync write: no space left ${progress}`);
+    if (!(count > 0)) throw new Error(`OPFS sync write made no progress ${progress}`);
+    if (!Number.isInteger(count) || count > chunk.byteLength) {
+      throw new Error(`OPFS sync write returned invalid byte count ${count} ${progress}`);
     }
     written += count;
   }
@@ -101,6 +104,12 @@ const truncateOpfsPath = async (request: StorageRequest): Promise<StorageRespons
     try {
       syncAccessHandle.truncate(size);
       syncAccessHandle.flush();
+      // Chromium skips a truncate over the storage quota without throwing.
+      const actual = syncAccessHandle.getSize();
+      if (actual !== size) {
+        const reason = actual < size ? ": no space left" : "";
+        throw new Error(`OPFS truncate of ${filePath} to ${size} bytes left ${actual} bytes${reason}`);
+      }
     } finally {
       syncAccessHandle.close();
     }
@@ -224,7 +233,7 @@ workerScope.onmessage = (event: MessageEvent<StorageRequest>) => {
     .catch((error) => {
       postCloneSafeWorkerMessage(workerScope, {
         action: "stage-error",
-        error: { message: getWorkerErrorMessage(error) },
+        error: { message: getWorkerErrorMessage(error), name: (error as { name?: unknown })?.name?.toString() },
         requestId: request.requestId,
         success: false,
       } satisfies StorageResponse);

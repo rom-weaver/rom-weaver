@@ -4,7 +4,13 @@
 import { describe, expect, it } from "vitest";
 import { resolveBrowserThreadPoolSizeFromCount } from "../../src/wasm/browser-wasi-thread-sizing.ts";
 import { buildStoredZip } from "./stored-zip-fixture.mjs";
-import { assertRunJsonSucceeded, joinGuestPath, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
+import {
+  assertRunJsonSucceeded,
+  joinGuestPath,
+  readGuestFile,
+  withTempFixture,
+  writeGuestFile,
+} from "./test-helpers.mjs";
 
 const NOT_FOUND_ERROR_REGEX = /not\s+found|object\s+can\s+not\s+be\s+found/i;
 
@@ -48,7 +54,7 @@ const listDirectoryEntries = async (rootHandle, relativePath, { ignoreMissing = 
   return names;
 };
 
-async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }) {
+async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [], verifyBytes = false, defaultThreads }) {
   let measurement = null;
   await withTempFixture(
     async ({ worker, opfsHandle, dir }) => {
@@ -64,6 +70,16 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
       const durationMs = performance.now() - startedAtMs;
       assertRunJsonSucceeded(result);
       const names = await listDirectoryEntries(opfsHandle, "out");
+      if (verifyBytes) {
+        for (let index = 0; index < entryCount; index += 1) {
+          const file = joinGuestPath(outDir, `entry-${String(index).padStart(5, "0")}.bin`);
+          const bytes = await readGuestFile(opfsHandle, file);
+          expect(bytes.byteLength).toBe(entrySize);
+          for (let offset = 0; offset < bytes.length; offset += 1) {
+            if (bytes[offset] !== (offset & 0xff)) throw new Error(`entry ${index} differs at byte ${offset}`);
+          }
+        }
+      }
       const scratchNames = await listDirectoryEntries(opfsHandle, "rom-weaver-out", { ignoreMissing: true });
       measurement = {
         ...parseHandleStats(traceLines),
@@ -74,7 +90,10 @@ async function measureManyEntryExtract({ entryCount, entrySize, extraArgs = [] }
       expect(names.filter((name) => name.startsWith(".rom-weaver-extract-"))).toEqual([]);
       expect(scratchNames.filter((name) => name.startsWith("rw-"))).toEqual([]);
     },
-    { prefix: "rom-weaver-many-entries-" },
+    {
+      prefix: "rom-weaver-many-entries-",
+      ...(defaultThreads === undefined ? {} : { initOptions: { defaultThreads } }),
+    },
   );
   return measurement;
 }
@@ -108,6 +127,30 @@ describe("many-entry archive extract", () => {
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(small.adapterBufferBytes + 8 * 1024 * 1024);
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
   });
+
+  it("bounds handles by fixed thread budgets and verifies all extracted bytes", async () => {
+    for (const threads of [1, 2]) {
+      const measurements = [];
+      for (const entryCount of [8, 32]) {
+        const measured = await measureManyEntryExtract({
+          entryCount,
+          entrySize: 257,
+          extraArgs: ["--threads", String(threads)],
+          verifyBytes: true,
+          defaultThreads: threads,
+        });
+        expect(measured.extractedFiles).toBe(entryCount);
+        expect(measured.peak).toBeLessThanOrEqual(MAX_EXPECTED_PEAK_HANDLES);
+        expect(measured.threadWorkersCreated).toBeLessThanOrEqual(resolveBrowserThreadPoolSizeFromCount(threads));
+        measurements.push(measured);
+      }
+      const [small, large] = measurements;
+      expect(large.opened).toBeGreaterThan(small.opened);
+      expect(large.peak).toBeLessThanOrEqual(small.peak + 2);
+      expect(large.adapterBufferBytes).toBeLessThanOrEqual(small.adapterBufferBytes + 8 * 1024 * 1024);
+      console.debug("[rom-weaver test] fixed-budget handle gauges", { threads, small, large });
+    }
+  }, 120000);
 
   // Exercise threaded extraction with per-entry checksums and verify every output while bounding workers and OPFS handles.
   it("validates a threaded 2048-entry extract with bounded resources", async () => {

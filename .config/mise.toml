@@ -19,6 +19,11 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:koalaman/shellcheck" = "0.11.0"           # shell script linting (also backs actionlint's `run:` checks)
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
+"ubi:sourcefrog/cargo-mutants" = "27.1.0"
+"cargo:cargo-fuzz" = "0.13.2"
+"cargo:kani-verifier" = "0.68.0"
+"ubi:taiki-e/cargo-llvm-cov" = "0.9.0"
+
 [env]
 # SDK discovery MUST use system tools because [env] renders before tool installation.
 # An absent SDK leaves native tasks usable; WASM build tasks report the missing toolchain.
@@ -277,7 +282,7 @@ run = "npm --prefix packages/rom-weaver-webapp run test:e2e:ios --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
-depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "licenses-check", "deny", "machete", "actionlint", "docs-lint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "quality-architecture", "quality-selection", "licenses-check", "deny", "machete", "actionlint", "docs-lint", "shellcheck", "hadolint", "test-rust", "build-wasm-prod"]
 run = "node {{ config_root }}/scripts/run-ci.mjs"
 
 # Benchmarks are not part of `ci`: they need a corpus of real disc images, which
@@ -298,3 +303,52 @@ run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite 7z --corpus '
 [tasks.bench-zip]
 description = "Benchmark zip deflate compress/extract against Info-ZIP (needs BENCH_CORPUS, hyperfine, zip/unzip)"
 run = "node {{ config_root }}/scripts/bench-disc-tools.mjs --suite zip --corpus '{{ env.BENCH_CORPUS }}'"
+
+[tasks.quality-architecture]
+description = "Check Cargo direction, shared errors and browser ownership"
+run = "node {{ config_root }}/scripts/quality-architecture.mjs"
+
+[tasks.quality-guardrails]
+description = "Review verification weakening against a merge base (pass BASE)"
+run = "node {{ config_root }}/scripts/quality-trusted-guardrails.mjs"
+
+[tasks.quality-selection]
+description = "Verify feature-gated and browser test target selection"
+run = "node {{ config_root }}/scripts/quality-test-selection.mjs"
+
+[tasks.quality-mutation]
+description = "Mutation evidence: broad, diff BASE, or list"
+run = "node {{ config_root }}/scripts/quality-mutation.mjs"
+
+[tasks.quality-fuzz]
+description = "Bounded owned-parser fuzzing: smoke or deep"
+run = "node {{ config_root }}/scripts/quality-fuzz.mjs"
+
+[tasks.quality-reference]
+description = "Verify native extraction against frozen pinned reference bytes"
+run = "node {{ config_root }}/scripts/quality-reference.mjs"
+
+[tasks.quality-regression-proof]
+description = "Prove an exact regression test fails behaviorally at base and passes at head"
+run = "node {{ config_root }}/scripts/quality-regression-proof.mjs"
+
+[tasks.quality-diff-coverage]
+description = "Report measured/unmeasured changed lines: BASE LCOV..."
+run = "node {{ config_root }}/scripts/quality-diff-coverage.mjs"
+
+[tasks.quality-sanitizer]
+description = "Native ASan and verified vendored libarchive ASan/UBSan"
+run = "node {{ config_root }}/scripts/quality-sanitizer.mjs"
+
+[tasks.quality-miri]
+description = "Compatible core ownership/byte helpers under Miri, two seeds"
+run = "node {{ config_root }}/scripts/quality-miri.mjs"
+
+[tasks.quality-kani]
+description = "Bounded proof of production chunk planning"
+run = "node {{ config_root }}/scripts/quality-kani.mjs"
+
+[tasks.coverage-rust-branch]
+description = "Opt-in nightly branch coverage with the same explicit target selections"
+depends = ["identify-data"]
+run = "node {{ config_root }}/scripts/coverage-rust.mjs --branch"

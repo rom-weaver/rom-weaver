@@ -135,15 +135,17 @@ const Masthead = ({
     [betaToolsEnabled, donateHref, githubHref, homeHref, tabs],
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
-  /* iOS raises the keyboard only for a focus made inside the tap, on a field
-     that is already rendered, so the sheet MUST commit before this returns. */
-  const openTools = useCallback(() => {
+  /* Menu opens for browsing, so the keyboard stays down; the Find shortcut
+     asks for the box. iOS raises the keyboard only for a focus made inside the
+     keypress, on a field that is already rendered, so the sheet MUST commit
+     before this returns. */
+  const openTools = useCallback((focusFind: boolean) => {
     flushSync(() => {
       setFindOpen(false);
       setMenuMounted(true);
       setMenuOpen(true);
     });
-    document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
+    if (focusFind) document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
   }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
@@ -192,7 +194,7 @@ const Masthead = ({
       // the shortcut opens Menu; Escape then has a visible trigger to return to.
       if (window.matchMedia("(max-width: 999px)").matches) {
         if (document.getElementById("menu-sheet")?.hidden === false) setMenuOpen(false);
-        else openTools();
+        else openTools(true);
         return;
       }
       setMenuOpen(false);
@@ -336,12 +338,14 @@ const Masthead = ({
           id: "status",
           label: localizer.message("ui.console.offline"),
           onSelect: onOpenStatus,
+          shortLabel: localizer.message("ui.status.offline"),
         },
         {
           icon: <HardDrive aria-hidden="true" />,
           id: "storage",
           label: localizer.message("ui.console.storage"),
           onSelect: openStorage,
+          shortLabel: localizer.message("ui.log.tabStorage"),
         },
         {
           icon: <ScrollText aria-hidden="true" />,
@@ -446,9 +450,6 @@ const Masthead = ({
   ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
-  // Docs and the landing page bring their own h1, so the brand steps down to a
-  // span there rather than giving the document two.
-  const BrandHeading = currentTab === "docs" || currentTab === "home" || currentTab === "whats-new" ? "span" : "h1";
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}
@@ -548,15 +549,19 @@ const Masthead = ({
           <div className="shell-head">
             <div className="shell-head-top">
               <span className="brand">
-                <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
-                  <BrandMark />
-                </a>
+                {/* The wordmark link below is the one labelled home link; the mark is a
+                    pointer-only duplicate, hidden from assistive tech and the tab order. */}
+                <span aria-hidden="true" className="brand-mark-wrap">
+                  <a className="brand-mark-link" href={homeHref} tabIndex={-1}>
+                    <BrandMark />
+                  </a>
+                </span>
                 <span className="brand-copy">
-                  <a className="brand-word-link" href={homeHref}>
-                    <BrandHeading className="brand-word">
+                  <a aria-label={localizer.message("ui.nav.home")} className="brand-word-link" href={homeHref}>
+                    <span className="brand-word">
                       rom<span className="brand-hy">-</span>
                       <b>weaver</b>
-                    </BrandHeading>
+                    </span>
                   </a>
                   {previewVersionStatus ? null : buildFacts}
                 </span>
@@ -632,22 +637,18 @@ const Masthead = ({
         </span>
       ) : null}
       <PhoneDock
-        appLabel={localizer.message("ui.tools.app")}
+        closeLabel={localizer.message("ui.common.close")}
         current={currentTab}
+        menuControls="menu-sheet"
         menuLabel={localizer.message("ui.tools.menu")}
         menuOpen={menuOpen}
         navLabel={navLabel}
-        onOpenApp={() => {
-          setFindOpen(false);
-          setMenuOpen(false);
-          onOpenSettings();
-        }}
         onSelect={onSelectTab}
         onToggleMenu={() => {
           setFindOpen(false);
           onPreloadLog?.();
           if (menuOpen) setMenuOpen(false);
-          else openTools();
+          else openTools(false);
         }}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}

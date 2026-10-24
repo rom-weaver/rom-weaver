@@ -1,4 +1,4 @@
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import { type Dispatch, type SetStateAction, useMemo } from "react";
 import { markPatchArchiveReplacement } from "../../lib/input/patch-archive-replacement.ts";
 import { createLogger } from "../../lib/logging.ts";
@@ -243,8 +243,8 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
         index: number,
         option: {
           id?: string;
-          input?: ParsedBundlePatchInput;
-          target?: ParsedBundlePatchInput;
+          input?: ParsedWeavePatchInput;
+          target?: ParsedWeavePatchInput;
           inputChecks?: string;
           outputChecks?: string;
           basis?: "base" | "previous";

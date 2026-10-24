@@ -40,14 +40,14 @@ describe("ChecksumWorkflowController", () => {
   it("names the extracted member instead of its archive", async () => {
     const { controller, run } = setup();
     run.mockResolvedValue({ ...result, fileName: "b.bin" });
-    await controller.setInput({ name: "bundle.zip", size: 100 });
+    await controller.setInput({ name: "weave.zip", size: 100 });
     expect(controller.getInput()).toMatchObject({
       fileName: "b.bin",
       sourceSize: 100,
       files: [{ fileName: "b.bin", size: 8 }],
     });
     await controller.calculate(["sha256"]);
-    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ fileName: "bundle.zip" }));
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ fileName: "weave.zip" }));
   });
 
   it("honors initial algorithm choices and disables extraction", async () => {
@@ -104,6 +104,20 @@ describe("ChecksumWorkflowController", () => {
     await expect(controller.calculate(["blake3"])).resolves.toMatchObject({
       files: [{ checksums: { blake3: "d".repeat(64) } }],
     });
+  });
+
+  it("reports host selection cancellation as skipped during staging and calculation", async () => {
+    const { controller, run } = setup();
+    const cancellation = new Error("validation error: interactive selection was cancelled for `/work/game.zip`");
+    run.mockRejectedValueOnce(cancellation);
+    await expect(controller.setInput(source)).rejects.toMatchObject({
+      code: "WORKFLOW_SELECTION_SKIPPED",
+      cause: cancellation,
+    });
+    await controller.setInput(source);
+    run.mockRejectedValueOnce(cancellation);
+    await expect(controller.calculate(["sha256"])).rejects.toMatchObject({ code: "WORKFLOW_SELECTION_SKIPPED" });
+    expect(controller.getInput()?.files[0]?.checksums).toEqual(result.checksums);
   });
 
   it("releases inputs when replacing and disposing them", async () => {

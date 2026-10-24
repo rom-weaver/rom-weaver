@@ -111,38 +111,62 @@ const renderAnchored = async (row: { height: number; left: number; top: number; 
 };
 
 describe("sample tutorial start", () => {
-  it("offers the bundle as a download alongside the guided run", () => {
+  it("offers the weave as a download alongside the guided run", () => {
     const onStart = vi.fn();
     const onSecondaryStart = vi.fn();
     render(
       <SampleTutorialStart
+        chipLabel="Patch a sample"
         downloadHref="/first-weave.zip"
-        downloadLabel="Download a test bundle"
+        downloadLabel="Download a test weave"
         downloadName="first-weave.zip"
         error=""
         guideHref="/apply-patch?guide=apply"
-        label="Start guided Apply"
+        label="Start a practice run"
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
-        secondaryLabel="Start guided bundle"
-        secondaryHref="/bundle?guide=bundle"
+        secondaryLabel="Start a practice weave"
+        secondaryHref="/weave?guide=weave"
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
-    const download = screen.getByRole("link", { name: /Download a test bundle/ });
+    fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
+    const download = screen.getByRole("link", { name: /Download a test weave/ });
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
 
-    const guidedApply = screen.getByRole("link", { name: /Start guided Apply/ });
+    const guidedApply = screen.getByRole("link", { name: /Start a practice run/ });
     expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
-    const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
-    expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
-    fireEvent.click(guidedBundle);
+    expect(screen.queryByRole("link", { name: /Start a practice run/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
+    const guidedWeave = screen.getByRole("link", { name: /Start a practice weave/ });
+    expect(guidedWeave.getAttribute("href")).toBe("/weave?guide=weave");
+    fireEvent.click(guidedWeave);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /Start a practice weave/ })).toBeNull();
+  });
+  it("reopens the sample menu when loading fails", async () => {
+    const props = {
+      chipLabel: "Share practice patches as a weave",
+      downloadHref: "/first-weave.zip",
+      downloadLabel: "Download a test weave",
+      downloadName: "first-weave.zip",
+      error: "",
+      guideHref: "/weave?guide=weave",
+      label: "Start a practice weave",
+      loading: false,
+      onStart: vi.fn(),
+    };
+    const { rerender } = render(<SampleTutorialStart {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /Share practice patches as a weave/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Start a practice weave/ }));
+    expect(screen.queryByRole("link", { name: /Start a practice weave/ })).toBeNull();
+    rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Could not load practice files"));
+    expect(screen.getByRole("link", { name: /Start a practice weave/ })).toBeTruthy();
   });
 });
 
@@ -178,13 +202,13 @@ describe("sample tutorial", () => {
       </div>,
     );
 
-    const guide = screen.getByRole("dialog", { name: "Loading the sample files" });
+    const guide = screen.getByRole("dialog", { name: "Loading practice files" });
     expect(guide.getAttribute("aria-busy")).toBe("true");
     expect(guide.getAttribute("data-loading")).toBe("true");
     expect(guide.hasAttribute("data-step")).toBe(false);
     expect(guide.hasAttribute("data-step-count")).toBe(false);
-    expect(screen.getByRole("progressbar", { name: "Loading sample files" }).getAttribute("aria-valuetext")).toBe(
-      "Getting the sample ready",
+    expect(screen.getByRole("progressbar", { name: "Loading practice files" }).getAttribute("aria-valuetext")).toBe(
+      "Preparing practice files",
     );
   });
 
@@ -434,7 +458,7 @@ describe("sample tutorial", () => {
     expect(button.dataset.guideCta).toBeUndefined();
   });
 
-  it("leaves an opened drawer open when the final action ends the guide", async () => {
+  it("re-closes an opened drawer when the final action ends the guide", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       {
         body: "Press it.",
@@ -463,7 +487,7 @@ describe("sample tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onClose).toHaveBeenCalledOnce();
     rerender(workbench(false));
-    expect(drawer.getAttribute("aria-expanded")).toBe("true");
+    expect(drawer.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {
@@ -473,6 +497,36 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
     endGuide();
     expect(drawer.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("sample tutorial shared anchor motion", () => {
+  it("finishes moving when consecutive steps share their anchor", async () => {
+    const animate = vi
+      .spyOn(HTMLElement.prototype, "animate")
+      .mockImplementation(() => ({ cancel: vi.fn(), finished: Promise.resolve() }) as unknown as Animation);
+    const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    try {
+      const sharedSteps = STEPS.map((step) => ({ ...step, target: "#tutorial-first" }));
+      render(
+        <div className="rw-app">
+          <TutorialSection id="tutorial-first" label="First drawer" />
+          <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={sharedSteps} />
+        </div>,
+      );
+      await waitFor(() => expect(document.querySelector(".sample-tutorial-ring")).toBeTruthy());
+      fireEvent.click(document.querySelector(".sample-tutorial-next") as HTMLButtonElement);
+      await waitFor(() =>
+        expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("2"),
+      );
+      expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-moving")).toBe(false);
+    } finally {
+      animate.mockRestore();
+      frame.mockRestore();
+    }
   });
 });
 
@@ -542,7 +596,7 @@ describe("sample tutorial step card", () => {
     );
 
     expect(document.querySelector(".sample-tutorial-beacon")?.textContent).toBe("0x01");
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(document.querySelectorAll(".sample-tutorial-pips i")).toHaveLength(2);
     expect(document.querySelector(".sample-tutorial-pips [data-state='current']")).toBe(
       document.querySelector(".sample-tutorial-pips i"),
@@ -557,14 +611,48 @@ describe("sample tutorial step card", () => {
     expect(screen.getByRole("heading", { name: "Choose how much to see" })).toBeTruthy();
     expect(screen.getByText(/You're in Simple view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Simple");
-    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Detailed/)).toBeTruthy();
     const head = document.querySelector(".workflow-panel-head") as HTMLElement;
     await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
 
     rerender(viewWorkbench(true));
     expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Detailed");
-    expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Simple/)).toBeTruthy();
+  });
+
+  it("changes the live view from the guide comparison without advancing", async () => {
+    const Workbench = () => {
+      const [detailed, setDetailed] = useState(false);
+      return (
+        <RomWeaverSettingsProvider settings={{ detailedViewEnabled: detailed }}>
+          <div className="rw-app">
+            <div className="workflow-panel-head">
+              <label className="panel-view-toggle">
+                <input
+                  checked={detailed}
+                  onChange={(event) => setDetailed(event.currentTarget.checked)}
+                  type="checkbox"
+                />
+                <span>Detailed</span>
+              </label>
+            </div>
+            <TutorialSection id="tutorial-first" label="First drawer" />
+            <ViewGuide />
+          </div>
+        </RomWeaverSettingsProvider>
+      );
+    };
+    render(<Workbench />);
+    await waitFor(() => expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Detailed\b/, pressed: true }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("button", { name: /^Simple\b/, pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", false);
+    expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("1");
   });
 
   it("lifts the switch in the target's own panel, not a hidden panel's earlier copy", async () => {
@@ -618,17 +706,17 @@ describe("sample tutorial step card", () => {
 
     expect(screen.queryByRole("heading", { name: "Choose how much to see" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 1");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 1");
   });
 
   it("folds the view explanation into a card's own step", async () => {
     render(viewWorkbench(false, true, mergedViewSteps));
 
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(screen.getByText(/^Check the first section\. You're in Simple view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare")).toBeTruthy();
-    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    expect(screen.getByText(/Switch to Detailed/)).toBeTruthy();
     const head = document.querySelector(".workflow-panel-head") as HTMLElement;
     await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
   });
@@ -637,7 +725,7 @@ describe("sample tutorial step card", () => {
     render(viewWorkbench(false, false, mergedViewSteps));
 
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
-    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run, step 1 of 2");
     expect(screen.getByText("Check the first section.")).toBeTruthy();
     expect(screen.queryByText(/You're in Simple view/)).toBeNull();
     expect(document.querySelector(".sample-tutorial-compare")).toBeNull();
@@ -697,7 +785,7 @@ describe("sample tutorial step card", () => {
     expect(onContinue).toHaveBeenCalledOnce();
     rerender(workbench({ busy: true }));
     expect(next.getAttribute("aria-busy")).toBe("true");
-    expect(next.textContent).toBe("Loading sample files…");
+    expect(next.textContent).toBe("Loading practice files…");
     // A second press while the files load starts nothing new.
     fireEvent.click(next);
     expect(onContinue).toHaveBeenCalledOnce();
@@ -724,8 +812,10 @@ describe("sample tutorial step card", () => {
     );
     const { rerender } = render(workbench());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    rerender(workbench({ error: "Could not load the sample. Try again." }));
-    expect(screen.getByRole("status").textContent).toBe("Could not load the sample. Try again.");
+    rerender(workbench({ error: "Couldn't load the practice files. Check your connection and try again." }));
+    expect(screen.getByRole("status").textContent).toBe(
+      "Couldn't load the practice files. Check your connection and try again.",
+    );
 
     // Files the reader adds afterwards unlock the step without carrying it on.
     rerender(workbench({ locked: false }));

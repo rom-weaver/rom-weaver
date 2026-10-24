@@ -43,7 +43,29 @@ pub(crate) fn regular_archive_probe_report(
 /// Expands to the `list_entries`, `list_entry_records` and `extract` methods
 /// of `ContainerHandlerOperations` for a handler with a `descriptor` field
 /// whose archives libarchive reads.
+///
+/// The `($variant, $detailed)` form also generates `probe` (libarchive probe of
+/// `LibarchiveProbeFormat::$variant`) and `probe_details`.
 macro_rules! regular_archive_read_operations {
+    ($variant:ident, $detailed:expr) => {
+        fn probe(&self, source: &Path) -> ProbeConfidence {
+            probe_regular_archive_with_libarchive(
+                source,
+                self.descriptor.name,
+                LibarchiveProbeFormat::$variant,
+            )
+        }
+
+        fn probe_details(
+            &self,
+            request: &ContainerProbeRequest,
+            _context: &OperationContext,
+        ) -> Result<OperationReport> {
+            regular_archive_probe_report(request, self.descriptor.name, $detailed)
+        }
+
+        regular_archive_read_operations!();
+    };
     () => {
         fn list_entries(
             &self,

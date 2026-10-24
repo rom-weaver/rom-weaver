@@ -95,14 +95,16 @@ type PatchInputRef = { rom: true; member?: string } | { patch: string; member?: 
 
 /** Per-patch options the user can set in the patch "Options" panel, aligned by patch index. */
 type PatchApplyUserOptions = {
-  /** Stable bundle/session identity for this patch slot. */
+  /** Stable weave/session identity for this patch slot. */
   id?: string;
-  /** Concrete execution input recorded by a bundle or session. */
+  /** Concrete execution input recorded by a weave or session. */
   input?: PatchInputRef;
-  /** Cumulative output lane recorded by a bundle or session. */
+  /** Cumulative output lane recorded by a weave or session. */
   target?: PatchInputRef;
   /** Expected checks for the concrete input state, forwarded to patch-apply. */
   inputChecks?: string;
+  /** Checks a bare file must match to stand in for this patch's member when `inputChecks` is unset (the weave's `rom.checks`). */
+  memberChecks?: string;
   /** Expected checks for this patch's output, forwarded to patch-apply. */
   outputChecks?: string;
   /** Which state this patch's embedded input checks describe. */
@@ -133,6 +135,10 @@ type PatchInput = {
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
   patchOptions?: PatchApplyUserOptions[];
+  /** The weave's `rom.member`, which a bare file serving the root lane already stands in for. */
+  rootMember?: string;
+  /** Checksums of a lone bare input file for algorithms staging does not compute, hashed on demand. */
+  bareFileChecksums?: Record<string, string>;
   /** Shared default sent once to the Rust patch planner. */
   defaultPatchBasis?: "auto" | "base" | "previous";
   preparedInputAssets?: InputAsset[];
@@ -240,12 +246,16 @@ type CompressionWorkflowOptions = {
 
 type CompressionProbeInput = {
   source: SourceRef;
+  /** Browser companion uploads MUST share a directory with the primary File input. */
+  companionFiles?: File[];
   format?: string;
   options?: CompressionWorkflowOptions;
 };
 
 type CompressionExtractInput = {
   source: SourceRef;
+  /** Browser companion uploads MUST share a directory with the primary File input. */
+  companionFiles?: File[];
   entries: string[];
   format?: string;
   outputName?: string;
@@ -276,6 +286,7 @@ type CompressionCreateImageFileInput = {
 };
 
 type CompressionCreateChdOptions = {
+  compressionProfile?: CompressionProfile;
   compressionCodecs?: ChdCompressionCodecs | null;
   cueFilePath?: string | null;
   imageFiles?: CompressionCreateImageFileInput[];
@@ -324,6 +335,12 @@ type CompressionProbeResult = {
   entries: CompressionEntryInfo[];
   /** Console decoded from the container's bytes, when the probe recognises one. */
   platform?: string;
+  /** Optical medium ("CD", "DVD", ...) the engine detected from the header bytes, when the file is a disc image. */
+  discFormat?: string;
+  /** Rom-specific container the engine recommends from the file's header bytes (e.g. `chd` for a CD image). */
+  recommendedFormat?: string;
+  /** Create mode (`cd`/`dvd`/`hd`/`raw`) native `chd` auto-inference picks for a loose `.bin`/`.iso`. */
+  chdCreateMode?: string;
   /** Digests read from a CHD header, without decompressing the payload. */
   chd?: { rawSha1?: string; sha1?: string };
 };
@@ -339,6 +356,8 @@ type CompressionCreateResult = {
 };
 
 type ApplyWorkflowResult = {
+  /** Handler warnings reported while applying; the output was still produced. */
+  warnings?: string[];
   cheats?: {
     rom: number;
   };
@@ -375,6 +394,8 @@ type ApplyWorkflowResult = {
 
 type CreatePatchResult = {
   output: PublicOutput;
+  /** Handler warnings reported while creating; the patch was still produced. */
+  warnings?: string[];
   format: string;
   sizeSummary?: {
     compressionTimeMs?: number;

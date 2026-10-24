@@ -215,6 +215,7 @@
   white-space: nowrap;
 }
 .rw-app .patch-desc {
+  clear: both;
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.45;
@@ -622,8 +623,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.rw-app .identify-ambiguous-lead,
-.rw-app .identify-unknown-lead {
+.rw-app .identify-ambiguous-lead {
   padding: 0 var(--sp-m) var(--sp-s);
   margin: 0;
   overflow-wrap: anywhere;
@@ -796,6 +796,7 @@
   font-weight: 650;
 }
 .rw-app .identify-search-row {
+  position: relative;
   display: flex;
   flex: 1 1 20rem;
   gap: var(--sp-s);
@@ -804,6 +805,16 @@
 .rw-app .identify-search-input {
   flex: 1 1 8rem;
   min-width: 0;
+  text-overflow: ellipsis;
+}
+/* The no-file sample reuses the onboarding sample link's look and 44px
+   target, set inside the empty box's end; the row's centering places it
+   vertically. It shows only while the box is empty, so typed text never runs
+   under it. The inset keeps its text about as far from the box's end as
+   the placeholder sits from its start. */
+.rw-app .identify-search-sample {
+  position: absolute;
+  inset-inline-end: 10px;
 }
 .rw-app .identify-search-error {
   flex-basis: 100%;

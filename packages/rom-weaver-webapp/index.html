@@ -22,7 +22,7 @@
       }
     </style>
     <script>
-      // Resolve data-theme/data-accent before first paint so the prerendered shell
+      // Resolve data-theme/data-theme-preference/data-accent before first paint so the prerendered shell
       // inside #webapp-root paints with the :root[data-theme] design tokens instead
       // of waiting for theme.ts in the bundle. Mirrors theme.ts (stored preference,
       // else prefers-color-scheme, dark default) and accent.ts (settings store's
@@ -35,6 +35,7 @@
           const preferred = stored === "light" || stored === "dark" ? stored : "";
           const system = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
           document.documentElement.setAttribute("data-theme", preferred || system);
+          document.documentElement.setAttribute("data-theme-preference", preferred || "auto");
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
           // Read these fields without a schema-version gate so compatible saved
@@ -55,6 +56,7 @@
           else document.documentElement.setAttribute("data-accent", accent);
         } catch (error) {
           document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.setAttribute("data-theme-preference", "auto");
           document.documentElement.dataset.betaToolsEnabled = "false";
           document.documentElement.dataset.onboardingEnabled = "true";
         }
@@ -131,18 +133,83 @@
       // is parsed, while the shell is painted and clickable well before that.
       // src/webapp/shell-click-replay.ts describes the targets before hydration
       // and replays what it can once React's handlers are attached.
+      //
+      // File picks and drops are buffered too, and kept until the first mount:
+      // a chosen file lives on the retained <input>, and a dropped one exists
+      // only inside its drop event. Both are re-delivered by shell-click-replay.ts.
       (function () {
+        function hasFiles(event) {
+          var types = event.dataTransfer && event.dataTransfer.types;
+          return !!types && Array.prototype.indexOf.call(types, "Files") !== -1;
+        }
         function record(event) {
           if (buffer.clicks.length < 4) buffer.clicks.push({ target: event.target, time: Date.now() });
         }
+        function recordPick(event) {
+          if (buffer.replaying) return;
+          var input = event.target;
+          if (!input || input.type !== "file" || !input.files || !input.files.length) return;
+          if (buffer.selections.length < 8 || buffer.deferSelections) {
+            buffer.selections.push({ files: Array.prototype.slice.call(input.files), kind: "pick", target: input });
+          }
+          if (buffer.deferSelections) event.stopImmediatePropagation();
+        }
+        // Without a dragover handler the browser refuses the drop and then
+        // navigates to the file, so claim file drags the shell cannot take yet.
+        function allowDrop(event) {
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }
+        function recordDrop(event) {
+          if (buffer.replaying) return;
+          if (!hasFiles(event)) return;
+          event.preventDefault();
+          var files = Array.prototype.slice.call(event.dataTransfer.files);
+          if (files.length && (buffer.selections.length < 8 || buffer.deferSelections)) {
+            var items = Array.prototype.map.call(event.dataTransfer.items || [], function (item) {
+              var entry = typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+              var file = item.getAsFile ? item.getAsFile() : null;
+              return {
+                kind: item.kind,
+                webkitGetAsEntry:
+                  typeof item.webkitGetAsEntry === "function"
+                    ? function () {
+                        return entry;
+                      }
+                    : undefined,
+                getAsFile: function () {
+                  return file;
+                },
+              };
+            });
+            buffer.selections.push({
+              files: files,
+              transfer: { files: files, items: items },
+              kind: "drop",
+              target: event.target,
+            });
+          }
+          if (files.length && buffer.deferSelections) event.stopImmediatePropagation();
+        }
         var buffer = {
           clicks: [],
+          selections: [],
+          deferSelections: false,
           stop: function () {
             document.removeEventListener("click", record, true);
+          },
+          stopSelections: function () {
+            document.removeEventListener("change", recordPick, true);
+            document.removeEventListener("dragover", allowDrop, true);
+            document.removeEventListener("drop", recordDrop, true);
           },
         };
         window.ROM_WEAVER_SHELL_CLICKS = buffer;
         document.addEventListener("click", record, true);
+        document.addEventListener("change", recordPick, true);
+        document.addEventListener("dragover", allowDrop, true);
+        document.addEventListener("drop", recordDrop, true);
       })();
     </script>
     <script>
@@ -171,6 +238,7 @@
         try {
           const stored = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           offlineCopyEnabled = stored?.common?.offlineCopyEnabled !== false;
+          document.documentElement.dataset.offlineCopyEnabled = offlineCopyEnabled;
           const applyCompression = stored?.apply?.compression;
           const createCompression = stored?.create?.compression;
           // No version gate - see the theme/accent script above. The parse

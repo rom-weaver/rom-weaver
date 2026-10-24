@@ -137,6 +137,23 @@ const IN_SOURCE_DEPENDENCIES = [
     ],
   },
   {
+    name: "chd-rs",
+    versionFile: path.join(
+      REPO_ROOT,
+      "crates",
+      "rom-weaver-containers",
+      "src",
+      "chd_rs",
+      "CHD_RS_VERSION",
+    ),
+    versionKey: "upstream-tag",
+    sourceKey: "source",
+    license: "BSD-3-Clause",
+    licenseFiles: [
+      path.join(REPO_ROOT, "crates", "rom-weaver-containers", "src", "chd_rs", "LICENSE.md"),
+    ],
+  },
+  {
     name: "nod",
     versionFile: path.join(
       REPO_ROOT,

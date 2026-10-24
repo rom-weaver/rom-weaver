@@ -73,7 +73,6 @@
 #include "archive_time_private.h"
 #include "archive_write_private.h"
 #include "archive_write_set_format_private.h"
-#include "archive_zlib_private.h"
 
 #ifndef HAVE_ZLIB_H
 #include "archive_crc32.h"
@@ -179,10 +178,7 @@ struct zip {
 	struct archive_string_conv *opt_sconv;
 	struct archive_string_conv *sconv_default;
 	enum compression requested_compression;
-	int compression_level;
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-	int zstd_compression_level;
-#endif
+	short compression_level;
 	int init_default_conversion;
 	enum encryption encryption_type;
 	short threads;
@@ -230,11 +226,6 @@ struct zip {
    on lots of platforms (but not all). */
 #define zipmin(a, b) ((a) > (b) ? (b) : (a))
 
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-#define ZIP_ZSTD_BUFFER_BYTES (1024 * 1024)
-#define ZIP_ZSTD_MT_OVERLAP_LOG 6
-#endif
-
 static ssize_t archive_write_zip_data(struct archive_write *,
 		   const void *buff, size_t s);
 static int archive_write_zip_close(struct archive_write *);
@@ -255,72 +246,6 @@ static int init_traditional_pkware_encryption(struct archive_write *);
 static int is_traditional_pkware_encryption_supported(void);
 static int init_winzip_aes_encryption(struct archive_write *);
 static int is_winzip_aes_encryption_supported(int encryption);
-
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-static int
-zip_ensure_zstd_buffer(struct archive_write *a, struct zip *zip)
-{
-	unsigned char *buf;
-
-	if (zip->len_buf >= ZIP_ZSTD_BUFFER_BYTES)
-		return (ARCHIVE_OK);
-
-	buf = realloc(zip->buf, ZIP_ZSTD_BUFFER_BYTES);
-	if (buf == NULL) {
-		archive_set_error(&a->archive, ENOMEM,
-		    "Can't allocate zstd compression buffer");
-		return (ARCHIVE_FATAL);
-	}
-	zip->buf = buf;
-	zip->len_buf = ZIP_ZSTD_BUFFER_BYTES;
-	return (ARCHIVE_OK);
-}
-
-static int
-zip_zstd_set_parameter(struct archive_write *a, ZSTD_CStream *context,
-    ZSTD_cParameter parameter, int value, const char *name)
-{
-	size_t zret;
-
-	zret = ZSTD_CCtx_setParameter(context, parameter, value);
-	if (ZSTD_isError(zret)) {
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "Can't set zstd %s: %s", name, ZSTD_getErrorName(zret));
-		return (ARCHIVE_FATAL);
-	}
-	return (ARCHIVE_OK);
-}
-
-static int
-zip_tune_zstd_parameters(struct archive_write *a, struct zip *zip)
-{
-	size_t zret;
-
-	if (zip->threads > 1) {
-		if (zip_zstd_set_parameter(a, zip->stream.zstd.context,
-		    ZSTD_c_nbWorkers, zip->threads, "worker count") != ARCHIVE_OK)
-			return (ARCHIVE_FATAL);
-		if (zip_zstd_set_parameter(a, zip->stream.zstd.context,
-		    ZSTD_c_overlapLog, ZIP_ZSTD_MT_OVERLAP_LOG,
-		    "overlap") != ARCHIVE_OK)
-			return (ARCHIVE_FATAL);
-	}
-
-	if (zip->entry_uncompressed_limit >= 0 &&
-	    zip->entry_uncompressed_limit != INT64_MAX) {
-		zret = ZSTD_CCtx_setPledgedSrcSize(zip->stream.zstd.context,
-		    (unsigned long long)zip->entry_uncompressed_limit);
-		if (ZSTD_isError(zret)) {
-			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-			    "Can't set zstd pledged source size: %s",
-			    ZSTD_getErrorName(zret));
-			return (ARCHIVE_FATAL);
-		}
-	}
-
-	return (ARCHIVE_OK);
-}
-#endif
 
 #ifdef HAVE_LZMA_H
 /* ZIP's LZMA format requires the use of a alas not exposed in LibLZMA
@@ -410,15 +335,6 @@ fake_crc32(unsigned long crc, const void *buff, size_t len)
 	return 0;
 }
 
-static void
-zip_reset_compression_levels(struct zip *zip)
-{
-	zip->compression_level = 6;
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-	zip->zstd_compression_level = ZSTD_CLEVEL_DEFAULT;
-#endif
-}
-
 static int
 archive_write_zip_options(struct archive_write *a, const char *key,
     const char *val)
@@ -482,51 +398,19 @@ archive_write_zip_options(struct archive_write *a, const char *key,
 		return (ret);
 	} else if (strcmp(key, "compression-level") == 0) {
 		char *endptr;
-		long lvl;
+		unsigned long v;
 
 		if (val == NULL)
 			return (ARCHIVE_WARN);
 		errno = 0;
-		lvl = strtol(val, &endptr, 10);
-		if (errno != 0 || *endptr != '\0') {
-			zip_reset_compression_levels(zip);
+		v = strtoul(val, &endptr, 10);
+		if (errno != 0 || *endptr != '\0' || v > 9) {
+			zip->compression_level = 6; // set to default
 			return (ARCHIVE_WARN);
 		}
-
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-		if (zip->requested_compression == COMPRESSION_ZSTD) {
-			if (lvl < ZSTD_minCLevel() || lvl > ZSTD_maxCLevel()) {
-				zip_reset_compression_levels(zip);
-				return (ARCHIVE_WARN);
-			}
-			zip->zstd_compression_level = (int)lvl;
-			return (ARCHIVE_OK);
-		}
-#endif
-
-		if (lvl < 0 || lvl > 9) {
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-			if (zip->requested_compression == COMPRESSION_UNSPECIFIED &&
-			    lvl >= ZSTD_minCLevel() && lvl <= ZSTD_maxCLevel()) {
-				zip->requested_compression = COMPRESSION_ZSTD;
-				zip->zstd_compression_level = (int)lvl;
-				return (ARCHIVE_OK);
-			}
-#endif
-			zip_reset_compression_levels(zip);
-			return (ARCHIVE_WARN);
-		}
-
-		zip->compression_level = (int)lvl;
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-		zip->zstd_compression_level = (int)lvl;
-#endif
+		zip->compression_level = (short)v;
 
 		if (zip->compression_level == 0) {
-#if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
-			if (zip->requested_compression == COMPRESSION_ZSTD)
-				return (ARCHIVE_OK);
-#endif
 			zip->requested_compression = COMPRESSION_STORE;
 			return ARCHIVE_OK;
 		} else {
@@ -860,7 +744,7 @@ archive_write_set_format_zip(struct archive *_a)
 	zip->requested_compression = COMPRESSION_UNSPECIFIED;
 	/* Following the 7-zip write support's lead, setting the default
 	 * compression level explicitly to 6 no matter what. */
-	zip_reset_compression_levels(zip);
+	zip->compression_level = 6;
 	/* Following the xar write support's lead, the default number of
 	 * threads is 1 (i.e. the xz compression, the only one caring about
 	 * that, not being multi-threaded even if the multi-threaded encoder
@@ -1477,7 +1361,6 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		zip->stream.deflate.opaque = Z_NULL;
 		zip->stream.deflate.next_out = zip->buf;
 		zip->stream.deflate.avail_out = (uInt)zip->len_buf;
-		archive_zlib_set_allocators(&zip->stream.deflate);
 		if (deflateInit2(&zip->stream.deflate, zip->compression_level,
 		    Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
 			archive_set_error(&a->archive, ENOMEM,
@@ -1500,31 +1383,23 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 #endif
 #if defined(HAVE_ZSTD_H) && HAVE_ZSTD_compressStream
 	case COMPRESSION_ZSTD:
-		{
-		ret = zip_ensure_zstd_buffer(a, zip);
-		if (ret != ARCHIVE_OK)
-			return (ret);
+		{/* Libzstd, contrary to many compression libraries, doesn't use
+		 * zlib's 0 to 9 scale and its negative scale is way bigger than
+		 * its positive one. So setting 1 as the lowest allowed compression
+		 * level and rescaling to 2 to 9 to libzstd's positive scale. */
+		int zstd_compression_level = zip->compression_level == 1
+			? ZSTD_minCLevel() // ZSTD_minCLevel is negative !
+			: (zip->compression_level - 1) * ZSTD_maxCLevel() / 8;
 		zip->stream.zstd.context = ZSTD_createCStream();
-		if (zip->stream.zstd.context == NULL) {
-			archive_set_error(&a->archive, ENOMEM,
-			    "Can't allocate zstd compressor");
-			return (ARCHIVE_FATAL);
-		}
-		size_t zret = ZSTD_initCStream(zip->stream.zstd.context,
-		    zip->zstd_compression_level);
+		size_t zret = ZSTD_initCStream(zip->stream.zstd.context, zstd_compression_level);
 		if (ZSTD_isError(zret)) {
-			ZSTD_freeCStream(zip->stream.zstd.context);
-			zip->stream.zstd.context = NULL;
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't init zstd compressor");
 			return (ARCHIVE_FATAL);
 		}
-		ret = zip_tune_zstd_parameters(a, zip);
-		if (ret != ARCHIVE_OK) {
-			ZSTD_freeCStream(zip->stream.zstd.context);
-			zip->stream.zstd.context = NULL;
-			return (ret);
-		}
+		/* Asking for the multi-threaded compressor is a no-op in zstd if
+		 * it's not supported, so no need to explicitly check for it */
+		ZSTD_CCtx_setParameter(zip->stream.zstd.context, ZSTD_c_nbWorkers, zip->threads);
 		zip->stream.zstd.out.dst = zip->buf;
 		zip->stream.zstd.out.size = zip->len_buf;
 		zip->stream.zstd.out.pos = 0;

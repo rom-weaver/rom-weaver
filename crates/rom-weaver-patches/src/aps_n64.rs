@@ -7,12 +7,13 @@ use std::{
 use tracing::{debug, trace};
 
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    FormatDescriptor, N64_BIG_ENDIAN_MAGIC, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
-use crate::checksum_validation_suffix;
+#[cfg(test)]
+use crate::shared::checked::read_u32_le;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
@@ -136,7 +137,7 @@ impl PatchHandler for ApsN64PatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let mut output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -162,17 +163,11 @@ impl PatchHandler for ApsN64PatchHandler {
             execution
         };
 
-        let checksum_suffix = checksum_validation_suffix(validate_checksums);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_apply_report(
             self.descriptor,
-            "apply",
-            format!(
-                "applied {} patch with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
-            Some(execution),
+            patch.records.len(),
+            validate_checksums,
+            execution,
         ))
     }
 
@@ -196,16 +191,10 @@ impl PatchHandler for ApsN64PatchHandler {
             let _ = prepare_aps_write(record, patch.output_size)?;
         }
 
-        let checksum_suffix = checksum_validation_suffix(validate_checksums);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_validate_report(
             self.descriptor,
-            "validate",
-            format!(
-                "validated {} patch source with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
+            patch.records.len(),
+            validate_checksums,
             context.single_thread_execution(),
         ))
     }
@@ -859,7 +848,7 @@ fn detect_n64_header(original_path: &Path, original: &[u8]) -> Option<DetectedN6
     if original.len() < (APS_N64_CART_ID_OFFSET as usize + 3) || original.len() < 0x18 {
         return None;
     }
-    if !original.starts_with(&[0x80, 0x37, 0x12, 0x40]) {
+    if !original.starts_with(&N64_BIG_ENDIAN_MAGIC) {
         return None;
     }
 
@@ -891,7 +880,7 @@ fn detect_n64_header_from_path(
     let mut original = File::open(original_path)?;
     let mut magic = [0u8; 4];
     original.read_exact(&mut magic)?;
-    if magic != [0x80, 0x37, 0x12, 0x40] {
+    if magic != N64_BIG_ENDIAN_MAGIC {
         return Ok(None);
     }
     original.seek(SeekFrom::Start(APS_N64_CART_ID_OFFSET))?;
@@ -1082,19 +1071,6 @@ fn decode_description(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .trim_end_matches(['\0', ' '])
         .to_string()
-}
-
-#[cfg(test)]
-fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| RomWeaverError::Validation("u32 read overflowed".into()))?;
-    let slice = bytes
-        .get(offset..end)
-        .ok_or_else(|| RomWeaverError::Validation("u32 read exceeded patch bounds".into()))?;
-    let mut buf = [0u8; 4];
-    buf.copy_from_slice(slice);
-    Ok(u32::from_le_bytes(buf))
 }
 
 #[cfg(test)]

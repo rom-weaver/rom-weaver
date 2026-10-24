@@ -2,19 +2,17 @@
 //! (`src/libarchive/entries.rs`): the file-entry listing, the single-entry
 //! reader, format matching, and archive-name normalization.
 
-use std::path::PathBuf;
-
 use super::*;
 
-fn unique_temp_dir(tag: &str) -> PathBuf {
+fn unique_temp_dir(tag: &str) -> crate::test_support::TempPath {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock is after the unix epoch")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!(
+    let dir = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
         "rom-weaver-entries-{tag}-{}-{nanos}",
         std::process::id()
-    ));
+    )));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }
@@ -85,6 +83,28 @@ fn listing_file_entries_skips_directories_and_normalizes_names() {
         ],
         "the directory entry must be skipped and `./` stripped from the top-level name"
     );
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn listing_file_entries_skips_backslash_directories_of_legacy_zips() {
+    // DOS-made entries `saves\` (no directory attribute) and `saves\a.sav`, no UTF-8 flag.
+    const ZIP: &[u8] = b"\x50\x4b\x03\x04\x14\x00\x00\x00\x00\x00\x00\x00\x55\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x73\x61\x76\x65\x73\x5c\x50\x4b\x03\x04\x14\x00\x00\x00\x00\x00\x00\x00\x55\x5d\x7a\x9f\xe9\x53\x05\x00\x00\x00\x05\x00\x00\x00\x0b\x00\x00\x00\x73\x61\x76\x65\x73\x5c\x61\x2e\x73\x61\x76\x73\x61\x76\x65\x0a\x50\x4b\x01\x02\x14\x00\x14\x00\x00\x00\x00\x00\x00\x00\x55\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x00\x00\x00\x00\x73\x61\x76\x65\x73\x5c\x50\x4b\x01\x02\x14\x00\x14\x00\x00\x00\x00\x00\x00\x00\x55\x5d\x7a\x9f\xe9\x53\x05\x00\x00\x00\x05\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x24\x00\x00\x00\x73\x61\x76\x65\x73\x5c\x61\x2e\x73\x61\x76\x50\x4b\x05\x06\x00\x00\x00\x00\x02\x00\x02\x00\x6d\x00\x00\x00\x52\x00\x00\x00\x00\x00";
+    let dir = unique_temp_dir("backslash-dirs");
+    let source = dir.join("legacy.zip");
+    fs::write(&source, ZIP).expect("write the zip fixture");
+
+    let entries = list_regular_archive_file_entries(&source, "zip").expect("list file entries");
+    let summary = probe_regular_archive(&source, "zip").expect("probe the zip fixture");
+
+    assert_eq!(
+        entries
+            .iter()
+            .map(|entry| (entry.index, entry.name.clone()))
+            .collect::<Vec<_>>(),
+        vec![(1, "saves/a.sav".to_string())]
+    );
+    assert_eq!((summary.files, summary.directories), (1, 1));
     fs::remove_dir_all(&dir).ok();
 }
 

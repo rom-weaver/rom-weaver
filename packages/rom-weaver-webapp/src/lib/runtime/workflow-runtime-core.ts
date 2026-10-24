@@ -321,6 +321,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
         sizeSummary: createTimeMs === undefined ? {} : { createTimeMs },
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
     } finally {
       await cleanupWorkerSources(workerSources);
@@ -433,7 +434,7 @@ type TrimRuntimeAdapter = {
 };
 
 const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
-  trim: async ({ source, extension, outputName, threads, logLevel, onLog, onProgress, signal }) => {
+  trim: async ({ source, dryRun, extension, outputName, threads, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSource = await adapter.workerIo.stageSource({
       fallbackFileName: "input.bin",
@@ -446,6 +447,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
     try {
       const result = await adapter.invokeTrimWorker(
         {
+          dryRun,
           extension,
           logLevel,
           outputName,
@@ -457,6 +459,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
+      if (dryRun) return (await result.cleanup?.()) as never;
       const trimTimeMs = roundElapsedMs(result.timing);
       return {
         output: await adapter.workerIo.createWorkerOutput(
@@ -502,6 +505,7 @@ const createSharedCompressionRuntime = (
   const createRomSpecificInputs = {
     chd: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateChdInput => ({
       compressionCodecs: request.romSpecific?.chd?.compressionCodecs,
+      compressionProfile: request.romSpecific?.chd?.compressionProfile,
       cueFilePath: request.romSpecific?.chd?.cueFilePath,
       fileName: request.fileName,
       imageFiles: request.romSpecific?.chd?.imageFiles,

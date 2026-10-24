@@ -376,12 +376,18 @@ impl IdentifyDatabaseSet {
     ) -> Result<()> {
         for (database_name, pack) in &self.packs {
             let IdentifyPackFile::V1(pack) = pack;
-            if raw_size.is_none() {
+            // Without a size, or without the crc32 a fingerprint needs (a
+            // `--hash` md5/sha1 lookup), the pack's hash routes supply the
+            // missing fields; a known size only keeps the routes of that size.
+            if raw_size.is_none() || !raw_checksums.contains_key("crc32") {
                 for (size, route_crc32) in pack.matching_routes(
                     raw_checksums.get("crc32").map(String::as_str),
                     raw_checksums.get("md5").map(String::as_str),
                     raw_checksums.get("sha1").map(String::as_str),
                 ) {
+                    if raw_size.is_some_and(|wanted| wanted != size) {
+                        continue;
+                    }
                     let mut routed_checksums = raw_checksums.clone();
                     routed_checksums
                         .entry("crc32".to_string())
@@ -902,6 +908,23 @@ impl CliApp {
 
     fn run_identify_hash_branch(&self, args: &mut IdentifyCommand) -> AppRunOutcome {
         let hashes = std::mem::take(&mut args.hash);
+        // Only a --system name needs the installed-pack catalog; a hash lookup
+        // against --database packs must not require a home directory.
+        #[cfg(not(target_arch = "wasm32"))]
+        let provider = if args.system.is_some() {
+            match IdentifyPackProvider::new(args.database_dir.clone()) {
+                Ok(provider) => Some(provider),
+                Err(error) => return self.finish("identify", identify_failed_error(error, None)),
+            }
+        } else {
+            trace!("identify --hash: no --system, skipping the installed-pack provider");
+            None
+        };
+        #[cfg(target_arch = "wasm32")]
+        let provider: Option<IdentifyPackProvider> = None;
+        if let Err(report) = resolve_identify_system_override(provider.as_ref(), &args.system) {
+            return self.finish("identify", *report);
+        }
         let databases = match IdentifyDatabaseSet::load(&args.database) {
             Ok(Some(databases)) => databases,
             Ok(None) => {
@@ -934,9 +957,9 @@ impl CliApp {
             system = ?args.system,
             database_dir = ?args.database_dir,
             exhaustive = args.exhaustive_database_search,
-            selections = args.select.len(),
-            no_extract = args.no_extract,
-            no_ignore = args.no_ignore,
+            selections = args.selection.select.len(),
+            no_extract = args.selection.no_extract,
+            no_ignore = args.selection.no_ignore,
             no_trim_fix = args.no_trim_fix,
             threads = %args.threads,
             "starting identify command"
@@ -954,10 +977,13 @@ impl CliApp {
             database_dir,
             exhaustive_database_search,
             subcommand: _,
-            select,
-            filter,
-            no_extract,
-            no_ignore,
+            selection:
+                ArchiveSelectionArgs {
+                    select,
+                    filter,
+                    no_extract,
+                    no_ignore,
+                },
             no_trim_fix,
             threads,
         } = args;
@@ -1000,7 +1026,10 @@ impl CliApp {
             threads,
         });
         if checksum_report.status != OperationStatus::Succeeded {
+            // Report the failure as identify's own, not the hashing step's.
             checksum_report.stage = "identify".to_string();
+            checksum_report.family = OperationFamily::Command;
+            checksum_report.format = Some("identify".to_string());
             return checksum_report;
         }
 
@@ -1108,7 +1137,7 @@ impl CliApp {
         }
     }
 
-    /// Identify from checks alone - the checksums and optional size a bundle
+    /// Identify from checks alone - the checksums and optional size a weave
     /// rom entry or a patch's source requirement carries, with no file to hash.
     fn run_identify_hash(
         &self,
@@ -1709,6 +1738,7 @@ struct IdentifyPackSelection {
 fn identify_unknown_condition(
     missing_platforms: &[String],
     selected: &[SelectedPack],
+    platform_routed: bool,
 ) -> (Option<String>, Option<String>) {
     if let Some(platform) = missing_platforms.first() {
         return (
@@ -1718,6 +1748,11 @@ fn identify_unknown_condition(
                  identify database, or pass `--database-dir` with an existing one"
             )),
         );
+    }
+    // Without a detected or requested platform every pack is searched, so a CD
+    // pack in the set says nothing about this input.
+    if !platform_routed {
+        return (None, None);
     }
     if let Some(selected) = selected.iter().find(|selected| {
         let IdentifyPackFile::V1(pack) = &selected.pack.file;
@@ -1772,7 +1807,11 @@ fn identify_input_report(
     };
 
     let (condition, hint) = if status == IdentifyStatus::Unknown {
-        identify_unknown_condition(&missing_platforms, &selected)
+        identify_unknown_condition(
+            &missing_platforms,
+            &selected,
+            !platform_candidates.is_empty(),
+        )
     } else {
         (None, None)
     };

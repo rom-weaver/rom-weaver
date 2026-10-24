@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider, useUiLocalizer } from "../../../src/public/react/settings-context.tsx";
@@ -85,12 +85,164 @@ describe("ChangelogPanel pending update", () => {
     expect(update.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
   });
 
+  it("shows only the highlights and collapses the other groups under All changes", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              { entries: [{ pr: "7", summary: "Headline change" }], title: "Highlights" },
+              { entries: [{ pr: "8", summary: "Small fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.open).toBe(false);
+    expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
+    expect(allChanges.contains(update.getByText("Headline change"))).toBe(false);
+    expect(update.queryByRole("heading", { name: "Highlights" })).toBeNull();
+  });
+
+  it("renders highlight subsections above collapsed generated changes", async () => {
+    mockChangelog([
+      {
+        date: "",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              {
+                entries: [
+                  { summary: "Legacy headline" },
+                  { pr: "7", scope: "webapp", summary: "New workflow" },
+                  { summary: "Fixed workflow" },
+                ],
+                sections: [
+                  { title: "", entries: [{ summary: "Legacy headline" }] },
+                  { title: "New features", entries: [{ pr: "7", scope: "webapp", summary: "New workflow" }] },
+                  { title: "Fixes", entries: [{ summary: "Fixed workflow" }] },
+                ],
+                title: "Highlights",
+              },
+              { entries: [{ summary: "Rename the flag" }], title: "⚠ BREAKING CHANGES" },
+              { entries: [{ summary: "Generated fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+    expect(update.queryByRole("heading", { name: "Highlights" })).toBeNull();
+    expect(update.getByRole("heading", { level: 3, name: "New features" })).toBeTruthy();
+    expect(update.getByRole("heading", { level: 3, name: "Fixes" })).toBeTruthy();
+    expect(update.getByRole("link", { name: "#7" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/pull/7`);
+    expect(allChanges.open).toBe(false);
+    expect(update.queryAllByRole("heading", { level: 4 })).toHaveLength(0);
+    for (const text of ["Legacy headline", "New workflow", "Fixed workflow", "Rename the flag"]) {
+      expect(allChanges.contains(update.getByText(text))).toBe(false);
+    }
+    expect(allChanges.contains(update.getByText("Generated fix"))).toBe(true);
+  });
+
+  it("keeps the breaking-changes group visible next to the highlights", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              { entries: [{ pr: "7", summary: "Headline change" }], title: "Highlights" },
+              { entries: [{ summary: "Rename the flag" }], title: "⚠ BREAKING CHANGES" },
+              { entries: [{ pr: "8", summary: "Small fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.contains(update.getByText("Rename the flag"))).toBe(false);
+    expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
+  });
+
+  it("links the commit range from All changes to the previous release", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          noteOf("9.9.9", [{ pr: "3", summary: "Newest entry" }]),
+          noteOf("9.9.8", [{ pr: "2", summary: "Older entry" }]),
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const compare = await update.findByRole("link", { name: /Compare v9\.9\.8…v9\.9\.9/ });
+
+    expect(compare.getAttribute("href")).toBe(`${REPOSITORY_URL}/compare/v9.9.8...v9.9.9`);
+    expect(compare.closest("details")?.open).toBe(false);
+  });
+
+  it("collapses every group when a release has no highlights", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3", summary: "Only entry" }])]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.open).toBe(false);
+    expect(allChanges.contains(update.getByText("Only entry"))).toBe(true);
+  });
+
   it("offers the reload the update asks for", async () => {
     mockChangelog([{ date: "", hash: "a", subject: "feat(cli): add a flag" }]);
 
     const update = await renderUpdate();
 
     expect(await update.findByRole("button", { name: "Reload now" })).toBeTruthy();
+  });
+
+  it("records the incoming release on reload, since the notes above describe it", async () => {
+    window.localStorage.clear();
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ summary: "Shiny release feature" }])]),
+        subject: "release",
+      },
+    ]);
+    const update = await renderUpdate();
+
+    fireEvent.click(await update.findByRole("button", { name: "Reload now" }));
+
+    expect(window.localStorage.getItem("rom-weaver-reloading-into-version")).toBe("9.9.9");
+    expect(window.localStorage.getItem("rom-weaver-last-seen-version")).toBeNull();
   });
 
   it("stays out of the way when no update is waiting", async () => {
@@ -166,6 +318,15 @@ describe("ChangelogPanel pending update", () => {
     ["a note whose entries lack a summary", releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3" }])])],
     ["a note with no groups array", releaseOf("9.9.9", [{ version: "9.9.9" }])],
     ["a release missing its repository url", { changelogUrl: CHANGELOG_URL, notes: [noteOf("9.9.9", [])] }],
+    [
+      "invalid highlight subsections",
+      releaseOf("9.9.9", [
+        {
+          version: "9.9.9",
+          groups: [{ title: "Highlights", entries: [], sections: [{ title: "Fixes", entries: [{}] }] }],
+        },
+      ]),
+    ],
     ["a non-object release", "release notes"],
   ])("ignores %s and shows commits instead", async (_label, release) => {
     mockChangelog([
@@ -320,5 +481,92 @@ describe("ChangelogPanel pending update", () => {
       `${REPOSITORY_URL}/releases/tag/v9.9.9`,
     );
     expect(document.querySelector(`a[href="${REPOSITORY_URL}/commit/v9.9.9"]`)).toBeNull();
+  });
+});
+
+describe("ChangelogPanel after an update", () => {
+  const mockReleases = () =>
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf(APP_VERSION, [
+          noteOf(APP_VERSION, [{ summary: "running release" }], "Highlights"),
+          noteOf("0.0.2", [{ summary: "skipped release" }], "Highlights"),
+          noteOf("0.0.1", [{ summary: "last seen release" }], "Highlights"),
+        ]),
+        subject: "release",
+      },
+    ]);
+  const releaseSections = async (since?: { from?: string }) => {
+    const Panel = () => <ChangelogPanel active localizer={useUiLocalizer()} since={since} />;
+    const { container } = render(withSettings(<Panel />));
+    await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+    return [...container.querySelectorAll<HTMLDetailsElement>(".rel")].map((section) => ({
+      marked: section.classList.contains("is-new") && within(section).queryByText("New") !== null,
+      open: section.open,
+    }));
+  };
+
+  it("marks and opens every release since the one last seen", async () => {
+    mockReleases();
+
+    expect(await releaseSections({ from: "0.0.1" })).toEqual([
+      { marked: true, open: true },
+      { marked: true, open: true },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("marks only the running release when no earlier version was recorded", async () => {
+    mockReleases();
+
+    expect(await releaseSections({})).toEqual([
+      { marked: true, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
+  });
+
+  it("dates each release from its changelog heading, skipping a missing or malformed date", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          { ...noteOf("9.9.9", [{ summary: "dated" }]), date: "2026-10-18" },
+          { ...noteOf("9.8.0", [{ summary: "malformed" }]), date: "October" },
+          noteOf("9.7.0", [{ summary: "undated" }]),
+        ]),
+        subject: "release",
+      },
+    ]);
+    // A calendar day, so no time zone may move it to the 17th. CI runs in UTC,
+    // where that cannot happen, so render west of UTC.
+    const timeZone = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      const { container } = render(withSettings(<UpdatingPanel />));
+      await waitFor(() => expect(container.querySelectorAll(".rel")).toHaveLength(3));
+
+      const dates = [...container.querySelectorAll(".rel")].map((section) => section.querySelector("time.rel-date"));
+      expect(dates.map((time) => time?.getAttribute("datetime") ?? null)).toEqual(["2026-10-18", null, null]);
+      expect(dates[0]?.textContent).toMatch(/18.*2026|2026.*18/);
+      const update = container.querySelector(".changelog-update") as HTMLElement;
+      expect(update.querySelector("time.release-changelog-date")?.getAttribute("datetime")).toBe("2026-10-18");
+    } finally {
+      if (timeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = timeZone;
+    }
+  });
+
+  it("marks nothing without an update", async () => {
+    mockReleases();
+
+    expect(await releaseSections()).toEqual([
+      { marked: false, open: true },
+      { marked: false, open: false },
+      { marked: false, open: false },
+    ]);
   });
 });

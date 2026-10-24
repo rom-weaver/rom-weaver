@@ -57,7 +57,7 @@ const LOAD_BEARING_UI_IDS = [
   "ui.patch.bulkSelectionUnchanged",
   "ui.step.apply",
   "settings.accent",
-  "settings.bundlePackage",
+  "settings.weavePackage",
   "settings.byteUnits",
   "settings.defaultCompression",
   "settings.emulatorSaveStorageEnabled",
@@ -104,7 +104,7 @@ describe("ui catalog", () => {
     const es = createLocalizer("es");
     const de = createLocalizer("de");
     expect(getSettingsFieldLabel("accent", es)).toBe("Color de acento");
-    expect(getSettingsFieldLabel("bundlePackage", es)).toBe("Paquete");
+    expect(getSettingsFieldLabel("weavePackage", es)).toBe("Paquete");
     expect(getSettingsFieldLabel("emulatorSaveStorageEnabled", de)).toBe(
       "Emulator-Spielstände auf diesem Gerät speichern",
     );
@@ -123,11 +123,19 @@ describe("messageCount", () => {
     expect(es.messageCount("ui.patch.offCount", 2)).toMatch(/^2 parches están/);
   });
 
+  it("states the real number of games that share a save layout", () => {
+    const en = createLocalizer("en");
+    expect(en.messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 games share this save layout/);
+    expect(en.messageCount("ui.saves.editor.chooseFormatHint", 1)).toMatch(/^1 game shares this save layout/);
+    expect(createLocalizer("de").messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 Spiele teilen/);
+    expect(createLocalizer("es").messageCount("ui.saves.editor.chooseFormatHint", 5)).toMatch(/^5 juegos comparten/);
+  });
+
   it("localizes bounded unused-input lists", () => {
     const en = createLocalizer("en");
     const es = createLocalizer("es");
     const de = createLocalizer("de");
-    expect(en.messageCount("ui.drop.unusedInputs", 0, { names: "a.sfc" })).toBe("Unused inputs: a.sfc.");
+    expect(en.messageCount("ui.drop.unusedInputs", 0, { names: "a.sfc" })).toBe("Not used: a.sfc.");
     expect(es.messageCount("ui.drop.unusedInputs", 2, { names: "a.sfc, b.sfc, c.sfc" })).toBe(
       "Entradas sin usar: a.sfc, b.sfc, c.sfc y 2 más.",
     );

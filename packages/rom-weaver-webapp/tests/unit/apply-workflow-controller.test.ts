@@ -15,7 +15,7 @@ type ControllerProbe = {
   addFannedOutPatch: unknown;
   applyEarlySidecarSelection: unknown;
   clearPatches: () => Promise<void>;
-  discoverImplicitPatches: () => Promise<void>;
+  discoverImplicitPatches: (appendSidecarPatches?: boolean) => Promise<void>;
   discoverNameMatchedSidecarPatches: (stages: unknown[]) => Promise<void>;
   evaluatePatchReadiness: unknown;
   getPatchableInputAssets: unknown;
@@ -94,6 +94,18 @@ describe("discoverImplicitPatches", () => {
     controller.inputSession = { stages: [inputStage("in-1", "rom.sfc")], view: inputStage("in-1", "rom.sfc") };
     await controller.discoverImplicitPatches();
     expect(controller.stageSidecarPatches).not.toHaveBeenCalled();
+  });
+
+  it("preserves headless explicit patch precedence even when append is requested", async () => {
+    const controller = createController();
+    controller.patches = [controller.createInitialSource("patch", { name: "explicit.ips" }, 0)];
+    controller.inputSession = { stages: [inputStage("in-1", "rom.sfc")] };
+    controller.stageSidecarPatches = vi.fn(() => [leaf("rom.ips", 1)]);
+
+    await controller.discoverImplicitPatches(true);
+
+    expect(controller.stageSidecarPatches).not.toHaveBeenCalled();
+    expect(controller.addFannedOutPatch).not.toHaveBeenCalled();
   });
 
   it("falls back to the session view when no stages were recorded", async () => {
@@ -194,7 +206,7 @@ describe("discoverImplicitPatches", () => {
 describe("surfaceArchivePatchSelection", () => {
   it("stages the archive as a patch slot and evaluates it", async () => {
     const controller = createController();
-    const source = { name: "bundle.zip" };
+    const source = { name: "weave.zip" };
 
     await (controller.surfaceArchivePatchSelection as (patchSource: Source) => Promise<void>)(source);
 
@@ -202,7 +214,7 @@ describe("surfaceArchivePatchSelection", () => {
     expect(controller.patches).toHaveLength(1);
     expect(controller.patches[0]?.source).toBe(source);
     expect(controller.patches[0]?.state.role).toBe("patch");
-    expect(controller.patches[0]?.state.fileName).toBe("bundle.zip");
+    expect(controller.patches[0]?.state.fileName).toBe("weave.zip");
     expect(controller.maybeResolveBlockingPatchSelection).toHaveBeenCalledTimes(1);
     expect(controller.evaluatePatchReadiness).toHaveBeenCalledTimes(1);
   });
@@ -212,7 +224,7 @@ describe("surfaceArchivePatchSelection", () => {
     controller.stageSource = vi.fn(async () => {
       throw new Error("staging failed");
     });
-    const source = { name: "bundle.zip" };
+    const source = { name: "weave.zip" };
 
     await (controller.surfaceArchivePatchSelection as (patchSource: Source) => Promise<void>)(source);
 
@@ -375,7 +387,7 @@ describe("replacePatchAt rollback", () => {
 describe("handleSourceSelectionRequests", () => {
   it("resets the stage to await a selection and forgets every derived verdict", () => {
     const controller = createController();
-    const stage = controller.createInitialSource("patch", { name: "bundle.zip" }, 0) as StageProbe & {
+    const stage = controller.createInitialSource("patch", { name: "weave.zip" }, 0) as StageProbe & {
       parentCompressions: string[];
       state: Record<string, unknown>;
     };

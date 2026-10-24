@@ -41,6 +41,61 @@ const rows = (container: ParentNode) =>
   );
 
 describe("RomExpectationCard", () => {
+  it.each(["manual", "name", "patch", "weave"] as const)(
+    "follows the detail setting without losing %s checks",
+    (source) => {
+      const card = (detailedViewEnabled: boolean) => (
+        <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+          <RomExpectationCard
+            expectation={{ checks: { checksums: { crc32: "abcd1234" } }, source }}
+            identification={matched([{ crc32: "abcd1234", size: 4194304 }])}
+          />
+        </RomWeaverSettingsProvider>
+      );
+      const { container, queryByRole, rerender } = render(card(false));
+
+      expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+      expect(queryByRole("button", { name: /^Checks.*GBA.*Identified.*Expected/ })).not.toBeNull();
+      expect(container.textContent).toContain("Metroid Fusion (USA)");
+      expect(rows(container)).toContain("CRC32 abcd1234");
+
+      rerender(card(true));
+      const identify = queryByRole("button", { name: /^Identify/ });
+      expect(identify).not.toBeNull();
+      expect(identify?.textContent).toContain("GBA");
+      expect(queryByRole("button", { name: /^Checks/ })?.textContent).toBe("ChecksExpected");
+      fireEvent.click(identify as HTMLButtonElement);
+      expect(identify?.getAttribute("aria-expanded")).toBe("true");
+
+      rerender(card(false));
+      expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+      expect(queryByRole("button", { name: /^Checks/ })?.getAttribute("aria-expanded")).toBe("true");
+      expect(rows(container)).toContain("CRC32 abcd1234");
+      expect(rows(container)).toContain("BYTES 4194304");
+    },
+  );
+
+  it("keeps ambiguous match counts visible in simple view", () => {
+    const identification = matched([{ crc32: "abcd1234" }]);
+    identification.status = "ambiguous";
+    identification.matches.push({ ...identification.matches[0], name: "Another game" });
+    const card = (detailedViewEnabled: boolean) => (
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+        <RomExpectationCard
+          expectation={{ checks: { checksums: { crc32: "abcd1234" } }, source: "manual" }}
+          identification={identification}
+        />
+      </RomWeaverSettingsProvider>
+    );
+    const { queryByRole, rerender } = render(card(false));
+
+    expect(queryByRole("button", { name: /^Identify/ })).toBeNull();
+    expect(queryByRole("button", { name: /^Checks.*GBA.*2 possible matches/ })).not.toBeNull();
+
+    rerender(card(true));
+    expect(queryByRole("button", { name: /^Identify/ })?.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("merges the database checks into one Expected group named after the database", () => {
     const { container } = render(
       <RomExpectationCard
@@ -61,15 +116,15 @@ describe("RomExpectationCard", () => {
     expect(container.textContent).not.toContain("From the database");
   });
 
-  it("names the bundle or the patch as the authority", () => {
+  it("names the weave or the patch as the authority", () => {
     const { container } = render(
       <RomExpectationCard
-        expectation={{ checks: { checksums: { crc32: "abcd1234" } }, name: "game.gba", source: "bundle" }}
+        expectation={{ checks: { checksums: { crc32: "abcd1234" } }, name: "game.gba", source: "weave" }}
         identification={matched([{ md5: "0".repeat(32) }])}
       />,
     );
 
-    expect(expectedGroups(container)[0]?.querySelector(".ck-head-note")?.textContent).toBe("by the bundle · No-Intro");
+    expect(expectedGroups(container)[0]?.querySelector(".ck-head-note")?.textContent).toBe("by the weave · No-Intro");
   });
 
   it("renders the expectation's own rows alone when nothing identified it", () => {
@@ -132,7 +187,7 @@ describe("RomExpectationCard", () => {
   it("keeps the authored size with the matching header variant", () => {
     const { container } = render(
       <RomExpectationCard
-        expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "bundle" }}
+        expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "weave" }}
         identification={matched([
           { crc32: "abcd1234", filename: "Game.unh", ordinal: 0, size: 16384 },
           { crc32: "deadbeef", filename: "Game.nes", ordinal: 1, size: 16400 },
@@ -316,6 +371,73 @@ describe("RomSearch release choices", () => {
     fireEvent.click(choice);
     expect(choose).toHaveBeenCalledWith(version);
     expect(version.expectedComponents.map((component) => component.filename)).toEqual(filenames);
+  });
+
+  it.each(["title", "version"] as const)("dismisses %s results without clearing the query", (kind) => {
+    const version: ParsedIdentifyTitleMatch = {
+      algorithm: "name",
+      database: "test",
+      name: "First",
+      platform: "NES",
+      variant: "raw",
+    };
+    const title = { name: "First", platform: "NES", slug: "nes" };
+    const search = lookup({
+      text: "games",
+      titles: kind === "title" ? [title] : [],
+      versions: kind === "version" ? [version] : [],
+    });
+    const { getByRole, queryByRole } = render(
+      <RomSearch localizer={{ message: (key: string) => key } as never} lookup={search} />,
+    );
+    const input = getByRole("combobox") as HTMLInputElement;
+    const option = getByRole("option");
+    const choice = option.querySelector("button");
+    if (!choice) throw new Error("the result choice is missing");
+    choice.focus();
+    fireEvent.keyDown(choice, { key: "Escape" });
+
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+    expect(input.hasAttribute("aria-controls")).toBe(false);
+    expect(queryByRole("listbox")).toBeNull();
+    expect(input.value).toBe("games");
+    expect(document.activeElement).toBe(input);
+    expect(search.clear).not.toHaveBeenCalled();
+    expect(search.choose).not.toHaveBeenCalled();
+    expect(search.chooseTitle).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(getByRole("option").getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    if (kind === "version") expect(search.choose).toHaveBeenCalledWith(version);
+    else expect(search.chooseTitle).toHaveBeenCalledWith(title);
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.click(input);
+    expect(getByRole("listbox")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.change(input, { target: { value: "new query" } });
+    expect(search.setText).toHaveBeenCalledWith("new query", undefined);
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("keeps late search results dismissed until the query is reopened", () => {
+    const search = lookup({ busy: true, text: "games" });
+    const form = (value: ReturnType<typeof useRomLookup>) => (
+      <RomSearch localizer={{ message: (key: string) => key } as never} lookup={value} />
+    );
+    const { getByRole, queryByRole, rerender } = render(form(search));
+    const input = getByRole("combobox");
+    fireEvent.keyDown(input, { key: "Escape" });
+    rerender(form({ ...search, busy: false, titles: [{ name: "First", platform: "NES", slug: "nes" }] }));
+
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(queryByRole("listbox")).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(getByRole("option").getAttribute("aria-selected")).toBe("true");
   });
 
   it("starts on the first release and lets arrows move the Enter choice", () => {

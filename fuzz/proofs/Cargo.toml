@@ -1,0 +1,12 @@
+[package]
+name = "rom-weaver-bounded-proofs"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "AGPL-3.0-or-later"
+
+[workspace]
+members = ["."]
+
+[dependencies]
+rom-weaver-core = { path = "../../crates/rom-weaver-core" }

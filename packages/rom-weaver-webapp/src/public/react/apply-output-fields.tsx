@@ -1,4 +1,5 @@
-import { Download, Share2, TriangleAlert } from "lucide-react";
+import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
+import { Spool, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   postApplyDownloadBehaviorOption,
@@ -18,9 +19,10 @@ import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import type { NoticeController, PatcherOutputController, PatcherUiController } from "./patcher-form.ts";
-import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
+import type { PatcherOutputState } from "./patcher-presentation.ts";
 import type { NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
-import { useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { resolveAssetUrl } from "./asset-url.ts";
 import {
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
@@ -32,10 +34,10 @@ import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { EmulatorJsAction } from "./apply-emulatorjs-action.tsx";
 import { BootCheckStatus, VerifyBootField } from "./apply-boot-check.tsx";
 
-/** Bundle-related notices and export reveal state, threaded from the form. */
-export type BundleToolsState = {
-  /** Persist the bundle package choice, synced to user settings. */
-  setBundlePackage: (value: string) => void;
+/** Weave-related notices and export reveal state, threaded from the form. */
+export type WeaveToolsState = {
+  /** Persist the weave package choice, synced to user settings. */
+  setWeavePackage: (value: string) => void;
   /** The run has optional entries (or patches toggled off): output checks only
    * describe the full chain. */
   hasOptionalEntries: boolean;
@@ -44,8 +46,10 @@ export type BundleToolsState = {
   outputVerification: { level: "warn"; message: string } | null;
 };
 
-export type BundleExportState = {
-  bundleRom: boolean;
+export type WeaveExportState = {
+  weaveRom: boolean;
+  /** Why export waits on the user (a malformed checks draft), shown beside the action. */
+  blockedReason?: string;
   busy: boolean;
   cancelExport: () => void;
   downloadable: boolean;
@@ -54,7 +58,7 @@ export type BundleExportState = {
   progress: ProgressViewModel | null;
   ready: boolean;
   runExport: () => Promise<void>;
-  setBundleRom: (value: boolean) => void;
+  setWeaveRom: (value: boolean) => void;
   setFormat: (value: string) => void;
 };
 export const OutputHeaderField = ({
@@ -165,7 +169,7 @@ export const PostApplyBehaviorFields = ({
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
   return (
-    <>
+    <div className="post-apply-fields">
       <PostApplyActionField
         disabled={disabled}
         id="rom-weaver-select-post-apply-download"
@@ -183,45 +187,45 @@ export const PostApplyBehaviorFields = ({
         value={testValue}
       />
       <VerifyBootField disabled={disabled} setting={verifyBootSetting} />
-    </>
+    </div>
   );
 };
 
 /** Export while running shows the live bar; otherwise the create/download button. */
-const BundleExportAction = ({
-  bundleActionLabel,
-  bundleExport,
+const WeaveExportAction = ({
+  weaveActionLabel,
+  weaveExport,
   disabled,
 }: {
-  bundleActionLabel: string;
-  bundleExport: BundleExportState;
+  weaveActionLabel: string;
+  weaveExport: WeaveExportState;
   disabled: boolean;
 }) => {
   const localizer = useUiLocalizer();
-  if (bundleExport.busy) {
+  if (weaveExport.busy) {
     return (
       <ProgressActionButton
-        cancelLabel={localizer.message("ui.apply.cancelBundleExport")}
+        cancelLabel={localizer.message("ui.apply.cancelWeaveExport")}
         disabled
-        label={bundleActionLabel}
-        onCancel={bundleExport.cancelExport}
+        label={weaveActionLabel}
+        onCancel={weaveExport.cancelExport}
         onClick={() => undefined}
-        progress={bundleExport.progress}
-        progressId="rom-weaver-bundle-export-progress"
+        progress={weaveExport.progress}
+        progressId="rom-weaver-weave-export-progress"
       />
     );
   }
   return (
     <button
-      className="btn primary slim bundle-share"
-      data-downloadable={bundleExport.downloadable || undefined}
+      className="btn primary slim weave-share"
+      data-downloadable={weaveExport.downloadable || undefined}
       disabled={disabled}
-      id="rom-weaver-button-export-bundle"
-      onClick={() => void bundleExport.runExport()}
+      id="rom-weaver-button-export-weave"
+      onClick={() => void weaveExport.runExport()}
       type="button"
     >
-      {bundleExport.downloadable ? <Download aria-hidden="true" /> : <Share2 aria-hidden="true" />}
-      {bundleActionLabel}
+      <Spool aria-hidden="true" />
+      {weaveActionLabel}
     </button>
   );
 };
@@ -240,7 +244,7 @@ const ApplyErrorNotice = ({
       level={notice.level === "warning" ? "warn" : "error"}
       onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
     >
-      {notice.message}
+      <WorkflowErrorMessage message={notice.message} />
     </Notice>
   );
 };
@@ -253,29 +257,37 @@ const ChecksumOverrideRow = ({
   uiController: PatcherUiController;
 }) => {
   const localizer = useUiLocalizer();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   if (!state.visible) return null;
   return (
-    <label className="checkrow warn">
-      <input
-        checked={state.checked}
-        disabled={state.disabled}
-        id="rom-weaver-checkbox-checksum-override"
-        onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
-    </label>
+    <>
+      <p>
+        <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
+          {localizer.message("ui.apply.validation.fixChecksum")}
+        </a>
+      </p>
+      <label className="checkrow warn">
+        <input
+          checked={state.checked}
+          disabled={state.disabled}
+          id="rom-weaver-checkbox-checksum-override"
+          onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
+      </label>
+    </>
   );
 };
 
 export const ApplyOutputAction = ({
   applyTotalTime,
-  bundleTools,
-  bundleVerificationError,
+  selectionEnabled,
+  weaveTools,
+  weaveVerificationError,
   cheatHeaderStripConflict,
   controllers,
   disabledPatchCount,
-  enabledPatchCount,
   emulatorCore,
   emulatorFileName,
   emulatorPlatform,
@@ -285,18 +297,17 @@ export const ApplyOutputAction = ({
   noticeController,
   onSelectView,
   outputState,
-  patches,
   uiController,
   uiState,
 }: {
   applyTotalTime: PatcherOutputState["totalTiming"];
-  bundleTools?: BundleToolsState;
-  bundleVerificationError: string | null;
+  selectionEnabled: boolean;
+  weaveTools?: WeaveToolsState;
+  weaveVerificationError: string | null;
   /** Cheats are On while a header strip is pinned - Apply stays blocked. */
   cheatHeaderStripConflict: string;
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
-  enabledPatchCount: number;
   emulatorCore?: string;
   emulatorFileName?: string;
   emulatorPlatform?: string;
@@ -306,7 +317,6 @@ export const ApplyOutputAction = ({
   localizer: ReturnType<typeof useUiLocalizer>;
   noticeController?: NoticeController;
   outputState: PatcherOutputState;
-  patches: PatchStackItemState[];
   uiController: PatcherUiController;
   uiState: ReturnType<PatcherUiController["getState"]>;
 }) => {
@@ -330,9 +340,8 @@ export const ApplyOutputAction = ({
       </div>
       <PatcherPrimaryAction
         controller={controllers.output}
-        disableRun={
-          (patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError || !!cheatHeaderStripConflict
-        }
+        disableRun={!selectionEnabled || !!weaveVerificationError || !!cheatHeaderStripConflict}
+        disableReason={weaveVerificationError || cheatHeaderStripConflict || undefined}
         showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
       />
@@ -345,11 +354,11 @@ export const ApplyOutputAction = ({
         shown={postApplyTestOption.visible}
       />
       <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} />
-      {bundleVerificationError ? <Notice level="error">{bundleVerificationError}</Notice> : null}
-      {bundleTools?.outputVerification ? (
-        <p aria-live="polite" className="patch-off-note" id="rom-weaver-bundle-output-unverified">
+      {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
+      {weaveTools?.outputVerification ? (
+        <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-output-unverified">
           <TriangleAlert aria-hidden="true" />
-          <span>{bundleTools.outputVerification.message}</span>
+          <span>{weaveTools.outputVerification.message}</span>
         </p>
       ) : null}
     </>
@@ -373,116 +382,120 @@ export const buildRomActualsById = (romInputs: RomInputRowState[]) => {
   return actualsById;
 };
 
-export const getBundleActionLabel = (
-  bundleExport: BundleExportState | undefined,
+export const getWeaveActionLabel = (
+  weaveExport: WeaveExportState | undefined,
   localizer: ReturnType<typeof useUiLocalizer>,
   downloadable: boolean,
 ) => {
-  if (!downloadable) return bundleExport ? localizer.message("ui.bundleExport.share") : "";
-  if (!bundleExport?.downloadable) return "";
-  const formatValue = bundleExport.format || "zip";
+  if (!downloadable) return weaveExport ? localizer.message("ui.weaveExport.share") : "";
+  if (!weaveExport?.downloadable) return "";
+  const formatValue = weaveExport.format || "zip";
   const formatName = formatValue === "7z" ? "7z" : formatValue.toUpperCase();
-  const downloadKey = bundleExport.bundleRom ? "ui.bundleExport.downloadRom" : "ui.bundleExport.download";
+  const downloadKey = weaveExport.weaveRom ? "ui.weaveExport.downloadRom" : "ui.weaveExport.download";
   return localizer.message(downloadKey, { format: formatName });
 };
 
-const BundleOutputFields = ({
-  bundleExport,
-  bundleTools,
+const WeaveOutputFields = ({
+  weaveExport,
+  weaveTools,
 }: {
-  bundleExport?: BundleExportState;
-  bundleTools?: BundleToolsState;
+  weaveExport?: WeaveExportState;
+  weaveTools?: WeaveToolsState;
 }) => {
   const localizer = useUiLocalizer();
-  if (!bundleExport) return null;
-  const setBundleContents = (includeRom: boolean) => {
-    bundleTools?.setBundlePackage(includeRom ? "rom" : "patches");
+  if (!weaveExport) return null;
+  const setWeaveContents = (includeRom: boolean) => {
+    weaveTools?.setWeavePackage(includeRom ? "rom" : "patches");
   };
   return (
-    <div className="bundle-job-fields">
-      <div className="bundle-rom-option">
-        <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
+    <div className="weave-job-fields">
+      <div className="weave-rom-option">
+        <label className="checkrow" htmlFor="rom-weaver-weave-export-weave-rom">
           <input
-            checked={bundleExport.bundleRom}
-            disabled={bundleExport.busy}
-            id="rom-weaver-bundle-export-bundle-rom"
-            onChange={(event) => setBundleContents(event.currentTarget.checked)}
+            checked={weaveExport.weaveRom}
+            disabled={weaveExport.busy}
+            id="rom-weaver-weave-export-weave-rom"
+            onChange={(event) => setWeaveContents(event.currentTarget.checked)}
             type="checkbox"
           />
-          <span>{localizer.message("ui.bundleExport.includeRom")}</span>
+          <span>{localizer.message("ui.weaveExport.includeRom")}</span>
         </label>
       </div>
-      {bundleExport.bundleRom ? (
-        <div className="bundle-rom-warning">
-          <Notice level="warn">{localizer.message("ui.bundleExport.romDistributionWarning")}</Notice>
+      {weaveExport.weaveRom ? (
+        <div className="weave-rom-warning">
+          <Notice level="warn">{localizer.message("ui.weaveExport.romDistributionWarning")}</Notice>
         </div>
       ) : null}
     </div>
   );
 };
 
-export const BundleOutputStep = ({
-  bundleActionLabel,
-  bundleExport,
-  bundleTools,
+export const WeaveOutputStep = ({
+  weaveActionLabel,
+  weaveExport,
+  weaveTools,
   disabled,
   fileName,
   headerField,
   onFileNameChange,
   onFormatChange,
   secondary,
+  combinedCheats,
 }: {
-  bundleActionLabel: string;
-  bundleExport: BundleExportState;
-  bundleTools: BundleToolsState;
+  weaveActionLabel: string;
+  weaveExport: WeaveExportState;
+  weaveTools: WeaveToolsState;
   disabled: boolean;
   fileName: string;
   headerField?: ReactNode;
   onFileNameChange: (value: string) => void;
   onFormatChange: (value: string) => void;
   secondary?: ReactNode;
+  combinedCheats?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   return (
     <WorkflowOutputStep
       action={
         <>
-          {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-          <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+          {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
+          {weaveExport.error || weaveExport.blockedReason ? (
+            <Notice level="error">{weaveExport.error || weaveExport.blockedReason}</Notice>
+          ) : null}
+          <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
         </>
       }
       compress={{
         children: null,
         extraChildren: (
           <>
-            <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+            <WeaveOutputFields weaveExport={weaveExport} weaveTools={weaveTools} />
             {headerField}
           </>
         ),
-        optionsNote: headerField ? localizer.message("ui.bundleExport.headerNotSaved") : false,
       }}
-      disabled={bundleExport.busy}
-      fault={!!bundleExport.error}
+      disabled={weaveExport.busy}
+      fault={!!weaveExport.error}
       fileName={fileName}
-      fileNameId="rom-weaver-input-bundle-file-name"
-      fileNamePlaceholder={localizer.message("ui.bundleExport.outputFilename")}
-      format={bundleExport.format}
-      formatId="rom-weaver-bundle-export-format"
+      fileNameId="rom-weaver-input-weave-file-name"
+      fileNamePlaceholder={localizer.message("ui.weaveExport.outputFilename")}
+      format={weaveExport.format}
+      formatId="rom-weaver-weave-export-format"
       formatOptions={[
         { label: ".zip", value: "zip" },
         { label: ".7z", value: "7z" },
       ]}
-      id="rom-weaver-bundle-job"
+      id="rom-weaver-weave-job"
       num="0x04"
       onFileNameChange={onFileNameChange}
       onFormatChange={onFormatChange}
       secondary={secondary}
-      title={localizer.message("ui.step.bundle")}
+      title={localizer.message("ui.step.weave")}
     />
   );
 };
 
-const SecondaryOutputJob = ({
+export const SecondaryOutputJob = ({
   children,
   hash,
   id,
@@ -518,13 +531,13 @@ const SecondaryOutputJob = ({
   return (
     <div id={id}>
       <Drawer
-        bodyClassName="bundle-job-content"
-        className="bundle-job"
+        bodyClassName="weave-job-content"
+        className="weave-job"
         headingRef={headingRef}
         label={label}
         onToggle={setOpen}
         open={open}
-        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
+        readouts={<DrawerReadout muted>{localizer.message("ui.weaveExport.optional")}</DrawerReadout>}
       >
         {children}
       </Drawer>
@@ -532,37 +545,38 @@ const SecondaryOutputJob = ({
   );
 };
 
-/** Bundle export is the optional alternate job on the Apply route. */
-export const BundleSecondaryJob = ({
-  bundleActionLabel,
-  bundleExport,
-  bundleTools,
+/** Weave export is the optional alternate job on the Apply route. */
+export const WeaveSecondaryJob = ({
+  weaveActionLabel,
+  weaveExport,
+  weaveTools,
   disabled,
+  combinedCheats,
 }: {
-  bundleActionLabel: string;
-  bundleExport: BundleExportState;
-  bundleTools: BundleToolsState;
+  weaveActionLabel: string;
+  weaveExport: WeaveExportState;
+  weaveTools: WeaveToolsState;
   disabled: boolean;
+  combinedCheats?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   return (
-    <SecondaryOutputJob
-      hash="#bundle"
-      id="rom-weaver-bundle-job"
-      label={localizer.message("ui.bundleExport.shareTitle")}
-    >
-      <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
-      {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+    <SecondaryOutputJob hash="#weave" id="rom-weaver-weave-job" label={localizer.message("ui.secondary.downloadWeave")}>
+      {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
+      <WeaveOutputFields weaveExport={weaveExport} weaveTools={weaveTools} />
+      {weaveExport.error || weaveExport.blockedReason ? (
+        <Notice level="error">{weaveExport.error || weaveExport.blockedReason}</Notice>
+      ) : null}
+      <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
     </SecondaryOutputJob>
   );
 };
 
-/** Apply is the optional alternate job on the Bundle route. */
-export const ApplySecondaryJob = ({ children }: { children: ReactNode }) => {
+/** Apply is the optional alternate job on the Weave route. */
+export const ApplySecondaryJob = ({ children, label }: { children: ReactNode; label?: string }) => {
   const localizer = useUiLocalizer();
   return (
-    <SecondaryOutputJob id="rom-weaver-apply-job" label={localizer.message("ui.step.apply")}>
+    <SecondaryOutputJob id="rom-weaver-apply-job" label={label || localizer.message("ui.secondary.downloadThisRom")}>
       {children}
     </SecondaryOutputJob>
   );

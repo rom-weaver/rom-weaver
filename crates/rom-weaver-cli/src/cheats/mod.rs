@@ -61,6 +61,23 @@ impl CheatSystem {
         }
     }
 
+    /// Human-readable console name for messages.
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Nes => "NES",
+            Self::Snes => "SNES",
+            Self::Genesis => "Genesis",
+            Self::GameBoy => "Game Boy",
+            Self::GameBoyColor => "Game Boy Color",
+            Self::GameBoyAdvance => "Game Boy Advance",
+            Self::PlayStation => "PlayStation",
+            Self::MasterSystem => "Master System",
+            Self::GameGear => "Game Gear",
+            Self::Sega32x => "Sega 32X",
+            Self::Sg1000 => "SG-1000",
+        }
+    }
+
     /// Parse the CLI/UI identifier (accepts a few common aliases).
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
@@ -159,7 +176,7 @@ pub struct CheatWrite {
     pub compare: Option<u8>,
 }
 
-/// A decoded address class. This does not weaken [`resolve_writes`], which
+/// A decoded address class. This does not weaken `resolve_writes`, which
 /// still rejects runtime addresses when a caller asks to bake them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -211,6 +228,11 @@ pub struct ClassifiedCheatRecord {
     pub record: CheatRecord,
     pub resolution: CheatResolution,
     pub detected_kind: Option<CheatKind>,
+    /// The record's raw code split into individual codes by [`split_for_kind`],
+    /// so the webapp never re-implements the splitting rules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub codes: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,6 +317,34 @@ pub fn split_xploder_codes(input: &str) -> Vec<String> {
     codes
 }
 
+/// Split one raw block into its individual codes the way the engine reads it:
+/// GBA Action Replay / GameShark blocks stay whole (their words decode as one
+/// stream), Xploder codes re-join their word pairs, and everything else splits
+/// on `+`, `,`, `;`, and whitespace. `kind` is the explicit or hinted code kind;
+/// `None` means auto-detect, which follows the system. The webapp reads this
+/// answer from the `cheat` command instead of splitting on its own.
+pub fn split_for_kind(raw: &str, system: CheatSystem, kind: Option<CheatKind>) -> Vec<String> {
+    if kind.is_some_and(CheatKind::is_gba_action_replay) {
+        let block = raw.trim();
+        return if block.is_empty() {
+            Vec::new()
+        } else {
+            vec![block.to_owned()]
+        };
+    }
+    let use_xploder = kind == Some(CheatKind::Xploder)
+        || (kind.is_none()
+            && matches!(
+                system,
+                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+            ));
+    if use_xploder {
+        split_xploder_codes(raw)
+    } else {
+        split_codes(raw).into_iter().map(str::to_owned).collect()
+    }
+}
+
 fn is_gba_rom_patch_word(token: &str) -> bool {
     token.len() == 8
         && matches!(
@@ -324,6 +374,19 @@ fn coded(code: &'static str, message: &'static str, offending: &str) -> RomWeave
             .with_message(message)
             .with_field("code", offending.to_owned()),
     )
+}
+
+/// Parse a hexadecimal slice, reporting `message` under `cheat_bad_code`.
+fn parse_hex(slice: &str, raw: &str, message: &'static str) -> Result<u32> {
+    u32::from_str_radix(slice, 16).map_err(|_| coded("cheat_bad_code", message, raw))
+}
+
+/// Require a non-empty all-hexadecimal code, reporting `message` under `cheat_bad_code`.
+fn require_hex(code: &str, raw: &str, message: &'static str) -> Result<()> {
+    if code.is_empty() || !code.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(coded("cheat_bad_code", message, raw));
+    }
+    Ok(())
 }
 
 /// Decode a single code with an explicit scheme.
@@ -631,7 +694,33 @@ fn code_has_parameter(record: &CheatRecord, value: &str) -> bool {
         // XX denotes unused Gold Finger data slots; the decoder validates their positions.
         return value.contains('?');
     }
+    if game_genie_letters_include_x(record, value, kind) {
+        // `X` is a real Game Genie letter here (GOZSXX), not a placeholder.
+        tracing::trace!(id = %record.id, "treating X as Game Genie data, not a placeholder");
+        return value.contains('?');
+    }
     contains_parameter_placeholder(value)
+}
+
+/// NES and Genesis Game Genie alphabets contain `X`, so `XX` inside a code that
+/// reads as Game Genie is data. Every other family writes `XX` for a hole.
+fn game_genie_letters_include_x(
+    record: &CheatRecord,
+    value: &str,
+    kind: Option<CheatKind>,
+) -> bool {
+    if !matches!(
+        record.system,
+        CheatSystem::Nes | CheatSystem::Genesis | CheatSystem::Sega32x
+    ) {
+        return false;
+    }
+    let codes = split_codes(value);
+    !codes.is_empty()
+        && codes.iter().all(|code| {
+            kind.unwrap_or_else(|| infer_kind(code, &normalize(code), record.system))
+                == CheatKind::GameGenie
+        })
 }
 
 fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
@@ -665,12 +754,23 @@ fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
 /// cartridge ROM writes is unsupported: the subcodes can depend on each other,
 /// so a partial bake would change the cheat's meaning.
 pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecord {
+    let mut classified = classify_record_resolution(rom, record);
+    classified.codes = Some(split_for_kind(
+        record.raw_code.as_deref().unwrap_or_default(),
+        record.system,
+        record.code_kind.or_else(|| record_kind_hint(record)),
+    ));
+    classified
+}
+
+fn classify_record_resolution(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecord {
     let unsupported = |reason: &str, detected_kind: Option<CheatKind>| ClassifiedCheatRecord {
         record: record.clone(),
         resolution: CheatResolution::Unsupported {
             reason: reason.to_string(),
         },
         detected_kind,
+        codes: None,
     };
     if has_parameterized_executable_field(record)
         || record
@@ -706,23 +806,12 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
                 record: record.clone(),
                 resolution: CheatResolution::RomBakeable { writes },
                 detected_kind: Some(kind),
+                codes: None,
             },
             Err(error) => unsupported(&error.to_string(), Some(kind)),
         };
     }
-    let codes = if record_kind == Some(CheatKind::Xploder)
-        || (record_kind.is_none()
-            && matches!(
-                record.system,
-                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
-            )) {
-        split_xploder_codes(raw_code)
-    } else {
-        split_codes(raw_code)
-            .into_iter()
-            .map(str::to_owned)
-            .collect()
-    };
+    let codes = split_for_kind(raw_code, record.system, record_kind);
     if codes.is_empty() {
         return unsupported("the entry has an empty native code", None);
     }
@@ -839,6 +928,7 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
         record: record.clone(),
         resolution,
         detected_kind,
+        codes: None,
     }
 }
 

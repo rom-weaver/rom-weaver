@@ -5,10 +5,10 @@ import { readUrlSessionRequest } from "../../src/webapp/url-session/url-session-
 import { UrlSessionBanner } from "../../src/webapp/url-session/url-session-banner.tsx";
 
 describe("readUrlSessionRequest", () => {
-  it("prefers a bundle and warns when direct sources are also present", () => {
-    expect(readUrlSessionRequest("?bundle=./bundle.json&rom=rom.bin&patch=one.ips", "https://host.test/app/")).toEqual({
-      request: { kind: "bundle", bundleUrl: "https://host.test/app/bundle.json" },
-      warnings: ["bundle= takes precedence; rom=/patch= params are ignored"],
+  it("prefers a weave and warns when direct sources are also present", () => {
+    expect(readUrlSessionRequest("?weave=./weave.json&rom=rom.bin&patch=one.ips", "https://host.test/app/")).toEqual({
+      request: { kind: "weave", weaveUrl: "https://host.test/app/weave.json" },
+      warnings: ["weave= takes precedence; rom=/patch= params are ignored"],
     });
   });
 
@@ -38,7 +38,7 @@ const state = (overrides: Record<string, unknown> = {}) => ({
   phase: "fetching",
   loadedBytes: 1024 * 1024,
   totalBytes: 4 * 1024 * 1024,
-  bundleName: "demo bundle",
+  weaveName: "demo weave",
   errorDetail: "",
   errorKind: undefined,
   ...overrides,
@@ -48,7 +48,7 @@ describe("UrlSessionBanner", () => {
   it("shows named byte progress and a retry action for blocked errors", () => {
     const onRetry = vi.fn();
     const { rerender } = render(<UrlSessionBanner onRetry={onRetry} state={state()} />);
-    expect(screen.getByRole("status").textContent).toContain("demo bundle - 1.0 MiB / 4.0 MiB");
+    expect(screen.getByRole("status").textContent).toContain("demo weave - 1.0 MiB / 4.0 MiB");
 
     rerender(
       <UrlSessionBanner

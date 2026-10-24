@@ -1,28 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry, RemoteFetchErrorKind } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles, RemoteFetchError } from "../../lib/remote/remote-file-fetch.ts";
 import type { UrlSessionRequest } from "./url-session-request.ts";
 
 const logger = createLogger("url-session");
-type BundleUrlSessionModule = typeof import("./bundle-url-session.ts");
-let bundleUrlSessionModulePromise: Promise<BundleUrlSessionModule> | null = null;
-const loadBundleUrlSessionModule = (): Promise<BundleUrlSessionModule> =>
-  (bundleUrlSessionModulePromise ??= import("./bundle-url-session.ts"));
+type WeaveUrlSessionModule = typeof import("./weave-url-session.ts");
+let weaveUrlSessionModulePromise: Promise<WeaveUrlSessionModule> | null = null;
+const loadWeaveUrlSessionModule = (): Promise<WeaveUrlSessionModule> =>
+  (weaveUrlSessionModulePromise ??= import("./weave-url-session.ts"));
 
 type UrlSessionBootState = {
   phase: "idle" | "fetching" | "done" | "error";
   loadedBytes: number;
   totalBytes: number | null;
-  /** The bundle's display name once parsed (bundle sessions only). */
-  bundleName: string;
+  /** The weave's display name once parsed (weave sessions only). */
+  weaveName: string;
   errorKind: RemoteFetchErrorKind | null;
   errorDetail: string;
 };
 
 const IDLE_STATE: UrlSessionBootState = {
-  bundleName: "",
+  weaveName: "",
   errorDetail: "",
   errorKind: null,
   loadedBytes: 0,
@@ -33,21 +33,21 @@ const IDLE_STATE: UrlSessionBootState = {
 /**
  * Boot-time URL-session loader: fetches the request's sources once per attempt
  * and delivers them as `File`s into the matching workflow's drop pipeline. The direct
- * `rom=`/`patch=` shape fetches verbatim; the `bundle=` shape parses the
- * rom-weaver-bundle.json through the wasm runtime first, acquires its sources, and surfaces
- * the decorated session via `onBundleSession` for the apply form to consume.
+ * `rom=`/`patch=` shape fetches verbatim; the `weave=` shape parses the
+ * rom-weaver-weave.json through the wasm runtime first, acquires its sources, and surfaces
+ * the decorated session via `onWeaveSession` for the apply form to consume.
  */
 function useUrlSessionBoot(
   request: UrlSessionRequest | null,
   deliverFiles: (files: File[]) => void,
-  onBundleSession?: (session: BundleApplySession) => void,
+  onWeaveSession?: (session: WeaveApplySession) => void,
 ): { state: UrlSessionBootState; retry: () => void } {
   const [state, setState] = useState<UrlSessionBootState>(IDLE_STATE);
   const [attempt, setAttempt] = useState(0);
   const deliverRef = useRef(deliverFiles);
   deliverRef.current = deliverFiles;
-  const bundleSessionRef = useRef(onBundleSession);
-  bundleSessionRef.current = onBundleSession;
+  const weaveSessionRef = useRef(onWeaveSession);
+  weaveSessionRef.current = onWeaveSession;
 
   useEffect(() => {
     if (!request) return undefined;
@@ -96,11 +96,11 @@ function useUrlSessionBoot(
         deliverRef.current(files.map((entry) => entry.file));
       });
     } else {
-      run = loadBundleUrlSessionModule()
-        .then(({ loadBundleUrlSession }) =>
-          loadBundleUrlSession(request.bundleUrl, {
-            onBundleName: (name) => {
-              if (!cancelled) setState((previous) => ({ ...previous, bundleName: name }));
+      run = loadWeaveUrlSessionModule()
+        .then(({ loadWeaveUrlSession }) =>
+          loadWeaveUrlSession(request.weaveUrl, {
+            onWeaveName: (name) => {
+              if (!cancelled) setState((previous) => ({ ...previous, weaveName: name }));
             },
             onProgress: (id, progress) => {
               loadedByEntry.set(id, progress.loadedBytes);
@@ -117,7 +117,7 @@ function useUrlSessionBoot(
             return;
           }
           // A retry after failure must re-seed the form, so the session identity carries the attempt.
-          bundleSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
+          weaveSessionRef.current?.({ ...session, key: `${session.key}#${attempt}` });
           deliverRef.current(files);
         });
     }

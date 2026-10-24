@@ -8,10 +8,10 @@ The CLI documentation now lives in focused pages. Update any bookmark or link th
 | --- | --- |
 | Install and Docker | [Install the CLI](../how-to/install-cli.md) |
 | Verify a download | [Verify a download](../how-to/verify-downloads.md) |
-| First apply, practice patch and bundle | [Your first apply in the terminal](../tutorials/cli-first-weave.md) |
+| First apply, practice patch and weave | [Your first apply in the terminal](../tutorials/cli-first-weave.md) |
 | Applying patches, validation | [Apply patches from the CLI](../how-to/cli-apply.md) |
 | Creating patches, SOLID metadata | [Create patches from the CLI](../how-to/cli-create.md) |
-| Bundles | [Bundles from the CLI](../how-to/cli-bundles.md) |
+| Weaves | [Weaves from the CLI](../how-to/cli-bundles.md) |
 | Commands, flags, alternate names, JSON, permissions, completions, man pages | [CLI reference](../reference/cli.md) |
 | Supported formats, codecs, checksums, trim, headers | [Supported formats](../reference/formats.md) |
 

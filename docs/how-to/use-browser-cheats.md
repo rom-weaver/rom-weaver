@@ -1,6 +1,6 @@
 # Use cheats in the browser
 
-Add supported cheat codes to the Apply workflow. The output ROM contains the changes; it does not need a running cheat engine.
+Add supported cheat codes with [Apply cheat codes](https://rom-weaver.com/apply-cheats). The output ROM contains the changes; it does not need a running cheat engine.
 
 The same cheat picker is available in Apply and Create. Identify lets you inspect known codes without changing a ROM.
 
@@ -30,13 +30,13 @@ The picker includes **Make the greeting start with M** (`80970D`) and **Change t
   <figcaption>The shared picker lists practice codes for the supplied ROM.</figcaption>
 </figure>
 
-1. Add the original ROM to the **Apply** page.
+1. Open [Apply cheat codes](https://rom-weaver.com/apply-cheats) and add the original ROM.
 2. In **Patches & Cheats**, select **Add cheats to the patch order**.
 3. Choose the system and game if the dialog asks.
 4. Search the list and add the cheats you want.
 5. Close the dialog and check the selected cheats in the patch order.
 6. Move each cheat before or after the patches that it must use.
-7. Start **Apply** and save the output ROM.
+7. Choose **APPLY & DOWNLOAD** and save the output ROM.
 
 Check the game and revision yourself when the database only matches a title. A title match is not an exact ROM match.
 
@@ -46,16 +46,16 @@ Use each card's inclusion control to leave a step out without removing it. Patch
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="1758">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="1770" height="1071">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="1758">
+    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="1770" height="1071">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="1758">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="1770" height="1071">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="1758">
+    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="1770" height="1071">
   </picture>
   <figcaption>Cheats occupy numbered steps beside patches. This homebrew example demonstrates the controls, not a recommended gameplay code.</figcaption>
 </figure>
@@ -82,23 +82,9 @@ The status names the output file. The [cheat reference](../reference/cheat-datab
 
 ## Create a patch from cheat codes
 
-The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
+The [guided Create cheats tour](https://rom-weaver.com/create-rom-patch?guide=create-cheats) makes a patch from a working code and the supplied homebrew ROM.
 
-1. Add the original ROM on **Create**.
-2. Select **Cheat codes** on the **Modified** step.
-3. Enter one code per line, or join codes with `+`.
-4. Select **Pick from the cheat database** to use the same picker as Apply.
-5. Check the detected system, code type, and write count.
-6. Check each code's write list and its `compare` badge.
-7. Select the patch format and file name on **Patch**.
-8. Select **Create & download patch**.
-
-**Pick from the cheat database** offers the same database as Apply. A code that cannot become ROM writes blocks creation and states its reason.
-
-<figure class="docs-screenshot">
-  <img src="../screenshots/cheat-create-cheats-desktop-light.webp" alt="Create using the shared cheat picker and manual entry" width="1164" height="900">
-  <figcaption>Create uses the same picker to add codes to its input.</figcaption>
-</figure>
+Open [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch), which starts in **Patches & cheats**, then follow [combined patch creation](create-rom-patches.md#build-from-patches-and-cheats). It uses Apply's cheat picker and supports patches alongside cheats.
 
 ## Inspect cheats without changing a ROM
 
@@ -107,7 +93,7 @@ The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create
 3. Search the matched game's known codes.
 4. Open **Code details** to inspect the original database fields and import warnings.
 
-Identify shows inspection data only. It can list checksum-only and archive candidates without claiming that a code is compatible with the selected bytes. Use Apply or Create to classify and use a code.
+Identify shows inspection data only. It can list checksum-only and archive candidates without claiming that a code is compatible with the selected bytes. Use [Apply cheat codes](https://rom-weaver.com/apply-cheats) or [Create a patch from cheat codes](https://rom-weaver.com/create-rom-cheat-patch) to classify and use a code.
 
 <figure class="docs-screenshot">
   <img src="../screenshots/cheat-identify-mobile-dark.webp" alt="Identify showing original cheat database fields without add controls" width="390" height="844">

@@ -6,11 +6,13 @@ import { copyToClipboard } from "../lib/clipboard.ts";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { RelatedStrip } from "./components/related-strip.tsx";
+import { DocsToolLinks } from "./components/docs-tool-links.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { DocsBar } from "./docs-bar.tsx";
+import { focusMainLanding } from "./focus-main.ts";
 import { docShelfFor, docsLabelFor, useDocsAudience, type DocsAudience } from "./docs-navigation.tsx";
 import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
@@ -75,10 +77,22 @@ const adoptPrerenderedDocsHtml = () => {
   if (!article) return;
   const slug = resolveDocsSlug();
   if (article.getAttribute("data-markdown-source") !== findDocsRoute(slug).source) return;
-  docsHtmlCache.set(slug, article.innerHTML);
+  const fragments = article.querySelectorAll("[data-docs-markdown]");
+  docsHtmlCache.set(slug, Array.from(fragments, (fragment) => fragment.innerHTML).join(""));
 };
 
 adoptPrerenderedDocsHtml();
+
+const DocsMarkdown = ({ html }: { html: string }) => (
+  <div
+    className="docs-markdown"
+    data-docs-markdown=""
+    // Committed repository Markdown, rendered to HTML at build time by
+    // the same parser that feeds the prerendered page.
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
+    dangerouslySetInnerHTML={{ __html: html }}
+  />
+);
 
 const preloadDocsHtml = (slug?: string): Promise<void> => {
   const resolved = resolveDocsSlug(slug);
@@ -311,17 +325,21 @@ const OnwardLink = ({
   route: DocRoute;
 }) => (
   <a
-    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
+    aria-label={`${direction === "next" ? "Next" : "Previous"}: ${docsLabelFor(route, audience)}`}
     className="docs-step"
     data-direction={direction}
     href={`/${route.slug}`}
+    onClick={(event) => {
+      // Soft navigation replaces the page under this footer link; land on the new page.
+      if (!(event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))
+        focusMainLanding();
+    }}
     onFocus={() => warmDocsHtml(route.slug)}
     onPointerEnter={() => warmDocsHtml(route.slug)}
   >
     {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
     <span className="docs-step-copy">
-      <small>{direction === "next" ? "Next" : "Previous"}</small>
-      <b>{docsLabelFor(route, audience)}</b>
+      <small>{direction === "next" ? "Next" : "Previous"}</small> <b>{docsLabelFor(route, audience)}</b>
     </span>
     {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
   </a>
@@ -355,14 +373,16 @@ const ArticleEnd = ({ onSelectTab, slug }: { onSelectTab?: (id: string) => void;
         </button>
         {next ? <OnwardLink audience={audience} direction="next" route={next} /> : <span className="docs-step-gap" />}
       </nav>
-      <a
-        className="docs-source-link"
-        href={`${GITHUB_BASE_URL}/edit/main/${route.source}`}
-        rel="noreferrer"
-        target="_blank"
-      >
-        Suggest changes on GitHub
-      </a>
+      {route.editable === false ? null : (
+        <a
+          className="docs-source-link"
+          href={`${GITHUB_BASE_URL}/edit/main/${route.source}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Suggest changes on GitHub
+        </a>
+      )}
       {onSelectTab ? <RelatedStrip entryKey={route.slug} onSelectTab={onSelectTab} /> : null}
     </footer>
   );
@@ -581,11 +601,19 @@ const DocsPage = ({
             key={route.slug}
             data-markdown-source={route.source}
             data-page-turn={pageTurned ? "true" : undefined}
-            // Committed repository Markdown, rendered to HTML at build time by
-            // the same parser that feeds the prerendered page.
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted repository Markdown is the page source
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          >
+            {/* The compiled Markdown renderer emits one h1. Keep its inline
+                markup while placing crawlable tool links directly below it. */}
+            {html.includes("</h1>") ? (
+              <>
+                <DocsMarkdown html={html.slice(0, html.indexOf("</h1>") + 5)} />
+                <DocsToolLinks slug={route.slug} />
+                <DocsMarkdown html={html.slice(html.indexOf("</h1>") + 5)} />
+              </>
+            ) : (
+              <DocsMarkdown html={html} />
+            )}
+          </article>
           {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
           <ArticleEnd onSelectTab={onSelectTab} slug={route.slug} />

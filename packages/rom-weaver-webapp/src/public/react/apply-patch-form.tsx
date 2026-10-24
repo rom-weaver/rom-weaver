@@ -1,14 +1,26 @@
-import { bundleCheckTokens, selectBundleMembers, validatePatchDependencies } from "../../lib/bundle/bundle-targets.ts";
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import {
+  gateWeaveChainChecks,
+  weaveCheckTokens,
+  selectWeaveMembers,
+  validatePatchDependencies,
+} from "../../lib/weave/weave-targets.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
-import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
-import { getErrorCode } from "../../presentation/errors.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
+import { throwIfAborted } from "../../lib/errors.ts";
+import type {
+  ApplyWorkflow,
+  BrowserApplyResult,
+  BrowserCreateResult,
+  WorkflowProgress,
+} from "../../platform/browser/browser-api.ts";
+import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { waitForBrowserOpfsBootCleanup } from "../../storage/browser/browser-opfs-cleanup.ts";
 import type {
-  ApplyWorkflowBundleSources,
+  ApplyWorkflowWeaveSources,
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
@@ -47,16 +59,20 @@ import {
   toPatchStageInfo,
   toStagedInputInfos,
 } from "./apply-workflow-staging-model.ts";
-import { resolveBundleArchiveFormat } from "./bundle-export.tsx";
+import { resolveWeaveArchiveFormat } from "./weave-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
+import { Modal } from "./components/ds/modal.tsx";
+import { SelectionTree } from "./components/ds/selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
+import { isApplyButtonActionable } from "./patcher-view-models.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
 import {
   getDefaultCompressionArchive,
   getDefaultCompressionMode,
+  toApplyWorkflowSettings,
   useApplySettings,
   useRomWeaverAssetBaseUrl,
   useUiLocalizer,
@@ -64,24 +80,38 @@ import {
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { addEntry } from "./emulator-session-store.ts";
 import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
-import { useApplyBundleExport } from "./use-apply-bundle-export.ts";
-import { getApplyOutputVerification, useApplyBundleChainStatus } from "./use-apply-bundle-chain-status.ts";
+import { useCombinedPatch } from "./use-combined-patch.tsx";
+import { countDropEntries, readDropEntries } from "./drop-destination.ts";
+import { useApplyWeaveExport } from "./use-apply-weave-export.ts";
+import { getApplyOutputVerification, useApplyWeaveChainStatus } from "./use-apply-weave-chain-status.ts";
 import { useApplyCheats } from "./use-apply-cheats.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
+import { canApplySelection } from "./apply-selection.ts";
 import {
-  type BundlePatchMeta,
-  type BundleSessionControllers,
-  mergeBundleMetaForIds,
-  useBundleApplySession,
-} from "./use-bundle-apply-session.ts";
+  type WeavePatchMeta,
+  type WeaveSessionControllers,
+  mergeWeaveMetaForIds,
+  useWeaveApplySession,
+} from "./use-weave-apply-session.ts";
 import { patchInputOverridesForRuntime, resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
 import { useUnifiedApplyDrop } from "./use-unified-apply-drop.ts";
 import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressEvent } from "./workflow-adapters.ts";
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
-import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
+import { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSizes } from "./apply-workflow-snapshot-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
+import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
+
+// The weave's `rom.checks` and `rom.member`, which the workflow verifies against the supplied ROM
+// for every weave, whatever its patches target. `rom.member` is passed even without checks: a bare
+// ROM file always stands in for it.
+const weaveRomExpectation = (session: WeaveApplySession | null): Partial<WeaveRomExpectation> | undefined => {
+  const checks = weaveCheckTokens(session?.romChecks);
+  const member = session?.romMember;
+  if (!(checks || member)) return undefined;
+  return { ...(checks ? { checks } : {}), ...(member ? { member } : {}) };
+};
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -184,7 +214,7 @@ const setWorkflowSettingsIfChanged = async ({
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
-  const mode = props.mode ?? "apply";
+  const mode = props.mode === "bundle" ? "weave" : (props.mode ?? "apply");
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -196,6 +226,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [patchInputBasis, setPatchInputBasis] = useState<PatchInputBasis>("auto");
   const patchInputBasisRef = useRef<PatchInputBasis>(patchInputBasis);
   patchInputBasisRef.current = patchInputBasis;
+  const [creatingCombined, setCreatingCombined] = useState(false);
   const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
   const [completedCheats, setCompletedCheats] = useState<BrowserApplyResult["cheats"]>();
   const [preStageOutputEstimate, setPreStageOutputEstimate] = useState<{
@@ -223,7 +254,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const selectFileRef = useRef(selectFile);
   selectFileRef.current = selectFile;
   // id matches webapp-root's `currentView` so root routing targets the active tab.
-  useInputSelectionHandler(mode === "bundle" ? "bundle" : "patcher", selectFile);
+  useInputSelectionHandler(
+    mode === "create" ? "creator" : mode === "weave" ? "weave" : "patcher",
+    selectFile,
+    props.active !== false,
+  );
   const lastInputsRef = useRef<BinarySource[]>([]);
   const forceInputWorkflowRefreshRef = useRef(false);
   const lastPatchOrderRef = useRef("");
@@ -231,33 +266,59 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const selectedCheatPositionsRef = useRef<number[]>([]);
+  const selectedCheatWeavePositionsRef = useRef<number[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
+  const [cheatsPresent, setCheatsPresent] = useState(false);
   const [cheatNames, setCheatNames] = useState<string[]>([]);
   const [practiceCheatSample, setPracticeCheatSample] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
-  const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
+  const weaveSourcesRef = useRef<ApplyWorkflowWeaveSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
     executionSettingsKey: "",
     inputs: [],
     patches: [],
     preparationSettingsKey: "",
   });
+  /** The inputs of the most recently queued pass: what the workflow holds once the queue drains. */
+  const queuedInputsRef = useRef<BinarySource[]>([]);
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
+  const { onSettingsChange } = props;
+  const handleSettingsChange = useCallback(
+    (nextSettings: Parameters<NonNullable<ApplyPatchFormProps["onSettingsChange"]>>[0]) => {
+      onSettingsChange?.(nextSettings);
+      // Prepare/run sync the workflow's name, but clearing the field must hand naming back to the
+      // workflow now, or its stale manual name keeps resolving as the "automatic" name.
+      const workflow = workflowHandle.peek();
+      const previous = JSON.parse(workflowOutputOverridesKeyRef.current || "{}") as {
+        compression?: string;
+        outputName?: string;
+      };
+      if (sanitizeTypedOutputName(nextSettings.output?.outputName) || !previous.outputName) return;
+      if (!workflow) return;
+      workflowOutputOverridesKeyRef.current = JSON.stringify({ ...previous, outputName: "" });
+      const run = mutationQueueRef.current.catch(() => undefined).then(() => workflow.setOutputName(""));
+      mutationQueueRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+    },
+    [onSettingsChange, workflowHandle],
+  );
   const propsWithSettings = {
     ...props,
+    onSettingsChange: handleSettingsChange,
     defaultSettings: props.defaultSettings || providerSettings,
     settings: props.settings,
   };
-  const traceSettings = props.settings || props.defaultSettings || providerSettings;
-  const storedBundlePackage = String(traceSettings.output?.bundlePackage || traceSettings.bundlePackage || "");
-  const storedBundleContents = storedBundlePackage.includes(":")
-    ? storedBundlePackage.split(":")[1]
-    : storedBundlePackage;
-  const defaultBundleContents = storedBundleContents === "rom" ? "rom" : "patches";
-  const defaultBundleFormat = resolveBundleArchiveFormat(
+  const sourceSettings = props.settings || props.defaultSettings || providerSettings;
+  const traceSettings = useMemo(() => toApplyWorkflowSettings(sourceSettings), [sourceSettings]);
+  const storedWeavePackage = String(traceSettings.output?.weavePackage ?? "");
+  const storedWeaveContents = storedWeavePackage.includes(":") ? storedWeavePackage.split(":")[1] : storedWeavePackage;
+  const defaultWeaveContents = storedWeaveContents === "rom" ? "rom" : "patches";
+  const defaultWeaveFormat = resolveWeaveArchiveFormat(
     getDefaultCompressionArchive(getDefaultCompressionMode(traceSettings)),
   );
   const emitApplyFormInputTrace = useCallback(
@@ -279,7 +340,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (!sameBinarySourceLists(lastInputsRef.current, inputs)) {
       if (lastInputsRef.current.length > 0 && inputs.length === 0) forceInputWorkflowRefreshRef.current = true;
       lastInputsRef.current = inputs.slice();
-      bundleSourcesRef.current = null;
+      weaveSourcesRef.current = null;
     }
   }, []);
 
@@ -295,7 +356,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const isAppend = previousOrder !== "" && patchOrder.startsWith(`${previousOrder}|`);
       if (!isAppend) forcePatchWorkflowRefreshRef.current = true;
       lastPatchOrderRef.current = patchOrder;
-      bundleSourcesRef.current = null;
+      weaveSourcesRef.current = null;
     }
   }, []);
 
@@ -330,79 +391,100 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     togglePatchEnabled,
   } = useApplyPatchEnablement();
 
-  // A `?bundle=` boot session: once the delivered patch files land, it seeds
+  const [invalidDraftPatchErrors, setInvalidDraftPatchErrors] = useState<ReadonlyMap<string, string>>(new Map());
+  const onDraftValidityChange = useCallback((id: string, error: string | null) => {
+    setInvalidDraftPatchErrors((previous) => {
+      if ((previous.get(id) || null) === error) return previous;
+      const next = new Map(previous);
+      if (error) next.set(id, error);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const applyValidationError = getPatchIds()
+    .filter((id) => !disabledPatchIds.has(id))
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
+  // Weave export still writes disabled patches (as optional entries with their
+  // checks), so a malformed draft on any patch blocks it.
+  const weaveValidationError = getPatchIds()
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
+
+  // A `?weave=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
   // Controllers are created further down, so the hook reads them through a ref.
-  const [localBundleSession, setLocalBundleSession] = useState<BundleApplySession | null>(null);
-  const [bundleDismissed, setBundleDismissed] = useState(false);
-  const bundleSessionKey = props.bundleSession?.key;
+  const [localWeaveSession, setLocalWeaveSession] = useState<WeaveApplySession | null>(null);
+  const [weaveDismissed, setWeaveDismissed] = useState(false);
+  const propWeaveSession = props.weaveSession ?? props.bundleSession;
+  const weaveSessionKey = propWeaveSession?.key;
   // biome-ignore lint/correctness/useExhaustiveDependencies: The bundle session key intentionally triggers a dismissal reset.
   useEffect(() => {
-    setBundleDismissed(false);
-  }, [bundleSessionKey]);
-  const activeBundleSession = bundleDismissed ? null : localBundleSession || props.bundleSession || null;
-  const activeBundleSessionRef = useRef(activeBundleSession);
-  activeBundleSessionRef.current = activeBundleSession;
+    setWeaveDismissed(false);
+  }, [weaveSessionKey]);
+  const activeWeaveSession = weaveDismissed ? null : localWeaveSession || propWeaveSession || null;
+  const activeWeaveSessionRef = useRef(activeWeaveSession);
+  activeWeaveSessionRef.current = activeWeaveSession;
   useEffect(() => {
-    setPatchInputBasis(activeBundleSession?.patchBasis || "auto");
-  }, [activeBundleSession]);
-  const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
+    setPatchInputBasis(activeWeaveSession?.patchBasis || "auto");
+  }, [activeWeaveSession]);
+  const weaveControllersRef = useRef<WeaveSessionControllers>({ output: null, patchStack: null });
   const {
-    bundleDefaultsPending,
-    handleBundlePatchesChange,
-    bundleMetaById,
+    weaveDefaultsPending,
+    handleWeavePatchesChange,
+    weaveMetaById,
     memberLaneChecksRef,
-    updateBundleMeta,
-    updateBundleMetaForIds,
-  } = useBundleApplySession({
-    bundleSession: activeBundleSession,
-    controllersRef: bundleControllersRef,
+    updateWeaveMeta,
+    updateWeaveMetaForIds,
+  } = useWeaveApplySession({
+    weaveSession: activeWeaveSession,
+    controllersRef: weaveControllersRef,
     getPatchIds,
     seedPatchEnablement,
   });
 
   // Metadata edits MUST invalidate the workflow name because the source identities stay unchanged.
   useEffect(() => {
-    if (bundleMetaById.size) workflowSnapshotStore.invalidateOutputName();
-  }, [bundleMetaById, workflowSnapshotStore]);
+    if (weaveMetaById.size) workflowSnapshotStore.invalidateOutputName();
+  }, [weaveMetaById, workflowSnapshotStore]);
 
-  // Declared chain metadata (bundle/user basis + checks) per patch index, forwarded into the
+  // Declared chain metadata (weave/user basis + checks) per patch index, forwarded into the
   // plan-mode validation so the engine resolves each patch's basis with the same declarations
   // the apply run will enforce.
-  const bundleMetaRef = useRef(bundleMetaById);
-  bundleMetaRef.current = bundleMetaById;
-  const updateBundleMetaImmediately = useCallback(
-    (id: string, updates: Partial<BundlePatchMeta>) => {
-      const next = new Map(bundleMetaRef.current);
+  const weaveMetaRef = useRef(weaveMetaById);
+  weaveMetaRef.current = weaveMetaById;
+  const updateWeaveMetaImmediately = useCallback(
+    (id: string, updates: Partial<WeavePatchMeta>) => {
+      const next = new Map(weaveMetaRef.current);
       next.set(id, { ...next.get(id), ...updates });
-      bundleMetaRef.current = next;
-      updateBundleMeta(id, updates);
+      weaveMetaRef.current = next;
+      updateWeaveMeta(id, updates);
       if ("input" in updates || "inputChecks" in updates || "outputChecks" in updates) {
         const ids = getPatchIds();
         void (async () => {
           for (const [index, patchId] of ids.entries()) {
             const meta = next.get(patchId);
-            await bundleControllersRef.current.patchStack?.setPatchOption?.(index, {
+            await weaveControllersRef.current.patchStack?.setPatchOption?.(index, {
               id: meta?.id || patchId,
               input: meta?.input,
               // A lane with no authored input checks keeps the ones the
               // identify record supplied at session load.
-              inputChecks: bundleCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
-              outputChecks: bundleCheckTokens(meta?.outputChecks),
+              inputChecks: weaveCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
+              outputChecks: weaveCheckTokens(meta?.outputChecks),
               revalidate: index === ids.length - 1,
             });
           }
         })();
       }
     },
-    [getPatchIds, memberLaneChecksRef, updateBundleMeta],
+    [getPatchIds, memberLaneChecksRef, updateWeaveMeta],
   );
-  const updateBundleMetaForIdsImmediately = useCallback(
-    (ids: readonly string[], updates: Partial<BundlePatchMeta>) => {
-      bundleMetaRef.current = mergeBundleMetaForIds(bundleMetaRef.current, ids, updates);
-      updateBundleMetaForIds(ids, updates);
+  const updateWeaveMetaForIdsImmediately = useCallback(
+    (ids: readonly string[], updates: Partial<WeavePatchMeta>) => {
+      weaveMetaRef.current = mergeWeaveMetaForIds(weaveMetaRef.current, ids, updates);
+      updateWeaveMetaForIds(ids, updates);
     },
-    [updateBundleMetaForIds],
+    [updateWeaveMetaForIds],
   );
   const buildChainMeta = useCallback(
     (patches: BinarySource[]) => {
@@ -410,7 +492,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         number,
         {
           id?: string;
-          input?: ParsedBundlePatchInput;
+          input?: ParsedWeavePatchInput;
           basis?: "auto" | "base" | "previous";
           inputChecks?: string;
           outputChecks?: string;
@@ -421,12 +503,25 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       const resolved = resolvePatchInputBases({
         disabled: patches.map((_, index) => disabled.has(index)),
         mode: patchInputBasisRef.current,
-        overrides: ids.map((id) => bundleMetaRef.current.get(id || "")?.basis),
+        overrides: ids.map((id) => weaveMetaRef.current.get(id || "")?.basis),
       });
+      const gatedChecks = gateWeaveChainChecks(
+        ids.map((id, index) => {
+          const meta = weaveMetaRef.current.get(id || "");
+          const inputChecks = weaveCheckTokens(meta?.inputChecks);
+          return {
+            target: meta?.target,
+            input: meta?.input,
+            enabled: !disabled.has(index),
+            authoredInputChecks: !!inputChecks,
+            inputChecks,
+            outputChecks: weaveCheckTokens(meta?.outputChecks),
+          };
+        }),
+      );
       ids.forEach((id, index) => {
-        const meta = bundleMetaRef.current.get(id || "");
-        const inputChecks = bundleCheckTokens(meta?.inputChecks);
-        const outputChecks = bundleCheckTokens(meta?.outputChecks);
+        const meta = weaveMetaRef.current.get(id || "");
+        const { inputChecks, outputChecks } = gatedChecks[index] || {};
         const basis = resolved[index] || "auto";
         chainMeta.set(index, {
           id: meta?.id || id,
@@ -441,7 +536,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [getDisabledPatchIndexes, getPatchIds],
   );
 
-  // Latest patch list mirror for flows outside the staging pipeline (bundle export).
+  // Latest patch list mirror for flows outside the staging pipeline (weave export).
   const currentPatchesRef = useRef<BinarySource[]>([]);
   const handlePatchInputBasisChange = useCallback(
     (index: number, basis: PatchInputBasis) => {
@@ -453,11 +548,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const resolved = resolvePatchInputBases({
           disabled: ids.map((_, patchIndex) => disabled.has(patchIndex)),
           mode: patchInputBasis,
-          overrides: ids.map((patchId) => bundleMetaRef.current.get(patchId)?.basis),
+          overrides: ids.map((patchId) => weaveMetaRef.current.get(patchId)?.basis),
         });
         ids.forEach((patchId, patchIndex) => {
           const resolvedBasis = resolved[patchIndex];
-          updateBundleMetaImmediately(patchId, {
+          updateWeaveMetaImmediately(patchId, {
             basis: patchIndex === index || resolvedBasis === "auto" ? undefined : resolvedBasis,
           });
         });
@@ -465,14 +560,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         setPatchInputBasis("auto");
         return;
       }
-      updateBundleMetaImmediately(id, {
+      updateWeaveMetaImmediately(id, {
         basis: basis === "auto" || basis === patchInputBasis ? undefined : basis,
       });
     },
-    [getDisabledPatchIndexes, getPatchIds, patchInputBasis, updateBundleMetaImmediately],
+    [getDisabledPatchIndexes, getPatchIds, patchInputBasis, updateWeaveMetaImmediately],
   );
   // Ordered patch file names as state (the refs above don't re-render): drives
-  // the bundle chain-intact check for output verification + its notice.
+  // the weave chain-intact check for output verification + its notice.
   const [currentPatchNames, setCurrentPatchNames] = useState<readonly string[]>([]);
   const chainPlans = workflowSnapshot.chainPlans;
 
@@ -481,54 +576,62 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       if (!nextPatches.length) {
-        setLocalBundleSession(null);
-        setBundleDismissed(true);
+        setLocalWeaveSession(null);
+        setWeaveDismissed(true);
       }
       syncPatchTracking(nextPatches);
       currentPatchesRef.current = nextPatches;
       setCurrentPatchNames(
         nextPatches.map((patch, index) => getReactBinarySourceFileName(patch, `Patch ${index + 1}`)),
       );
-      handleBundlePatchesChange(nextPatches);
+      handleWeavePatchesChange(nextPatches);
       syncPatchSelectionRefs(nextPatches);
       onPatchesChange?.(nextPatches);
     },
-    [handleBundlePatchesChange, onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
+    [handleWeavePatchesChange, onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
-  const { bundleChainStatus, bundleSessionMatches } = useApplyBundleChainStatus({
-    activeBundleSession,
-    bundleMetaById,
+  const { weaveChainStatus, weaveSessionMatches } = useApplyWeaveChainStatus({
+    activeWeaveSession,
+    weaveMetaById,
     currentPatchNames,
     disabledPatchIds,
   });
+  // The weave's expected ROM follows the chain like its expected output: only while the bench holds
+  // the weave's patch list (names in order; toggles aside) do its rom.checks and ROM attribution
+  // describe this apply. Otherwise they stand down, and they apply again when the bench matches.
+  // weaveChainStatus cannot decide this: it stays null until the weave's metadata is seeded, which
+  // happens only once the list first matches.
+  const weaveRomEnforced = weaveSessionMatches;
+  const weaveRomEnforcedRef = useRef(weaveRomEnforced);
+  weaveRomEnforcedRef.current = weaveRomEnforced;
 
-  // Reactive owner of the bundle's expected-output check: engaged only while the
-  // full authored chain is enabled (the bundle's output.checks describe exactly
+  // Reactive owner of the weave's expected-output check: engaged only while the
+  // full authored chain is enabled (the weave's output.checks describe exactly
   // that result), stood down otherwise. Runs through the same per-patch option
   // path as user edits; the carrier index is found by value so reorders and
   // clears stay aligned.
-  const bundleOutputChecks = activeBundleSession?.chainEndpointChecks.output?.checksums;
-  const bundleOutputChecksum = bundleOutputChecks?.sha1 || bundleOutputChecks?.md5 || bundleOutputChecks?.crc32 || "";
+  const weaveOutputChecks = activeWeaveSession?.chainEndpointChecks.output?.checksums;
+  const weaveOutputChecksum = weaveOutputChecks?.sha1 || weaveOutputChecks?.md5 || weaveOutputChecks?.crc32 || "";
   useEffect(() => {
-    if (!bundleOutputChecksum || bundleChainStatus === null) return;
-    const desired = bundleChainStatus === "full" ? bundleOutputChecksum : "";
-    const targetIndex = (activeBundleSession?.entries.length ?? 0) - 1;
+    if (!weaveOutputChecksum || weaveChainStatus === null) return;
+    const desired = weaveChainStatus === "full" ? weaveOutputChecksum : "";
+    const targetIndex = (activeWeaveSession?.entries.length ?? 0) - 1;
     const abort = new AbortController();
     void (async () => {
       // Wait for the stack to settle (same readiness rule as the session seeding)
       // so the option lands on staged items instead of racing their staging.
-      await waitForPatchStackReady(bundleControllersRef.current.patchStack, { signal: abort.signal });
+      await waitForPatchStackReady(weaveControllersRef.current.patchStack, { signal: abort.signal });
       if (abort.signal.aborted) return;
-      const stack = bundleControllersRef.current.patchStack;
+      const stack = weaveControllersRef.current.patchStack;
       const items = stack?.getState().items || [];
-      const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === bundleOutputChecksum);
+      const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === weaveOutputChecksum);
       if (desired) {
         if (carrierIndex === targetIndex) return;
         if (carrierIndex >= 0)
           await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
         if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length)
-          await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum }));
+          await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: weaveOutputChecksum }));
         return;
       }
       if (carrierIndex >= 0)
@@ -537,19 +640,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     return () => {
       abort.abort();
     };
-  }, [activeBundleSession, bundleChainStatus, bundleOutputChecksum]);
+  }, [activeWeaveSession, weaveChainStatus, weaveOutputChecksum]);
 
   // The output-verification line: whether the applied FINAL result will be checked against an
   // expected output, and why not when it won't. Plan-driven when the chain plans carry a
   // final-step output expectation (declared per-patch checks or the last patch's embedded
-  // target); the bundle-level expected output (seeded onto the last patch only while the full
+  // target); the weave-level expected output (seeded onto the last patch only while the full
   // authored chain is enabled in order) is the fallback source.
   const enabledPatchCount = currentPatchNames.length - disabledPatchIds.size;
   const localizer = useUiLocalizer();
   const outputVerification = useMemo(
     () =>
-      getApplyOutputVerification({ bundleChainStatus, bundleOutputChecksum, chainPlans, enabledPatchCount, localizer }),
-    [bundleChainStatus, bundleOutputChecksum, chainPlans, enabledPatchCount, localizer],
+      getApplyOutputVerification({ weaveChainStatus, weaveOutputChecksum, chainPlans, enabledPatchCount, localizer }),
+    [weaveChainStatus, weaveOutputChecksum, chainPlans, enabledPatchCount, localizer],
   );
 
   const queueMutation = useCallback(<TValue,>(callback: () => Promise<TValue>) => {
@@ -566,9 +669,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowSnapshotStore.setWorkflow(null);
     expectedWorkflowPatchCountRef.current = 0;
     preparedWorkflowRef.current = null;
-    bundleSourcesRef.current = null;
+    weaveSourcesRef.current = null;
     forceInputWorkflowRefreshRef.current = false;
     workflowSyncRef.current = { executionSettingsKey: "", inputs: [], patches: [], preparationSettingsKey: "" };
+    queuedInputsRef.current = [];
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
@@ -607,7 +711,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               retainUncompressedOutput,
               selectFile: async (request) => {
                 if (request.role === "input") {
-                  const session = activeBundleSessionRef.current;
+                  const session = activeWeaveSessionRef.current;
                   const members =
                     session?.entries.flatMap((entry) =>
                       [entry.input, entry.target].flatMap((reference) =>
@@ -615,7 +719,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
                       ),
                     ) || [];
                   if (session?.romMember) members.push(session.romMember);
-                  const selection = selectBundleMembers(members, request.candidates);
+                  const selection = selectWeaveMembers(members, request.candidates);
                   if (selection) return selection;
                 }
                 const handlers = prepareHandlersRef.current;
@@ -660,7 +764,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       typeof snapshot.options.output?.outputName === "string" && snapshot.options.output.outputName.trim()
         ? snapshot.options.output.outputName
         : "";
-    if (manualOutputName) await workflow.setOutputName(manualOutputName);
+    // An empty name hands naming back to the workflow's automatic name (cheats, archive names).
+    await workflow.setOutputName(manualOutputName);
     const compressionMode = snapshot.options.output?.compression || "auto";
     if (compressionMode !== "auto") await workflow.setOutputFormat(compressionMode);
   }, []);
@@ -809,6 +914,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             // the input is checksummed, before the patch (re)validation inside setInput runs - that
             // validation is a patch concern and reports only on the patch row.
             .setInput(snapshot.inputs, {
+              appendSidecarPatches: mode === "create",
               onPrepared: (state) => {
                 handlers.onInputPrepared?.(state);
                 emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input prepared", { input: state });
@@ -916,7 +1022,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
         const input = workflow.getInput();
         const patches = workflow.getPatches();
-        bundleSourcesRef.current = workflow.getBundleExportSources();
+        weaveSourcesRef.current = workflow.getWeaveExportSources();
         const checksums = input?.checksums || null;
         const resolvedOutput = workflow.getSnapshot().output;
         handlers.onInputState?.(input);
@@ -952,7 +1058,38 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         workflow.off("progress", handleProgress);
       }
     },
-    [getWorkflow, props.threads, syncSelectionRefs, syncWorkflowOutputOverrides, workflowHandle, workflowSnapshotStore],
+    [
+      getWorkflow,
+      mode,
+      props.threads,
+      syncSelectionRefs,
+      syncWorkflowOutputOverrides,
+      workflowHandle,
+      workflowSnapshotStore,
+    ],
+  );
+
+  // A pass that changes the ROM waits behind queued passes, and a validation pass can be hashing
+  // the old ROM for the weave's checks. Cancel that hash when the queued inputs change, so the new
+  // ROM does not wait for it; passes still queued for the old ROM skip the hash (see
+  // isInputSuperseded).
+  const noteQueuedInputs = useCallback(
+    (snapshot: ApplyWorkflowSessionInput) => {
+      const previous = queuedInputsRef.current;
+      queuedInputsRef.current = snapshot.inputs;
+      if (!sameBinarySourceLists(previous, snapshot.inputs)) workflowHandle.peek()?.cancelWeaveRomHash?.();
+    },
+    [workflowHandle],
+  );
+
+  // A validation pass whose inputs a newer queued pass replaces skips the weave-ROM hash.
+  const isInputSuperseded = useCallback(
+    (snapshot: ApplyWorkflowSessionInput) => !sameBinarySourceLists(queuedInputsRef.current, snapshot.inputs),
+    [],
+  );
+  const enforcedWeaveRomExpectation = useCallback(
+    () => (weaveRomEnforcedRef.current ? weaveRomExpectation(activeWeaveSessionRef.current) : undefined),
+    [],
   );
 
   const withPreparedWorkflow = useCallback(
@@ -970,9 +1107,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         inputCount: snapshot.inputs.length,
         patchCount: snapshot.patches.length,
       });
+      noteQueuedInputs(snapshot);
       return queueMutation(() => prepareWorkflow(snapshot, handlers, callback));
     },
-    [prepareWorkflow, queueMutation],
+    [noteQueuedInputs, prepareWorkflow, queueMutation],
   );
 
   // The session fires ROM and patch staging in the same tick (its coalescing window). Batch those
@@ -1036,6 +1174,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         promptPatchSelection: members.some((member) => member.handlers.selection?.promptPatchSelection !== false),
       },
     };
+    noteQueuedInputs(snapshot);
     void queueMutation(() =>
       prepareWorkflow(snapshot, mergedHandlers, async (prepared) => {
         for (const member of members) await member.run(prepared);
@@ -1043,7 +1182,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ).catch((error) => {
       for (const member of members) member.fail(error);
     });
-  }, [emitWorkflowProgress, prepareWorkflow, queueMutation, workflowHandle]);
+  }, [emitWorkflowProgress, noteQueuedInputs, prepareWorkflow, queueMutation, workflowHandle]);
 
   const enqueueStageBatch = useCallback(
     <TValue,>(
@@ -1074,32 +1213,46 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [flushStageBatch],
   );
 
-  const applyPatches = useCallback(
-    async (rawInput: ApplyWorkflowSessionInput) => {
+  const executePatchWorkflow = useCallback(
+    async <TResult,>(
+      rawInput: ApplyWorkflowSessionInput,
+      run: (workflow: ApplyWorkflow) => Promise<TResult>,
+      onProgress?: (event: WorkflowProgress) => void,
+    ) => {
       // Disabled patches never reach the workflow; the bench keeps their cards.
       // Their index-aligned run options travel with the kept patches so the
       // filtered re-stage can replay them onto its fresh stages.
       const patchIds = getPatchIds();
       const runOptions = rawInput.patches.map((_patch, index) => {
         const patchId = patchIds[index] || "";
-        const meta = bundleMetaRef.current.get(patchId);
+        const meta = weaveMetaRef.current.get(patchId);
         const basis = meta?.basis;
         return {
           id: meta?.id || patchId,
           ...(meta?.input ? { input: meta.input } : {}),
           ...(meta?.target ? { target: meta.target } : {}),
-          inputChecks: bundleCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
-          outputChecks: bundleCheckTokens(meta?.outputChecks),
+          inputChecks: weaveCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
+          outputChecks: weaveCheckTokens(meta?.outputChecks),
           ...rawInput.patchOptions?.[index],
           ...(basis ? { basis } : {}),
         };
       });
+      const enabled = runOptions.map((_option, index) => !disabledPatchIds.has(patchIds[index] || ""));
+      // A disabled entry breaks its lane's chain, so later declared states no longer describe the bytes.
+      const gatedChecks = gateWeaveChainChecks(
+        runOptions.map((option, index) => ({
+          ...option,
+          enabled: enabled[index] ?? true,
+          authoredInputChecks: !!weaveCheckTokens(weaveMetaRef.current.get(patchIds[index] || "")?.inputChecks),
+        })),
+      );
+      for (const [index, option] of runOptions.entries()) Object.assign(option, gatedChecks[index]);
       const dependencyError = validatePatchDependencies(
         runOptions.map((option, index) => ({
           id: option.id || `patch-${index + 1}`,
           input: option.input,
           target: option.target,
-          enabled: !disabledPatchIds.has(patchIds[index] || ""),
+          enabled: enabled[index] ?? true,
         })),
       );
       if (dependencyError) throw new Error(dependencyError);
@@ -1145,12 +1298,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const readinessError = getWorkflowReadinessError(workflow.getInput() || stagedInput, workflow.getPatches());
         if (readinessError) throw readinessError;
         const abortSignal = input.options.signal;
+        throwIfAborted(abortSignal);
         const abortWorkflow = () => workflow.abort(abortSignal?.reason);
-        if (abortSignal?.aborted) abortWorkflow();
-        else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
+        abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
-          setCompletedOutput(null);
-          setCompletedCheats(undefined);
+          workflow.setWeaveRom?.(enforcedWeaveRomExpectation());
           const selectedCheats = selectedCheatsRef.current;
           workflow.setCheats?.(
             selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
@@ -1158,14 +1310,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               cheatDelivery(record) === "rom" ? [selectedCheatPositionsRef.current[index] ?? 0] : [],
             ),
           );
-          const result = (await workflow.run()) as BrowserApplyResult;
-          handleApplyComplete(result);
-          return normalizeApplyResult(result);
+          return await run(workflow);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
         }
       };
 
+      noteQueuedInputs(input);
       return queueMutation(async () => {
         syncSelectionRefs(input);
         const baseSettings = createBaseApplyWorkflowSettings(input.options, threads);
@@ -1185,6 +1336,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             {
               onProgress: (event) => {
                 emitWorkflowProgress(event, input.options.onProgress);
+                onProgress?.(event);
               },
             },
             runPreparedWorkflow,
@@ -1194,6 +1346,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         prepareHandlersRef.current = {
           onProgress: (event) => {
             emitWorkflowProgress(event, input.options.onProgress);
+            onProgress?.(event);
           },
         };
         const handleProgress = (event: WorkflowProgress) => prepareHandlersRef.current?.onProgress?.(event);
@@ -1221,7 +1374,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [
       disabledPatchIds,
       emitWorkflowProgress,
-      handleApplyComplete,
+      enforcedWeaveRomExpectation,
+      noteQueuedInputs,
       threads,
       queueMutation,
       syncSelectionRefs,
@@ -1233,6 +1387,18 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       patchInputBasis,
       workflowHandle,
     ],
+  );
+
+  const applyPatches = useCallback(
+    (input: ApplyWorkflowSessionInput) =>
+      executePatchWorkflow(input, async (workflow) => {
+        setCompletedOutput(null);
+        setCompletedCheats(undefined);
+        const result = (await workflow.run()) as BrowserApplyResult;
+        handleApplyComplete(result);
+        return normalizeApplyResult(result);
+      }),
+    [executePatchWorkflow, handleApplyComplete],
   );
 
   const downloadOutput = useCallback(
@@ -1300,9 +1466,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          bundleSourcesRef.current = workflow.getBundleExportSources();
+          weaveSourcesRef.current = workflow.getWeaveExportSources();
           const infos = toStagedInputInfos(stagedInput, input.inputs);
-          if (!input.patches.length) {
+          if (mode === "create" || !input.patches.length) {
             const implicitPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
             if (implicitPatchSources.length) {
               const buildInfo = createPatchStageInfoMapper(infos);
@@ -1327,7 +1493,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [enqueueStageBatch],
+    [enqueueStageBatch, mode],
   );
 
   const stagePatches = useCallback(
@@ -1354,7 +1520,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
         async ({ input: stagedInput, patches, workflow }) => {
           preparedWorkflowRef.current = workflow;
-          bundleSourcesRef.current = workflow.getBundleExportSources();
+          weaveSourcesRef.current = workflow.getWeaveExportSources();
           const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(stagedInput, input.inputs));
           // A nested patch archive with several patches fans out into N independent leaf sources;
           // surface them so React grows its patch stack instead of showing only the dropped archive.
@@ -1435,12 +1601,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             chainMeta: buildChainMeta(input.patches),
             defaultPatchBasis: patchInputBasis,
             disabledIndexes,
+            skipWeaveRomHash: isInputSuperseded(input),
+            weaveRom: enforcedWeaveRomExpectation(),
           });
           return buildInfos();
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, patchInputBasis, withPreparedWorkflow],
+    [
+      buildChainMeta,
+      emitApplyFormInputTrace,
+      enforcedWeaveRomExpectation,
+      getDisabledPatchIndexes,
+      isInputSuperseded,
+      patchInputBasis,
+      withPreparedWorkflow,
+    ],
   );
 
   const setPatchTarget = useCallback(
@@ -1476,7 +1652,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       patchIndex: number,
       option: {
         id?: string;
-        input?: ParsedBundlePatchInput;
+        input?: ParsedWeavePatchInput;
         inputChecks?: string;
         outputChecks?: string;
         basis?: "base" | "previous";
@@ -1510,13 +1686,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           // A user edit changed what the run verifies (header bytes / expected
           // checks): rerun the deep validation - patches whose validation key is
           // unchanged short-circuit, the affected one re-verifies. Programmatic
-          // seeding (bundle sessions) skips this; the staging-completion pass
+          // seeding (weave sessions) skips this; the staging-completion pass
           // validates those on its own schedule.
           if (revalidate) {
             await workflow.validatePatches({
               chainMeta: buildChainMeta(input.patches),
               defaultPatchBasis: patchInputBasisRef.current,
               disabledIndexes: getDisabledPatchIndexes(input.patches),
+              skipWeaveRomHash: isInputSuperseded(input),
+              weaveRom: enforcedWeaveRomExpectation(),
             });
           }
           const refreshedInput = workflow.getInput();
@@ -1528,7 +1706,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         },
       );
     },
-    [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
+    [
+      buildChainMeta,
+      emitApplyFormInputTrace,
+      enforcedWeaveRomExpectation,
+      getDisabledPatchIndexes,
+      isInputSuperseded,
+      withPreparedWorkflow,
+    ],
   );
 
   const hasRequestedPatches = expectedWorkflowPatchCountRef.current > 0;
@@ -1551,27 +1736,37 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowSnapshot.ready &&
     (!expectedWorkflowPatchCountRef.current || workflowSnapshot.patchCount === expectedWorkflowPatchCountRef.current);
 
-  const { localUiController, localStackController, localOutputController, localNoticeController } =
-    useLocalApplyPatchFormSession({
-      ...propsWithSettings,
-      applyPatches,
-      applyReady: applyReady && !bundleDefaultsPending,
-      defaultPatchBasis: patchInputBasis,
-      disabledPatchIds,
-      downloadOutput,
-      onApplyComplete: () => undefined,
-      onInputsChange: handleLocalInputsChange,
-      onPatchesChange: handleLocalPatchesChange,
-      resolvedOutputCompression,
-      resolvedOutputName,
-      resolvedOutputNameKey,
-      cheatNames,
-      setPatchOption,
-      setPatchTarget,
-      stageInput,
-      stagePatches,
-      validatePatches,
-    });
+  const {
+    localUiController,
+    localStackController,
+    localOutputController,
+    localNoticeController,
+    getRunInput,
+    canStartApply,
+  } = useLocalApplyPatchFormSession({
+    ...propsWithSettings,
+    disabled: props.disabled || creatingCombined,
+    applyPatches,
+    applyReady: applyReady && !weaveDefaultsPending,
+    applyDisabled: weaveDefaultsPending,
+    applyValidationError,
+    defaultPatchBasis: patchInputBasis,
+    disabledPatchIds,
+    downloadOutput,
+    getPatchSlotIds: getPatchIds,
+    onApplyComplete: () => undefined,
+    onInputsChange: handleLocalInputsChange,
+    onPatchesChange: handleLocalPatchesChange,
+    resolvedOutputCompression,
+    resolvedOutputName,
+    resolvedOutputNameKey,
+    cheatNames,
+    setPatchOption,
+    setPatchTarget,
+    stageInput: props.active === false ? undefined : stageInput,
+    stagePatches: props.active === false ? undefined : stagePatches,
+    validatePatches: props.active === false ? undefined : validatePatches,
+  });
   const resolvedUiController = localUiController;
   const resolvedStackController = localStackController;
   const resolvedOutputController = localOutputController;
@@ -1580,7 +1775,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     resolvedOutputController.getState,
     resolvedOutputController.getState,
   );
-  bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
+  weaveControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
   const { cheatRom, classifyDatabaseCheats, classifyManualCode, handleCheatSelection, saveCheatsAsPatch } =
     useApplyCheats({
@@ -1589,6 +1784,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedAssetBaseUrl,
       resolvedUiController,
       selectedCheatPositionsRef,
+      selectedCheatWeavePositionsRef,
       selectedCheatsRef,
       setCheatConflictMessage,
       setCheatNames,
@@ -1599,15 +1795,41 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     });
   const practiceCheatCatalog = practiceCheatSample ? getPracticeCheatCatalog(cheatRom?.checksums) : {};
 
-  const { bundleExport, changeBundlePackage } = useApplyBundleExport({
-    bundleMetaById,
-    bundleSourcesRef,
-    currentPatchesRef,
-    defaultBundleContents,
-    defaultBundleFormat,
+  const runInput = getRunInput();
+  const combinedRevision = JSON.stringify({
+    inputs: getBinarySourceListStableIds(runInput.inputs),
+    patches: getBinarySourceListStableIds(runInput.patches),
+    options: runInput.patchOptions,
+    settings: runInput.options,
+    disabled: [...disabledPatchIds],
+    metadata: [...weaveMetaById],
+    basis: patchInputBasis,
+    cheats: selectedCheatsRef.current.map(({ record }) => record),
+    positions: selectedCheatPositionsRef.current,
+    weavePositions: selectedCheatWeavePositionsRef.current,
+  });
+  const combinedReady =
+    canStartApply &&
+    runInput.inputs.length === 1 &&
+    (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
+  const { weaveExport, changeWeavePackage } = useApplyWeaveExport({
+    weaveValidationError,
+    getCheats: () =>
+      selectedCheatsRef.current.flatMap((entry, index) =>
+        cheatDelivery(entry) === "rom"
+          ? [{ record: entry.record, position: selectedCheatWeavePositionsRef.current[index] ?? 0 }]
+          : [],
+      ),
+    cheatsOn,
+    getSessionSources: () =>
+      withPreparedWorkflow(getRunInput(), {}, async ({ workflow }) => workflow.getWeaveExportSources()),
+    sourcesRevision: combinedRevision,
+    weaveMetaById,
+    weaveSourcesRef,
+    defaultWeaveContents,
+    defaultWeaveFormat,
     disabledPatchIds,
     getPatchIds,
-    lastInputsRef,
     mutationQueueRef,
     outputState,
     patchInputBasis,
@@ -1618,23 +1840,99 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowHandle,
   });
 
+  const combinedPatch = useCombinedPatch({
+    revision: combinedRevision,
+    name: outputState.displayFileName,
+    ready: combinedReady,
+    disabled: !!props.disabled || weaveExport.busy || outputState.applyButton.loading,
+    patchType: props.patchType,
+    defaultPatchType: props.defaultPatchType,
+    onPatchTypeChange: props.onPatchTypeChange,
+    romSize: workflowSnapshot.romSize,
+    ...getEnabledPatchTargetSizes(workflowSnapshot.patchTargetSizes, getPatchIds(), disabledPatchIds),
+    settings: props.createSettings,
+    onComplete: props.onCreateComplete,
+    onError: props.onError,
+    run: ({ settings, signal, onProgress }) => {
+      const input = getRunInput();
+      return executePatchWorkflow(
+        { ...input, options: { ...input.options, signal } },
+        (workflow) => workflow.createCombinedPatch(settings) as Promise<BrowserCreateResult>,
+        onProgress,
+      );
+    },
+  });
+  useEffect(() => setCreatingCombined(combinedPatch.busy), [combinedPatch.busy]);
+  const notifyBusy = props.onBusyChange;
+  const anyJobBusy = combinedPatch.busy || weaveExport.busy || outputState.applyButton.loading;
+  useEffect(() => {
+    notifyBusy?.(anyJobBusy);
+  }, [anyJobBusy, notifyBusy]);
+
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
   // until their ROM-vs-patch bucket is classified.
-  const { onDrop: handleUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
+  // A drop that cannot be read (malformed weave, missing patch file) is dropped from the bench;
+  // keep its message on the page until the next drop so the user is not left with an empty state.
+  const [dropError, setDropError] = useState<string | null>(null);
+  const { onDrop: rawUnifiedDrop, pendingDrops } = useUnifiedApplyDrop(
     resolvedUiController,
-    setLocalBundleSession,
-    props.onError,
+    setLocalWeaveSession,
+    (error) => {
+      setDropError(formatCodedErrorForDisplay(error, localizer));
+      props.onError?.(error);
+    },
     selectFile,
   );
+  const handleUnifiedDrop: typeof rawUnifiedDrop = (...args) => {
+    setDropError(null);
+    rawUnifiedDrop(...args);
+  };
+  const [createRomChoice, setCreateRomChoice] = useState<File[] | null>(null);
   const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
-    handleUnifiedDrop(files, undefined, undefined, onSettled);
+    if (mode !== "create" || !props.onCreateRomDrop) {
+      handleUnifiedDrop(files, undefined, undefined, onSettled);
+      return;
+    }
+    void readDropEntries(files)
+      .then((entries) => {
+        const counts = countDropEntries(entries);
+        if (
+          counts.patches === 0 &&
+          counts.weaves === 0 &&
+          !entries.some((entry) => entry.hasPatches) &&
+          counts.roms + counts.unknown > 0
+        ) {
+          if (files.length !== 1) {
+            props.onCreateRomDrop?.(files);
+            onSettled?.();
+            return;
+          }
+          if (!props.inputs?.length) {
+            handleUnifiedDrop(files, undefined, undefined, onSettled);
+            return;
+          }
+          // Over an existing Original, one ROM could replace it or become the Modified ROM, so ask.
+          setCreateRomChoice(files);
+          onSettled?.();
+          return;
+        }
+        handleUnifiedDrop(files, undefined, undefined, onSettled);
+      })
+      .catch((error) => {
+        props.onError?.(error instanceof Error ? error : new Error(String(error)));
+        onSettled?.();
+      });
   };
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
   const handledPageDropIdRef = useRef<number | null>(null);
-  usePageDropForwarder(props.pageDrop, (files) => handleUnifiedDrop(files), handledPageDropIdRef);
+  usePageDropForwarder(
+    props.active === false ? null : props.pageDrop,
+    (files) => new Promise<void>((resolve) => handleUnifiedDropFiles(files, resolve)),
+    handledPageDropIdRef,
+  );
 
   handleSelectionCancelledRef.current = (request) => {
     const normalizedSourceName = request.sourceName.trim().toLowerCase();
@@ -1659,116 +1957,138 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (removeId) resolvedUiController.removeRomInput?.(removeId);
   };
 
-  const applyActionEnabled = !(
-    outputState.applyButton.disabled ||
-    outputState.applyButton.loading ||
-    outputState.pendingDownloadFileName
-  );
+  const applyActionEnabled =
+    canApplySelection({ patchCount: currentPatchNames.length, enabledPatchCount, cheatsPresent, cheatsOn }) &&
+    isApplyButtonActionable(outputState.applyButton) &&
+    !outputState.applyButton.loading &&
+    !outputState.pendingDownloadFileName;
   const downloadActionEnabled =
     !(outputState.applyButton.disabled || outputState.applyButton.loading) && !!outputState.pendingDownloadFileName;
-  const cancelActionEnabled = outputState.applyButton.loading || bundleExport.busy;
-  useAgentWorkflow(mode === "bundle" ? "bundle" : "patcher", {
-    getState: () => {
-      const uiState = resolvedUiController.getState();
-      const stackState = resolvedStackController.getState();
-      return {
-        mode,
-        sources: lastInputsRef.current.map(describeAgentSource),
-        patches: currentPatchesRef.current.map((source, index) => ({
-          ...describeAgentSource(source),
-          enabled: !disabledPatchIds.has(getPatchIds()[index] || ""),
-          item: stackState.items[index] || null,
-        })),
-        settings: traceSettings,
-        options: { patchInputBasis },
-        ready: applyReady,
-        staging:
-          uiState.patchInput.loading ||
-          uiState.romInputs.some((input) => input.loading) ||
-          stackState.items.some((item) => !!item.progress),
-        busy: outputState.applyButton.loading || bundleExport.busy,
-        error:
-          [uiState.inputNotice, uiState.patchNotice, uiState.outputNotice].find((notice) => notice.visible)?.message ||
-          bundleExport.error ||
-          null,
-        progress: outputState.applyButton.progress || bundleExport.progress,
-        output: {
-          downloadable: !!outputState.pendingDownloadFileName,
-          name: outputState.resolvedOutputName,
-          requestedName: outputState.displayFileName,
-          compression: outputState.compressionFormat,
-          ready: !outputState.applyButton.disabled,
-        },
-        cheats: {
-          enabled: cheatsOn,
-          names: cheatNames,
-          conflict: cheatConflictMessage || null,
-          outputReady: !!completedCheats,
-        },
-        bundle: {
-          session: activeBundleSession
-            ? {
-                key: activeBundleSession.key,
-                name: activeBundleSession.name,
-                patchCount: activeBundleSession.entries.length,
-              }
-            : null,
-          metadata: getPatchIds().map((id) => ({ id, ...bundleMetaById.get(id) })),
-          chainStatus: bundleChainStatus,
-          sessionMatches: bundleSessionMatches,
-          export: {
-            bundleRom: bundleExport.bundleRom,
-            busy: bundleExport.busy,
-            downloadable: bundleExport.downloadable,
-            error: bundleExport.error || null,
-            format: bundleExport.format,
-            progress: bundleExport.progress,
-            ready: bundleExport.ready,
+  const cancelActionEnabled = anyJobBusy;
+  const createActionEnabled = combinedReady && !anyJobBusy && !props.disabled;
+  const agentView = { create: "creator", weave: "weave", apply: "patcher" } as const;
+  useAgentWorkflow(
+    agentView[mode],
+    {
+      getState: () => {
+        const uiState = resolvedUiController.getState();
+        const stackState = resolvedStackController.getState();
+        return {
+          mode,
+          sources: lastInputsRef.current.map(describeAgentSource),
+          patches: currentPatchesRef.current.map((source, index) => ({
+            ...describeAgentSource(source),
+            enabled: !disabledPatchIds.has(getPatchIds()[index] || ""),
+            item: stackState.items[index] || null,
+          })),
+          settings: traceSettings,
+          options: { patchInputBasis },
+          ready: applyReady,
+          staging:
+            uiState.patchInput.loading ||
+            uiState.romInputs.some((input) => input.loading) ||
+            stackState.items.some((item) => !!item.progress),
+          busy: anyJobBusy,
+          error:
+            [uiState.inputNotice, uiState.patchNotice, uiState.outputNotice].find(
+              (notice) => notice.visible && notice.level !== "warning",
+            )?.message ||
+            weaveExport.error ||
+            null,
+          progress: outputState.applyButton.progress || weaveExport.progress,
+          output: {
+            downloadable: !!outputState.pendingDownloadFileName,
+            name: outputState.resolvedOutputName,
+            requestedName: outputState.displayFileName,
+            compression: outputState.compressionFormat,
+            ready: isApplyButtonActionable(outputState.applyButton),
+          },
+          cheats: {
+            enabled: cheatsOn,
+            names: cheatNames,
+            conflict: cheatConflictMessage || null,
+            outputReady: !!completedCheats,
+          },
+          weave: {
+            session: activeWeaveSession
+              ? {
+                  key: activeWeaveSession.key,
+                  name: activeWeaveSession.name,
+                  patchCount: activeWeaveSession.entries.length,
+                }
+              : null,
+            metadata: getPatchIds().map((id) => ({ id, ...weaveMetaById.get(id) })),
+            chainStatus: weaveChainStatus,
+            sessionMatches: weaveSessionMatches,
+            export: {
+              weaveRom: weaveExport.weaveRom,
+              busy: weaveExport.busy,
+              downloadable: weaveExport.downloadable,
+              error: weaveExport.error || weaveExport.blockedReason || null,
+              format: weaveExport.format,
+              progress: weaveExport.progress,
+              ready: weaveExport.ready,
+            },
+          },
+        };
+      },
+      actions: {
+        createPatch: {
+          description: "Create and download a combined patch from the enabled patches and cheats.",
+          enabled: createActionEnabled,
+          execute: () => {
+            if (createActionEnabled) return combinedPatch.run();
+            return undefined;
           },
         },
-      };
+        apply: {
+          description: "Apply the staged patch stack and download the output.",
+          enabled: applyActionEnabled,
+          execute: () => {
+            if (applyActionEnabled) return resolvedOutputController.runPrimaryAction();
+            return undefined;
+          },
+        },
+        download: {
+          description: "Download the completed patched output.",
+          enabled: downloadActionEnabled,
+          execute: () => {
+            if (downloadActionEnabled) return resolvedOutputController.runPrimaryAction();
+            return undefined;
+          },
+        },
+        cancel: {
+          description: "Cancel the active output operation.",
+          enabled: cancelActionEnabled,
+          execute: () => {
+            if (combinedPatch.busy) return combinedPatch.cancel();
+            if (weaveExport.busy) return weaveExport.cancelExport();
+            if (outputState.applyButton.loading) return resolvedOutputController.cancelPrimaryAction?.();
+            return undefined;
+          },
+        },
+        exportWeave: {
+          description: "Create or download a weave from the staged ROM and patches.",
+          enabled: weaveExport.ready && !anyJobBusy,
+          execute: () => {
+            if (weaveExport.ready && !anyJobBusy) return weaveExport.runExport();
+            return undefined;
+          },
+        },
+      },
     },
-    actions: {
-      apply: {
-        description: "Apply the staged patch stack and download the output.",
-        enabled: applyActionEnabled,
-        execute: () => {
-          if (applyActionEnabled) return resolvedOutputController.runPrimaryAction();
-          return undefined;
-        },
-      },
-      download: {
-        description: "Download the completed patched output.",
-        enabled: downloadActionEnabled,
-        execute: () => {
-          if (downloadActionEnabled) return resolvedOutputController.runPrimaryAction();
-          return undefined;
-        },
-      },
-      cancel: {
-        description: "Cancel the active apply or bundle export operation.",
-        enabled: cancelActionEnabled,
-        execute: () => {
-          if (bundleExport.busy) return bundleExport.cancelExport();
-          if (outputState.applyButton.loading) return resolvedOutputController.cancelPrimaryAction?.();
-          return undefined;
-        },
-      },
-      exportBundle: {
-        description: "Create or download a bundle from the staged ROM and patches.",
-        enabled: bundleExport.ready && !bundleExport.busy,
-        execute: () => {
-          if (bundleExport.ready && !bundleExport.busy) return bundleExport.runExport();
-          return undefined;
-        },
-      },
-    },
-  });
+    props.active !== false,
+  );
 
   return (
     <>
       <ApplyWorkflowFormView
+        cheatsPage={props.cheatsPage}
         mode={mode}
+        combinedPatch={combinedPatch}
+        createModeControls={props.createModeControls}
+        createCheatSampleRequestId={props.createCheatSampleRequestId}
+        onPracticeDrop={(files) => handleUnifiedDrop(files)}
         cheats={({ headerStripConflict, renderStack }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
@@ -1776,6 +2096,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             {...practiceCheatCatalog}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
+            onPresenceChange={setCheatsPresent}
             outputSummary={completedCheats}
             rom={cheatRom}
             renderStack={renderStack}
@@ -1783,29 +2104,34 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           />
         )}
         cheatsOn={cheatsOn}
+        cheatsPresent={cheatsPresent}
         onPracticeCheatSampleChange={setPracticeCheatSample}
         emulatorOutput={completedOutput}
-        bundleExport={bundleExport}
-        bundleMetaById={bundleMetaById}
-        bundleSessionMatches={bundleSessionMatches}
+        weaveExport={weaveExport}
+        weaveMetaById={weaveMetaById}
+        weaveSessionMatches={weaveSessionMatches}
         controllers={{
           notice: localNoticeController,
           output: resolvedOutputController,
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
-        {...(activeBundleSession?.chainEndpointChecks.input
-          ? { bundleExpectedRomChecks: activeBundleSession.chainEndpointChecks.input }
+        {...(weaveRomEnforced && activeWeaveSession?.chainEndpointChecks.input
+          ? { weaveExpectedRomChecks: activeWeaveSession.chainEndpointChecks.input }
           : {})}
-        {...(activeBundleSession?.romExpectation ? { bundleRomExpectation: activeBundleSession.romExpectation } : {})}
-        bundleTools={{
+        {...(weaveRomEnforced && activeWeaveSession?.romExpectation
+          ? { weaveRomExpectation: activeWeaveSession.romExpectation }
+          : {})}
+        weaveTools={{
           hasOptionalEntries:
-            !!activeBundleSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
+            !!activeWeaveSession?.entries.some((entry) => entry.optional) || disabledPatchIds.size > 0,
           outputVerification,
-          setBundlePackage: changeBundlePackage,
+          setWeavePackage: changeWeavePackage,
         }}
-        onBundleMetaChange={updateBundleMetaImmediately}
-        onBundleMetaBulkChange={updateBundleMetaForIdsImmediately}
+        onWeaveMetaChange={updateWeaveMetaImmediately}
+        onDraftValidityChange={onDraftValidityChange}
+        applyValidationError={applyValidationError}
+        onWeaveMetaBulkChange={updateWeaveMetaForIdsImmediately}
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
@@ -1817,11 +2143,44 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }}
         patchInputBasis={patchInputBasis}
         onPatchInputBasisChange={handlePatchInputBasisChange}
+        dropError={dropError}
         pendingDrops={pendingDrops}
         romLookupRequest={props.romLookupRequest}
         startup={startup}
       />
       {candidateSelectionDialog}
+      {createRomChoice ? (
+        <Modal
+          onClose={() => setCreateRomChoice(null)}
+          open
+          subtitle={localizer.message("ui.combinedPatch.romChoice.subtitle", { name: createRomChoice[0]?.name || "" })}
+          title={localizer.message("ui.combinedPatch.romChoice.title")}
+          variant="select-modal"
+        >
+          <SelectionTree
+            items={[
+              {
+                id: "original",
+                name: localizer.message("ui.combinedPatch.romChoice.replace"),
+                note: localizer.message("ui.combinedPatch.romChoice.replaceNote"),
+                selectable: true,
+              },
+              {
+                id: "modified",
+                name: localizer.message("ui.combinedPatch.romChoice.modified"),
+                note: localizer.message("ui.combinedPatch.romChoice.modifiedNote"),
+                selectable: true,
+              },
+            ]}
+            onSelect={(id) => {
+              const files = createRomChoice;
+              setCreateRomChoice(null);
+              if (id === "original") handleUnifiedDrop(files);
+              else props.onCreateRomDrop?.(files, true);
+            }}
+          />
+        </Modal>
+      ) : null}
     </>
   );
 }

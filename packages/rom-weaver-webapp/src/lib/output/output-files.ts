@@ -11,9 +11,15 @@ import {
   z3dsUnderlyingExtensionForCompressedExtension,
   z3dsUnderlyingExtensionForMagic,
 } from "../compression/z3ds-subtypes.ts";
-import { appendFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { appendFileNameExtension } from "../input/path-utils.ts";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
-import { CHD_EXTENSION_REGEX, getFileNameExtension } from "../path-utils.ts";
+import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
+import {
+  getLiteralFileNameExtension,
+  hasKnownOutputExtension,
+  removeKnownOutputExtension,
+  withOutputExtension,
+} from "./output-name-validation.ts";
 
 const RVZ_EXTENSION_REGEX = createRomSpecificExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
 const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip)$/i;
@@ -64,8 +70,7 @@ const getCompressedOutputFileName = (
   }
 
   const sourceExtension = source ? getSourceExtension(source, "") : "";
-  const resolvedSourceFileName =
-    !hasFileNameExtension(fileName) && sourceExtension ? replaceFileNameExtension(fileName, sourceExtension) : fileName;
+  const resolvedSourceFileName = withOutputExtension(fileName, sourceExtension);
   const compressionSource =
     source && typeof source === "object"
       ? {
@@ -86,14 +91,12 @@ const getChdIntermediateFileName = (
   chdOutputMode: string | null | undefined,
 ): string => {
   if (!source) return fileName;
-  if (!hasFileNameExtension(fileName)) {
-    const sourceExtension = getSourceExtension(source, chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso");
-    return replaceFileNameExtension(fileName, sourceExtension);
-  }
+  const defaultExtension = getSourceExtension(source, chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso");
+  if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
   if (CHD_EXTENSION_REGEX.test(fileName)) {
     const sourceExtension = getSourceExtension(source, chdOutputMode === "cd" ? "bin" : "iso");
-    return replaceFileNameExtension(
-      fileName,
+    return appendFileNameExtension(
+      removeKnownOutputExtension(fileName),
       sourceExtension || (chdModeFromMetadata(source?.metadata) === "cd" ? "bin" : "iso"),
     );
   }
@@ -102,11 +105,10 @@ const getChdIntermediateFileName = (
 
 const getArchiveIntermediateFileName = (fileName: string, source: SourceFileLike | null | undefined): string => {
   if (!source) return fileName;
-  if (!hasFileNameExtension(fileName)) return replaceFileNameExtension(fileName, getSourceExtension(source, "bin"));
-  if (ARCHIVE_EXTENSION_REGEX.test(fileName)) {
-    const sourceExtension = getSourceExtension(source, "bin");
-    return replaceFileNameExtension(fileName, sourceExtension || "bin");
-  }
+  const defaultExtension = getSourceExtension(source, "bin");
+  if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
+  if (ARCHIVE_EXTENSION_REGEX.test(fileName))
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), defaultExtension);
   return fileName;
 };
 
@@ -114,14 +116,10 @@ const getRvzIntermediateFileName = (fileName: string, source: SourceFileLike | n
   if (!source) return fileName;
   const normalizeRvzSourceExtension = (extension: string) =>
     extension && hasRomSpecificExtension(RVZ_DECOMPRESSION_INPUT_EXTENSIONS, extension) ? "iso" : extension;
-  if (!hasFileNameExtension(fileName)) {
-    const sourceExtension = normalizeRvzSourceExtension(getSourceExtension(source, "iso"));
-    return replaceFileNameExtension(fileName, sourceExtension);
-  }
-  if (RVZ_EXTENSION_REGEX.test(fileName)) {
-    const sourceExtension = normalizeRvzSourceExtension(getSourceExtension(source, "iso"));
-    return replaceFileNameExtension(fileName, sourceExtension || "iso");
-  }
+  const defaultExtension = normalizeRvzSourceExtension(getSourceExtension(source, "iso"));
+  if (!hasKnownOutputExtension(fileName, defaultExtension)) return appendFileNameExtension(fileName, defaultExtension);
+  if (RVZ_EXTENSION_REGEX.test(fileName))
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), defaultExtension || "iso");
   return fileName;
 };
 
@@ -137,19 +135,15 @@ const getZ3dsDecompressedSourceExtension = (source: SourceFileLike | null | unde
 const getZ3dsIntermediateFileName = (fileName: string, source: SourceFileLike | null | undefined): string => {
   if (!source) return fileName;
   const sourceExtension = getZ3dsDecompressedSourceExtension(source);
-  if (!hasFileNameExtension(fileName)) {
-    return replaceFileNameExtension(fileName, sourceExtension);
-  }
-  if (isZ3dsCompressedExtension((getFileNameExtension(fileName) ?? "").toLowerCase())) {
-    return replaceFileNameExtension(fileName, sourceExtension);
+  if (!hasKnownOutputExtension(fileName, sourceExtension)) return appendFileNameExtension(fileName, sourceExtension);
+  if (isZ3dsCompressedExtension(getLiteralFileNameExtension(fileName))) {
+    return appendFileNameExtension(removeKnownOutputExtension(fileName), sourceExtension);
   }
   return fileName;
 };
 
 const getRawIntermediateFileName = (fileName: string, source: SourceFileLike | null | undefined): string => {
-  if (!source || hasFileNameExtension(fileName)) return fileName;
-  const sourceExtension = getSourceExtension(source, "");
-  return sourceExtension ? replaceFileNameExtension(fileName, sourceExtension) : fileName;
+  return source ? withOutputExtension(fileName, getSourceExtension(source, "")) : fileName;
 };
 
 const getCompressionIntermediateFileName = (

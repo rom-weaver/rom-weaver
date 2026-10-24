@@ -156,6 +156,32 @@ pub fn parse_expect_tokens(
     Ok(spec)
 }
 
+/// Parse one `--patch-input-check` / `--patch-output-check` value: a
+/// comma-separable list of `ALGO=HEX` and `size=N` tokens (empty means none).
+/// A declared chain state is exact, so `min-size=N` is rejected, as the
+/// `patch apply --expect-in/--expect-out` flags reject it.
+pub(crate) fn parse_patch_check_value(value: &str, flag_name: &str) -> Result<ExpectSpec> {
+    let tokens: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(str::to_owned)
+        .collect();
+    let spec = parse_expect_tokens(&tokens, flag_name, true)?;
+    if spec.min_size.is_some() {
+        return Err(RomWeaverError::Validation(format!(
+            "{flag_name} does not accept min-size=N; use size=N for the exact byte length"
+        )));
+    }
+    tracing::trace!(
+        flag = flag_name,
+        tokens = tokens.len(),
+        size = ?spec.size,
+        "parsed patch check value"
+    );
+    Ok(spec)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

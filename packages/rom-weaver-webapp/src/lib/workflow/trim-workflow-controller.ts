@@ -16,6 +16,7 @@ import { RomWeaverError } from "../errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { runTrimWorkflow } from "../trim/workflow.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
@@ -51,6 +52,7 @@ type InternalSourceState = {
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
+  trimSupported?: boolean;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -83,6 +85,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         size: state.size,
         sourceSize: state.sourceSize,
         status: state.status,
+        trimSupported: state.trimSupported,
         warnings: state.warnings.map(cloneWarning),
         wasDecompressed: state.wasDecompressed,
       } satisfies TrimWorkflowSourceState)
@@ -144,9 +147,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     if (isCompressionFormat(configuredCompression)) {
       this.outputFormat = configuredCompression;
     }
-    if (typeof this.settings.output?.outputName === "string" && this.settings.output.outputName.trim()) {
+    if (sanitizeTypedOutputName(this.settings.output?.outputName)) {
       this.manualOutputName = true;
-      this.outputName = this.settings.output.outputName;
+      this.outputName = this.settings.output?.outputName ?? "";
     } else {
       this.outputName = this.buildAutomaticOutputName();
     }
@@ -173,6 +176,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         this.inputStage = stage;
         await this.inputStages.maybeResolveBlockingStageSelection(stage);
         await this.finalizeInputStableState(stage);
+        await this.probeTrimSupport(stage);
         if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
       } catch (error) {
         await this.releaseInputStage();
@@ -199,7 +203,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
 
   async setOutputName(name: string): Promise<void> {
     return this.mutate("setOutputName", async () => {
-      const normalizedName = name.trim();
+      const normalizedName = sanitizeTypedOutputName(name);
       this.manualOutputName = !!normalizedName;
       this.outputName = this.manualOutputName ? this.normalizeOutputName(name) : this.buildAutomaticOutputName();
     });
@@ -219,7 +223,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (stage.state.status !== "ready" || !stage.state.selectedCandidateId)
         throw new RomWeaverError("AMBIGUOUS_SELECTION", "Trim source requires candidate selection");
       this.getOutputCompression();
-      const outputName = this.outputName.trim();
+      const outputName = this.normalizeOutputName(this.outputName);
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
       const result = await runTrimWorkflow(this.createTrimInput(stage), this.runtime);
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
@@ -325,6 +329,25 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     stage.state.romType = cloneRomType(primaryAsset?.romType);
   }
 
+  /** Dry-run the trim plan so an unsupported input is flagged at staging, before any confirm or run. */
+  private async probeTrimSupport(stage: StagedSource<TSource>) {
+    if (stage.state.status !== "ready") return;
+    try {
+      await this.runtime.trim?.trim?.({
+        dryRun: true,
+        outputName: "",
+        signal: this.abortController.signal,
+        source: (this.getPreparedTrimSource(stage) || stage.source) as never,
+      });
+      stage.state.trimSupported = true;
+    } catch (error) {
+      // Only a definite "unsupported" verdict counts; other probe failures must not block trimming.
+      if ((error as Error)?.message !== "This input does not support trimming") return;
+      stage.state.trimSupported = false;
+      this.pushWarning(stage, Object.assign(error as Error, { code: "TRIM_UNSUPPORTED" }));
+    }
+  }
+
   private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {
     return getPrimaryInputAsset(stage.preparedInputAssets || [])?.file;
   }
@@ -353,7 +376,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
   }
 
   private normalizeOutputName(name: string) {
-    const normalizedName = name.trim();
+    const normalizedName = sanitizeTypedOutputName(name);
     const input = this.getInput();
     if (!(normalizedName && input?.fileName)) return normalizedName;
     const outputBaseName = getFileNameWithoutExtension(normalizedName).trim().toLowerCase();
@@ -371,7 +394,9 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       output: {
         ...cloneValue(this.settings.output || {}),
         compression: this.getOutputCompression(),
-        outputName: this.normalizeOutputName(this.outputName || this.settings.output?.outputName || ""),
+        outputName:
+          this.normalizeOutputName(this.outputName || this.settings.output?.outputName || "") ||
+          this.buildAutomaticOutputName(),
       },
       signal: this.abortController.signal,
       workers: cloneValue(this.settings.workers || {}),

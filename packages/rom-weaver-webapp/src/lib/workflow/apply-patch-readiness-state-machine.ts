@@ -1,11 +1,31 @@
 import { RomWeaverError, toRomWeaverError } from "../errors.ts";
+import { isDcpPatchStage, markDcpPatchUnsupported } from "./apply-dcp-patch.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { resolveApplyHeaderMode, resolveApplyN64ByteOrder, toNormalizedCrc32 } from "./apply-header-resolution.ts";
 import type { InternalPatchChecksumPreflight, StagedSource } from "./apply-workflow-state.ts";
 import { getInputAssetChecksums } from "./staged-source-checksums.ts";
+import { loneBareFile } from "../apply/bare-member-target.ts";
 
 type PatchReadinessAdapters<TSource> = {
   getPatchableInputAssets: () => InputAsset[];
+  declaredInputChecks?: string;
+  /** The ROM member the patch names as its input or target. A lone bare file that no member
+   * reference resolved to is then not the target: it stays unassigned instead of being picked as
+   * the only candidate, and the row reports why (see `describeBareMemberFailure`). */
+  memberRef?: string;
+  /** Why a lone bare file does not stand in for `memberRef`: it matches several members, or it
+   * matches neither by name nor by checks. */
+  describeBareMemberFailure?: (bare: InputAsset) => string | undefined;
+  /** True for the first patch on `target` (each target is its own engine run) when it reads the
+   * original ROM. Only that patch's file name `[crc32:..]` token is an input requirement (the CLI
+   * enforces the same); a later patch's input is usually the previous patch's output, which the
+   * token describes. */
+  filenameCrc32AppliesTo?: (target: InputAsset) => boolean;
+  previousLayout?: StagedSource<TSource>["state"];
+  /** The CRC32 of the checksum variant (header-stripped or an N64 byte order) the weave's
+   * `rom.checks` matched on `target`, when only a variant matched. A patch with no layout
+   * evidence of its own takes its header and byte-order decision from it. */
+  getWeaveLayoutCrc32?: (target: InputAsset) => string | undefined;
   /** Invoked when the patch is staged and parsed but has no ROM to verify against yet (the input is
    * still being prepared). Lets the row replace its lingering staging label with a "waiting on the
    * ROM" status instead of the misleading "checking nested archives in extracted outputs". */
@@ -105,8 +125,13 @@ const createChecksumPreflightVerdict = ({
 const createApplyPatchChecksumPreflight = <TSource>(
   stage: StagedSource<TSource>,
   target: InputAsset,
+  weaveLayoutCrc32?: string,
+  declaredInputChecks?: string,
+  previousLayout?: StagedSource<TSource>["state"],
+  filenameCrc32Applies = false,
 ): InternalPatchChecksumPreflight => {
   const requirements = stage.state.requirements;
+  const filenameCrc32 = filenameCrc32Applies ? requirements?.filenameCrc32 : undefined;
   // A user-typed expected input CRC32 (8 hex chars; longer hashes are enforced by
   // the engine at apply time) joins the patch's own requirements: it feeds the
   // header auto-resolution and the preflight verdict exactly like a filename token.
@@ -119,12 +144,34 @@ const createApplyPatchChecksumPreflight = <TSource>(
   // headerless bytes - so the preflight must compare those, not the raw file.
   const wanted = {
     ...(requirements?.sourceCrc32 === undefined ? {} : { sourceCrc32: requirements.sourceCrc32 }),
-    filenameCrc32: requirements?.filenameCrc32 ?? userInputCrc32,
+    filenameCrc32: filenameCrc32 ?? userInputCrc32,
   };
   const available = { checksums: getInputAssetChecksums(target), checksumVariants: target.checksumVariants };
-  const headerResolution = resolveApplyHeaderMode(wanted, available);
+  // A patch with no checksum evidence of its own applies to the layout the weave's ROM check
+  // matched. Any declared or embedded source check, in any algorithm, is the patch's own evidence
+  // and leaves the decision to it (and the engine). The weave CRC32 only steers the decision; it
+  // never joins the preflight requirement.
+  const ownLayoutEvidence =
+    wanted.sourceCrc32 !== undefined ||
+    wanted.filenameCrc32 !== undefined ||
+    !!requirements?.hasSourceChecksums ||
+    !!stage.state.inputChecks?.trim() ||
+    !!declaredInputChecks?.trim() ||
+    !!stage.state.validateInputChecksum?.trim();
+  const layoutWanted = !ownLayoutEvidence && weaveLayoutCrc32 ? { sourceCrc32: weaveLayoutCrc32 } : wanted;
+  const headerResolution = resolveApplyHeaderMode(layoutWanted, available);
+  // Previous-output checks MUST keep the preceding layout; they describe patched bytes,
+  // not a separate layout of the original ROM. Explicit drawer choices still win below.
+  if (headerResolution && previousLayout?.headerResolution) {
+    headerResolution.mode = previousLayout.headerChoice ?? previousLayout.headerResolution.mode;
+    headerResolution.decided = previousLayout.headerChoice !== undefined || previousLayout.headerResolution.decided;
+  }
   stage.state.headerResolution = headerResolution;
-  const n64Resolution = resolveApplyN64ByteOrder(wanted, available);
+  const n64Resolution = resolveApplyN64ByteOrder(layoutWanted, available);
+  if (n64Resolution && previousLayout?.n64Resolution) {
+    n64Resolution.mode = previousLayout.n64ByteOrderChoice ?? previousLayout.n64Resolution.mode;
+    n64Resolution.decided = previousLayout.n64ByteOrderChoice !== undefined || previousLayout.n64Resolution.decided;
+  }
   stage.state.n64Resolution = n64Resolution;
   const effectiveHeaderMode = stage.state.headerChoice ?? headerResolution?.mode ?? "keep";
   const headerRemoved = effectiveHeaderMode === "strip" && !!headerResolution;
@@ -148,15 +195,18 @@ const createApplyPatchChecksumPreflight = <TSource>(
   const minimumSourceSize = toFiniteSize(requirements?.minimumSourceSize);
   const requiredCrc32 =
     toNormalizedCrc32(requirements?.sourceCrc32) ??
-    toNormalizedCrc32(requirements?.filenameCrc32) ??
+    toNormalizedCrc32(filenameCrc32) ??
     toNormalizedCrc32(userInputCrc32);
-  return createChecksumPreflightVerdict({
+  const verdict = createChecksumPreflightVerdict({
     actualCrc32,
     actualSize,
     minimumSourceSize,
     requiredCrc32,
     requiredSize,
   });
+  // Only a file-name token (never the engine's view) may outrank a passing dry run in the staging model.
+  const requiredFromFilename = !toNormalizedCrc32(requirements?.sourceCrc32) && !!toNormalizedCrc32(filenameCrc32);
+  return requiredFromFilename ? { ...verdict, requiredCrc32FromFilename: true } : verdict;
 };
 
 /** Separates the target/preflight key from the chain fingerprint the validation pass appends. */
@@ -212,6 +262,7 @@ const createApplyPatchValidationKey = <TSource>(
 const resolveApplyPatchTargetForStage = async <TSource>(
   stage: StagedSource<TSource>,
   assets: InputAsset[],
+  hasMemberRef = false,
 ): Promise<InputAsset | null> => {
   if (!assets.length) {
     clearApplyPatchTarget(stage);
@@ -220,6 +271,13 @@ const resolveApplyPatchTargetForStage = async <TSource>(
   if (assets.length === 1) {
     const [target] = assets;
     if (!target) return null;
+    // A member-targeted patch takes only an asset its member reference resolved to (the caller
+    // assigned it); the lone asset is not a fallback, or the row would show Verified and then fail
+    // at Apply with "ROM member was not found".
+    if (hasMemberRef && !stage.state.targetInputId) {
+      clearApplyPatchTarget(stage);
+      return null;
+    }
     assignApplyPatchTarget(stage, target);
     return target;
   }
@@ -276,16 +334,25 @@ const settleApplyPatchTarget = async <TSource>(
   assets: InputAsset[],
 ) => {
   try {
-    const target = await resolveApplyPatchTargetForStage(stage, assets);
+    const target = await resolveApplyPatchTargetForStage(stage, assets, !!adapters.memberRef);
     stage.state.status = target ? "ready" : "needsSelection";
-    const preflight = target ? createApplyPatchChecksumPreflight(stage, target) : undefined;
+    const preflight = target
+      ? createApplyPatchChecksumPreflight(
+          stage,
+          target,
+          adapters.getWeaveLayoutCrc32?.(target),
+          adapters.declaredInputChecks,
+          adapters.previousLayout,
+          adapters.filenameCrc32AppliesTo?.(target) ?? false,
+        )
+      : undefined;
     stage.state.checksumPreflight = preflight;
     dropStaleValidation(stage, target, preflight);
     if (target) return;
-    adapters.pushWarning(
-      stage,
-      new RomWeaverError("AMBIGUOUS_SELECTION", `${stage.state.fileName || "Patch"} target selection is required`),
-    );
+    const bare = adapters.memberRef ? loneBareFile(assets) : undefined;
+    const bareFailure = bare ? adapters.describeBareMemberFailure?.(bare) : undefined;
+    const message = bareFailure ?? `${stage.state.fileName || "Patch"} target selection is required`;
+    adapters.pushWarning(stage, new RomWeaverError("AMBIGUOUS_SELECTION", message));
   } catch (error) {
     const normalized = toRomWeaverError(error);
     if (normalized.code !== "AMBIGUOUS_SELECTION" && normalized.code !== "PATCH_TARGET_MISMATCH") throw normalized;
@@ -304,6 +371,10 @@ const evaluateApplyPatchReadiness = async <TSource>(
     (warning) => !PATCH_TARGET_SELECTION_ERROR_CODES.has(String(warning.code || "")),
   );
   const changed = () => previousStatus !== stage.state.status;
+  if (isDcpPatchStage(stage)) {
+    markDcpPatchUnsupported(stage);
+    return changed();
+  }
   if (stage.state.status === "loading" && !stage.preparedPatchFile && !stage.state.candidates.length) return false;
   if (!stage.state.selectedCandidateId) {
     clearApplyPatchTarget(stage);
@@ -312,6 +383,8 @@ const evaluateApplyPatchReadiness = async <TSource>(
   }
   if (!stage.preparedPatchFile) await adapters.prepareSelectedSource(stage);
   if (!stage.parsedPatch) await adapters.parsePatch(stage);
+  // Unreadable patch: parsePatch recorded the failure on the card; keep it instead of resetting.
+  if (!stage.parsedPatch && stage.state.patchValidation?.unreadable) return changed();
   const assets = adapters.getPatchableInputAssets();
   if (!(assets.length && stage.parsedPatch)) {
     clearApplyPatchTarget(stage);

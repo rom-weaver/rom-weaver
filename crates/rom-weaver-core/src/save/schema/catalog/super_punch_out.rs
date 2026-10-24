@@ -22,9 +22,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         let check = Check { when: None, assert: Condition::new(move |bytes| Ok(u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]) == checksum(bytes, base))), code: "super_punch_out_checksum".into(), message: "the Super Punch-Out!! slot checksum is invalid".into(), section_id: None, warning: None };
         GameDefinition {
             fields: vec![
-                FieldDefinition::new("losses".into(), "Losses".into(), base + 0x17f, Storage::U8),
-                FieldDefinition::new("wins".into(), "Wins".into(), base + 0x17e, Storage::U8).editable(false).description("Read-only because lowering wins can also change the beaten-opponents mask.".into()),
-                FieldDefinition::new("championship_progression".into(), "Championship progression code".into(), base + 0x104, Storage::U8).editable(false),
+                catalog_field("losses", "Losses", base + 0x17f, Storage::U8),
+                catalog_field("wins", "Wins", base + 0x17e, Storage::U8).editable(false).description("Read-only because lowering wins can also change the beaten-opponents mask.".into()),
+                catalog_field("championship_progression", "Championship progression code", base + 0x104, Storage::U8).editable(false),
             ],
             description: format!("Edits the independent loss counter in profile {}. Names, wins, opponent flags, and records are omitted because they use coupled or packed write rules.", slot + 1),
             signatures: vec![SignatureDefinition { offset: base + 0x100, bytes: vec![1] }],

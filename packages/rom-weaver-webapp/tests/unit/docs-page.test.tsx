@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
@@ -39,13 +39,13 @@ const docsShell = (slug: string, currentTab = "docs", language = "en") => (
 
 const renderDocsShell = (slug: string) => render(docsShell(slug));
 
-const BUNDLE_GUIDE_ANCHORS = [
+const WEAVE_GUIDE_ANCHORS = [
   "choose-what-to-include",
   "build-the-patch-recipe",
-  "turn-on-bundle-output-and-download-it",
+  "turn-on-weave-output-and-download-it",
   "test-the-finished-download",
   "publish-a-useful-release",
-  "open-a-hosted-bundle-in-apply",
+  "open-a-hosted-weave",
 ];
 
 const routeFor = (slug: string) => {
@@ -57,7 +57,7 @@ const routeFor = (slug: string) => {
 const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
 const navShelfTitles = [
   "Walkthroughs",
-  "Patching & bundles",
+  "Patching & weaves",
   "ROM checks",
   "Conversion & files",
   "Saves",
@@ -114,9 +114,9 @@ describe("DocsPage", () => {
 
     rerender(<DocsPage active={false} slug="docs" />);
     setSeoMetadata(
-      "rom-weaver: Create ROM patches online",
+      "Create ROM patches online | rom-weaver",
       "Create ROM patches locally in your browser.",
-      "https://rom-weaver.com/create-patch",
+      "https://rom-weaver.com/create-rom-patch",
     );
     rerender(<DocsPage active slug="docs" />);
 
@@ -142,7 +142,7 @@ describe("DocsPage", () => {
     expect(introduction?.textContent).toBe("Introduction");
     expect(introduction?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     expect(rail.querySelector(".warp-rail-title")?.textContent).toMatch(
-      new RegExp(`^Patching & bundles\\d+ of ${routeFor("docs/apply-rom-patches").sections.length + 1}$`),
+      new RegExp(`^Patching & weaves\\d+ of ${routeFor("docs/apply-rom-patches").sections.length + 1}$`),
     );
     expect(railLinks.length).toBeGreaterThan(0);
     for (const link of railLinks) {
@@ -412,17 +412,25 @@ Fixture description.
     expect(sections.filter((section) => !section.label.trim())).toEqual([]);
   });
 
-  it("keeps the bundle guide's published anchors stable", () => {
-    expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
+  it("exposes canonical weave sections and preserves published bundle anchors", () => {
+    const route = routeFor("docs/create-bundles");
+    expect(route.sections.map((section) => section.id)).toEqual(WEAVE_GUIDE_ANCHORS);
+    render(<DocsPage active slug="docs/create-bundles" />);
+    for (const legacy of [
+      "create-and-share-a-patch-bundle-in-the-browser",
+      "turn-on-bundle-output-and-download-it",
+      "open-a-hosted-bundle-in-apply",
+      "open-a-hosted-weave-in-apply",
+    ]) {
+      expect(document.getElementById(legacy)).not.toBeNull();
+    }
   });
 
-  it("publishes the browser bundle guide as one topic with self-linked sections", () => {
+  it("publishes the browser weave guide as one topic with self-linked sections", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
-    ).toBeTruthy();
-    expect(document.querySelectorAll(".docs-article > h2 > .docs-section-link")).toHaveLength(
+    expect(screen.getByRole("heading", { level: 1, name: "Share multiple ROM patches as one weave" })).toBeTruthy();
+    expect(document.querySelectorAll(".docs-article h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
     );
     expect(document.querySelectorAll(".docs-article details.docs-disclosure")).toHaveLength(0);
@@ -431,8 +439,9 @@ Fixture description.
   it.each([
     ["docs/apply-rom-patches", 4],
     ["docs/create-rom-patches", 4],
-    ["docs/create-bundles", 2],
-  ])("reserves responsive screenshot space and keeps WebP fallbacks on %s", (slug, expectedPictures) => {
+    // quality-reason: Obsolete Bundle-labeled screenshots are intentionally omitted until refreshed.
+    ["docs/create-bundles", 0],
+  ])("renders the intended screenshot set with responsive WebP fallbacks on %s", (slug, expectedPictures) => {
     render(<DocsPage active slug={slug} />);
 
     const pictures = [...document.querySelectorAll<HTMLPictureElement>("picture[data-docs-screenshot-theme]")];
@@ -479,7 +488,7 @@ Fixture description.
 [Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
 [Source](../../crates/rom-weaver-patches/src/lib.rs)
-[Schema](../rom-weaver-bundle-v2.schema.json)
+[Schema](../rom-weaver-weave-v2.schema.json)
 ![Sample](../screenshots/first-sample-rom-world.webp)
 `,
     );
@@ -491,7 +500,7 @@ Fixture description.
     expect(route.html).toContain(
       'href="https://github.com/rom-weaver/rom-weaver/blob/main/crates/rom-weaver-patches/src/lib.rs"',
     );
-    expect(route.html).toContain('href="/rom-weaver-bundle-v2.schema.json"');
+    expect(route.html).toContain('href="/rom-weaver-weave-v2.schema.json"');
     expect(route.html).toContain('src="/docs/screenshots/first-sample-rom-world.webp"');
   });
 
@@ -774,9 +783,7 @@ Fixture description.
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     await vi.waitFor(() => expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true));
-    expect(currentLink?.closest("details")?.querySelector(".guide-shelf-title")?.textContent).toBe(
-      "Patching & bundles",
-    );
+    expect(currentLink?.closest("details")?.querySelector(".guide-shelf-title")?.textContent).toBe("Patching & weaves");
   });
 
   it("keeps Find in the global Menu sheet beside the separate docs drawer", async () => {
@@ -843,6 +850,23 @@ Fixture description.
     expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
   });
 
+  it("moves focus to the main landmark when a pager link is followed", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    try {
+      render(<DocsPage active slug="docs/apply-rom-patches" />);
+      const step = document.querySelector<HTMLAnchorElement>(".docs-onward .docs-step[data-direction='next']");
+      step?.focus();
+      fireEvent.click(step as HTMLAnchorElement);
+
+      await vi.waitFor(() => expect(document.activeElement).toBe(main));
+    } finally {
+      main.remove();
+    }
+  });
+
   it("links each guide footer to its editable GitHub source", () => {
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 
@@ -850,6 +874,12 @@ Fixture description.
     expect(sourceLink.getAttribute("href")).toBe(
       "https://github.com/rom-weaver/rom-weaver/edit/main/docs/how-to/apply-rom-patches.md",
     );
+  });
+
+  it("hides the edit link for a generated page that GitHub does not track", () => {
+    render(<DocsPage active slug="docs/notices" />);
+
+    expect(screen.queryByRole("link", { name: "Suggest changes on GitHub" })).toBeNull();
   });
 
   it("holds the previous step's place on the first page rather than sliding next into it", () => {
@@ -949,13 +979,99 @@ Fixture description.
     const strip = footer?.querySelector("nav.related-strip");
     expect(strip).not.toBeNull();
     const toolButton = strip?.querySelector(".related-row-tool") as HTMLButtonElement;
-    expect(toolButton.textContent).toContain("Trim tool");
+    expect(toolButton.textContent).toContain("Trim ROMs");
     fireEvent.click(toolButton);
     expect(onSelectTab).toHaveBeenCalledWith("trim");
   });
 
-  it("does not mount the related-links strip without an onSelectTab handler", () => {
+  it.each([
+    ["docs/apply-rom-patches", "patcher", "/apply-patches", "Apply ROM patches"],
+    ["docs/create-rom-patches", "creator", "/create-rom-patch?mode=rom", "Create ROM patches"],
+    ["docs/create-bundles", "weave", "/weave-patches", "Weave ROM patches"],
+    ["docs/identify-roms-browser", "identify", "/identify-rom", "Identify ROMs"],
+    ["docs/search-rom-checksums", "identify", "/identify-rom", "Identify ROMs"],
+    ["docs/checksum-roms-browser", "checksum", "/checksum", "Calculate ROM checksums"],
+    ["docs/convert-to-chd", "compress", "/compress", "Compress and convert ROMs"],
+    ["docs/convert-rvz-to-iso", "extract", "/extract", "Extract and convert ROMs"],
+    ["docs/test-roms", "test", "/test-rom", "Test ROMs"],
+    ["docs/trim-roms-browser", "trim", "/trim-rom", "Trim ROMs"],
+    ["docs/edit-gen3-saves", "save-editor", "/save-editor", "Edit game saves"],
+    ["docs/undo-ppf-browser", "ppf-undo", "/ppf-undo", "Undo PPF patches"],
+    ["docs/get-started", "patcher", "/apply-patches", "Apply ROM patches"],
+  ])("links to the matching tool below the heading and footer of %s", (slug, view, href, label) => {
+    const onSelectTab = vi.fn();
+    render(<DocsPage active onSelectTab={onSelectTab} slug={slug} />);
+    const nav = screen.getByRole("navigation", { name: "Tools for this guide" });
+    const article = document.querySelector(".docs-article") as HTMLElement;
+    const heading = article.querySelector("h1") as HTMLElement;
+    const link = nav.querySelector("a") as HTMLAnchorElement;
+    expect(article.contains(nav)).toBe(true);
+    expect(heading.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.nextElementSibling?.matches(".docs-markdown")).toBe(true);
+    expect(link.getAttribute("href")).toBe(href);
+    expect(link.textContent).toBe(label);
+    expect(document.querySelector(".docs-footer .related-strip")?.getAttribute("aria-label")).toBe("Related");
+    const footerTool = document.querySelector(".docs-footer .related-row-tool") as HTMLElement;
+    if (footerTool instanceof HTMLAnchorElement) {
+      expect(footerTool.getAttribute("href")).toBe(href);
+    } else {
+      fireEvent.click(footerTool);
+      expect(onSelectTab).toHaveBeenCalledWith(view);
+    }
+  });
+
+  it("points both cheat guide shortcuts and footer links to task pages", () => {
+    render(<DocsPage active onSelectTab={vi.fn()} slug="docs/use-cheats" />);
+    for (const selector of [".docs-tools", ".docs-footer .related-strip"]) {
+      const links = [...document.querySelectorAll(`${selector} a`)];
+      expect(links.map((link) => link.getAttribute("href"))).toEqual(["/apply-cheats", "/create-rom-cheat-patch"]);
+      expect(links.map((link) => link.textContent)).toEqual([
+        expect.stringContaining("Apply cheat codes"),
+        expect.stringContaining("Create a patch from cheat codes"),
+      ]);
+    }
+  });
+
+  it("updates the tool links when navigating between guides", () => {
+    const { rerender } = render(<DocsPage active slug="docs/use-cheats" />);
+    const toolPaths = () => [...document.querySelectorAll(".docs-tools a")].map((link) => link.getAttribute("href"));
+    expect(toolPaths()).toEqual(["/apply-cheats", "/create-rom-cheat-patch"]);
+
+    rerender(<DocsPage active slug="docs/create-bundles" />);
+    expect(toolPaths()).toEqual(["/weave-patches"]);
+
+    rerender(<DocsPage active slug="docs/privacy" />);
+    expect(document.querySelector(".docs-tools")).toBeNull();
+    expect(document.querySelectorAll(".docs-article h1")).toHaveLength(1);
+  });
+
+  it("keeps native tool links available without an onSelectTab handler", () => {
     render(<DocsPage active slug="docs/cli-trim" />);
     expect(document.querySelector(".docs-footer nav.related-strip")).toBeNull();
+    expect(screen.getByRole("link", { name: "Trim ROMs" }).getAttribute("href")).toBe("/trim-rom");
+    expect(document.querySelector(".docs-tools li")?.getAttribute("data-beta")).toBe("true");
+  });
+
+  it("preserves the deployment subpath in tool links", () => {
+    window.history.replaceState({}, "", "/rom-weaver/docs/use-cheats");
+    render(<DocsPage active slug="docs/use-cheats" />);
+    expect(
+      within(screen.getByRole("navigation", { name: "Tools for this guide" }))
+        .getByRole("link", { name: "Apply cheat codes" })
+        .getAttribute("href"),
+    ).toBe("/rom-weaver/apply-cheats");
+  });
+
+  it.each([
+    ["es", "Aplicar códigos de trucos", "Crear un parche a partir de códigos de trucos"],
+    ["de", "Cheat-Codes anwenden", "Einen Patch aus Cheat-Codes erstellen"],
+  ])("uses descriptive tool names in %s", (language, applyLabel, createLabel) => {
+    render(
+      <RomWeaverSettingsProvider settings={{ language }}>
+        <DocsPage active slug="docs/use-cheats" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(screen.getByRole("link", { name: applyLabel }).getAttribute("href")).toBe("/apply-cheats");
+    expect(screen.getByRole("link", { name: createLabel }).getAttribute("href")).toBe("/create-rom-cheat-patch");
   });
 });

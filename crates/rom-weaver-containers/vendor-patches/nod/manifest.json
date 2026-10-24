@@ -1,0 +1,283 @@
+{
+  "version": 1,
+  "name": "nod",
+  "source": {
+    "url": "https://codeload.github.com/encounter/nod/tar.gz/ebd80cac99b48a323200d84365e07a58cc27412d",
+    "revision": "ebd80cac99b48a323200d84365e07a58cc27412d",
+    "sha256": "ffd3cfc3b0fb365516abc6d2d6d75c05283358e13ae38712561379fdcb50cd02",
+    "format": "tar",
+    "root": "nod-ebd80cac99b48a323200d84365e07a58cc27412d/nod/src",
+    "extraFiles": [
+      {
+        "from": "nod-ebd80cac99b48a323200d84365e07a58cc27412d/LICENSE-APACHE",
+        "to": "LICENSE-APACHE"
+      },
+      {
+        "from": "nod-ebd80cac99b48a323200d84365e07a58cc27412d/LICENSE-MIT",
+        "to": "LICENSE-MIT"
+      }
+    ]
+  },
+  "destination": "crates/rom-weaver-containers/src/nod",
+  "exclude": [],
+  "patches": [
+    {
+      "file": "0001-dol-size-safety.patch",
+      "stage": "source",
+      "reason": "Saturate hostile DOL section endpoints and retain at least the DOL header allocation.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/encounter/nod/blob/ebd80cac99b48a323200d84365e07a58cc27412d/nod/src/disc/gcn.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::disc::gcn::tests::read_dol_and_read_fst_follow_the_boot_header_offsets -- --exact"
+      ]
+    },
+    {
+      "file": "0002-fst-string-table-bounds.patch",
+      "stage": "source",
+      "reason": "Compute untrusted FST node table size in u64 to prevent wrapping before bounds validation.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/encounter/nod/blob/ebd80cac99b48a323200d84365e07a58cc27412d/nod/src/disc/fst.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod_regressions_tests::fst_new_rejects_a_root_length_that_overflows_the_node_array -- --exact"
+      ]
+    },
+    {
+      "file": "0003-wii-fst-alignment.patch",
+      "stage": "source",
+      "reason": "Pad Wii FST bytes and advertised size to four-byte boot-header units.",
+      "upstream": {
+        "status": "open",
+        "url": "https://github.com/encounter/nod/pull/34"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod_regressions_tests::a_wii_fst_is_padded_to_a_multiple_of_four -- --exact"
+      ]
+    },
+    {
+      "file": "0004-wii-absolute-partition-end.patch",
+      "stage": "source",
+      "reason": "Convert inferred partition-relative file end to an absolute disc sector.",
+      "upstream": {
+        "status": "open",
+        "url": "https://github.com/encounter/nod/pull/35"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::disc::reader::tests::read_partition_info_guesses_the_data_end_for_a_zero_sized_partition -- --exact"
+      ]
+    },
+    {
+      "file": "0005-preloader-read-ahead.patch",
+      "stage": "source",
+      "reason": "Decouple prefetch depth from worker count with a 16-group floor and cache room for in-flight work.",
+      "upstream": {
+        "status": "open",
+        "url": "https://github.com/encounter/nod/pull/27"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::disc::gcn::tests::the_preloader_serves_the_same_bytes_with_worker_threads -- --exact"
+      ]
+    },
+    {
+      "file": "0006-gcz-geometry-validation.patch",
+      "stage": "source",
+      "reason": "Reject GCZ blocks smaller than a sector, non-sector-aligned blocks, and counts inconsistent with disc size.",
+      "upstream": {
+        "status": "unverified",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::gcz::tests::block_reader_rejects_invalid_geometry -- --exact"
+      ]
+    },
+    {
+      "file": "0007-nfs-sparse-sector-zeroing.patch",
+      "stage": "source",
+      "reason": "Clear the output for logical zero sectors and report BlockKind::Zero instead of stale raw bytes.",
+      "upstream": {
+        "status": "unverified",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::nfs::tests::read_block_decrypts_mapped_sectors_and_zeroes_unmapped_ones -- --exact"
+      ]
+    },
+    {
+      "file": "0008-bzip2-full-buffer-fallback.patch",
+      "stage": "source",
+      "reason": "Stop bzip2 finish when its output buffer fills, allowing the existing raw-block fallback instead of BZ_SEQUENCE_ERROR.",
+      "upstream": {
+        "status": "present-upstream",
+        "url": "https://github.com/encounter/nod/blob/main/nod/src/util/compress.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod_regressions_tests::bzip2_stores_a_block_raw_when_it_does_not_fit -- --exact"
+      ]
+    },
+    {
+      "file": "0009-check-block-options.patch",
+      "stage": "source",
+      "reason": "Group disc identity and partition policy into CheckBlockOptions instead of a long positional argument list.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0010-window-is-empty.patch",
+      "stage": "source",
+      "reason": "Provide the empty-window query alongside Window::len.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0011-tracing-diagnostics.patch",
+      "stage": "source",
+      "reason": "Route library diagnostics through tracing so stdout remains available for command output.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0012-ciso-block-size-validation.patch",
+      "stage": "source",
+      "reason": "Reject CISO block sizes that are zero, smaller than a sector, or not sector-aligned; a PSP CSO shares the magic and otherwise reaches a divide by zero in read_block.",
+      "upstream": {
+        "status": "unverified",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::ciso::tests::block_reader_rejects_invalid_block_sizes -- --exact"
+      ]
+    },
+    {
+      "file": "0013-rust-codec-backends.patch",
+      "stage": "integration",
+      "reason": "Select Rust AES/digest backends and flate2 zlib compression/decompression for the workspace WASM build; preserve bounded-output raw-block fallback and validate zlib levels.",
+      "upstream": {
+        "status": "related-open",
+        "url": "https://github.com/encounter/nod/pull/33"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::util::compress::tests::",
+        "cargo test -p rom-weaver-cli --test cli_smoke"
+      ]
+    },
+    {
+      "file": "0014-wasi-path-resolution.patch",
+      "stage": "integration",
+      "reason": "Avoid unavailable WASI canonicalize while retaining native canonicalization and NFS key existence checks.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::io::",
+        "mise run build-wasm"
+      ]
+    },
+    {
+      "file": "0015-remove-python-bindings.patch",
+      "stage": "integration",
+      "reason": "Remove the PyO3 bindings and their feature-gated module, which this workspace never enables.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0016-module-paths.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: and doctest paths to crate::nod:: and rom_weaver_containers::nod::. Mechanical; mod.rs appears as a delete and add because patch renames are unsupported.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0017-workspace-formatting.patch",
+      "stage": "integration",
+      "reason": "Apply workspace rustfmt defaults in place of upstream's rustfmt.toml. Formatting only; reproduce with `rustfmt --edition 2024 mod.rs`.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0018-workspace-lints.patch",
+      "stage": "integration",
+      "reason": "Allow upstream's collapsible-if and manual multiple-of style under the workspace clippy policy.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo clippy -p rom-weaver-containers --all-targets -- -D warnings"
+      ]
+    },
+    {
+      "file": "0019-dead-code-cleanup.patch",
+      "stage": "integration",
+      "reason": "Remove unused preloader fields, shutdown and commented-out thread tuning, unused NKit flags and a stale WIP comment; document the read-ahead floor and cache sizing.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::"
+      ]
+    },
+    {
+      "file": "0020-test-hooks.patch",
+      "stage": "integration",
+      "reason": "Attach the project's nod unit-test modules and add inline WIA/RVZ header, disc and block-reader validation tests.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/encounter/nod"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib",
+        "cargo test -p rom-weaver-cli --test cli_smoke"
+      ]
+    },
+    {
+      "file": "0021-lzma-dictionary-cap.patch",
+      "stage": "integration",
+      "reason": "Cap the WIA/RVZ LZMA decoder dictionary at the group's output size; each worker otherwise allocates the encoder preset's dictionary per group.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib nod::util::compress::tests::"
+      ]
+    }
+  ],
+  "materialized": true,
+  "preserve": [
+    "NOD_VERSION"
+  ]
+}

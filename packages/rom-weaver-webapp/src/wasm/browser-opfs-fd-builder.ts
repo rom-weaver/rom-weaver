@@ -270,6 +270,17 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     if (!this.mount.isWritablePath(guestPath)) {
       return { inode_obj: null, ret: wasiShim.wasi.ERRNO_ROFS };
     }
+    // An fd still open on this file (mkstemp-then-unlink temp files) may not have opened its proxy
+    // handle yet. Open it first so the proxy defers the OPFS removal to the handle's close instead of
+    // the first later write re-creating the unlinked path as an orphan.
+    const live = findEntryInDirectory(this.mount.contents, pathStr);
+    if (live instanceof WasiRandomAccessFileInode && live.openRefCount > 0) {
+      try {
+        live.file.openNow?.();
+      } catch {
+        // best-effort: fall through to a plain unlink
+      }
+    }
     const unlinked = unlinkEntryFromDirectory(this.mount.contents, pathStr);
     if (unlinked.ret === wasiShim.wasi.ERRNO_SUCCESS) {
       // Also remove the backing OPFS file so the namespace matches the inode tree.

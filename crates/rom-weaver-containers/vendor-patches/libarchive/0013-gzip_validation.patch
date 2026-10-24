@@ -1,0 +1,61 @@
+diff --git a/libarchive/archive_read_support_filter_gzip.c b/libarchive/archive_read_support_filter_gzip.c
+--- a/libarchive/archive_read_support_filter_gzip.c
++++ b/libarchive/archive_read_support_filter_gzip.c
+@@ -403,10 +403,12 @@
+ 	struct private_data *state;
+ 	const unsigned char *p;
+ 	ssize_t avail;
++	uint32_t member_size;
+ 
+ 	state = (struct private_data *)self->data;
+ 
+ 	state->in_stream = 0;
++	member_size = (uint32_t)state->stream.total_out;
+ 	switch (inflateEnd(&(state->stream))) {
+ 	case Z_OK:
+ 		break;
+@@ -419,10 +421,22 @@
+ 
+ 	/* GZip trailer is a fixed 8 byte structure. */
+ 	p = __archive_read_filter_ahead(self->upstream, 8, &avail);
+-	if (p == NULL || avail == 0)
++	if (p == NULL || avail < 8) {
++		archive_set_error(&self->archive->archive,
++		    ARCHIVE_ERRNO_MISC, "truncated gzip trailer");
+ 		return (ARCHIVE_FATAL);
+-
+-	/* XXX TODO: Verify the length and CRC. */
++	}
++
++	if (archive_le32dec(p) != (uint32_t)state->crc) {
++		archive_set_error(&self->archive->archive,
++		    ARCHIVE_ERRNO_MISC, "gzip CRC32 mismatch");
++		return (ARCHIVE_FATAL);
++	}
++	if (archive_le32dec(p + 4) != member_size) {
++		archive_set_error(&self->archive->archive,
++		    ARCHIVE_ERRNO_MISC, "gzip uncompressed size mismatch");
++		return (ARCHIVE_FATAL);
++	}
+ 
+ 	/* We've verified the trailer, so consume it now. */
+ 	__archive_read_filter_consume(self->upstream, 8);
+@@ -436,6 +450,7 @@
+ 	struct private_data *state;
+ 	size_t decompressed;
+ 	ssize_t avail_in, max_in;
++	unsigned char *output_start;
+ 	int ret;
+ 
+ 	state = (struct private_data *)self->data;
+@@ -478,7 +493,10 @@
+ 		state->stream.avail_in = (uInt)avail_in;
+ 
+ 		/* Decompress and consume some of that data. */
++		output_start = state->stream.next_out;
+ 		ret = inflate(&(state->stream), 0);
++		state->crc = crc32(state->crc, output_start,
++		    (uInt)(state->stream.next_out - output_start));
+ 		switch (ret) {
+ 		case Z_OK: /* Decompressor made some progress. */
+ 			__archive_read_filter_consume(self->upstream,

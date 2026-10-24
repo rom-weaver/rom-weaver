@@ -6,7 +6,7 @@ To take every file out of an archive, use [Extract files](extract-files-browser.
 
 For specific formats, use [ISO or BIN/CUE to CHD](convert-to-chd-browser.md), [ISO to RVZ](convert-to-rvz-browser.md), or [Nintendo 3DS to Z3DS](convert-to-z3ds-browser.md).
 
-To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extract Z3DS files](extract-z3ds-browser.md).
+To decompress images, use [CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md), [RVZ to ISO](convert-rvz-to-iso-browser.md), or [Extract Z3DS files](extract-z3ds-browser.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -22,8 +22,8 @@ To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extrac
 1. Open [Compress](https://rom-weaver.com/compress).
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
-4. When you add an archive or a compressed disc image, Compress lists the files inside it. Select the files to add, then select the **Add** button. Compress extracts only the selected files.
-5. To add the archive itself without extracting it, turn on **Keep packed**, then select the **Add** button.
+4. When you add an archive or a compressed disc image, Compress lists the files inside it. Select the files to add, then select **Add N files**. Compress extracts only the selected files.
+5. To add the archive itself without extracting it, turn on **Keep packed**, then select **Add N files**.
 
 <figure class="docs-screenshot">
   <picture>
@@ -33,7 +33,7 @@ To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extrac
   <figcaption>Select the files inside an archive that you want to compress.</figcaption>
 </figure>
 
-ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
+ZIP and 7z accept arbitrary file sets. CHD accepts CD, GD-ROM, and DVD disc images (hard-disk and raw CHDs need the CLI). RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
 ## Choose an output
 

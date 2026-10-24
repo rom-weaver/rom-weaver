@@ -1,3 +1,5 @@
+import indexHtml from "../../index.html?raw";
+import { captureShellClicks, replayShellSelections } from "../../src/webapp/shell-click-replay.ts";
 import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -99,7 +101,6 @@ const createServiceWorkerCacheState = () => ({
   title: "",
   updateLabel: "Reload to update",
   updateReady: false,
-  updateTitle: "",
 });
 
 const createWebappState = (settings = getDefaultSettings(), currentView = "patcher") => ({
@@ -116,8 +117,11 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
   validation: createEmptyValidationState(),
 });
 
+let selectExternalView;
+
 function WebappRootHarness({ initialView = "patcher", settings, updateReady = false, onReloadUpdate } = {}) {
   const [currentView, setCurrentView] = useState(initialView);
+  selectExternalView = setCurrentView;
   const props = useMemo(
     () => ({
       actions: { ...createNoopActions(), onSelectView: setCurrentView, onReloadUpdate },
@@ -168,13 +172,217 @@ const openMenuSheet = async () => {
   return document.querySelector(".menu-sheet");
 };
 
+const selectionPatch = (name) => new File([new Uint8Array([80, 65, 84, 67, 72, 0, 0, 1, 0, 1, 66, 69, 79, 70])], name);
+const sendHomeSelection = (kind, files) => {
+  const transfer = new DataTransfer();
+  for (const file of files) transfer.items.add(file);
+  if (kind === "pick") {
+    const input = document.querySelector("#home-file-input");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  } else document.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+};
+const patchNames = () =>
+  [...document.querySelectorAll("#rom-weaver-list-patch-stack [data-file-name]")].map((node) => node.dataset.fileName);
+
+test.each(["pick", "drop"])("Home retains separate %s selections through routing to Apply", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  sendHomeSelection(kind, [selectionPatch("first.ips")]);
+  sendHomeSelection(kind, [selectionPatch("second.ips")]);
+  await expect.poll(() => patchNames().includes("second.ips")).toBe(true);
+  expect(patchNames()).toEqual(["first.ips", "second.ips"]);
+});
+
+test.each(["pick", "drop"])("Home retains a batch %s selection", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  sendHomeSelection(kind, [selectionPatch("first.ips"), selectionPatch("second.ips")]);
+  await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips"]);
+});
+
+test.each(["pick", "drop"])("Home queues newer %s arrivals while the destination transition waits", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("first.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    sendHomeSelection(kind, [selectionPatch("second.ips")]);
+    sendHomeSelection(kind, [selectionPatch("third.ips")]);
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips", "third.ips"]);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+test.each(["pick", "drop"])("Home replay waits for routing and includes newer buffered %s selections", async (kind) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  const source = indexHtml.match(/<script>\s*\/\/ Buffer clicks[\s\S]*?<\/script>/)[0];
+  const script = document.createElement("script");
+  script.textContent = source.replace(/^<script>|<\/script>$/g, "");
+  document.head.append(script);
+  script.remove();
+  captureShellClicks();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection(kind, [selectionPatch("first.ips")]);
+    sendHomeSelection(kind, [selectionPatch("second.ips")]);
+    replayShellSelections(rootElement);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    expect(window.ROM_WEAVER_SHELL_CLICKS.deferSelections).toBe(true);
+    sendHomeSelection(kind, [selectionPatch("third.ips")]);
+    openDestination();
+    finish();
+    await expect.poll(() => patchNames()).toEqual(["first.ips", "second.ips", "third.ips"]);
+    await expect.poll(() => window.ROM_WEAVER_SHELL_CLICKS.deferSelections).toBe(false);
+    expect(window.ROM_WEAVER_SHELL_CLICKS.selections).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+    window.ROM_WEAVER_SHELL_CLICKS.stop();
+    window.ROM_WEAVER_SHELL_CLICKS.stopSelections();
+    delete window.ROM_WEAVER_SHELL_CLICKS;
+  }
+});
+
+test("Home cancels a pending file handoff when the user navigates away", async () => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  try {
+    sendHomeSelection("pick", [selectionPatch("cancelled.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    navRow("Home").click();
+    openDestination();
+    finish();
+    await expect.poll(() => document.querySelector("#panel-home")?.closest("[hidden]")).toBeNull();
+    navRow("Apply").click();
+    await expect.poll(() => document.querySelector("#panel-patcher:not([hidden])")).toBeTruthy();
+    expect(patchNames()).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+  }
+});
+
+test.each(["history", "soft-link"])("Home cancels file routing on external %s navigation", async (navigation) => {
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector("#home-file-input")).toBeTruthy();
+  let openDestination;
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const transition = vi.spyOn(document, "startViewTransition").mockImplementationOnce((update) => {
+    openDestination = update;
+    return { ready: Promise.resolve(), finished };
+  });
+  const link = document.createElement("a");
+  link.href = "/docs";
+  link.textContent = "External Docs route";
+  rootElement.append(link);
+  const navigate = (event) => {
+    if (event.target !== link) return;
+    event.preventDefault();
+    selectExternalView("docs");
+  };
+  document.addEventListener("click", navigate);
+  try {
+    sendHomeSelection("drop", [selectionPatch("cancelled.ips")]);
+    await expect.poll(() => typeof openDestination).toBe("function");
+    if (navigation === "history") {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      selectExternalView("docs");
+    } else link.click();
+    await expect.poll(() => document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    openDestination();
+    finish();
+    await expect.poll(() => document.querySelector("#column").classList.contains("rw-drop-routing")).toBe(false);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(document.querySelector("#panel-docs:not([hidden])")).toBeTruthy();
+    expect(patchNames()).toEqual([]);
+  } finally {
+    finish();
+    transition.mockRestore();
+    document.removeEventListener("click", navigate);
+    link.remove();
+  }
+});
+
+test.each([
+  ["home", "Apply Patches", "Apply & download"],
+  ["home", "Weave Patches", "Share weave"],
+  ["docs", "Apply Patches", "Apply & download"],
+  ["whats-new", "Weave Patches", "Share weave"],
+])("%s offers %s for a ZIP containing a weave and its ROM", async (initialView, destination, action) => {
+  mountWebappRoot({ initialView });
+  await expect.poll(() => document.querySelector(`#panel-${initialView}:not([hidden])`)).toBeTruthy();
+  const transfer = new DataTransfer();
+  transfer.items.add(await loadFixtureFile("first-weave.zip", "application/zip"));
+  document.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+
+  await expect.element(page.getByRole("dialog", { name: "What do you want to do with this weave?" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: /Test ROM/ })).not.toBeInTheDocument();
+  await expect.poll(() => document.querySelector("#column")?.classList.contains("rw-drop-routing")).toBe(false);
+  await page.getByRole("button", { name: new RegExp(destination) }).click();
+
+  await waitForInputStackFile("hello-world.nes");
+  await expect.poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack .file").length).toBe(2);
+  await expect.element(page.getByRole("button", { name: action, exact: true })).toBeVisible();
+});
+
+test("disc conversion and extraction have independent hit targets on mobile", async () => {
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector(".home-route-actions")).toBeTruthy();
+  const actions = document.querySelector(".home-route-actions");
+  const links = Array.from(actions.querySelectorAll("a"));
+  expect(links.map((link) => link.textContent)).toEqual(["Compress", "Extract files"]);
+  expect(links.map((link) => new URL(link.href).pathname)).toEqual(["/compress", "/extract"]);
+  for (const link of links) {
+    link.scrollIntoView({ block: "center" });
+    const rect = link.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    expect(hit?.closest("a")).toBe(link);
+  }
+});
+
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
   // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
   // below require the flag on - matching the pattern the sibling controller unit tests use.
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
-  const romInput = page.getByLabelText(/ROMs, patches, bundles, or archives/i);
+  const romInput = page.getByLabelText(/ROMs, patches, weaves, or archives/i);
 
   await expect.element(romInput).toBeInTheDocument();
 
@@ -192,13 +400,13 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   // The output section (and its apply button) renders once the workflow has files.
   await expect.element(page.getByRole("button", { name: "Apply & download" })).toBeInTheDocument();
 
-  await page.getByRole("button", { name: "Clear ROM input" }).click();
+  await page.getByRole("button", { name: "Remove ROM" }).click();
   await expect
     .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
     .not.toContain("game.bin");
 
   await page
-    .getByLabelText(/ROMs, patches, bundles, or archives/i)
+    .getByLabelText(/ROMs, patches, weaves, or archives/i)
     .upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
 
   await selectCandidateIfPrompted("game.bin");
@@ -209,11 +417,12 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Menu and Controls at every setting.
+  // The dock keeps its four workflow slots, then Menu, at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
-  expect(navRow("PPF undo")).toBeUndefined();
+    .toEqual(["Apply", "Create", "Identify", "Test", "Menu"]);
+  expect(navRow("PPF undo")).toBeTruthy();
+  expect(navRow("PPF undo").querySelector(".nav-beta")).toBeNull();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
@@ -265,9 +474,9 @@ test("mobile Docs docks one docs bar on the workflow dock and opens everything f
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
-    "Menu",
+    "Identify",
     "Test",
-    "Controls",
+    "Menu",
   ]);
   // Flush on the dock: part of the bottom chrome, never floating over the article.
   expect(getComputedStyle(bar).position).toBe("fixed");
@@ -377,8 +586,8 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
     expect(document.querySelector("#ppf-undo-identify-input-picker")).toBeNull();
-    // Neither beta tool takes one of the dock's three workflow slots.
-    expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
+    // No beta tool takes a dock slot; Identify, not beta, holds one of the four.
+    expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeTruthy();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
     // Both layouts list every destination, App's included, under the same groups.
@@ -388,7 +597,8 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     }
     if (width < 1000) {
       expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
-      expect(document.querySelector(".dock-app")).toBeTruthy();
+      // Settings lives in Menu; the dock has no slot of its own for it.
+      expect(document.querySelector(".dock-app")).toBeNull();
     }
   }
   await page.viewport(1280, 900);
@@ -403,6 +613,37 @@ test("WebappRoot reports the configured thread count before the workflow view to
   const threadButton = document.querySelector("#panel-patcher .panel-threads-btn");
   const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle");
   expect(threadButton.compareDocumentPosition(viewToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("the workflow heading sheds labels only when they would cover the step title", async () => {
+  // The heading is drawn over the first step's title row; its room depends on
+  // the locale and the switch state, so fixed breakpoints let labels land on it.
+  const clearance = () => {
+    const head = document.querySelector("#panel-patcher .workflow-panel-head");
+    const title = document.querySelector("#panel-patcher .step > .step-head > .step-title");
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const marks = [range.getBoundingClientRect(), title.nextElementSibling?.getBoundingClientRect()];
+    return head.getBoundingClientRect().left - Math.max(...marks.filter(Boolean).map((rect) => rect.right));
+  };
+  for (const [language, detailedViewEnabled] of [
+    ["de", true],
+    ["de", false],
+    ["es", true],
+  ]) {
+    mountWebappRoot({ settings: { ...getDefaultSettings(), detailedViewEnabled, language, threads: 16 } });
+    for (const width of [320, 360, 390, 430, 480, 600]) {
+      await page.viewport(width, 844);
+      await expect.poll(clearance, { timeout: 2000 }).toBeGreaterThanOrEqual(8);
+    }
+  }
+  // English fits its switch label at a common phone width, so it keeps it.
+  mountWebappRoot({ settings: { ...getDefaultSettings(), language: "en", threads: 16 } });
+  await page.viewport(390, 844);
+  await expect.poll(clearance, { timeout: 2000 }).toBeGreaterThanOrEqual(8);
+  const toggleLabel = document.querySelector("#panel-patcher .panel-view-toggle span");
+  expect(getComputedStyle(toggleLabel).display).not.toBe("none");
+  await page.viewport(1280, 900);
 });
 
 test("the wordmark keeps its version while persistent status sits beside navigation", async () => {
@@ -581,13 +822,24 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
-  ["bundle", "/bundle-patches?guide=bundle", "/docs/create-bundles"],
-])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref, docsPath) => {
+  ["creator", "/create-rom-patch?guide=create", "/docs/create-rom-patches"],
+  ["weave", "/weave-patches?guide=weave", "/docs/create-bundles"],
+])("the %s sample link carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });
 
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  const chip = document.querySelector(".sample-tutorial-start-chip");
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  const chip = document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip");
+  // Measure the settled layout: mid panel-in, the body's sub-pixel translate
+  // rounds the chip's box to 43.9999px.
+  await Promise.allSettled(
+    document
+      .querySelector(".workflow-body")
+      .getAnimations()
+      .map((animation) => animation.finished),
+  );
   const chipBox = chip.getBoundingClientRect();
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
@@ -597,7 +849,11 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  const secondaryHref = initialView === "patcher" ? "/apply-patches?guide=apply-cheats" : null;
+  const secondaryHrefs = {
+    patcher: "/apply-patches?guide=apply-cheats",
+    creator: "/create-rom-patch?guide=create-cheats",
+  };
+  const secondaryHref = secondaryHrefs[initialView] || null;
   await expect
     .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
     .toBe(secondaryHref ? 5 : 4);
@@ -619,12 +875,35 @@ test.each([
 
   // Dismissal hides the beacon in place.
   document.querySelector(".sample-tutorial-start-dismiss").click();
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip")).toBeNull();
 
   // The persisted form of the same choice: onboardingEnabled=false renders no beacon.
   mountWebappRoot({ initialView, settings: { ...getDefaultSettings(), onboardingEnabled: false } });
   await expect.poll(() => document.querySelector(".drop.hero")).toBeTruthy();
-  expect(document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip")).toBeNull();
+});
+
+test("guided Apply scrolls its first card clear of the dock on a phone", async () => {
+  // The phone drop zone is taller than the screen, and the first card hangs
+  // below it rather than covering its Add files button.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  expect(dock.height).toBeGreaterThan(0);
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(guide.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  await page.viewport(1280, 900);
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
@@ -669,35 +948,36 @@ test("navigation Offline app keeps a plain label and opens the current offline v
   ).toContain("Update available");
 });
 
-test("the phone console keeps its five sections and Close on one bar at the foot", async () => {
+test("the phone console opens one section from Menu, with the dock at its foot reading Close", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
-  document.querySelector(".dock-app").click();
-  await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+  // Menu's Settings row opens the console on that section alone.
+  let sheet = await openMenuSheet();
+  navRow("Settings", ".menu-sheet").click();
+  await expect.poll(() => document.querySelector(".log-dlg[open] .console-pane")).toBeTruthy();
+  expect(getComputedStyle(document.querySelector(".log-dlg .console-nav")).display).toBe("none");
+  expect(document.querySelector("#console-pane-title")?.textContent).toBe("Settings");
 
-  const nav = document.querySelector(".log-dlg .console-nav");
-  const close = nav.querySelector(".console-close");
-  const items = [...nav.querySelectorAll(".console-tab"), close];
-  const visibleLabel = (item) => item.querySelector(item === close ? "span" : ".console-tab-short");
-  expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
-    "Settings",
-    "Offline",
-    "Storage",
-    "Logs",
-    "About",
-    "Close",
-  ]);
-  // Close takes the bottom-right corner, after every section.
-  expect(close.getBoundingClientRect().right).toBeGreaterThan(nav.getBoundingClientRect().right - 20);
-  expect(new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size).toBe(1);
-  expect(nav.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
-  expect(nav.querySelector(".console-nav-foot")?.getBoundingClientRect().height ?? 0).toBe(0);
+  // The dock again, its Menu slot reading Close in the bottom-right corner.
+  const dock = document.querySelector(".log-dlg .dock");
+  const slots = [...dock.querySelectorAll(".dock-tab")];
+  expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Identify", "Test", "Close"]);
+  const close = dock.querySelector(".dock-menu");
+  expect(close.getAttribute("aria-expanded")).toBe("true");
+  expect(close.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth - 90);
+  expect(new Set(slots.map((slot) => Math.round(slot.getBoundingClientRect().top))).size).toBe(1);
+  expect(dock.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
+
+  // Close shuts the console, not just back to Menu.
+  close.click();
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  expect(document.querySelector(".menu-sheet").hidden).toBe(true);
 
   // Storage shows the saves; the raw OPFS listing waits for Advanced.
-  document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  sheet = await openMenuSheet();
+  navRow("Saves & storage", ".menu-sheet").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
   expect(document.querySelector("#logpanel-storage .opfs-inspector")).toBeNull();
   document.querySelector("#console-advanced-phone").click();
@@ -705,9 +985,9 @@ test("the phone console keeps its five sections and Close on one bar at the foot
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
   document.querySelector("#console-advanced-phone").click();
 
-  // Close slides the page out and closes the console.
-  close.click();
+  document.querySelector(".log-dlg .dock-menu").click();
   await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  expect(sheet.hidden).toBe(true);
   await page.viewport(1280, 900);
 });
 
@@ -716,16 +996,18 @@ test("a phone console swipe closes past a quarter of the width and springs back 
   mountWebappRoot();
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const openConsole = async () => {
-    document.querySelector(".dock-app").click();
-    await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+    await openMenuSheet();
+    navRow("Settings", ".menu-sheet").click();
+    await expect.poll(() => document.querySelector(".log-dlg[open] .console-edge")).toBeTruthy();
     // The page MUST finish sliding in, or the swipe starts from a moving frame.
     await pause(400);
   };
   const swipe = async (points, holdMs) => {
-    const tab = document.querySelector('.log-dlg [data-logtab="storage"]');
-    const { top, height } = tab.getBoundingClientRect();
+    // The left edge starts the swipe back.
+    const edge = document.querySelector(".log-dlg .console-edge");
+    const { top, height } = edge.getBoundingClientRect();
     const send = (type, clientX) =>
-      tab.dispatchEvent(
+      edge.dispatchEvent(
         new PointerEvent(type, {
           bubbles: true,
           button: 0,
@@ -746,7 +1028,6 @@ test("a phone console swipe closes past a quarter of the width and springs back 
     send("pointerup", points.at(-1));
   };
 
-  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
   await openConsole();
   // A quick 80px (about 20%) drag that stops before release is no flick.
   await swipe([40, 80, 120], 200);
@@ -845,7 +1126,7 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
   expect(sheet.querySelector(".find-palette.is-embedded")).toBeTruthy();
 
-  document.querySelector(".dock-app").click();
+  navRow("Settings", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });

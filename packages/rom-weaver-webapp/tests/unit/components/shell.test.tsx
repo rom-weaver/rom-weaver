@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal } from "../../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
@@ -59,7 +59,6 @@ const TABS = [
     railLabel: "Trim",
   },
   {
-    beta: true,
     group: "patches",
     href: "ppf-undo",
     icon: <svg aria-hidden="true" />,
@@ -73,7 +72,14 @@ const TABS = [
     icon: <svg aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    railLabel: "Saves",
+  },
+  {
+    group: "roms",
+    href: "short-name",
+    icon: <svg aria-hidden="true" />,
+    id: "short-name",
+    label: "Long workflow name",
+    railLabel: "Quick",
   },
 ] satisfies WorkflowTab[];
 
@@ -101,7 +107,9 @@ const rowsOf = (nav: Element | null) =>
 describe("Masthead", () => {
   it("names every destination in the sidebar, under the group that supplies its noun", () => {
     const onSelectTab = vi.fn();
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const { container, getAllByRole, getByRole } = render(
+      withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />),
+    );
     const nav = container.querySelector(".side-nav") as HTMLElement;
     expect(nav.getAttribute("aria-label")).toBe("Workflow");
     // Every navigation group MUST have a name, and every workflow appears once.
@@ -110,7 +118,7 @@ describe("Masthead", () => {
       "Patches",
       "ROMs",
       "Files",
-      "Controls",
+      "App",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
@@ -123,7 +131,8 @@ describe("Masthead", () => {
       "PPF undo",
       "Test",
       "Trim",
-      "Saves",
+      "Save Editor",
+      "Quick",
       "Settings",
       "Offline app",
       "Saves & storage",
@@ -141,16 +150,22 @@ describe("Masthead", () => {
     ]);
 
     // The brand and Home row both reach the app's base route.
+    // Exactly one labelled, focusable home link; the mark link is a hidden duplicate.
     const logoHome = getByRole("link", { name: "rom-weaver home" });
     expect(logoHome.getAttribute("href")).toBe("/");
-    expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
-    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/");
+    expect(logoHome.classList.contains("brand-word-link")).toBe(true);
+    expect(getAllByRole("link", { name: "rom-weaver home" })).toHaveLength(1);
+    const markLink = container.querySelector(".brand-mark-link") as HTMLAnchorElement;
+    expect(markLink.getAttribute("href")).toBe("/");
+    expect(markLink.closest("[aria-hidden='true']")).not.toBeNull();
+    expect(markLink.getAttribute("tabindex")).toBe("-1");
+    expect(markLink.querySelector(".brand-mark")).toBeTruthy();
     const home = nav.querySelector("#tab-home") as HTMLAnchorElement;
     expect(home.getAttribute("href")).toBe("/");
     fireEvent.click(home);
     expect(onSelectTab).toHaveBeenCalledWith("home");
-    // Build facts stay with the title in both layouts.
-    expect(container.querySelectorAll("h1").length).toBe(1);
+    // The workflow owns its heading; the shared brand is not a page title.
+    expect(container.querySelectorAll("h1").length).toBe(0);
     expect(container.querySelectorAll(".brand").length).toBe(1);
     expect(container.querySelectorAll(".masthead-threads").length).toBe(0);
     expect(container.querySelectorAll(".sub-status").length).toBe(2);
@@ -186,12 +201,16 @@ describe("Masthead", () => {
       "ROMs",
       "Files",
       "Project",
-      "Controls",
+      "App",
     ]);
-    // Opening Menu puts the cursor in its Find box, so the keyboard comes with it.
+    // Menu opens for browsing: the cursor stays out of its Find box, so the keyboard stays down.
     const find = sheet.querySelector(".find-palette.is-embedded .find-input");
     expect(find).toBeTruthy();
-    expect(document.activeElement).toBe(find);
+    expect(document.activeElement).not.toBe(find);
+    // A tile too narrow for its full label shows the short one and keeps the full one as its name.
+    const offline = sheet.querySelector('[data-nav="status"]') as HTMLElement;
+    expect(offline.querySelector(".nav-row-short")?.textContent).toBe("Offline");
+    expect(offline.getAttribute("aria-label")).toBe("Offline app");
     expect(sheet.querySelector(".find-empty")).toBeNull();
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
@@ -199,7 +218,7 @@ describe("Masthead", () => {
     );
   });
 
-  it("docks three workflows plus Menu and Controls", () => {
+  it("docks the workflows, then Menu, which reads Close while its sheet is open", () => {
     const onSelectTab = vi.fn();
     const onOpenSettings = vi.fn();
     const { container } = render(
@@ -207,7 +226,7 @@ describe("Masthead", () => {
     );
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
     expect(container.querySelector(".dock-find")).toBeNull();
@@ -220,7 +239,10 @@ describe("Masthead", () => {
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(sheet.hidden).toBe(false);
-    // Clicking Menu again closes it; so does Escape.
+    // The way out sits where the way in was.
+    expect(menu.textContent).toBe("Close");
+    expect(menu.getAttribute("aria-label")).toBe("Close");
+    // Clicking it again closes the sheet; so does Escape.
     fireEvent.click(menu);
     expect(sheet.hidden).toBe(true);
     fireEvent.click(menu);
@@ -230,23 +252,13 @@ describe("Masthead", () => {
     fireEvent.click(dockNav.querySelector('[data-mode="test"]') as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("test");
 
-    // App closes the sheet and opens the console.
+    // Settings in the sheet closes it and opens the console; the dock has no slot of its own for it.
+    expect(dockNav.querySelector(".dock-app")).toBeNull();
     fireEvent.click(menu);
-    fireEvent.click(dockNav.querySelector(".dock-app") as HTMLButtonElement);
+    fireEvent.click(sheet.querySelector('[data-nav="settings"]') as HTMLButtonElement);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(sheet.hidden).toBe(true);
-  });
-
-  it("opens the console on a leftward swipe across the dock, not on a vertical drag", () => {
-    const onOpenSettings = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
-    const dockNav = container.querySelector(".dock") as HTMLElement;
-    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
-    fireEvent.pointerUp(dockNav, { clientX: 290, clientY: 600, isPrimary: true });
-    expect(onOpenSettings).not.toHaveBeenCalled();
-    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
-    fireEvent.pointerUp(dockNav, { clientX: 180, clientY: 705, isPrimary: true });
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(menu.textContent).toBe("Menu");
   });
 
   it("spends Escape on the sheet when the open popover is the chrome's, not the sheet's", () => {
@@ -282,8 +294,8 @@ describe("Masthead", () => {
     for (const nav of [".side-nav", ".menu-sheet"]) {
       const labels = rowsOf(container.querySelector(nav));
       expect(labels).not.toContain("Trim");
-      expect(labels).not.toContain("PPF undo");
-      expect(labels).not.toContain("Saves");
+      expect(labels).toContain("PPF undo");
+      expect(labels).not.toContain("Save Editor");
       expect(labels).toContain("Apply");
       for (const row of container.querySelectorAll(`${nav} .nav-row[hidden]`)) {
         expect(row.parentElement?.hidden).toBe(true);
@@ -297,7 +309,7 @@ describe("Masthead", () => {
   it("wears a BETA chip beside the name it qualifies", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const trim = container.querySelector('.side-nav .nav-row[href="trim"]') as HTMLElement;
-    expect(trim.querySelector(".nav-beta")?.textContent).toBe("Beta");
+    expect(trim.querySelector(".nav-beta")?.getAttribute("data-label")).toBe("Beta");
     // The chip follows the label rather than being pushed to the row's edge.
     expect(trim.querySelector(".nav-row-label")?.nextElementSibling?.classList.contains("nav-beta")).toBe(true);
   });
@@ -427,7 +439,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const device = Array.from(container.querySelectorAll(".side-nav .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
     );
     expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
       "Settings",
@@ -451,7 +463,7 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenAbout={onOpenAbout} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const app = Array.from(container.querySelectorAll("#menu-sheet .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
     );
     expect(rowsOf(app ?? null)).toEqual(["Settings", "Offline app", "Saves & storage", "Logs", "About"]);
     fireEvent.click(Array.from(app?.querySelectorAll<HTMLElement>(".nav-row") ?? []).at(-1) as HTMLElement);
@@ -478,10 +490,12 @@ describe("Masthead", () => {
     for (const row of container.querySelectorAll<HTMLElement>(".side-nav .nav-row")) {
       const visible = row.querySelector(".nav-row-label")?.textContent ?? "";
       // WCAG 2.5.3: a speech user says what they can read, so the accessible
-      // name has to contain it. "Saves" is not contained in "Save Editor".
+      // name has to contain it. A rail label that is not part of the full
+      // label ("Quick" in "Long workflow name") keeps its visible text.
       expect((row.getAttribute("aria-label") ?? visible).toLowerCase()).toContain(visible.toLowerCase());
     }
     expect(container.querySelector('.nav-row[href="save-editor"]')?.getAttribute("aria-label")).toBeNull();
+    expect(container.querySelector('.nav-row[href="short-name"]')?.getAttribute("aria-label")).toBeNull();
   });
 
   it("closes an open picker on Escape", () => {
@@ -510,6 +524,8 @@ describe("Masthead", () => {
     );
     const buildTag = container.querySelector(".build-tag .sub-link") as HTMLButtonElement;
     expect(buildTag.textContent).toBe("v1.2.3+3*");
+    // It navigates to the What's new page; it opens no dialog.
+    expect(buildTag.hasAttribute("aria-haspopup")).toBe(false);
     fireEvent.click(buildTag);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
@@ -654,33 +670,5 @@ describe("Reveal", () => {
     rerender(<Reveal open>banner</Reveal>);
     expect(reveal.hidden).toBe(false);
     expect(reveal.classList.contains("is-open")).toBe(true);
-  });
-});
-
-describe("UpdateBanner", () => {
-  it("offers reload, release notes, and dismissal", () => {
-    const onDismiss = vi.fn();
-    const onOpenWhatsNew = vi.fn();
-    const onReload = vi.fn();
-    const { container } = render(
-      withSettings(
-        <UpdateBanner
-          onDismiss={onDismiss}
-          onOpenWhatsNew={onOpenWhatsNew}
-          onReload={onReload}
-          open
-          title="A newer app version is ready."
-        />,
-      ),
-    );
-    const whatsNewButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
-    expect(whatsNewButton.textContent).toBe("What’s new");
-    expect(whatsNewButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
-    fireEvent.click(whatsNewButton);
-    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
-    expect(onReload).toHaveBeenCalledTimes(1);
-    fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

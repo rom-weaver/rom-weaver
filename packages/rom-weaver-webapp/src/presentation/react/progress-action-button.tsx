@@ -18,6 +18,9 @@ type ProgressActionButtonProps = {
   progress: ProgressViewModel | null;
   id?: string;
   title?: string;
+  /** Looks and reports disabled but stays focusable, so the reason it points at (aria-describedby) is reachable. */
+  ariaDisabled?: boolean;
+  describedBy?: string;
   icon?: ReactNode;
   loading?: boolean;
   onCancel?: () => void;
@@ -159,6 +162,8 @@ function ProgressActionButton({
   progress,
   id,
   title,
+  ariaDisabled,
+  describedBy,
   icon,
   loading,
   onCancel,
@@ -182,10 +187,12 @@ function ProgressActionButton({
 
   return (
     <button
+      aria-describedby={describedBy}
+      aria-disabled={ariaDisabled || undefined}
       className={join("btn primary run", isDownload && "download-btn dl")}
       disabled={disabled}
       id={id}
-      onClick={onClick}
+      onClick={ariaDisabled ? undefined : onClick}
       ref={runButtonRef}
       title={title}
       type="button"

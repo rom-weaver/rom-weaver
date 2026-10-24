@@ -4,6 +4,7 @@ import {
   CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
 } from "../../lib/compression/container-format-registry.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -57,8 +58,18 @@ import { useActiveAbortController, useDisposableCleanup } from "./workflow-run-h
 import { retainBrowserSource, releaseBrowserSource } from "../../storage/browser/browser-source-primitives.ts";
 import { clearApplyEntries } from "./emulator-session-store.ts";
 
-const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
-  JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
+// weavePackage is read from the settings by the form directly and persisted as the user toggles
+// Include ROM; counting it as a changed default would reset every per-job override (such as the
+// chosen weave format) back to the defaults.
+const withoutWeavePackage = ({ weavePackage: _weave, bundlePackage: _bundle, ...rest }: Record<string, unknown> = {}) =>
+  rest;
+const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) => {
+  const output = withoutWeavePackage(settings.output);
+  return JSON.stringify(
+    { ...withoutWeavePackage(settings), output: Object.keys(output).length ? output : undefined },
+    (_key, value) => (typeof value === "function" ? "[function]" : value),
+  );
+};
 
 const sameStringSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
   left.size === right.size && [...left].every((value) => right.has(value));
@@ -97,6 +108,8 @@ const useLocalApplyPatchFormSession = ({
   onError,
   applyPatches,
   applyReady = false,
+  applyDisabled = false,
+  applyValidationError,
   downloadOutput,
   defaultPatchBasis = "auto",
   resolvedOutputCompression,
@@ -104,6 +117,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputNameKey,
   cheatNames = [],
   disabledPatchIds,
+  getPatchSlotIds,
   stageInput,
   stagePatches,
   validatePatches,
@@ -122,6 +136,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
+    setCompletedWarnings,
     setErrorMessage,
     setInputStaging,
     setOutputErrorMessage,
@@ -163,6 +178,8 @@ const useLocalApplyPatchFormSession = ({
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
+  // Whether the pending result was produced under a manual name, noted when it is first seen.
+  const pendingResultManualNameRef = useRef<{ manual: boolean; result: ApplyWorkflowResult } | null>(null);
   const patchChangePendingRef = useRef(false);
   const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
@@ -196,9 +213,9 @@ const useLocalApplyPatchFormSession = ({
   const activePatches = patches === undefined ? internalPatches : patches;
   const outputPatches = useMemo(() => {
     if (!disabledPatchIds?.size) return activePatches;
-    const ids = getBinarySourceListStableIds(activePatches);
+    const ids = getPatchSlotIds?.() ?? getBinarySourceListStableIds(activePatches);
     return activePatches.filter((_, index) => !disabledPatchIds.has(ids[index] || ""));
-  }, [activePatches, disabledPatchIds]);
+  }, [activePatches, disabledPatchIds, getPatchSlotIds]);
   const retainedSources = useMemo(
     () => new Set<BinarySource>([...effectiveInputs, ...activePatches]),
     [activePatches, effectiveInputs],
@@ -227,6 +244,7 @@ const useLocalApplyPatchFormSession = ({
     activeCompression,
     displayedCompression,
     effectiveActiveCompression,
+    formatPending,
     outputOptions,
     requestedCompression,
     selectedOutputOptionLabel,
@@ -267,7 +285,7 @@ const useLocalApplyPatchFormSession = ({
   const hasPendingDownload = !!pendingDownloadFileName;
   const setPendingDownloadReadyFileName = useCallback(
     (fileName: string) => {
-      const normalizedFileName = getRequestedOutputName(fileName) || "output";
+      const normalizedFileName = sanitizeTypedOutputName(fileName) || "output";
       pendingDownloadFileNameRef.current = normalizedFileName;
       setPendingDownloadFileName(normalizedFileName);
     },
@@ -290,6 +308,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs(null);
     setCompletedCompressionTimeMs(null);
     setCompletedSizeSummary(createOutputSizeSummary());
+    setCompletedWarnings([]);
     setProgress(null);
     clearPendingDownload();
   }, [
@@ -297,6 +316,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
+    setCompletedWarnings,
     setProgress,
   ]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
@@ -312,6 +332,16 @@ const useLocalApplyPatchFormSession = ({
     identifiedOutputBase,
   );
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
+  // Noted when a result is first seen, before the name can be cleared. A manually named
+  // run's resolved/result name must not leak back in as the automatic name afterwards.
+  const pendingDownloadResult = pendingDownloadResultRef.current;
+  if (pendingDownloadResult && pendingResultManualNameRef.current?.result !== pendingDownloadResult) {
+    pendingResultManualNameRef.current = {
+      manual: !!sanitizeTypedOutputName(requestedOutputName),
+      result: pendingDownloadResult,
+    };
+  }
+  const isPendingResultManuallyNamed = !!pendingDownloadResult && !!pendingResultManualNameRef.current?.manual;
   const currentResolvedOutputName =
     outputPatches.length && resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
       ? resolvedOutputName
@@ -320,8 +350,8 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
-  const effectiveResolvedOutputName =
-    requestedOutputName || buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const automaticDisplayOutputName = buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const effectiveResolvedOutputName = requestedOutputName || automaticDisplayOutputName;
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({
@@ -387,11 +417,11 @@ const useLocalApplyPatchFormSession = ({
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
-  const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
   const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage;
+  const outputWarningMessage = localState.completedWarnings.join(" ");
   // Deferred patch validation has no staging progress, but its verdict still controls whether the
   // next run is safe. Keep a queued Apply behind that silent pass.
   const applyPreparationPending =
@@ -401,11 +431,17 @@ const useLocalApplyPatchFormSession = ({
     !!patchProgress ||
     Object.keys(patchProgressByKey).length > 0 ||
     romInputs.some((entry) => entry.loading || !!entry.progress);
+  const strictInputChecksumBlocked =
+    hasStrictInputChecksumMismatch && !checksumOverrideChecked && !applyPreparationPending;
   const patchValidationBlocked = stagedPatchInfos.some(
     (info) => info.validationState === "invalid" && info.checksumPreflightMismatch !== true,
   );
   const applyQueueBlocked =
-    !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
+    !!applyValidationError ||
+    !!failureMessage ||
+    !!outputErrorMessage ||
+    strictInputChecksumBlocked ||
+    patchValidationBlocked;
   const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
@@ -453,7 +489,8 @@ const useLocalApplyPatchFormSession = ({
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
         resolvePendingDownloadFileName({
-          automaticOutputName: automaticResolvedOutputName,
+          automaticOutputName: automaticDisplayOutputName,
+          preferAutomaticName: isPendingResultManuallyNamed,
           requestedOutputName: configuredOutputName,
           resultOutputName: pendingDownloadResultRef.current.output.fileName,
         }),
@@ -461,8 +498,9 @@ const useLocalApplyPatchFormSession = ({
     }
   }, [
     activeSettings.output?.outputName,
-    automaticResolvedOutputName,
+    automaticDisplayOutputName,
     hasPendingDownload,
+    isPendingResultManuallyNamed,
     setPendingDownloadReadyFileName,
     setOutputName,
     setOutputNameEdited,
@@ -503,6 +541,7 @@ const useLocalApplyPatchFormSession = ({
         inputNoticeMessage,
         inputStaging,
         outputRuntimeNoticeMessage,
+        outputWarningMessage,
         patchNoticeMessage,
         patchProgress,
         patchProgressByKey,
@@ -518,6 +557,7 @@ const useLocalApplyPatchFormSession = ({
       effectiveOutputNoticeMessage,
       inputNoticeMessage,
       outputRuntimeNoticeMessage,
+      outputWarningMessage,
       patchProgress,
       patchProgressByKey,
       patchStaging,
@@ -543,15 +583,17 @@ const useLocalApplyPatchFormSession = ({
     () =>
       buildOutputViewState({
         activeSettings,
+        applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
         canQueueApply,
         completedSizeSummary,
         compressTimingText,
-        disabled,
+        disabled: disabled || applyDisabled,
         displayedCompression,
         effectiveResolvedOutputName,
+        formatPending,
         hasPendingDownload,
         identifiedTitle,
         outputName,
@@ -565,7 +607,11 @@ const useLocalApplyPatchFormSession = ({
       }),
     [
       applyQueued,
+      applyDisabled,
+      applyValidationError,
       activeSettings,
+      strictInputChecksumBlocked,
+      patchValidationBlocked,
       identifiedTitle,
       applyTimingText,
       busy,
@@ -575,6 +621,7 @@ const useLocalApplyPatchFormSession = ({
       disabled,
       displayedCompression,
       effectiveResolvedOutputName,
+      formatPending,
       hasPendingDownload,
       pendingDownloadFileName,
       outputOptions,
@@ -592,8 +639,8 @@ const useLocalApplyPatchFormSession = ({
   );
 
   const updateSettings = useCallback(
-    (nextSettings: ApplyPatchFormSettings) => {
-      setChecksumOverrideChecked(false);
+    (nextSettings: ApplyPatchFormSettings, keepChecksumOverride = false) => {
+      if (!keepChecksumOverride) setChecksumOverrideChecked(false);
       setApplyQueued(false);
       clearDismissibleErrors();
       invalidateCompletedOutputState();
@@ -614,13 +661,16 @@ const useLocalApplyPatchFormSession = ({
   );
   useEffect(() => {
     if (!outputCompressionEdited || activeCompression === effectiveActiveCompression) return;
-    updateSettings({
-      ...activeSettings,
-      output: {
-        ...activeSettings.output,
-        compression: effectiveActiveCompression,
+    updateSettings(
+      {
+        ...activeSettings,
+        output: {
+          ...activeSettings.output,
+          compression: effectiveActiveCompression,
+        },
       },
-    });
+      true,
+    );
   }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
@@ -704,6 +754,8 @@ const useLocalApplyPatchFormSession = ({
           archivePathEntries: info.parentCompressions?.length
             ? info.parentCompressions
             : ((patch as Partial<RomInputRowState>).archivePathEntries ?? existing.archivePathEntries),
+          chdCodecMode:
+            info.chdCodecMode === undefined ? (patch.chdCodecMode ?? existing.chdCodecMode) : info.chdCodecMode,
           chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           cueText: info.cueText ?? patch.cueText ?? existing.cueText,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,
@@ -943,7 +995,7 @@ const useLocalApplyPatchFormSession = ({
     const previous = previousDisabledPatchIdsRef.current;
     const current = disabledPatchIds ?? new Set<string>();
     previousDisabledPatchIdsRef.current = current;
-    // Bundle bootstrapping may seed its initial optional state after the first patch stage. That is
+    // Weave bootstrapping may seed its initial optional state after the first patch stage. That is
     // initial configuration, not a user edit, so it must not launch a competing validation pass.
     if (!previous) return;
     if (!(validatePatches && activePatches.length)) return;
@@ -1288,6 +1340,8 @@ const useLocalApplyPatchFormSession = ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
       setDisplayFileName: (value: string) => {
+        // The field keeps what was typed; resolvePendingDownloadFileName treats a name that
+        // sanitizes to empty (":::") as automatic, matching setApplyOutputName.
         const nextOutputName = getRequestedOutputName(value);
         clearDismissibleErrors();
         setOutputName(value);
@@ -1295,8 +1349,9 @@ const useLocalApplyPatchFormSession = ({
         if (pendingDownloadResultRef.current && hasPendingDownload) {
           setPendingDownloadReadyFileName(
             resolvePendingDownloadFileName({
-              automaticOutputName: automaticResolvedOutputName,
+              automaticOutputName: automaticDisplayOutputName,
               fallbackOutputName: effectiveResolvedOutputName,
+              preferAutomaticName: isPendingResultManuallyNamed,
               requestedOutputName: nextOutputName,
               resultOutputName: pendingDownloadResultRef.current.output.fileName,
             }),
@@ -1323,13 +1378,17 @@ const useLocalApplyPatchFormSession = ({
       },
       setOutputCompression: (value: string) => {
         setOutputCompressionEdited(true);
-        updateSettings({
-          ...activeSettings,
-          output: {
-            ...activeSettings.output,
-            compression: value as "auto" | CompressionFormat,
+        // The output format never changes the input checks, so it keeps the "apply anyway" override.
+        updateSettings(
+          {
+            ...activeSettings,
+            output: {
+              ...activeSettings.output,
+              compression: value as "auto" | CompressionFormat,
+            },
           },
-        });
+          true,
+        );
       },
       setOutputCompressOption: (key: string, value: string, updates?: Record<string, string>) => {
         // Per-job override of a flat compression setting (zipCodec, compressionProfile, …)
@@ -1347,11 +1406,12 @@ const useLocalApplyPatchFormSession = ({
     [
       activeSettings,
       applyDownloadOrchestration,
-      automaticResolvedOutputName,
+      automaticDisplayOutputName,
       clearDismissibleErrors,
       commitSettings,
       effectiveResolvedOutputName,
       hasPendingDownload,
+      isPendingResultManuallyNamed,
       localOutputStoreController,
       setPendingDownloadReadyFileName,
       setOutputName,
@@ -1385,6 +1445,8 @@ const useLocalApplyPatchFormSession = ({
   );
 
   return {
+    canStartApply,
+    getRunInput: () => ({ ...createStageSnapshot(), patchOptions: activePatchOptions }),
     localNoticeController,
     localOutputController,
     localStackController,

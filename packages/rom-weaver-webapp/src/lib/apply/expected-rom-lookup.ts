@@ -1,4 +1,4 @@
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 
 type ExpectedRomLookupOptions = {
@@ -11,7 +11,7 @@ type ExpectedRomLookupOptions = {
  * Return titles or an unavailable-data result; return undefined for a lookup with no matches.
  */
 const lookupExpectedRom = async (
-  checks: ParsedBundleChecks,
+  checks: ParsedWeaveChecks,
   options: ExpectedRomLookupOptions = {},
 ): Promise<ParsedIdentifyResolution | undefined> => {
   const { identifyChecks } = await import("../../platform/browser/browser-api.ts");

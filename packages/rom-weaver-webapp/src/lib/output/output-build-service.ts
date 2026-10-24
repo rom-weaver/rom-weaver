@@ -28,10 +28,12 @@ import {
   isLazyExternalPatchFile,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { appendFileNameExtension, getFileNameWithoutExtension } from "../input/path-utils.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
   getChdAutoCreateMode,
+  isLooseChdAutoSource,
   replaceCuePatchFileName,
 } from "../input/rom-specific-file-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
@@ -43,6 +45,7 @@ import {
   createArchivePatchFileOutput,
   createPatchFileFromRuntimeOutput,
 } from "./archive-output-service.ts";
+import { removeKnownOutputExtension, withOutputExtension } from "./output-name-validation.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
 type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
@@ -70,8 +73,7 @@ const getLogLevel = (options: OutputWorkflowOptions | undefined) => options?.log
 const getContainerSettings = (options: OutputWorkflowOptions | undefined): OutputContainerSettings =>
   options?.output?.container || {};
 const getRequestedOutputName = (options: OutputWorkflowOptions | undefined) => {
-  const outputName = options?.output?.outputName;
-  return typeof outputName === "string" ? outputName.trim() : "";
+  return sanitizeTypedOutputName(options?.output?.outputName);
 };
 
 const traceOutputName = (
@@ -116,19 +118,49 @@ const getRvzOptions = (
   return options;
 };
 
-const createOutputPlan = ({
+const getOutputChdAutoMode = async (
+  file: PatchFileInstance,
+  options: OutputWorkflowOptions | undefined,
+  runtime: WorkflowRuntime | undefined,
+): Promise<string> => {
+  const mode = getChdAutoCreateMode(file);
+  // An unidentified `.iso` also needs its bytes: native `auto` reads UDF to pick DVD.
+  const unidentifiedIso =
+    /\.iso$/i.test(file.fileName) && !chdModeFromMetadata(file.metadata) && !file.metadata?.cuePath;
+  if (!(isLooseChdAutoSource(file) || unidentifiedIso)) return mode;
+  if (!(file.fileSize > 0)) return mode;
+  if (!/\.(bin|iso)$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
+  // The patched bytes are new, so ask the engine which create mode native `auto` picks for them. A probe
+  // failure (opaque bytes) keeps the structural/metadata mode, except for an unidentified `.iso`: the
+  // engine may still infer CD from its size, so no codec set is sent (mode "auto") and native picks one.
+  options?.signal?.throwIfAborted();
+  try {
+    const result = await runtime?.compression.probe?.({
+      source: createRuntimeSourceFromPatchFile(file, file.fileName),
+    });
+    return result?.chdCreateMode || mode;
+  } catch (error) {
+    options?.signal?.throwIfAborted();
+    traceOutputName(options, "output.chd.auto-mode.probe-failed", { error: String(error), fileName: file.fileName });
+    return unidentifiedIso ? "auto" : mode;
+  }
+};
+
+const createOutputPlan = async ({
   compression,
   options,
   patchedFileName,
   romFile,
   chdAutoModeFile = romFile,
+  runtime,
 }: {
   compression: string;
   options: OutputWorkflowOptions | undefined;
   patchedFileName: string;
   romFile: PatchFileInstance;
   chdAutoModeFile?: PatchFileInstance;
-}): PatchedOutputPlan => {
+  runtime?: WorkflowRuntime;
+}): Promise<PatchedOutputPlan> => {
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
     compressionProfile: String(getCompressionProfile(options)),
@@ -140,13 +172,16 @@ const createOutputPlan = ({
     zipCodec: archiveSettings.zipCodec as string | null | undefined,
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
+  const chdAutoMode =
+    compression === "chd" && (!archiveSettings.chdOutputMode || archiveSettings.chdOutputMode === "auto")
+      ? await getOutputChdAutoMode(chdAutoModeFile, options, runtime)
+      : "raw";
   return createPatchedOutputPlan({
     chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName,
-    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
-      mode === "auto" ? getChdAutoCreateMode(chdAutoModeFile) : mode,
+    resolveChdCodecMode: (_fileName: string, mode: string | null) => (mode === "auto" ? chdAutoMode : mode),
     resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile,
     rvzOptions: getRvzOptions(archiveSettings, levels),
@@ -237,6 +272,7 @@ const createRuntimeRomSpecificOutputFiles = async (
       romSpecific: {
         chd: {
           compressionCodecs: outputPlan.chdCompressionCodecs,
+          compressionProfile: getCompressionProfile(options),
           cueFilePath: outputPlan.chdCuePath,
           mode: outputPlan.chdCreateMode,
           sourceMode: outputPlan.chdSourceMode,
@@ -294,11 +330,12 @@ const createSingleFileRomSpecificOutput = async ({
   options: OutputWorkflowOptions | undefined;
   runtime?: WorkflowRuntime;
 }): Promise<PatchFileInstance | null> => {
-  const outputPlan = createOutputPlan({
+  const outputPlan = await createOutputPlan({
     compression,
     options,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
     romFile: outputFile,
+    runtime,
   });
   const outputs = await createRuntimeRomSpecificOutputFiles(compression, outputFile, outputPlan, options, runtime);
   if (!outputs?.[0]) return null;
@@ -318,12 +355,13 @@ const buildOutputFiles = async (
   });
   if (compression === "none") return [patchedRom];
 
-  const outputPlan = createOutputPlan({
+  const outputPlan = await createOutputPlan({
     compression,
     options,
     patchedFileName: patchedRom.fileName,
     romFile,
     chdAutoModeFile: patchedRom,
+    runtime,
   });
   if (isArchiveCompressionFormat(compression)) {
     const archiveEntryFileName =
@@ -373,11 +411,8 @@ const getOutputBaseName = (assets: InputAsset[]) => {
   return getFileNameWithoutExtension(name) || "patched";
 };
 
-const resolveRawRequestedOutputName = (outputName: string, source: PatchFileInstance) => {
-  if (hasFileNameExtension(outputName)) return outputName;
-  const sourceExtension = typeof source.getExtension === "function" ? source.getExtension() : "";
-  return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
-};
+const resolveRawRequestedOutputName = (outputName: string, source: PatchFileInstance) =>
+  withOutputExtension(outputName, typeof source.getExtension === "function" ? source.getExtension() : "");
 
 const createArchiveEntryFromPatchFile = (
   asset: InputAsset,
@@ -416,8 +451,10 @@ const createArchiveEntriesFromOutputAssets = (
   if (cueOutput && trackOutput && trackOutputs.length === 1) {
     const trackExtension = getArchiveTrackExtension(trackOutput.file, trackOutput.asset.fileName);
     if (trackExtension.toLowerCase() !== "bin") return createDefaultEntries();
-    const trackFileName = replaceFileNameExtension(baseName, trackExtension);
-    const cueFileName = replaceFileNameExtension(baseName, "cue");
+    // baseName may be a typed base name: keep a dotted version and drop only a known extension.
+    const discBaseName = removeKnownOutputExtension(baseName) || baseName;
+    const trackFileName = appendFileNameExtension(discBaseName, trackExtension);
+    const cueFileName = appendFileNameExtension(discBaseName, "cue");
     let cueText: string;
     try {
       cueText = replaceCuePatchFileName(
@@ -478,7 +515,7 @@ const buildSessionOutputFiles = async (
     const onlyFile = onlyOutput.file;
     if (requestedOutputName)
       onlyFile.fileName =
-        compression === "none"
+        compression === "none" || !isArchiveCompressionFormat(compression)
           ? resolveRawRequestedOutputName(requestedOutputName, onlyOutput.asset.file)
           : requestedOutputName;
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };
@@ -520,9 +557,12 @@ const buildSessionOutputFiles = async (
     };
   }
   if (archiveCompression === "chd") {
-    const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
+    // The CHD replaces the disc sheet, so a typed `x.cue` names `x.chd`, not `x.cue.chd`.
+    const chdFileName = appendFileNameExtension(removeKnownOutputExtension(baseName) || baseName, "chd");
+    const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue" || asset.kind === "gdi");
     const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
-    if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a CUE disc group with tracks");
+    if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a disc sheet group with tracks");
+    const mode = cueOutput.asset.kind === "gdi" ? "gd" : "cd";
     if (!runtime?.compression.create) throw new Error("Runtime CHD compression capability is unavailable");
     const cueFile = clonePatchFile(cueOutput.file, cueOutput.asset.fileName);
     const source = createRuntimeSourceFromPatchFile(cueFile, cueOutput.asset.fileName);
@@ -554,18 +594,19 @@ const buildSessionOutputFiles = async (
         signal: options?.signal,
         threads: getThreads(options),
       },
-      outputName: `${baseName}.chd`,
+      outputName: chdFileName,
       romSpecific: {
         chd: {
-          compressionCodecs: getChdCompressionCodecs("cd", options),
+          compressionCodecs: getChdCompressionCodecs(mode, options),
+          compressionProfile: getCompressionProfile(options),
           imageFiles,
-          mode: "cd",
+          mode,
         },
       },
       source,
     });
     const output = "output" in result ? result.output : result;
-    const file = await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`);
+    const file = await createPatchFileFromRuntimeOutput(output, chdFileName);
     await runPatchFileCleanups(outputAssetCleanups);
     return {
       compressionTimeMs: getPatchFileRuntimeTimingMs(file),

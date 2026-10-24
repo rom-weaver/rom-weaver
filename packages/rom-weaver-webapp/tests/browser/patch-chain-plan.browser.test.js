@@ -53,7 +53,9 @@ const getPatchInputSelect = async (index) => {
 
 const patchCheckHeadings = (index) => {
   const card = [...document.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")][index];
-  return [...(card?.querySelectorAll(".ck-group-head") || [])].map((head) => head.textContent?.trim());
+  return [...(card?.querySelectorAll(".ck-group-head") || [])].map((head) =>
+    head.querySelector(":scope > span")?.textContent?.trim(),
+  );
 };
 
 test("a true BPS chain defers the dependent patch instead of failing it", async () => {
@@ -66,22 +68,22 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   // One "runs on" select per patch; patch 2's automatic choice names the chain head's output.
   const runsOn0 = await getPatchInputSelect(0);
-  expect(runsOn0.options[0]?.textContent).toBe("auto (Original ROM)");
+  expect(runsOn0.options[0]?.textContent).toBe("Original ROM (detected)");
   const runsOn1 = await getPatchInputSelect(1);
-  expect(runsOn1.options[0]?.textContent).toBe("auto (Previous patch output)");
+  expect(runsOn1.options[0]?.textContent).toBe("Previous patch's result (detected)");
   expect(runsOn1.value).toBe("auto");
   // A single target lane has nothing to choose between, so the track select is hidden.
   expect(document.getElementById("rom-weaver-patch-track-0")).toBeNull();
   expect(patchCheckHeadings(0)).toEqual([
-    "Authored input checks: Original ROM (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-    "Shared input checks: Original ROM",
+    "Input: Original ROM (detected)",
+    "Patch result",
+    "Combined result",
+    "Shared input: Original ROM",
   ]);
   expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Previous patch output (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
+    "Input: Previous patch's result (detected)",
+    "Patch result",
+    "Combined result",
   ]);
   expect(document.querySelector("#rom-weaver-patch-checks-help-1")).toBeNull();
   await page.viewport(390, 844);
@@ -94,9 +96,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
 
   // An exact statically-proven chain makes the last patch's embedded target
   // enforceable: the output line stands down with no "won't be verified" warning.
-  await expect
-    .poll(() => document.getElementById("rom-weaver-bundle-output-unverified"), { timeout: 60000 })
-    .toBeNull();
+  await expect.poll(() => document.getElementById("rom-weaver-weave-output-unverified"), { timeout: 60000 }).toBeNull();
 });
 
 test("same-base patches all match the ROM and feed the Expected group without conflict", async () => {
@@ -118,15 +118,16 @@ test("same-base patches all match the ROM and feed the Expected group without co
   expect(document.getElementById("rom-weaver-rom-expected-conflict")).toBeNull();
 }, 120000);
 
-test("checksumless patches distinguish successful preflight from verified identity", async () => {
+test("checksumless patches distinguish a successful preflight from a verified identity", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, IPS_ALT_A, IPS_ALT_B]);
 
   // A successful preflight is a verified check even when its patch carries no source checksum.
   const passedChecks = () =>
-    document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
+    document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Ready to apply"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
+  // No checksum was compared, so the chip claims only that the patch was checked.
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checked");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
@@ -137,27 +138,23 @@ test("a patch input selector re-plans that patch", async () => {
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (Original ROM)");
+  expect(basisSelect.options[0]?.textContent).toBe("Original ROM (detected)");
 
-  // Pinning "previous output" overrides the inference: the re-plan stops
+  // Pinning "previous patch's result" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
   // real intermediate decides).
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Checks during apply: game.bin");
-  expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Previous patch output",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-  ]);
+  expect(patchCheckHeadings(1)).toEqual(["Input: Previous patch's result", "Patch result", "Combined result"]);
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
   expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Original ROM (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-    "Shared input checks: Original ROM",
+    "Input: Original ROM (detected)",
+    "Patch result",
+    "Combined result",
+    "Shared input: Original ROM",
   ]);
 }, 180000);
 
@@ -208,7 +205,7 @@ test("an out-of-order chain names its predecessor and Fix order repairs it", asy
     .toContain("applied first");
   // The broken chain also stands down output verification, naming the order problem.
   await expect
-    .poll(() => document.getElementById("rom-weaver-bundle-output-unverified")?.textContent ?? "", { timeout: 60000 })
+    .poll(() => document.getElementById("rom-weaver-weave-output-unverified")?.textContent ?? "", { timeout: 60000 })
     .toContain("out of order");
 
   const fixButton = document.getElementById("rom-weaver-button-fix-patch-order");
@@ -220,7 +217,5 @@ test("an out-of-order chain names its predecessor and Fix order repairs it", asy
   await expect.poll(() => chipText(2), { timeout: 90000 }).toBe("Checks during apply: chain-step-b.bps");
   await expect.poll(() => document.getElementById("rom-weaver-patch-order-note"), { timeout: 60000 }).toBeNull();
   // ...and the output line stands down: no "won't be verified" warning remains.
-  await expect
-    .poll(() => document.getElementById("rom-weaver-bundle-output-unverified"), { timeout: 60000 })
-    .toBeNull();
+  await expect.poll(() => document.getElementById("rom-weaver-weave-output-unverified"), { timeout: 60000 }).toBeNull();
 }, 180000);

@@ -114,7 +114,7 @@ impl<R: Read + Seek> GdRomFs<R> {
     }
 
     /// Read the data track's IP.BIN boot area: the first
-    /// [`BOOT_AREA_SECTORS`] logical sectors (the ISO9660 system area), which a
+    /// `BOOT_AREA_SECTORS` logical sectors (the ISO9660 system area), which a
     /// rebuilt track must preserve unless the patch replaces it.
     pub fn read_boot_area(&mut self) -> Result<Vec<u8>> {
         self.sectors.read_logical_range(0, BOOT_AREA_SIZE as u64)

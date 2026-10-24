@@ -1,6 +1,6 @@
 # About rom-weaver
 
-rom-weaver patches, converts, and bundles ROMs and disc images. It is free and open-source software, it runs the same engine in your browser and on the command line, and it does the work on your own device.
+rom-weaver patches, converts, and weaves ROMs and disc images. It is free and open-source software, it runs the same engine in your browser and on the command line, and it does the work on your own device.
 
 <!-- START doctoc -->
 ## Table of contents

@@ -70,3 +70,40 @@ test("falls back to the flat file list when directory entries are unavailable", 
 test("returns an empty list for a null transfer", async () => {
   expect(await readDataTransferFiles(null)).toEqual([]);
 });
+
+test("reads exact bytes from a browser-created file transfer", async () => {
+  const expected = new Uint8Array([1, 2, 3, 4]);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([expected], "first.gba"));
+  const files = await readDataTransferFiles(transfer);
+  expect(names(files)).toEqual(["first.gba"]);
+  expect(new Uint8Array(await files[0].arrayBuffer())).toEqual(expected);
+});
+
+test("captures a failed file entry's fallback before the transfer clears", async () => {
+  const direct = new File([new Uint8Array([5, 6, 7])], "direct.bin");
+  let available = direct;
+  const failed = {
+    file: (_resolve, reject) => queueMicrotask(() => reject(new DOMException("Missing path", "NotFoundError"))),
+    isDirectory: false,
+    isFile: true,
+    name: direct.name,
+  };
+  const transfer = entryTransfer([fileEntry("first.bin"), failed, directoryEntry("folder", [fileEntry("nested.bin")])]);
+  transfer.items[1].getAsFile = () => available;
+  const result = readDataTransferFiles(transfer);
+  available = null;
+  const files = await result;
+  expect(names(files)).toEqual(["first.bin", "direct.bin", "nested.bin"]);
+  expect(files[1]).toBe(direct);
+  expect(new Uint8Array(await files[1].arrayBuffer())).toEqual(new Uint8Array([5, 6, 7]));
+});
+
+test("does not duplicate readable entries or recover hidden entries", async () => {
+  const visible = fileEntry("visible.bin");
+  const hidden = { ...fileEntry(".hidden"), file: (_resolve, reject) => reject(new Error("unreadable")) };
+  const transfer = entryTransfer([visible, hidden]);
+  transfer.items[0].getAsFile = () => file("visible.bin");
+  transfer.items[1].getAsFile = () => file("fallback.bin");
+  expect(names(await readDataTransferFiles(transfer))).toEqual(["visible.bin"]);
+});

@@ -5,6 +5,7 @@ import type { Localizer } from "../../presentation/localization/index.ts";
 import { RomSearchResultSummary } from "../../public/react/components/ds/rom-expectation-card.tsx";
 import type { FindAction, FindEntry, FindIndex, FindKind, FindResult, FindSources } from "../find-index.ts";
 import { createFindIndex, loadGuideRoutes, loadIdentifyFindEntries, searchFind } from "../find-index.ts";
+import { focusMainLanding } from "../focus-main.ts";
 
 const KIND_MESSAGE: Record<
   FindKind,
@@ -64,7 +65,7 @@ const FindPalette = ({
   const results: FindResult[] = useMemo(
     () =>
       showResults
-        ? [...identifyEntries.map((entry) => ({ entry, score: Number.MAX_SAFE_INTEGER })), ...searchFind(index, query)]
+        ? [...searchFind(index, query), ...identifyEntries.map((entry) => ({ entry, score: Number.MAX_SAFE_INTEGER }))]
         : [],
     [identifyEntries, index, query, showResults],
   );
@@ -113,8 +114,9 @@ const FindPalette = ({
       setActiveEntryId(null);
       return undefined;
     }
-    inputRef.current?.focus();
+    // Menu opens for browsing; its Find box takes focus only when the opener asks.
     if (embedded) return undefined;
+    inputRef.current?.focus();
     const dismiss = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -140,6 +142,11 @@ const FindPalette = ({
     // dispatching a view switch as well would double-route (and on the 404
     // shell would drop the slug).
     if (result.entry.kind !== "guide") onAction(result.entry.action, result.entry);
+    // The activated row is gone, so focus would fall to BODY. Dialog openers
+    // restore focus themselves and external links leave the page.
+    const { type } = result.entry.action;
+    if (type === "view" || type === "identify" || type === "changelog" || result.entry.kind === "guide")
+      focusMainLanding();
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {

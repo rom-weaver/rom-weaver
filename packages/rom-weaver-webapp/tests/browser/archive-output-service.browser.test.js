@@ -58,11 +58,11 @@ test("createArchiveOutput builds runtime archive create requests and reports pro
       },
       workers: { threads: 2 },
     },
-    outputName: "bundle.zip",
+    outputName: "weave.zip",
     runtime,
   });
 
-  expect(output.fileName).toBe("bundle.zip");
+  expect(output.fileName).toBe("weave.zip");
   expect(calls).toHaveLength(1);
   expect(calls[0].format).toBe("zip");
   expect(calls[0].entries[0]).toMatchObject({
@@ -72,7 +72,7 @@ test("createArchiveOutput builds runtime archive create requests and reports pro
   });
   expect(calls[0].options).toMatchObject({
     compression: "zip",
-    outputName: "bundle.zip",
+    outputName: "weave.zip",
     threads: 2,
     zipCodec: "store",
     zipLevel: undefined,
@@ -105,7 +105,7 @@ test("createArchiveOutput uses normalized container codec settings", async () =>
         },
       },
     },
-    outputName: "bundle.zip",
+    outputName: "weave.zip",
     runtime,
   });
 
@@ -155,10 +155,10 @@ test("createArchivePatchFileOutput wraps runtime archive output as a patch file"
     compression: "7z",
     entries: [{ data: new Uint8Array([1]), filename: "entry.bin" }],
     options: undefined,
-    outputName: "bundle.7z",
+    outputName: "weave.7z",
     runtime,
   });
 
-  expect(patchFile.fileName).toBe("bundle.7z");
+  expect(patchFile.fileName).toBe("weave.7z");
   expect([...getPatchFileBytes(patchFile)]).toEqual([...outputBytes]);
 });

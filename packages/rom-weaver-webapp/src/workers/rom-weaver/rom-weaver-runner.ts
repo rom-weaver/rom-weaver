@@ -35,6 +35,8 @@ import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?
 import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
 import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
 import { formatCommandForTrace } from "../../wasm/workers/worker-trace-format.ts";
+import { createVfsPathId } from "../../storage/vfs/path-id.ts";
+import { getManagedOpfsFileHandle, removeManagedOpfsPath } from "../protocol/opfs-path.ts";
 import { getStagedInputMs } from "../protocol/browser-opfs-source-ref.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
@@ -97,6 +99,15 @@ type RunnerCreateOptions = { threads?: RuntimeValue };
 // Keep about half the thread budget as idle runners, with a floor of two and this cap.
 // The scheduler separately limits active operations by the thread budget.
 const MAX_WARM_IDLE_RUNNERS = 8;
+// Every admitted operation holds its own runner: a worker plus a WASM heap and a thread-pool shell set.
+// A large drop must queue behind this cap, or dozens of simultaneous runners exhaust the page's memory
+// and address space (a 14-file identify drop crashed the tab) even though thread-less ops reserve no threads.
+const MAX_CONCURRENT_RUNNERS = 8;
+// Mobile WebKit reserves each runner's whole shared-memory maximum (the mobile memory ceiling) up front,
+// so a phone's 4-6 thread budget would still reserve several GiB. Mobile also keeps only one warm runner.
+const MAX_MOBILE_CONCURRENT_RUNNERS = 2;
+const resolveMaxConcurrentRunners = (threadBudget: number, root?: Parameters<typeof isMobileRuntime>[0]): number =>
+  Math.min(threadBudget, isMobileRuntime(root) ? MAX_MOBILE_CONCURRENT_RUNNERS : MAX_CONCURRENT_RUNNERS);
 const resolveWarmIdleRunners = (): number => {
   // WASM heaps never shrink. Mobile keeps one runner because shared-memory reservations leave little headroom.
   if (isMobileRuntime()) return 1;
@@ -220,7 +231,7 @@ const selectActiveVirtualFilesForRun = (
 ) => {
   const command = readRomWeaverRunInputCommand(commandOrRequest);
   const referencedPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
-  if (command.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
+  if (command.type === "compress" && [...referencedPaths].some((path) => /\.(cue|gdi)$/i.test(path))) {
     return activeVirtualFiles;
   }
   if (!referencedPaths.size) return activeVirtualFiles;
@@ -342,7 +353,7 @@ const getOperationScheduler = (): OperationScheduler => {
     // Limit operations by the thread budget. The thread gate keeps their total request within it, so full-budget work runs alone.
     const threadBudget = getDefaultBrowserThreadCount();
     operationScheduler = createOperationScheduler({
-      maxConcurrency: threadBudget,
+      maxConcurrency: resolveMaxConcurrentRunners(threadBudget),
       memoryCeiling: resolveMemoryCeilingBytes(),
       // Rust plans I/O batches from browser memory, thread limits, and source sizes. Its planner command bypasses this scheduler.
       planBatch: (jobSizes, planOptions) =>
@@ -422,12 +433,20 @@ const scheduleMobileIdleRunnerEviction = () => {
   }, MOBILE_IDLE_EVICTION_DEBOUNCE_MS);
 };
 
-// WASM heaps only grow. Match shared WASI/Emscripten OOM messages and V8 memory RangeErrors so the affected runner is recycled.
-const isRunnerOutOfMemoryError = (error: unknown): boolean => {
+const FATAL_OPFS_PROXY_MESSAGE_REGEX = /^OPFS proxy (?:request timed out|is poisoned|died mid-request)$/;
+
+// Classification MUST use messages because structured cloning drops custom Error names on resolved results.
+const isRunnerUnrecoverableError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;
-  if (OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message)) return true;
-  return error.name === "RangeError" && /memory/i.test(error.message);
+  return (
+    OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message) ||
+    (error.name === "RangeError" && /memory/i.test(error.message)) ||
+    FATAL_OPFS_PROXY_MESSAGE_REGEX.test(error.message)
+  );
 };
+
+// A terminated runner releases its OPFS handles a moment after the abort.
+const SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200];
 
 const createRunnerAbortError = () => {
   const error = new Error("Workflow was cancelled") as Error & { code?: string };
@@ -499,6 +518,22 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   // Reserve the estimated working set from staged input sizes to prevent overlap that exhausts device memory.
   const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
 
+  // libarchive's 7z writer spools into an unlinked temp file under TMPDIR. A cancelled run kills the worker
+  // (and its OPFS proxy) before the deferred removal can happen, so give each compress its own scratch
+  // directory and remove it from here once the run settles, whatever the outcome.
+  const createRunScratchDir = async (): Promise<string | null> => {
+    if (command.type !== "compress") return null;
+    const scratchPath = `/work/rw-tmp-${createVfsPathId()}`;
+    try {
+      // Creating a file makes the parent directory; the guest needs the directory to exist before the run.
+      await getManagedOpfsFileHandle(`${scratchPath}/.keep`, { create: true });
+      return scratchPath;
+    } catch (error) {
+      emitRunnerTraceLine(options, `runJson scratch dir unavailable; using default temp ${String(error)}`);
+      return null;
+    }
+  };
+
   const dispatchRun = async (assignedThreads: number): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
     // Wait for warmup to release its lease so the first operation can reuse that runner.
@@ -514,6 +549,19 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       `runJson dispatch mode=${lease.runner.ready.mode} threaded=${String(lease.runner.ready.threaded)}`,
     );
     let removeAbortListener: (() => void) | undefined;
+    const scratchPath = await createRunScratchDir();
+    const leaseRunOptions: RomWeaverRunnerRunJsonOptions = scratchPath
+      ? ({
+          ...runOptions,
+          env: { ...(runOptions as { env?: Record<string, string> }).env, TMPDIR: scratchPath },
+        } as RomWeaverRunnerRunJsonOptions)
+      : runOptions;
+    const recycleUnrecoverableError = (error: unknown) => {
+      if (isRunnerUnrecoverableError(error)) {
+        emitRunnerTraceLine(options, "runJson unrecoverable failure; terminating runner");
+        lease.terminate();
+      }
+    };
     try {
       return await new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
         let settled = false;
@@ -541,12 +589,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
             `runJson thread allotment threadsPerOp=${forcedThreads} threadBudget=${threadBudget}`,
           );
         }
-        lease.runner.runJson(dispatchInput, runOptions).then(
+        lease.runner.runJson(dispatchInput, leaseRunOptions).then(
           (result) => {
             if (settled) return;
             settled = true;
             // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();
+            if (!result.ok) recycleUnrecoverableError(result.error);
             resolve(result);
           },
           (error) => {
@@ -557,15 +606,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         );
       });
     } catch (error) {
-      // A long-lived worker can exhaust its grown heap. Only that runner is replaced on the next acquire.
-      if (isRunnerOutOfMemoryError(error)) {
-        // Release the exhausted worker's OPFS handles immediately.
-        emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
-        lease.terminate();
-      }
+      recycleUnrecoverableError(error);
       throw error;
     } finally {
       removeAbortListener?.();
+      if (scratchPath) {
+        void removeManagedOpfsPath(scratchPath, undefined, { busyRetryDelaysMs: SCRATCH_REMOVE_BUSY_RETRY_DELAYS_MS });
+      }
       if (isMobileRuntime()) {
         // Mobile releases runners after heavy or threaded work. Light-operation runners remain for a short burst, then idle eviction releases them.
         const mobileHeavyOp = operationBytes >= IDLE_RECYCLE_MIN_OP_BYTES || operationThreads > 1;
@@ -770,6 +817,7 @@ export {
   noteRomWeaverIoBatch,
   recycleWarmRomWeaverRunner,
   resetRomWeaverRunner,
+  resolveMaxConcurrentRunners,
   runRomWeaverJson,
   setInputSelectionHandler,
   warmupRomWeaverRunner,

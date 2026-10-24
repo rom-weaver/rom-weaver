@@ -14,19 +14,21 @@ use rayon::prelude::*;
 use rom_weaver_checksum::md5_bytes;
 use rom_weaver_checksum::{checksum_reader_values_with_progress, md5_file};
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyDirection,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchEndpointSelection, PatchHandler,
-    PatchInputN64ByteOrder, PatchValidateRequest, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, UnsupportedOp,
+    FormatDescriptor, N64ByteOrder, OperationContext, OperationFamily, OperationReport,
+    PatchApplyDirection, PatchApplyRequest, PatchCapabilities, PatchCreateRequest,
+    PatchEndpointSelection, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
+    RomWeaverError, SharedThreadPool, UnsupportedOp,
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::civil_from_days;
+#[cfg(test)]
+use crate::shared::checked::checked_add_usize;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
     run_with_optional_pool, scan_create_chunks,
 };
+use crate::shared::{hex_encode, utc_today};
 
 const RUP_MAGIC: &[u8; 6] = b"NINJA2";
 const RUP_HEADER_SIZE: usize = 0x800;
@@ -214,7 +216,10 @@ impl PatchHandler for RupPatchHandler {
             ensure_parent_dir(&path)?;
             path
         };
-        fs::copy(&normalized_input.path, &normalized_output_path)?;
+        rom_weaver_core::copy_file_retrying_interrupted(
+            &normalized_input.path,
+            &normalized_output_path,
+        )?;
         let input_len = fs::metadata(&normalized_input.path)?.len();
         let mut output = OpenOptions::new()
             .read(true)
@@ -934,20 +939,13 @@ fn normalize_n64_input(
 ) -> Result<RupNormalizedInput> {
     let order = match context.patch_input_n64_byte_order() {
         Some(order) => Some(order),
-        None => match read_bytes_at(input_path, 0, 4)?.as_deref() {
-            Some([0x80, 0x37, 0x12, 0x40]) => Some(PatchInputN64ByteOrder::BigEndian),
-            Some([0x40, 0x12, 0x37, 0x80]) => Some(PatchInputN64ByteOrder::LittleEndian),
-            Some([0x37, 0x80, 0x40, 0x12]) => Some(PatchInputN64ByteOrder::ByteSwapped),
-            _ => None,
-        },
+        None => read_bytes_at(input_path, 0, 4)?
+            .as_deref()
+            .and_then(N64ByteOrder::detect),
     };
     match order {
-        Some(PatchInputN64ByteOrder::BigEndian) => {
-            Ok(RupNormalizedInput::n64_big_endian(input_path))
-        }
-        Some(
-            order @ (PatchInputN64ByteOrder::LittleEndian | PatchInputN64ByteOrder::ByteSwapped),
-        ) => {
+        Some(N64ByteOrder::BigEndian) => Ok(RupNormalizedInput::n64_big_endian(input_path)),
+        Some(order @ (N64ByteOrder::LittleEndian | N64ByteOrder::ByteSwapped)) => {
             let path = write_n64_big_endian_to_temp(input_path, context, order)?;
             Ok(RupNormalizedInput::n64_normalized(path))
         }
@@ -1105,13 +1103,13 @@ fn finalize_rup_output(
             let mut output = File::create(output_path)?;
             output.write_all(header)?;
             let mut normalized = File::open(normalized_output_path)?;
-            io::copy(&mut normalized, &mut output)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut normalized, &mut output)?;
             output.flush()?;
             Ok(())
         }
         RupOutputReconstruction::Unif => {
             ensure_parent_dir(output_path)?;
-            fs::copy(input_path, output_path)?;
+            rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
             let mut normalized = File::open(normalized_output_path)?;
             let mut output = OpenOptions::new()
                 .read(true)
@@ -1193,7 +1191,7 @@ fn rebuild_unif_payload(output: &mut File, normalized: &mut File) -> Result<()> 
     }
 
     let mut trailing = [0u8; 1];
-    if normalized.read(&mut trailing)? != 0 {
+    if rom_weaver_core::read_full(normalized, &mut trailing)? != 0 {
         return Err(RomWeaverError::Validation(
             "RUP UNIF normalized output exceeded template PRG/CHR capacity".into(),
         ));
@@ -1308,13 +1306,13 @@ fn deinterleave_snes_payload(payload: &[u8]) -> Vec<u8> {
 fn write_n64_big_endian_to_temp(
     input_path: &Path,
     context: &OperationContext,
-    order: PatchInputN64ByteOrder,
+    order: N64ByteOrder,
 ) -> Result<PathBuf> {
     write_normalization_temp(context, "rup-n64-native", |output_path| {
         let unit = match order {
-            PatchInputN64ByteOrder::LittleEndian => 4,
-            PatchInputN64ByteOrder::ByteSwapped => 2,
-            PatchInputN64ByteOrder::BigEndian => 1,
+            N64ByteOrder::LittleEndian => 4,
+            N64ByteOrder::ByteSwapped => 2,
+            N64ByteOrder::BigEndian => 1,
         };
         let input_len = fs::metadata(input_path)?.len();
         if !input_len.is_multiple_of(unit) {
@@ -1419,7 +1417,7 @@ fn copy_cancellable(
     let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
     loop {
         context.cancel().check()?;
-        let read = input.read(&mut buffer)?;
+        let read = rom_weaver_core::read_full(input, &mut buffer)?;
         if read == 0 {
             break;
         }
@@ -1430,8 +1428,9 @@ fn copy_cancellable(
 
 fn copy_exact_bytes(input: &mut File, output: &mut File, len: u64, label: &str) -> Result<()> {
     let mut limited = input.take(len);
-    let copied = io::copy(&mut limited, output)?;
-    if copied != len {
+    rom_weaver_core::copy_retrying_interrupted(&mut limited, output)?;
+    // `Take` counts down across retried attempts, so what remains is what was never copied.
+    if limited.limit() != 0 {
         return Err(RomWeaverError::Validation(format!(
             "{label} ended unexpectedly while copying bytes"
         )));
@@ -2294,37 +2293,12 @@ fn usize_from_u64(value: u64, label: &str) -> Result<usize> {
         .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded usize")))
 }
 
-#[cfg(test)]
-fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
-}
-
 fn format_md5_hex(value: [u8; 16]) -> String {
-    let mut output = String::with_capacity(32);
-    for byte in value {
-        output.push(nibble_to_hex(byte >> 4));
-        output.push(nibble_to_hex(byte & 0x0f));
-    }
-    output
-}
-
-fn nibble_to_hex(value: u8) -> char {
-    match value {
-        0..=9 => (b'0' + value) as char,
-        10..=15 => (b'a' + (value - 10)) as char,
-        _ => '0',
-    }
+    hex_encode(&value)
 }
 
 fn current_utc_yyyymmdd() -> String {
-    let now = std::time::SystemTime::now();
-    let duration = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-    let days = (duration.as_secs() / 86_400) as i64;
-
-    let (year, month, day) = civil_from_days(days);
+    let (year, month, day) = utc_today();
     format!("{year:04}{month:02}{day:02}")
 }
 

@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "name": "lzma-sdk",
+  "source": {
+    "url": "https://www.7-zip.org/a/lzma2602.7z",
+    "revision": "26.02",
+    "sha256": "2878c85f5f43a4a4e0952b1fd4e5fe097c1c143997a8047c7e1e788892aa9357",
+    "format": "7z",
+    "root": ".",
+    "extraFiles": [
+      {
+        "from": "DOC/lzma-sdk.txt",
+        "to": "lzma-sdk.txt"
+      }
+    ]
+  },
+  "destination": "crates/rom-weaver-containers/lzma-sdk/vendor",
+  "include": [
+    "Asm/arm64/7zAsm.S",
+    "Asm/arm64/LzmaDecOpt.S",
+    "Asm/x86/7zAsm.asm",
+    "Asm/x86/LzmaDecOpt.asm",
+    "C/7zStream.c",
+    "C/7zTypes.h",
+    "C/7zWindows.h",
+    "C/Compiler.h",
+    "C/CpuArch.c",
+    "C/CpuArch.h",
+    "C/LzFind.c",
+    "C/LzFind.h",
+    "C/LzFindMt.c",
+    "C/LzFindMt.h",
+    "C/LzFindOpt.c",
+    "C/LzHash.h",
+    "C/Lzma2Dec.c",
+    "C/Lzma2Dec.h",
+    "C/Lzma2Enc.c",
+    "C/Lzma2Enc.h",
+    "C/LzmaDec.c",
+    "C/LzmaDec.h",
+    "C/LzmaEnc.c",
+    "C/LzmaEnc.h",
+    "C/MtCoder.c",
+    "C/MtCoder.h",
+    "C/MtDec.c",
+    "C/MtDec.h",
+    "C/Precomp.h",
+    "C/RotateDefs.h",
+    "C/Threads.c",
+    "C/Threads.h"
+  ],
+  "exclude": [],
+  "patches": [
+    {
+      "file": "0001-portable-short-distance-copy.patch",
+      "stage": "build",
+      "reason": "Accelerate short-distance LZMA match copies without changing decoded bytes.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip",
+        "cargo test -p rom-weaver-containers --test vendor_patch_queue"
+      ]
+    },
+    {
+      "file": "0002-arm64-short-distance-copy.patch",
+      "stage": "arm64",
+      "reason": "Accelerate short-distance LZMA match copies without changing decoded bytes.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib seven_z_short_period_matches_round_trip",
+        "cargo test -p rom-weaver-containers --test vendor_patch_queue"
+      ]
+    }
+  ],
+  "materialized": false
+}

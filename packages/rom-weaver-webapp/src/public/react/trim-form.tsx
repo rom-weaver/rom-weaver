@@ -1,11 +1,15 @@
 import { Download, Scissors } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { hasDiscImageEvidence } from "../../lib/compression/disc-image-policy.ts";
+import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import {
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
   getCompressionOutputExtension,
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
-import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
+import { removeKnownOutputExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
   BrowserSaveDestination,
@@ -20,7 +24,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
-import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
+import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { type FileProgressProps, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
@@ -28,6 +32,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
+import { ROM_WEAVER_TRIM_INPUT_EXTENSIONS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
@@ -81,11 +86,11 @@ import {
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
-/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-convert
- * candidates), listed in the 0x01 info popover - not the full ROM registry. */
+/** Trim-eligible formats only (generated from Rust's trim extension tables), listed in
+ * the 0x01 info popover - not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
   {
-    extensions: ["nds", "dsi", "srl", "gba", "3ds", "xiso", "xiso.iso", "iso", "gcm", "wbfs", "rvz"],
+    extensions: ROM_WEAVER_TRIM_INPUT_EXTENSIONS,
     label: "Trimmable ROMs",
   },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
@@ -268,7 +273,8 @@ const getDefaultTrimOutputName = (sourceFileName: string, identifiedBase?: strin
 const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
-  const outputBaseName = getFileNameStem(normalizedOutputName).toLowerCase();
+  // The typed name is a stem, so only a known extension ends it: `Hack v1.2` keeps its `.2`.
+  const outputBaseName = removeKnownOutputExtension(normalizedOutputName).trim().toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
     return getDefaultTrimOutputName(sourceFileName);
@@ -282,10 +288,9 @@ const resolveTrimExecutionOutputName = (
   sourceFileName: string,
   settings?: TrimPatchFormSettings,
 ) => {
-  const normalizedOutputName = outputName.trim();
+  const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
-  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  return appendFileNameExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
+  return withOutputExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
 };
 
 const getFiniteSize = (size?: number | null) => (typeof size === "number" && Number.isFinite(size) ? size : undefined);
@@ -309,8 +314,10 @@ const getCompletedDownloadMeta = (
   ]
     .filter(Boolean)
     .join(" · ");
+  const alreadyTrimmed = typeof sourceSize === "number" && sourceSize === trimmedSize && compressedSavedSize === 0;
+  const verb = getSourceExtension(fileName) === "rvz" ? "Converted" : alreadyTrimmed ? "Already trimmed" : "Trimmed";
   return {
-    format: `${getSourceExtension(fileName) === "rvz" ? "Converted" : "Trimmed"} .${getSourceExtension(fileName)}`,
+    format: `${verb} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
     size: typeof outputSize === "number" ? formatByteSize(outputSize) : undefined,
   };
@@ -605,19 +612,37 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const trimPreparationPending = sourceStaging || progress?.stage === "input" || (!!source && !sourceState);
   const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState);
   const trimReady = trimSourceReady && !trimPreparationPending;
-  const actionDisabled = !!props.disabled || trimQueued || !(busy || completedOutput || source);
+  const trimUnsupported = sourceState?.trimSupported === false;
+  const actionDisabled =
+    !!props.disabled || trimQueued || !(busy || completedOutput || source) || (trimUnsupported && !busy);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
   const losslessDiscConversion = sourceState?.romType?.recommendedFormat === "rvz";
   const defaultCompressionMode = getDefaultCompressionMode(settings);
   const defaultArchiveFormat = getDefaultCompressionArchive(defaultCompressionMode);
-  const configuredOutputFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
+  // CHD, RVZ, and Z3DS only apply to matching inputs, so a cartridge ROM never offers them (as in Compress).
+  const formatSource = {
+    fileName: resolvedSourceFileName,
+    metadata: {
+      ...(sourceState?.chdMode ? { mode: sourceState.chdMode } : {}),
+      ...(sourceState?.romType?.discFormat ? { format: sourceState.romType.discFormat } : {}),
+      ...(sourceState?.romType?.recommendedFormat ? { recommendedFormat: sourceState.romType.recommendedFormat } : {}),
+    },
+    ...(typeof sourceState?.size === "number" ? { size: sourceState.size } : {}),
+  };
+  const isOfferedOutputFormat = (format: string) =>
+    !(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS as readonly string[]).includes(format) ||
+    (losslessDiscConversion && format === "rvz") ||
+    OutputCompressionManager.supportsOutputCompression(formatSource, format);
+  const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
+  const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
   const automaticCompressionFormat = resolveAutomaticCompressionFormat({
     fallback: defaultArchiveFormat,
     parentCompressions: sourceState?.parentCompressions,
     sourceFileName: resolvedSourceFileName,
     sourceSize: sourceState?.size,
+    hasDiscEvidence: hasDiscImageEvidence(sourceState?.romType?.recommendedFormat, sourceState?.chdMode),
   });
   const automaticOutputFormat = resolveTrimAutomaticOutputFormat({
     automaticCompressionFormat,
@@ -640,12 +665,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
   const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName);
-  const executionOutputName = resolveTrimExecutionOutputName(
-    resolvedOutputName,
-    resolvedOutputFormat,
-    resolvedSourceFileName,
-    settings,
-  );
+  const executionOutputName =
+    resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings) ||
+    resolveTrimExecutionOutputName(generatedOutputName, resolvedOutputFormat, resolvedSourceFileName, settings);
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
@@ -854,6 +876,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             });
             setSourceStaging(false);
             clearProgressForStage("input");
+            // A last checksum event with no completion event (an empty file) would otherwise pin the checks panel.
+            clearProgressForStage("checksum");
           } else {
             emitTrimFormTrace("stage.finish.stale", {
               currentGeneration: stagedTrimWorkflowGenerationRef.current,
@@ -1052,20 +1076,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     : null;
 
   const rawExtensionOption = losslessDiscConversion ? "" : rawOutputFormat;
-  const formatOptions = useMemo(
+  const allFormatOptions = useMemo(
     () =>
       createTrimOutputOptions(losslessDiscConversion ? "rvz" : rawExtensionOption, {
         rawLabel: source ? undefined : "None",
       }),
     [losslessDiscConversion, rawExtensionOption, source],
   );
-  const compressFormatOptions = useMemo(
-    () => createCompressionTypeOptions(formatOptions, rawExtensionOption),
-    [formatOptions, rawExtensionOption],
-  );
-  const compressHeaderFormat = getOutputCompressionFormatLabel(resolvedOutputFormat, compressFormatOptions, {
-    uncompressedValues: [rawExtensionOption],
-  });
+  const formatOptions = allFormatOptions.filter((option) => isOfferedOutputFormat(option.value));
+  const compressFormatOptions = createCompressionTypeOptions(formatOptions, rawExtensionOption);
   const trimTimingText = formatOptionalElapsedMs(completedTrimTimeMs ?? undefined);
   const compressTimingText = formatOptionalElapsedMs(completedCompressionTimeMs ?? undefined);
   const checksumProgress = progress?.stage === "checksum" ? progress : null;
@@ -1198,7 +1217,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     compress: buildOutputCompressionPanel({
       disabled: outputDisabled,
       fields: trimCompressPanel?.fields,
-      format: compressHeaderFormat,
       formatId: "trim-builder-select-output-compression",
       formatOptions: compressFormatOptions,
       formatValue: resolvedOutputFormat,
@@ -1212,6 +1230,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     fileNameId: "trim-builder-output-file",
     fileNamePlaceholder: "Trimmed filename (no extension)",
     format: resolvedOutputFormat,
+    outputExtensions: [
+      getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings),
+      getSourceExtension(resolvedSourceFileName),
+    ],
     formatId: "trim-builder-select-output-format",
     formatOptions,
     info: (
@@ -1312,7 +1334,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <InfoPopover title="ROM input">
           <strong>ROM</strong>
           <ul>
-            <li>Drop an over-dumped ROM (NDS/N64 and similar) to remove trailing padding.</li>
+            <li>Drop an NDS, GBA, 3DS, or XISO image to remove trailing padding.</li>
+            <li>GameCube and Wii discs convert losslessly to RVZ instead; the savings come from compression.</li>
             <li>Archives are extracted; pick the ROM if several candidates are found.</li>
           </ul>
         </InfoPopover>

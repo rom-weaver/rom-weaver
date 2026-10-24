@@ -11,8 +11,8 @@ import {
   normalizeCodecList,
   normalizeCodecListWithFallback,
   normalizeCompressionProfile,
-  normalizeIntegerInRange,
   parseIntegerInRange,
+  parseRvzBlockSize,
 } from "./settings-compression.ts";
 import type {
   SettingsDraft,
@@ -89,7 +89,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "language",
   "byteUnits",
   "logLevel",
-  "bundlePackage",
+  "weavePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
   "compressionProfile",
@@ -106,7 +106,7 @@ const isSingleCodecField = (fieldKey: SettingsFieldKey): boolean =>
 const readStoredField = <T>(schema: StoredSchema<T>, value: unknown): T | undefined =>
   schema(value) ? value : undefined;
 
-const normalizeStoredBundlePackage = (value: string, fallback: string): string => {
+const normalizeStoredWeavePackage = (value: string, fallback: string): string => {
   const normalized = value.trim().toLowerCase();
   if (normalized === "patches" || normalized === "rom") return normalized;
   const contents = normalized.split(":")[1];
@@ -271,15 +271,23 @@ const validateConditionalCodecField = (
         true,
       );
 
-const validateConditionalPositiveIntegerField = (
-  fieldKey: SettingsFieldKey,
+const validateRvzBlockSize = (
   rawDraft: SettingsDraft,
   validation: SettingsValidation,
   settings: SettingsState,
-): number =>
-  isValidationFieldEnabled(fieldKey, validation.settings)
-    ? normalizeIntegerSetting(fieldKey, rawDraft[fieldKey] as string | number | null | undefined, validation)
-    : normalizePositiveIntegerField(fieldKey, rawDraft[fieldKey], settings[fieldKey] as number, settings);
+): number => {
+  if (!isValidationFieldEnabled("rvzBlockSize", validation.settings))
+    return normalizePositiveIntegerField("rvzBlockSize", rawDraft.rvzBlockSize, settings.rvzBlockSize, settings);
+  try {
+    const size = parseRvzBlockSize(rawDraft.rvzBlockSize as string | number | null | undefined);
+    if (size === null) throw new Error("RVZ block size is required.");
+    return size;
+  } catch (cause) {
+    validation.messages.push(cause instanceof Error ? cause.message : "Invalid RVZ block size.");
+    validation.invalidFields.push(getSettingsFieldId("rvzBlockSize"));
+    return settings.rvzBlockSize;
+  }
+};
 
 const validateChoiceSetting = <K extends SettingsFieldKey>(
   fieldKey: K,
@@ -312,33 +320,6 @@ const validateCodecList = (
     const raw = String(value || "").trim();
     if (!raw) return "";
     return raw;
-  }
-};
-
-const normalizeIntegerSetting = (
-  fieldKey: SettingsFieldKey,
-  value: string | number | null | undefined,
-  validation: SettingsValidation,
-  settings: SettingsState = validation.settings,
-): number => {
-  const { max, min } = getNumericFieldRange(fieldKey, settings);
-  const rangeText = formatLevelRange(min, max);
-  const parsedValue = readStoredField(storedStringOrNumberSchema, value);
-  try {
-    return parseIntegerInRange(parsedValue === undefined ? value : parsedValue, {
-      failureMessage: getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`),
-      max,
-      min,
-      requireExactString: true,
-    }) as number;
-  } catch {
-    validation.messages.push(getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`));
-    validation.invalidFields.push(getSettingsFieldId(fieldKey));
-    return normalizeIntegerInRange(value, {
-      fallback: min,
-      max,
-      min,
-    }) as number;
   }
 };
 
@@ -415,7 +396,9 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     offlineCopyEnabled: commonSettings.offlineCopyEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
-    bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
+    weavePackage: isRecord(applySettings.output)
+      ? (applySettings.output.weavePackage ?? applySettings.output.bundlePackage)
+      : undefined,
     legacyPostApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
     postApplyDownloadBehavior: isRecord(applySettings.output)
       ? applySettings.output.postApplyDownloadBehavior
@@ -490,12 +473,15 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
-    const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
-    if (bundlePackage !== undefined) {
-      settings.bundlePackage = normalizeChoiceField(
-        "bundlePackage",
-        normalizeStoredBundlePackage(bundlePackage, settings.bundlePackage),
-        settings.bundlePackage,
+    const weavePackage = readStoredField(
+      storedStringSchema,
+      loadedSettings.weavePackage ?? loadedSettings.bundlePackage,
+    );
+    if (weavePackage !== undefined) {
+      settings.weavePackage = normalizeChoiceField(
+        "weavePackage",
+        normalizeStoredWeavePackage(weavePackage, settings.weavePackage),
+        settings.weavePackage,
       );
     }
 
@@ -688,7 +674,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       return;
     }
     if (
-      fieldKey === "bundlePackage" ||
+      fieldKey === "weavePackage" ||
       fieldKey === "postApplyDownloadBehavior" ||
       fieldKey === "postApplyTestBehavior" ||
       fieldKey === "verifyBootAfterApply"
@@ -754,12 +740,7 @@ const validateSettingsDraft = (rawDraft: SettingsDraft, currentSettings?: Settin
       fieldKey,
       validateConditionalCodecField(fieldKey, rawDraft, validation, settings),
     );
-  validation.settings.rvzBlockSize = validateConditionalPositiveIntegerField(
-    "rvzBlockSize",
-    rawDraft,
-    validation,
-    settings,
-  );
+  validation.settings.rvzBlockSize = validateRvzBlockSize(rawDraft, validation, settings);
   validation.settings.threads = normalizeThreadsSetting(rawDraft.threads, validation);
 
   return validation;

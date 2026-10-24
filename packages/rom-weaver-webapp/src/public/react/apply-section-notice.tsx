@@ -1,3 +1,4 @@
+import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import type { NoticeState } from "./patcher-ui-state.ts";
 
@@ -17,7 +18,7 @@ export const SectionNotice = ({
       level={state.level === "warning" ? "warn" : "error"}
       onDismiss={state.dismissible ? onDismiss : undefined}
     >
-      {state.message}
+      <WorkflowErrorMessage message={state.message} />
     </Notice>
   );
 };

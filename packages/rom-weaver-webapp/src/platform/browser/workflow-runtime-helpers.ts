@@ -33,13 +33,13 @@ const uniqueNonEmptyStrings = (values: string[]): string[] => {
 const getPathDerivedFileName = (filePath: string, fallback: string): string => getPathBaseName(filePath, fallback);
 
 const toNumericLevel = (value: unknown): number | null => {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   if (!normalized) return null;
-  if (!/^\d+$/.test(normalized)) return null;
+  if (!/^-?\d+$/.test(normalized)) return null;
   const parsed = Number.parseInt(normalized, 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const toLevelProfile = (value: unknown): string | null => {

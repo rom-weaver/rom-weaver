@@ -20,6 +20,7 @@ import { resolveCompressionLevels } from "../compression/compression-settings.ts
 import { type ArchiveCompressionFormat, isArchiveCompressionFormat } from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
+import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 
@@ -54,7 +55,7 @@ const hasArchiveFileName = (fileName: string, compression: string) =>
   compression === "zip" ? ZIP_COMPRESSED_EXTENSION_REGEX.test(fileName) : SEVEN_ZIP_EXTENSION_REGEX.test(fileName);
 
 const getOutputName = (options: ArchiveOutputOptions | undefined) =>
-  typeof options?.output?.outputName === "string" ? options.output.outputName.trim() : "";
+  sanitizeTypedOutputName(options?.output?.outputName);
 
 const getCompressionProfile = (options: ArchiveOutputOptions | undefined) =>
   options?.output?.container?.profile || "max";

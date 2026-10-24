@@ -69,6 +69,26 @@ runs:
       shell: bash
       run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
 
+    # The origin the deployment is served from. llms.txt, the Markdown
+    # alternates, openapi.json and the API catalog name it instead of
+    # production; canonical URLs and headers stay on production.
+    - name: Resolve site origin
+      id: origin
+      shell: bash
+      env:
+        CHANNEL: ${{ inputs.channel }}
+        BRANCH: ${{ inputs.branch }}
+        PROJECT: ${{ inputs.project }}
+      run: |
+        case "$CHANNEL" in
+          prod) origin="https://rom-weaver.com" ;;
+          beta) origin="https://beta.rom-weaver.com" ;;
+          nightly) origin="https://nightly.rom-weaver.com" ;;
+          preview) origin="https://${BRANCH}.${PROJECT}.pages.dev" ;;
+          *) echo "unknown channel: $CHANNEL" >&2; exit 1 ;;
+        esac
+        echo "origin=$origin" >> "$GITHUB_OUTPUT"
+
     # The channel stamps the bundle's visible identity - masthead badge, tab
     # title, PWA name and accent tokens - so a nightly or preview tab is never
     # mistaken for production.
@@ -77,6 +97,7 @@ runs:
       env:
         ROM_WEAVER_CHANNEL: ${{ inputs.channel }}
         ROM_WEAVER_CHANNEL_LABEL: ${{ inputs.label }}
+        ROM_WEAVER_SITE_ORIGIN: ${{ steps.origin.outputs.origin }}
         ROM_WEAVER_SYSTEM_CHROME: "1"
       run: npm --prefix packages/rom-weaver-webapp run build
 

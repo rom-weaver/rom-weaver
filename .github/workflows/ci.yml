@@ -9,7 +9,12 @@ on:
         default: none
         type: choice
         options: [none, nightly, beta, prod]
+  # No `labeled`: branch protection reads the newest CI run on a commit, so a
+  # run started by a label, even one whose jobs all skip, would hide the real
+  # run's `CI gate` and block the merge. Dependabot labels every pull request
+  # it opens.
   pull_request:
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
@@ -28,8 +33,8 @@ on:
 permissions:
   contents: read
 
-# Superseded pushes to a branch are pointless work; on main every commit is a
-# release candidate, so those runs are allowed to finish.
+# Main validation MUST share one active slot to limit runner contention. New
+# pushes replace the pending run while the active run finishes.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
 # shared group would be replaced by the next push (or replace it).
 concurrency:
@@ -48,10 +53,15 @@ jobs:
       actions: read
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
+      rust_lint: ${{ steps.classify.outputs.rust_lint }}
+      fuzz: ${{ steps.classify.outputs.fuzz }}
       webapp: ${{ steps.classify.outputs.webapp }}
+      webapp_browser: ${{ steps.classify.outputs.webapp_browser }}
+      lighthouse: ${{ steps.classify.outputs.lighthouse }}
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      docker_arm_wasm_cache: ${{ steps.classify.outputs.docker_arm_wasm_cache }}
       docker_prebuilt: ${{ steps.classify.outputs.docker_prebuilt }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
@@ -65,6 +75,7 @@ jobs:
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
+      last_nightly_sha: ${{ steps.last-nightly.outputs.sha }}
     steps:
       # Shallow on purpose: every other job waits on this one, and the
       # classifier needs only the base and head trees for a two-dot diff, not
@@ -83,12 +94,11 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
-      # The nightly diffs against the last nightly that passed, so it rebuilds
-      # the native targets only when a Rust input changed since then. No
-      # previous green nightly leaves BASE_SHA empty, which selects everything.
-      - name: Find the last green nightly
+      # Nightly and manual quality checks share the previous successful nightly
+      # as their baseline. The native matrix uses it to avoid rebuilding unchanged targets.
+      - name: Find the last successful nightly
         id: last-nightly
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
@@ -207,7 +217,7 @@ jobs:
         id: identify
         if: >-
           github.event_name == 'workflow_dispatch' ||
-          steps.classify.outputs.rust == 'true' ||
+          steps.classify.outputs.rust_lint == 'true' ||
           steps.classify.outputs.webapp == 'true' ||
           steps['docker-matrix'].outputs.matrix != '[]' ||
           (steps.plan.outputs.targets != '' &&
@@ -245,8 +255,8 @@ jobs:
     needs: changes
     # It lints every tracked workflow, shell script, and Dockerfile rather than
     # the diff, so the gate is "did any file of those kinds change at all", not
-    # a per-file filter. The `Plumbing` aggregate below is the required check,
-    # so skipping this reports nothing to branch protection.
+    # a per-file filter. The `gate` job below is the required check, so
+    # skipping this reports nothing to branch protection.
     if: github.ref_type != 'tag' && needs.changes.outputs.repo_lint == 'true'
     steps:
       - name: Checkout
@@ -265,6 +275,33 @@ jobs:
       - name: CI script tests
         run: node --test scripts/ci/*.test.mjs
 
+      # The tests of ROOT_LEAF_SCRIPTS in scripts/ci/classify-changes.mjs; those
+      # scripts select only this job. `webapp-static` runs them with the rest.
+      - name: Leaf script tests
+        run: >-
+          node --test
+          scripts/markdownlint-no-soft-line-breaks.test.mjs
+          scripts/quality-diff-coverage.test.mjs
+          scripts/quality-fuzz.test.mjs
+          scripts/quality-kani.test.mjs
+          scripts/quality-miri.test.mjs
+          scripts/quality-mutation.test.mjs
+          scripts/quality-native-unaligned.test.mjs
+          scripts/quality-plan.test.mjs
+          scripts/quality-reference.test.mjs
+          scripts/quality-reference-encoder.test.mjs
+          scripts/quality-regression-proof.test.mjs
+          scripts/quality-sanitizer.test.mjs
+          scripts/quality-summary.test.mjs
+          scripts/quality-test-selection.test.mjs
+          scripts/quality-trusted-guardrails.test.mjs
+          scripts/quality-workflows.test.mjs
+          scripts/release-metadata.test.mjs
+          scripts/remove-worktree.test.mjs
+          scripts/setup-worktree.test.mjs
+          scripts/strip-ai-attribution.test.mjs
+          scripts/update-markdown-toc.test.mjs
+
       - name: Workflows
         run: mise run actionlint
 
@@ -279,6 +316,177 @@ jobs:
 
       - name: Markdown
         run: mise run docs-lint
+
+  quality-fast:
+    name: Quality (architecture and verification)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: changes
+    if: >-
+      github.ref_type != 'tag' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      reference: ${{ steps.plan.outputs.reference }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          cargo-cache: "false"
+          webapp-deps: "true"
+      - name: Prepare signal artifacts
+        run: mkdir -p .agent/quality-signals
+      - name: Plan relevant assurance lanes
+        id: plan
+        env:
+          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
+            node scripts/quality-plan.mjs "$QUALITY_BASE" > .agent/quality-signals/selection.json
+          else
+            node scripts/quality-plan.mjs > .agent/quality-signals/selection.json
+          fi
+      - name: Checker failure-injection tests
+        run: node --test scripts/quality-*.test.mjs scripts/coverage-rust.test.mjs
+      - name: Compile locale modules for architecture inspection
+        run: npm --prefix packages/rom-weaver-webapp run i18n:compile
+      - name: Architecture invariants
+        id: architecture
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-architecture.mjs > .agent/quality-signals/architecture.json
+      - name: Test selection correctness
+        id: selection
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-test-selection.mjs > .agent/quality-signals/test-selection.txt
+      - name: Verification weakening diff
+        id: guardrails
+        if: ${{ !cancelled() }}
+        env:
+          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          base="$QUALITY_BASE"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-parse HEAD^)"
+          fi
+          node scripts/quality-trusted-guardrails.mjs "$base" > .agent/quality-signals/guardrails.json
+      - name: Quality signal summary
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/quality-summary.mjs
+          architecture=${{ steps.architecture.outcome }}
+          test-selection=${{ steps.selection.outcome }}
+          verification-guardrails=${{ steps.guardrails.outcome }}
+      - name: Upload quality findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-fast
+          include-hidden-files: true
+          path: .agent/quality-signals/*
+          if-no-files-found: error
+
+  quality-analysis:
+    name: Quality signal (${{ matrix.signal }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    needs: [changes, quality-fast]
+    if: >-
+      github.ref_type != 'tag'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && needs.quality-fast.outputs.matrix != ''
+      && needs.quality-fast.outputs.matrix != '[]'
+    # Initially advisory: baseline mutation survivors and fuzz/tool costs must be observed before gating.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.quality-fast.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Diff-scoped analysis MUST exclude base commits added to GitHub's merge ref.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust ${{ matrix.signal == 'mutation' && 'cargo-mutants' || matrix.signal == 'fuzz' && 'cargo-fuzz' || '' }}
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Install pinned fuzz toolchain
+        if: matrix.signal == 'fuzz'
+        run: rustup toolchain install nightly-2026-08-25 --profile minimal --component rust-src
+      - name: Diff mutation evidence
+        id: mutation
+        if: matrix.signal == 'mutation'
+        env:
+          QUALITY_BASE: ${{ needs.changes.outputs.last_nightly_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
+            mise run quality-mutation diff "$QUALITY_BASE"
+          else
+            mise run quality-mutation broad
+          fi
+      - name: Fuzz smoke
+        id: fuzz
+        if: matrix.signal == 'fuzz'
+        run: mise run quality-fuzz smoke
+      - name: Report selected signal
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/quality-summary.mjs
+          ${{ matrix.signal }}=${{ matrix.signal == 'mutation' && steps.mutation.outcome || steps.fuzz.outcome || 'not-run' }}
+      - name: Upload analysis evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-${{ matrix.signal }}
+          include-hidden-files: true
+          path: |
+            .agent/quality-mutation/summary.json
+            .agent/quality-mutation/mutants.out/**
+            .agent/quality-fuzz/**
+            fuzz/artifacts/**
+          if-no-files-found: ignore
+
+  quality-reference:
+    name: Quality (pinned reference)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: quality-fast
+    if: >-
+      github.ref_type != 'tag'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && needs.quality-fast.outputs.reference == 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Build native candidate
+        run: cargo build --locked -p rom-weaver-cli --bin rom-weaver
+      - name: Pinned reference evidence
+        id: reference
+        run: |
+          mkdir -p .agent/quality-signals
+          mise run quality-reference > .agent/quality-signals/reference.json
+      - name: Reference summary
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-summary.mjs pinned-reference=${{ steps.reference.outcome }}
+      - name: Upload reference evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-pinned-reference
+          include-hidden-files: true
+          path: .agent/quality-signals/reference.json
+          if-no-files-found: ignore
 
   # Build selected images on native runners to check the source-build paths without emulation.
   # The shared identify tree and optional cached WASM module avoid duplicate builds.
@@ -329,7 +537,17 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Install webapp smoke browser
+        if: matrix.name == 'webapp'
+        run: |
+          npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
+          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+
       - uses: ./.github/actions/download-identify-data
+
+      - name: Check clean CLI identify source inputs
+        if: matrix.name == 'CLI' && matrix.arch == 'amd64'
+        run: docker build --file Dockerfile --target identify-data-verify .
 
       # The release tree the CLI image copies to /share. Tree only: the
       # .tar.br archives are a release-fan-out product nothing here consumes.
@@ -344,11 +562,11 @@ jobs:
           mkdir -p target/identify-data
           cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
 
-      # Restore WASM read-only on amd64; a cache miss uses the Dockerfile's source build.
-      # Selected arm64 legs compile WASM to check their toolchain, without delaying CLI legs.
+      # PRs MAY reuse a source-exact module from main or an earlier PR run.
+      # ARM MUST compile changed image plumbing and unknown diffs before merge.
       - name: Restore the built wasm module
         id: wasm
-        if: matrix.name == 'webapp' && matrix.arch == 'amd64'
+        if: matrix.name == 'webapp' && (matrix.arch == 'amd64' || (github.event_name == 'pull_request' && needs.changes.outputs.docker_arm_wasm_cache == 'true'))
         uses: ./.github/actions/wasm-cache
         with:
           variant: prod
@@ -368,6 +586,7 @@ jobs:
         uses: ./.github/actions/docker-build-arch
         with:
           image: ${{ matrix.image }}
+          smoke-kind: ${{ matrix.name == 'CLI' && 'cli' || 'webapp' }}
           file: ${{ matrix.file }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
@@ -411,17 +630,30 @@ jobs:
       && contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
     permissions:
       contents: read
+      actions: read
       packages: write
       # Attesting the nightly image, so it carries the same signed provenance as
       # every image the release fan-out pushes.
       attestations: write
       artifact-metadata: write
       id-token: write
+    concurrency:
+      group: publish-docker-cli-nightly
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Docker publish (CLI, nightly)
+          PUBLICATION_STEP_NAME: Assemble the manifest list
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Log in to GitHub Container Registry
+        if: steps.freshness.outputs.fresh == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -429,6 +661,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble the manifest list
+        if: steps.freshness.outputs.fresh == 'true'
         id: manifest
         uses: ./.github/actions/docker-manifest
         with:
@@ -439,6 +672,7 @@ jobs:
       # The manifest list, not either architecture's image: that is what a pull
       # of `:nightly` resolves against.
       - name: Sign build provenance
+        if: steps.freshness.outputs.fresh == 'true'
         uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-cli
@@ -500,12 +734,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install webapp smoke browser
+        run: |
+          npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
+          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+
       - name: Build the prebuilt path
         uses: ./.github/actions/docker-build-arch
         with:
           image: rom-weaver-webapp
           file: packages/rom-weaver-webapp/Dockerfile
           build-args: DIST=prebuilt
+          smoke-kind: webapp
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -524,16 +769,29 @@ jobs:
       && needs.docker-prebuilt.result == 'success'
     permissions:
       contents: read
+      actions: read
       packages: write
       # Same signed provenance the release fan-out attaches to every image.
       attestations: write
       artifact-metadata: write
       id-token: write
+    concurrency:
+      group: publish-docker-webapp-nightly
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Docker publish (webapp, nightly)
+          PUBLICATION_STEP_NAME: Assemble the manifest list
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Log in to GitHub Container Registry
+        if: steps.freshness.outputs.fresh == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -541,6 +799,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble the manifest list
+        if: steps.freshness.outputs.fresh == 'true'
         id: manifest
         uses: ./.github/actions/docker-manifest
         with:
@@ -549,6 +808,7 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
 
       - name: Sign build provenance
+        if: steps.freshness.outputs.fresh == 'true'
         uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp
@@ -560,15 +820,15 @@ jobs:
   wasm:
     name: Build WASM module + webapp
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     needs: changes
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
       size: ${{ steps.size.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
-    # first-party pull requests also select it to build their preview bundle.
-    # The `Plumbing` aggregate below is the required check.
+    # every first-party pull request also builds it for its preview.
+    # The `gate` job below is the required check.
     if: >-
       needs.changes.outputs.webapp == 'true' ||
       (github.event_name == 'pull_request' &&
@@ -604,13 +864,28 @@ jobs:
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust binaryen
+          cargo-cache-targets: "false"
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
           ccache: "true"
+          ccache-maxsize: 1G
           sccache: "true"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
+
+      # Cargo MUST validate restored fingerprints; this cache contains build state,
+      # not a finished module. The SHA suffix allows successful main builds to save
+      # new generations without losing restores from compatible older commits.
+      - name: Restore WASM target artifacts
+        id: wasm-target-cache
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: target
+          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
+          restore-keys: |
+            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-
 
       - uses: ./.github/actions/download-identify-data
 
@@ -620,13 +895,23 @@ jobs:
       - name: Build production WASM
         id: wasm-build
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: mise run build-wasm-prod
+        env:
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
+        run: /usr/bin/time -v mise run build-wasm-prod
+
+      - name: Save WASM target artifacts
+        if: steps.wasm-build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.wasm-target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: target
+          key: ${{ steps.wasm-target-cache.outputs.cache-primary-key }}
 
       - name: Compiler cache statistics
         if: always() && (steps.wasm-build.outcome == 'success' || steps.wasm-build.outcome == 'failure')
         run: |
           ccache --show-stats --verbose
           sccache --show-stats
+          du -sh target
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
@@ -661,13 +946,8 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      # The build generates ignored channel assets from tracked masters. Render
-      # a second time and compare it with the build output before upload.
-      - name: Channel icon output is deterministic
-        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
-        env:
-          ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
+      # The channel icon determinism check (`icons:channels:check`) runs in
+      # Webapp (static) via `test:static`, off this job's critical path.
 
       # Browser E2E, Lighthouse, and Docker MUST consume this exact bundle.
       - name: Upload webapp bundle
@@ -689,51 +969,14 @@ jobs:
         continue-on-error: true
         run: npm --prefix packages/rom-weaver-webapp run check:size
 
-  # One stable name for the repository plumbing - lint, the WASM module, the
-  # images - so each of those jobs can be skipped outright when nothing it
-  # consumes changed. Branch protection requires this, not the individual jobs:
-  # a job removed from a matrix reports no status at all, and the ruleset has no
-  # bypass actors, so an unreported required name blocks the merge forever.
-  # Same shape as `rust` and `webapp` below: it runs even when its dependencies
-  # skipped, and accepts a WASM skip only where neither a webapp change nor a
-  # first-party pull-request preview selected it.
-  plumbing:
-    name: Plumbing
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    needs: [changes, repo-lint, docker, docker-prebuilt, wasm]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # One call per selection flag rather than one for the job: unlike `rust`
-      # and `webapp`, these jobs do not share a flag, and the script's contract
-      # is one flag per group. The prebuilt smoke has a flag of its own because
-      # a pull request skips it for a webapp change that touched no image file,
-      # which the webapp flag would report as a missing job. Every group is
-      # evaluated before exiting so one skip-mismatch does not hide the others.
-      - name: Verify plumbing jobs
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          REPO_LINT_SELECTED: ${{ needs.changes.outputs.repo_lint }}
-          REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
-          DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
-          DOCKER_RESULT: ${{ needs.docker.result }}
-          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
-          WASM_RESULT: ${{ needs.wasm.result }}
-          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
-          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
-        run: node scripts/ci/assert-job-groups.mjs
-
   # Host-profile Rust lint and metadata checks. The test suite has its own job
   # below so both compile-heavy paths can run at the same time.
   rust-lint:
     name: "Rust (Linux: lint + metadata)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust_lint == 'true'
     env:
       CARGO_TERM_COLOR: always
       # Full debuginfo is the bulk of a dev-profile target/, which is what this
@@ -805,10 +1048,18 @@ jobs:
       - name: Unused Rust dependencies
         run: mise run machete
 
+      # The fuzz crate is its own workspace, so no other job compiles it; the
+      # nightly fuzz smoke is the only other check of its targets. Not
+      # `--locked`: Release Please does not bump fuzz/Cargo.lock, so its pins of
+      # the workspace crates trail every release.
+      - name: Fuzz targets build
+        if: needs.changes.outputs.fuzz == 'true'
+        run: cargo check --manifest-path fuzz/Cargo.toml --bins
+
   rust-host:
     name: "Rust (Linux: tests + package)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -851,7 +1102,7 @@ jobs:
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: 40
     needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -973,7 +1224,7 @@ jobs:
   rust-macos:
     name: Rust (macOS)
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 20
     needs: changes
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
@@ -1007,7 +1258,7 @@ jobs:
   rust-windows:
     name: Rust (Windows)
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 35
     needs: changes
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
@@ -1078,7 +1329,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2.87.22
+      - uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-nextest@0.9.140
 
@@ -1112,53 +1363,12 @@ jobs:
           cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
           --example rom-weaver-typegen --example rom-weaver-app
 
-  # Presents one stable check name while the independent host and threaded-target
-  # work runs in parallel, so branch protection has a single thing to require.
-  # The `main protection` ruleset requires this context by name. It must fail
-  # rather than skip when a dependency fails, hence `!cancelled()` plus the
-  # explicit result assertions below - a skipped check counts as passing.
-  # `!cancelled()` rather than `always()`: when the run itself is cancelled
-  # (superseded by a newer push, or by hand) the dependencies report
-  # `cancelled`, and `always()` would turn that into a red Rust check on a
-  # build nobody finished.
-  rust:
-    name: Rust
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    needs: [changes, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
-    if: ${{ !cancelled() && github.ref_type != 'tag' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Verify Rust jobs
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust }}'
-          'rust-host=${{ needs.rust-host.result }}'
-          'rust-lint=${{ needs.rust-lint.result }}'
-          'cli-platforms=${{ needs.cli-platforms.result }}'
-          'rust-windows=${{ needs.rust-windows.result }}'
-
-      # Same `!cancelled()` as the job above, for the same reason: this has to
-      # report even when the step before it failed, but a cancelled run is not a
-      # red Rust check.
-      - name: Verify full native jobs
-        if: ${{ !cancelled() }}
-        run: >-
-          node scripts/ci/assert-jobs.mjs
-          '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
-          'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
-          'rust-macos=${{ needs.rust-macos.result }}'
-
   # Keep node-only checks on the shorter Lighthouse job so the browser suite
   # can start immediately without adding another runner to the queue.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
@@ -1183,22 +1393,23 @@ jobs:
       # Vite reads the identify index while loading the config for lint.
       - uses: ./.github/actions/download-identify-data
 
+      # Root script tests, webapp script tests, and unit tests run concurrently
+      # (output buffered per command, every exit code collected) after the shared
+      # generators - accents, compiled locales, channel icons and their
+      # determinism check - ran once serially so no reader sees a partial file.
       # The runtime import contract reads the built module downloaded above.
-      - name: Build script tests
-        run: node --test scripts/*.test.mjs scripts/wasm/*.test.mjs
-
-      - name: Webapp script tests
+      - name: Script and unit tests
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
-        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+        run: npm --prefix packages/rom-weaver-webapp run test:static
 
       - name: Lint
         run: npm --prefix packages/rom-weaver-webapp run lint
 
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
-
+      # A pull request audits only when the bundle can differ from main's; the
+      # `lighthouse` flag fails open for every build and CI input.
       - name: Download webapp bundle
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
@@ -1212,11 +1423,12 @@ jobs:
       # ordered before this job in any case.
       - name: Lighthouse gates
         id: performance
+        if: github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true'
         run: npm --prefix packages/rom-weaver-webapp run audit:lighthouse
 
       - name: Upload Lighthouse reports
         id: lighthouse-reports
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.lighthouse == 'true') }}
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
@@ -1280,9 +1492,9 @@ jobs:
   webapp-browser:
     name: Webapp (browser)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1316,7 +1528,7 @@ jobs:
   webapp-wasm-browser:
     name: Webapp (WASM browser)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     needs: [changes, wasm]
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
@@ -1354,7 +1566,7 @@ jobs:
   webapp-e2e:
     name: Webapp (E2E)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
@@ -1394,9 +1606,9 @@ jobs:
     # Test the WebKit OPFS path on macOS because Linux WebKit hangs on real OPFS operations.
     # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 30
     needs: [changes, wasm]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp_browser == 'true'
     env:
       ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1"
       ROM_WEAVER_CHANNEL: prod
@@ -1432,21 +1644,114 @@ jobs:
           ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
 
-  # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)
-  # for branch protection while the webapp jobs run in parallel. Must
-  # fail rather than skip when a dependency fails (a skipped check counts as
-  # passing), and `!cancelled()` keeps a superseded run from reporting red.
-  webapp:
-    name: Webapp
+  # The one required CI check. A job that is not selected is skipped, a matrix
+  # leg that is not planned reports no status at all, and the ruleset has no
+  # bypass actors, so branch protection requires this name instead of the jobs.
+  # Each step below checks one selection flag's group with
+  # scripts/ci/assert-jobs.mjs: a skip passes only when its group was not
+  # selected, so every PR-only skip needs its own flag shared with the job's
+  # `if:`. One runner for every group: separate aggregates each waited for a
+  # runner of their own under the concurrency cap.
+  # `!cancelled()` rather than `always()`: it reports even when a dependency
+  # failed (a skipped required check counts as passing), but a superseded or
+  # hand-cancelled run is not a red gate. Each step repeats it so one failed
+  # group does not hide the others.
+  gate:
+    name: CI gate
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, wasm, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs:
+      [
+        changes,
+        repo-lint,
+        docker,
+        docker-prebuilt,
+        wasm,
+        quality-fast,
+        quality-reference,
+        rust-host,
+        rust-lint,
+        cli-platforms,
+        cli-linux-arm64,
+        rust-macos,
+        rust-windows,
+        webapp-static,
+        webapp-browser,
+        webapp-wasm-browser,
+        webapp-e2e,
+        webapp-webkit-e2e,
+      ]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Verify required quality checks
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          'true'
+          'quality-fast=${{ needs.quality-fast.result }}'
+
+      - name: Verify selected pinned reference
+        if: >-
+          ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.quality-fast.outputs.reference }}'
+          'quality-reference=${{ needs.quality-reference.result }}'
+
+      # One call per selection flag: these jobs do not share a flag. The
+      # prebuilt smoke has a flag of its own because a pull request skips it
+      # for a webapp change that touched no image file, which the webapp flag
+      # would report as a missing job.
+      - name: Verify plumbing jobs
+        if: ${{ !cancelled() }}
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          REPO_LINT_SELECTED: ${{ needs.changes.outputs.repo_lint }}
+          REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
+          DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+          WASM_RESULT: ${{ needs.wasm.result }}
+          DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
+          DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
+        run: node scripts/ci/assert-job-groups.mjs
+
+      # A fuzz-target change selects `rust-lint` without the rest of the Rust
+      # group.
+      - name: Verify Rust lint
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust_lint }}'
+          'rust-lint=${{ needs.rust-lint.result }}'
+
+      - name: Verify Rust jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust }}'
+          'rust-host=${{ needs.rust-host.result }}'
+          'cli-platforms=${{ needs.cli-platforms.result }}'
+          'rust-windows=${{ needs.rust-windows.result }}'
+
+      - name: Verify full native jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
+          'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
+          'rust-macos=${{ needs.rust-macos.result }}'
+
       - name: Verify webapp jobs
+        if: ${{ !cancelled() }}
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
@@ -1454,11 +1759,18 @@ jobs:
           'webapp-build=${{ needs.wasm.outputs.bundle || needs.wasm.result }}'
           'webapp-size=${{ needs.wasm.outputs.size || needs.wasm.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
-          'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
+
+      # A pull request that changes only published guide Markdown skips these.
+      - name: Verify webapp browser jobs
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.changes.outputs.webapp_browser }}'
+          'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
 
-      # Reports even when the step above failed, but never on a cancelled run.
       - name: Verify WASM runtime jobs
         if: ${{ !cancelled() }}
         run: >-
@@ -1576,6 +1888,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      actions: read
       statuses: write
       deployments: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
@@ -1601,6 +1914,9 @@ jobs:
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
+    concurrency:
+      group: publish-pages-${{ matrix.target.project }}-${{ matrix.target.branch }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1613,7 +1929,16 @@ jobs:
           fetch-depth: 60
           fetch-tags: true
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Webapp deploy (${{ matrix.target.channel }})
+          PUBLICATION_STEP_NAME: Build and deploy
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Mark deployment pending
+        if: steps.freshness.outputs.fresh == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1625,12 +1950,14 @@ jobs:
         run: node scripts/ci/deployment-status.mjs
 
       - name: Download WASM artifact
+        if: steps.freshness.outputs.fresh == 'true'
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
       - name: Build and deploy
+        if: steps.freshness.outputs.fresh == 'true'
         id: pages
         uses: ./.github/actions/deploy-webapp-pages
         with:
@@ -1643,7 +1970,7 @@ jobs:
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Publish deployment status
-        if: always()
+        if: steps.freshness.outputs.fresh == 'true' && (always())
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1670,14 +1997,14 @@ jobs:
       # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
       # set and the API token carries Zone -> Cache Rules -> Edit.
       - name: Ensure zone cache rules for assets and negotiated pages
-        if: matrix.target.channel == 'nightly'
+        if: steps.freshness.outputs.fresh == 'true' && (matrix.target.channel == 'nightly')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs
 
       - name: Purge negotiated page cache after custom-domain deployment
-        if: success() && matrix.target.channel != 'preview' && steps.pages.outputs.url != ''
+        if: steps.freshness.outputs.fresh == 'true' && (success() && matrix.target.channel != 'preview' && steps.pages.outputs.url != '')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -1685,7 +2012,7 @@ jobs:
         run: node scripts/ci/purge-cloudflare-pages-cache.mjs
 
       - name: Delete superseded deployments for this pull request
-        if: ${{ !cancelled() && matrix.target.channel == 'preview' }}
+        if: ${{ steps.freshness.outputs.fresh == 'true' && (!cancelled() && matrix.target.channel == 'preview') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

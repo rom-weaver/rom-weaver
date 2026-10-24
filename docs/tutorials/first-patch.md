@@ -28,23 +28,24 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 ## Step 1: open the guide and add the practice files
 
-Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **New here?** › **Start guided Apply** under the empty drop zone.
+Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a practice ROM** › **Start a practice run** under the empty drop zone.
 
-The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or bundle, or choose **Add files** to pick them.
+The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
 For this tutorial, choose **Continue** without adding anything. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead, then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
 
 ## Step 2: look at what you added
 
-The guide points at three more parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
+The guide points at four more parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
 
-1. **Check your starting ROM** frames the **ROM** card, which lists the file's checksums, and lifts the **Detailed** switch beside it. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
-2. **Patches and cheats** shows two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`. Cheats join the same list from **Add cheats to the patch order**; leave every cheat off to preserve this tutorial's expected output.
-3. **Apply** controls the output.
+1. **Check your original ROM** frames the **ROM** card, which lists the file's checksums, and lifts the **Simple/Detailed** switch beside it. Its label shows the active view. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
+2. **Identify your original ROM** explains the search under the empty drop zone. The homebrew sample has no public database entry, so there is nothing to search; choose **Continue**.
+3. **Patches and cheats** shows two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`. Cheats join the same list from **Add cheats to the patch order**; leave every cheat off to preserve this tutorial's expected output.
+4. **Apply & download** names the output controls you use in the next step.
 
 ## Step 3: apply the patches
 
-In **Apply**, select **.nes** in **Output format**, then choose **APPLY & DOWNLOAD**.
+In **Apply**, check that **Output format** shows **.nes**, then choose **APPLY & DOWNLOAD**.
 
 This downloads the ROM itself, not a ZIP archive. The checksum in the next step describes that ROM.
 
@@ -81,14 +82,14 @@ For a tool that reports SHA-256, the same file has this value:
 
 A match checks that you downloaded the expected result. [Checksums](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains what this comparison establishes.
 
-To see the sample files for yourself, choose **Download a test bundle** from the **New here?** beacon on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
+To see the sample files for yourself, choose **Download a test weave** from **Patch a practice ROM** on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 ## Step 5: try the other two samples
 
 The same practice files drive two more guided runs:
 
-- [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
-- [Guided Bundle Patches](https://rom-weaver.com/bundle-patches?guide=bundle) turns the Apply Patches sample into a patch-only release archive.
+- [Guided Create](https://rom-weaver.com/create-rom-patch?guide=create) makes a patch from two homebrew ROMs.
+- [Guided Weave Patches](https://rom-weaver.com/weave-patches?guide=weave) turns the Apply Patches sample into a patch-only release archive.
 
 These are optional follow-up exercises. [Guided practice runs](../reference/guided-runs.md) lists every guided run, its steps, and its files.
 
@@ -97,7 +98,7 @@ These are optional follow-up exercises. [Guided practice runs](../reference/guid
 The supplied homebrew ROM also has guided cheat-code exercises:
 
 - [Guided Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) adds a working practice code to the patch order.
-- [Guided Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) turns a working practice code into a patch.
+- [Guided Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) turns a working practice code into a patch.
 
 These guides label the sample as practice. The checksum above is still the result of the two-patch tutorial. A cheat changes the output bytes, so do not expect that checksum after you select one.
 

@@ -1,0 +1,15 @@
+diff --git a/layout.rs b/layout.rs
+index 1673a382f..76494bf39 100644
+--- a/layout.rs
++++ b/layout.rs
+@@ -48,7 +48,9 @@ pub struct VolumeDescriptor {
+ }
+ 
+ bitfield!(
+-#[repr(C)]
++// proc-bitfield 0.5 made bitfields `#[repr(transparent)]` themselves, so an
++// explicit `#[repr(C)]` here is now a hard error. Layout is unchanged - this
++// is a single-field newtype over `u8`.
+ #[derive(Deserialize, Serialize, Copy, Clone, Eq, PartialEq)]
+ pub struct DirentAttributes(pub u8): Debug {
+     pub attrs: u8 @ ..,

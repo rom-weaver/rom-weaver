@@ -169,3 +169,20 @@ describe("apply automatic output name from the identified title", () => {
     );
   });
 });
+
+describe("cheat suffix scanning", () => {
+  it("removes only the contiguous trailing cheat labels", () => {
+    expect(buildCheatOutputBaseName("game [cht first] [cht second]", [])).toBe("game");
+    for (const name of ["game [cht ]", "game [cht a[b]", "game [cht a] trailing", "game [cht a]\n"]) {
+      expect(buildCheatOutputBaseName(name, [])).toBe(name);
+    }
+    expect(buildCheatOutputBaseName("game [other] [cht last]", [])).toBe("game [other]");
+  });
+
+  it("handles long nonmatching cheat suffixes promptly", () => {
+    const name = "game" + " [cht Z]".repeat(20000) + "!";
+    const start = performance.now();
+    expect(buildCheatOutputBaseName(name, [])).toBe(name);
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+});

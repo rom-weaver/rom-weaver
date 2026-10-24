@@ -1,0 +1,2133 @@
+import { createElement } from "react";
+import { expect, test, vi } from "vitest";
+import { RomWeaverError } from "../../src/lib/errors.ts";
+import { loadLocalWeaveSession } from "../../src/lib/weave/local-weave-session.ts";
+import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
+import { CreateWorkflow } from "../../src/platform/browser/browser-api.ts";
+import { ApplyPatchForm } from "../../src/public/react/index.tsx";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { loadWeaveUrlSession } from "../../src/webapp/url-session/weave-url-session.ts";
+import {
+  clickApplyButton,
+  getOutputFileNameValue,
+  getPatchStackFileNames,
+  installPatcherTestHooks,
+  loadFixtureFile,
+  mount,
+  RAW_PATCH,
+  RAW_ROM,
+  setFormControlValue,
+  WRONG_INPUT_BPS,
+  waitForApplyButtonEnabled,
+  waitForApplyOutcome,
+  waitForState,
+} from "./patcher-test-shared.js";
+
+installPatcherTestHooks();
+
+const ALTERNATE_PATCH = "tests/fixtures/archive_sources/multi-patch/alternate.ips";
+const WEAVE_URL = `${location.origin}/virtual/weave/rom-weaver-weave.json`;
+
+// The weave's sources are real same-origin fixture URLs (only the rom-weaver-weave.json itself is virtual, so
+// fetch is stubbed for that one URL and passed through for everything else).
+const WEAVE_JSON = {
+  output: { name: "weave-output" },
+  patches: [
+    {
+      description: "Required core patch",
+      label: "stable",
+      name: "Core",
+      url: `${location.origin}/${RAW_PATCH}`,
+    },
+    { name: "Alternate", optional: true, url: `${location.origin}/${ALTERNATE_PATCH}` },
+  ],
+  rom: { url: `${location.origin}/${RAW_ROM}` },
+  version: 1,
+};
+
+const withWeaveFetchStub = async (weave, run) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || String(input);
+    if (url === WEAVE_URL) {
+      return Promise.resolve(
+        new Response(JSON.stringify(weave), { headers: { "content-type": "application/json" }, status: 200 }),
+      );
+    }
+    return originalFetch(input, init);
+  };
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+};
+
+const getPatchToggles = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .patch-enable input"));
+
+// Pack files into a zip through the real compression runtime (what a patch
+// distributor would publish as a without-ROM weave).
+const buildZip = async (entries, outputName) => {
+  const create = browserRuntime.compression.create;
+  if (!create) throw new Error("Runtime compression create capability is unavailable");
+  const result = await create({
+    entries,
+    format: "zip",
+    options: { outputName, threads: 1 },
+  });
+  const output = result?.output;
+  if (!output) throw new Error("Zip compression did not return output");
+  try {
+    // Materialize the bytes before dispose() deletes the backing OPFS file - a
+    // File built straight from the blob references that file lazily, and reads
+    // during the later drop intermittently fail once it is gone.
+    const blob = await browserRuntime.publicOutput.getBlob(output);
+    const bytes = await blob.arrayBuffer();
+    return new File([bytes], outputName, { type: "application/zip" });
+  } finally {
+    await output.dispose().catch(() => undefined);
+  }
+};
+
+test("local without-rom weave drop seeds optional patches off", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
+    type: "application/octet-stream",
+  });
+  const weaveJson = {
+    output: { name: "bundled-output" },
+    patches: [
+      { name: "Core", path: "change.ips" },
+      { name: "Alternate", optional: true, path: "alternate.ips" },
+    ],
+    rom: {
+      checks: { checksums: { crc32: "c6fb1252" } },
+      name: "game.bin",
+    },
+    version: 1,
+  };
+  const weaveFile = new File([JSON.stringify(weaveJson)], "rom-weaver-weave.json", { type: "application/json" });
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: alternateFile, fileName: "alternate.ips" },
+    ],
+    "without-rom.zip",
+  );
+
+  // A user drop: the checks-only weave plus their own ROM in one gesture.
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
+
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
+  // The optional patch must seed OFF; the core patch stays on.
+  await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  // A completed run must be invalidated without starting another run when an optional weave patch
+  // is turned back on. The patch file stays in the stack, so its extracted source cannot be released
+  // with the first run.
+  getPatchToggles()[1]?.click();
+  await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(true);
+  await waitForApplyButtonEnabled();
+  await expect
+    .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+    .toContain("Apply");
+  expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
+
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  // Reusing the same weave output name must remain valid across repeated
+  // invalidation, validation, and apply cycles.
+  for (let cycle = 0; cycle < 8; cycle += 1) {
+    getPatchToggles()[1]?.click();
+    await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(cycle % 2 === 1);
+    await waitForApplyButtonEnabled();
+    expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
+    await clickApplyButton();
+    expect(await waitForApplyOutcome(), `cycle ${cycle}`).toEqual({ kind: "download" });
+  }
+});
+
+test("weave keeps same-name apply usable after enabling several optional patches", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const patchEntries = Array.from({ length: 8 }, (_, index) => ({
+    name: `Patch ${index + 1}`,
+    optional: index > 1,
+    path: `patch-${index + 1}.ips`,
+  }));
+  const patchFiles = await Promise.all(
+    patchEntries.map(async (entry) => new File([await patchFile.arrayBuffer()], entry.path)),
+  );
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "same-output-name" },
+        patches: patchEntries,
+        rom: { path: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: romFile, fileName: "game.bin" },
+      ...patchFiles.map((file) => ({ file, fileName: file.name })),
+    ],
+    "many-optional.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive], id: 1 } }));
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(8);
+  await expect
+    .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+    .toEqual([true, true, false, false, false, false, false, false]);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("same-output-name");
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  for (const toggle of getPatchToggles().slice(2)) toggle.click();
+  await expect
+    .poll(
+      () =>
+        getPatchToggles()
+          .slice(2)
+          .every((toggle) => toggle.checked),
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+
+  for (const toggle of getPatchToggles().slice(2)) toggle.click();
+  await expect
+    .poll(
+      () =>
+        getPatchToggles()
+          .slice(2)
+          .every((toggle) => !toggle.checked),
+      { timeout: 30000 },
+    )
+    .toBe(true);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+const createIpsPatch = (fileName, offset, value) => {
+  const bytes = new Uint8Array(14);
+  bytes.set(new TextEncoder().encode("PATCH"));
+  bytes.set([(offset >>> 16) & 0xff, (offset >>> 8) & 0xff, offset & 0xff, 0, 1, value], 5);
+  bytes.set(new TextEncoder().encode("EOF"), 11);
+  return new File([bytes], fileName, { type: "application/octet-stream" });
+};
+
+test("weave checks after a switched-off optional patch are not enforced; switched on they are sent", async () => {
+  // 64 zero bytes; first.ips sets byte 0, second.ips sets byte 10. The authored chain declares the
+  // second patch's output as both edits (crc32 f9f31dcf), which the bytes only match with first.ips on.
+  const romFile = new File([new Uint8Array(64)], "game.bin", { type: "application/octet-stream" });
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "chain-check-output" },
+        patches: [
+          { name: "First", optional: true, path: "first.ips" },
+          { name: "Second", outputChecks: { checksums: { crc32: "f9f31dcf" } }, path: "second.ips" },
+        ],
+        rom: { path: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: romFile, fileName: "game.bin" },
+      { file: createIpsPatch("first.ips", 0, 1), fileName: "first.ips" },
+      { file: createIpsPatch("second.ips", 10, 2), fileName: "second.ips" },
+    ],
+    "chain-checks.zip",
+  );
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  const lastOutputChecks = () => applySpy.mock.calls.at(-1)?.[0]?.options?.patchOutputChecks;
+  try {
+    mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive], id: 1 } }));
+    await expect
+      .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+      .toEqual([false, true]);
+
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(lastOutputChecks()).toBeUndefined();
+
+    getPatchToggles()[0]?.click();
+    await expect.poll(() => getPatchToggles()[0]?.checked, { timeout: 30000 }).toBe(true);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(lastOutputChecks()).toEqual(["", "crc32=f9f31dcf"]);
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+test("imported weave whose optional patch is off applies without touching the toggle", async () => {
+  // The off patch does not match the ROM (wrong-input BPS), so its preflight verdict is a
+  // checksum mismatch. That verdict belongs to a patch that never runs and must not block Apply.
+  const [romFile, patchFile, offBps] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    loadFixtureFile(RAW_PATCH),
+    loadFixtureFile(WRONG_INPUT_BPS),
+  ]);
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "off-optional-output" },
+        patches: [
+          { name: "Core", path: "change.ips" },
+          { name: "Off", optional: true, path: "wrong-input-same-size.bps" },
+        ],
+        rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: offBps, fileName: "wrong-input-same-size.bps" },
+    ],
+    "off-optional.zip",
+  );
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    await expect
+      .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+      .toEqual([true, false]);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+// RAW_ROM (game.bin) is 13 bytes: crc32 c6fb1252, sha1 1d73a56886d4cd676b771bca857cf64b227e3677.
+const RAW_ROM_CHECKS = {
+  checksums: { crc32: "c6fb1252", sha1: "1d73a56886d4cd676b771bca857cf64b227e3677" },
+  size: 13,
+};
+
+const buildExpectedRomWeave = async (checks, patchFile) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "expected-rom-output" },
+        patches: [{ name: "Core", path: "change.ips" }],
+        rom: { checks, name: "game.bin" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: patchFile, fileName: "change.ips" },
+    ],
+    "expected-rom.zip",
+  );
+};
+
+test("weave expected-ROM checks accept the matching ROM", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildExpectedRomWeave(RAW_ROM_CHECKS, patchFile);
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files: [weaveArchive, romFile], id: 1 },
+    }),
+  );
+  await waitForApplyButtonEnabled();
+  expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+for (const { checks, label } of [
+  { checks: { checksums: { crc32: "a1cecd74", sha1: RAW_ROM_CHECKS.checksums.sha1 }, size: 13 }, label: "checksum" },
+  { checks: { checksums: { sha1: "96ff406466d366276a84a48947ae14cac4065e1c" } }, label: "sha-1 only" },
+  { checks: { checksums: { crc32: "c6fb1252" }, size: 14 }, label: "size" },
+]) {
+  test(`weave expected-ROM ${label} mismatch blocks apply until override is checked`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const weaveArchive = await buildExpectedRomWeave(checks, patchFile);
+    const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+    try {
+      mount(
+        createElement(ApplyPatchForm, {
+          defaultSettings: { validation: { requireInputChecksumMatch: true } },
+          pageDrop: { files: [weaveArchive, romFile], id: 1 },
+        }),
+      );
+      const override = await waitForState(() => {
+        const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+        return checkbox instanceof HTMLInputElement ? checkbox : null;
+      }, 60000);
+      await expect
+        .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad"), {
+          timeout: 60000,
+        })
+        .not.toBeNull();
+      // The weave's output-name defaults land after staging and reset the override, so let them settle.
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("expected-rom-output");
+      expect(applySpy).not.toHaveBeenCalled();
+
+      override.click();
+      await waitForApplyButtonEnabled();
+      await clickApplyButton();
+      expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+      expect(applySpy).toHaveBeenCalledTimes(1);
+    } finally {
+      applySpy.mockRestore();
+    }
+  });
+}
+
+// The guided Apply sample (first-weave.zip): a headered NES ROM whose weave declares `basis: base`
+// on both patches and full rom.checks including size. The IPS bytes match the shipped sample.
+const SAMPLE_ROM = "tests/fixtures/cheats/hello-world.nes";
+const SAMPLE_ROM_CHECKS = {
+  checksums: {
+    crc32: "3e30b9b3",
+    md5: "df0e55e0f744b2d9734ef90e4454aa8f",
+    sha1: "22f56591eb4dbb85fbb6398cd0c4554558f70603",
+  },
+  size: 24592,
+};
+const ipsFile = (fileName, bytes) => new File([new Uint8Array(bytes)], fileName, { type: "application/octet-stream" });
+const IPS_EOF = [0x45, 0x4f, 0x46];
+const IPS_HEADER = [0x50, 0x41, 0x54, 0x43, 0x48];
+const SAMPLE_PATCHES = [
+  ipsFile("hello-to-rom.ips", [...IPS_HEADER, 0, 0, 0xa8, 0, 5, 0x12, 0x0f, 0x0d, 0, 0, ...IPS_EOF]),
+  ipsFile("world-to-weaver.ips", [...IPS_HEADER, 0, 0, 0xaf, 0, 5, 0x05, 0x01, 0x16, 0x05, 0x12, ...IPS_EOF]),
+];
+
+const buildSampleWeave = async ({ outputName = "rom-weaver.nes", patches } = {}) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: outputName },
+        patches: patches || [
+          { basis: "base", name: "Hello to ROM", path: "hello-to-rom.ips" },
+          { basis: "base", name: "World to WEAVER", path: "world-to-weaver.ips" },
+        ],
+        rom: { checks: SAMPLE_ROM_CHECKS, name: "hello-world.nes" },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      ...SAMPLE_PATCHES.map((file) => ({ file, fileName: file.name })),
+    ],
+    "sample-weave.zip",
+  );
+};
+
+// Same size as the sample ROM, one byte changed outside the patched range.
+const loadWrongSampleRom = async () => {
+  const bytes = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  bytes[0x2000] ^= 0xff;
+  return new File([bytes], "hello-world.nes", { type: "application/octet-stream" });
+};
+
+const getChecksumOverride = () => {
+  const checkbox = document.getElementById("rom-weaver-checkbox-checksum-override");
+  return checkbox instanceof HTMLInputElement ? checkbox : null;
+};
+
+const mountStrict = (files) =>
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files, id: 1 },
+    }),
+  );
+
+test("sample weave applies on its matching ROM under strict validation", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadFixtureFile(SAMPLE_ROM)]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+    // The weave's ROM checks are compared with the supplied file in the browser; they are neither
+    // the engine's --expect-in nor patch 0's own input declaration.
+    expect(options?.validateWithChecksums).toBeUndefined();
+    expect(options?.patchInputChecks).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+test("sample weave rejects a wrong ROM until the override is checked", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    const override = await waitForState(getChecksumOverride, 60000);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    expect(applySpy).not.toHaveBeenCalled();
+    override.click();
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    expect(applySpy.mock.calls[0]?.[0]?.options?.validateWithChecksums).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+// Woven output of the two sample patches (scripts/first-sample-assets.mjs `wovenRom`).
+const SAMPLE_WOVEN_SHA256 = "7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e";
+const sha256Hex = async (blob) =>
+  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+
+/** Records each download anchor's file name with the blob its object URL points at. */
+const captureDownloads = () => {
+  const blobsByUrl = new Map();
+  const createObjectUrl = URL.createObjectURL.bind(URL);
+  const urlSpy = vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    const url = createObjectUrl(blob);
+    blobsByUrl.set(url, blob);
+    return url;
+  });
+  // Calls through; `mock.contexts` holds each clicked anchor.
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click");
+  return {
+    getDownloads: () =>
+      clickSpy.mock.contexts
+        .filter((anchor) => anchor.download)
+        .map((anchor) => ({ blob: blobsByUrl.get(anchor.href), name: anchor.download })),
+    restore: () => {
+      clickSpy.mockRestore();
+      urlSpy.mockRestore();
+    },
+  };
+};
+
+const applyDottedSampleWeave = async ({
+  compression,
+  typedName,
+  weaveOutputName = "Practice 3.5.1.nes",
+  expectedFieldName = "Practice 3.5.1",
+}) => {
+  const capture = captureDownloads();
+  try {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({ outputName: weaveOutputName }),
+      loadFixtureFile(SAMPLE_ROM),
+    ]);
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression } },
+        pageDrop: { files: [weaveArchive, romFile], id: 1 },
+      }),
+    );
+    // The name field carries the stem; the manifest's `.nes` belongs to the format.
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe(expectedFieldName);
+    if (typedName) setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), typedName);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+    const outcome = await waitForApplyOutcome();
+    expect(outcome?.kind, outcome && "errorText" in outcome ? outcome.errorText : "").toBe("download");
+    await expect.poll(() => capture.getDownloads().length, { timeout: 30000 }).toBeGreaterThan(0);
+    return capture.getDownloads().at(-1);
+  } finally {
+    capture.restore();
+  }
+};
+
+test("weave output name with a dotted version stem keeps its .nes extension", async () => {
+  const download = await applyDottedSampleWeave({ compression: "none" });
+  expect(download?.name).toBe("Practice 3.5.1.nes");
+  expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
+});
+
+test("compressed weave output with a dotted version stem names the archive entry with .nes", async () => {
+  const download = await applyDottedSampleWeave({ compression: "zip" });
+  expect(download?.name).toBe("Practice 3.5.1.zip");
+  // A ZIP stores entry names as plain bytes in its headers.
+  expect(new TextDecoder("latin1").decode(await download.blob.arrayBuffer())).toContain("Practice 3.5.1.nes");
+});
+
+for (const [typedName, expectedName] of [
+  ["Typed 2.0", "Typed 2.0.nes"],
+  ["Typed.nes", "Typed.nes"],
+  ["Typed.sfc", "Typed.sfc"],
+  ["Kaizo Mario #2.nes", "Kaizo Mario #2.nes"],
+]) {
+  test(`typed name "${typedName}" overrides the weave output name`, async () => {
+    const download = await applyDottedSampleWeave({ compression: "none", typedName });
+    expect(download?.name).toBe(expectedName);
+    expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
+  });
+}
+
+for (const romKind of ["matching", "wrong"]) {
+  test(`expected-ROM checks follow an optional first patch switched on (${romKind} ROM)`, async () => {
+    const [weaveArchive, romFile] = await Promise.all([
+      buildSampleWeave({
+        patches: [
+          { name: "Hello to ROM", optional: true, path: "hello-to-rom.ips" },
+          { name: "World to WEAVER", path: "world-to-weaver.ips" },
+        ],
+      }),
+      romKind === "matching" ? loadFixtureFile(SAMPLE_ROM) : loadWrongSampleRom(),
+    ]);
+    const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+    try {
+      mountStrict([weaveArchive, romFile]);
+      await expect
+        .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+        .toEqual([false, true]);
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+      getPatchToggles()[0]?.click();
+      await expect
+        .poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 })
+        .toEqual([true, true]);
+      if (romKind === "wrong") {
+        const override = await waitForState(getChecksumOverride, 60000);
+        expect(applySpy).not.toHaveBeenCalled();
+        override.click();
+      }
+      await waitForApplyButtonEnabled();
+      if (romKind === "matching") expect(getChecksumOverride()).toBeNull();
+      await clickApplyButton();
+      expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+      const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+      expect(options?.patchInputChecks).toBeUndefined();
+      expect(options?.validateWithChecksums).toBeUndefined();
+    } finally {
+      applySpy.mockRestore();
+    }
+  });
+}
+
+test("expected-ROM checks follow a reordered sample weave", async () => {
+  const [weaveArchive, romFile] = await Promise.all([buildSampleWeave(), loadFixtureFile(SAMPLE_ROM)]);
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict([weaveArchive, romFile]);
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+    document.querySelector("#rom-weaver-list-patch-stack .handle")?.click();
+    const positionInput = await waitForState(
+      () => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"),
+      30000,
+    );
+    setFormControlValue(positionInput, "2");
+    positionInput.blur();
+    await expect
+      .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+      .toEqual(["world-to-weaver.ips", "hello-to-rom.ips"]);
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    const options = applySpy.mock.calls.at(-1)?.[0]?.options;
+    expect(options?.validateWithChecksums).toBeUndefined();
+    expect(options?.patchInputChecks).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+});
+
+// The weave's rom.checks follow the bench like its output checks: once the patch list diverges
+// from the weave they stand down, and they apply again when it matches the weave.
+const movePatchToPosition = async (position) => {
+  document.querySelector("#rom-weaver-list-patch-stack .handle")?.click();
+  const positionInput = await waitForState(
+    () => document.querySelector("#rom-weaver-list-patch-stack .phandle-input"),
+    30000,
+  );
+  setFormControlValue(positionInput, String(position));
+  positionInput.blur();
+};
+
+test("a bench that diverges from the weave drops the weave's ROM checks", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const ownPatch = ipsFile("own-hack.ips", [...IPS_HEADER, 0, 0x30, 0, 0, 1, 0x42, ...IPS_EOF]);
+  const props = { defaultSettings: { validation: { requireInputChecksumMatch: true } } };
+  const root = mount(createElement(ApplyPatchForm, { ...props, pageDrop: { files: [weaveArchive, wrongRom], id: 1 } }));
+  await waitForState(getChecksumOverride, 60000);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(ApplyPatchForm, { ...props, pageDrop: { files: [ownPatch], id: 2 } }),
+    ),
+  );
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips", "own-hack.ips"]);
+  for (const name of ["hello-to-rom.ips", "world-to-weaver.ips"]) {
+    const index = getPatchStackFileNames().indexOf(name);
+    const remove = document.querySelectorAll("button[id^='rom-weaver-patch-menu-remove-']")[index];
+    if (!(remove instanceof HTMLButtonElement)) throw new Error(`Missing remove button for ${name}`);
+    remove.click();
+    await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).not.toContain(name);
+  }
+  expect(getPatchStackFileNames()).toEqual(["own-hack.ips"]);
+  await waitForApplyButtonEnabled();
+  expect(getChecksumOverride()).toBeNull();
+  await clickApplyButton();
+  expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+});
+
+// Mount a strict form, then drop `files` onto the bench it already holds.
+const dropOntoBench = (root, files) =>
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(ApplyPatchForm, {
+        defaultSettings: { validation: { requireInputChecksumMatch: true } },
+        pageDrop: { files, id: 2 },
+      }),
+    ),
+  );
+
+test("a weave dropped onto a bench that already holds a patch does not enforce its ROM checks", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  const ownPatch = ipsFile("own-hack.ips", [...IPS_HEADER, 0, 0x30, 0, 0, 1, 0x42, ...IPS_EOF]);
+  const root = mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: { validation: { requireInputChecksumMatch: true } },
+      pageDrop: { files: [ownPatch], id: 1 },
+    }),
+  );
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["own-hack.ips"]);
+  dropOntoBench(root, [weaveArchive, wrongRom]);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["own-hack.ips", "hello-to-rom.ips", "world-to-weaver.ips"]);
+  // Every patch, the user's own included, validates on its own terms.
+  await expect
+    .poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack .file.ok").length, { timeout: 60000 })
+    .toBe(3);
+  expect(getChecksumOverride()).toBeNull();
+  expect(document.querySelector("#rom-weaver-list-patch-stack .pfault-detail")).toBeNull();
+});
+
+test("a diverged bench does not attribute the expected ROM to the weave", async () => {
+  const [weaveArchive, ownBps] = await Promise.all([buildSampleWeave(), loadFixtureFile(WRONG_INPUT_BPS)]);
+  const root = mount(createElement(ApplyPatchForm, { pageDrop: { files: [ownBps], id: 1 } }));
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toHaveLength(1);
+  dropOntoBench(root, [weaveArchive]);
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toHaveLength(3);
+  // The card still shows the first patch's input checks, attributed to that patch.
+  const card = await waitForState(() => document.getElementById("rom-weaver-weave-rom-expectation"), 30000);
+  await expect.poll(() => card.textContent, { timeout: 30000 }).not.toContain("provide it yourself");
+  expect(card.textContent).not.toContain("hello-world.nes");
+});
+
+test("the weave's ROM checks apply again when the bench matches the weave", async () => {
+  const [weaveArchive, wrongRom] = await Promise.all([buildSampleWeave(), loadWrongSampleRom()]);
+  mountStrict([weaveArchive, wrongRom]);
+  await waitForState(getChecksumOverride, 60000);
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("rom-weaver");
+  await movePatchToPosition(2);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["world-to-weaver.ips", "hello-to-rom.ips"]);
+  await expect.poll(getChecksumOverride, { timeout: 30000 }).toBeNull();
+  await waitForApplyButtonEnabled();
+  await movePatchToPosition(2);
+  await expect
+    .poll(() => getPatchStackFileNames(), { timeout: 30000 })
+    .toEqual(["hello-to-rom.ips", "world-to-weaver.ips"]);
+  await expect.poll(getChecksumOverride, { timeout: 30000 }).not.toBeNull();
+});
+
+// Header and N64 byte-order cases: rom.checks describe the file as supplied (as weave export and
+// `weave create` write them), while the patch targets headerless or big-endian bytes. The checks
+// must neither block the matching ROM nor change the engine's automatic header decision.
+const CRC32_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+const crc32 = (bytes) => {
+  let value = 0xffffffff;
+  for (const byte of bytes) value = CRC32_TABLE[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+};
+const hex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const fileChecks = async (bytes) => ({
+  checksums: {
+    crc32: crc32(bytes).toString(16).padStart(8, "0"),
+    sha1: hex(new Uint8Array(await crypto.subtle.digest("SHA-1", bytes))),
+  },
+  size: bytes.length,
+});
+// Deterministic pseudo-random bytes (xorshift32), so the ROM has no accidental structure.
+const noiseBytes = (length, seed) => {
+  const bytes = new Uint8Array(length);
+  let state = seed >>> 0;
+  for (let index = 0; index < length; index += 1) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    bytes[index] = state & 0xff;
+  }
+  return bytes;
+};
+const withBytes = (source, offset, replacement) => {
+  const bytes = new Uint8Array(source);
+  bytes.set(replacement, offset);
+  return bytes;
+};
+const vlq = (value) => {
+  const out = [];
+  let rest = value;
+  for (;;) {
+    const low = rest & 0x7f;
+    rest = Math.floor(rest / 128);
+    if (rest === 0) {
+      out.push(0x80 | low);
+      return out;
+    }
+    out.push(low);
+    rest -= 1;
+  }
+};
+const u32le = (value) => [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+// A same-size BPS: SourceRead the unchanged prefix, TargetRead the changed span, SourceRead the rest.
+const createBps = (source, target) => {
+  let start = 0;
+  while (start < source.length && source[start] === target[start]) start += 1;
+  let end = source.length;
+  while (end > start && source[end - 1] === target[end - 1]) end -= 1;
+  const bytes = [0x42, 0x50, 0x53, 0x31, ...vlq(source.length), ...vlq(target.length), ...vlq(0)];
+  if (start > 0) bytes.push(...vlq((start - 1) * 4));
+  bytes.push(...vlq((end - start - 1) * 4 + 1), ...target.subarray(start, end));
+  if (end < source.length) bytes.push(...vlq((source.length - end - 1) * 4));
+  bytes.push(...u32le(crc32(source)), ...u32le(crc32(target)));
+  bytes.push(...u32le(crc32(bytes)));
+  return new Uint8Array(bytes);
+};
+// One-byte IPS records: [offset, value].
+const createIps = (records) =>
+  new Uint8Array([
+    ...IPS_HEADER,
+    ...records.flatMap(([offset, value]) => [
+      (offset >>> 16) & 0xff,
+      (offset >>> 8) & 0xff,
+      offset & 0xff,
+      0,
+      1,
+      value,
+    ]),
+    ...IPS_EOF,
+  ]);
+const applyRecords = (source, records) => {
+  const bytes = new Uint8Array(source);
+  for (const [offset, value] of records) bytes[offset] = value;
+  return bytes;
+};
+// A LoROM internal header ("TEST GAME", map mode 0x20, 1 MiB) at 0x7fc0 of the headerless image.
+const SNES_INTERNAL_HEADER = [
+  0x54,
+  0x45,
+  0x53,
+  0x54,
+  0x20,
+  0x47,
+  0x41,
+  0x4d,
+  0x45,
+  ...Array.from({ length: 13 }, () => 0x20),
+  0x00,
+  0x0a,
+  0x00,
+  0x01,
+  0x33,
+  0x00,
+  0x12,
+  0x4b,
+  0xfb,
+  0x9f,
+];
+const byteSwap16 = (source) => {
+  const bytes = new Uint8Array(source.length);
+  for (let index = 0; index + 1 < source.length; index += 2) {
+    bytes[index] = source[index + 1];
+    bytes[index + 1] = source[index];
+  }
+  return bytes;
+};
+
+const buildTransformWeave = async (romChecks, patchName, patchBytes, romName) => {
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        output: { name: "transform-output" },
+        patches: [{ name: "Hack", path: patchName }],
+        rom: { checks: romChecks, name: romName },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  return buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: new File([patchBytes], patchName), fileName: patchName },
+    ],
+    "transform-weave.zip",
+  );
+};
+
+// Apply under strict validation and return the bytes the engine produced.
+const applyWeaveAndReadOutput = async (files) => {
+  const original = browserRuntime.patch.applyPatch;
+  let outputBytes = null;
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch").mockImplementation(async (input) => {
+    const output = await original.call(browserRuntime.patch, input);
+    outputBytes = new Uint8Array(await (await browserRuntime.publicOutput.getBlob(output)).arrayBuffer());
+    return output;
+  });
+  try {
+    mountStrict(files);
+    await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain("transform-output");
+    await waitForApplyButtonEnabled();
+    expect(getChecksumOverride()).toBeNull();
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    if (!outputBytes) throw new Error("apply produced no output");
+    return { options: applySpy.mock.calls.at(-1)?.[0]?.options, output: outputBytes };
+  } finally {
+    applySpy.mockRestore();
+  }
+};
+
+test("weave rom.checks of a headered ROM accept it for a headerless BPS", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const headerless = headered.subarray(16);
+  const modified = withBytes(headerless, 0x98, [0x12, 0x0f, 0x0d, 0x00, 0x00]);
+  const weaveArchive = await buildTransformWeave(
+    SAMPLE_ROM_CHECKS,
+    "hack.bps",
+    createBps(headerless, modified),
+    "hello-world.nes",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, await loadFixtureFile(SAMPLE_ROM)]);
+  // The patched headerless bytes, with or without the copier header put back.
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+test("weave rom.checks of a headered SNES ROM keep the automatic headerless IPS basis", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+    [0x9001, 0x7e],
+    [0xffff0, 0x78],
+  ];
+  const modified = applyRecords(headerless, records);
+  // A hand-written weave may carry only a CRC32 and size for its ROM.
+  const { checksums, size } = await fileChecks(headered);
+  const weaveArchive = await buildTransformWeave(
+    { checksums: { crc32: checksums.crc32 }, size },
+    "hack.ips",
+    createIps(records),
+    "game.smc",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]);
+  // With the header wrongly kept, every IPS record would land 512 bytes early.
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+test("weave rom.checks of a byte-swapped N64 ROM accept it for a big-endian BPS", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const byteSwapped = byteSwap16(bigEndian);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(byteSwapped),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.v64",
+  );
+  const { options, output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwapped], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(modified));
+  // Never the engine's --expect-in, which checks the transformed bytes and steers the header choice.
+  expect(options?.validateWithChecksums).toBeUndefined();
+});
+
+// A patch with no layout evidence of its own (an IPS) applies to the layout the weave's ROM check
+// matched: the headerless body, or the big-endian byte order.
+test("an IPS applies to the headerless body when rom.checks match only the header-stripped NES ROM", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const body = headered.subarray(16);
+  const records = [
+    [0x98, 0x12],
+    [0x99, 0x0f],
+    [0x9a, 0x0d],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(body),
+    "hack.ips",
+    createIps(records),
+    "hello-world.nes",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  const modified = applyRecords(body, records);
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+});
+
+test("an IPS applies in big-endian order when rom.checks match only the .z64 layout of a .v64 dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const records = [
+    [0x1000, 0xde],
+    [0x1001, 0xad],
+    [0x1002, 0xbe],
+    [0x1003, 0xef],
+    [0x8001, 0x11],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(bigEndian),
+    "hack.ips",
+    createIps(records),
+    "game.z64",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(applyRecords(bigEndian, records)));
+});
+
+test("a patch's own layout evidence still wins over the layout rom.checks matched", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  // A BPS made for the headered file: its source CRC32 says keep the header.
+  const modified = withBytes(headered, 0x98, [0x12, 0x0f, 0x0d]);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(headered.subarray(16)),
+    "hack.bps",
+    createBps(headered, modified),
+    "hello-world.nes",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  expect(hex(output)).toBe(hex(modified));
+});
+
+const buildWeaveArchive = async (weave, patchFiles) =>
+  buildZip(
+    [
+      {
+        file: new File([JSON.stringify(weave)], "rom-weaver-weave.json", { type: "application/json" }),
+        fileName: "rom-weaver-weave.json",
+      },
+      ...patchFiles.map((file) => ({ file, fileName: file.name })),
+    ],
+    "rom-check-weave.zip",
+  );
+
+// A patch's own source checks, of any algorithm, decide its layout even when rom.checks match only
+// the header-stripped ROM: declared inputChecks, or a checksum embedded in the patch (a RUP's MD5).
+const applyOwnEvidenceWeave = async (patchEntry, patchFile, headered) => {
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ name: "Hack", path: patchFile.name, ...patchEntry }],
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  return applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+};
+
+test("a patch's declared inputChecks keep its raw layout when rom.checks match only the headerless body", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const records = [
+    [0xa8, 0x12],
+    [0xa9, 0x0f],
+    [0xaa, 0x0d],
+  ];
+  const patchFile = new File([createIps(records)], "hack.ips");
+  const { output } = await applyOwnEvidenceWeave({ inputChecks: await fileChecks(headered) }, patchFile, headered);
+  expect(hex(output)).toBe(hex(applyRecords(headered, records)));
+});
+
+test.each(["crc32", "md5", "sha1"].map((algorithm) => [algorithm, "base"]))(
+  "a later patch's declared %s with %s basis outranks the weave layout",
+  async (algorithm, basis) => {
+    const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+    const inputChecks = { checksums: { [algorithm]: SAMPLE_ROM_CHECKS.checksums[algorithm] } };
+    const firstRecords = [[0xa8, 0x12]];
+    const laterRecords = [[0xa9, 0x0f]];
+    const patches = [
+      new File([createIps(firstRecords)], "first.ips"),
+      new File([createIps(laterRecords)], "later.ips"),
+    ];
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "transform-output" },
+        patches: patches.map((patch) => ({ ...(basis === "base" ? { basis } : {}), inputChecks, path: patch.name })),
+        rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+        version: 1,
+      },
+      patches,
+    );
+    const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+    expect(hex(output)).toBe(hex(applyRecords(applyRecords(headered, firstRecords), laterRecords)));
+  },
+);
+
+test("a first patch's SHA256 declaration keeps the validation plan on its raw layout", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", headered)));
+  const patchFile = new File([createIps([[0xa8, 0x12]])], "hack.ips");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      patches: [{ path: patchFile.name, inputChecks: { checksums: { sha256 } } }],
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  const originalValidate = browserRuntime.patch.validatePatch;
+  let result;
+  const validateSpy = vi.spyOn(browserRuntime.patch, "validatePatch").mockImplementation(async (input) => {
+    result = await originalValidate.call(browserRuntime.patch, input);
+    return result;
+  });
+  try {
+    mountStrict([weaveArchive, new File([headered], "hello-world.nes")]);
+    await expect.poll(() => result?.plan?.per_patch?.[0]?.input_verdict, { timeout: 30000 }).toBe("passed");
+    expect(result.plan.per_patch[0].matched).toEqual({ kind: "base", variant: "raw" });
+    expect(validateSpy.mock.calls.at(-1)?.[0]?.options.removeHeader).toBe(false);
+  } finally {
+    validateSpy.mockRestore();
+  }
+});
+
+test("a RUP's embedded MD5 keeps its raw layout when rom.checks match only the headerless body", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const modified = withBytes(headered, 0xa8, [0x12, 0x0f, 0x0d]);
+  const workflow = new CreateWorkflow({
+    settings: { format: "rup", output: { compression: "none", outputName: "hack.rup" }, workers: { threads: 1 } },
+  });
+  await workflow.setOriginal(new File([headered], "original.nes"));
+  await workflow.setModified(new File([modified], "modified.nes"));
+  const created = await workflow.run();
+  const rupBytes = await (await created.output.getBlob()).arrayBuffer();
+  await created.output.dispose();
+  // Renamed so no filename checksum token adds evidence: only the RUP's embedded MD5 remains.
+  const { output } = await applyOwnEvidenceWeave({}, new File([rupBytes], "hack.rup"), headered);
+  expect(hex(output)).toBe(hex(modified));
+});
+
+// Apply under strict validation: a matching ROM applies with no override; a wrong one shows the
+// override and reaches the engine only once it is checked.
+const expectStrictApply = async (files, { outputName, romMatches }) => {
+  const applySpy = vi.spyOn(browserRuntime.patch, "applyPatch");
+  try {
+    mountStrict(files);
+    if (romMatches) {
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain(outputName);
+      await waitForApplyButtonEnabled();
+      expect(getChecksumOverride()).toBeNull();
+    } else {
+      const override = await waitForState(getChecksumOverride, 60000);
+      // The weave's output-name defaults land after staging and reset the override, so let them settle.
+      await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toContain(outputName);
+      expect(applySpy).not.toHaveBeenCalled();
+      override.click();
+      await waitForApplyButtonEnabled();
+    }
+    await clickApplyButton();
+    expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    expect(applySpy.mock.calls[0]?.[0]?.options?.validateWithChecksums).toBeUndefined();
+  } finally {
+    applySpy.mockRestore();
+  }
+};
+
+// The browser export writes `target: {rom: true}` on every patch, version 2 and patchBasis auto.
+for (const romMatches of [true, false]) {
+  test(`exported-shape weave verifies rom.checks (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const checks = romMatches
+      ? RAW_ROM_CHECKS
+      : { checksums: { crc32: "a1cecd74", sha1: "96ff406466d366276a84a48947ae14cac4065e1c" }, size: 14 };
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "exported-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+        rom: { checks, name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "exported-output", romMatches });
+  });
+}
+
+// `weave create --output weave.json` records the input ROM as `rom.path`; zipping that JSON by hand leaves the
+// path unbundled. Like `rom.name`, it means the user supplies the ROM (the CLI accepts it too).
+for (const romMatches of [true, false]) {
+  test(`weave zip with an unbundled rom.path verifies rom.checks (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const checks = romMatches
+      ? RAW_ROM_CHECKS
+      : { checksums: { crc32: "a1cecd74", sha1: "96ff406466d366276a84a48947ae14cac4065e1c" }, size: 14 };
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "unbundled-path-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+        rom: { checks, path: "not-in-the-zip/game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "unbundled-path-output", romMatches });
+  });
+}
+
+// An unbundled rom.path whose rom.checks match a bundled member under another name binds that member
+// (resolved by the Rust `weave parse`), so the weave loads without a separate ROM file.
+test("weave zip with an unbundled rom.path binds the bundled member whose checksums match", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const bundledRom = new File([await romFile.arrayBuffer()], "bundled-renamed.bin");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "bound-by-checks-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+      rom: { checks: RAW_ROM_CHECKS, path: "not-in-the-zip/game.bin" },
+      version: 2,
+    },
+    [patchFile, bundledRom],
+  );
+  await expectStrictApply([weaveArchive], { outputName: "bound-by-checks-output", romMatches: true });
+});
+
+test("weave zip whose patch path matches no member still fails to load", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "missing-patch-output" },
+      patches: [{ name: "Core", path: "missing.ips" }],
+      rom: { checks: RAW_ROM_CHECKS, name: "game.bin" },
+      version: 1,
+    },
+    [patchFile],
+  );
+  await expect(loadLocalWeaveSession(weaveArchive, [romFile])).rejects.toThrow(/matches no archive member/);
+});
+
+// `weave create --checksum sha256` writes algorithms staging does not compute; they are hashed on demand.
+for (const romMatches of [true, false]) {
+  test(`sha256-only rom.checks are computed and verified (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "sha256-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Core", path: patchFile.name }],
+        rom: { checks: { checksums: { sha256: romMatches ? sha256 : "0".repeat(64) } }, name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "sha256-output", romMatches });
+  });
+}
+
+// A patch's own SHA-256 inputChecks must not read as malformed, and a wrong ROM keeps the override.
+for (const romMatches of [true, false]) {
+  test(`sha256 patch inputChecks are verified (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+    const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "sha256-input-output" },
+        patchBasis: "auto",
+        patches: [
+          {
+            inputChecks: { checksums: { sha256: romMatches ? sha256 : "0".repeat(64) } },
+            name: "Core",
+            path: patchFile.name,
+            target: { rom: true },
+          },
+        ],
+        rom: { name: "game.bin" },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, romFile], { outputName: "sha256-input-output", romMatches });
+    expect(document.body.textContent).not.toContain("is malformed");
+  });
+}
+
+// A member-lane weave: rom.member names the disc track the weave's ROM checks describe.
+for (const romMatches of [true, false]) {
+  test(`member-lane weave verifies rom.checks on rom.member (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const trackOneName = "member-lane-track01.bin";
+    const trackTwoName = "member-lane-track02.bin";
+    const trackOne = noiseBytes(2352 * 40, 0x01);
+    const trackTwo = noiseBytes(2352 * 40, 0x02);
+    const cue = new File(
+      [
+        `FILE "${trackOneName}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n` +
+          `FILE "${trackTwoName}" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n`,
+      ],
+      "member-lane.cue",
+      { type: "application/x-cue" },
+    );
+    const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+    const target = { member: trackTwoName, rom: true };
+    // The weave bundles the disc as one ROM archive. The wrong case declares track 1's checks for
+    // track 2, as a weave made from another disc would.
+    const disc = await buildZip(
+      [
+        { file: cue, fileName: cue.name },
+        { file: new File([trackOne], trackOneName), fileName: trackOneName },
+        { file: new File([trackTwo], trackTwoName), fileName: trackTwoName },
+      ],
+      "member-lane.zip",
+    );
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "member-lane-output" },
+        patchBasis: "auto",
+        patches: [{ name: "Track", path: patchFile.name, target }],
+        rom: {
+          checks: await fileChecks(romMatches ? trackTwo : trackOne),
+          member: trackTwoName,
+          name: disc.name,
+          path: disc.name,
+        },
+        version: 2,
+      },
+      [patchFile, disc],
+    );
+    await expectStrictApply([weaveArchive], { outputName: "member-lane-output", romMatches });
+  });
+}
+
+// A member-lane weave given only the extracted ROM member, not the archive it came from.
+for (const romMatches of [true, false]) {
+  test(`member-lane weave verifies rom.checks on the bare member file (${romMatches ? "matching" : "wrong"} ROM)`, async () => {
+    const memberName = "bare-member-track02.bin";
+    const member = noiseBytes(2352 * 40, 0x02);
+    const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+    const weaveArchive = await buildWeaveArchive(
+      {
+        output: { name: "bare-member-output" },
+        patchBasis: "auto",
+        // `weave create --rom-member` names the member on rom only; its patches carry no target.
+        patches: [{ name: "Track", path: patchFile.name }],
+        rom: {
+          checks: await fileChecks(romMatches ? member : noiseBytes(member.length, 0x01)),
+          member: memberName,
+          name: "bare-member.zip",
+        },
+        version: 2,
+      },
+      [patchFile],
+    );
+    await expectStrictApply([weaveArchive, new File([member], memberName)], {
+      outputName: "bare-member-output",
+      romMatches,
+    });
+  });
+}
+
+// A checks-only weave and the user's ROM archive arrive in ONE drop: the archive is a ROM candidate
+// and the weave's rom.member is extracted from it, exactly as when it is dropped second.
+test("single drop of a checks-only weave and a cartridge ROM zip stages the ROM", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const romZip = await buildZip([{ file: romFile, fileName: "game.bin" }], "rom.zip");
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "single-drop-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name, target: { rom: true } }],
+      rom: { checks: RAW_ROM_CHECKS, member: "game.bin", name: "rom.zip" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  await expectStrictApply([weaveArchive, romZip], { outputName: "single-drop-output", romMatches: true });
+});
+
+test("single drop of a checks-only weave and a cue/bin ROM zip stages the disc", async () => {
+  const trackOneName = "single-drop-track01.bin";
+  const trackTwoName = "single-drop-track02.bin";
+  const trackOne = noiseBytes(2352 * 40, 0x01);
+  const trackTwo = noiseBytes(2352 * 40, 0x02);
+  const cue = new File(
+    [
+      `FILE "${trackOneName}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n` +
+        `FILE "${trackTwoName}" BINARY\n  TRACK 02 MODE1/2352\n    INDEX 01 00:00:00\n`,
+    ],
+    "single-drop.cue",
+    { type: "application/x-cue" },
+  );
+  const patchFile = new File([createIps([[0, 0xd4]])], "track.ips");
+  const discZip = await buildZip(
+    [
+      { file: cue, fileName: cue.name },
+      { file: new File([trackOne], trackOneName), fileName: trackOneName },
+      { file: new File([trackTwo], trackTwoName), fileName: trackTwoName },
+    ],
+    "disc.zip",
+  );
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "single-drop-disc-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Track", path: patchFile.name, target: { member: trackTwoName, rom: true } }],
+      rom: { checks: await fileChecks(trackTwo), member: trackTwoName, name: "disc.zip" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  await expectStrictApply([weaveArchive, discZip], { outputName: "single-drop-disc-output", romMatches: true });
+});
+
+// rom.checks recorded from the headerless or big-endian ROM still accept the user's headered or
+// byte-swapped dump, and the patch still lands on the bytes it targets.
+test("weave rom.checks of a headerless SNES ROM accept the headered dump", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(headerless),
+    "hack.ips",
+    createIps(records),
+    "game.sfc",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]);
+  const modified = applyRecords(headerless, records);
+  expect(hex(output.subarray(output.length - modified.length))).toBe(hex(modified));
+});
+
+test("weave rom.checks of a big-endian N64 ROM accept the byte-swapped dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const weaveArchive = await buildTransformWeave(
+    await fileChecks(bigEndian),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.z64",
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]);
+  const normalized = output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+  expect(hex(normalized)).toBe(hex(modified));
+});
+
+// `weave create --checksum sha256` from the headerless or big-endian ROM: staging hashes no SHA-256,
+// so the header-stripped and byte-swapped variants are hashed on demand, once per file.
+const sha256Checks = async (bytes) => ({
+  checksums: { sha256: hex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))) },
+  size: bytes.length,
+});
+const withSha256HashCount = async (run) => {
+  const original = browserRuntime.ingest.run;
+  const ingestSpy = vi
+    .spyOn(browserRuntime.ingest, "run")
+    .mockImplementation((input) => original.call(browserRuntime.ingest, input));
+  try {
+    const result = await run();
+    return {
+      result,
+      sha256Hashes: ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length,
+    };
+  } finally {
+    ingestSpy.mockRestore();
+  }
+};
+
+test("sha256-only rom.checks of a headerless NES ROM accept the headered dump", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const body = headered.subarray(16);
+  const records = [
+    [0x98, 0x12],
+    [0x99, 0x0f],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(body),
+    "hack.ips",
+    createIps(records),
+    "hello-world.nes",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]),
+  );
+  const modified = applyRecords(body, records);
+  expect(hex(result.output.subarray(result.output.length - modified.length))).toBe(hex(modified));
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks of a headerless SNES ROM accept the headered dump", async () => {
+  const headerless = withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER);
+  const headered = new Uint8Array(512 + headerless.length);
+  headered.set(headerless, 512);
+  const records = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+  ];
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(headerless),
+    "hack.ips",
+    createIps(records),
+    "game.sfc",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([headered], "game.smc")]),
+  );
+  const modified = applyRecords(headerless, records);
+  expect(hex(result.output.subarray(result.output.length - modified.length))).toBe(hex(modified));
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks of a big-endian N64 ROM accept the byte-swapped dump", async () => {
+  const bigEndian = withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const modified = withBytes(bigEndian, 0x1000, [0xde, 0xad, 0xbe, 0xef]);
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(bigEndian),
+    "hack.bps",
+    createBps(bigEndian, modified),
+    "game.z64",
+  );
+  const { result, sha256Hashes } = await withSha256HashCount(() =>
+    applyWeaveAndReadOutput([weaveArchive, new File([byteSwap16(bigEndian)], "game.v64")]),
+  );
+  const normalized = result.output[0] === 0x37 && result.output[1] === 0x80 ? byteSwap16(result.output) : result.output;
+  expect(hex(normalized)).toBe(hex(modified));
+  // The same-size raw file is hashed on demand first; that pass already hashes its variants.
+  expect(sha256Hashes).toBe(1);
+});
+
+test("sha256-only rom.checks still reject the headered dump of a different ROM", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const otherBody = withBytes(headered.subarray(16), 0x98, [0xff]);
+  const weaveArchive = await buildTransformWeave(
+    await sha256Checks(otherBody),
+    "hack.ips",
+    createIps([[0x99, 0x0f]]),
+    "hello-world.nes",
+  );
+  await expectStrictApply([weaveArchive, new File([headered], "hello-world.nes")], {
+    outputName: "transform-output",
+    romMatches: false,
+  });
+});
+
+// A transient failure hashing a declared algorithm leaves the patches retryable: Apply hashes again
+// and, once that works, applies the matching ROM without the override.
+test("a transient weave-ROM hash failure recovers on Apply", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const sha256 = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await romFile.arrayBuffer())));
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "retry-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name }],
+      rom: { checks: { checksums: { sha256 } }, name: "game.bin" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  const original = browserRuntime.ingest.run;
+  let failed = false;
+  const ingestSpy = vi.spyOn(browserRuntime.ingest, "run").mockImplementation(async (input) => {
+    if (!failed && input.checksumAlgorithms?.join(",") === "sha256") {
+      failed = true;
+      throw new RomWeaverError("WORKER_FAILED", "The checksum worker stopped");
+    }
+    return original.call(browserRuntime.ingest, input);
+  });
+  try {
+    await expectStrictApply([weaveArchive, romFile], { outputName: "retry-output", romMatches: true });
+    expect(failed).toBe(true);
+    expect(ingestSpy.mock.calls.filter(([input]) => input.checksumAlgorithms?.join(",") === "sha256").length).toBe(2);
+  } finally {
+    ingestSpy.mockRestore();
+  }
+});
+
+// Dropping another ROM while a validation pass hashes the old one cancels that hash, so the new ROM
+// stages without waiting for it and the old ROM is not hashed again.
+test("replacing the ROM in the form cancels the old ROM's weave hash", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "replace-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Core", path: patchFile.name }],
+      rom: { checks: { checksums: { sha256: "ab".repeat(32) } }, name: "game.bin" },
+      version: 2,
+    },
+    [patchFile],
+  );
+  const otherBytes = new Uint8Array(await romFile.arrayBuffer());
+  otherBytes[0] ^= 0xff;
+  const otherRom = new File([otherBytes], "other-rom.bin", { type: "application/octet-stream" });
+  const original = browserRuntime.ingest.run;
+  const calls = [];
+  let heldSignal;
+  let releaseHeld;
+  // Hold the first on-demand SHA-256 hash until it is cancelled (or the test ends).
+  const ingestSpy = vi.spyOn(browserRuntime.ingest, "run").mockImplementation((input) => {
+    calls.push({ algorithms: (input.checksumAlgorithms || []).join(","), fileName: input.fileName });
+    if (input.checksumAlgorithms?.join(",") !== "sha256" || heldSignal)
+      return original.call(browserRuntime.ingest, input);
+    heldSignal = input.signal;
+    return new Promise((_, reject) => {
+      releaseHeld = () => reject(new RomWeaverError("WORKER_FAILED", "released by the test"));
+      input.signal?.addEventListener("abort", () => reject(input.signal.reason), { once: true });
+    });
+  });
+  try {
+    const props = { defaultSettings: { validation: { requireInputChecksumMatch: true } } };
+    const root = mount(
+      createElement(ApplyPatchForm, { ...props, pageDrop: { files: [weaveArchive, romFile], id: 1 } }),
+    );
+    await waitForState(() => heldSignal, 60000);
+    root.render(
+      createElement(
+        RomWeaverSettingsProvider,
+        { settings: { detailedViewEnabled: true } },
+        createElement(ApplyPatchForm, { ...props, pageDrop: { files: [otherRom], id: 2 } }),
+      ),
+    );
+    await expect.poll(() => heldSignal.aborted, { timeout: 10000 }).toBe(true);
+    await expect.poll(() => calls.some((call) => call.fileName === "other-rom.bin"), { timeout: 30000 }).toBe(true);
+    expect(calls.filter((call) => call.fileName === "game.bin" && call.algorithms === "sha256")).toHaveLength(1);
+  } finally {
+    releaseHeld?.();
+    ingestSpy.mockRestore();
+  }
+});
+
+// A patch the engine fails reports its own error even when the weave's ROM also mismatches, so the
+// user sees it before checking the override.
+test("a failing patch keeps its own error under a weave ROM mismatch", async () => {
+  const [romFile, wrongPatch] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(WRONG_INPUT_BPS)]);
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "failing-output" },
+      patchBasis: "auto",
+      patches: [{ name: "Wrong", path: "wrong-input.bps" }],
+      rom: { checks: { checksums: { crc32: "a1cecd74" } }, name: "game.bin" },
+      version: 2,
+    },
+    [new File([await wrongPatch.arrayBuffer()], "wrong-input.bps")],
+  );
+  mountStrict([weaveArchive, romFile]);
+  const detail = () => document.querySelector("#rom-weaver-list-patch-stack .pfault-detail")?.textContent || "";
+  await expect.poll(detail, { timeout: 60000 }).not.toBe("");
+  expect(detail()).not.toContain("a1cecd74");
+});
+
+test("archive whose index is named rw.json (not canonical) is content-probed and seeds enablement", async () => {
+  // A pre-rename weave: its index is `rw.json`, not `rom-weaver-weave.json`.
+  // Detection must fall back to content-probing so it still auto-selects. A
+  // decoy `metadata.json` that is not a weave sits alongside to prove the
+  // probe is gated on a successful parse, not on the `.json` extension.
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const alternateFile = new File([await patchFile.arrayBuffer()], "alternate.ips", {
+    type: "application/octet-stream",
+  });
+  const legacyIndex = {
+    output: { name: "bundled-output" },
+    patches: [
+      { name: "Core", path: "change.ips" },
+      { name: "Alternate", optional: true, path: "alternate.ips" },
+    ],
+    rom: { checks: { checksums: { crc32: "c6fb1252" } }, name: "game.bin" },
+    version: 1,
+  };
+  const decoy = new File([JSON.stringify({ title: "not a weave" })], "metadata.json", { type: "application/json" });
+  const indexFile = new File([JSON.stringify(legacyIndex)], "rw.json", { type: "application/json" });
+  const weaveArchive = await buildZip(
+    [
+      { file: decoy, fileName: "metadata.json" },
+      { file: indexFile, fileName: "rw.json" },
+      { file: patchFile, fileName: "change.ips" },
+      { file: alternateFile, fileName: "alternate.ips" },
+    ],
+    "legacy-rw.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive, romFile], id: 1 } }));
+
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
+  await expect.poll(() => getPatchToggles().map((toggle) => toggle.checked), { timeout: 30000 }).toEqual([true, false]);
+});
+
+test("local v2 weave keeps a per-patch input override", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        patchBasis: "base",
+        patches: [{ basis: "previous", path: patchFile.name }],
+        rom: { path: romFile.name },
+        version: 2,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+
+  const loaded = await loadLocalWeaveSession(weaveFile, [romFile, patchFile]);
+  try {
+    expect(loaded.session.patchBasis).toBe("base");
+    expect(loaded.session.entries[0]?.basis).toBe("previous");
+  } finally {
+    await loaded.cleanup();
+  }
+});
+
+test("local weave remote sources remain live until the workflow owner is disposed", async () => {
+  const truncateSpy = vi.spyOn(browserVfs, "truncate");
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        patches: [{ name: "Core", url: `${location.origin}/${RAW_PATCH}` }],
+        rom: { url: `${location.origin}/${RAW_ROM}` },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  try {
+    mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveFile], id: 1 } }));
+    await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips"]);
+    await waitForApplyButtonEnabled();
+    const remotePaths = truncateSpy.mock.calls
+      .map(([filePath]) => filePath)
+      .filter((filePath) => filePath.includes("/remote-fetch/"));
+    expect(remotePaths).toHaveLength(2);
+    expect(await Promise.all(remotePaths.map((filePath) => browserVfs.stat(filePath)))).not.toContain(null);
+
+    mount(createElement("div"));
+    await expect
+      .poll(async () => Promise.all(remotePaths.map((filePath) => browserVfs.stat(filePath))))
+      .toEqual([null, null]);
+  } finally {
+    truncateSpy.mockRestore();
+  }
+});
+
+test("local weave cleans acquired remote siblings when another source fails", async () => {
+  const originalFetch = globalThis.fetch;
+  const truncateSpy = vi.spyOn(browserVfs, "truncate");
+  const missingPatchUrl = `${location.origin}/virtual/missing.ips`;
+  const slowPatchUrl = `${location.origin}/virtual/slow.ips`;
+  let slowPatchAborted = false;
+  const weaveFile = new File(
+    [
+      JSON.stringify({
+        patches: [
+          { name: "Core", url: `${location.origin}/${RAW_PATCH}` },
+          { name: "Missing", url: missingPatchUrl },
+          { name: "Slow", url: slowPatchUrl },
+        ],
+        rom: { url: `${location.origin}/${RAW_ROM}` },
+        version: 1,
+      }),
+    ],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === "string" ? input : input?.url || String(input);
+    if (url === missingPatchUrl) {
+      return new Promise((resolve) => setTimeout(() => resolve(new Response("missing", { status: 404 })), 25));
+    }
+    if (url === slowPatchUrl) {
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1, 2, 3]));
+              init?.signal?.addEventListener(
+                "abort",
+                () => {
+                  slowPatchAborted = true;
+                  controller.error(new DOMException("download aborted", "AbortError"));
+                },
+                { once: true },
+              );
+            },
+          }),
+        ),
+      );
+    }
+    if (url === `${location.origin}/${RAW_ROM}` || url === `${location.origin}/${RAW_PATCH}`) {
+      return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+    }
+    return originalFetch(input, init);
+  };
+  try {
+    const error = await loadLocalWeaveSession(weaveFile, []).catch((reason) => reason);
+    expect(error).toMatchObject({ kind: "http", status: 404 });
+    expect(slowPatchAborted).toBe(true);
+
+    const remotePaths = truncateSpy.mock.calls
+      .map(([filePath]) => filePath)
+      .filter((filePath) => filePath.includes("/remote-fetch/"));
+    expect(remotePaths).toHaveLength(3);
+    await expect
+      .poll(async () => Promise.all(remotePaths.map((filePath) => browserVfs.stat(filePath))))
+      .toEqual([null, null, null]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    truncateSpy.mockRestore();
+  }
+});
+
+test("local weave cancellation aborts active remote acquisition and removes its partial OPFS file", async () => {
+  const originalFetch = globalThis.fetch;
+  const truncateSpy = vi.spyOn(browserVfs, "truncate");
+  const controller = new AbortController();
+  const remoteRomUrl = `${location.origin}/virtual/never-finishes.bin`;
+  let fetchStarted = false;
+  const weaveFile = new File(
+    [JSON.stringify({ patches: [{ path: "change.ips" }], rom: { url: remoteRomUrl }, version: 1 })],
+    "rom-weaver-weave.json",
+    { type: "application/json" },
+  );
+  const localPatch = new File([new Uint8Array([1])], "change.ips");
+  globalThis.fetch = (_input, init) =>
+    Promise.resolve(
+      new Response(
+        new ReadableStream({
+          start(streamController) {
+            fetchStarted = true;
+            streamController.enqueue(new Uint8Array([1, 2, 3]));
+            init?.signal?.addEventListener(
+              "abort",
+              () => streamController.error(new DOMException("download aborted", "AbortError")),
+              { once: true },
+            );
+          },
+        }),
+      ),
+    );
+  try {
+    const loading = loadLocalWeaveSession(weaveFile, [localPatch], { signal: controller.signal }).catch(
+      (reason) => reason,
+    );
+    await expect.poll(() => fetchStarted, { timeout: 30000 }).toBe(true);
+    controller.abort();
+    const error = await loading;
+    expect(error).toMatchObject({ kind: "aborted" });
+
+    const remotePaths = truncateSpy.mock.calls
+      .map(([filePath]) => filePath)
+      .filter((filePath) => filePath.includes("/remote-fetch/"));
+    expect(remotePaths).toHaveLength(1);
+    await expect.poll(async () => browserVfs.stat(remotePaths[0])).toBeNull();
+  } finally {
+    globalThis.fetch = originalFetch;
+    truncateSpy.mockRestore();
+  }
+});
+
+test("weave url session seeds enablement + output defaults and applies to a download", async () => {
+  // The REAL boot flow: fetch → wasm weave parse → plan → source acquisition (same code the
+  // use-url-session-boot hook runs).
+  const { cleanup, files, session } = await withWeaveFetchStub(WEAVE_JSON, () => loadWeaveUrlSession(WEAVE_URL));
+  expect(files.map((file) => file.name)).toEqual(["game.bin", "change.ips", "alternate.ips"]);
+  // The display name derives from the output naming now that weaves carry no name field.
+  expect(session.name).toBe("weave-output");
+  expect(session.entries.map((entry) => entry.optional)).toEqual([false, true]);
+  expect(session.outputDefaults).toEqual({ name: "weave-output" });
+
+  // Deliver exactly like WebappRoot does: one pageDrop plus the decorated session prop.
+  mount(
+    createElement(ApplyPatchForm, {
+      weaveSession: session,
+      pageDrop: { files, id: 1 },
+    }),
+  );
+
+  // Patches land in weave order.
+  await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toEqual(["change.ips", "alternate.ips"]);
+  await expect.poll(() => getPatchToggles().length, { timeout: 30000 }).toBe(2);
+  // Default-on patch stays toggleable.
+  await expect.poll(() => getPatchToggles()[0]?.disabled, { timeout: 30000 }).toBe(false);
+  expect(getPatchToggles()[0]?.checked).toBe(true);
+  // Default-off patch starts Off and stays toggleable.
+  await expect.poll(() => getPatchToggles()[1]?.checked, { timeout: 30000 }).toBe(false);
+  expect(getPatchToggles()[1]?.disabled).toBe(false);
+  getPatchToggles()[1]?.click();
+  await expect.poll(() => getPatchToggles()[1]?.checked).toBe(true);
+  getPatchToggles()[1]?.click();
+  await expect.poll(() => getPatchToggles()[1]?.checked).toBe(false);
+  // Weave metadata reaches the patch cards; the plain view shows the weave
+  // description as static card text.
+  const patchStackText = () => document.getElementById("rom-weaver-list-patch-stack")?.textContent || "";
+  expect(patchStackText()).toContain("stable");
+  expect(document.getElementById("rom-weaver-patch-card-description-0")?.textContent).toBe("Required core patch");
+  // The pencil on the patch card swaps the static description for the inline
+  // editable fields.
+  document.getElementById("rom-weaver-patch-meta-edit-0")?.click();
+  const descriptionInput = await waitForState(() => document.getElementById("rom-weaver-patch-description-0"));
+  expect(descriptionInput?.value).toBe("Required core patch");
+  expect(descriptionInput?.tagName).toBe("TEXTAREA");
+  expect(document.querySelector(".weave-banner")).toBeNull();
+  expect(document.getElementById("rom-weaver-patch-card-description-0")).toBeNull();
+  // Output defaults applied once through the output controller.
+  await expect.poll(() => getOutputFileNameValue(), { timeout: 30000 }).toBe("weave-output");
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  const outcome = await waitForApplyOutcome();
+  expect(outcome).toEqual({ kind: "download" });
+  await cleanup();
+});
+
+test("a rom extracted from the weave archive shows the weave -> rom extract chain", async () => {
+  // A ROM shipped inside the weave archive is pulled out out-of-band by the weave parse, so it reaches
+  // the ROM card as a bare file. It must still render the same "Extract" section (weave archive -> rom)
+  // a ROM dropped inside a plain archive shows, rather than appearing as a chainless input.
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const romInWeave = new File([await romFile.arrayBuffer()], "game.bin", { type: "application/octet-stream" });
+  const weaveJson = {
+    output: { name: "bundled-output" },
+    patches: [{ name: "Core", path: "change.ips" }],
+    rom: { path: "game.bin" },
+    version: 1,
+  };
+  const weaveFile = new File([JSON.stringify(weaveJson)], "rom-weaver-weave.json", { type: "application/json" });
+  const weaveArchive = await buildZip(
+    [
+      { file: weaveFile, fileName: "rom-weaver-weave.json" },
+      { file: romInWeave, fileName: "game.bin" },
+      { file: patchFile, fileName: "change.ips" },
+    ],
+    "with-rom.zip",
+  );
+
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive], id: 1 } }));
+
+  const extractTreeNames = (listId) => () => {
+    const drawer = document.querySelector(`#${listId} .card.file .extract-d`);
+    if (!drawer) return null;
+    return Array.from(drawer.querySelectorAll(".tree-name")).map((node) => node.textContent || "");
+  };
+  // The ROM extracted from the weave archive shows the full weave -> rom chain.
+  await expect
+    .poll(extractTreeNames("rom-weaver-list-input-stack"), { timeout: 30000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("game.bin")]));
+  // A patch extracted from the same weave archive keeps the parent breadcrumb, not just its bare leaf.
+  await expect
+    .poll(extractTreeNames("rom-weaver-list-patch-stack"), { timeout: 30000 })
+    .toEqual(expect.arrayContaining([expect.stringContaining("with-rom.zip"), expect.stringContaining("change.ips")]));
+});
+
+test.each([
+  ["snes", "previous", "ips"],
+  ["n64", "previous", "ips"],
+  ["snes", "auto", "ips"],
+  ["n64", "auto", "ips"],
+  ["snes", "default previous", "ips"],
+  ["n64", "default previous", "ips"],
+  ["snes", "auto", "bps"],
+  ["n64", "auto", "bps"],
+])("%s %s-basis %s chains preserve the weave layout", async (platform, basis, format) => {
+  const body =
+    platform === "snes"
+      ? withBytes(noiseBytes(1024 * 1024, 0x5eed), 0x7fc0, SNES_INTERNAL_HEADER)
+      : withBytes(noiseBytes(1024 * 1024, 0x64), 0, [0x80, 0x37, 0x12, 0x40]);
+  const supplied = platform === "snes" ? new Uint8Array(512 + body.length) : byteSwap16(body);
+  if (platform === "snes") supplied.set(body, 512);
+  const romName = platform === "snes" ? "game.smc" : "game.v64";
+  const firstRecords = [
+    [0x100, 0xf2],
+    [0x8000, 0x09],
+    [0x9001, 0x7e],
+    [0xffff0, 0x78],
+  ];
+  const secondRecords = [[0x8001, 0x0f]];
+  const afterFirst = applyRecords(body, firstRecords);
+  const afterSecond = applyRecords(afterFirst, secondRecords);
+  const patches = [
+    new File([createIps(firstRecords)], "first.ips"),
+    new File([format === "bps" ? createBps(afterFirst, afterSecond) : createIps(secondRecords)], `second.${format}`),
+  ];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      output: { name: "transform-output" },
+      ...(basis === "default previous" ? { patchBasis: "previous" } : {}),
+      patches: [
+        { path: patches[0].name, outputChecks: await fileChecks(afterFirst) },
+        {
+          path: patches[1].name,
+          ...(basis === "previous" ? { basis } : {}),
+          ...(format === "ips" ? { inputChecks: await fileChecks(afterFirst) } : {}),
+          outputChecks: await fileChecks(afterSecond),
+        },
+      ],
+      rom: { checks: await fileChecks(body), name: romName },
+      version: basis === "default previous" ? 2 : 1,
+    },
+    patches,
+  );
+  const originalValidate = browserRuntime.patch.validatePatch;
+  const calls = [];
+  const validateSpy = vi.spyOn(browserRuntime.patch, "validatePatch").mockImplementation(async (input) => {
+    const started = performance.now();
+    try {
+      return await originalValidate.call(browserRuntime.patch, input);
+    } finally {
+      calls.push({
+        elapsedMs: performance.now() - started,
+        removeHeader: input.options.removeHeader,
+        n64ByteOrder: input.options.n64ByteOrder,
+      });
+    }
+  });
+  try {
+    const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([supplied], romName)]);
+    const normalized = platform === "n64" && output[0] === 0x37 && output[1] === 0x80 ? byteSwap16(output) : output;
+    expect(hex(normalized)).toBe(hex(afterSecond));
+  } finally {
+    console.log("LAYOUT_PLANNER_COST", JSON.stringify({ platform, basis, format, calls }));
+    validateSpy.mockRestore();
+  }
+});
+
+test("auto basis keeps an independent embedded raw BPS source", async () => {
+  const headered = new Uint8Array(await (await loadFixtureFile(SAMPLE_ROM)).arrayBuffer());
+  const first = withBytes(headered, 0xa8, [0x12]);
+  const later = withBytes(headered, 0xa9, [0x0f]);
+  const patches = [
+    new File([createBps(headered, first)], "first.bps"),
+    new File([createBps(headered, later)], "later.bps"),
+  ];
+  const weaveArchive = await buildWeaveArchive(
+    {
+      version: 1,
+      output: { name: "transform-output" },
+      rom: { checks: await fileChecks(headered.subarray(16)), name: "hello-world.nes" },
+      patches: patches.map((patch) => ({ path: patch.name })),
+    },
+    patches,
+  );
+  const { output } = await applyWeaveAndReadOutput([weaveArchive, new File([headered], "hello-world.nes")]);
+  expect(hex(output)).toBe(hex(withBytes(first, 0xa9, [0x0f])));
+});
+
+test("a malformed weave drop shows an on-page error instead of silently emptying the page", async () => {
+  const patchFile = await loadFixtureFile(RAW_PATCH);
+  const cases = [
+    { label: "bad JSON", json: "{ not json,,", entries: [] },
+    {
+      label: "unsupported version",
+      json: JSON.stringify({ patches: [{ path: "change.ips" }], version: 3 }),
+      entries: [{ file: patchFile, fileName: "change.ips" }],
+    },
+    {
+      label: "missing patch file",
+      json: JSON.stringify({ patches: [{ path: "absent.ips" }], version: 1 }),
+      entries: [],
+    },
+  ];
+  for (const [index, { label, json, entries }] of cases.entries()) {
+    const weaveFile = new File([json], "rom-weaver-weave.json", { type: "application/json" });
+    const archive = await buildZip(
+      [{ file: weaveFile, fileName: "rom-weaver-weave.json" }, ...entries],
+      `malformed-${index}.zip`,
+    );
+    mount(createElement(ApplyPatchForm, { pageDrop: { files: [archive], id: 1 } }));
+    await expect
+      .poll(() => document.querySelector("#rom-weaver-container .notice.error")?.textContent || "", {
+        message: label,
+        timeout: 30000,
+      })
+      .not.toBe("");
+    expect(getPatchStackFileNames()).toEqual([]);
+  }
+});
+
+test("weave output name with a literal # keeps its whole stem and .nes extension", async () => {
+  const download = await applyDottedSampleWeave({
+    compression: "none",
+    expectedFieldName: "Hack.v2#2",
+    weaveOutputName: "Hack.v2#2.nes",
+  });
+  expect(download?.name).toBe("Hack.v2#2.nes");
+  expect(await sha256Hex(download.blob)).toBe(SAMPLE_WOVEN_SHA256);
+});

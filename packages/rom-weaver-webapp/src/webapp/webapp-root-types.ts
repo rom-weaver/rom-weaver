@@ -1,3 +1,5 @@
+import type { CreatorMode } from "./app-routes.ts";
+import type { WORKFLOW_ENTRY_ROUTES } from "./workflow-seo.mjs";
 import type { PageUpdateState } from "./page-update-state.ts";
 import type { GuidedSample } from "../public/react/guided-sample-start.ts";
 import type { ServiceWorkerStatus } from "./pwa/service-worker-cache-state.ts";
@@ -31,6 +33,9 @@ const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
 
 type WebappRootProps = {
   docsSlug?: string;
+  workflowEntry?: keyof typeof WORKFLOW_ENTRY_ROUTES | null;
+  /** A `?mode=` request for Create; switching to another tab drops it from the URL. */
+  creatorMode?: CreatorMode | null;
   /** Render the normal app chrome with a not-found workbench. */
   notFound?: boolean;
   /**
@@ -60,7 +65,6 @@ type WebappRootProps = {
     title: string;
     updateLabel: string;
     updateReady: boolean;
-    updateTitle: string;
   };
   pageUpdate: PageUpdateState;
   confirmationDialog: ConfirmationDialogState;
@@ -69,7 +73,7 @@ type WebappRootProps = {
     onCancel: () => void;
     onConfirm: () => void;
   };
-  /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
+  /** Boot-time `?weave=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
     onStartGuide: (guide: GuidedSample) => void;
@@ -95,7 +99,7 @@ type WebappRootProps = {
     onCreatorOriginalChange: (file: unknown) => void;
     onCreatorPatchTypeChange: (patchType: string) => void;
     onCreatorSettingsChange: (settings: unknown) => void;
-    onPatcherBundlePackageChange: (value: string) => void;
+    onPatcherWeavePackageChange: (value: string) => void;
     onPatcherInputsChange: (inputs: readonly unknown[]) => void;
     onPatcherPatchesChange: (patches: readonly unknown[]) => void;
     onPatcherSettingsChange: (settings: unknown) => void;

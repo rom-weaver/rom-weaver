@@ -59,14 +59,11 @@ const toFileLike = (source: Blob, fileName: string): File => {
 
 const LEADING_DOTS_REGEX = /^\.+/;
 const PATH_SEPARATOR_REGEX = /[\\/]+/g;
-// Strips C0 control characters and DEL from file names. Built via String.fromCharCode so the control
-// characters never appear as a regex literal (lint/suspicious/noControlCharactersInRegex forbids that);
-// the compiled pattern is identical to the original control-character class.
+// Build C0/C1 control ranges with String.fromCharCode because the regex-literal lint rule forbids control bytes.
 const CONTROL_FILE_CHARS_REGEX = new RegExp(
-  `[${String.fromCharCode(0x00)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}]+`,
+  `[${String.fromCharCode(0x00)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}-${String.fromCharCode(0x9f)}]+`,
   "g",
 );
-const NON_ASCII_CHARS_REGEX = /[^\x20-\x7e]+/g;
 const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
@@ -115,7 +112,6 @@ const normalizeVirtualFileName = (fileName: string | null | undefined, fallback 
   String(fileName || fallback)
     .replace(PATH_SEPARATOR_REGEX, "_")
     .replace(CONTROL_FILE_CHARS_REGEX, "_")
-    .replace(NON_ASCII_CHARS_REGEX, "_")
     .replace(RESERVED_FILE_CHARS_REGEX, "_")
     .replace(LEADING_DOTS_REGEX, "")
     .replace(EDGE_WHITESPACE_OR_UNDERSCORES_REGEX, "") || fallback;

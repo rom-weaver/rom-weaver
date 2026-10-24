@@ -25,6 +25,7 @@ import {
 } from "./browser-opfs-proxy-channel.ts";
 import { CREATE_FLAG, WRITABLE_FLAG } from "./browser-opfs-proxy-client.ts";
 import {
+  CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT,
   OPFS_PROXY_CONTROL_AUX_HIGH_INDEX,
   OPFS_PROXY_CONTROL_AUX_LOW_INDEX,
   OPFS_PROXY_CONTROL_HANDLE_INDEX,
@@ -60,10 +61,10 @@ const ERRNO_EXIST = 20;
 const ERRNO_IO = 29;
 const ERRNO_ISDIR = 31;
 const ERRNO_NOENT = 44;
+const ERRNO_NOSPC = 51;
 const ERRNO_NOTDIR = 54;
 const ERRNO_ROFS = 69;
 
-const DOORBELL_SLICE_MS = 250;
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
@@ -146,6 +147,11 @@ class OpfsProxyServer {
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
   private running = true;
+  private nativeDoorbellWaitPending = false;
+  private idleRescanDelayMs = 1;
+  private doorbellWaitFailed = false;
+  private doorbellWaitError: unknown;
+  private wakeIdleWait?: () => void;
 
   constructor(options: OpfsProxyServerOptions) {
     this.channel = options.channel;
@@ -160,6 +166,7 @@ class OpfsProxyServer {
     // Wake the loop so it observes the stop flag promptly.
     Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
     Atomics.notify(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+    this.wakeIdleWait?.();
   }
 
   registerBlobSource(path: string, blob: Blob): void {
@@ -177,6 +184,7 @@ class OpfsProxyServer {
     this.trace?.(`[browser-opfs] proxy server start slots=${slots.length} mounts=${this.mounts.length}`);
     try {
       while (this.running) {
+        if (this.doorbellWaitFailed) throw this.doorbellWaitError;
         const seen = Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
         let servicedAny = false;
         for (const slot of slots) {
@@ -184,16 +192,19 @@ class OpfsProxyServer {
           await this.serviceSlot(slot);
           servicedAny = true;
         }
-        if (servicedAny) continue;
+        if (servicedAny) {
+          this.idleRescanDelayMs = 1;
+          continue;
+        }
         if (Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX) !== seen) continue;
-        const wait = Atomics.waitAsync(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, seen, DOORBELL_SLICE_MS);
-        if (wait.async) await wait.value;
+        await this.waitForDoorbell(seen);
       }
     } catch (error) {
       // The loop itself failing is fatal: poison so every waiting consumer fails fast with EIO.
       this.poisonAndWakeConsumers();
       this.trace?.(`[browser-opfs] proxy server loop died ${String(error)}`);
     } finally {
+      this.wakeIdleWait?.();
       this.closeAllHandles();
       // The loop has exited, so nothing will ever service another request: poison + wake every parked
       // consumer (a clean stop, not just a crash) so they fail fast instead of waiting out their full
@@ -201,6 +212,42 @@ class OpfsProxyServer {
       this.poisonAndWakeConsumers();
       this.trace?.("[browser-opfs] proxy server stopped");
     }
+  }
+
+  private waitForDoorbell(seen: number): Promise<void> | undefined {
+    const { global } = this.channel;
+    // WebKit can leave even untimed native waits unresolved after notification. Retaining one
+    // settlement handler avoids accumulating native waits or promise reactions during recovery.
+    if (!this.nativeDoorbellWaitPending) {
+      const wait = Atomics.waitAsync(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, seen);
+      if (!wait.async) return;
+      this.nativeDoorbellWaitPending = true;
+      void wait.value.then(
+        () => {
+          this.nativeDoorbellWaitPending = false;
+          this.wakeIdleWait?.();
+        },
+        (error: unknown) => {
+          this.nativeDoorbellWaitPending = false;
+          this.doorbellWaitFailed = true;
+          this.doorbellWaitError = error;
+          this.wakeIdleWait?.();
+        },
+      );
+    }
+    return new Promise((resolve) => {
+      const wake = () => {
+        if (this.wakeIdleWait !== wake) return;
+        this.wakeIdleWait = undefined;
+        clearTimeout(timer);
+        resolve();
+      };
+      this.wakeIdleWait = wake;
+      const timer = setTimeout(() => {
+        this.idleRescanDelayMs = Math.min(this.idleRescanDelayMs * 2, 250);
+        wake();
+      }, this.idleRescanDelayMs);
+    });
   }
 
   /** Take a slot that has a pending request, flipping it to servicing so no other pass takes it. */
@@ -239,8 +286,11 @@ class OpfsProxyServer {
       const encoded = textEncoder.encode(detail).subarray(0, data.byteLength);
       data.set(encoded, 0);
       result = encoded.byteLength;
+      // A missing path is an expected probe result (unlink-if-exists, open-without-create): the guest
+      // gets ENOENT and handles it, so trace it as a miss, which the worker does not log as an error.
+      const outcome = status === ERRNO_NOENT ? "missed" : "failed";
       this.trace?.(
-        `[browser-opfs] proxy op failed opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
+        `[browser-opfs] proxy op ${outcome} opcode=${Atomics.load(control, OPFS_PROXY_CONTROL_OPCODE_INDEX)} errno=${status} ${detail}`,
       );
     }
     // Encode the result across two words like read/write offsets so 64-bit values survive: RESULT
@@ -357,7 +407,9 @@ class OpfsProxyServer {
     const target = data.subarray(0, Math.min(length, data.byteLength));
     if (entry.blob) return this.readBlobAt(entry.blob, offset, target);
     if (!entry.handle) throw new ProxyErrno(ERRNO_IO);
-    return entry.handle.read(target, { at: offset });
+    const read = entry.handle.read(target, { at: offset });
+    validateByteCount(read, target.byteLength, "read", offset);
+    return read;
   }
 
   // Slice a read range out of a Blob input into the (SAB-backed) slot buffer. Async - only the dedicated
@@ -379,6 +431,11 @@ class OpfsProxyServer {
     const length = Atomics.load(control, OPFS_PROXY_CONTROL_LENGTH_INDEX);
     const source = data.subarray(0, Math.min(length, data.byteLength));
     const written = entry.handle.write(source, { at: offset });
+    if (written === CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT) {
+      this.trace?.(`[browser-opfs] proxy write out of storage path=${entry.path} offset=${offset}`);
+      throw new ProxyErrno(ERRNO_NOSPC);
+    }
+    validateByteCount(written, source.byteLength, "write", offset);
     this.bumpVersion(entry.id);
     return written;
   }
@@ -389,6 +446,15 @@ class OpfsProxyServer {
     if (!(entry.writable && entry.handle)) throw new ProxyErrno(ERRNO_ROFS);
     const size = readAux(control);
     entry.handle.truncate(size);
+    const actual = entry.handle.getSize();
+    if (actual !== size) {
+      // Chromium grows a file only as far as origin storage allows and still returns normally.
+      if (actual < size) {
+        this.trace?.(`[browser-opfs] proxy truncate out of storage path=${entry.path} requested=${size} got=${actual}`);
+        throw new ProxyErrno(ERRNO_NOSPC);
+      }
+      throw new Error(`OPFS truncate failed for ${entry.path}: requested ${size}, got ${actual}`);
+    }
     this.bumpVersion(entry.id);
     return 0;
   }
@@ -588,6 +654,14 @@ class OpfsProxyServer {
       } catch {
         // best-effort close
       }
+      // Unlinked-while-open files would otherwise outlive a cancelled run: finish their deferred removal.
+      if (entry.pendingRemoval) {
+        const { dir, name } = entry.pendingRemoval;
+        entry.pendingRemoval = null;
+        void Promise.resolve(dir.removeEntry?.(name)).catch((error: unknown) => {
+          this.trace?.(`[browser-opfs] proxy deferred unlink failed path=${entry.path} ${String(error)}`);
+        });
+      }
     }
     this.byId.clear();
     this.byPath.clear();
@@ -603,6 +677,12 @@ class ProxyErrno extends Error {
     super(`proxy errno ${errno}`);
     this.name = "ProxyErrno";
     this.errno = errno;
+  }
+}
+
+function validateByteCount(count: number, requested: number, operation: string, offset: number): void {
+  if (!Number.isInteger(count) || count < 0 || count > requested) {
+    throw new Error(`OPFS ${operation} returned invalid byte count ${count} for ${requested} bytes at ${offset}`);
   }
 }
 
@@ -625,5 +705,6 @@ function errnoForError(error: unknown): number {
   if (name === "TypeMismatchError") return ERRNO_NOTDIR;
   if (name === "InvalidModificationError") return ERRNO_EXIST;
   if (name === "NoModificationAllowedError") return ERRNO_ACCES;
+  if (name === "QuotaExceededError") return ERRNO_NOSPC;
   return ERRNO_IO;
 }

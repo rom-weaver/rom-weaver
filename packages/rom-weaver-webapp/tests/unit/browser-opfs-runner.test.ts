@@ -510,6 +510,16 @@ describe("createRomWeaverBrowserOpfs threaded runs", () => {
     vi.spyOn(WebAssembly.Module, "imports").mockReturnValue(THREADED_IMPORTS);
   });
 
+  it("passes the granted memory maximum to the engine and reports peak memory after teardown", async () => {
+    const pageBytes = 64 * 1024;
+    const traceLines: string[] = [];
+    const runner = await createRunner({ sharedMemoryInitialPages: 2, sharedMemoryMaximumPages: 16 });
+    await runner.run(compressCommand({ threads: 2 }), { onTraceNonJsonLine: (line) => traceLines.push(line) });
+
+    expect(harness.spawnerArgs[0]?.envList).toContain(`ROM_WEAVER_MEMORY_LIMIT_BYTES=${16 * pageBytes}`);
+    expect(traceLines).toContain(`[perf] wasm memory peakBytes=${2 * pageBytes} maximumBytes=${16 * pageBytes}`);
+  });
+
   it("wires the thread-spawn import and a shared memory into the instance", async () => {
     const runner = await createRunner({ sharedMemoryInitialPages: 2 });
     await runner.run(compressCommand({ threads: 2 }));

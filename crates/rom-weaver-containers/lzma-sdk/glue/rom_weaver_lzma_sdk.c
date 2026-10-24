@@ -37,15 +37,74 @@ struct rw_lzma_dec {
 	CLzma2Dec	lzma2;
 };
 
+/* LzmaProps_Decode raises any smaller dictionary to this floor. */
+#define RW_LZMA_DICT_MIN	((uint32_t)1 << 12)
+#define RW_LZMA2_PROP_MAX	40
+
+static uint32_t
+rw_lzma2_prop_dict_size(unsigned prop)
+{
+	if (prop >= RW_LZMA2_PROP_MAX)
+		return 0xFFFFFFFFu;
+	return ((uint32_t)2 | (prop & 1)) << (prop / 2 + 11);
+}
+
+static uint32_t
+rw_capped_dict_size(uint32_t dict_size, uint64_t max_output)
+{
+	if (max_output < (uint64_t)dict_size)
+		dict_size = (uint32_t)max_output;
+	return dict_size < RW_LZMA_DICT_MIN ? RW_LZMA_DICT_MIN : dict_size;
+}
+
+/* LZMA2 limits lc + lp to this (Lzma2Dec.c's LZMA2_LCLP_MAX), so
+ * probabilities sized for it fit every chunk's properties. */
+#define RW_LZMA2_LCLP_MAX	4
+
+static uint32_t
+rw_le32(const uint8_t *bytes)
+{
+	return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
+	    ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+/* The declared dictionary capped at max_output, or 0 for malformed
+ * properties. */
+static uint32_t
+rw_dec_dict_size(int lzma2, const uint8_t *props, size_t props_size,
+    uint64_t max_output)
+{
+	if (props == NULL)
+		return 0;
+	if (lzma2) {
+		if (props_size != 1 || props[0] > RW_LZMA2_PROP_MAX)
+			return 0;
+		return rw_capped_dict_size(rw_lzma2_prop_dict_size(props[0]),
+		    max_output);
+	}
+	if (props_size != LZMA_PROPS_SIZE)
+		return 0;
+	return rw_capped_dict_size(rw_le32(props + 1), max_output);
+}
+
+uint64_t
+rw_lzma_dec_dict_size(int lzma2, const uint8_t *props, size_t props_size,
+    uint64_t max_output)
+{
+	return rw_dec_dict_size(lzma2, props, props_size, max_output);
+}
+
 rw_lzma_dec *
-rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size)
+rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size,
+    uint64_t max_output)
 {
 	rw_lzma_dec *dec;
+	Byte capped_props[LZMA_PROPS_SIZE];
+	uint32_t dict_size;
 	SRes res;
 
-	if (props == NULL)
-		return NULL;
-	if (lzma2 ? props_size != 1 : props_size != LZMA_PROPS_SIZE)
+	dict_size = rw_dec_dict_size(lzma2, props, props_size, max_output);
+	if (dict_size == 0)
 		return NULL;
 
 	dec = calloc(1, sizeof(*dec));
@@ -53,10 +112,22 @@ rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size)
 		return NULL;
 	dec->is_lzma2 = lzma2 ? 1 : 0;
 
+	/* Lzma2Dec_Allocate takes the property byte, whose dictionaries step
+	 * by up to 1.5x, so build the LZMA properties it would pass to
+	 * LzmaDec_Allocate with the exact capped size instead. */
+	if (dec->is_lzma2)
+		capped_props[0] = (Byte)RW_LZMA2_LCLP_MAX;
+	else
+		capped_props[0] = props[0];
+	capped_props[1] = (Byte)dict_size;
+	capped_props[2] = (Byte)(dict_size >> 8);
+	capped_props[3] = (Byte)(dict_size >> 16);
+	capped_props[4] = (Byte)(dict_size >> 24);
+
 	if (dec->is_lzma2) {
 		Lzma2Dec_CONSTRUCT(&dec->lzma2);
-		res = Lzma2Dec_Allocate(&dec->lzma2, (Byte)props[0],
-		    &rw_sdk_allocator);
+		res = LzmaDec_Allocate(&dec->lzma2.decoder, capped_props,
+		    LZMA_PROPS_SIZE, &rw_sdk_allocator);
 		if (res != SZ_OK) {
 			free(dec);
 			return NULL;
@@ -64,7 +135,7 @@ rw_lzma_dec_new(int lzma2, const uint8_t *props, size_t props_size)
 		Lzma2Dec_Init(&dec->lzma2);
 	} else {
 		LzmaDec_CONSTRUCT(&dec->lzma1);
-		res = LzmaDec_Allocate(&dec->lzma1, (const Byte *)props,
+		res = LzmaDec_Allocate(&dec->lzma1, capped_props,
 		    LZMA_PROPS_SIZE, &rw_sdk_allocator);
 		if (res != SZ_OK) {
 			free(dec);

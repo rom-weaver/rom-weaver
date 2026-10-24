@@ -18,7 +18,7 @@ Connect an MCP client or browser agent.
 
 Check for `search_docs` and `get_supported_formats`. This endpoint cannot access files or run workflows.
 
-Self-hosted endpoints need Cloudflare Pages functions. Static and Docker deployments lack `/mcp`; see [webapp integration](../hosting/webapp-integration.md).
+Self-hosted endpoints need Cloudflare Pages functions. Static and Docker deployments lack `/mcp`; see [self-hosting](../hosting/self-hosting.md#static-files).
 
 ## Use a browser agent
 

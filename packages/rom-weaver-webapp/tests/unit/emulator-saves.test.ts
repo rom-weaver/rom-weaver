@@ -7,10 +7,12 @@ import {
   deleteEmulatorSave,
   importEmulatorSave,
   importEmulatorSavePart,
-  ensureEmulatorSaveBridge,
+  registerEmulatorSaveBridge,
   listEmulatorSaves,
+  loadDroppedSram,
   parseSerializedEmulatorSave,
   readPendingTestSave,
+  readPendingTestSaves,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
   stagePendingTestSave,
@@ -43,6 +45,7 @@ type FakeCursorRequest = {
 type FakeTransaction = {
   abort: () => void;
   aborted: boolean;
+  pendingRequests: number;
   error: Error | null;
   onabort: (() => void) | null;
   oncomplete: (() => void) | null;
@@ -112,10 +115,12 @@ class FakeObjectStore {
       onupgradeneeded: null,
       result: undefined,
     };
+    this.transaction.pendingRequests += 1;
     queueMicrotask(() => {
       request.result = result();
       request.onsuccess?.();
-      if (!this.transaction.aborted) this.transaction.oncomplete?.();
+      this.transaction.pendingRequests -= 1;
+      if (!this.transaction.aborted && this.transaction.pendingRequests === 0) this.transaction.oncomplete?.();
     });
     return request;
   }
@@ -147,6 +152,7 @@ class FakeDatabase {
     const transaction = {} as FakeTransaction;
     transaction.error = null;
     transaction.aborted = false;
+    transaction.pendingRequests = 0;
     transaction.abort = () => {
       transaction.aborted = true;
       queueMicrotask(() => transaction.onabort?.());
@@ -210,6 +216,51 @@ beforeEach(() => {
 });
 
 describe("emulator saves", () => {
+  it("migrates suffixed CHD saves without losing bytes or metadata", async () => {
+    const database = new FakeDatabase();
+    const legacy = { ...record, gameId: `${sha1}.chd`, gameName: `${sha1}.chd` };
+    database.seed(legacy.gameId, legacy);
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toEqual({
+      ...legacy,
+      gameId: sha1,
+      gameName: sha1,
+    });
+    expect(database.stored(legacy.gameId)).toBeUndefined();
+  });
+
+  it("preserves conflicting CHD saves while filling missing canonical parts", async () => {
+    const database = new FakeDatabase();
+    const legacy = { ...record, gameId: `${sha1}.chd`, gameName: `${sha1}.chd` };
+    const canonical = {
+      ...record,
+      gameId: sha1,
+      gameName: sha1,
+      sram: undefined,
+      state: new Uint8Array([9]),
+      label: "Canonical",
+      updatedAt: 5,
+    };
+    database.seed(legacy.gameId, legacy);
+    database.seed(sha1, canonical);
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toEqual({
+      ...canonical,
+      sram: legacy.sram,
+    });
+    expect(database.stored(`${sha1}.chd-conflict`)).toEqual({ ...legacy, gameId: `${sha1}.chd-conflict` });
+    database.seed(legacy.gameId, { ...legacy, label: "Another legacy save" });
+    await listEmulatorSaves();
+    expect(database.stored(`${sha1}.chd-conflict`)).toEqual({ ...legacy, gameId: `${sha1}.chd-conflict` });
+    expect(database.stored(`${sha1}.chd-conflict-1`)).toEqual({
+      ...legacy,
+      gameId: `${sha1}.chd-conflict-1`,
+      label: "Another legacy save",
+    });
+    await deleteEmulatorSave(sha1);
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toBeUndefined();
+  });
+
   it("stages and reads a defensive copy of one pending test save", async () => {
     const data = new Uint8Array([1, 2, 3]);
     const staged = await stagePendingTestSave({
@@ -229,6 +280,168 @@ describe("emulator saves", () => {
     if (!read) throw new Error("Expected a staged pending test save.");
     read.bytes[2] = 9;
     expect((await readPendingTestSave())?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("stages a dropped save that names no game", async () => {
+    const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+    expect(staged).not.toHaveProperty("platform");
+    expect(staged).not.toHaveProperty("gameId");
+    expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), fileName: "game.sav" });
+    await expect(
+      stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", platform: "nes" }),
+    ).rejects.toThrow("requires a game ID");
+  });
+
+  it("stores a dropped SRAM only when its ROM has none stored", async () => {
+    expect(await loadDroppedSram(sha1.toUpperCase(), new Uint8Array([1, 2]), "game.nes")).toBe("stored");
+    expect(await loadDroppedSram(sha1, new Uint8Array([3]), "game.nes")).toBe("preview");
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toMatchObject({
+      label: "game.nes",
+      sram: new Uint8Array([1, 2]),
+    });
+    clearEmulatorSavePreview(sha1);
+  });
+
+  it("previews a dropped SRAM when storage cannot keep it", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      clearEmulatorSavePreview(sha1);
+    }
+  });
+
+  it("only previews a dropped SRAM while save storage is off", async () => {
+    configureEmulatorSaveStorage(false);
+    try {
+      expect(await loadDroppedSram(sha1, new Uint8Array([1]), "game.nes")).toBe("preview");
+    } finally {
+      configureEmulatorSaveStorage(true);
+      clearEmulatorSavePreview(sha1);
+    }
+    expect(await listEmulatorSaves()).toEqual([]);
+  });
+
+  it("keeps a held save only in this page while save storage is off", async () => {
+    await stagePendingTestSave({ data: new Uint8Array([4]), fileName: "older.sav" });
+    configureEmulatorSaveStorage(false);
+    try {
+      const staged = await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+
+      expect(staged.memoryOnly).toBe(true);
+      expect(await readPendingTestSave()).toMatchObject({ fileName: "game.sav", memoryOnly: true });
+      vi.resetModules();
+      const reloaded = await import("../../src/storage/browser/emulator-saves.ts");
+      expect(await reloaded.readPendingTestSave()).toBeUndefined();
+    } finally {
+      configureEmulatorSaveStorage(true);
+    }
+    await clearPendingTestSave();
+    expect(await readPendingTestSave()).toBeUndefined();
+  });
+
+  it("holds a save in memory while storage is off even when IndexedDB is missing", async () => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal("indexedDB", undefined);
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav" });
+      expect(await readPendingTestSave()).toMatchObject({ bytes: new Uint8Array([5]), memoryOnly: true });
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
+  it.each(["missing", "denied"])("consumes a memory-only held save when IndexedDB is %s", async (availability) => {
+    configureEmulatorSaveStorage(false);
+    vi.stubGlobal(
+      "indexedDB",
+      availability === "missing"
+        ? undefined
+        : {
+            open: () => {
+              throw new Error("IndexedDB denied");
+            },
+          },
+    );
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([5]), fileName: "game.sav", slot: "dropped" });
+      await expect(clearPendingTestSave("dropped")).resolves.toBeUndefined();
+      expect(await readPendingTestSaves()).toEqual([]);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+    } finally {
+      configureEmulatorSaveStorage(true);
+      vi.stubGlobal("indexedDB", createFakeIndexedDb());
+      await clearPendingTestSave();
+    }
+  });
+
+  it("keeps a replacement save when an earlier discard finishes", async () => {
+    const database = new FakeDatabase();
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    configureEmulatorSaveStorage(false);
+    let releaseDeletion: () => void = vi.fn();
+    let deletionReached: () => void = vi.fn();
+    const deletionPending = new Promise<void>((resolve) => {
+      deletionReached = resolve;
+    });
+    const originalTransaction = database.transaction.bind(database);
+    let holdNextWrite = false;
+    const transactionSpy = vi.spyOn(database, "transaction").mockImplementation((name, mode) => {
+      const transaction = originalTransaction(name, mode);
+      if (mode === "readwrite" && holdNextWrite) {
+        holdNextWrite = false;
+        let oncomplete: (() => void) | null = null;
+        Object.defineProperty(transaction, "oncomplete", {
+          get: () => () => {
+            releaseDeletion = () => oncomplete?.();
+            deletionReached();
+          },
+          set: (callback: (() => void) | null) => {
+            oncomplete = callback;
+          },
+        });
+      }
+      return transaction;
+    });
+    try {
+      await stagePendingTestSave({ data: new Uint8Array([65]), fileName: "A.sav", slot: "dropped" });
+      holdNextWrite = true;
+      const discard = clearPendingTestSave("dropped");
+      await deletionPending;
+      await stagePendingTestSave({ data: new Uint8Array([66]), fileName: "B.sav", slot: "dropped" });
+      releaseDeletion();
+      await discard;
+      expect(await readPendingTestSaves()).toMatchObject([{ fileName: "B.sav", bytes: new Uint8Array([66]) }]);
+    } finally {
+      releaseDeletion();
+      transactionSpy.mockRestore();
+      configureEmulatorSaveStorage(true);
+      await clearPendingTestSave();
+    }
+  });
+
+  it("keeps a dropped save and a Save editor hand-off in separate slots, newest first", async () => {
+    const now = vi.spyOn(Date, "now");
+    try {
+      now.mockReturnValue(10);
+      await stagePendingTestSave({ data: new Uint8Array([1]), fileName: "edit.sav", gameId: "g", platform: "gba" });
+      now.mockReturnValue(20);
+      await stagePendingTestSave({ data: new Uint8Array([2]), fileName: "drop.srm", slot: "dropped" });
+      expect((await readPendingTestSaves()).map((save) => [save.fileName, save.slot])).toEqual([
+        ["drop.srm", "dropped"],
+        ["edit.sav", "handoff"],
+      ]);
+
+      await clearPendingTestSave("handoff");
+      expect((await readPendingTestSaves()).map((save) => save.fileName)).toEqual(["drop.srm"]);
+      await clearPendingTestSave();
+      expect(await readPendingTestSaves()).toEqual([]);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("replaces and clears the fixed pending test save", async () => {
@@ -475,13 +688,22 @@ describe("emulator saves", () => {
   it("answers emulator save requests with the persisted SRAM", async () => {
     const source = { postMessage: vi.fn() };
     const listeners: Array<(event: MessageEvent<unknown>) => void> = [];
-    vi.stubGlobal("window", {
+    const host = {
+      origin: "https://app.test",
+      location: { origin: "https://app.test" },
+      removeEventListener: vi.fn(),
       addEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) => {
         listeners.push(listener);
       },
-    });
+    };
+    const frame = {
+      ownerDocument: { defaultView: host },
+      contentWindow: source,
+      isConnected: true,
+      hasAttribute: () => false,
+    } as unknown as HTMLIFrameElement;
     await writeEmulatorSave(record);
-    ensureEmulatorSaveBridge();
+    const unregister = registerEmulatorSaveBridge(frame, record.gameId);
 
     listeners[0]?.({
       data: {
@@ -490,6 +712,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
 
     await vi.waitFor(() => expect(source.postMessage).toHaveBeenCalled());
@@ -500,7 +723,7 @@ describe("emulator saves", () => {
         kind: "load-sram",
         source: "rom-weaver-emulator",
       }),
-      "*",
+      host.location.origin,
     );
 
     const preview = new Uint8Array([4, 5]);
@@ -510,11 +733,12 @@ describe("emulator saves", () => {
     listeners[0]?.({
       data: { gameId: record.gameId, kind: "request-load-sram", source: "rom-weaver-emulator" },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() =>
       expect(source.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ data: new Uint8Array([4, 5]), kind: "load-sram" }),
-        "*",
+        host.location.origin,
       ),
     );
     listeners[0]?.({
@@ -525,6 +749,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     expect((await listEmulatorSaves())[0]?.sram).toEqual(record.sram);
     clearEmulatorSavePreview(record.gameId);
@@ -539,6 +764,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.state).toEqual(new Uint8Array([9, 8])));
     listeners[0]?.({
@@ -550,6 +776,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.sram).toEqual(new Uint8Array([6, 7])));
     source.postMessage.mockClear();
@@ -560,9 +787,13 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() =>
-      expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "load-state" }), "*"),
+      expect(source.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "load-state" }),
+        host.location.origin,
+      ),
     );
     listeners[0]?.({ data: { source: "other", kind: "save-state", gameId: record.gameId } });
     listeners[0]?.({ data: { source: "rom-weaver-emulator", kind: "save-state", gameId: record.gameId, data: null } });
@@ -577,8 +808,148 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
-    expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ data: null, kind: "load-sram" }), "*");
+    expect(source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: null, kind: "load-sram" }),
+      host.location.origin,
+    );
     configureEmulatorSaveStorage(true);
+    unregister();
+  });
+});
+
+describe("emulator save bridge session isolation", () => {
+  const gameId = "a".repeat(40);
+  const otherGameId = "b".repeat(40);
+  const origin = "https://app.test";
+  const setup = (opaque = false) => {
+    const listeners = new Set<(event: MessageEvent<unknown>) => void>();
+    const host = {
+      origin,
+      location: { origin },
+      addEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) =>
+        listeners.delete(listener),
+    };
+    const source = { postMessage: vi.fn() };
+    const frame = {
+      ownerDocument: { defaultView: host },
+      contentWindow: source,
+      isConnected: true,
+      hasAttribute: () => opaque,
+      sandbox: { contains: () => false },
+    };
+    const register = (id = gameId) => registerEmulatorSaveBridge(frame as unknown as HTMLIFrameElement, id);
+    const send = (overrides: Record<string, unknown> = {}, data: Record<string, unknown> = {}) => {
+      const event = {
+        source,
+        origin: opaque ? "null" : origin,
+        data: { source: "rom-weaver-emulator", gameId, kind: "request-load-sram", ...data },
+        ...overrides,
+      } as unknown as MessageEvent<unknown>;
+      for (const listener of listeners) listener(event);
+    };
+    return { frame, source, listeners, register, send };
+  };
+
+  it("rejects foreign sources, origins, mismatched games, and disconnected frames before storage access", () => {
+    const session = setup();
+    const unregister = session.register();
+    setEmulatorSavePreview(gameId, new Uint8Array([17, 42, 99]));
+    const open = vi.spyOn(indexedDB, "open");
+    const foreign = { postMessage: vi.fn() };
+    for (const kind of ["request-load-sram", "request-load-state", "save-sram", "save-state"]) {
+      const data = { kind, data: new Uint8Array([9]) };
+      session.send({ source: foreign }, data);
+      session.send({ source: null }, data);
+      session.send({ origin: "https://untrusted.invalid" }, data);
+      session.send({ origin: "null" }, data);
+      session.send({}, { ...data, gameId: otherGameId });
+    }
+    expect(open).not.toHaveBeenCalled();
+    expect(foreign.postMessage).not.toHaveBeenCalled();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.frame.isConnected = false;
+    session.send();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.frame.isConnected = true;
+    session.send();
+    expect(session.source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: new Uint8Array([17, 42, 99]) }),
+      origin,
+    );
+    unregister();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("revokes disposed sessions even if an already queued listener runs after remount", () => {
+    const old = setup();
+    const unregister = old.register();
+    const queued = [...old.listeners][0];
+    setEmulatorSavePreview(gameId, new Uint8Array([1]));
+    unregister();
+    const current = setup();
+    const disposeCurrent = current.register();
+    queued?.({
+      source: old.source,
+      origin,
+      data: { source: "rom-weaver-emulator", gameId, kind: "request-load-sram" },
+    } as unknown as MessageEvent<unknown>);
+    current.send({ source: old.source });
+    expect(old.source.postMessage).not.toHaveBeenCalled();
+    expect(current.source.postMessage).not.toHaveBeenCalled();
+    current.send();
+    expect(current.source.postMessage).toHaveBeenCalledOnce();
+    disposeCurrent();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("does not deliver an in-flight stored save read to a disposed session", async () => {
+    await writeEmulatorSave({ gameId, gameName: gameId, label: "Synthetic", updatedAt: 1, sram: new Uint8Array([3]) });
+    const session = setup();
+    const unregister = session.register();
+    const read = vi.spyOn(indexedDB, "open");
+    session.send();
+    expect(read).toHaveBeenCalled();
+    unregister();
+    // Drain the same asynchronous database work before checking the old reply.
+    await listEmulatorSaves();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("supports exact opaque-origin iframe sources without accepting other null-origin windows", () => {
+    const session = setup(true);
+    const unregister = session.register();
+    setEmulatorSavePreview(gameId, new Uint8Array([2]));
+    session.send({ source: { postMessage: vi.fn() } });
+    session.send({ origin });
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.send();
+    expect(session.source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: new Uint8Array([2]) }),
+      "*",
+    );
+    unregister();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("keeps simultaneous session registrations and cleanup independent", () => {
+    const one = setup();
+    const two = setup();
+    const disposeOne = one.register();
+    const disposeTwo = two.register(otherGameId);
+    setEmulatorSavePreview(gameId, new Uint8Array([1]));
+    setEmulatorSavePreview(otherGameId, new Uint8Array([2]));
+    one.send({}, { gameId: otherGameId });
+    two.send();
+    expect(one.source.postMessage).not.toHaveBeenCalled();
+    expect(two.source.postMessage).not.toHaveBeenCalled();
+    disposeOne();
+    two.send({}, { gameId: otherGameId });
+    expect(two.source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ data: new Uint8Array([2]) }), origin);
+    disposeTwo();
+    clearEmulatorSavePreview(gameId);
+    clearEmulatorSavePreview(otherGameId);
   });
 });

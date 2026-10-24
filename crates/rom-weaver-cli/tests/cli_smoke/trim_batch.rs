@@ -290,6 +290,37 @@ fn trim_recursively_scans_directories_by_default() {
 }
 
 #[test]
+fn trim_on_a_directory_is_quiet_unless_verbose() {
+    let temp = setup_temp_dir();
+    let root = temp.child("input");
+    fs::create_dir_all(root.path()).expect("mkdir");
+    let rom = root.child("top.nds");
+    fs::write(
+        rom.path(),
+        build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false),
+    )
+    .expect("fixture");
+    let root_s = root.path().to_str().expect("path");
+
+    let quiet = command_output_with_env(&["trim", "--input", root_s], &[], 0);
+    assert!(
+        quiet.stdout.is_empty(),
+        "stdout: {}",
+        String::from_utf8_lossy(&quiet.stdout)
+    );
+    assert!(rom.path().with_extension("trim.nds").exists());
+
+    fs::remove_file(rom.path().with_extension("trim.nds")).expect("remove first output");
+    let verbose = command_output_with_env(&["trim", "--input", root_s, "-v"], &[], 0);
+    let streams = format!(
+        "{}{}",
+        String::from_utf8_lossy(&verbose.stdout),
+        String::from_utf8_lossy(&verbose.stderr)
+    );
+    assert!(streams.contains("top.trim.nds"), "{streams}");
+}
+
+#[test]
 fn trim_no_recursive_only_processes_top_level() {
     let temp = setup_temp_dir();
     let root = temp.child("input");
@@ -779,8 +810,10 @@ fn trim_wbfs_uses_rvz_convert_output() {
     assert!(label.contains("mode=rvz-convert"));
     assert!(label.contains("revert_supported=false"));
     assert!(label.contains(
-        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO, not --revert"
+        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO"
     ));
+    // A plain trim never asked for --revert, so the warning must not mention it.
+    assert!(!label.contains("--revert"), "{label}");
 
     let trimmed = source_wbfs.path().with_extension("trim.rvz");
     assert!(trimmed.exists(), "expected trimmed rvz output");
@@ -1549,4 +1582,34 @@ fn trim_rejects_patch_only_archive_filter() {
     );
     assert!(!temp.child("game.trim.gba").path().exists());
     assert_eq!(fs::read(source.path()).unwrap(), data);
+}
+
+#[test]
+fn trim_revert_conflicts_with_revert_marker() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.gba");
+    fs::write(source.path(), vec![0xFF_u8; 4096]).expect("fixture");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("source path"),
+            "--revert",
+            "--revert-marker",
+        ],
+        2,
+    );
+}
+
+#[test]
+fn trim_extension_conflicts_with_output_and_in_place() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.gba");
+    fs::write(source.path(), vec![0xFF_u8; 4096]).expect("fixture");
+    let source = source.path().to_str().expect("source path");
+    for conflicting in [["--output", "out.gba"], ["--in-place", "--force"]] {
+        let mut args = vec!["trim", "--input", source, "--extension", "small.{ext}"];
+        args.extend(conflicting);
+        command_stdout(&args, 2);
+    }
 }

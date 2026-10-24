@@ -86,6 +86,7 @@ fn options(
     mode: AutoExtractMode,
 ) -> AutoExtractResolutionOptions {
     AutoExtractResolutionOptions {
+        group_disc_payloads: false,
         no_extract: false,
         no_ignore: false,
         kind_filter,
@@ -99,7 +100,7 @@ fn no_filter() -> ArchiveEntryKindFilter {
 }
 
 /// Pack `inputs` into `output` with the registry's zip handler, the same route
-/// `bundle create --bundle` uses.
+/// `weave create --weave` uses.
 fn make_zip(app: &CliApp, output: &Path, inputs: &[PathBuf], context: &OperationContext) {
     let handler = app
         .containers
@@ -108,6 +109,7 @@ fn make_zip(app: &CliApp, output: &Path, inputs: &[PathBuf], context: &Operation
     handler
         .create(
             &ContainerCreateRequest {
+                rvz_block_size: None,
                 archive_names: None,
                 inputs: inputs.to_vec(),
                 output: output.to_path_buf(),
@@ -137,6 +139,7 @@ fn no_extract_returns_the_source_untouched() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("no-extract short circuits");
     assert_eq!(resolved.source, PathBuf::from("/games/archive.zip"));
@@ -163,6 +166,7 @@ fn a_source_no_handler_matches_is_returned_as_is() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("plain file resolves to itself");
     assert_eq!(resolved.source, rom);
@@ -192,6 +196,7 @@ fn an_archive_resolves_to_its_single_extracted_payload() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("archive resolves");
     assert_eq!(resolved.extracted_archives, 1);
@@ -230,6 +235,7 @@ fn nested_archives_are_unwrapped_until_a_plain_payload_is_reached() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("nested archives resolve");
     assert_eq!(resolved.extracted_archives, 2);
@@ -303,6 +309,7 @@ fn nesting_deeper_than_the_depth_limit_is_refused() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect_err("depth limit");
     assert!(
@@ -704,4 +711,26 @@ fn exact_member_rejects_raw_input_and_disabled_extraction() {
         assert!(error.to_string().contains("game.bin"));
     }
     fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[test]
+fn ppf_disc_grouping_normalizes_sheet_track_paths() {
+    let root = scratch_dir("ppf-disc-normalized-refs");
+    fs::create_dir(root.join("subdir")).expect("subdir");
+    fs::write(root.join("track01.bin"), b"track one").expect("track one");
+    fs::write(root.join("track02.bin"), b"track two").expect("track two");
+    fs::write(root.join("disc.cue"),
+        "FILE \"./track01.bin\" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\nFILE \"subdir/../track02.bin\" BINARY\n TRACK 02 AUDIO\n INDEX 01 00:00:00\n",
+    ).expect("sheet");
+    let app = noninteractive_app();
+    let candidates = app
+        .collect_checksum_extract_candidates(&root)
+        .expect("candidates");
+    let grouped = CliApp::group_disc_extract_candidates(candidates).expect("grouped disc");
+    let paths = grouped
+        .iter()
+        .map(|candidate| candidate.display_name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(paths, ["disc.cue"]);
+    fs::remove_dir_all(root).expect("cleanup fixture");
 }

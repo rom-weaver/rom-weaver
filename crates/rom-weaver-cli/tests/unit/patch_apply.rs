@@ -230,6 +230,7 @@ fn a_dry_run_resolves_the_compression_plan_before_reporting() {
         &requested,
         &compression_options(Some("zip")),
         None,
+        None,
     );
 
     assert_eq!(report.status, OperationStatus::Succeeded);
@@ -254,6 +255,7 @@ fn a_dry_run_fails_when_the_requested_container_format_is_unknown() {
         &[PathBuf::from("a.ips")],
         &temp.path().join("out.bin"),
         &compression_options(Some("definitely-not-a-format")),
+        None,
         None,
     );
 
@@ -288,7 +290,7 @@ fn direct_patch_target_without_inputs_aligns_to_the_patch_list() {
     fs::write(&patch, ips_patch(&[(0, b"X")])).expect("patch fixture");
     let output = temp.path().join("out.sfc");
     let mut args = apply_command(&input, vec![patch]);
-    args.patch_target = vec![Some(BundlePatchInput::Rom {
+    args.patch_target = vec![Some(WeavePatchInput::Rom {
         rom: true,
         member: None,
     })];
@@ -368,59 +370,44 @@ fn the_output_alias_message_names_whichever_input_the_output_collides_with() {
     let input = temp.path().join("game.sfc");
     let original = temp.path().join("archive.zip");
     let patch = temp.path().join("fix.ips");
-    let bundle = temp.path().join("run.json");
-    for path in [&input, &original, &patch, &bundle] {
+    let weave = temp.path().join("run.json");
+    for path in [&input, &original, &patch, &weave] {
         fs::write(path, b"x").expect("fixture");
     }
     let patches = vec![patch.clone()];
 
-    let same_input = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &input,
-    )
-    .expect("input alias");
+    let same_input =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &input)
+            .expect("input alias");
     assert!(same_input.contains("input and output resolve to the same file"));
 
     let same_original = CliApp::patch_apply_output_alias_message(
         &input,
         &patches,
         &original,
-        Some(&bundle),
+        Some(&weave),
         &original,
     )
     .expect("original alias");
     assert!(same_original.contains("input and output resolve to the same file"));
 
-    let same_patch = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &patch,
-    )
-    .expect("patch alias");
+    let same_patch =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &patch)
+            .expect("patch alias");
     assert!(same_patch.contains("patch file"));
     assert!(same_patch.contains(&patch.display().to_string()));
 
-    let same_bundle = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &bundle,
-    )
-    .expect("bundle alias");
-    assert!(same_bundle.contains("bundle source"));
+    let same_weave =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &weave)
+            .expect("weave alias");
+    assert!(same_weave.contains("weave source"));
 
     assert!(
         CliApp::patch_apply_output_alias_message(
             &input,
             &patches,
             &original,
-            Some(&bundle),
+            Some(&weave),
             &temp.path().join("fresh.sfc"),
         )
         .is_none()
@@ -793,6 +780,7 @@ fn running_compression_rejects_a_format_no_handler_claims() {
 
     let error = app()
         .run_patch_apply_compression(
+            "patch-apply",
             &plan,
             vec![payload],
             &[],
@@ -823,6 +811,7 @@ fn running_compression_writes_the_container_and_names_the_codec() {
 
     let (report, codec_label) = app()
         .run_patch_apply_compression(
+            "patch-apply",
             &plan,
             vec![payload],
             &[],
@@ -934,7 +923,8 @@ fn an_n64_input_is_rewritten_into_the_order_the_patch_asked_for() {
             n64_byte_order: PatchN64ByteOrderMode::LittleEndian,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: false,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -972,7 +962,8 @@ fn keeping_the_n64_order_leaves_the_input_where_it_is() {
             n64_byte_order: PatchN64ByteOrderMode::Keep,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: false,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -1011,7 +1002,8 @@ fn checksum_repair_normalizes_a_byte_swapped_input_to_big_endian() {
             n64_byte_order: PatchN64ByteOrderMode::Keep,
             inference: N64AutoInference::ChecksumOnly,
             first_patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_n64_order: None,
             repair_checksum: true,
             context: &context,
             temp_paths: &mut temp_paths,
@@ -1046,7 +1038,8 @@ fn a_non_n64_input_with_an_explicit_order_is_rejected() {
         N64TargetRequest {
             input: &input,
             patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_order: None,
             mode: PatchN64ByteOrderMode::BigEndian,
             inference: N64AutoInference::ChecksumOnly,
         },
@@ -1066,7 +1059,8 @@ fn a_non_n64_input_with_an_explicit_order_is_rejected() {
         N64TargetRequest {
             input: &input,
             patch: None,
-            expected_crc32: None,
+            expected_input_checksums: &BTreeMap::new(),
+            weave_rom_order: None,
             mode: PatchN64ByteOrderMode::Auto,
             inference: N64AutoInference::ChecksumOnly,
         },
@@ -1091,7 +1085,8 @@ fn an_auto_n64_target_without_evidence_keeps_the_current_order() {
             N64TargetRequest {
                 input: &input,
                 patch: Some(&patch),
-                expected_crc32: None,
+                expected_input_checksums: &BTreeMap::new(),
+                weave_rom_order: None,
                 mode: PatchN64ByteOrderMode::Auto,
                 inference: N64AutoInference::ChecksumOnly,
             },
@@ -1192,33 +1187,121 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
     fs::write(&state_path, b"0123456789").expect("intermediate fixture");
     let context = test_context(temp.path().join("chain-step-temp"));
 
-    CliApp::verify_chain_step_state(&state_path, &patch_plan::PlanState::default(), &context)
-        .expect("an empty declaration always passes");
+    CliApp::verify_chain_step_state(
+        &state_path,
+        "output",
+        &patch_plan::PlanState::default(),
+        &context,
+    )
+    .expect("an empty declaration always passes");
 
     let matching = patch_plan::PlanState {
         checksums: BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]),
         size: Some(10),
     };
-    CliApp::verify_chain_step_state(&state_path, &matching, &context)
+    CliApp::verify_chain_step_state(&state_path, "output", &matching, &context)
         .expect("the declared size and checksum match");
 
     let wrong_size = patch_plan::PlanState {
         checksums: BTreeMap::new(),
         size: Some(11),
     };
-    assert!(CliApp::verify_chain_step_state(&state_path, &wrong_size, &context).is_err());
+    assert!(CliApp::verify_chain_step_state(&state_path, "output", &wrong_size, &context).is_err());
 
     let wrong_checksum = patch_plan::PlanState {
         checksums: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
         size: None,
     };
-    assert!(CliApp::verify_chain_step_state(&state_path, &wrong_checksum, &context).is_err());
+    assert!(
+        CliApp::verify_chain_step_state(&state_path, "output", &wrong_checksum, &context).is_err()
+    );
+}
+
+/// A minimal valid ZIP of stored entries, shaped like a real DCP (IP.BIN, 1ST_READ.BIN, DATA/FONT.PVR).
+fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut archive = Vec::new();
+    let mut directory = Vec::new();
+    for (name, data) in entries {
+        let offset = u32::try_from(archive.len()).expect("offset");
+        let crc = crc32fast::hash(data);
+        let size = u32::try_from(data.len()).expect("size");
+        let name_len = u16::try_from(name.len()).expect("name length");
+        let mut common = Vec::new();
+        common.extend_from_slice(&20_u16.to_le_bytes());
+        // Flags and method (stored), then DOS mod time 00:00:00 and date 1980-01-01.
+        common.extend_from_slice(&[0; 4]);
+        common.extend_from_slice(&0_u16.to_le_bytes());
+        common.extend_from_slice(&0x0021_u16.to_le_bytes());
+        common.extend_from_slice(&crc.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&size.to_le_bytes());
+        common.extend_from_slice(&name_len.to_le_bytes());
+        archive.extend_from_slice(b"PK\x03\x04");
+        archive.extend_from_slice(&common);
+        archive.extend_from_slice(&0_u16.to_le_bytes());
+        archive.extend_from_slice(name.as_bytes());
+        archive.extend_from_slice(data);
+        directory.extend_from_slice(b"PK\x01\x02");
+        directory.extend_from_slice(&20_u16.to_le_bytes());
+        directory.extend_from_slice(&common);
+        directory.extend_from_slice(&[0; 12]);
+        directory.extend_from_slice(&offset.to_le_bytes());
+        directory.extend_from_slice(name.as_bytes());
+    }
+    let directory_offset = u32::try_from(archive.len()).expect("directory offset");
+    let count = u16::try_from(entries.len()).expect("entry count");
+    archive.extend_from_slice(&directory);
+    archive.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&count.to_le_bytes());
+    archive.extend_from_slice(&u32::try_from(directory.len()).expect("size").to_le_bytes());
+    archive.extend_from_slice(&directory_offset.to_le_bytes());
+    archive.extend_from_slice(&0_u16.to_le_bytes());
+    archive
+}
+
+#[test]
+fn probing_a_zip_dcp_patch_names_dcp_instead_of_a_missing_handler() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let dcp = temp.path().join("real.dcp");
+    fs::write(
+        &dcp,
+        stored_zip(&[
+            ("IP.BIN", b"ip"),
+            ("1ST_READ.BIN", b"boot"),
+            ("DATA/FONT.PVR", b"font"),
+        ]),
+    )
+    .expect("fixture");
+    // Also probe an unrelated inner file as the resolved path: the handler must still report the
+    // DCP-specific message from the `.dcp` source name.
+    let inner = temp.path().join("1ST_READ.BIN");
+    fs::write(&inner, b"boot").expect("inner fixture");
+
+    for (source, resolved) in [(&dcp, &inner), (&dcp, &dcp)] {
+        let Err(report) = app().probe_patch_handler(source, resolved, 0, 1, None) else {
+            panic!("a DCP has no per-patch handler");
+        };
+        assert_eq!(report.status, OperationStatus::Failed);
+        assert_eq!(report.format.as_deref(), Some("DCP"));
+        assert!(
+            report.label.contains("Dreamcast DCP patch"),
+            "{}",
+            report.label
+        );
+        assert!(
+            !report.label.contains("no registered patch handler")
+                && !report.label.contains("ambiguous"),
+            "{}",
+            report.label
+        );
+    }
 }
 
 #[test]
 fn probing_an_unhandled_patch_names_both_the_original_and_resolved_paths() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
-    let requested = temp.path().join("bundle.zip");
+    let requested = temp.path().join("weave.zip");
     let resolved = temp.path().join("member.bin");
     fs::write(&resolved, b"not a patch").expect("fixture");
     let app = app();
@@ -1623,15 +1706,16 @@ fn requirements(pairs: &[(&str, &str)], size: Option<u64>) -> FilenameRequiremen
     }
 }
 
-fn bundle_resolution(
+fn weave_resolution(
     checks: Vec<(String, FilenameRequirements)>,
     output_checks: Option<(String, FilenameRequirements)>,
-) -> BundleApplyResolution {
-    BundleApplyResolution {
+) -> WeaveApplyResolution {
+    WeaveApplyResolution {
         warnings: Vec::new(),
         patch_basis: PatchBasisMode::Auto,
         cheats: Vec::new(),
         checks,
+        rom_checks: None,
         expected_rom_name: None,
         output_checks,
         steps: Vec::new(),
@@ -1640,20 +1724,20 @@ fn bundle_resolution(
 }
 
 #[test]
-fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
+fn a_weave_output_check_that_contradicts_expect_out_is_rejected() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]);
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         Vec::new(),
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6")], None),
         )),
     );
 
     let report = app()
-        .merge_patch_apply_bundle_requirements(
+        .merge_patch_apply_weave_requirements(
             &resolution,
             false,
             &mut expected_input,
@@ -1665,7 +1749,7 @@ fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
 
     assert_eq!(report.status, OperationStatus::Failed);
     assert_eq!(report.stage, "validate");
-    assert!(report.label.contains("bundle output.checks"));
+    assert!(report.label.contains("weave output.checks"));
     assert!(report.label.contains("was already requested"));
     assert_eq!(
         expected_output.get("crc32").map(String::as_str),
@@ -1674,24 +1758,24 @@ fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
 }
 
 #[test]
-fn a_bundle_output_check_fills_in_what_expect_out_left_open() {
+fn a_weave_output_check_fills_in_what_expect_out_left_open() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]);
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         vec![(
-            "bundle rom.checks".to_string(),
+            "weave patches[0].inputChecks".to_string(),
             requirements(&[("md5", &"ab".repeat(16))], Some(64)),
         )],
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6"), ("sha1", &"cd".repeat(20))], None),
         )),
     );
 
     assert!(
         app()
-            .merge_patch_apply_bundle_requirements(
+            .merge_patch_apply_weave_requirements(
                 &resolution,
                 false,
                 &mut expected_input,
@@ -1715,21 +1799,21 @@ fn a_bundle_output_check_fills_in_what_expect_out_left_open() {
 }
 
 #[test]
-fn a_disc_apply_drops_the_bundle_output_checks_it_cannot_verify() {
+fn a_disc_apply_drops_the_weave_output_checks_it_cannot_verify() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::new();
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         Vec::new(),
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6")], None),
         )),
     );
 
     assert!(
         app()
-            .merge_patch_apply_bundle_requirements(
+            .merge_patch_apply_weave_requirements(
                 &resolution,
                 true,
                 &mut expected_input,
@@ -2090,8 +2174,11 @@ fn auto_header_stripping_keeps_an_input_that_carries_no_header() {
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &BTreeMap::new(),
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &BTreeMap::new(),
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );
@@ -2121,8 +2208,11 @@ fn auto_header_stripping_keeps_a_header_no_checksum_argues_against() {
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &expected,
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &expected,
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );
@@ -2152,8 +2242,11 @@ fn auto_header_stripping_strips_when_the_headerless_bytes_are_the_proven_basis()
     let (strip, note) = app().auto_header_strip_decision(
         &input,
         None,
-        &expected,
-        &BTreeMap::new(),
+        AutoHeaderEvidence {
+            expected_input_checksums: &expected,
+            cached_input_checksums: &BTreeMap::new(),
+            weave_rom_headerless: false,
+        },
         &context,
         &mut temp_paths,
     );
@@ -2209,4 +2302,47 @@ fn a_staged_payload_whose_name_is_not_the_archive_entry_name_is_refused() {
         failure.label
     );
     assert!(!requested.exists());
+}
+
+#[test]
+fn bare_input_match_reuses_seeded_checksums_and_seeds_the_rest() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let input = temp.path().join("renamed.bin");
+    fs::write(&input, b"0123456789abcdef").expect("input fixture");
+    let context = test_context(temp.path().to_path_buf());
+    // A sentinel no real hash produces: matching it proves the seed was read
+    // instead of the file being hashed again.
+    let sentinel = "feedfacefeedfacefeedfacefeedfacefeedface";
+    context.seed_checksums(
+        &input,
+        &BTreeMap::from([("sha1".to_owned(), sentinel.to_owned())]),
+    );
+    let requirement = |checksums: &[(&str, &str)]| {
+        vec![(
+            None,
+            checksums
+                .iter()
+                .map(|(algorithm, value)| ((*algorithm).to_owned(), (*value).to_owned()))
+                .collect::<BTreeMap<_, _>>(),
+        )]
+    };
+    assert!(
+        run::bare_input_satisfies_any(&input, &requirement(&[("sha1", sentinel)]), &context)
+            .expect("seeded match")
+    );
+    // An unseeded algorithm is computed once and seeded for later members.
+    let crc = "68c4f033";
+    assert!(context.seeded_checksum(&input, "crc32").is_none());
+    assert!(
+        run::bare_input_satisfies_any(
+            &input,
+            &requirement(&[("crc32", &crc.to_uppercase()), ("sha1", sentinel)]),
+            &context
+        )
+        .expect("computed match")
+    );
+    assert_eq!(
+        context.seeded_checksum(&input, "crc32").as_deref(),
+        Some(crc)
+    );
 }

@@ -19,8 +19,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         let check = Check { when: None, assert: Condition::new(move |bytes| Ok(u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]) == checksum(bytes, base))), code: "chrono_trigger_checksum".into(), message: "the Chrono Trigger slot checksum is invalid".into(), section_id: None, warning: None };
         GameDefinition {
             fields: vec![
-                FieldDefinition::new("gold".into(), "Gold".into(), base + 0x5e0, Storage::U24Le).min(0).max(9_999_999),
-                FieldDefinition::new("inventory.first_item".into(), "First inventory item code".into(), base + 0x2c5, Storage::U8).editable(false),
+                catalog_field("gold", "Gold", base + 0x5e0, Storage::U24Le).min(0).max(9_999_999),
+                catalog_field("inventory.first_item", "First inventory item code", base + 0x2c5, Storage::U8).editable(false),
             ],
             description: format!("Edits independent scalar fields in slot {}. Character levels, locations, inventory pairs, and progression are omitted because they have coupled write rules.", slot + 1),
             signatures: vec![SignatureDefinition { offset: 0x1ff8 + slot * 2, bytes: vec![0x1b, 0xe4] }],

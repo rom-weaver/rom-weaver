@@ -3,7 +3,7 @@
 //! `--patch-header auto` decides on checksum proof wherever the patch offers
 //! any: [`CliApp::checksum_basis_proof`] compares every whole-file check the
 //! patch embeds - under whatever algorithm it uses (BPS/UPS/PMSR crc32, RUP and
-//! Solid md5) - plus anything the user, bundle or filename declared, against
+//! Solid md5) - plus anything the user, weave or filename declared, against
 //! the raw and the headerless bytes. Formats such as IPS provide no embedded
 //! checksums, so they can need structural evidence.
 //!
@@ -21,8 +21,9 @@
 //!    console ROM the input was. A wrongly based patch scatters records across
 //!    the internal ROM header and the platform stops recognising its own ROM.
 //!
-//! When the evidence does not distinguish the candidates, the caller keeps
-//! the existing header state and reports any inferred decision.
+//! When the evidence does not distinguish the candidates, the caller strips the
+//! header if a weave's `rom.checks` matched only the headerless bytes, and
+//! otherwise keeps the existing header state. It reports any inferred decision.
 
 use super::*;
 
@@ -51,7 +52,7 @@ impl CliApp {
     /// the raw and the headerless bytes.
     ///
     /// Requirements come from two places, declared first: what the user, a
-    /// bundle or the patch filename asked for, then what the patch itself
+    /// weave or the patch filename asked for, then what the patch itself
     /// embeds (`details.patch.endpoints`, normalized by every handler that has
     /// whole-file checks to report). Any algorithm counts - RUP and Solid pin
     /// an md5, PMSR a crc32 - so hashing follows the patch rather than a
@@ -132,7 +133,7 @@ impl CliApp {
     /// Every whole-file input expectation the patch itself carries, one entry
     /// per endpoint variant (RUP carries one per file variant per direction).
     /// An unreadable or unclaimed patch contributes nothing, with a reason.
-    fn embedded_input_states(
+    pub(super) fn embedded_input_states(
         &self,
         patch: Option<&Path>,
         context: &OperationContext,
@@ -622,7 +623,7 @@ struct BasisOutputScore<'a> {
 /// The checksum algorithms worth hashing for `required`: every algorithm some
 /// candidate pins, minus any the engine cannot compute. Order is stable so the
 /// trace output reads the same across runs.
-fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
+pub(super) fn hashable_algorithms(required: &[patch_plan::PlanState]) -> Vec<String> {
     let mut algorithms: Vec<String> = Vec::new();
     for state in required {
         for algorithm in state.checksums.keys() {
@@ -656,13 +657,13 @@ fn first_matching_state<'a>(
 }
 
 /// Copy `source` minus its first `skip` bytes into `destination`.
-fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<u64> {
+fn copy_without_prefix(source: &Path, destination: &Path, skip: u64) -> Result<()> {
     let mut reader = BufReader::new(File::open(source)?);
     reader.seek(SeekFrom::Start(skip))?;
     let mut writer = BufWriter::new(File::create(destination)?);
-    let copied = std::io::copy(&mut reader, &mut writer)?;
+    rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut writer)?;
     writer.flush()?;
-    Ok(copied)
+    Ok(())
 }
 
 /// How well one candidate's output held up. Field order is the comparison

@@ -3,6 +3,7 @@ mod gba;
 mod nes;
 mod nintendo_64;
 mod nintendo_ds;
+mod pc_engine;
 mod playstation;
 mod saturn;
 mod sega;
@@ -79,6 +80,7 @@ pub const ALL_SAVE_FORMATS: &[&[SaveFormatDefinition]] = &[
     sega::FORMATS,
     playstation::FORMATS,
     saturn::FORMATS,
+    pc_engine::FORMATS,
 ];
 
 pub fn all_save_formats() -> impl Iterator<Item = SaveFormatDefinition> {

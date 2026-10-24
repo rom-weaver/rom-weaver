@@ -9,6 +9,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use crate::chd_rs::{
+        header::Header,
+        map::{CompressionTypeV5, Map, MapEntry},
+    };
     #[cfg(not(target_family = "wasm"))]
     use crate::lzma2_sdk_threads_for_budget_with_limits;
     use crate::nod::{
@@ -19,16 +23,13 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
+    use crate::test_support::TempPath;
     use crate::{
         ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, GCZ,
         NodHandlerCore, RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher,
         SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
         copy_progress_buffer_size, lzma2_liblzma_threads_for_budget_with_limits,
         lzma2_preset_dict_bytes, lzma2_threads_for_budget, zstd_threads_for_budget,
-    };
-    use chd::{
-        header::Header,
-        map::{CompressionTypeV5, Map, MapEntry},
     };
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
@@ -81,26 +82,26 @@ mod tests {
         }
     }
 
-    fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
+    fn temp_file_path_with_extension(label: &str, extension: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-probe-{label}-{}-{timestamp}.{extension}",
             test_process_id(),
-        ))
+        )))
     }
 
-    fn temp_dir_path(label: &str) -> PathBuf {
+    fn temp_dir_path(label: &str) -> TempPath {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        test_temp_root().join(format!(
+        TempPath::new(test_temp_root().join(format!(
             "rom-weaver-containers-tests-{label}-{}-{timestamp}",
             test_process_id(),
-        ))
+        )))
     }
 
     fn test_context(temp_root: &Path, threads: usize) -> OperationContext {
@@ -369,6 +370,33 @@ mod tests {
         destination.flush().expect("flush wbfs fixture");
     }
 
+    fn write_test_gc_ciso(input: &Path, output: &Path) {
+        let disc = NodDiscReader::new(input, &NodDiscOptions::default())
+            .expect("open ciso source fixture");
+        let options = NodFormatOptions {
+            format: NodFormat::Ciso,
+            compression: NodCompression::None,
+            block_size: NodFormat::Ciso.default_block_size(),
+        };
+        let writer = NodDiscWriter::new(disc, &options).expect("create ciso writer");
+        let mut destination = fs::File::create(output).expect("create ciso fixture");
+        let finalization = writer
+            .process(
+                |data, _processed, _total| destination.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .expect("write ciso fixture");
+        if !finalization.header.is_empty() {
+            destination
+                .seek(SeekFrom::Start(0))
+                .expect("seek ciso header");
+            destination
+                .write_all(finalization.header.as_ref())
+                .expect("write ciso header");
+        }
+        destination.flush().expect("flush ciso fixture");
+    }
+
     fn write_test_wia(input: &Path, output: &Path) {
         let disc =
             NodDiscReader::new(input, &NodDiscOptions::default()).expect("open wia source fixture");
@@ -407,6 +435,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join(format!("payload.{output_extension}")),
@@ -604,10 +633,24 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "pbp", "chd", "gcz", "wia", "tgc", "nfs", "wbfs", "rvz",
-                "z3ds", "xiso"
+                "xz", "zst", "cso", "pbp", "chd", "gc-ciso", "gcz", "wia", "tgc", "nfs", "wbfs",
+                "rvz", "z3ds", "xiso"
             ]
         );
+    }
+
+    #[test]
+    fn z3ds_create_heap_reserve_covers_queued_frames_and_worker_contexts() {
+        use super::super::z3ds::z3ds_create_heap_reserve;
+        const MIB: usize = 1024 * 1024;
+
+        // 16 workers: 4 * 16 frames of 1 MiB, a 2 MiB stack plus a context per worker, and the
+        // shared 32 MiB margin.
+        assert_eq!(z3ds_create_heap_reserve(16, 22), (64 + 16 * 20 + 32) * MIB);
+        assert_eq!(z3ds_create_heap_reserve(16, 3), (64 + 16 * 4 + 32) * MIB);
+        // 8 workers at level 13+ fit the 256 MiB memory rung.
+        assert!(z3ds_create_heap_reserve(8, 22) < 256 * MIB);
+        assert_eq!(z3ds_create_heap_reserve(usize::MAX, 22), usize::MAX);
     }
 
     #[test]
@@ -701,6 +744,141 @@ mod tests {
             handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), Some(*b"ABCD")),
             "rom.3ds".to_string()
         );
+    }
+
+    fn z3ds_create_warnings(name: &str, payload: &[u8]) -> Vec<String> {
+        let temp_dir = temp_dir_path(&format!("z3ds-warn-{name}"));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, payload).expect("write fixture");
+        let report = Z3dsContainerHandler
+            .create(
+                &ContainerCreateRequest {
+                    rvz_block_size: None,
+                    archive_names: None,
+                    inputs: vec![input_path],
+                    output: temp_dir.join("out.z3ds"),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("z3ds create succeeds");
+        report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("warnings"))
+            .and_then(|warnings| warnings.as_array())
+            .map(|warnings| {
+                warnings
+                    .iter()
+                    .filter_map(|warning| warning.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn z3ds_created_underlying_magic(name: &str, payload: &[u8]) -> [u8; 4] {
+        let temp_dir = temp_dir_path(&format!("z3ds-magic-{name}"));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, payload).expect("write fixture");
+        let output = temp_dir.join("out.z3ds");
+        Z3dsContainerHandler
+            .create(
+                &ContainerCreateRequest {
+                    rvz_block_size: None,
+                    archive_names: None,
+                    inputs: vec![input_path],
+                    output: output.clone(),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("z3ds create succeeds");
+        let written = fs::read(&output).expect("read z3ds");
+        assert_eq!(&written[..4], b"Z3DS");
+        written[4..8].try_into().expect("underlying magic")
+    }
+
+    #[test]
+    fn z3ds_create_writes_upstream_underlying_magic_for_real_images() {
+        let mut ncsd = vec![0xa5_u8; 4096];
+        ncsd[0x100..0x104].copy_from_slice(b"NCSD");
+        assert_eq!(z3ds_created_underlying_magic("ncsd", &ncsd), *b"NCSD");
+        let mut ncch = vec![0xa5_u8; 4096];
+        ncch[0x100..0x104].copy_from_slice(b"NCCH");
+        assert_eq!(z3ds_created_underlying_magic("ncch", &ncch), *b"NCCH");
+        let mut cia = vec![0_u8; 4096];
+        cia[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
+        assert_eq!(z3ds_created_underlying_magic("cia", &cia), *b"CIA\0");
+        assert_eq!(
+            z3ds_created_underlying_magic("3dsx", b"3DSX\0\0\0\0"),
+            *b"3DSX"
+        );
+        assert_eq!(
+            z3ds_created_underlying_magic("other", &[0x5a; 4096]),
+            [0x5a; 4]
+        );
+    }
+
+    #[test]
+    fn z3ds_create_preserves_3dsx_magic_when_rodata_contains_image_magic() {
+        for magic in [b"NCSD", b"NCCH", b"NONE"] {
+            let mut payload = vec![0_u8; 588];
+            payload[..4].copy_from_slice(b"3DSX");
+            payload[4..6].copy_from_slice(&44_u16.to_le_bytes());
+            payload[6..8].copy_from_slice(&8_u16.to_le_bytes());
+            payload[16..20].copy_from_slice(&4_u32.to_le_bytes());
+            payload[20..24].copy_from_slice(&512_u32.to_le_bytes());
+            payload[24..28].copy_from_slice(&4_u32.to_le_bytes());
+            payload[0x100..0x104].copy_from_slice(magic);
+            let underlying = z3ds_created_underlying_magic(
+                std::str::from_utf8(magic).expect("ASCII magic"),
+                &payload,
+            );
+            assert_eq!(underlying, *b"3DSX");
+            assert_eq!(
+                Z3dsContainerHandler.extract_name_with_underlying_magic(
+                    Path::new("generic.z3ds"),
+                    Some(underlying)
+                ),
+                "generic.3dsx"
+            );
+        }
+    }
+
+    #[test]
+    fn z3ds_extract_name_maps_legacy_cia_header_size_magic() {
+        assert_eq!(
+            Z3dsContainerHandler.extract_name_with_underlying_magic(
+                Path::new("rom.z3ds"),
+                Some([0x20, 0x20, 0, 0])
+            ),
+            "rom.cia".to_string()
+        );
+    }
+
+    #[test]
+    fn z3ds_create_warns_when_input_is_not_3ds_content() {
+        let warnings = z3ds_create_warnings("random", &[0x5a; 4096]);
+        assert_eq!(warnings, vec!["input is not recognizable 3DS content"]);
+    }
+
+    #[test]
+    fn z3ds_create_does_not_warn_for_3ds_content() {
+        let mut ncsd = vec![0_u8; 4096];
+        ncsd[0x100..0x104].copy_from_slice(b"NCSD");
+        assert!(z3ds_create_warnings("ncsd", &ncsd).is_empty());
+        let mut cia = vec![0_u8; 4096];
+        cia[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
+        assert!(z3ds_create_warnings("cia", &cia).is_empty());
+        assert!(z3ds_create_warnings("3dsx", b"3DSX\0\0\0\0").is_empty());
     }
 
     #[test]
@@ -892,6 +1070,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -1015,6 +1194,7 @@ mod tests {
                 let archive_path =
                     temp_dir.join(format!("payload-{}.{}", format.replace('.', "-"), format));
                 let create_request = ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_dir.clone()],
                     output: archive_path.clone(),
@@ -1156,6 +1336,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: temp_dir.join(format!("payload-{level}.zip")),
@@ -1209,6 +1390,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.zip"),
@@ -1246,6 +1428,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
@@ -1473,6 +1656,7 @@ mod tests {
             ("wia", "wia"),
             ("tgc", "tgc"),
             ("wbfs", "wbfs"),
+            ("gc-ciso", "gc-ciso"),
         ] {
             assert_extract_only_create_rejected(format, output_extension);
         }
@@ -1504,6 +1688,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
@@ -1581,6 +1766,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
@@ -1677,6 +1863,174 @@ mod tests {
     }
 
     #[test]
+    fn cso_v1_extract_round_trips_deflate_raw_and_aligned_blocks() {
+        let temp_dir = temp_dir_path("cso-v1-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let block = TEST_CSO_BLOCK_BYTES;
+        let alignment = 2_u32;
+        // Even blocks are deflated, odd blocks are stored raw (high index bit set).
+        let source = (0..block * 5 + 77)
+            .map(|index| ((index * 2654435761_usize) >> 13) as u8)
+            .collect::<Vec<_>>();
+        let table_len = 24 + (source.len().div_ceil(block) + 1) * 4;
+        let mut body = vec![0_u8; table_len.next_multiple_of(4) - table_len];
+        let mut index = Vec::new();
+        for (number, chunk) in source.chunks(block).enumerate() {
+            let position = ((table_len + body.len()) >> alignment) as u32;
+            if number % 2 == 1 {
+                index.push(position | 0x8000_0000);
+                body.extend_from_slice(chunk);
+            } else {
+                let mut encoder = DeflateEncoder::new(Vec::new(), DeflateCompression::default());
+                encoder.write_all(chunk).expect("deflate block");
+                index.push(position);
+                body.extend_from_slice(&encoder.finish().expect("finish block"));
+            }
+            body.resize(body.len().next_multiple_of(4), 0);
+        }
+        index.push(((table_len + body.len()) >> alignment) as u32);
+        let mut image = b"CISO".to_vec();
+        image.extend_from_slice(&24_u32.to_le_bytes());
+        image.extend_from_slice(&(source.len() as u64).to_le_bytes());
+        image.extend_from_slice(&(block as u32).to_le_bytes());
+        image.extend_from_slice(&[1, alignment as u8, 0, 0]);
+        for entry in index {
+            image.extend_from_slice(&entry.to_le_bytes());
+        }
+        image.extend_from_slice(&body);
+        let cso = temp_dir.join("disc.cso");
+        fs::write(&cso, &image).expect("write v1 cso");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let output_dir = temp_dir.join("out");
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: cso,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("extract v1 cso");
+        assert_eq!(
+            fs::read(output_dir.join("disc.iso")).expect("read extracted output"),
+            source
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_maxcso_v2_extract_round_trips_deflate_lz4_and_raw_blocks() {
+        let block = TEST_CSO_BLOCK_BYTES * 2;
+        let alignment = 3_u32;
+        for only_lz4 in [false, true] {
+            let temp_dir = temp_dir_path(if only_lz4 { "cso-v2-lz4" } else { "cso-v2-mix" });
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            // Blocks cycle through repetitive, incompressible (stored raw), and zero data. maxcso
+            // sizes are whole 2048-byte sectors, and the final block here is a half-size
+            // incompressible one that maxcso pads to `block` and then deflates or LZ4-compresses
+            // to more than its logical `block / 2` bytes but fewer than `block`.
+            let mut seed = 0x1287_u32;
+            let mut random = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            };
+            let source = (0..block * 6 + 2048)
+                .map(|index| match (index / block + 1) % 3 {
+                    0 => (index % 13) as u8,
+                    1 => random(),
+                    _ => 0,
+                })
+                .collect::<Vec<_>>();
+            let mut raw_blocks = 0;
+            let mut padded_tail_stored = 0;
+            let table_len = 24 + (source.len().div_ceil(block) + 1) * 4;
+            let mut body = vec![0xaa_u8; table_len.next_multiple_of(8) - table_len];
+            let mut index = Vec::new();
+            for (number, chunk) in source.chunks(block).enumerate() {
+                let mut padded = chunk.to_vec();
+                padded.resize(block, 0);
+                let chunk = padded.as_slice();
+                let position = ((table_len + body.len()) >> alignment) as u32;
+                let (stored, flag) = if only_lz4 || number % 3 == 2 {
+                    (lz4_flex::block::compress(chunk), 0x8000_0000)
+                } else {
+                    let mut encoder = DeflateEncoder::new(Vec::new(), DeflateCompression::best());
+                    encoder.write_all(chunk).expect("deflate block");
+                    (encoder.finish().expect("finish block"), 0)
+                };
+                if stored.len().next_multiple_of(8) >= block {
+                    raw_blocks += 1;
+                    index.push(position);
+                    body.extend_from_slice(chunk);
+                } else {
+                    if number == 6 {
+                        padded_tail_stored = stored.len().next_multiple_of(8);
+                    }
+                    index.push(position | flag);
+                    body.extend_from_slice(&stored);
+                }
+                body.resize(body.len().next_multiple_of(8), 0xaa);
+            }
+            assert!(raw_blocks >= 2, "raw blocks occur: {raw_blocks}");
+            assert!(
+                (block / 2..block).contains(&padded_tail_stored),
+                "final block stored size {padded_tail_stored} lies between its logical size and block"
+            );
+            index.push(((table_len + body.len()) >> alignment) as u32);
+            let mut image = b"CISO".to_vec();
+            image.extend_from_slice(&24_u32.to_le_bytes());
+            image.extend_from_slice(&(source.len() as u64).to_le_bytes());
+            image.extend_from_slice(&(block as u32).to_le_bytes());
+            image.extend_from_slice(&[2, alignment as u8, 0, 0]);
+            for entry in index {
+                image.extend_from_slice(&entry.to_le_bytes());
+            }
+            image.extend_from_slice(&body);
+            let cso = temp_dir.join("disc.cso");
+            fs::write(&cso, &image).expect("write maxcso v2 cso");
+
+            let registry = ContainerRegistry::new();
+            let handler = registry.find_by_name("cso").expect("cso handler");
+            let output_dir = temp_dir.join("out");
+            handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: cso,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 1),
+                )
+                .expect("extract maxcso v2 cso");
+            assert_eq!(
+                fs::read(output_dir.join("disc.iso")).expect("read extracted output"),
+                source,
+                "only_lz4 {only_lz4}"
+            );
+
+            let _ = fs::remove_dir_all(temp_dir);
+        }
+    }
+
+    #[test]
     fn wbfs_extract_round_trips_to_iso_output() {
         let temp_dir = temp_dir_path("wbfs-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -1711,6 +2065,134 @@ mod tests {
         let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
         assert_eq!(extracted, source);
 
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn wbfs_extract_reports_size_mismatch_as_a_validation_code() {
+        let temp_dir = temp_dir_path("wbfs-size-code");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let wbfs = temp_dir.join("disc.wbfs");
+        fs::write(&input_iso, build_test_gamecube_iso(0x8000)).expect("write source fixture");
+        write_test_wbfs(&input_iso, &wbfs);
+        let written = fs::metadata(&wbfs).expect("wbfs metadata").len();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&wbfs)
+            .expect("open wbfs for append")
+            .write_all(&[0; 512])
+            .expect("grow wbfs");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let error = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: wbfs,
+                    out_dir: temp_dir.join("out"),
+                    selections: Vec::new(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect_err("oversized wbfs must be rejected");
+
+        let rom_weaver_core::RomWeaverError::ValidationCode(coded) = &error else {
+            panic!("expected a validation code, got {error}");
+        };
+        assert_eq!(
+            coded.code(),
+            rom_weaver_core::VALIDATION_CODE_WBFS_SIZE_MISMATCH
+        );
+        let field = |key: &str| {
+            coded
+                .fields()
+                .iter()
+                .find(|field| field.key == key)
+                .map(|field| field.value.to_string())
+        };
+        assert_eq!(field("actual"), Some((written + 512).to_string()));
+        assert!(
+            error.to_string().contains("Invalid WBFS file size"),
+            "{error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn gamecube_ciso_routes_to_nod_and_extracts_byte_exact_iso() {
+        let temp_dir = temp_dir_path("gc-ciso-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let source = build_test_gamecube_iso(0x8000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        // Both the shared `.ciso` extension and a misnamed `.cso` must route to the nod handler.
+        for name in ["disc.ciso", "disc.cso"] {
+            let image = temp_dir.join(name);
+            write_test_gc_ciso(&input_iso, &image);
+            let handler = registry.probe(&image).expect("handler for gamecube ciso");
+            assert_eq!(handler.descriptor().name, "gc-ciso", "for {name}");
+
+            let output_dir = temp_dir.join(format!("out-{name}"));
+            let report = handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: image,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract gamecube ciso");
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+            let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+            assert_eq!(extracted, source, "for {name}");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn psp_cso_headers_are_not_routed_to_gamecube_ciso() {
+        use super::super::gc_ciso::is_gamecube_ciso_header;
+        let header = |size_field: u32| {
+            let mut bytes = b"CISO".to_vec();
+            bytes.extend_from_slice(&size_field.to_le_bytes());
+            bytes
+        };
+        // v2 (24) and v1 (0) header sizes stay PSP CSO; sector-aligned block sizes are GameCube.
+        assert!(!is_gamecube_ciso_header(&header(24)));
+        assert!(!is_gamecube_ciso_header(&header(0)));
+        assert!(!is_gamecube_ciso_header(&header(0x8001)));
+        assert!(!is_gamecube_ciso_header(b"CISO"));
+        assert!(!is_gamecube_ciso_header(b"WBFS\0\x80\0\0"));
+        assert!(is_gamecube_ciso_header(&header(0x8000)));
+        assert!(is_gamecube_ciso_header(&header(0x20_0000)));
+
+        let temp_dir = temp_dir_path("psp-cso-probe");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, vec![0x5a_u8; 4096]).expect("source");
+        let cso = temp_dir.join("disc.ciso");
+        write_test_cso(&input, &cso);
+        let registry = ContainerRegistry::new();
+        let handler = registry.probe(&cso).expect("handler for psp cso");
+        assert_eq!(handler.descriptor().name, "cso");
         let _ = fs::remove_dir_all(temp_dir);
     }
 
@@ -2002,6 +2484,60 @@ mod tests {
     }
 
     #[test]
+    fn xiso_extract_rejects_source_output_aliases_without_changing_source() {
+        let temp_dir = temp_dir_path("xiso-aliases");
+        let tree = temp_dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("payload.bin"), b"source payload").unwrap();
+        let source = temp_dir.join("game.iso");
+        let mut image = File::create(&source).unwrap();
+        let mut source_fs = crate::xdvdfs::write::fs::StdFilesystem::create(&tree);
+        crate::xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut image, |_| {}).unwrap();
+        drop(image);
+        let original = fs::read(&source).unwrap();
+        let hardlink_dir = temp_dir.join("hardlink");
+        fs::create_dir_all(&hardlink_dir).unwrap();
+        fs::hard_link(&source, hardlink_dir.join("game.iso")).unwrap();
+        #[cfg(unix)]
+        let symlink_dir = {
+            let symlink_dir = temp_dir.join("symlink");
+            fs::create_dir_all(&symlink_dir).unwrap();
+            std::os::unix::fs::symlink(&source, symlink_dir.join("game.iso")).unwrap();
+            Some(symlink_dir)
+        };
+        #[cfg(not(unix))]
+        let symlink_dir = None;
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("xiso").unwrap();
+        for out_dir in [
+            Some(temp_dir.to_path_buf()),
+            Some(hardlink_dir),
+            symlink_dir,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let result = handler.extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: source.clone(),
+                    out_dir,
+                    selections: Vec::new(),
+                    kind_filter: Default::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            );
+            assert!(result.is_err(), "aliased output must fail");
+            assert_eq!(fs::read(&source).unwrap(), original);
+        }
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
     fn xiso_capabilities_allow_extract_but_disable_create() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xiso").expect("xiso handler");
@@ -2143,6 +2679,39 @@ mod tests {
     }
 
     #[test]
+    fn rvz_invalid_block_size_rejects_create_and_dry_run_before_output() {
+        let temp_dir = temp_dir_path("rvz-invalid-block-size");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input = temp_dir.join("disc.iso");
+        fs::write(&input, build_test_gamecube_iso(65536)).expect("fixture");
+        let handler = RvzContainerHandler;
+        for block_size in [0, 1, 65535, 1_u32 << 31, u32::MAX] {
+            let request = ContainerCreateRequest {
+                rvz_block_size: Some(block_size),
+                archive_names: None,
+                inputs: vec![input.clone()],
+                output: temp_dir.join(format!("missing-{block_size}/disc.rvz")),
+                format: "rvz".to_string(),
+                codec: None,
+                level: None,
+                parent: None,
+            };
+            let context = test_context(&temp_dir, 1);
+            for result in [
+                handler.create(&request, &context).map(|_| ()),
+                handler.create_dry_run_size(&request, &context).map(|_| ()),
+            ] {
+                let error = result.expect_err("invalid RVZ block size must fail");
+                assert!(
+                    matches!(error, RomWeaverError::Validation(ref message) if message.contains("--rvz-block-size must be a power of two from 32768 to 1073741824 bytes")),
+                    "unexpected error: {error}"
+                );
+                assert!(!request.output.parent().expect("output parent").exists());
+            }
+        }
+    }
+
+    #[test]
     fn rvz_create_and_nested_extract_runtime_threads_match_capability() {
         let temp_dir = temp_dir_path("rvz-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -2159,6 +2728,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: output_path.clone(),
@@ -2271,6 +2841,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
@@ -2309,6 +2880,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
@@ -2359,6 +2931,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: archive_path.clone(),
@@ -2427,6 +3000,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -2504,6 +3078,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -2566,6 +3141,7 @@ mod tests {
                 handler
                     .create(
                         &ContainerCreateRequest {
+                            rvz_block_size: None,
                             archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
@@ -2636,6 +3212,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
@@ -2887,6 +3464,7 @@ mod tests {
                 let create_report = handler
                     .create(
                         &ContainerCreateRequest {
+                            rvz_block_size: None,
                             archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
@@ -3005,6 +3583,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
@@ -3039,6 +3618,7 @@ mod tests {
             seven_z
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input_path],
                         output: path.clone(),
@@ -3142,6 +3722,34 @@ mod tests {
         let recommendation = registry.recommend_compress_format(&path);
         assert_eq!(recommendation.format_name, "7z");
         assert_eq!(recommendation.reason, "fallback-7z-lzma2");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn recommend_compress_format_survives_cso_v1_with_zero_header_size() {
+        // The original v1 `ciso` tool writes header size 0, which GameCube CISO reads as its
+        // block size; the nod fallback must reject it instead of dividing by zero.
+        let block = 2048_usize;
+        let blocks = 64;
+        let table_len = 24 + (blocks + 1) * 4;
+        let mut image = b"CISO".to_vec();
+        image.extend_from_slice(&0_u32.to_le_bytes());
+        image.extend_from_slice(&((block * blocks) as u64).to_le_bytes());
+        image.extend_from_slice(&(block as u32).to_le_bytes());
+        image.extend_from_slice(&[1, 0, 0, 0]);
+        for number in 0..=blocks {
+            let entry = (table_len + number * block) as u32;
+            let flag = if number < blocks { 0x8000_0000 } else { 0 };
+            image.extend_from_slice(&(entry | flag).to_le_bytes());
+        }
+        image.resize(table_len + block * blocks, 0x5a);
+        let path = temp_file_path_with_extension("recommend-cso-v1", "cso");
+        fs::write(&path, &image).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "7z");
 
         let _ = fs::remove_file(path);
     }
@@ -3367,6 +3975,86 @@ mod tests {
                 .expect("raw kind"),
             "raw"
         );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+    #[test]
+    fn chd_create_auto_infers_cooked_dvd_from_udf_or_size() {
+        fn descriptor(bytes: &mut [u8], sector: usize, kind: u8, id: &[u8; 5]) {
+            bytes[sector * 2048] = kind;
+            bytes[sector * 2048 + 1..sector * 2048 + 6].copy_from_slice(id);
+        }
+        let temp_dir = temp_dir_path("chd-dvd-auto-infer");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let handler = ChdContainerHandler;
+        let kind = |name: &str, bytes: &[u8]| {
+            let path = temp_dir.join(name);
+            fs::write(&path, bytes).expect("write image");
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &path,
+                    u64::try_from(bytes.len()).expect("size"),
+                )
+                .expect("auto kind")
+        };
+
+        // ISO9660/UDF bridge (CD001, BEA01, NSR02) -> dvd for every auto-inferred name.
+        let mut bridge = vec![0_u8; 2048 * 40];
+        descriptor(&mut bridge, 16, 1, b"CD001");
+        descriptor(&mut bridge, 17, 255, b"CD001");
+        descriptor(&mut bridge, 18, 0, b"BEA01");
+        descriptor(&mut bridge, 19, 0, b"NSR02");
+        descriptor(&mut bridge, 20, 0, b"TEA01");
+        for name in ["bridge.bin", "bridge.iso", "bridge"] {
+            assert_eq!(kind(name, &bridge), "dvd", "{name}");
+        }
+        // UDF-only (NSR03, no ISO9660) -> dvd.
+        let mut udf = vec![0_u8; 2048 * 40];
+        descriptor(&mut udf, 16, 0, b"BEA01");
+        descriptor(&mut udf, 17, 0, b"NSR03");
+        assert_eq!(kind("udf.bin", &udf), "dvd");
+        // BEA01 alone is not UDF, and an NSR id with a nonzero type byte is not a descriptor.
+        let mut not_udf = vec![0_u8; 2048 * 40];
+        descriptor(&mut not_udf, 16, 1, b"CD001");
+        descriptor(&mut not_udf, 17, 0, b"BEA01");
+        descriptor(&mut not_udf, 18, 1, b"NSR02");
+        assert_eq!(kind("plain.bin", &not_udf), "cd");
+        assert_eq!(kind("plain.iso", &not_udf), "cd");
+        // UDF past the scanned recognition sequence (LBA 32) is ignored.
+        let mut late = not_udf.clone();
+        descriptor(&mut late, 32, 0, b"NSR02");
+        assert_eq!(kind("late.bin", &late), "cd");
+        // Raw CD framing wins over UDF-looking bytes.
+        let mut raw = vec![0_u8; 2352 * 40];
+        raw[..12].copy_from_slice(&[0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
+        descriptor(&mut raw, 17, 0, b"NSR02");
+        assert_eq!(kind("raw.bin", &raw), "cd");
+        // UDF without whole 2048-byte sectors is not a cooked DVD image.
+        let mut ragged = bridge.clone();
+        ragged.push(0);
+        assert_eq!(kind("ragged.bin", &ragged), "raw");
+
+        // ISO9660 without UDF: CD up to 450,000 sectors, DVD one sector beyond (sparse files).
+        for (sectors, expected) in [(450_000_u64, "cd"), (450_001_u64, "dvd")] {
+            let path = temp_dir.join(format!("large-{sectors}.bin"));
+            let mut file = fs::File::create(&path).expect("create sparse image");
+            file.seek(std::io::SeekFrom::Start(16 * 2048))
+                .expect("seek descriptor");
+            file.write_all(&[1, b'C', b'D', b'0', b'0', b'1'])
+                .expect("write descriptor");
+            file.set_len(sectors * 2048).expect("size sparse image");
+            drop(file);
+            assert_eq!(
+                handler
+                    .infer_create_kind_label_for_tests("chd", &path, sectors * 2048)
+                    .expect("large auto kind"),
+                expected,
+                "{sectors} sectors"
+            );
+        }
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -3669,6 +4357,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -3723,6 +4412,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -3838,6 +4528,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -3896,6 +4587,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: parent_chd.clone(),
@@ -3910,6 +4602,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: child_chd.clone(),
@@ -3973,8 +4666,10 @@ mod tests {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
-        let payload = (0..(896 * 1024))
-            .map(|index| (index as u8).wrapping_mul(41))
+        // Four symbols in a non-repeating order, so every codec, Huffman included,
+        // compresses the hunks and no hunk duplicates another.
+        let payload = (0..(896 * 1024_u32))
+            .map(|index| ((index.wrapping_mul(2_654_435_761) >> 13) % 4) as u8 * 41)
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 
@@ -4043,7 +4738,7 @@ mod tests {
         }
         sector[0x0f] = 1;
         sector[0x81c..].fill(0);
-        ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+        crate::chd_rs::compression::ecc::ErrorCorrectedSector::generate_ecc(&mut (&mut sector));
         sector
     }
 
@@ -4182,6 +4877,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
@@ -4232,6 +4928,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_path],
                     output: archive_path.clone(),
@@ -4295,6 +4992,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![input.clone()],
                         output: archive_path.clone(),
@@ -4360,6 +5058,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -4427,6 +5126,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
@@ -4480,6 +5180,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
@@ -4531,6 +5232,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
@@ -4591,6 +5293,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -4649,6 +5352,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
@@ -4708,6 +5412,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        rvz_block_size: None,
                         archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
@@ -4935,6 +5640,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
@@ -4965,6 +5671,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
@@ -4997,6 +5704,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![first, second],
                     output: temp_dir.join("disc.z3ds"),
@@ -5009,7 +5717,7 @@ mod tests {
             )
             .expect_err("multiple inputs should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires exactly one input file")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires exactly one input file; pass one")),
             "unexpected error: {error:?}"
         );
 
@@ -5049,6 +5757,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    rvz_block_size: None,
                     archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.cso"),
@@ -5146,31 +5855,67 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
+    fn psar_less_pbp(psar_offset: u32, file_size: usize) -> Vec<u8> {
+        let mut pbp = vec![0u8; file_size];
+        pbp[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
+        for section in 0..7 {
+            write_u32_le(&mut pbp, 8 + (section * 4), 0x28);
+        }
+        write_u32_le(&mut pbp, 0x24, psar_offset);
+        pbp
+    }
+
     #[test]
     fn pbp_probe_rejects_out_of_range_psar_offset() {
         let temp_dir = temp_dir_path("pbp-bad-psar-offset");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source = temp_dir.join("bad-psar.pbp");
-        // The PSAR offset field (0x24) is the last section-table slot, so to reach the dedicated
-        // PSAR guard (which rejects `>= file_size`) without first tripping the section-table guard
-        // (which rejects `> file_size`) the value must equal the file size exactly. A 0x30-byte
-        // file with the PSAR slot set to 0x30 passes the section checks but fails the PSAR check.
-        let file_size = 0x30u32;
-        let mut header = vec![0u8; file_size as usize];
-        header[..4].copy_from_slice(&[0x00, b'P', b'B', b'P']);
-        for section in 0..7 {
-            write_u32_le(&mut header, 8 + (section * 4), 0x28);
-        }
-        write_u32_le(&mut header, 0x24, file_size); // PSAR offset == file size
-        fs::write(&source, header).expect("fixture");
+        fs::write(&source, psar_less_pbp(0x31, 0x30)).expect("fixture");
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("pbp").expect("pbp handler");
         let error = handler
             .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
-            .expect_err("out-of-range psar offset should fail");
+            .expect_err("psar offset past the end of the file should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("invalid DATA.PSAR offset")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("out-of-range PBP section offset")),
+            "unexpected error: {error:?}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_with_empty_psar_is_a_self_contained_rom() {
+        let temp_dir = temp_dir_path("pbp-empty-psar-flag");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("EBOOT.PBP");
+        fs::write(&source, psar_less_pbp(0x30, 0x30)).expect("fixture");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        assert!(handler.is_self_contained_rom(&source));
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_probe_and_list_handle_an_empty_psar() {
+        let temp_dir = temp_dir_path("pbp-empty-psar");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source = temp_dir.join("EBOOT.PBP");
+        // PSAR offset equals the file size: the normal encoding for PSP homebrew with no PSAR.
+        fs::write(&source, psar_less_pbp(0x30, 0x30)).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let report = handler
+            .probe_details(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect("an empty DATA.PSAR probes");
+        assert!(report.label.contains("empty DATA.PSAR"), "{}", report.label);
+        let error = handler
+            .list_entries(&z3ds_probe_request(&source), &test_context(&temp_dir, 1))
+            .expect_err("nothing to list");
+        assert!(
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("empty DATA.PSAR")),
             "unexpected error: {error:?}"
         );
 
@@ -5204,6 +5949,7 @@ mod tests {
     fn nod_ensure_single_create_input_rejects_multiple_inputs() {
         let core = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
         let request = ContainerCreateRequest {
+            rvz_block_size: None,
             archive_names: None,
             inputs: vec![PathBuf::from("a.iso"), PathBuf::from("b.iso")],
             output: PathBuf::from("out.rvz"),
@@ -5216,7 +5962,7 @@ mod tests {
             .ensure_single_create_input(&request)
             .expect_err("multiple inputs should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("gcz create currently requires exactly one input file")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("gcz create currently requires exactly one input file; pass one disc image")),
             "unexpected error: {error:?}"
         );
     }

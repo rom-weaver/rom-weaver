@@ -14,6 +14,9 @@ import {
   runWithRomWeaverOutputScope,
 } from "../../src/lib/runtime/run-output-paths.ts";
 
+// Scope removal retries while a just-terminated (cancelled) worker still holds OPFS handles.
+const scopeRemoveOptions = { busyRetryDelaysMs: expect.any(Array) };
+
 describe("run output path ownership", () => {
   it("selects an operation-scoped path and rejects active input conflicts", () => {
     const scope = createRomWeaverOutputScope();
@@ -40,7 +43,7 @@ describe("run output path ownership", () => {
     await cleanups[2]?.();
     expect(removeOutputPath).toHaveBeenCalledWith("/work/b");
     expect(mocks.removeManagedOpfsPath).toHaveBeenCalledTimes(1);
-    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledWith(scope.rootPath);
+    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledWith(scope.rootPath, undefined, scopeRemoveOptions);
   });
 
   it("cleans an empty scope immediately and composes nested result cleanup", async () => {
@@ -52,7 +55,7 @@ describe("run output path ownership", () => {
         vi.fn(async () => undefined),
       ),
     ).toEqual([]);
-    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledWith(emptyScope.rootPath);
+    expect(mocks.removeManagedOpfsPath).toHaveBeenCalledWith(emptyScope.rootPath, undefined, scopeRemoveOptions);
 
     mocks.removeManagedOpfsPath.mockClear();
     const resultCleanup = vi.fn(async () => undefined);

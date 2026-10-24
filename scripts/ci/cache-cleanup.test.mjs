@@ -84,6 +84,20 @@ test("sccache cleanup preserves separate jobs, runners, refs, and cache versions
   assert.deepEqual(supersededCaches([old, current, ...separateScopes]), [old]);
 });
 
+test("WASM target cleanup retains compatible toolchains and scope boundaries", () => {
+  const old = cache({ key: "wasm-target-v1-Linux-X64-11223344-aabbccdd", created_at: "2026-09-09T12:00:00Z" });
+  const current = cache({ id: 2, key: "wasm-target-v1-Linux-X64-11223344-ddeeff00" });
+  const separateScopes = [
+    cache({ id: 3, key: "wasm-target-v1-Linux-X64-ffeeddcc-aabbccdd" }),
+    cache({ id: 4, key: "wasm-target-v1-Linux-ARM64-11223344-aabbccdd" }),
+    cache({ id: 5, key: "wasm-target-v2-Linux-X64-11223344-aabbccdd" }),
+    { ...current, id: 6, ref: "refs/pull/7/merge" },
+    { ...current, id: 7, version: "other-version" },
+    cache({ id: 8, key: "wasm-prod-Linux-11223344-aabbccdd" }),
+  ];
+  assert.deepEqual(supersededCaches([old, current, ...separateScopes]), [old]);
+});
+
 test("reads every cache page and retains the current cache for an open pull request", async () => {
   const calls = [];
   const firstPage = cache({ id: 1, ref: "refs/pull/7/merge", key: "ccache-build-Linux-aabbccdd" });
@@ -101,7 +115,8 @@ test("reads every cache page and retains the current cache for an open pull requ
     }
     if (request.pathname.endsWith("/actions/caches")) return response({ actions_caches: [current] });
     if (request.pathname.endsWith("/pulls/7")) return response({ state: "open", merged_at: null });
-    if (request.pathname.endsWith("/actions/caches/2") && options.method === "DELETE") return response(null, { status: 204 });
+    if (request.pathname.endsWith("/actions/caches/2") && options.method === "DELETE")
+      return response(null, { status: 204 });
     throw new Error(`unexpected request: ${request.pathname}${request.search}`);
   };
 

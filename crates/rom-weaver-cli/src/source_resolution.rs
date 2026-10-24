@@ -1,7 +1,7 @@
 use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
-use super::bundle_load::is_stream_codec_format_name;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
+use super::weave_load::is_stream_codec_format_name;
 use super::*;
 
 #[derive(Debug)]
@@ -45,6 +45,7 @@ pub(super) struct PatchResolveLabels<'a> {
 
 #[derive(Clone, Copy, Debug)]
 struct AutoExtractResolutionOptions {
+    group_disc_payloads: bool,
     no_extract: bool,
     no_ignore: bool,
     kind_filter: ArchiveEntryKindFilter,
@@ -78,7 +79,7 @@ impl CliApp {
         labels: AutoExtractResolutionLabels<'_>,
         flags: AutoExtractResolutionFlags,
     ) -> Result<ResolvedChecksumSource> {
-        let member = super::bundle_parse::normalized_member_path(member, labels.source_label)?;
+        let member = super::weave_parse::normalized_member_path(member, labels.source_label)?;
         if flags.no_extract {
             return Err(RomWeaverError::Validation(format!(
                 "{} `{member}` requires extraction; remove --no-extract",
@@ -130,6 +131,7 @@ impl CliApp {
                         context,
                         labels,
                         AutoExtractResolutionOptions {
+                            group_disc_payloads: false,
                             no_extract: false,
                             no_ignore: true,
                             kind_filter: ArchiveEntryKindFilter::default(),
@@ -232,6 +234,7 @@ impl CliApp {
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
         flags: AutoExtractResolutionFlags,
+        group_disc_payloads: bool,
     ) -> Result<ResolvedChecksumSource> {
         self.resolve_source_with_auto_extract_with_mode(
             source,
@@ -239,6 +242,7 @@ impl CliApp {
             context,
             labels,
             AutoExtractResolutionOptions {
+                group_disc_payloads,
                 no_extract: flags.no_extract,
                 no_ignore: flags.no_ignore,
                 kind_filter: flags.kind_filter,
@@ -294,10 +298,26 @@ impl CliApp {
                 extracted_archives,
                 "auto-extract iteration"
             );
-            let Some(handler) = self.containers.probe(&current_source) else {
+            // A `.dcp` is a ZIP-shaped patch, not an archive: its inner entries are DCP operations.
+            // An explicit `--select` against the top-level source still reaches inside it; a
+            // nested `.dcp` was already picked by that selection, so it stays a leaf.
+            if is_dcp_patch_name(&current_source.to_string_lossy())
+                && (depth > 0 || select.is_empty())
+            {
                 trace!(
                     current_source = %current_source.display(),
-                    "auto-extract stopped: no container handler matched source"
+                    "auto-extract stopped: DCP patch is a leaf"
+                );
+                break;
+            }
+            let Some(handler) = self
+                .containers
+                .probe(&current_source)
+                .filter(|handler| !handler.is_self_contained_rom(&current_source))
+            else {
+                trace!(
+                    current_source = %current_source.display(),
+                    "auto-extract stopped: no extractable container handler matched source"
                 );
                 break;
             };
@@ -327,13 +347,30 @@ impl CliApp {
                 split_bin: false,
             };
             if let Err(error) = handler.probe_details(&probe_request, context) {
+                // A short signature can match raw ROM bytes by chance. Only a
+                // file named as this container is a damaged archive; any
+                // other file is used as-is.
+                if !handler.descriptor().matches_path(&current_source) {
+                    debug!(
+                        current_source = %current_source.display(),
+                        format = handler.descriptor().name,
+                        error = %error,
+                        "auto-extract stopped: signature-only match failed its probe; using the raw file"
+                    );
+                    break;
+                }
                 trace!(
                     current_source = %current_source.display(),
                     format = handler.descriptor().name,
                     error = %error,
-                    "auto-extract stopped: handler probe failed"
+                    "auto-extract failed: handler probe failed"
                 );
-                break;
+                return Err(RomWeaverError::Validation(format!(
+                    "{} payload extraction failed for `{}` ({}): {error}",
+                    labels.source_label,
+                    current_source.display(),
+                    handler.descriptor().name
+                )));
             }
 
             let next_depth = depth + 1;
@@ -478,6 +515,11 @@ impl CliApp {
         options: AutoExtractResolutionOptions,
     ) -> Result<ChecksumExtractCandidate> {
         let all_candidates = self.collect_checksum_extract_candidates(out_dir)?;
+        let all_candidates = if options.group_disc_payloads {
+            Self::group_disc_extract_candidates(all_candidates)?
+        } else {
+            all_candidates
+        };
         trace!(
             source = %current_source.display(),
             candidate_count = all_candidates.len(),
@@ -513,6 +555,33 @@ impl CliApp {
             )?
         };
         self.select_auto_extract_candidate(current_source, candidates, labels.source_label)
+    }
+
+    fn group_disc_extract_candidates(
+        candidates: Vec<ChecksumExtractCandidate>,
+    ) -> Result<Vec<ChecksumExtractCandidate>> {
+        let mut companions = BTreeSet::new();
+        for candidate in &candidates {
+            if detect_disc_sheet(&candidate.source).is_none() {
+                continue;
+            }
+            let parent = candidate.source.parent().unwrap_or_else(|| Path::new("."));
+            for name in enumerate_disc_sheet_refs(&candidate.source)?.referenced_files {
+                let track = parent.join(name);
+                companions.insert(fs::canonicalize(&track).unwrap_or(track));
+            }
+            if let Some(gdi) = sibling_gdi_path(&candidate.source) {
+                companions.insert(fs::canonicalize(&gdi).unwrap_or(gdi));
+            }
+        }
+        Ok(candidates
+            .into_iter()
+            .filter(|candidate| {
+                let source = fs::canonicalize(&candidate.source)
+                    .unwrap_or_else(|_| candidate.source.clone());
+                !companions.contains(&source)
+            })
+            .collect())
     }
 
     fn filter_ignored_auto_extract_candidates(

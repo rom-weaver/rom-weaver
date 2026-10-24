@@ -6,7 +6,7 @@ import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import { resolvedBasisLabel } from "./apply-patch-chain-labels.tsx";
 
@@ -82,8 +82,8 @@ const PatchTrackSelect = ({
   disabled?: boolean;
   index: number;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  meta?: WeavePatchMeta;
+  onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
   patchStack: PatcherStackController;
 }) => {
   const localizer = useUiLocalizer();
@@ -194,9 +194,9 @@ const PatchRunsOnSelect = ({
   hasImplicitPredecessor: boolean;
   index: number;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
+  meta?: WeavePatchMeta;
   onBasisChange?: (basis: PatchInputBasis) => void;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
   patchStack: PatcherStackController;
   predecessors: readonly { id?: string; label: string }[];
   previousBasisAvailable: boolean;
@@ -210,7 +210,7 @@ const PatchRunsOnSelect = ({
   else if (basis === "previous") currentValue = "previous";
   const knownReference = !!input && "patch" in input && namedPredecessors.some((entry) => entry.id === input.patch);
   // A member can select a leaf from either the ROM or a generated patch output.
-  // Preserve it when the source changes so an imported bundle keeps its exact
+  // Preserve it when the source changes so an imported weave keeps its exact
   // source instead of silently broadening the reference.
   const member = input?.member;
   const setBasis = (next: PatchInputBasis) => {
@@ -218,7 +218,7 @@ const PatchRunsOnSelect = ({
     void patchStack.setPatchOption?.(index, { basis: next === "auto" ? undefined : next, revalidate: true });
   };
   // Clearing an input that is already unset would revalidate every patch for nothing.
-  const setInput = (next: BundlePatchMeta["input"]) => {
+  const setInput = (next: WeavePatchMeta["input"]) => {
     if (onMetaChange && (next || input)) onMetaChange({ input: next });
   };
   const verdictBasis = item.chainVerdict?.basis ?? (hasImplicitPredecessor ? "previous" : "base");

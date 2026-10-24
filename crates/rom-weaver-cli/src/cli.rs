@@ -4,19 +4,22 @@ use std::process::ExitCode;
 use std::io::{self, IsTerminal};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_app::{
-    BundleCommands, Commands, LogLevel, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
-    PatchApplyCommand, PatchCommands, RomWeaverRunOutputOptions, RunCommandOptions, run_command,
+    Commands, LogLevel, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand,
+    PatchCommands, RomWeaverRunOutputOptions, RunCommandOptions, WeaveCommands, run_command,
     run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{
-    NoninteractivePrompter, OperationFamily, OperationReport, ProgressSink, SelectionPrompter,
-    clear_in_progress_outputs, process_cancellation_token, remove_in_progress_outputs,
+    NoninteractivePrompter, OperationFamily, OperationReport, OperationStatus, ProgressEvent,
+    ProgressSink, RomWeaverErrorKind, SelectionPrompter, clear_in_progress_outputs,
+    process_cancellation_token, remove_in_progress_outputs,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,6 +28,37 @@ use crate::formats_command::print_formats;
 use crate::native_output::{self, JsonReporter, OutputMode, print_argument_result, print_asset};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
+
+/// Turns a `patch validate --independent` result with failing verdicts into a
+/// failed event for the native front-end only, so the process exit status,
+/// human output, and `--json`/`--jsonl` `exit_code` all agree. The app layer
+/// keeps reporting the run as succeeded with `details.patch_validation.status`
+/// of `mixed`, because the browser reads `per_patch` from that report.
+#[cfg(not(target_arch = "wasm32"))]
+struct IndependentValidationExitSink {
+    inner: Arc<dyn ProgressSink>,
+    failed: AtomicBool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ProgressSink for IndependentValidationExitSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        let failed_count = (event.command == "patch-validate"
+            && event.status == OperationStatus::Succeeded)
+            .then_some(event.details.as_ref())
+            .flatten()
+            .and_then(|details| details.get("patch_validation"))
+            .filter(|validation| validation.get("independent") == Some(&serde_json::json!(true)))
+            .and_then(|validation| validation.get("failed_count")?.as_u64())
+            .unwrap_or(0);
+        if failed_count > 0 {
+            event.status = OperationStatus::Failed;
+            event.error_kind = Some(RomWeaverErrorKind::Validation);
+            self.failed.store(true, Ordering::SeqCst);
+        }
+        self.inner.emit(event);
+    }
+}
 
 /// Heading the global flags are listed under. Every subcommand inherits the
 /// globals, so without a heading they interleave with that command's own
@@ -236,6 +270,9 @@ enum CliCommand {
     /// Top-level spelling of `patch apply`. Normalized away in [`main_entry`]
     /// before dispatch, so it never reaches the shared `Commands` enum.
     #[command(
+        name = "legacy-weave-apply",
+        override_usage = "rom-weaver weave [OPTIONS] --input <PATH>",
+        hide = true,
         about = "Apply one or more patches to a ROM, in order (same as `patch apply`)",
         long_about = PATCH_APPLY_LONG_ABOUT,
         after_help = PATCH_APPLY_AFTER_HELP,
@@ -307,6 +344,23 @@ pub fn cli_command() -> clap::Command {
             )
         },
     )))
+}
+
+// Some shell generators include hidden subcommands. Build their tree without
+// the internal parser shim, retaining the same arguments and public commands.
+#[cfg(not(target_arch = "wasm32"))]
+fn completion_command() -> clap::Command {
+    let command = cli_command();
+    clap::Command::new("rom-weaver")
+        .version(env!("CARGO_PKG_VERSION"))
+        .args(command.get_arguments().cloned())
+        .groups(command.get_groups().cloned())
+        .subcommands(
+            command
+                .get_subcommands()
+                .filter(|sub| !sub.is_hide_set())
+                .cloned(),
+        )
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -391,7 +445,7 @@ fn progress_override(progress: bool, no_progress: bool) -> Option<bool> {
 }
 
 /// Resolve the `--color`/`--no-color` pair into an explicit override, or `None`
-/// to fall back to the `NO_COLOR`-env / tty default in [`Surface`]. Flag beats
+/// to fall back to the `NO_COLOR`-env / tty default in [`Surface`](crate::render::Surface). Flag beats
 /// env: `--color` forces color even with `NO_COLOR` set.
 #[cfg(not(target_arch = "wasm32"))]
 fn color_override(color: bool, no_color: bool) -> Option<bool> {
@@ -405,8 +459,130 @@ fn color_override(color: bool, no_color: bool) -> Option<bool> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let is_display = |error: &clap::Error| {
+        matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        )
+    };
+    let command = cli_command();
+    let canonical_error = match command.clone().try_get_matches_from(&args) {
+        Ok(_) => return args,
+        Err(error) if is_display(&error) => return args,
+        Err(error) => error,
+    };
+    // Partial matches retain a selected recipe subcommand even when its flags
+    // fail validation; those diagnostics must never become apply diagnostics.
+    if command
+        .clone()
+        .ignore_errors(true)
+        .try_get_matches_from(&args)
+        .is_ok_and(|matches| {
+            matches
+                .subcommand_matches("weave")
+                .is_some_and(|weave| weave.subcommand_name().is_some())
+        })
+    {
+        return args;
+    }
+    // A rejected apply flag identifies legacy syntax even when another argument
+    // is missing or invalid. Keep recipe subcommand errors on the canonical path.
+    let legacy_flag_error = canonical_error
+        .get(clap::error::ContextKind::InvalidArg)
+        .and_then(|value| match value {
+            clap::error::ContextValue::String(value) => Some(value.as_str()),
+            _ => None,
+        })
+        .is_some_and(|invalid| {
+            command
+                .find_subcommand("legacy-weave-apply")
+                .expect("legacy apply command")
+                .get_arguments()
+                .any(|arg| {
+                    !arg.is_global_set()
+                        && (arg
+                            .get_long()
+                            .into_iter()
+                            .chain(arg.get_all_aliases().into_iter().flatten())
+                            .any(|long| invalid == format!("--{long}"))
+                            || arg
+                                .get_short()
+                                .into_iter()
+                                .chain(arg.get_all_short_aliases().into_iter().flatten())
+                                .any(|short| invalid == format!("-{short}")))
+                })
+        });
+    for (index, arg) in args.iter().enumerate().skip(1) {
+        if arg != "weave" {
+            continue;
+        }
+        let mut legacy = args.clone();
+        legacy[index] = "legacy-weave-apply".into();
+        match cli_command().try_get_matches_from(&legacy) {
+            Ok(matches) if matches.subcommand_name() == Some("legacy-weave-apply") => {
+                return legacy;
+            }
+            Err(error) if is_display(&error) || legacy_flag_error => {
+                let mut prefix = legacy[..=index].to_vec();
+                prefix.extend(["--input".into(), "compatibility-probe.bin".into()]);
+                if let Ok(matches) = cli_command().try_get_matches_from(prefix)
+                    && matches.subcommand_name() == Some("legacy-weave-apply")
+                {
+                    return legacy;
+                }
+            }
+            _ => {}
+        }
+    }
+    args
+}
+
+/// `help --help` and `help patch --help` ask for help about help; print the
+/// target's help instead of failing the `help` subcommand's own parse.
+#[cfg(not(target_arch = "wasm32"))]
+fn normalize_help_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let asks_help = |arg: &std::ffi::OsString| arg == "--help" || arg == "-h";
+    // The subcommand token is the first argument after the global flags;
+    // `--log-level` is the only global flag that takes a separate value.
+    let mut command_index = 1;
+    while let Some(arg) = args.get(command_index) {
+        if arg == "--log-level" {
+            command_index += 2;
+        } else if arg != "--" && arg.to_str().is_some_and(|arg| arg.starts_with('-')) {
+            command_index += 1;
+        } else {
+            break;
+        }
+    }
+    let Some(after_help) = args
+        .get(command_index)
+        .filter(|arg| *arg == "help")
+        .map(|_| &args[command_index + 1..])
+    else {
+        return args;
+    };
+    if !after_help.iter().any(asks_help) {
+        return args;
+    }
+    // `help [help...] [SUBCOMMAND...]` plus a help flag anywhere means
+    // `[SUBCOMMAND...] --help`; clap would read the flag as a request for the
+    // `help` subcommand's own help, or the help flag as the command path.
+    let mut normalized = args[..command_index].to_vec();
+    normalized.extend(
+        after_help
+            .iter()
+            .skip_while(|arg| *arg == "help")
+            .filter(|arg| !asks_help(arg))
+            .cloned(),
+    );
+    normalized.push("--help".into());
+    normalized
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    let args: Vec<_> = std::env::args_os().collect();
+    let args = normalize_legacy_weave_args(normalize_help_args(std::env::args_os().collect()));
     let mode = OutputMode::from_args(&args);
     crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
 }
@@ -446,14 +622,13 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
     );
     tracing::debug!(options = ?cli, "native command options");
     // `completions` is a native-only concern: emit the script and exit before
-    // any command runs. `cli_command()` rebuilds the same clap tree the parse
-    // used, so the generated script covers every real subcommand.
+    // any command runs. The completion tree excludes internal parser shims.
     if let CliCommand::Completions { shell } = &cli.command {
         if cli.dry_run {
             return print_native_dry_run_plan("completions", Vec::new(), mode);
         }
         let shell = *shell;
-        let mut command = cli_command();
+        let mut command = completion_command();
         let mut script = Vec::new();
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
         return print_asset(
@@ -475,7 +650,10 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
             man_dir.as_deref(),
             cli.dry_run,
             mode,
-            cli.verbose > 0 && !cli.quiet,
+            ManOutputLevel {
+                verbose: cli.verbose > 0 && !cli.quiet,
+                quiet: cli.quiet,
+            },
         );
     }
     if let CliCommand::Formats = &cli.command {
@@ -506,43 +684,66 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         }
         return ExitCode::SUCCESS;
     }
-    // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
+    // `weave schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
-    if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
+    if let CliCommand::App(Commands::Bundle(WeaveCommands::Schema)) = &cli.command {
         if cli.dry_run {
             return print_native_dry_run_plan("bundle-schema", Vec::new(), mode);
         }
         if mode.is_json() {
-            let schema =
-                match serde_json::from_str::<serde_json::Value>(rom_weaver_app::BUNDLE_JSON_SCHEMA)
-                {
-                    Ok(schema) => schema,
-                    Err(error) => {
-                        return native_output::print_error(
-                            mode,
-                            "bundle-schema",
-                            "schema",
-                            "cli.schema",
-                            &error.to_string(),
-                            1,
-                        );
-                    }
-                };
+            let schema = match serde_json::from_str::<serde_json::Value>(
+                rom_weaver_app::WEAVE_JSON_SCHEMA,
+            ) {
+                Ok(schema) => schema,
+                Err(error) => {
+                    return native_output::print_error(
+                        mode,
+                        "bundle-schema",
+                        "schema",
+                        "cli.schema",
+                        &error.to_string(),
+                        1,
+                    );
+                }
+            };
             return native_output::print_event(
                 mode,
                 native_output::result_event(
                     "bundle-schema",
                     "schema",
-                    "bundle schema",
+                    "weave schema",
                     Some(serde_json::json!({ "schema": schema })),
                 ),
                 0,
             );
         }
-        crate::stdout_output::write(format_args!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA));
+        crate::stdout_output::write(format_args!("{}", rom_weaver_app::WEAVE_JSON_SCHEMA));
         return ExitCode::SUCCESS;
     }
     unreachable!("only native commands reach this dispatcher")
+}
+
+/// The deepest subcommand the user invoked, so argument errors print that
+/// command's usage rather than the root footer.
+#[cfg(not(target_arch = "wasm32"))]
+fn matched_subcommand_mut<'a>(
+    parser: &'a mut clap::Command,
+    matches: &clap::ArgMatches,
+) -> &'a mut clap::Command {
+    let mut command = parser;
+    let mut current = matches;
+    while let Some((name, sub_matches)) = current.subcommand() {
+        // `find_subcommand_mut` cannot be re-borrowed in a loop condition, so
+        // stop descending as soon as a name is not a registered subcommand.
+        if command.find_subcommand(name).is_none() {
+            break;
+        }
+        command = command
+            .find_subcommand_mut(name)
+            .expect("subcommand presence was just checked");
+        current = sub_matches;
+    }
+    command
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -561,14 +762,17 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     if let CliCommand::App(command) = &mut cli.command
         && let Err(error) = crate::cli_inputs::resolve(command, &matches)
     {
-        return print_argument_result(error.format(&mut parser), mode);
+        return print_argument_result(
+            error.format(matched_subcommand_mut(&mut parser, &matches)),
+            mode,
+        );
     }
     let digest = matches
         .subcommand_matches("checksum")
         .is_some_and(|matches| matches.get_flag("digest"));
     if digest && (mode.is_json() || cli.dry_run) {
         return print_argument_result(
-            parser.error(
+            matched_subcommand_mut(&mut parser, &matches).error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest cannot be used with --json, --jsonl, or --dry-run",
             ),
@@ -580,7 +784,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         && command.algo.len() != 1
     {
         return print_argument_result(
-            parser.error(
+            matched_subcommand_mut(&mut parser, &matches).error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest requires exactly one algorithm; use --algo ALGO",
             ),
@@ -591,7 +795,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         CliCommand::Completions { .. } => Some("completions"),
         CliCommand::Man { .. } => Some("man"),
         CliCommand::Formats => Some("formats"),
-        CliCommand::App(Commands::Bundle(BundleCommands::Schema)) => Some("bundle-schema"),
+        CliCommand::App(Commands::Bundle(WeaveCommands::Schema)) => Some("bundle-schema"),
         _ => None,
     };
     if let Some(command) = native_command {
@@ -608,7 +812,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     if let CliCommand::App(Commands::Patch(PatchCommands::Apply(command))) = &mut cli.command
         && let Some(apply_matches) = match matches.subcommand() {
             // Top-level `weave` puts the apply args one level shallower than `patch apply`.
-            Some(("weave", apply_matches)) => Some(apply_matches),
+            Some(("legacy-weave-apply", apply_matches)) => Some(apply_matches),
             Some((_, patch_matches)) => patch_matches.subcommand().map(|(_, args)| args),
             None => None,
         }
@@ -616,11 +820,11 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         command.align_patch_header_modes(apply_matches);
         command.align_patch_basis(apply_matches);
     }
-    if let CliCommand::App(Commands::Bundle(BundleCommands::Create(command))) = &mut cli.command
-        && let Some((_, bundle_matches)) = matches.subcommand()
-        && let Some((_, create_matches)) = bundle_matches.subcommand()
+    if let CliCommand::App(Commands::Bundle(WeaveCommands::Create(command))) = &mut cli.command
+        && let Some((_, weave_matches)) = matches.subcommand()
+        && let Some((_, create_matches)) = weave_matches.subcommand()
     {
-        command.align_bundle_patch_metadata(create_matches);
+        command.align_weave_patch_metadata(create_matches);
     }
     if let CliCommand::App(Commands::Patch(PatchCommands::Validate(command))) = &mut cli.command
         && let Some((_, patch_matches)) = matches.subcommand()
@@ -668,6 +872,11 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
             command,
         ))
     };
+    let validation_exit = Arc::new(IndependentValidationExitSink {
+        inner: reporter,
+        failed: AtomicBool::new(false),
+    });
+    let reporter: Arc<dyn ProgressSink> = Arc::clone(&validation_exit) as Arc<dyn ProgressSink>;
     let prompter: Arc<dyn SelectionPrompter> = if interactive {
         Arc::new(StdinPrompter::new())
     } else {
@@ -678,8 +887,8 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         unreachable!("completions handled and returned above");
     };
     // `apply --tui` runs an interactive metadata wizard, then applies AND writes
-    // the bundle. It needs a terminal; scripted runs use `bundle create` /
-    // `apply --emit-bundle`.
+    // the weave. It needs a terminal; scripted runs use `weave create` /
+    // `apply --emit-weave`.
     let is_apply_tui =
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
     let stdin_name = matches.subcommand().and_then(|(name, args)| {
@@ -692,7 +901,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     install_cancel_handler(mode);
     let status = if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
         if !interactive {
-            let message = "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs";
+            let message = "--tui needs an interactive terminal; use `weave create` or `apply --emit-weave` for scripted runs";
             reporter.emit(native_output::error_event(
                 "patch-apply",
                 "validate",
@@ -711,11 +920,23 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     } else {
         run_command(command, options, reporter, prompter)
     };
+    let status = if status == ExitCode::SUCCESS && validation_exit.failed.load(Ordering::SeqCst) {
+        ExitCode::FAILURE
+    } else {
+        status
+    };
     let status = finish_run(status);
     match json_reporter {
         Some(reporter) => reporter.finish(status),
         None => status,
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy)]
+struct ManOutputLevel {
+    verbose: bool,
+    quiet: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -725,10 +946,13 @@ fn run_man_command(
     man_dir: Option<&std::path::Path>,
     dry_run: bool,
     mode: OutputMode,
-    verbose: bool,
+    level: ManOutputLevel,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
-    let selected = rom_weaver_app::manpages::page_name(topics);
+    let mut selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        selected = rom_weaver_app::manpages::page_name_with_aliases(topics);
+    }
     let Some(page) = pages.get(&selected) else {
         return native_output::print_error(
             mode,
@@ -742,19 +966,27 @@ fn run_man_command(
             2,
         );
     };
-    let output_dir = man_dir
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
-    if dry_run {
-        let writes = if install {
-            vec![output_dir.display().to_string()]
-        } else {
-            Vec::new()
-        };
-        return print_native_dry_run_plan("man", writes, mode);
-    }
     if !install {
+        if dry_run {
+            return print_native_dry_run_plan("man", Vec::new(), mode);
+        }
         return print_asset(mode, "man", "roff", &String::from_utf8_lossy(page));
+    }
+    let Some(output_dir) = man_dir
+        .map(std::path::Path::to_path_buf)
+        .or_else(rom_weaver_app::manpages::default_man_dir)
+    else {
+        return native_output::print_error(
+            mode,
+            "man",
+            "install",
+            "cli.man_install",
+            "cannot resolve the man page directory: no home directory; pass --man-dir",
+            1,
+        );
+    };
+    if dry_run {
+        return print_native_dry_run_plan("man", vec![output_dir.display().to_string()], mode);
     }
     let selected_page = if topics.is_empty() {
         None
@@ -768,10 +1000,10 @@ fn run_man_command(
                 if count == 1 { "" } else { "s" },
                 output_dir.display()
             );
-            if verbose {
-                native_output::diagnostic(mode.is_json(), "INFO", "man", &label);
-            }
             if mode.is_json() {
+                if level.verbose {
+                    native_output::diagnostic(true, "INFO", "man", &label);
+                }
                 return native_output::print_event(
                     mode,
                     native_output::result_event(
@@ -784,6 +1016,9 @@ fn run_man_command(
                     ),
                     0,
                 );
+            }
+            if !level.quiet {
+                crate::stdout_output::write(format_args!("{label}\n"));
             }
             ExitCode::SUCCESS
         }
@@ -841,7 +1076,8 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, mode: OutputMod
     ExitCode::SUCCESS
 }
 
-/// Trip the process cancellation token on Ctrl-C so running work unwinds and
+/// Trip the process cancellation token on Ctrl-C (and SIGTERM/SIGHUP on unix, via ctrlc's
+/// `termination` feature) so running work unwinds and
 /// the partial output is cleaned up. A second Ctrl-C means the operation is not
 /// unwinding, so leave immediately after removing what was written.
 #[cfg(not(target_arch = "wasm32"))]
@@ -850,9 +1086,13 @@ fn install_cancel_handler(mode: OutputMode) {
 
     static SIGNALLED: AtomicBool = AtomicBool::new(false);
     let token = process_cancellation_token();
+    #[cfg(unix)]
+    let ignored_signals = ignored_termination_signals();
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             remove_in_progress_outputs();
+            // process::exit skips Drop, so the temp allocators cannot clean up on their own.
+            rom_weaver_core::remove_live_temp_dirs();
             crate::render::clear_progress();
             if mode.is_json() {
                 native_output::print_error(
@@ -877,6 +1117,15 @@ fn install_cancel_handler(mode: OutputMode) {
             "cancelling; press Ctrl-C again to stop immediately",
         );
     });
+    // ctrlc overwrites an inherited SIG_IGN (e.g. from `nohup`); put it back so a run started
+    // that way still survives SIGHUP/SIGTERM as it did before the handler covered them.
+    #[cfg(unix)]
+    for signal in ignored_signals {
+        // SAFETY: restoring SIG_IGN for a valid signal number.
+        unsafe {
+            libc::signal(signal, libc::SIG_IGN);
+        }
+    }
     if let Err(error) = result {
         // Not fatal: without a handler Ctrl-C keeps its default behaviour.
         native_output::diagnostic(
@@ -886,6 +1135,20 @@ fn install_cancel_handler(mode: OutputMode) {
             &format!("could not install the Ctrl-C handler ({error})"),
         );
     }
+}
+
+/// SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
+#[cfg(unix)]
+fn ignored_termination_signals() -> Vec<libc::c_int> {
+    [libc::SIGHUP, libc::SIGTERM]
+        .into_iter()
+        .filter(|&signal| {
+            // SAFETY: a null new action only queries the current disposition.
+            let mut current: libc::sigaction = unsafe { std::mem::zeroed() };
+            let rc = unsafe { libc::sigaction(signal, std::ptr::null(), &mut current) };
+            rc == 0 && current.sa_sigaction == libc::SIG_IGN
+        })
+        .collect()
 }
 
 /// Map the run's exit code, cleaning up partial output when it was cancelled.
@@ -899,8 +1162,8 @@ fn finish_run(exit_code: ExitCode) -> ExitCode {
     exit_code
 }
 
-/// Drive `apply --tui`: collect bundle metadata interactively, run the apply,
-/// then (on success) write the authored bundle.
+/// Drive `apply --tui`: collect weave metadata interactively, run the apply,
+/// then (on success) write the authored weave.
 #[cfg(not(target_arch = "wasm32"))]
 fn run_apply_tui(
     command: Commands,
@@ -911,7 +1174,7 @@ fn run_apply_tui(
     let Commands::Patch(PatchCommands::Apply(mut apply)) = command else {
         unreachable!("run_apply_tui is only called for apply commands");
     };
-    let bundle_command = match crate::interactive::run_bundle_tui(&apply) {
+    let weave_command = match crate::interactive::run_weave_tui(&apply) {
         Ok(command) => command,
         Err(message) => {
             crate::render::write_stderr(format_args!(
@@ -921,7 +1184,7 @@ fn run_apply_tui(
             return ExitCode::from(2);
         }
     };
-    // Run the apply itself without the tui/emit hooks, then author the bundle.
+    // Run the apply itself without the tui/emit hooks, then author the weave.
     apply.tui = false;
     apply.emit_bundle = None;
     let apply_outcome = run_command_outcome(
@@ -934,7 +1197,7 @@ fn run_apply_tui(
         return ExitCode::from(apply_outcome.exit_code);
     }
     let create_outcome = run_command_outcome(
-        Commands::Bundle(BundleCommands::Create(Box::new(bundle_command))),
+        Commands::Bundle(WeaveCommands::Create(Box::new(weave_command))),
         options,
         reporter,
         prompter,
@@ -950,7 +1213,10 @@ pub fn main_entry() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, cli_command, color_override, default_progress, progress_override};
+    use super::{
+        Cli, cli_command, color_override, default_progress, normalize_legacy_weave_args,
+        progress_override,
+    };
     use crate::native_output::OutputMode;
     use clap::{FromArgMatches, Parser};
     use rom_weaver_app::{LogLevel, RomWeaverRunOutputOptions, RunCommandOptions};
@@ -985,7 +1251,11 @@ mod tests {
             ["rom-weaver", "patch", "weave", "--input", "a.nes"].as_slice(),
         ] {
             assert!(
-                cli_command().try_get_matches_from(argv).is_ok(),
+                cli_command()
+                    .try_get_matches_from(normalize_legacy_weave_args(
+                        argv.iter().map(std::ffi::OsString::from).collect()
+                    ))
+                    .is_ok(),
                 "{argv:?} parses"
             );
         }
@@ -1000,6 +1270,242 @@ mod tests {
                 .expect("serialize")
                 .contains(r#""type":"apply""#)
         );
+    }
+
+    #[test]
+    fn weave_compatibility_preserves_canonical_commands_and_argument_values() {
+        for argv in [
+            vec![
+                "rom-weaver",
+                "weave",
+                "--json",
+                "create",
+                "--output",
+                "recipe.json",
+            ],
+            vec![
+                "rom-weaver",
+                "--json",
+                "weave",
+                "parse",
+                "--input",
+                "recipe.json",
+            ],
+            vec!["rom-weaver", "checksum", "--input", "weave", "--json"],
+            vec!["rom-weaver", "checksum", "--input", "weave", "--unknown"],
+            vec!["rom-weaver", "patch", "weave", "--input", "game.bin"],
+        ] {
+            let args: Vec<std::ffi::OsString> = argv.iter().map(std::ffi::OsString::from).collect();
+            assert_eq!(normalize_legacy_weave_args(args.clone()), args, "{argv:?}");
+        }
+        for argv in [
+            vec!["rom-weaver", "weave", "--input", "game.bin"],
+            vec!["rom-weaver", "--json", "weave", "--input", "game.bin"],
+        ] {
+            let normalized =
+                normalize_legacy_weave_args(argv.iter().map(std::ffi::OsString::from).collect());
+            let matches = cli_command()
+                .try_get_matches_from(normalized)
+                .expect("legacy apply");
+            assert_eq!(matches.subcommand_name(), Some("legacy-weave-apply"));
+        }
+    }
+
+    #[test]
+    fn legacy_weave_help_preserves_canonical_help_and_argument_values() {
+        for argv in [
+            vec!["rom-weaver", "weave", "--help"],
+            vec!["rom-weaver", "weave", "--help", "create"],
+            vec!["rom-weaver", "checksum", "--input", "weave", "--help"],
+            vec![
+                "rom-weaver",
+                "patch",
+                "weave",
+                "--input",
+                "game.bin",
+                "--help",
+            ],
+        ] {
+            let args: Vec<std::ffi::OsString> = argv.iter().map(std::ffi::OsString::from).collect();
+            assert_eq!(normalize_legacy_weave_args(args.clone()), args);
+        }
+        for argv in [
+            vec!["rom-weaver", "weave", "--input", "game.bin", "--help"],
+            vec![
+                "rom-weaver",
+                "--json",
+                "weave",
+                "--input",
+                "game.bin",
+                "--help",
+            ],
+        ] {
+            let normalized =
+                normalize_legacy_weave_args(argv.iter().map(std::ffi::OsString::from).collect());
+            assert!(normalized.iter().any(|arg| arg == "legacy-weave-apply"));
+            let error = cli_command()
+                .try_get_matches_from(normalized)
+                .expect_err("help exits");
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+            assert_eq!(error.exit_code(), 0);
+            assert!(error.to_string().contains("Apply one or more patches"));
+            assert!(!error.to_string().contains("legacy-weave-apply"));
+        }
+    }
+
+    #[test]
+    fn legacy_weave_invalid_arguments_keep_apply_diagnostics() {
+        for (argv, expected) in [
+            (
+                vec!["rom-weaver", "weave", "--bundle", "recipe.json"],
+                "--input <PATH>",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--input=a.bin", "--bogus"],
+                "'--bogus'",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--patch", "x.ips"],
+                "--input <PATH>",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--input", "a.bin", "--bogus"],
+                "'--bogus'",
+            ),
+            (
+                vec!["rom-weaver", "weave", "-i", "a.bin", "-p", "x.ips"],
+                "'-p'",
+            ),
+            (
+                vec!["rom-weaver", "--json", "weave", "--patch", "x.ips"],
+                "--input <PATH>",
+            ),
+        ] {
+            let normalized =
+                normalize_legacy_weave_args(argv.iter().map(std::ffi::OsString::from).collect());
+            let error = cli_command()
+                .try_get_matches_from(normalized)
+                .expect_err("invalid apply");
+            assert!(error.to_string().contains(expected), "{argv:?}: {error}");
+            assert!(!error.to_string().contains("legacy-weave-apply"), "{error}");
+        }
+        for argv in [
+            vec![
+                "rom-weaver",
+                "weave",
+                "parse",
+                "--input",
+                "r.json",
+                "--cheat",
+                "x",
+            ],
+            vec![
+                "rom-weaver",
+                "weave",
+                "create",
+                "--output",
+                "r.json",
+                "--codec",
+                "zstd",
+            ],
+            vec![
+                "rom-weaver",
+                "weave",
+                "create",
+                "--output",
+                "r.json",
+                "--emit-bundle",
+                "e.json",
+            ],
+            vec![
+                "rom-weaver",
+                "--json",
+                "weave",
+                "parse",
+                "--input",
+                "r.json",
+                "--cheat",
+                "x",
+            ],
+            vec!["rom-weaver", "weave", "create", "--bogus"],
+            vec!["rom-weaver", "weave", "--json", "parse", "--bogus"],
+            vec![
+                "rom-weaver",
+                "checksum",
+                "--input",
+                "weave",
+                "--patch",
+                "x.ips",
+            ],
+        ] {
+            let args: Vec<std::ffi::OsString> = argv.iter().map(std::ffi::OsString::from).collect();
+            assert_eq!(normalize_legacy_weave_args(args.clone()), args, "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn completions_exclude_internal_legacy_command() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Elvish,
+            clap_complete::Shell::PowerShell,
+        ] {
+            let mut bytes = Vec::new();
+            clap_complete::generate(
+                shell,
+                &mut super::completion_command(),
+                "rom-weaver",
+                &mut bytes,
+            );
+            let script = String::from_utf8(bytes).expect("completion UTF-8");
+            assert!(!script.contains("legacy-weave-apply"), "{shell}");
+            assert!(script.contains("weave"), "{shell}");
+            assert!(script.contains("checksum"), "{shell}");
+        }
+    }
+
+    #[test]
+    fn legacy_recipe_command_and_flags_are_accepted() {
+        for command in ["weave", "bundle"] {
+            for flags in [
+                ["--weave", "--weave-rom", "--no-weave-rom"],
+                ["--bundle", "--bundle-rom", "--no-bundle-rom"],
+            ] {
+                assert!(
+                    cli_command()
+                        .try_get_matches_from([
+                            "rom-weaver",
+                            command,
+                            "create",
+                            "--output",
+                            "recipe.json",
+                            flags[0],
+                            "release.zip",
+                            flags[1],
+                            "game.bin",
+                            flags[2],
+                        ])
+                        .is_ok()
+                );
+            }
+        }
+        for flag in ["--weave", "--bundle", "--emit-weave", "--emit-bundle"] {
+            assert!(
+                cli_command()
+                    .try_get_matches_from([
+                        "rom-weaver",
+                        "patch",
+                        "apply",
+                        "--input",
+                        "game.bin",
+                        flag,
+                        "recipe.json"
+                    ])
+                    .is_ok()
+            );
+        }
     }
 
     #[test]
@@ -1027,7 +1533,11 @@ mod tests {
                 });
             }
             assert!(
-                cli_command().try_get_matches_from(argv).is_ok(),
+                cli_command()
+                    .try_get_matches_from(normalize_legacy_weave_args(
+                        argv.iter().map(std::ffi::OsString::from).collect()
+                    ))
+                    .is_ok(),
                 "{flag} parses for patch apply"
             );
         }
@@ -1064,14 +1574,14 @@ mod tests {
                 ],
             ),
             (
-                "Archive/bundle:",
+                "Archive/weave:",
                 &[
                     "-s, --select",
                     "--target",
                     "--filter",
                     "--no-extract",
                     "--no-ignore",
-                    "--bundle",
+                    "--weave",
                     "--with",
                     "--without",
                 ],
@@ -1096,7 +1606,7 @@ mod tests {
                     "--code",
                     "--code-system",
                     "--code-kind",
-                    "--emit-bundle",
+                    "--emit-weave",
                     "--tui",
                 ],
             ),
@@ -1125,7 +1635,7 @@ mod tests {
         }
 
         let basic_start = help.find("Basic:").expect("basic heading");
-        let basic_end = help.find("Archive/bundle:").expect("archive heading");
+        let basic_end = help.find("Archive/weave:").expect("archive heading");
         let basic = &help[basic_start..basic_end];
         let input = basic.find("-i, --input").expect("input in basic help");
         let patch = basic.find("--patch").expect("patch in basic help");

@@ -1,9 +1,11 @@
-import { Download, Stamp } from "lucide-react";
+import { Download, Stamp, TriangleAlert } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useUiLocalizer } from "../settings-context.tsx";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { ProgressActionButton } from "./progress-action-button.tsx";
+
+const BLOCKED_REASON_ID = "rom-weaver-apply-blocked-reason";
 
 type OutputController = {
   subscribe: (listener: () => void) => () => void;
@@ -18,12 +20,15 @@ type OutputController = {
 function PatcherPrimaryAction({
   controller,
   disableRun,
+  disableReason,
   showCompletedDownload = true,
   totalTime,
 }: {
   controller: OutputController;
   /** Extra gate (e.g. every staged patch toggled off). */
   disableRun?: boolean;
+  /** Why `disableRun` applies, shown instead of the checksum-override reason. */
+  disableReason?: string;
   /** Keep the completed output's Download action visible. */
   showCompletedDownload?: boolean;
   /** Total wall time for the finished run (download button right edge). */
@@ -67,23 +72,39 @@ function PatcherPrimaryAction({
     );
   }
 
+  // A natively disabled button is not focusable, so its own reason replaces the
+  // checksum-override one (which would point at a checkbox that cannot unblock it).
+  const runDisabled = state.applyButton.disabled || !!disableRun;
+  const blocked = state.applyButton.blocked && !state.applyButton.loading && !runDisabled;
+  const disabledReason = disableRun && !state.applyButton.loading && !state.applyButton.disabled ? disableReason : "";
+  const reason = blocked ? localizer.message("ui.output.applyBlocked") : disabledReason;
   return (
-    <ProgressActionButton
-      cancelLabel={localizer.message("ui.output.cancelApply")}
-      disabled={state.applyButton.disabled || !!disableRun}
-      icon={<Stamp aria-hidden="true" />}
-      id="rom-weaver-button-apply"
-      label={
-        state.pendingDownloadFileName
-          ? localizer.message("ui.output.downloadFile", { name: state.pendingDownloadFileName })
-          : localizer.message("ui.output.applyDownload")
-      }
-      loading={state.applyButton.loading}
-      onCancel={controller.cancelPrimaryAction}
-      onClick={() => controller.runPrimaryAction()}
-      progress={state.applyButton.progress}
-      progressId="rom-weaver-progress-apply"
-    />
+    <>
+      <ProgressActionButton
+        ariaDisabled={blocked}
+        cancelLabel={localizer.message("ui.output.cancelApply")}
+        describedBy={reason ? BLOCKED_REASON_ID : undefined}
+        disabled={runDisabled}
+        icon={<Stamp aria-hidden="true" />}
+        id="rom-weaver-button-apply"
+        label={
+          state.pendingDownloadFileName
+            ? localizer.message("ui.output.downloadFile", { name: state.pendingDownloadFileName })
+            : localizer.message("ui.output.applyDownload")
+        }
+        loading={state.applyButton.loading}
+        onCancel={controller.cancelPrimaryAction}
+        onClick={() => controller.runPrimaryAction()}
+        progress={state.applyButton.progress}
+        progressId="rom-weaver-progress-apply"
+      />
+      {reason ? (
+        <p className="patch-off-note apply-blocked-reason" id={BLOCKED_REASON_ID}>
+          <TriangleAlert aria-hidden="true" />
+          <span>{reason}</span>
+        </p>
+      ) : null}
+    </>
   );
 }
 

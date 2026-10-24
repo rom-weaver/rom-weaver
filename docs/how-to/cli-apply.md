@@ -39,9 +39,9 @@ rom-weaver patch apply \
 
 An output extension matching the selected ROM leaf writes a plain ROM, so `translated.sfc` does not need `--no-compress`. A registered container extension such as `.zip` still compresses the result. Use `--no-compress` to force raw bytes. The [output reference](../reference/cli.md#output-and-compression) lists compression overrides and aliases.
 
-For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
+For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Weave applies keep their weave-provided output name; a weave without one still requires `--output`.
 
-Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+Formats that carry their own checksums are verified strictly, so a wrong original ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
 
 ## Apply a Dreamcast DCP patch
 
@@ -158,15 +158,26 @@ rom-weaver patch validate \
 
 Patches default to automatic checksum inference. Pass `--default-patch-basis base` for patches made from the original ROM, or `previous` for a dependent chain.
 
-Pass `--independent` to check each patch separately and report every verdict. Use `--expect-in ALGO=HEX` to check the ROM itself.
+Pass `--independent` to check each patch separately and report every verdict. The command exits `1` if any patch fails. Use `--expect-in ALGO=HEX` to check the ROM itself.
 
 ## Undo a PPF patch
 
-Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data.
+Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data. Create one with `rom-weaver patch create original.bin modified.bin -o change.ppf --ppf-undo`.
 
 ```sh
-rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin
+rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin --no-compress
 ```
+
+To restore from archived ROM and patch inputs and compress the result:
+
+```sh
+rom-weaver tools ppf-undo \
+  -i patched.zip --select game.bin \
+  --patch change.zip --patch-select change.ppf \
+  -o restored.zip
+```
+
+See [compression overrides](../reference/cli.md#output-and-compression) for other formats and codecs.
 
 Compare the restored file with the original's known checksum before you use it. If the patch lacks undo data, restore your backup instead.
 
@@ -175,5 +186,5 @@ The [tools reference](../reference/cli.md#tools) lists the inputs and limits.
 ## Where next
 
 - A checksum mismatch is almost always a wrong starting file; see [Fix a checksum error](fix-checksum-errors.md).
-- Record a finished run as a shareable recipe with [Bundles from the CLI](cli-bundles.md).
-- Bake cheat codes into a ROM (`--code`), write a bundle alongside the patched ROM (`--emit-bundle`, `--tui`), or patch straight from a `rom-weaver-bundle.json`: the [patching flags](../reference/cli.md#patching) cover every option, and `rom-weaver patch apply --help` is authoritative.
+- Record a finished run as a shareable recipe with [Weaves from the CLI](cli-bundles.md).
+- Bake cheat codes into a ROM (`--code`), write a weave alongside the patched ROM (`--emit-weave`, `--tui`), or patch straight from a `rom-weaver-weave.json`: the [patching flags](../reference/cli.md#patching) cover every option, and `rom-weaver patch apply --help` is authoritative.

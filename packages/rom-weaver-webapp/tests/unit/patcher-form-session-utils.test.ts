@@ -23,8 +23,32 @@ describe("resolvePendingDownloadFileName", () => {
     );
   });
 
+  it("appends the result extension after a dotted version", () => {
+    expect(resolvePendingDownloadFileName({ requestedOutputName: "Hack v1.2", resultOutputName: "x.zip" })).toBe(
+      "Hack v1.2.zip",
+    );
+  });
+
   it("borrows the result extension when the requested name has none", () => {
     expect(resolvePendingDownloadFileName({ requestedOutputName: "rom", resultOutputName: "x.7z" })).toBe("rom.7z");
+  });
+
+  it("treats a version segment as part of the requested stem", () => {
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Practice 3.5.1", resultOutputName: "Practice 3.5.1.nes" }),
+    ).toBe("Practice 3.5.1.nes");
+    expect(resolvePendingDownloadFileName({ requestedOutputName: "Typed.sfc", resultOutputName: "x.nes" })).toBe(
+      "Typed.sfc",
+    );
+  });
+
+  it("borrows the literal result extension after a hash character", () => {
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Hack.v2#2", resultOutputName: "Hack.v2#2.nes" }),
+    ).toBe("Hack.v2#2.nes");
+    expect(
+      resolvePendingDownloadFileName({ requestedOutputName: "Kaizo Mario #2", resultOutputName: "Kaizo Mario #2.nes" }),
+    ).toBe("Kaizo Mario #2.nes");
   });
 
   it("falls back through result, automatic, fallback, then 'output'", () => {
@@ -32,6 +56,44 @@ describe("resolvePendingDownloadFileName", () => {
     expect(resolvePendingDownloadFileName({ automaticOutputName: "auto.zip" })).toBe("auto.zip");
     expect(resolvePendingDownloadFileName({ fallbackOutputName: "fb.zip" })).toBe("fb.zip");
     expect(resolvePendingDownloadFileName({})).toBe("output");
+  });
+
+  it("prefers the automatic name over a stale result name, keeping the result extension", () => {
+    const base = { automaticOutputName: "game [change]", preferAutomaticName: true };
+    expect(resolvePendingDownloadFileName({ ...base, resultOutputName: "valid-name.bin" })).toBe("game [change].bin");
+    expect(resolvePendingDownloadFileName({ ...base, resultOutputName: "valid-name.zip" })).toBe("game [change].zip");
+  });
+
+  it("uses the automatic name when the requested name has only reserved characters", () => {
+    expect(
+      resolvePendingDownloadFileName({
+        automaticOutputName: "game [change]",
+        preferAutomaticName: true,
+        requestedOutputName: ":::",
+        resultOutputName: "valid-name.bin",
+      }),
+    ).toBe("game [change].bin");
+  });
+
+  it("keeps a recognized extension in the automatic stem before the result extension", () => {
+    expect(
+      resolvePendingDownloadFileName({
+        automaticOutputName: "Game.gba",
+        preferAutomaticName: true,
+        resultOutputName: "custom.bin",
+      }),
+    ).toBe("Game.gba.bin");
+  });
+
+  it("does not duplicate the extension and falls back to the result name without an automatic name", () => {
+    expect(
+      resolvePendingDownloadFileName({
+        automaticOutputName: "game [change].bin",
+        preferAutomaticName: true,
+        resultOutputName: "game [change].bin",
+      }),
+    ).toBe("game [change].bin");
+    expect(resolvePendingDownloadFileName({ preferAutomaticName: true, resultOutputName: "x.7z" })).toBe("x.7z");
   });
 });
 

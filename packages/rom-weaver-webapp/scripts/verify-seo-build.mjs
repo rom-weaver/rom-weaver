@@ -1,3 +1,4 @@
+import { countVisibleWords, hasDescriptiveHeading } from "./html-document.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -10,8 +11,14 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { resolveSiteOrigin } from "./vite-config/channel.mjs";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
-import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
+import {
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  WORKFLOW_ENTRY_ROUTES,
+  WORKFLOW_SEO_ROUTES,
+} from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
@@ -27,6 +34,8 @@ const identifyDataIndex = JSON.parse(
 );
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
+// Discovery endpoints name the deployment that serves them; canonicals name production (SITE_ORIGIN).
+const siteOrigin = resolveSiteOrigin(process.env.ROM_WEAVER_SITE_ORIGIN);
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
@@ -49,24 +58,12 @@ const assertCount = (source, expected, count, label) => {
   if (actual !== count)
     throw new Error(`${label} contains ${actual} copies of ${JSON.stringify(expected)}; expected ${count}`);
 };
-// Only text a reader (and a crawler) sees counts. Inline `<script>` bodies used
-// to land in this total, which put roughly 150 words of pre-paint bootstrap
-// source on every page and set the guide minimum below far above the prose it
-// was measuring.
-const countVisibleWords = (source) =>
-  source
-    .replace(/<script[\s\S]*?<\/script>/g, " ")
-    .replace(/<style>[\s\S]*?<\/style>/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .trim()
-    .split(/\s+/).length;
-
 // index.html is the apex landing page; the patcher lives at apply-patches.html.
 const homeHtml = read("index.html");
 const applyHtml = read("apply-patches.html");
-const bundleHtml = read("bundle-patches.html");
+const weaveHtml = read("weave-patches.html");
 const notFoundHtml = read("404.html");
-const createHtml = read("create-patch.html");
+const createHtml = read("create-rom-patch.html");
 const checksumHtml = read("checksum.html");
 const compressHtml = read("compress.html");
 const extractHtml = read("extract.html");
@@ -95,14 +92,35 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
     "text/markdown; charset=utf-8",
     `${markdownPath} content type`,
   );
+  // Exactly one canonical: a placeholder rule's Link plus an exception's would be two.
+  const canonicalLinks = markdownResponseHeaders.Link ?? [];
+  if (canonicalLinks.length !== 1 || canonicalLinks[0] !== `<${SITE_ORIGIN}${routePath}>; rel="canonical"`) {
+    throw new Error(
+      `${markdownPath} canonical header must be ${SITE_ORIGIN}${routePath}; found ${canonicalLinks.join(", ")}`,
+    );
+  }
+}
+const authMarkdownHeaders = matchPagesHeaders(parsePagesHeaders(headers), "/auth.md");
+assertIncludes(authMarkdownHeaders["Content-Type"] ?? "", "text/markdown; charset=utf-8", "/auth.md content type");
+if (authMarkdownHeaders.Link) throw new Error("/auth.md must not carry a canonical Link");
+for (const route of Object.values(WORKFLOW_ENTRY_ROUTES)) {
+  if (!hasDescriptiveHeading(read(`${route.slug}.html`), SITE_NAME)) {
+    throw new Error(`${route.slug} must have one descriptive workflow heading`);
+  }
 }
 for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
-  const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), `/${route.slug}`).Link?.join(", ") ?? "";
-  assertIncludes(
-    pageLinks,
-    `</${route.slug || "index"}.md>; rel="alternate"; type="text/markdown"`,
-    `${route.slug || "home"} Markdown header discovery`,
-  );
+  const html = read(`${route.slug || "index"}.html`);
+  if (!hasDescriptiveHeading(html, SITE_NAME)) {
+    throw new Error(`${route.slug || "home"} must have one descriptive workflow heading`);
+  }
+
+  // The middleware sends the other workflow pages' alternate Link.
+  if (!route.slug) {
+    const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), "/").Link?.join(", ") ?? "";
+    assertIncludes(pageLinks, '</index.md>; rel="alternate"; type="text/markdown"', "home Markdown header discovery");
+  } else if (!MARKDOWN_ROUTES.find(({ path: routePath }) => routePath === `/${route.slug}`)?.alternateLink) {
+    throw new Error(`${route.slug} needs a middleware Markdown alternate Link`);
+  }
 
   assertIncludes(
     read(`${route.slug || "index"}.md`),
@@ -114,15 +132,13 @@ for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
   assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="/${route.slug}.md"`, "Markdown discovery");
-  assertIncludes(headers, `/${route.slug}.md\n  Content-Type: text/markdown; charset=utf-8`, "Markdown content type");
-  assertIncludes(headers, `Link: <https://rom-weaver.com/${route.slug}>; rel="canonical"`, "Markdown canonical header");
 }
 
 for (const route of [
   "apply-patches",
-  "bundle-patches",
+  "weave-patches",
   "checksum",
-  "create-patch",
+  "create-rom-patch",
   "extract",
   "identify-rom",
   "test-rom",
@@ -137,7 +153,7 @@ for (const route of [
   "tools",
   "weave",
   "apply-patch",
-  "bundle",
+  "weave",
 ]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
@@ -151,6 +167,8 @@ for (const [index, line] of headerLines.entries()) {
     throw new Error(`_headers pattern ${JSON.stringify(line)} must be preceded by a blank line`);
   }
 }
+// Cloudflare Pages ignores every _headers rule after the 100th.
+if (parsePagesHeaders(headers).length > 100) throw new Error("_headers exceeds the 100-rule limit");
 assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
 assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}`, "API catalog content type");
@@ -178,8 +196,8 @@ if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
 const openapi = JSON.parse(read(OPENAPI_PATH));
 if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
 if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
-const expectedEndpoints = Object.keys(openapi.paths).map((pathname) => `${SITE_ORIGIN}${pathname}`);
-const catalogItems = catalog.linkset.find((entry) => entry.anchor === `${SITE_ORIGIN}${API_CATALOG_PATH}`)?.item;
+const expectedEndpoints = Object.keys(openapi.paths).map((pathname) => `${siteOrigin}${pathname}`);
+const catalogItems = catalog.linkset.find((entry) => entry.anchor === `${siteOrigin}${API_CATALOG_PATH}`)?.item;
 if (!Array.isArray(catalogItems)) throw new Error("API catalog must link to its API endpoints with item relations");
 const actualEndpoints = catalogItems.map((item) => item.href);
 if (
@@ -189,24 +207,33 @@ if (
   throw new Error("API catalog item links MUST match the OpenAPI paths");
 }
 for (const [index, entry] of catalog.linkset.entries()) {
-  if (typeof entry.anchor !== "string" || !entry.anchor.startsWith(SITE_ORIGIN)) {
+  if (typeof entry.anchor !== "string" || !entry.anchor.startsWith(siteOrigin)) {
     throw new Error(`API catalog entry ${index} has a missing or off-origin anchor`);
   }
   for (const relation of ["service-desc", "service-doc"]) {
     for (const link of entry[relation] ?? []) {
-      if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
+      if (!link.href?.startsWith(siteOrigin)) throw new Error(`API catalog ${relation} href is off-origin`);
     }
   }
 }
 for (const endpoint of expectedEndpoints) {
   const entry = catalog.linkset.find((candidate) => candidate.anchor === endpoint);
   if (!entry) throw new Error(`API catalog is missing metadata for endpoint ${endpoint}`);
-  if (entry["service-desc"]?.[0]?.href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
+  if (entry["service-desc"]?.[0]?.href !== `${siteOrigin}${OPENAPI_PATH}`) {
     throw new Error(`API catalog service-desc for ${endpoint} MUST point at the OpenAPI document`);
   }
-  if (entry["service-doc"]?.[0]?.href !== `${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}`) {
+  if (entry["service-doc"]?.[0]?.href !== `${siteOrigin}${WEBAPP_URL_SESSION_DOC_PATH}`) {
     throw new Error(`API catalog service-doc for ${endpoint} MUST point at the URL session guide section`);
   }
+}
+assertIncludes(llmsTxt, `](${siteOrigin}/apply-patches)`, "llms.txt web app link");
+assertIncludes(llmsTxt, `](${siteOrigin}/index.md)`, "llms.txt Markdown link");
+assertIncludes(read("index.md"), `](${siteOrigin}/docs.md)`, "home Markdown documentation link");
+if (openapi.servers?.[0]?.url !== siteOrigin) throw new Error(`OpenAPI server must be ${siteOrigin}`);
+if (siteOrigin !== SITE_ORIGIN) {
+  assertExcludes(llmsTxt, SITE_ORIGIN, "llms.txt production origin");
+  assertExcludes(read(API_CATALOG_PATH), SITE_ORIGIN, "API catalog production origin");
+  assertExcludes(read(OPENAPI_PATH), SITE_ORIGIN, "OpenAPI production origin");
 }
 assertIncludes(
   headers,
@@ -277,28 +304,32 @@ assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patches" id="tab-patc
 if (notFoundHtml.includes('aria-current="page"')) throw new Error("404 page marks a destination as current");
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
-  assertIncludes(redirects, `${source} /apply-patches 301`, `${source} compatibility redirect`);
+  assertIncludes(redirects, `${source} /weave-patches 301`, `${source} compatibility redirect`);
 }
+for (const source of ["/create-patch", "/create-patch/", "/create-patch.html", "/create-patch/index.html"]) {
+  assertIncludes(redirects, `${source} /create-rom-patch 301`, `${source} renamed Create redirect`);
+}
+assertIncludes(redirects, "/create-patch.md /create-rom-patch.md 301", "renamed Create Markdown redirect");
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
   assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
-  "https://rom-weaver.com/apply-patches",
-  "https://rom-weaver.com/create-patch",
-  "https://rom-weaver.com/identify-rom",
-  "https://rom-weaver.com/docs",
-  "https://rom-weaver.com/docs/apply-rom-patches",
-  "https://rom-weaver.com/docs/cli",
-  "https://rom-weaver.com/docs/install",
-  "https://rom-weaver.com/docs/cli-get-started",
-  "https://rom-weaver.com/docs/compression-formats",
-  "https://rom-weaver.com/docs/supported-formats",
-  "https://rom-weaver.com/docs/create-bundles",
-  "https://rom-weaver.com/docs/create-rom-patches",
-  "https://rom-weaver.com/docs/faq",
-  "https://rom-weaver.com/docs/self-hosting",
-  "https://rom-weaver.com/docs/architecture",
+  `${siteOrigin}/apply-patches`,
+  `${siteOrigin}/create-rom-patch`,
+  `${siteOrigin}/identify-rom`,
+  `${siteOrigin}/docs`,
+  `${siteOrigin}/docs/apply-rom-patches`,
+  `${siteOrigin}/docs/cli`,
+  `${siteOrigin}/docs/install`,
+  `${siteOrigin}/docs/cli-get-started`,
+  `${siteOrigin}/docs/compression-formats`,
+  `${siteOrigin}/docs/supported-formats`,
+  `${siteOrigin}/docs/create-bundles`,
+  `${siteOrigin}/docs/create-rom-patches`,
+  `${siteOrigin}/docs/faq`,
+  `${siteOrigin}/docs/self-hosting`,
+  `${siteOrigin}/docs/architecture`,
   "https://github.com/rom-weaver/rom-weaver",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md",
   "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md",
@@ -324,12 +355,13 @@ assertIncludes(
 assertIncludes(homeHtml, 'href="https://rom-weaver.com/"', "home canonical");
 assertIncludes(homeHtml, WORKFLOW_SEO_ROUTES.home.description, "home description");
 assertIncludes(homeHtml, 'id="panel-home"', "home prerendered landing page");
-assertIncludes(homeHtml, "Patch ROMs in your browser.", "home headline");
+assertIncludes(homeHtml, "Online ROM patcher.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="btn primary lg" href="/apply-patches"', "home Apply action");
-assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
+assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-patches"', "home Apply action");
+assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
+assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
 // Home is the only current Project destination on the landing page.
 const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
@@ -340,9 +372,9 @@ if (currentHomeRows.length !== 1 || currentHomeRows[0] !== "tab-home") {
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
-assertIncludes(bundleHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.bundle.slug}"`, "bundle canonical");
-assertIncludes(bundleHtml, WORKFLOW_SEO_ROUTES.bundle.description, "bundle description");
-assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description, "static-host bundle description");
+assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.weave.slug}"`, "weave canonical");
+assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.weave.description, "weave description");
+assertIncludes(read("weave/index.html"), WORKFLOW_SEO_ROUTES.weave.description, "static-host weave description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(
@@ -391,13 +423,13 @@ assertIncludes(
   "apply prerendered workflow",
 );
 assertIncludes(
-  bundleHtml,
-  'aria-current="page" aria-label="Bundle Patches" class="nav-row" href="bundle-patches" id="tab-bundle"',
+  weaveHtml,
+  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
   "bundle prerendered workflow",
 );
 assertIncludes(
   createHtml,
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
   "create prerendered workflow",
 );
 assertIncludes(identifyHtml, 'id="panel-identify"', "identify prerendered workflow");
@@ -432,7 +464,7 @@ for (const route of [
 }
 assertIncludes(
   read("create/index.html"),
-  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-rom-patch" id="tab-creator"',
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -452,6 +484,7 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
+  if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
   for (const { name: viewport } of DOCS_SCREENSHOT_VIEWPORTS) {
     for (const theme of DOCS_SCREENSHOT_THEMES) {
@@ -473,7 +506,7 @@ assertIncludes(homeHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)
 assertIncludes(applyHtml, '"@type":"SoftwareApplication"', "apply SoftwareApplication JSON-LD");
 if (applyHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
-assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-patch"', "create JSON-LD canonical url");
+assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-rom-patch"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
 for (const route of DOC_ROUTES) {
@@ -521,8 +554,8 @@ for (const route of DOC_ROUTES) {
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
     assertIncludes(docsHtml, 'href="/apply-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
-    assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/bundle-patches?guide=bundle"', `${route.slug} guided Bundle Patches link`);
+    assertIncludes(docsHtml, 'href="/create-rom-patch?guide=create"', `${route.slug} guided Create link`);
+    assertIncludes(docsHtml, 'href="/weave-patches?guide=weave"', `${route.slug} guided Weave Patches link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
@@ -571,7 +604,17 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
+for (const [slug, title] of [
+  ["save-editor", "Save Editor | rom-weaver"],
+  ["trim-rom", "Trim ROM | rom-weaver"],
+  ["whats-new", "What's new | rom-weaver"],
+]) {
+  const html = read(`${slug}/index.html`);
+  assertIncludes(html, `<title>${title}`, `${slug} title`);
+  assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
+  assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
+}
+for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -582,7 +625,7 @@ for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
 for (const [route, panel] of Object.entries({
   "apply-patches": "panel-patcher",
   checksum: "panel-checksum",
-  "create-patch": "panel-creator",
+  "create-rom-patch": "panel-creator",
   extract: "panel-extract",
   "identify-rom": "panel-identify",
   "ppf-undo": "panel-ppf-undo",
@@ -601,28 +644,40 @@ for (const [route, panel] of Object.entries({
 for (const [legacy, canonical] of Object.entries({
   apply: "apply-patches",
   "apply-patch": "apply-patches",
-  bundle: "bundle-patches",
-  create: "create-patch",
+  bundle: "weave-patches",
+  "bundle-patches": "weave-patches",
+  create: "create-rom-patch",
+  "create-patch": "create-rom-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patches",
+  weave: "weave-patches",
 })) {
   for (const file of [`${legacy}.html`, `${legacy}/index.html`]) {
     assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
     assertIncludes(read(file), `rel="canonical" href="https://rom-weaver.com/${canonical}"`, `${file} canonical`);
   }
+  // Pages (_redirects) and the Docker image (sws.toml) must send every legacy
+  // spelling to the same workflow.
+  for (const source of [`/${legacy}`, `/${legacy}/`, `/${legacy}.html`, `/${legacy}/index.html`]) {
+    assertIncludes(redirects, `${source} /${canonical} 301`, `${source} Pages redirect`);
+    assertIncludes(
+      swsConfig,
+      `source = "${source}"\ndestination = "/${canonical}"\nkind = 301`,
+      `${source} Docker redirect`,
+    );
+  }
 }
-// The retired /weave/ slug serves the patcher, whose shell it must hydrate as.
+// The short /weave/ alias hydrates the canonical weave workflow.
 // index.html is the landing page, so a host that applies neither the redirect
 // nor this document would serve landing markup to a patcher route.
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-patches" id="tab-patcher"',
-    `${weave} patcher shell`,
+    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
+    `${weave} weave shell`,
   );
-  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patches"', `${weave} canonical`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-patches"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
@@ -637,7 +692,7 @@ if (production) {
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
-  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-patch", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-rom-patch", "sitemap");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract", "extract sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {

@@ -29,11 +29,11 @@ impl CliApp {
             Commands::Patch(PatchCommands::Create(args)) => {
                 Some(self.plan_patch_create_dry_run(args))
             }
-            Commands::Bundle(BundleCommands::Create(args)) => {
-                Some(self.plan_bundle_create_dry_run(args))
+            Commands::Bundle(WeaveCommands::Create(args)) => {
+                Some(self.plan_weave_create_dry_run(args))
             }
-            Commands::Bundle(BundleCommands::Parse(args)) => {
-                Some(self.plan_bundle_parse_dry_run(args))
+            Commands::Bundle(WeaveCommands::Parse(args)) => {
+                Some(self.plan_weave_parse_dry_run(args))
             }
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(self.plan_ppf_undo_dry_run(args)),
             Commands::Setup(args) => Some(self.plan_setup_dry_run(args)),
@@ -44,7 +44,7 @@ impl CliApp {
 
     /// A plain apply already resolves its complete output/compression plan
     /// without network or persistent writes. More indirect forms are planned
-    /// here before bundle loading can download or extract a member.
+    /// here before weave loading can download or extract a member.
     fn plain_patch_plan(args: &PatchApplyCommand) -> bool {
         args.bundle.is_none()
             && (!args.patches.is_empty() || !args.codes.is_empty())
@@ -67,11 +67,10 @@ impl CliApp {
             }
         }
         let mut downloads = Vec::new();
-        if let Some(bundle) = &args.bundle {
-            if let Some(url) = super::bundle_apply::bundle_ref_as_url(bundle) {
+        if let Some(weave) = &args.bundle {
+            if let Some(url) = super::weave_apply::weave_ref_as_url(weave) {
                 downloads.push(url.to_string());
-            } else if let Some(outcome) =
-                self.plan_readable(command, OperationFamily::Patch, bundle)
+            } else if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, weave)
             {
                 return outcome;
             }
@@ -81,17 +80,17 @@ impl CliApp {
             .as_ref()
             .map(|path| vec![path.display().to_string()])
             .unwrap_or_default();
-        if let Some(bundle) = &args.emit_bundle {
-            writes.push(bundle.display().to_string());
+        if let Some(weave) = &args.emit_bundle {
+            writes.push(weave.display().to_string());
         }
         self.plan_succeeded_with_downloads(
             command,
             OperationFamily::Patch,
-            "dry run: would resolve the patch bundle or source; nothing written",
+            "dry run: would resolve the patch weave or source; nothing written",
             writes,
             downloads,
             vec![
-                "bundle contents, archive members, and remote sources are not resolved during dry run"
+                "weave contents, archive members, and remote sources are not resolved during dry run"
                     .to_string(),
             ],
         )
@@ -172,7 +171,7 @@ impl CliApp {
         )
     }
 
-    fn plan_bundle_create_dry_run(&self, args: &BundleCreateCommand) -> AppRunOutcome {
+    fn plan_weave_create_dry_run(&self, args: &WeaveCreateCommand) -> AppRunOutcome {
         let command = "bundle-create";
         if let Some(rom) = &args.rom
             && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, rom)
@@ -190,19 +189,19 @@ impl CliApp {
             return outcome;
         }
         let mut writes = vec![args.output.display().to_string()];
-        if let Some(bundle) = &args.bundle {
-            writes.push(bundle.display().to_string());
+        if let Some(weave) = &args.bundle {
+            writes.push(weave.display().to_string());
         }
         self.plan_succeeded(
             command,
             OperationFamily::Command,
-            "dry run: would create a bundle; nothing written",
+            "dry run: would create a weave; nothing written",
             writes,
-            vec!["bundle metadata, checksums, and output-parent access are not validated during dry run".to_string()],
+            vec!["weave metadata, checksums, and output-parent access are not validated during dry run".to_string()],
         )
     }
 
-    fn plan_bundle_parse_dry_run(&self, args: &BundleParseCommand) -> AppRunOutcome {
+    fn plan_weave_parse_dry_run(&self, args: &WeaveParseCommand) -> AppRunOutcome {
         let command = "bundle-parse";
         if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, &args.input) {
             return outcome;
@@ -212,9 +211,9 @@ impl CliApp {
             command,
             OperationFamily::Command,
             if extracts {
-                "dry run: would parse the bundle and extract selected members; nothing written"
+                "dry run: would parse the weave and extract selected members; nothing written"
             } else {
-                "dry run: bundle parse only reads; no changes planned"
+                "dry run: weave parse only reads; no changes planned"
             },
             if extracts {
                 args.output
@@ -225,7 +224,7 @@ impl CliApp {
                 Vec::new()
             },
             vec![
-                "bundle entries and output-directory access are not validated during dry run"
+                "weave entries and output-directory access are not validated during dry run"
                     .to_string(),
             ],
         )
@@ -238,16 +237,89 @@ impl CliApp {
                 return outcome;
             }
         }
-        self.plan_succeeded(
-            command,
+        let planned = (|| -> Result<(PathBuf, Option<PatchApplyCompressionPlan>, bool)> {
+            let options = Self::parse_patch_apply_compression_options(
+                args.no_compress,
+                args.compress_format.clone(),
+                args.compress_codec.clone(),
+                args.compress_level,
+            )?;
+            let unresolved = !args.no_extract
+                && self.containers.probe(&args.rom).is_some()
+                && options.enabled
+                && options.requested_format.is_none()
+                && options.codec.is_none()
+                && !options.level_explicit
+                && self
+                    .containers
+                    .find_by_output_extension(&args.output)
+                    .is_none();
+            if unresolved {
+                return Ok((args.output.clone(), None, true));
+            }
+            let options =
+                self.resolve_patch_apply_output_options(options, &args.output, &args.rom)?;
+            let plan = options
+                .enabled
+                .then(|| {
+                    self.resolve_patch_apply_compression_plan(&args.output, &args.rom, &options)
+                })
+                .transpose()?;
+            let output = plan
+                .as_ref()
+                .map(|plan| plan.output_path.clone())
+                .unwrap_or_else(|| args.output.clone());
+            Ok((output, plan, false))
+        })();
+        let (output, compression, unresolved) = match planned {
+            Ok(plan) => plan,
+            Err(error) => {
+                return self.plan_failed(command, OperationFamily::Patch, &error.to_string());
+            }
+        };
+        for source in [&args.rom, &args.patch] {
+            if crate::path_access::paths_refer_to_same_file(source, &output) {
+                return self.plan_failed(command, OperationFamily::Patch,
+                    "PPF undo output and source resolve to the same file; choose a different --output path");
+            }
+        }
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
-            "dry run: would restore the ROM from PPF undo data; nothing written",
-            vec![args.output.display().to_string()],
-            vec![
-                "PPF undo data and output-parent access are not validated during dry run"
-                    .to_string(),
-            ],
-        )
+            Some("PPF".to_string()),
+            "plan",
+            "dry run: would restore the ROM from PPF undo data; nothing written".to_string(),
+            Some(100.0),
+            None,
+        );
+        let outputs_unknown = unresolved
+            || (compression.is_none()
+                && (detect_disc_sheet(&args.rom).is_some()
+                    || (!args.no_extract && self.containers.probe(&args.rom).is_some())));
+        let mut notes = vec![if unresolved {
+            "output format awaits archive payload selection; PPF undo data and destination access are not validated during dry run"
+        } else {
+            "archive members, PPF undo data, and destination access are not validated during dry run"
+        }];
+        if outputs_unknown {
+            notes.push("raw disc companion output paths, when present, await source inspection");
+        }
+        report.details = Some(json!({
+            "dry_run": true,
+            "command": command,
+            "writes": [output.display().to_string()],
+            "downloads": [],
+            "read_only": false,
+            "outputs_unknown": outputs_unknown,
+            "format": compression.as_ref().map(|plan| plan.format.as_str())
+                .unwrap_or(if unresolved { "unresolved" } else { "raw" }),
+            "codec": compression.as_ref().and_then(|plan| plan.codec.as_deref()),
+            "level": compression.as_ref().and_then(|plan| plan.level),
+            "notes": notes,
+        }));
+        if let Some(plan) = compression {
+            Self::append_report_warnings(&mut report, plan.warning);
+        }
+        self.finish(command, report)
     }
 
     fn plan_setup_dry_run(&self, args: &SetupCommand) -> AppRunOutcome {
@@ -382,12 +454,12 @@ impl CliApp {
     }
 
     fn read_only_dry_run(&self, command: &str) -> AppRunOutcome {
-        self.plan_succeeded(
+        self.plan_report(
             command,
             OperationFamily::Command,
             &format!("dry run: {command} only reads; no changes planned"),
-            Vec::new(),
-            Vec::new(),
+            (Vec::new(), Vec::new(), Vec::new()),
+            true,
         )
     }
 
@@ -451,8 +523,6 @@ impl CliApp {
         downloads: Vec<String>,
         notes: Vec<String>,
     ) -> AppRunOutcome {
-        let mut report =
-            OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
         let read_only = matches!(
             command,
             "probe"
@@ -465,6 +535,25 @@ impl CliApp {
                 | "man"
                 | "plan-extract-batch"
         ) || (command == "bundle-parse" && writes.is_empty());
+        self.plan_report(
+            command,
+            family,
+            label,
+            (writes, downloads, notes),
+            read_only,
+        )
+    }
+
+    fn plan_report(
+        &self,
+        command: &str,
+        family: OperationFamily,
+        label: &str,
+        (writes, downloads, notes): (Vec<String>, Vec<String>, Vec<String>),
+        read_only: bool,
+    ) -> AppRunOutcome {
+        let mut report =
+            OperationReport::succeeded(family, None, "plan", label.to_string(), Some(100.0), None);
         report.details = Some(json!({
             "dry_run": true,
             "command": command,

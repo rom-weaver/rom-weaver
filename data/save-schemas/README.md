@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 140 profiles: the original seven game-family definitions and 118 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 611 profiles: the original seven game-family definitions and 589 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -77,10 +77,50 @@ The Generation I and II definitions use Rust loops and shared constructors for r
 <!-- START doctoc -->
 ## Table of contents
 
+- [Additional save editors](#additional-save-editors)
 - [Sources and attribution](#sources-and-attribution)
 - [Additional handheld and Nintendo 64 profiles](#additional-handheld-and-nintendo-64-profiles)
 
 <!-- END doctoc -->
+
+
+## Additional save editors
+
+These profiles require explicit game selection and a game-made template. They expose only the fields listed here. Checksums and structural validation do not establish that a synthetic save or an arbitrary combination of field values is playable.
+
+| Games | Profiles | Accepted storage | Editable scope |
+| --- | ---: | --- | --- |
+| Sonic Advance, Sonic Advance 2, Sonic Advance 3 | 3 | Raw 64 KiB GBA Flash | Emerald, character, and menu unlock flags; selected rotating record only |
+| Wario Land 4 | 1 | Raw 8 KiB GBA EEPROM, Europe/USA | Difficulty and medals in occupied files |
+| Konami Krazy Racers | 1 | Raw 8 KiB GBA EEPROM, Europe/USA | Coins and item quantities in occupied files |
+| WarioWare, Inc.: Minigame Mania | 1 | Raw 8 KiB GBA EEPROM | Gender and independently stored high scores |
+| Castlevania: Harmony of Dissonance | 1 | Raw 32 KiB GBA SRAM | Gold, experience, level, maximum HP and MP; linked gold and level previews |
+| Advance Wars | 1 | Raw 64 KiB GBA Flash | Points and coins in the selected system record |
+| Golden Sun, Golden Sun: The Lost Age | 6 | Raw 64 KiB GBA Flash | Gold with its preview and step count; fixed file profiles |
+| Kurukuru Kururin | 1 | Raw 32 KiB GBA SRAM | Rank, difficulty, and independent unlocks; selected section only |
+| The Legend of Zelda: The Minish Cap | 1 | Raw 8 KiB GBA EEPROM with reversed eight-byte words | Mysterious Shell quantities in occupied files |
+| Sonic Rush | 1 | Raw 8 KiB DS save | Independently stored menu fields in the selected rotating record |
+| Castlevania: Dawn of Sorrow, Castlevania: Order of Ecclesia | 2 | Raw 8 KiB DS save | Gold in occupied files; Dawn of Sorrow also exposes mode unlocks |
+| Game Boy Camera | 1 | Raw 128 KiB Game Boy SRAM | Packed-decimal record counts and Space Fever II/Ball high scores; photo data preserved |
+| Kingdom Hearts: Chain of Memories | 1 | Raw 32 KiB GBA SRAM | Shared Riku Story/Link unlock and title-screen choice/switch |
+| Bomberman 64 | 3 | Canonical 512 B N64 EEPROM | Playtime, hard difficulty, and Rainbow Palace; fixed slot profiles |
+| Super Smash Bros. | 1 | Canonical 32 KiB N64 SRAM | Independent unlocks and arcade score/bonus fields |
+| Paper Mario | 4 | Canonical 128 KiB N64 FlashRAM | Coins, Star Pieces, and Star Points; newest occupied record for each file |
+| The Legend of Zelda: Ocarina of Time | 3 | Canonical 32 KiB N64 SRAM | Death count and rupees in the basic wallet range, 0–99; primary/backup recovery and paired writes |
+| Banjo-Kazooie | 3 | Canonical 512 B N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
+| Tekken | 45 | Single-block save in a raw 128 KiB PS1 card | Difficulty and character unlocks |
+| Rayman | 45 | Single-block save in a raw 128 KiB PS1 card | Lives and Tings |
+| Castlevania: Symphony of the Night | 60 | Single-block save in a raw 128 KiB PS1 card | Gold with its preview and experience |
+| Grandia | 75 | Single-block save in a raw 128 KiB PS1 card | Gold pieces |
+| Final Fantasy VII | 105 | Single-block save in a raw 128 KiB PS1 card | Gil with its preview and GP |
+| Final Fantasy VIII | 105 | Single-block save in a raw 128 KiB PS1 card | Squall/Laguna gil with the active preview |
+| Castlevania: Rondo of Blood | 1 | Raw 2 KiB PC Engine BRAM, Japan; first record must be DRACULA X | Money and death count in occupied slots |
+
+The new definitions add 29 titles and 471 profiles. The preceding catalog table describes the original 118 additional profiles. Each PS1 profile selects an exact product code, region, and card block from 1 through 15. It validates allocation metadata and supports only a complete single-block game save. Multi-block saves, standalone save exports, and PC ports remain unsupported. DexDrive and Virtual Game Station card wrappers are preserved by the existing container layer.
+
+Nintendo 64 profiles accept only the stated canonical big-endian byte order. The Minish Cap profile accepts only its stated EEPROM word order. Regional boundaries and omitted fields are recorded in each profile's description.
+
+The definitions derive from [Game Tools Collection revision `6f5d8064050eec83eb4f2a910743c121a70655c9`](https://github.com/RyudoSynbios/game-tools-collection/tree/6f5d8064050eec83eb4f2a910743c121a70655c9). Each catalog module links its exact source directory. Ocarina of Time backup and checksum behavior follows [zeldaret/oot revision `52a510f379afd143aaa0375be9f1e190369572e1`](https://github.com/zeldaret/oot/blob/52a510f379afd143aaa0375be9f1e190369572e1/src/code/z_sram.c). Final Fantasy VIII's CRC lookup variant follows [Hyne revision `54cc50dc133897b9db45f9deab5167e9d14de0fc`](https://github.com/myst6re/hyne/blob/54cc50dc133897b9db45f9deab5167e9d14de0fc/src/SaveData.cpp); its last table entry differs from the standard CCITT table.
 
 ## Sources and attribution
 

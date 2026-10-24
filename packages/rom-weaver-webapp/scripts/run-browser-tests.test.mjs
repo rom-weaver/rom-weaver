@@ -3,7 +3,31 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assertTestFilesSelected, discoverTestFiles, parseShard, selectShard } from "./run-browser-tests.mjs";
+import {
+  assertTestFilesSelected,
+  discoverTestFiles,
+  parseShard,
+  resolveConcurrency,
+  selectShard,
+} from "./run-browser-tests.mjs";
+
+test("WebKit file processes run sequentially by default, including mixed browser selections", () => {
+  for (const browser of ["webkit", " WebKit ", "all", "chromium, webkit"]) {
+    assert.equal(resolveConcurrency({ ROM_WEAVER_BROWSER: browser }), 1, browser);
+  }
+});
+
+test("Chromium retains the default parallel file pool", () => {
+  for (const environment of [{}, { ROM_WEAVER_BROWSER: "chromium" }]) {
+    const concurrency = resolveConcurrency(environment);
+    assert.ok(concurrency >= 2 && concurrency <= 4);
+  }
+});
+
+test("explicit browser file concurrency overrides the engine default", () => {
+  assert.equal(resolveConcurrency({ BROWSER_TEST_CONCURRENCY: "3", ROM_WEAVER_BROWSER: "webkit" }), 3);
+  assert.equal(resolveConcurrency({ BROWSER_TEST_CONCURRENCY: "0", ROM_WEAVER_BROWSER: "webkit" }), 1);
+});
 
 // selectShard weighs by fs.statSync(file).size, so fixtures use real temp
 // files padded to a controlled byte size rather than an injectable weight.

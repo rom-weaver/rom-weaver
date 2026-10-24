@@ -1,3 +1,4 @@
+import { readAppBaseUrl } from "../app-routes.ts";
 import { GITHUB_URL } from "../project-links.ts";
 
 /**
@@ -8,8 +9,10 @@ import { GITHUB_URL } from "../project-links.ts";
 const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
 
 type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
-type ReleaseGroup = { entries: ReleaseEntry[]; title: string };
-type ReleaseNote = { groups: ReleaseGroup[]; version: string };
+type ReleaseSection = { entries: ReleaseEntry[]; title: string };
+type ReleaseGroup = ReleaseSection & { sections?: ReleaseSection[] };
+/** `date` is the CHANGELOG heading's `YYYY-MM-DD`; assets built before it was read carry none. */
+type ReleaseNote = { date?: string; groups: ReleaseGroup[]; version: string };
 type ReleaseChangelog = {
   changelogUrl: string;
   notes: ReleaseNote[];
@@ -21,11 +24,34 @@ type ChangelogEntry = { hash: string; subject: string; date: string; release?: u
 
 const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryUrl}/releases/tag/v${version}`;
 
-const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
+// The commit range between two releases, which the version heading no longer links to.
+type CompareRange = { from: string; to: string };
+const compareUrl = (repositoryUrl: string, { from, to }: CompareRange) => `${repositoryUrl}/compare/v${from}...v${to}`;
+
+// A calendar date with no time of day, so it is formatted in UTC: a local zone
+// west of UTC would otherwise show the day before.
+const RELEASE_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ReleaseDate = ({ className, date, locale }: { className: string; date?: string; locale: string }) => {
+  const day = date && RELEASE_DATE_REGEX.test(date) ? new Date(`${date}T00:00:00Z`) : undefined;
+  if (!day || Number.isNaN(day.getTime())) return null;
+  return (
+    <time className={className} dateTime={date}>
+      {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(day)}
+    </time>
+  );
+};
+
+const isReleaseSection = (value: unknown): value is ReleaseSection => {
   if (!value || typeof value !== "object") return false;
-  const group = value as ReleaseGroup;
+  const group = value as ReleaseSection;
   if (typeof group.title !== "string" || !Array.isArray(group.entries)) return false;
   return group.entries.every((entry) => entry && typeof entry.summary === "string");
+};
+
+const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
+  if (!isReleaseSection(value)) return false;
+  const group = value as ReleaseGroup;
+  return group.sections === undefined || (Array.isArray(group.sections) && group.sections.every(isReleaseSection));
 };
 
 const isReleaseNote = (value: unknown): value is ReleaseNote => {
@@ -45,7 +71,10 @@ const readReleaseChangelog = (value: unknown): ReleaseChangelog | undefined => {
 };
 
 const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: ReleaseChangelog }> => {
-  const response = await fetch(`./changelog.json?t=${Date.now()}`, { cache: "no-store" });
+  // The update banner fetches from any route, and soft navigation moves the
+  // document's base into it (`/docs/about` has no changelog), so resolve
+  // against the app base.
+  const response = await fetch(new URL(`changelog.json?t=${Date.now()}`, readAppBaseUrl()), { cache: "no-store" });
   if (!response.ok) throw new Error(`changelog fetch failed: ${response.status}`);
   const data: unknown = await response.json();
   if (!Array.isArray(data)) throw new Error("changelog is not an array");
@@ -142,6 +171,19 @@ const EntryRef = ({ entry, repositoryUrl }: { entry: ReleaseEntry; repositoryUrl
   );
 };
 
+const EntryList = ({ entries, repositoryUrl }: { entries: ReleaseEntry[]; repositoryUrl: string }) => (
+  <ul className="release-changelog-entries">
+    {entries.map((entry) => (
+      <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>
+        {entry.scope ? <strong>{entry.scope}: </strong> : null}
+        {entry.summary}
+        {/* Fall back to the commit when an entry has no pull request. */}
+        <EntryRef entry={entry} repositoryUrl={repositoryUrl} />
+      </li>
+    ))}
+  </ul>
+);
+
 // The shared body of every view: `### type` group headings over
 // `**scope:** summary #ref` lines, mirroring CHANGELOG.md.
 const EntryGroups = ({
@@ -156,22 +198,83 @@ const EntryGroups = ({
   <>
     {groups.map((group) => (
       <div className="release-changelog" key={`${keyPrefix}:${group.title}`}>
-        {group.title ? <h3 className="release-changelog-group">{group.title}</h3> : null}
-        <ul className="release-changelog-entries">
-          {group.entries.map((entry) => (
-            <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>
-              {entry.scope ? <strong>{entry.scope}: </strong> : null}
-              {entry.summary}
-              {/* The PR is the readable reference; fall back to the commit so an
-                  entry recorded without a PR still links somewhere. */}
-              <EntryRef entry={entry} repositoryUrl={repositoryUrl} />
-            </li>
-          ))}
-        </ul>
+        {group.title && group.title !== HIGHLIGHTS_TITLE ? (
+          <h3 className="release-changelog-group">{group.title}</h3>
+        ) : null}
+        {group.sections?.length ? (
+          group.sections.map((section) => {
+            const Heading = group.title === HIGHLIGHTS_TITLE ? "h3" : "h4";
+            return (
+              <div className="release-changelog-subsection" key={section.title}>
+                {section.title ? <Heading className="release-changelog-subheading">{section.title}</Heading> : null}
+                <EntryList entries={section.entries} repositoryUrl={repositoryUrl} />
+              </div>
+            );
+          })
+        ) : (
+          <EntryList entries={group.entries} repositoryUrl={repositoryUrl} />
+        )}
       </div>
     ))}
   </>
 );
 
-export { COMMIT_SECTIONS, commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
-export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };
+// A release leads with its hand-written `Highlights` group (see the release
+// skill). That group and any breaking-change group are shown up front, as on
+// the GitHub release; every other generated group sits in a collapsed
+// "All changes" block. A release or nightly with no highlights shows
+// just the collapsed block.
+const HIGHLIGHTS_TITLE = "Highlights";
+const isVisibleGroup = (group: ReleaseGroup) =>
+  group.title === HIGHLIGHTS_TITLE || /BREAKING CHANGES/.test(group.title);
+
+const ReleaseGroups = ({
+  compare,
+  groups,
+  keyPrefix,
+  repositoryUrl,
+}: {
+  /** The release's commit range, linked first inside All changes. */
+  compare?: CompareRange;
+  groups: ReleaseGroup[];
+  keyPrefix: string;
+  repositoryUrl: string;
+}) => {
+  const highlights = groups.filter(isVisibleGroup);
+  const rest = groups.filter((group) => !isVisibleGroup(group));
+  return (
+    <>
+      {highlights.length ? (
+        <EntryGroups groups={highlights} keyPrefix={`${keyPrefix}:highlights`} repositoryUrl={repositoryUrl} />
+      ) : null}
+      {rest.length ? (
+        <details className="release-all-changes">
+          <summary className="release-all-changes-summary">All changes</summary>
+          {compare ? (
+            <a
+              className="release-compare-link"
+              href={compareUrl(repositoryUrl, compare)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Compare v{compare.from}…v{compare.to} ↗
+            </a>
+          ) : null}
+          <EntryGroups groups={rest} keyPrefix={keyPrefix} repositoryUrl={repositoryUrl} />
+        </details>
+      ) : null}
+    </>
+  );
+};
+
+export {
+  COMMIT_SECTIONS,
+  commitGroups,
+  fetchChangelog,
+  HIGHLIGHTS_TITLE,
+  ReleaseDate,
+  ReleaseGroups,
+  releaseTagUrl,
+  REPOSITORY_URL,
+};
+export type { ChangelogEntry, CompareRange, ReleaseChangelog, ReleaseNote };

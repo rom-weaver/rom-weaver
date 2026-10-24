@@ -1,3 +1,19 @@
+import {
+  IdentifyDataUnavailableError,
+  loadIdentifyPacks,
+  loadIdentifyPackForPlatform,
+  loadIdentifyTitleIndex,
+  mapIdentifyTitleSearchMatches,
+} from "./identify-packs.ts";
+import {
+  invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIdentifyNameWorker,
+  invokeRomWeaverIdentifyTitlesWorker,
+} from "../../lib/runtime/wasm-command-runtime.ts";
+import { createSingleFileRomSpecificOutput } from "../../lib/output/output-build-service.ts";
+import { toPublicOutput } from "../../lib/apply/patch-apply-service.ts";
+import type { RomSpecificCompressionFormat } from "../../lib/compression/container-format-registry.ts";
+import { createArchiveOutput, createPatchFileFromRuntimeOutput } from "../../lib/output/archive-output-service.ts";
 import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { CheatDatabaseRecord, CheatRecord, ClassifiedCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
@@ -12,7 +28,8 @@ import type { ApplySettings, CommonSettings, CreateSettings, WorkerSettings } fr
 import type { BrowserSourceRef, SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
-import type { CompressionProbeInput } from "../../types/workflow-runtime-types.ts";
+import type { SourceMetadata } from "../../types/workflow-source.ts";
+import type { PublicOutput, CompressionProbeInput } from "../../types/workflow-runtime-types.ts";
 import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
@@ -36,6 +53,14 @@ type BrowserCreatePatchFormatCandidatesInput = {
   settings?: Partial<CreateSettings>;
 };
 type BrowserPpfUndoInput = {
+  metadata?: SourceMetadata;
+  companions?: PublicOutput[];
+  target?: string;
+  onWarning?: (message: string) => void;
+  preparedRom?: PublicOutput;
+  preparedPatch?: PublicOutput;
+  compression?: string;
+  settings?: Partial<ApplySettings>;
   logLevel?: LogLevel;
   outputName: string;
   patch: BrowserSourceRef;
@@ -185,7 +210,7 @@ const identifyCheckHashes = (check: BrowserIdentifyCheck): string[] =>
 
 /**
  * Identify from checks alone - a bare crc32/md5/sha1 digest, or the whole rom
- * check a bundle entry or a patch's source requirement carries - through the
+ * check a weave entry or a patch's source requirement carries - through the
  * `identify --hash` command. The checksum router picks the packs a digest can
  * be in, so only those load; a router that names none is a definitive
  * `unknown`. An unloadable database reports `unavailable`, never a false
@@ -200,7 +225,6 @@ const identifyChecks = async (
   if (!normalized) throw new Error("Identify needs at least one checksum.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyPacks } = await import("./identify-packs.ts");
   let packs: Awaited<ReturnType<typeof loadIdentifyPacks>>;
   try {
     packs = await loadIdentifyPacks({ checksums: check.checksums }, (platforms) => {
@@ -222,7 +246,6 @@ const identifyChecks = async (
       status: "unknown",
     };
   }
-  const { invokeRomWeaverIdentifyHashWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSources(
     packs.map((pack, index) => ({
       fallbackFileName: pack.fileName,
@@ -291,7 +314,6 @@ const identifyName = async (
   if (!normalized) throw new Error("Identify needs a name to search for.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyPackForPlatform } = await import("./identify-packs.ts");
   let pack: Awaited<ReturnType<typeof loadIdentifyPackForPlatform>>;
   try {
     pack = await loadIdentifyPackForPlatform(platform, (platforms) => {
@@ -306,7 +328,6 @@ const identifyName = async (
       unavailableReason: error.message,
     };
   }
-  const { invokeRomWeaverIdentifyNameWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSources([
     {
       fallbackFileName: pack.fileName,
@@ -357,8 +378,6 @@ const identifyTitles = async (
   if (!name) throw new Error("Identify needs a name to search for.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
-  const { IdentifyDataUnavailableError, loadIdentifyTitleIndex, mapIdentifyTitleSearchMatches } =
-    await import("./identify-packs.ts");
   let titleIndex: Awaited<ReturnType<typeof loadIdentifyTitleIndex>>;
   try {
     titleIndex = await loadIdentifyTitleIndex(options.onProgress);
@@ -367,7 +386,6 @@ const identifyTitles = async (
     return { status: "unavailable", titles: [], unavailableReason: error.message };
   }
   options.signal?.throwIfAborted();
-  const { invokeRomWeaverIdentifyTitlesWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
   const staged = await workerIo.stageSource({
     fallbackFileName: titleIndex.fileName,
     pathPrefix: "identify-title-index",
@@ -457,14 +475,28 @@ const getCreatePatchFormatCandidates = async ({
   return candidates;
 };
 
-const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfUndoInput) => {
+const undoPpf = async ({
+  compression = "none",
+  metadata,
+  companions,
+  target,
+  onWarning,
+  preparedRom,
+  preparedPatch,
+  settings,
+  logLevel,
+  outputName,
+  patch,
+  rom,
+  signal,
+}: BrowserPpfUndoInput) => {
   assertPublicSources([rom, patch]);
   const staged = await browserRuntime.workerIo.stageSources([
     {
       fallbackFileName: "patched-rom.bin",
       pathPrefix: "ppf-undo-rom",
       scope: "apply",
-      source: rom,
+      source: preparedRom || rom,
       trace: { logLevel },
     },
     {
@@ -472,7 +504,7 @@ const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfU
       pathBucket: "patches",
       pathPrefix: "ppf-undo-patch",
       scope: "apply",
-      source: patch,
+      source: preparedPatch || patch,
       trace: { logLevel },
     },
   ]);
@@ -480,14 +512,63 @@ const undoPpf = async ({ logLevel, outputName, patch, rom, signal }: BrowserPpfU
   if (!(stagedRom && stagedPatch)) throw new Error("PPF undo inputs could not be staged");
   try {
     const result = await invokeRomWeaverPpfUndoWorker({
-      knownInputPaths: [stagedRom.filePath, stagedPatch.filePath],
+      knownInputPaths: [stagedRom.filePath, stagedPatch.filePath, ...(companions || []).map((output) => output.path)],
       logLevel,
       outputName,
+      target,
+      onWarning,
+      settings,
       patchFilePath: stagedPatch.filePath,
       romFilePath: stagedRom.filePath,
       signal,
     });
-    return browserRuntime.workerIo.createWorkerOutput(result, outputName, "PPF undo did not return a restored ROM");
+    const options = {
+      ...settings,
+      signal,
+      output: {
+        ...settings?.output,
+        compression: compression as NonNullable<ApplySettings["output"]>["compression"],
+        outputName,
+      },
+      onLog: (record: { level: string; message: string }) => {
+        if (record.level === "warn") onWarning?.(record.message);
+      },
+    };
+    if (compression === "zip" || compression === "7z" || (compression === "none" && result.files.length > 1)) {
+      const format = compression === "7z" ? "7z" : "zip";
+      try {
+        return await createArchiveOutput({
+          compression: format,
+          outputName: `${outputName.replace(/\.[^.]+$/, "")}.${format}`,
+          entries: result.files.map((file) => ({ filename: file.fileName, filePath: file.path })),
+          options,
+          ...(compression === "none" ? { overrides: { zipCodec: "store" as const } } : {}),
+          runtime: browserRuntime,
+        });
+      } finally {
+        await result.cleanup?.();
+      }
+    }
+    const raw = await browserRuntime.workerIo.createWorkerOutput(
+      result,
+      outputName,
+      "PPF undo did not return a restored ROM",
+    );
+    if (compression === "none") return raw;
+    try {
+      const patchFile = await createPatchFileFromRuntimeOutput(raw, raw.fileName);
+      patchFile.metadata = { ...patchFile.metadata, ...metadata, ...(target ? { cuePath: raw.path } : {}) };
+      const compressed = await createSingleFileRomSpecificOutput({
+        compression: compression as RomSpecificCompressionFormat,
+        outputFile: patchFile,
+        options,
+        runtime: browserRuntime,
+      });
+      if (!compressed) throw new Error(`Compression format ${compression} is unavailable for this ROM`);
+      return await toPublicOutput(compressed, browserRuntime);
+    } finally {
+      await raw.dispose();
+    }
   } finally {
     await Promise.all(staged.map((source) => source.cleanup().catch(() => undefined)));
   }

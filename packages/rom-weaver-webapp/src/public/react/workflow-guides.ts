@@ -1,13 +1,14 @@
 import type { WorkflowGuide } from "./components/ds/unified-drop-zone.tsx";
 
 /**
- * Each workflow's browser how-to page. The hero help row and the "New here?"
+ * Each workflow's browser how-to page. The hero help row and the sample-link
  * menu both link it, so the two MUST stay on the same page. Paths are
  * published doc slugs (see `DOC_SOURCES` in `webapp/docs-routing.mjs`).
  */
 const WORKFLOW_GUIDES = {
+  cheats: { path: "docs/use-cheats", label: "ui.hero.cheatsGuide" },
   apply: { path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" },
-  bundle: { path: "docs/create-bundles", label: "ui.hero.bundleGuide" },
+  weave: { path: "docs/create-bundles", label: "ui.hero.weaveGuide" },
   compress: { path: "docs/convert-roms-browser", label: "ui.hero.compressGuide" },
   create: { path: "docs/create-rom-patches", label: "ui.hero.createGuide" },
   extract: { path: "docs/extract-files-browser", label: "ui.hero.extractGuide" },

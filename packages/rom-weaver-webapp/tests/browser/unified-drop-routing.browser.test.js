@@ -15,8 +15,8 @@ const names = (files) => files.map((entry) => (entry ? entry.name : null));
 const localizer = createLocalizer("en");
 
 test("collectRomDropFiles keeps roms and archives but drops patches", () => {
-  const result = collectRomDropFiles([file("game.sfc"), file("hack.ips"), file("bundle.zip")]);
-  expect(names(result.roms)).toEqual(["game.sfc", "bundle.zip"]);
+  const result = collectRomDropFiles([file("game.sfc"), file("hack.ips"), file("weave.zip")]);
+  expect(names(result.roms)).toEqual(["game.sfc", "weave.zip"]);
   expect(names(result.ignoredPatches)).toEqual(["hack.ips"]);
 });
 

@@ -26,12 +26,18 @@ const ensureIdentifyData = () => {
 // Render the shell through an already-running Vite server's SSR loader. The dev
 // server reuses this so the prerendered shell matches production without
 // standing up a second Vite server per index.html request.
-const renderLandingShellWithServer = async (server, view = "patcher", notFound = false, docsSlug = "docs") => {
+const renderLandingShellWithServer = async (
+  server,
+  view = "patcher",
+  notFound = false,
+  docsSlug = "docs",
+  workflowEntry = null,
+) => {
   forceDeterministicNavigator();
   const entry = await server.ssrLoadModule("/src/webapp/prerender-entry.tsx");
   // renderLandingShellHtml resolves the requested tab's lazy route chunk before
   // rendering, so it is async - renderToString cannot suspend.
-  return await entry.renderLandingShellHtml(view, notFound, docsSlug);
+  return await entry.renderLandingShellHtml(view, notFound, docsSlug, workflowEntry);
 };
 
 // Runs `render` against one throwaway SSR server. Standing a server up costs

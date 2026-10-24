@@ -9,8 +9,8 @@ use super::patch_commands::{
     CREATE_PATCH_IPS_SIZE_LIMIT_BYTES, CREATE_PATCH_LARGE_DEFAULT_FORMAT,
     CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES, CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS,
     LARGE_CREATE_PATCH_FORMATS, MEDIUM_CREATE_PATCH_FORMATS, MID_LARGE_CREATE_PATCH_FORMATS,
-    PatchCreateFormatCandidates, PatchCreateInputInfo, PatchCreateInputSizes,
-    PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
+    NO_SHRINK_CREATE_PATCH_FORMATS, PatchCreateFormatCandidates, PatchCreateInputInfo,
+    PatchCreateInputSizes, PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
 };
 
 /// Validated output, context, and format for a non-plan `patch create`.
@@ -100,6 +100,29 @@ pub(super) fn create_patch_formats_for_sizes(
     SMALL_CREATE_PATCH_FORMATS
 }
 
+/// MOD (pmsr) patches can only apply to Paper Mario (USA) v1.0, so the plan lists the format
+/// only for that exact original. The CRC32 is read only when the size already matches.
+fn original_is_paper_mario_usa10(original: &Path, size: u64) -> bool {
+    const PAPER_MARIO_USA10_SIZE: u64 = 41_943_040;
+    const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5_CD7E;
+    if size != PAPER_MARIO_USA10_SIZE {
+        return false;
+    }
+    let Ok(mut file) = fs::File::open(original) else {
+        return false;
+    };
+    let mut hasher = crc32fast::Hasher::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    loop {
+        match rom_weaver_core::read_full(&mut file, &mut buffer) {
+            Ok(0) => break,
+            Ok(read) => hasher.update(&buffer[..read]),
+            Err(_) => return false,
+        }
+    }
+    hasher.finalize() == PAPER_MARIO_USA10_CRC32
+}
+
 pub(super) fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
     let normalized_path = path.to_string_lossy().to_ascii_lowercase();
     extensions
@@ -148,6 +171,16 @@ pub(super) fn create_patch_format_size_error_message(
             "Create inputs at or above {limit} should use BPS, xdelta, or another large-capable patch type; selected patch type: {normalized_format}"
         ));
     }
+    if sizes.modified < sizes.original
+        && NO_SHRINK_CREATE_PATCH_FORMATS.contains(&normalized_format.as_str())
+    {
+        return Some(format!(
+            "{} patches cannot shrink the output (original: {}, modified: {}); use BPS, xdelta, or another patch type that can; selected patch type: {normalized_format}",
+            normalized_format.to_ascii_uppercase(),
+            sizes.original,
+            sizes.modified
+        ));
+    }
     if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES
         && !matches!(normalized_format.as_str(), "xdelta" | "ppf")
     {
@@ -168,42 +201,38 @@ impl CliApp {
         modified: &Path,
         thread_execution: Option<ThreadExecution>,
     ) -> std::result::Result<PatchCreateInputSizes, Box<OperationReport>> {
-        let original_size = match fs::metadata(original) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
+        let inspect = |role: &str, path: &Path| -> std::result::Result<u64, Box<OperationReport>> {
+            let fail = |message: String| {
+                Box::new(
                     OperationReport::failed(
                         OperationFamily::Patch,
-                        format,
+                        format.clone(),
                         "validate",
-                        format!(
-                            "failed to inspect {command} original input `{}`: {error}",
-                            original.display()
-                        ),
-                        thread_execution,
+                        message,
+                        thread_execution.clone(),
                     )
                     .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
+                )
+            };
+            let metadata = fs::metadata(path).map_err(|error| {
+                fail(format!(
+                    "failed to inspect {command} {role} input `{}`: {error}",
+                    path.display()
+                ))
+            })?;
+            // Creation sizes and re-reads its inputs, so a pipe or device would
+            // report size 0 and yield a wrong patch or a partial output.
+            if !metadata.is_file() {
+                debug!(role, path = %path.display(), "patch create rejected a non-regular input");
+                return Err(fail(format!(
+                    "{command} {role} input `{}` is not a regular file; patch create needs seekable inputs, so write the stream to a file first",
+                    path.display()
+                )));
             }
+            Ok(metadata.len())
         };
-        let modified_size = match fs::metadata(modified) {
-            Ok(metadata) => metadata.len(),
-            Err(error) => {
-                return Err(Box::new(
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        format,
-                        "validate",
-                        format!(
-                            "failed to inspect {command} modified input `{}`: {error}",
-                            modified.display()
-                        ),
-                        thread_execution,
-                    )
-                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
-                ));
-            }
-        };
+        let original_size = inspect("original", original)?;
+        let modified_size = inspect("modified", modified)?;
         Ok(PatchCreateInputSizes {
             original: original_size,
             modified: modified_size,
@@ -362,6 +391,7 @@ impl CliApp {
         };
         let create_output = match self.patch_create_output_path(
             &args,
+            &modified_path,
             handler.descriptor().name,
             output,
             &context,
@@ -376,8 +406,12 @@ impl CliApp {
             output: create_output.clone(),
             format: handler.descriptor().name.to_string(),
         };
-        let mut report =
-            self.create_patch_with_handler(handler.as_ref(), &request, solid_options, &context);
+        let mut report = self.create_patch_with_handler(
+            handler.as_ref(),
+            &request,
+            solid_options.or(args.ppf_undo.then_some(PatchCreateFormatOptions::PpfUndo)),
+            &context,
+        );
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -413,6 +447,15 @@ impl CliApp {
                 args.format.clone(),
                 "validate",
                 "SOLID metadata options cannot be combined with --plan".to_string(),
+                probe_threads,
+            );
+        }
+        if args.ppf_undo {
+            return OperationReport::failed(
+                OperationFamily::Patch,
+                args.format.clone(),
+                "validate",
+                "--ppf-undo cannot be combined with --plan".to_string(),
                 probe_threads,
             );
         }
@@ -458,7 +501,18 @@ impl CliApp {
         };
         let sizes = create_patch_input_sizes(&input_info);
         let candidates = create_patch_format_candidates_for_sources(&input_info);
-        let formats = candidates.formats.to_vec();
+        let mut formats = candidates.formats.to_vec();
+        let input_sizes_are_raw = [&input_info.original, &input_info.modified]
+            .iter()
+            .all(|source| !source.archive && !source.special_compression);
+        if input_sizes_are_raw && sizes.modified < sizes.original {
+            debug!("patch create plan drops formats that cannot shrink the output");
+            formats.retain(|format| !NO_SHRINK_CREATE_PATCH_FORMATS.contains(format));
+        }
+        if !original_is_paper_mario_usa10(&args.original, input_info.original.size) {
+            debug!("patch create plan drops pmsr: original is not Paper Mario (USA) v1.0");
+            formats.retain(|format| *format != "pmsr");
+        }
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(candidates.default_format.to_string()),
@@ -560,6 +614,13 @@ impl CliApp {
                 "SOLID metadata options require --format solid or a .solid output".to_string(),
             ));
         }
+        if args.ppf_undo && !requested_format.eq_ignore_ascii_case("ppf") {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                "--ppf-undo requires --format ppf or a .ppf output".to_string(),
+            ));
+        }
         if let Some(warning) = format_warning.as_deref() {
             debug!(
                 command = "patch-create",
@@ -653,6 +714,7 @@ impl CliApp {
     fn patch_create_output_path(
         &self,
         args: &PatchCreateCommand,
+        modified: &Path,
         format_name: &str,
         output: PathBuf,
         context: &OperationContext,
@@ -699,6 +761,15 @@ impl CliApp {
             }
         }
 
+        if crate::path_access::paths_refer_to_same_file(&args.original, &create_output)
+            || crate::path_access::paths_refer_to_same_file(modified, &create_output)
+        {
+            return Err(fail_error(RomWeaverError::Validation(
+                "patch create input and output resolve to the same file; choose a different --output path"
+                    .to_string(),
+            )));
+        }
+
         // Guarded after --checksum-name has settled the final file name, so the
         // path checked is the path written.
         ensure_output_available(&create_output, args.force).map_err(fail_error)?;
@@ -724,7 +795,10 @@ impl CliApp {
             None,
         );
         match handler.create_with_options(request, solid_options.as_ref(), context) {
-            Ok(report) => report,
+            Ok(mut report) => {
+                Self::lift_handler_label_warnings(&mut report);
+                report
+            }
             Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
                 OperationFamily::Patch,
                 Some(handler.descriptor().name.to_string()),

@@ -281,8 +281,8 @@ describe("createSharedCompressionRuntime", () => {
       { create: archiveCreate, extract: archiveExtract, probe: archiveProbe } as never,
       {},
     );
-    await expect(runtime.create?.({ entries: [], format: "zip", outputName: "bundle.zip" } as never)).resolves.toEqual({
-      output: { fileName: "bundle.zip", size: 2 },
+    await expect(runtime.create?.({ entries: [], format: "zip", outputName: "weave.zip" } as never)).resolves.toEqual({
+      output: { fileName: "weave.zip", size: 2 },
     });
     await expect(runtime.probe?.({ format: "zip", source: {} } as never)).resolves.toEqual({
       entries: [{ filename: "game.bin", size_bytes: 2 }],

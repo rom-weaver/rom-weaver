@@ -8,6 +8,7 @@ struct ProbeContainerOptions {
 
 impl CliApp {
     pub(super) fn run_probe(&self, mut args: ProbeCommand) -> AppRunOutcome {
+        let from_stdin = args.input == Path::new("-");
         let _stdin_guard = match crate::stdin_input::spool_stdin_if_dash(&mut args.input) {
             Ok(guard) => guard,
             Err(error) => {
@@ -24,14 +25,17 @@ impl CliApp {
                 );
             }
         };
-        let rom_filter = args.rom_filter();
-        let patch_filter = args.patch_filter();
+        let rom_filter = args.selection.rom_filter();
+        let patch_filter = args.selection.patch_filter();
         let ProbeCommand {
             input: source,
-            select,
-            filter: _,
-            no_extract,
-            no_ignore,
+            selection:
+                ArchiveSelectionArgs {
+                    select,
+                    filter: _,
+                    no_extract,
+                    no_ignore,
+                },
             split_bin,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
@@ -92,7 +96,7 @@ impl CliApp {
             None,
         );
 
-        let report = self.probe_resolved_source(
+        let mut report = self.probe_resolved_source(
             &probe_source,
             &context,
             kind_filter,
@@ -100,8 +104,35 @@ impl CliApp {
             split_bin,
             probe_recommendation.as_ref(),
         );
+        if report.status == OperationStatus::Failed && (from_stdin || probe_source != source) {
+            // Name what the user passed, not the private staging path it was resolved to.
+            let shown = if from_stdin {
+                "<stdin>".to_string()
+            } else {
+                source.display().to_string()
+            };
+            report.label = report
+                .label
+                .replace(&probe_source.display().to_string(), &shown);
+            if !from_stdin && extracted_archives > 0 {
+                let prefix = format!("no registered handler matched `{shown}`");
+                if report.label.contains(&prefix) {
+                    let member = probe_source
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    report.label = report.label.replace(
+                        &prefix,
+                        &format!(
+                            "selected archive member `{member}` of `{shown}` is not a recognised container, patch, or disc image; use `checksum -s` to hash it"
+                        ),
+                    );
+                }
+            }
+        }
         self.finish_probe(
             report,
+            &probe_source,
             extracted_archives,
             cleanup_paths,
             probe_recommendation.as_ref(),
@@ -136,6 +167,7 @@ impl CliApp {
                     kind_filter,
                     stop_on_single_payload_codec: true,
                 },
+                false,
             )
         } else {
             Ok(ResolvedChecksumSource {
@@ -419,6 +451,7 @@ impl CliApp {
     pub(super) fn finish_probe(
         &self,
         mut report: OperationReport,
+        probe_source: &Path,
         extracted_archives: usize,
         cleanup_paths: Vec<PathBuf>,
         recommendation: Option<&CompressFormatRecommendation>,
@@ -434,6 +467,16 @@ impl CliApp {
                 );
                 details.insert("reason".to_string(), json!(recommendation.reason));
             }
+            report.details = Some(Value::Object(details));
+        }
+        // The create mode native `chd` auto-inference would pick for a loose disc/raw image, so
+        // hosts read it rather than re-deriving it from a byte prefix.
+        if report.status == OperationStatus::Succeeded
+            && probe_source.is_file()
+            && let Some(mode) = Self::chd_create_mode_for_path(probe_source)
+        {
+            let mut details = operation_report_details(&mut report);
+            details.insert("chd_create_mode".to_string(), json!(mode));
             report.details = Some(Value::Object(details));
         }
         if report.status == OperationStatus::Succeeded && extracted_archives > 0 {

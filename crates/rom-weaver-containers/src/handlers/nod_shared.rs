@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::{VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -17,6 +18,55 @@ pub(crate) struct NodExtractPlan {
     pub(crate) disc_size: u64,
     pub(crate) compression_label: String,
     pub(crate) output_path: PathBuf,
+}
+
+/// Adds the disc header's game ID and title, and each Wii partition's kind and data size, to
+/// probe details. Fields that are blank or not valid text are left out.
+pub(crate) fn write_disc_header_details(
+    disc: &NodDiscReader,
+    details: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    let header = disc.header();
+    let printable = |text: &str| {
+        let text = text.trim();
+        (!text.is_empty() && !text.chars().any(char::is_control)).then(|| text.to_string())
+    };
+    let game_id = std::str::from_utf8(&header.game_id)
+        .ok()
+        .and_then(printable);
+    let title = std::ffi::CStr::from_bytes_until_nul(&header.game_title)
+        .ok()
+        .and_then(|title| title.to_str().ok())
+        .and_then(printable);
+    trace!(
+        ?game_id,
+        ?title,
+        partitions = disc.partitions().len(),
+        "nod disc probe header"
+    );
+    if let Some(game_id) = game_id {
+        details.insert("game_id".to_string(), game_id.into());
+    }
+    if let Some(title) = title {
+        details.insert("title".to_string(), title.into());
+    }
+    if !disc.partitions().is_empty() {
+        let partitions = disc
+            .partitions()
+            .iter()
+            .map(|partition| {
+                serde_json::json!({
+                    "index": partition.index,
+                    "kind": partition.kind.to_string(),
+                    "data_size": partition.data_size(),
+                })
+            })
+            .collect();
+        details.insert(
+            "partitions".to_string(),
+            serde_json::Value::Array(partitions),
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,23 +215,32 @@ impl NodHandlerCore {
         }
     }
 
-    fn open_disc_with<E, F>(
+    fn open_disc_with<F>(
         &self,
         source: &Path,
         preloader_threads: usize,
         open_disc: F,
     ) -> Result<NodDiscReader>
     where
-        E: std::fmt::Display,
-        F: FnOnce(&Path, &NodDiscOptions) -> std::result::Result<NodDiscReader, E>,
+        F: FnOnce(&Path, &NodDiscOptions) -> std::result::Result<NodDiscReader, DiscOpenFailure>,
     {
         let options = self.read_options(preloader_threads);
-        open_disc(source, &options).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "failed to open {} source `{}`: {error}",
+        open_disc(source, &options).map_err(|failure| {
+            let message = format!(
+                "failed to open {} source `{}`: {}",
                 self.format_name(),
-                source.display()
-            ))
+                source.display(),
+                failure.message
+            );
+            match failure.wbfs_size {
+                Some((actual, expected)) => RomWeaverError::ValidationCode(
+                    ValidationCodeError::new(VALIDATION_CODE_WBFS_SIZE_MISMATCH)
+                        .with_message(message)
+                        .with_field("actual", actual)
+                        .with_field("expected", expected),
+                ),
+                None => RomWeaverError::Validation(message),
+            }
         })
     }
 
@@ -191,7 +250,7 @@ impl NodHandlerCore {
         preloader_threads: usize,
     ) -> Result<NodDiscReader> {
         self.open_disc_with(source, preloader_threads, |path, options| {
-            self.open_disc_from_path_or_stream(path, options)
+            self.open_disc_detailed(path, options)
         })
     }
 
@@ -200,6 +259,17 @@ impl NodHandlerCore {
         source: &Path,
         options: &NodDiscOptions,
     ) -> std::result::Result<NodDiscReader, String> {
+        self.open_disc_detailed(source, options)
+            .map_err(|failure| failure.message)
+    }
+
+    /// Opens a disc by path, falling back to a stream. The failure keeps the last WBFS size
+    /// mismatch, because the message joins every attempt's report.
+    fn open_disc_detailed(
+        &self,
+        source: &Path,
+        options: &NodDiscOptions,
+    ) -> std::result::Result<NodDiscReader, DiscOpenFailure> {
         #[cfg(target_family = "wasm")]
         if self.nod_format != NodFormat::Nfs {
             // Browser WASI thread workers have their own fd tables, so cloned NOD readers must
@@ -211,7 +281,11 @@ impl NodHandlerCore {
                 Ok(disc) => return Ok(disc),
                 Err(stream_error) => {
                     return NodDiscReader::new(source, options).map_err(|path_error| {
-                        format!("{stream_error}; path fallback failed: {path_error}")
+                        DiscOpenFailure {
+                            message: format!("{stream_error}; path fallback failed: {path_error}"),
+                            wbfs_size: wbfs_size_mismatch(&path_error)
+                                .or_else(|| wbfs_size_mismatch(&stream_error)),
+                        }
                     });
                 }
             }
@@ -224,14 +298,33 @@ impl NodHandlerCore {
                 // Non-cloneable stream fallback is mutex-serialized, so preloader fanout only
                 // adds startup thread spawn overhead without improving throughput.
                 fallback_options.preloader_threads = 0;
-                let file = File::open(source).map_err(|stream_open_error| {
-                    format!("{path_error}; stream fallback open failed: {stream_open_error}")
+                let file = File::open(source).map_err(|stream_open_error| DiscOpenFailure {
+                    message: format!(
+                        "{path_error}; stream fallback open failed: {stream_open_error}"
+                    ),
+                    wbfs_size: wbfs_size_mismatch(&path_error),
                 })?;
                 NodDiscReader::new_from_non_cloneable_read(file, &fallback_options).map_err(
-                    |stream_error| format!("{path_error}; stream fallback failed: {stream_error}"),
+                    |stream_error| {
+                        // The path attempt reads the whole split set; the stream fallback sees one file.
+                        let wbfs_size = wbfs_size_mismatch(&path_error)
+                            .or_else(|| wbfs_size_mismatch(&stream_error));
+                        let stream_message = stream_error.to_string();
+                        let path_message = path_error.to_string();
+                        // Both attempts usually fail identically; report that once.
+                        let message = if stream_message == path_message {
+                            path_message
+                        } else {
+                            format!("{path_message}; stream fallback failed: {stream_message}")
+                        };
+                        DiscOpenFailure { message, wbfs_size }
+                    },
                 )
             }
-            Err(path_error) => Err(path_error.to_string()),
+            Err(path_error) => Err(DiscOpenFailure {
+                message: path_error.to_string(),
+                wbfs_size: wbfs_size_mismatch(&path_error),
+            }),
         }
     }
 
@@ -333,9 +426,10 @@ impl NodHandlerCore {
             Some(100.0),
             Some(execution),
         );
-        if !identity.is_empty() {
-            let mut details = serde_json::Map::new();
-            identity.write_into(&mut details);
+        let mut details = serde_json::Map::new();
+        identity.write_into(&mut details);
+        write_disc_header_details(&disc, &mut details);
+        if !details.is_empty() {
             report.details = Some(serde_json::Value::Object(details));
         }
         Ok(report)
@@ -446,10 +540,9 @@ impl NodHandlerCore {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
-        let mut output = BufWriter::new(create_extract_output_file(
-            &plan.output_path,
-            request.overwrite,
-        )?);
+        let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
+        output.set_len(plan.disc_size)?;
+        let mut output = BufWriter::new(output);
         let progress_label = format!("extracting `{}`", self.format_name());
         let bytes_written = copy_reader_with_progress(
             &mut plan.disc,
@@ -510,7 +603,7 @@ impl NodHandlerCore {
     ) -> Result<&'a Path> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(format!(
-                "{} create currently requires exactly one input file",
+                "{} create currently requires exactly one input file; pass one disc image (such as .iso, .gcm, or .rvz)",
                 self.format_name()
             )));
         }
@@ -548,9 +641,10 @@ impl NodHandlerCore {
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}",
-                    input.display(),
-                    self.format_name()
+                    "failed to open input `{}` for {} create: {error}{}",
+                    display_input_name(input),
+                    self.format_name(),
+                    unknown_disc_hint(&error)
                 ))
             })?;
 
@@ -612,9 +706,10 @@ impl NodHandlerCore {
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}",
-                    input.display(),
-                    self.format_name()
+                    "failed to open input `{}` for {} create: {error}{}",
+                    display_input_name(input),
+                    self.format_name(),
+                    unknown_disc_hint(&error)
                 ))
             })?;
 
@@ -716,3 +811,37 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// File name only, so errors do not leak internal staging directories (e.g. `/work` in the browser).
+fn display_input_name(input: &Path) -> String {
+    input.file_name().map_or_else(
+        || input.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+/// A failed disc open: the joined message of every attempt, plus the last WBFS size mismatch.
+struct DiscOpenFailure {
+    message: String,
+    wbfs_size: Option<(u64, u64)>,
+}
+
+/// Reads the sizes out of nod's `Invalid WBFS file size: {actual}, expected {expected}` error.
+/// The mapping lives here so the vendored nod source stays unmodified.
+fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
+    let crate::nod::Error::DiscFormat(message) = error else {
+        return None;
+    };
+    let sizes = message.strip_prefix("Invalid WBFS file size: ")?;
+    let (actual, expected) = sizes.split_once(", expected ")?;
+    Some((actual.parse().ok()?, expected.parse().ok()?))
+}
+
+/// Hint appended when a create input is not a disc image the nod reader recognizes.
+fn unknown_disc_hint(error: &str) -> &'static str {
+    if error.contains("Unknown disc format") {
+        "; the input must be a GameCube or Wii disc image"
+    } else {
+        ""
+    }
+}

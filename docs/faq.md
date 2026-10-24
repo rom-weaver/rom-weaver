@@ -1,6 +1,6 @@
 # Frequently asked questions
 
-Find the guide that answers your question.
+Find rom-weaver guides for ROM patching, checksum errors, supported files, privacy, and offline use.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -8,7 +8,7 @@ Find the guide that answers your question.
 - [Getting started](#getting-started)
   - [What can rom-weaver do?](#what-can-rom-weaver-do)
   - [Can I try it without a game file?](#can-i-try-it-without-a-game-file)
-  - [Where are Trim, PPF Undo, and the Save Editor?](#where-are-trim-ppf-undo-and-the-save-editor)
+  - [Where are Trim and the Save Editor?](#where-are-trim-and-the-save-editor)
 - [Files and privacy](#files-and-privacy)
   - [Are my ROMs or patches uploaded?](#are-my-roms-or-patches-uploaded)
   - [Does rom-weaver include games?](#does-rom-weaver-include-games)
@@ -19,21 +19,24 @@ Find the guide that answers your question.
   - [Which patch format should I choose?](#which-patch-format-should-i-choose)
   - [Can I drop a ZIP or 7z without extracting it?](#can-i-drop-a-zip-or-7z-without-extracting-it)
   - [Why does the expected filename not match?](#why-does-the-expected-filename-not-match)
-  - [Why does the checksum not match?](#why-does-the-checksum-not-match)
+  - [What does a source ROM checksum mismatch mean?](#what-does-a-source-rom-checksum-mismatch-mean)
   - [Does patch order matter?](#does-patch-order-matter)
   - [Why is Apply and Download disabled?](#why-is-apply-and-download-disabled)
 - [Creating a patch](#creating-a-patch)
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
   - [What belongs in release notes?](#what-belongs-in-release-notes)
-- [Bundles](#bundles)
-  - [What is a bundle?](#what-is-a-bundle)
-  - [Does a bundle contain the ROM?](#does-a-bundle-contain-the-rom)
+  - [Can I convert a BPS patch to IPS?](#can-i-convert-a-bps-patch-to-ips)
+- [Weaves](#weaves)
+  - [What is a weave?](#what-is-a-weave)
+  - [Does a weave contain the ROM?](#does-a-weave-contain-the-rom)
   - [How do I make one?](#how-do-i-make-one)
-  - [Can a link open my hosted bundle?](#can-a-link-open-my-hosted-bundle)
+  - [Can a link open my hosted weave?](#can-a-link-open-my-hosted-weave)
 - [Identify, prepare, and save](#identify-prepare-and-save)
   - [Why is my ROM unknown?](#why-is-my-rom-unknown)
+  - [Can I find a ROM from its checksum without a file?](#can-i-find-a-rom-from-its-checksum-without-a-file)
   - [Can I compress or extract without a patch?](#can-i-compress-or-extract-without-a-patch)
+  - [Can I decompress CHD to ISO?](#can-i-decompress-chd-to-iso)
   - [Can I make a trimmed ROM larger again?](#can-i-make-a-trimmed-rom-larger-again)
   - [Can I undo a patch?](#can-i-undo-a-patch)
   - [Can I edit a save state?](#can-i-edit-a-save-state)
@@ -61,7 +64,7 @@ Find the guide that answers your question.
 
 [Your first patch with supplied homebrew files](tutorials/first-patch.md), or any of the [guided practice runs](reference/guided-runs.md).
 
-### Where are Trim, PPF Undo, and the Save Editor?
+### Where are Trim and the Save Editor?
 
 [Enable beta tools](how-to/browser-settings.md#enable-beta-tools).
 
@@ -81,7 +84,7 @@ Find the guide that answers your question.
 
 ### Can I share the result?
 
-[Bundles and redistribution](explanation/bundles.md#what-it-is-not).
+[Weaves and redistribution](explanation/bundles.md#what-it-is-not).
 
 ## Applying a patch
 
@@ -101,9 +104,11 @@ Find the guide that answers your question.
 
 [Checksums and filenames](explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not).
 
-### Why does the checksum not match?
+<a id="why-does-the-checksum-not-match"></a>
 
-Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
+### What does a source ROM checksum mismatch mean?
+
+Work through [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md).
 
 ### Does patch order matter?
 
@@ -127,23 +132,35 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 [Write useful release notes](how-to/create-rom-patches.md#write-useful-release-notes).
 
-## Bundles
+### Can I convert a BPS patch to IPS?
 
-### What is a bundle?
+[Convert BPS to IPS and other patch formats](how-to/convert-patch-format-browser.md).
 
-[What a bundle is](explanation/bundles.md).
+<a id="bundles"></a>
 
-### Does a bundle contain the ROM?
+## Weaves
 
-[What a bundle contains](explanation/bundles.md#what-it-is-not).
+<a id="what-is-a-bundle"></a>
+
+### What is a weave?
+
+[What a weave is](explanation/bundles.md).
+
+<a id="does-a-bundle-contain-the-rom"></a>
+
+### Does a weave contain the ROM?
+
+[What a weave contains](explanation/bundles.md#what-it-is-not).
 
 ### How do I make one?
 
-[Create and share a patch bundle](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
+[Share multiple ROM patches as one weave](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
 
-### Can a link open my hosted bundle?
+<a id="can-a-link-open-my-hosted-bundle"></a>
 
-[Open a hosted bundle in Apply](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
+### Can a link open my hosted weave?
+
+[Open a hosted weave](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
 
 ## Identify, prepare, and save
 
@@ -151,9 +168,17 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 [Read an identification result](how-to/identify-roms-browser.md#identify-a-file).
 
+### Can I find a ROM from its checksum without a file?
+
+[Search ROM checksums by CRC32, MD5, or SHA-1](how-to/search-rom-checksums-browser.md).
+
 ### Can I compress or extract without a patch?
 
-[Extract files in the browser](how-to/extract-files-browser.md) or [convert a ROM in the browser](how-to/convert-roms-browser.md). For disc formats, see [RVZ to ISO](how-to/convert-rvz-to-iso-browser.md) and [ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md). For terminal workflows, use [CLI archive commands](how-to/work-with-archives.md).
+[Extract files in the browser](how-to/extract-files-browser.md) or [compress a ROM in the browser](how-to/convert-roms-browser.md). For disc formats, see [RVZ to ISO](how-to/convert-rvz-to-iso-browser.md) and [ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md). For terminal workflows, use [CLI archive commands](how-to/work-with-archives.md).
+
+### Can I decompress CHD to ISO?
+
+[Convert CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md).
 
 ### Can I make a trimmed ROM larger again?
 

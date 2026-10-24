@@ -49,10 +49,18 @@ impl CliApp {
             base_inputs.prepared,
             prepared_representation,
             &plan_inputs,
+            base_inputs.first_step_reads_base,
             context,
         )?;
         let resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
-        Self::check_apply_step_bases(steps, &plan_inputs, &resolved, &base_variants, context)?;
+        Self::check_apply_step_bases(
+            steps,
+            &plan_inputs,
+            &resolved,
+            &base_variants,
+            base_inputs.first_step_reads_base,
+            context,
+        )?;
 
         let verifications = steps
             .iter_mut()
@@ -95,7 +103,7 @@ impl CliApp {
         // or archive expansion can change the resolved count, in which case
         // declarations cannot be attributed and only inference applies.
         let aligned = |declared_len: usize| declared_len == user_count;
-        let bundle_steps_applied = user_count > 0
+        let weave_steps_applied = user_count > 0
             && steps
                 .iter()
                 .skip(cheat_steps)
@@ -103,7 +111,7 @@ impl CliApp {
         for step in steps.iter_mut().take(cheat_steps) {
             step.metadata.verification = Some(patch_plan::PatchStepVerification::default());
         }
-        if !bundle_steps_applied {
+        if !weave_steps_applied {
             for step in steps.iter_mut().skip(cheat_steps) {
                 let verification = step
                     .metadata
@@ -157,7 +165,7 @@ impl CliApp {
                 let handler = self.patches.probe(resolved_patch_path);
                 let verification = step.metadata.verification.as_ref();
                 let declared_basis = verification.and_then(|verification| verification.basis);
-                // Unbased bundle checks constrain inference and remain a
+                // Unbased weave checks constrain inference and remain a
                 // previous-step runtime gate; only explicit declarations may
                 // use them as independent base evidence. Ignore mode retains
                 // endpoint planning without turning declarations back into
@@ -227,6 +235,7 @@ impl CliApp {
         plan_inputs: &[patch_plan::PlanPatchInput],
         resolved: &patch_plan::ResolvedPlan,
         base_variants: &[patch_plan::BaseVariant],
+        first_step_reads_base: bool,
         context: &OperationContext,
     ) -> Result<()> {
         for (index, verdict) in resolved.per_patch.iter().enumerate() {
@@ -253,6 +262,15 @@ impl CliApp {
 
         for index in 0..steps.len() {
             let patch_path = &steps[index].patch.source;
+            if index == 0 && !first_step_reads_base {
+                // The chain loop verifies these checks against the source the
+                // step actually reads; the base ROM is not that input.
+                trace!(
+                    patch = %patch_path.display(),
+                    "first step reads another source; skipping its base check"
+                );
+                continue;
+            }
             let required_base_failed = resolved.per_patch[index].input_verdict
                 == patch_plan::PatchInputVerdict::Failed
                 || (!plan_inputs[index].declared_input.is_empty()
@@ -280,7 +298,7 @@ impl CliApp {
                     .with_field("patch", patch_path.display().to_string())
                     .with_field("detail", resolved.per_patch[index].message.clone());
                 let declared = &plan_inputs[index].declared_input;
-                super::super::bundle_apply::describe_expected_state(
+                super::super::weave_apply::describe_expected_state(
                     &declared.checksums,
                     declared.size,
                     &mut coded,

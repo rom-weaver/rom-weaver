@@ -8,22 +8,6 @@ import { HomeLoom } from "../../src/webapp/components/home-loom.tsx";
 import { HomePage } from "../../src/webapp/components/home-page.tsx";
 import { navigatorWith } from "./navigator-test-utils.ts";
 
-const makeContext = () =>
-  ({
-    beginPath: vi.fn(),
-    clearRect: vi.fn(),
-    clip: vi.fn(),
-    closePath: vi.fn(),
-    fill: vi.fn(),
-    quadraticCurveTo: vi.fn(),
-    rect: vi.fn(),
-    restore: vi.fn(),
-    save: vi.fn(),
-    setTransform: vi.fn(),
-    lineTo: vi.fn(),
-    moveTo: vi.fn(),
-  }) as unknown as CanvasRenderingContext2D;
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -34,169 +18,87 @@ beforeAll(async () => {
 });
 
 describe("HomeLoom", () => {
-  it("draws the animated weave, responds to resize and dye changes, and cleans up", () => {
-    const context = makeContext();
-    const frames = new Map<number, FrameRequestCallback>();
-    let frameId = 0;
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
-    vi.spyOn(HTMLCanvasElement.prototype, "getBoundingClientRect").mockReturnValue({
-      bottom: 180,
-      height: 180,
-      left: 0,
-      right: 560,
-      top: 0,
-      width: 560,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    Object.defineProperty(HTMLCanvasElement.prototype, "clientWidth", { configurable: true, value: 560 });
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      const id = ++frameId;
-      frames.set(id, callback);
-      return id;
-    });
-    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
-    vi.spyOn(performance, "now").mockReturnValue(0);
-    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    document.documentElement.style.setProperty("--well", "#111");
-    document.documentElement.style.setProperty("--warp-a", "#222");
-    document.documentElement.style.setProperty("--warp-b", "#333");
-    document.documentElement.style.setProperty("--shuttle", "#444");
-    document.documentElement.style.setProperty("--loom-weft-1", "#555");
-    document.documentElement.style.setProperty("--loom-weft-2", "#666");
-    document.documentElement.style.setProperty("--loom-weft-3", "#777");
-
-    const { container, unmount } = render(<HomeLoom ariaLabel="The original ROM has three patches." />);
-    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
-    expect(canvas.getAttribute("role")).toBe("img");
-    expect(canvas.getAttribute("aria-label")).toContain("three patches");
-    expect(context.setTransform.mock.calls.length).toBeGreaterThan(0);
-    expect(frames.size).toBe(1);
-
-    const initialFrame = frames.values().next().value as FrameRequestCallback;
-    initialFrame(3_000);
-    expect(context.clearRect.mock.calls.length).toBeGreaterThan(0);
-    expect(context.save.mock.calls.length).toBeGreaterThan(0);
-    expect(context.restore.mock.calls.length).toBeGreaterThan(0);
-    window.dispatchEvent(new Event("resize"));
-    document.documentElement.setAttribute("data-theme", "dark");
-    for (const callback of frames.values()) callback(10_000);
-    expect(context.setTransform.mock.calls.length).toBeGreaterThan(1);
-
-    unmount();
-    window.dispatchEvent(new Event("resize"));
-    expect(context.setTransform.mock.calls.length).toBeGreaterThan(1);
-  });
-
-  it("paints all rows immediately when reduced motion is enabled", () => {
-    const context = makeContext();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
-    vi.stubGlobal("requestAnimationFrame", vi.fn());
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(<HomeLoom ariaLabel="The original ROM has three patches." />);
-    expect(requestAnimationFrame).not.toHaveBeenCalled();
-    expect(context.save.mock.calls.length).toBe(3);
-    expect(context.fill.mock.calls.length).toBeGreaterThan(0);
-  });
-
-  it("adopts the loop the shell started on the hydrated canvas and stops it on unmount", () => {
-    // A real context, so a mount that ignored the parked loop would start a
-    // second loop and fail the frame assertion below.
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(makeContext());
-    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    vi.stubGlobal("requestAnimationFrame", vi.fn());
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    // The prerendered shell: the same markup, already in the document, with the
-    // inline script's loop parked on window for the mount to pick up.
-    const container = document.createElement("div");
-    container.innerHTML = renderToString(<HomeLoom ariaLabel="The original ROM has three patches." />);
-    document.body.append(container);
-    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
-    const shellLoom = { canvas, stop: vi.fn() };
-    (window as Window & { ROM_WEAVER_SHELL_LOOM?: typeof shellLoom }).ROM_WEAVER_SHELL_LOOM = shellLoom;
-
-    const { unmount } = render(<HomeLoom ariaLabel="The original ROM has three patches." />, {
-      container,
-      hydrate: true,
-    });
-    expect(container.querySelector("canvas")).toBe(canvas);
-    expect((window as Window & { ROM_WEAVER_SHELL_LOOM?: unknown }).ROM_WEAVER_SHELL_LOOM).toBeUndefined();
-    // No second loop: the shell's frames keep drawing.
-    expect(requestAnimationFrame).not.toHaveBeenCalled();
-    expect(shellLoom.stop).not.toHaveBeenCalled();
-    unmount();
-    expect(shellLoom.stop).toHaveBeenCalledTimes(1);
-    container.remove();
-  });
-
-  it("stops a shell loop that draws on another canvas and starts its own", () => {
-    const context = makeContext();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
-    vi.stubGlobal("requestAnimationFrame", vi.fn());
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    // Hydration fell back to a client render, so the shell's canvas is gone.
-    const shellLoom = { canvas: document.createElement("canvas"), stop: vi.fn() };
-    (window as Window & { ROM_WEAVER_SHELL_LOOM?: typeof shellLoom }).ROM_WEAVER_SHELL_LOOM = shellLoom;
-
-    render(<HomeLoom ariaLabel="The original ROM has three patches." />);
-    expect(shellLoom.stop).toHaveBeenCalledTimes(1);
-    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
-    expect((window as Window & { ROM_WEAVER_SHELL_LOOM?: unknown }).ROM_WEAVER_SHELL_LOOM).toBeUndefined();
+  it("labels the original, each patch in order, and the checked result", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomeLoom />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector(".home-loom-beam.home-loom-top")?.textContent).toBe("game.chd");
+    expect(Array.from(container.querySelectorAll(".home-loom-label"), (label) => label.textContent)).toEqual([
+      "1translation.bps.rar",
+      "2bugfix.ips.zip",
+      "3undub.xdelta.7z",
+    ]);
+    expect(container.querySelector(".home-loom-beam.home-loom-bottom")?.textContent).toBe(
+      "patched-game.chdSHA-1 checked",
+    );
+    expect(container.querySelector("figcaption")?.textContent).toContain("Patches apply in the order shown");
+    // The drawing is decoration; the labels carry its meaning for assistive technology.
+    const drawing = Array.from(container.querySelectorAll(".home-loom-bed, .home-loom-band"));
+    expect(drawing).toHaveLength(4);
+    expect(drawing.every((node) => node.getAttribute("aria-hidden") === "true")).toBe(true);
   });
 });
 
 describe("HomePage", () => {
+  it("offers separate disc conversion and extraction with offline preparation", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    const disc = Array.from(container.querySelectorAll(".home-route")).find((row) =>
+      row.textContent?.includes("game.chd"),
+    );
+    expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Compress");
+    expect(disc?.querySelector("a[href='/tools/extract']")?.textContent).toBe("Extract files");
+    expect(disc?.textContent).toContain("ISO or BIN/CUE");
+    const offline = container.querySelector("a[href='/tools/docs/browser-settings#prepare-for-offline-use']");
+    expect(offline?.textContent).toBe("Prepare for offline use");
+    expect(offline?.parentElement?.textContent).toContain("separate downloads");
+  });
+
   it("builds sub-path-safe workflow links and includes the public workflow copy", async () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    const links = Array.from(
-      container.querySelectorAll(
-        ".home-main-actions a[href^='/tools/']:not([href*='/docs']):not([href*='?']), " +
-          ".home-webapp a[href^='/tools/']:not([href*='/docs']):not([href*='?'])",
-      ),
-    ).map((link) => link.getAttribute("href"));
-    expect(links).toEqual([
+    expect(container.querySelector(".home-practice a")?.getAttribute("href")).toMatch(/^\/tools\//);
+    expect(Array.from(container.querySelectorAll(".home-route-go"), (link) => link.getAttribute("href"))).toEqual([
       "/tools/apply-patches",
-      "/tools/create-patch",
-      "/tools/bundle-patches",
+      "/tools/compress",
+      "/tools/extract",
+      "/tools/identify-rom",
+      "/tools/create-rom-patch",
+      "/tools/apply-patches",
       "/tools/test-rom",
       "/tools/checksum",
+      "/tools/weave-patches",
     ]);
-    expect(container.querySelector("#home-title")?.textContent).toContain("Patch ROMs in your browser.");
-    expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
-    expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
-    expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
-    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
-    expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain("game.chdextractgame.iso");
-    expect(container.textContent).toContain("translation.bps.rarunpacktranslation.bps");
-    expect(container.textContent).toContain("bugfix.ips.zipunpackbugfix.ips");
-    expect(container.textContent).toContain("undub.xdelta.7zunpackundub.xdelta");
-    expect(container.querySelector(".home-loom-output-flow")?.textContent).toContain(
-      "outputgame.isocompresspatched-game.chd",
+    expect(container.querySelector(".home-main-actions .home-practice")?.textContent).toBe(
+      "No files yet? Patch a practice ROM, step by step",
     );
-    expect(Array.from(container.querySelectorAll(".home-loom-flow-action"), (item) => item.textContent)).toEqual([
-      "extract",
-      "unpack",
-      "unpack",
-      "unpack",
-      "compress",
+    expect(container.querySelector(".home-main-actions .home-pick")?.textContent).toBe("Choose files");
+    expect(container.querySelector(".home-pick #home-file-input")).not.toBeNull();
+    expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(
+      "See every format",
+    );
+    expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
+    expect(container.querySelector("a[href='/tools/docs/faq']")).not.toBeNull();
+    const formatHeadings = Array.from(container.querySelectorAll(".home-format-group h3"), (item) => item.textContent);
+    expect(formatHeadings).toEqual(["20 patch formats", "24 archive and disc formats", "8 checksum types"]);
+    expect(container.querySelector(".home-format-group p")?.textContent).toContain(".bps");
+    expect(container.querySelectorAll(".home-faq details")).toHaveLength(4);
+    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("Patches apply in the order shown");
+    expect(Array.from(container.querySelectorAll(".home-trust-list h3"), (item) => item.textContent)).toEqual([
+      "Works offline",
+      "Originals stay as they were",
+      "Open source",
     ]);
-    expect(container.querySelector(".home-loom-disc-flow .home-loom-source-swatch")).not.toBeNull();
-    expect(container.querySelector(".home-loom-output-flow .home-loom-output-swatch")).not.toBeNull();
-    expect(container.querySelector(".home-loom-result")?.textContent).toBe("result");
-    expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(5);
-    expect(
-      Array.from(container.querySelectorAll(".home-install-code")).every(
-        (code) => code instanceof HTMLTextAreaElement && code.readOnly,
-      ),
-    ).toBe(true);
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
     fireEvent.click(container.querySelector(".home-install-copy") as HTMLButtonElement);
@@ -204,10 +106,11 @@ describe("HomePage", () => {
   });
 
   it.each([
-    ["Windows NT 10.0", "Windows (PowerShell)", "install.ps1"],
-    ["Macintosh; Intel Mac OS X", "macOS / Linux", "install.sh"],
-    ["Linux x86_64", "macOS / Linux", "install.sh"],
-  ])("shows the installer for %s after hydration", (userAgent, label, script) => {
+    ["Windows NT 10.0", "Windows (PowerShell)", "Windows", "install.ps1"],
+    ["Macintosh; Intel Mac OS X", "macOS / Linux", "macOS / Linux", "install.sh"],
+    ["Linux x86_64", "macOS / Linux", "macOS / Linux", "install.sh"],
+    ["iPhone; CPU iPhone OS 17_0 like Mac OS X", "macOS / Linux", "macOS / Linux", "install.sh"],
+  ])("shows the installer for %s after hydration", (userAgent, label, tab, command) => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
     const page = (
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
@@ -218,9 +121,51 @@ describe("HomePage", () => {
     const { container } = render(page);
     const commands = container.querySelectorAll(".home-install-code");
     expect(commands).toHaveLength(1);
-    expect(commands[0]?.getAttribute("aria-label")).toBe(label);
-    expect((commands[0] as HTMLTextAreaElement).value).toContain(script);
-    expect(container.querySelector(".home-install a")?.getAttribute("href")).toContain("/tools/docs/install#");
+    expect(commands[0]?.textContent).toContain(command);
+    expect(container.querySelector(".home-install-copy")?.getAttribute("aria-label")).toBe(`Copy ${label}`);
+    expect(container.querySelector(".home-install-methods [aria-pressed='true']")?.textContent).toBe(tab);
+    expect(container.querySelector(".home-install-doc")?.textContent).toBe(label);
+    expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toContain("/tools/docs/install#");
+  });
+
+  it("switches the install command when another method is picked", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Linux x86_64");
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    const npm = Array.from(container.querySelectorAll(".home-install-methods button")).find(
+      (button) => button.textContent === "npm",
+    ) as HTMLButtonElement;
+    fireEvent.click(npm);
+    expect(npm.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".home-install-code")?.textContent).toBe("npm install --global rom-weaver");
+    expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toBe("/tools/docs/install#npm");
+  });
+
+  it("prerenders the Apply action and drop zone that verify-seo-build.mjs checks", () => {
+    const html = renderToString(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://rom-weaver.com/" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(html).toContain('class="btn ghost slim home-route-go" href="/apply-patches"');
+    expect(html).toContain('id="home-file-input"');
+  });
+
+  it("hands picked files to the shell's router", () => {
+    const picked: File[][] = [];
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/" onFiles={(files) => picked.push(files)} />
+      </RomWeaverSettingsProvider>,
+    );
+    const input = container.querySelector<HTMLInputElement>("#home-file-input");
+    expect(input?.multiple).toBe(true);
+    const files = [new File(["rom"], "game.sfc"), new File(["patch"], "hack.ips")];
+    fireEvent.change(input as HTMLInputElement, { target: { files } });
+    expect(picked.map((batch) => batch.map((file) => file.name))).toEqual([["game.sfc", "hack.ips"]]);
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {
@@ -229,8 +174,8 @@ describe("HomePage", () => {
         <HomePage baseUrl="not a URL" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patches");
-    expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
+    expect(container.querySelector(".home-route-go")?.getAttribute("href")).toBe("/apply-patches");
+    expect(container.querySelector("a[href='/create-rom-patch']")).toBeTruthy();
   });
 
   it("updates homepage copy and workflow names when the language changes", () => {
@@ -240,7 +185,8 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Patche ROMs in deinem Browser.");
-    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Patches anwenden");
+    expect(container.querySelector(".home-route-go")?.textContent).toBe("Anwenden");
+    expect(container.querySelector(".home-practice")?.textContent).toContain("Noch keine Dateien?");
     expect(container.textContent).toContain("Befehlszeile");
 
     rerender(
@@ -249,7 +195,8 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Aplica parches a ROMs en tu navegador.");
-    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Aplicar parches");
+    expect(container.querySelector(".home-route-go")?.textContent).toBe("Aplicar");
+    expect(container.querySelector(".home-practice")?.textContent).toContain("¿Aún no tienes archivos?");
     expect(container.textContent).toContain("Línea de comandos");
   });
 });

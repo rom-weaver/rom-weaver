@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createLocalizer } from "../../src/presentation/localization/index.ts";
+import { createLocalizer, preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createFindIndex, loadIdentifyFindEntries, searchFind } from "../../src/webapp/find-index.ts";
 
 const identifyMocks = vi.hoisted(() => ({
@@ -11,8 +11,8 @@ vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => identifyMocks);
 
 const TABS = [
   { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { href: "bundle", icon: null, id: "bundle", label: "Bundles" },
-  { href: "create-patch", icon: null, id: "creator", label: "Create Patch" },
+  { href: "weave", icon: null, id: "weave", label: "Weaves" },
+  { href: "create-rom-patch", icon: null, id: "creator", label: "Create Patch" },
   {
     beta: true,
     group: "tools" as const,
@@ -32,6 +32,7 @@ const TABS = [
     label: "Trim ROM",
     placement: "more" as const,
   },
+  { beta: true, group: "roms" as const, href: "save-editor", icon: null, id: "save-editor", label: "Save Editor" },
 ];
 
 const GUIDES = [
@@ -60,18 +61,30 @@ beforeEach(() => {
 describe("createFindIndex", () => {
   it("lists tools then app surfaces for browsing, and every setting for search", () => {
     const index = createFindIndex(sources);
-    expect(index.browse.map((entry) => entry.id).slice(0, 7)).toEqual([
+    expect(index.browse.map((entry) => entry.id).slice(0, 8)).toEqual([
       "tool:patcher",
-      "tool:bundle",
+      "tool:weave",
       "tool:creator",
       "tool:identify",
       "tool:test",
       "tool:trim",
+      "tool:save-editor",
       "app:settings",
     ]);
     expect(index.browse.some((entry) => entry.kind === "setting")).toBe(false);
     expect(index.entries.find((entry) => entry.id === "setting:threads")?.hint).toBe("Settings · Compression");
     expect(index.entries.find((entry) => entry.id === "app:github")?.href).toBe("https://example.com/repo");
+  });
+});
+
+describe("createFindIndex in German", () => {
+  it("shows localized settings group titles yet still finds them by the English name", async () => {
+    await preloadCatalog("de");
+    const index = createFindIndex({ ...sources, localizer: createLocalizer("de") });
+    const threads = index.entries.find((entry) => entry.id === "setting:threads");
+    expect(threads?.hint).toBe("Einstellungen · Komprimierung");
+    expect(threads?.keywords).toContain("Compression");
+    expect(threads?.keywords).toContain("Komprimierung");
   });
 });
 
@@ -91,21 +104,32 @@ describe("searchFind", () => {
     expect(identify[0]?.entry).toMatchObject({
       id: "tool:identify",
       kind: "tool",
-      hint: "Match your ROM’s checksum against the local database to find its exact dump name.",
+      hint: "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum.",
     });
+  });
+
+  it("finds the Save Editor tool by its name and by the keyword saves", () => {
+    const index = createFindIndex(sources, GUIDES);
+    for (const query of ["save editor", "saves"]) {
+      expect(searchFind(index, query)[0]?.entry).toMatchObject({
+        id: "tool:save-editor",
+        label: "Save Editor",
+        kind: "tool",
+      });
+    }
   });
 
   it("maps browser and CLI command aliases to the matching tool or guide", () => {
     const index = createFindIndex(sources, GUIDES);
-    expect(searchFind(index, "weave")[0]?.entry).toMatchObject({ id: "tool:patcher", href: "apply-patch" });
-    expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({
-      action: { type: "view", view: "bundle" },
-      hint: "Build patch bundles and optionally apply them.",
-      href: "bundle",
-      id: "tool:bundle",
-      label: "Bundle Patches",
+    expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({ id: "tool:weave", href: "weave" });
+    expect(searchFind(index, "weave")[0]?.entry).toMatchObject({
+      action: { type: "view", view: "weave" },
+      hint: "Build patch weaves and optionally apply them.",
+      href: "weave",
+      id: "tool:weave",
+      label: "Weave Patches",
     });
-    expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
+    expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-rom-patch" });
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });
     expect(searchFind(index, "bsdiff")[0]?.entry).toMatchObject({ id: "tool:patcher" });
     expect(searchFind(index, "untrim")[0]?.entry).toMatchObject({
@@ -200,5 +224,13 @@ describe("loadIdentifyFindEntries", () => {
     await expect(loadIdentifyFindEntries("3337ec460", "Identify ROM")).resolves.toEqual([]);
     expect(identifyMocks.lookupExpectedRom).not.toHaveBeenCalled();
     expect(identifyMocks.searchExpectedRomTitles).not.toHaveBeenCalled();
+  });
+});
+
+describe("Compress tool search", () => {
+  it('is named Compress but still found by the "convert" keyword', () => {
+    const compress = { href: "compress", icon: null, id: "compress", label: "Compress" };
+    const index = createFindIndex({ ...sources, tabs: [...TABS, compress] });
+    expect(searchFind(index, "convert")[0]?.entry).toMatchObject({ id: "tool:compress", label: "Compress" });
   });
 });

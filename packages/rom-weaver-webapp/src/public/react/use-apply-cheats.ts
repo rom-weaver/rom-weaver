@@ -27,6 +27,7 @@ type ApplyCheatsInput = {
   resolvedAssetBaseUrl: string | undefined;
   resolvedUiController: ReturnType<typeof useLocalApplyPatchFormSession>["localUiController"];
   selectedCheatPositionsRef: RefObject<number[]>;
+  selectedCheatWeavePositionsRef: RefObject<number[]>;
   selectedCheatsRef: RefObject<ClassifiedCheatRecord[]>;
   setCheatConflictMessage: Dispatch<SetStateAction<string>>;
   setCheatNames: Dispatch<SetStateAction<string[]>>;
@@ -43,6 +44,7 @@ const useApplyCheats = ({
   resolvedAssetBaseUrl,
   resolvedUiController,
   selectedCheatPositionsRef,
+  selectedCheatWeavePositionsRef,
   selectedCheatsRef,
   setCheatConflictMessage,
   setCheatNames,
@@ -90,7 +92,7 @@ const useApplyCheats = ({
     [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
   );
   const peekCheatSource = useCallback(
-    () => (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source,
+    () => (preparedWorkflowRef.current || workflowHandle.peek())?.getWeaveExportSources().rom?.source,
     [preparedWorkflowRef, workflowHandle],
   );
   const getCheatSource = useCallback(() => {
@@ -142,11 +144,15 @@ const useApplyCheats = ({
     },
     [cheatFileName, cheatRomRow?.size, getCheatSource, resolvedAssetBaseUrl],
   );
+  // The controller object changes with every store update, so a ref keeps handleCheatSelection stable.
+  const discardCompletedOutputRef = useRef(resolvedUiController.discardCompletedOutput);
+  discardCompletedOutputRef.current = resolvedUiController.discardCompletedOutput;
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
-    (records: ClassifiedCheatRecord[], positions: number[] = []) => {
+    (records: ClassifiedCheatRecord[], positions: number[] = [], weavePositions: number[] = positions) => {
       selectedCheatsRef.current = records;
       selectedCheatPositionsRef.current = positions;
+      selectedCheatWeavePositionsRef.current = weavePositions;
       // ROM cheat offsets refer to the staged bytes, so selected ROM writes
       // prevent header stripping during apply.
       const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
@@ -157,6 +163,8 @@ const useApplyCheats = ({
       setCheatNames(romRecords.map((record) => record.description));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
+      // A finished run baked the previous cheat list, so retire its Download.
+      discardCompletedOutputRef.current();
       (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords, romPositions);
       const sequence = ++preflightSequence.current;
       setCheatConflictMessage("");
@@ -197,6 +205,7 @@ const useApplyCheats = ({
       getCheatSource,
       preparedWorkflowRef,
       selectedCheatPositionsRef,
+      selectedCheatWeavePositionsRef,
       selectedCheatsRef,
       setCheatConflictMessage,
       setCheatNames,

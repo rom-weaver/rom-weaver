@@ -129,8 +129,8 @@ type OfflineWarmup = {
   getIdentifyGroupState: () => Promise<IdentifyGroupState[]>;
   getReadyState: () => Promise<OfflineReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
-  /** onInterim streams byte-level progress while the unit downloads. */
-  runNextUnit: (onInterim?: (progress: WarmupProgress) => void) => Promise<WarmupProgress>;
+  /** onInterim streams progress; identifyGroupIds limits data-saver pumps to those queued groups. */
+  runNextUnit: (onInterim?: (progress: WarmupProgress) => void, identifyGroupIds?: string[]) => Promise<WarmupProgress>;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
   setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<IdentifyGroupState[]>;
   reset: () => void;
@@ -750,9 +750,17 @@ const createOfflineWarmup = ({
   // Pumps MUST run serially. Concurrent clients can take the same head unit and discard work when one removes it.
   let pumpChain: Promise<unknown> = Promise.resolve();
 
-  const processNextUnit = async (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupUnit | undefined> => {
+  const processNextUnit = async (
+    onInterim?: (progress: WarmupProgress) => void,
+    identifyGroupIds?: string[],
+  ): Promise<WarmupUnit | undefined> => {
     if (policy && !(await policy.isEnabled())) return undefined;
-    const units = await getQueue();
+    const queued = await getQueue();
+    // A priority bump is not permission to download the next unrelated unit.
+    // Keep the full queue intact so an explicit offline download can resume it.
+    const units = identifyGroupIds
+      ? queued.filter((unit) => unit.kind === "identify-group" && identifyGroupIds.includes(unit.group.id))
+      : queued;
     const unit = units[0];
     if (!unit) {
       // Runtime requests can fill the queue's files before its completion marker exists.
@@ -835,10 +843,15 @@ const createOfflineWarmup = ({
     return batchHead;
   };
 
-  const runNextUnit = (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupProgress> => {
+  const runNextUnit = (
+    onInterim?: (progress: WarmupProgress) => void,
+    identifyGroupIds?: string[],
+  ): Promise<WarmupProgress> => {
     const generation = policy?.token();
     const process = () =>
-      policy && generation !== policy.token() ? Promise.resolve(undefined) : processNextUnit(onInterim);
+      policy && generation !== policy.token()
+        ? Promise.resolve(undefined)
+        : processNextUnit(onInterim, identifyGroupIds);
     const run = pumpChain.then(process, process);
     pumpChain = run.catch(() => undefined);
     return run.then(async (unit) => {

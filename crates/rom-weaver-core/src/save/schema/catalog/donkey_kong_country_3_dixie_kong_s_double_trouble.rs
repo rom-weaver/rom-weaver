@@ -3,92 +3,82 @@ use super::*;
 fn default() -> GameDefinition {
     {
         let fields = vec![
-            FieldDefinition::new(
-                "slot_1.player_1.play_time".into(),
-                "Play-time ticks".into(),
+            catalog_field(
+                "slot_1.player_1.play_time",
+                "Play-time ticks",
                 114,
                 Storage::U32Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_1.bear_coins".into(),
-                "Bear Coins".into(),
+            catalog_field(
+                "slot_1.player_1.bear_coins",
+                "Bear Coins",
                 123,
                 Storage::U16Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_1.bonus_coins".into(),
-                "Bonus Coins".into(),
+            catalog_field(
+                "slot_1.player_1.bonus_coins",
+                "Bonus Coins",
                 125,
                 Storage::U16Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_1.dk_coins".into(),
-                "DK Coins".into(),
-                129,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.player_1.banana_birds".into(),
-                "Banana Birds".into(),
+            catalog_field("slot_1.player_1.dk_coins", "DK Coins", 129, Storage::U16Le),
+            catalog_field(
+                "slot_1.player_1.banana_birds",
+                "Banana Birds",
                 127,
                 Storage::U16Le,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_1.completion".into(),
-                "Completion percentage".into(),
+            catalog_field(
+                "slot_1.player_1.completion",
+                "Completion percentage",
                 118,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_1.location".into(),
-                "Location code".into(),
+            catalog_field(
+                "slot_1.player_1.location",
+                "Location code",
                 135,
                 Storage::U32Le,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.play_time".into(),
-                "Play-time ticks".into(),
+            catalog_field(
+                "slot_1.player_2.play_time",
+                "Play-time ticks",
                 436,
                 Storage::U32Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_2.bear_coins".into(),
-                "Bear Coins".into(),
+            catalog_field(
+                "slot_1.player_2.bear_coins",
+                "Bear Coins",
                 445,
                 Storage::U16Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_2.bonus_coins".into(),
-                "Bonus Coins".into(),
+            catalog_field(
+                "slot_1.player_2.bonus_coins",
+                "Bonus Coins",
                 447,
                 Storage::U16Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_2.dk_coins".into(),
-                "DK Coins".into(),
-                451,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.player_2.banana_birds".into(),
-                "Banana Birds".into(),
+            catalog_field("slot_1.player_2.dk_coins", "DK Coins", 451, Storage::U16Le),
+            catalog_field(
+                "slot_1.player_2.banana_birds",
+                "Banana Birds",
                 449,
                 Storage::U16Le,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.completion".into(),
-                "Completion percentage".into(),
+            catalog_field(
+                "slot_1.player_2.completion",
+                "Completion percentage",
                 440,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_2.location".into(),
-                "Location code".into(),
+            catalog_field(
+                "slot_1.player_2.location",
+                "Location code",
                 457,
                 Storage::U32Le,
             )
@@ -167,92 +157,82 @@ fn game_donkey_kong_country_3_dixie_kong_s_double_trouble_slot_2() -> GameDefini
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_2.player_1.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field(
+            "slot_2.player_1.play_time",
+            "Play-time ticks",
             764,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.bear_coins".into(),
-            "Bear Coins".into(),
+        catalog_field(
+            "slot_2.player_1.bear_coins",
+            "Bear Coins",
             773,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.bonus_coins".into(),
-            "Bonus Coins".into(),
+        catalog_field(
+            "slot_2.player_1.bonus_coins",
+            "Bonus Coins",
             775,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.dk_coins".into(),
-            "DK Coins".into(),
-            779,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.player_1.banana_birds".into(),
-            "Banana Birds".into(),
+        catalog_field("slot_2.player_1.dk_coins", "DK Coins", 779, Storage::U16Le),
+        catalog_field(
+            "slot_2.player_1.banana_birds",
+            "Banana Birds",
             777,
             Storage::U16Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_1.completion",
+            "Completion percentage",
             768,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_1.location",
+            "Location code",
             785,
             Storage::U32Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field(
+            "slot_2.player_2.play_time",
+            "Play-time ticks",
             1086,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.bear_coins".into(),
-            "Bear Coins".into(),
+        catalog_field(
+            "slot_2.player_2.bear_coins",
+            "Bear Coins",
             1095,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.bonus_coins".into(),
-            "Bonus Coins".into(),
+        catalog_field(
+            "slot_2.player_2.bonus_coins",
+            "Bonus Coins",
             1097,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.dk_coins".into(),
-            "DK Coins".into(),
-            1101,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.player_2.banana_birds".into(),
-            "Banana Birds".into(),
+        catalog_field("slot_2.player_2.dk_coins", "DK Coins", 1101, Storage::U16Le),
+        catalog_field(
+            "slot_2.player_2.banana_birds",
+            "Banana Birds",
             1099,
             Storage::U16Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_2.completion",
+            "Completion percentage",
             1090,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_2.location",
+            "Location code",
             1107,
             Storage::U32Le,
         )
@@ -288,92 +268,82 @@ fn game_donkey_kong_country_3_dixie_kong_s_double_trouble_slot_3() -> GameDefini
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_3.player_1.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field(
+            "slot_3.player_1.play_time",
+            "Play-time ticks",
             1414,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.bear_coins".into(),
-            "Bear Coins".into(),
+        catalog_field(
+            "slot_3.player_1.bear_coins",
+            "Bear Coins",
             1423,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.bonus_coins".into(),
-            "Bonus Coins".into(),
+        catalog_field(
+            "slot_3.player_1.bonus_coins",
+            "Bonus Coins",
             1425,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.dk_coins".into(),
-            "DK Coins".into(),
-            1429,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.player_1.banana_birds".into(),
-            "Banana Birds".into(),
+        catalog_field("slot_3.player_1.dk_coins", "DK Coins", 1429, Storage::U16Le),
+        catalog_field(
+            "slot_3.player_1.banana_birds",
+            "Banana Birds",
             1427,
             Storage::U16Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_1.completion",
+            "Completion percentage",
             1418,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_1.location",
+            "Location code",
             1435,
             Storage::U32Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.play_time".into(),
-            "Play-time ticks".into(),
+        catalog_field(
+            "slot_3.player_2.play_time",
+            "Play-time ticks",
             1736,
             Storage::U32Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.bear_coins".into(),
-            "Bear Coins".into(),
+        catalog_field(
+            "slot_3.player_2.bear_coins",
+            "Bear Coins",
             1745,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.bonus_coins".into(),
-            "Bonus Coins".into(),
+        catalog_field(
+            "slot_3.player_2.bonus_coins",
+            "Bonus Coins",
             1747,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.dk_coins".into(),
-            "DK Coins".into(),
-            1751,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.player_2.banana_birds".into(),
-            "Banana Birds".into(),
+        catalog_field("slot_3.player_2.dk_coins", "DK Coins", 1751, Storage::U16Le),
+        catalog_field(
+            "slot_3.player_2.banana_birds",
+            "Banana Birds",
             1749,
             Storage::U16Le,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_2.completion",
+            "Completion percentage",
             1740,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_2.location",
+            "Location code",
             1757,
             Storage::U32Le,
         )

@@ -88,7 +88,8 @@
    option styling outright. The selection ring is --ink, not --thread: the draft
    accent isn't applied until Save, so a thread-coloured ring would show the
    previous dye and read as the wrong swatch being selected. */
-.rw-app .accent-picker {
+.rw-app .accent-picker,
+.rw-app .theme-picker {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-s);
@@ -134,7 +135,8 @@
 .rw-app .accent-chip input:disabled + .accent-chip-dot {
   opacity: 0.5;
 }
-.rw-app .accent-name {
+.rw-app .accent-name,
+.rw-app .theme-picker-name {
   font-size: 0.82rem;
   color: var(--ink-2);
 }

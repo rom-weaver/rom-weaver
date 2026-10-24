@@ -279,13 +279,14 @@ test("apply output codec options refresh after per-job edits", async () => {
 
   mount(createElement(Harness));
 
-  await expect.poll(() => document.querySelector(".outopts .cks-head")?.textContent || "").toContain("deflate:9");
+  // Without a codec level override the badge names the codec family; Level carries the profile.
+  await expect.poll(() => document.querySelector(".outopts .cks-head")?.textContent || "").toContain("Codecdeflate");
   document.querySelector(".outopts .cks-head")?.click();
   await expect.poll(() => document.querySelector('input[aria-label="ZIP codec"]')).not.toBeNull();
   setFormControlValue(document.querySelector('input[aria-label="ZIP codec"]'), "zstd");
 
   await expect.poll(() => document.querySelector('input[aria-label="ZIP codec"]')?.value || "").toBe("zstd");
-  await expect.poll(() => document.querySelector(".outopts .cks-head")?.textContent || "").toContain("zstd:22");
+  await expect.poll(() => document.querySelector(".outopts .cks-head")?.textContent || "").toContain("Codeczstd");
 });
 
 test("output compression selector keeps expected apply options", async () => {

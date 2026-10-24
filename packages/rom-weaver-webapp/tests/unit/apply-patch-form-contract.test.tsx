@@ -2,6 +2,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as weaveApplySession from "../../src/public/react/use-weave-apply-session.ts";
 
 /**
  * Container-level contract for `ApplyPatchForm`: the piece above
@@ -62,7 +63,7 @@ const createFakeApplyWorkflow = () => {
     dispose: vi.fn(async () => {
       disposed = true;
     }),
-    getBundleExportSources: vi.fn(() => ({ patches: [], rom: null })),
+    getWeaveExportSources: vi.fn(() => ({ patches: [], rom: null })),
     getInput: vi.fn(() => input),
     getPatches: vi.fn(() => patches.slice()),
     getPatchSources: vi.fn(() => [] as unknown[]),
@@ -146,7 +147,9 @@ const createFakeApplyWorkflow = () => {
     setPatchOption: vi.fn(async () => undefined),
     setPatchTarget: vi.fn(async () => undefined),
     setSettings: vi.fn(async () => undefined),
-    validatePatches: vi.fn(async () => undefined),
+    validatePatches: vi.fn(async () => {
+      await validationBarrier;
+    }),
   };
   return {
     ...workflow,
@@ -168,6 +171,7 @@ const createFakeApplyWorkflow = () => {
 };
 
 let latestFakeWorkflow: ReturnType<typeof createFakeApplyWorkflow> | null = null;
+let validationBarrier: Promise<void> | null = null;
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
   ApplyWorkflow: class {
@@ -181,7 +185,8 @@ vi.mock("../../src/platform/browser/browser-api.ts", () => ({
 }));
 
 const { ApplyPatchForm } = await import("../../src/public/react/apply-patch-form.tsx");
-const { RomWeaverSettingsProvider } = await import("../../src/public/react/settings-context.tsx");
+const { RomWeaverSettingsProvider, toApplyWorkflowSettings, useApplySettings } =
+  await import("../../src/public/react/settings-context.tsx");
 
 const renderForm = (props: Parameters<typeof ApplyPatchForm>[0] = {}) =>
   render(
@@ -190,7 +195,71 @@ const renderForm = (props: Parameters<typeof ApplyPatchForm>[0] = {}) =>
     </RomWeaverSettingsProvider>,
   );
 
+describe("legacy package settings normalization", () => {
+  const normalize = (settings: unknown) =>
+    toApplyWorkflowSettings(settings as Parameters<typeof toApplyWorkflowSettings>[0]);
+  it.each([{ bundlePackage: "rom" }, { output: { bundlePackage: "rom" } }])(
+    "normalizes legacy settings %j",
+    (settings) => {
+      const normalized = normalize(settings);
+      expect(normalized.output?.weavePackage).toBe("rom");
+      expect(normalized).not.toHaveProperty("bundlePackage");
+      expect(normalized.output).not.toHaveProperty("bundlePackage");
+      expect(JSON.stringify(settings)).toContain("bundlePackage");
+    },
+  );
+  it.each([
+    { weavePackage: "patches", bundlePackage: "rom" },
+    { output: { weavePackage: "patches", bundlePackage: "rom" } },
+    { weavePackage: "patches", output: { bundlePackage: "rom" } },
+  ])("prefers canonical settings %j", (settings) => {
+    expect(normalize(settings).output?.weavePackage).toBe("patches");
+  });
+  it("normalizes legacy provider settings", () => {
+    const Choice = () => <output>{useApplySettings().output?.weavePackage}</output>;
+    const { container } = render(
+      <RomWeaverSettingsProvider
+        settings={{ bundlePackage: "rom" } as unknown as Parameters<typeof RomWeaverSettingsProvider>[0]["settings"]}
+      >
+        <Choice />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector("output")?.textContent).toBe("rom");
+  });
+});
+
 describe("ApplyPatchForm - empty mount", () => {
+  it("changes the entry heading and guide without loading a sample or replacing staged inputs", async () => {
+    const { container, rerender } = renderForm({ cheatsPage: true });
+    expect(container.querySelector("h1")?.textContent).toBe("Apply cheat codes to ROMs");
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toContain("docs/use-cheats");
+    expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeNull();
+    const input = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [new File(["rom-bytes"], "game.bin")] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalledTimes(1));
+    const workflow = latestFakeWorkflow;
+    rerender(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm cheatsPage={false} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(latestFakeWorkflow).toBe(workflow);
+    expect(workflow?.setInput).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
+  });
+
+  it("gives the Create cheat entry its heading, description and guide", () => {
+    const { container } = renderForm({ cheatsPage: true, mode: "create" });
+    expect(container.querySelector("h1")?.textContent).toBe("Create ROM patches from cheat codes");
+    expect(container.textContent).toContain(
+      "Turn supported cheat codes into a patch for your ROM. Files stay on your device.",
+    );
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toContain("docs/use-cheats");
+  });
+
   beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -221,6 +290,37 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     latestFakeWorkflow = null;
+  });
+
+  it.each(["weave", "bundle"] as const)("uses legacy defaults for the rendered %s ROM choice", async (mode) => {
+    const { container } = renderForm({
+      mode,
+      defaultSettings: { output: { bundlePackage: "rom" } } as unknown as Parameters<
+        typeof ApplyPatchForm
+      >[0]["defaultSettings"],
+    });
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-weave") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [new File(["rom-bytes"], "game.bin")] });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => {
+      const choice = container.querySelector<HTMLInputElement>("#rom-weaver-weave-export-weave-rom");
+      expect(choice).not.toBeNull();
+      expect(choice?.checked).toBe(true);
+    });
+  });
+
+  it.each(["apply", "create"] as const)("opts into sidecar appending only for %s mode", async (mode) => {
+    const rom = new File(["rom"], "game.nes");
+    renderForm({ mode, defaultInputs: [rom], defaultPatches: [new File(["patch"], "existing.ips")] });
+
+    await vi.waitFor(() =>
+      expect(latestFakeWorkflow?.setInput).toHaveBeenCalledWith(
+        [rom],
+        expect.objectContaining({ appendSidecarPatches: mode === "create" }),
+      ),
+    );
   });
 
   it("stages a dropped ROM through the fake workflow and discloses the rest of the bench", async () => {
@@ -285,6 +385,168 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
 
     await act(async () => latestFakeWorkflow?.__emitProgress());
     expect(onRender).toHaveBeenCalledTimes(commitsAfterStaging);
+  });
+
+  it("keeps cancellation connected until the running workflow settles", async () => {
+    const onApplyComplete = vi.fn();
+    const { container, getByRole } = renderForm({
+      defaultInputs: [new File(["rom"], "game.bin")],
+      defaultPatches: [new File(["patch"], "change.ips")],
+      onApplyComplete,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    let rejectRun: (reason: unknown) => void = () => undefined;
+    workflow.run.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectRun = reject;
+        }),
+    );
+    workflow.abort.mockImplementation(() => rejectRun(new DOMException("Cancelled", "AbortError")));
+    const applyButton = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+    await act(async () => fireEvent.click(applyButton));
+    await vi.waitFor(() => expect(workflow.run).toHaveBeenCalledOnce());
+
+    try {
+      await act(async () => fireEvent.click(getByRole("button", { name: /cancel/i })));
+      expect(workflow.abort).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+      expect(onApplyComplete).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => rejectRun(new DOMException("Cancelled", "AbortError")));
+    }
+  });
+
+  it("defers shared input staging while aggregate Create is inactive", async () => {
+    const initial = new File(["rom"], "game.bin");
+    const archive = new File(["archive"], "multiple-roms.zip");
+    const patch = new File(["patch"], "change.ips");
+    const view = (active: boolean, rom: File) => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm mode="create" active={active} inputs={[rom]} patches={[patch]} />
+      </RomWeaverSettingsProvider>
+    );
+    const { rerender } = render(view(true, initial));
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalledOnce());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    await act(async () => {
+      rerender(view(false, archive));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+
+    expect(latestFakeWorkflow).toBe(workflow);
+    expect(workflow.setInput).toHaveBeenCalledOnce();
+    await act(async () => rerender(view(true, archive)));
+    await vi.waitFor(() => expect(workflow.setInput).toHaveBeenLastCalledWith([archive], expect.anything()));
+    expect(workflow.setInput).toHaveBeenCalledTimes(2);
+  });
+
+  it("stages one ROM as the aggregate Create original without asking when none is loaded", async () => {
+    const onCreateRomDrop = vi.fn();
+    const onInputsChange = vi.fn();
+    const { container, queryByRole } = renderForm({ mode: "create", inputs: [], onCreateRomDrop, onInputsChange });
+    const rom = new File(["rom"], "game.bin");
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-create") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [rom] });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => expect(onInputsChange).toHaveBeenCalledWith([rom]));
+    expect(onCreateRomDrop).not.toHaveBeenCalled();
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    ["Replace the Original ROM", "original"],
+    ["Use as the Modified ROM", "modified"],
+  ] as const)("asks where one ROM goes over an aggregate Create original: %s", async (choice, slot) => {
+    const onCreateRomDrop = vi.fn();
+    const onInputsChange = vi.fn();
+    const { container, findByRole } = renderForm({
+      mode: "create",
+      inputs: [new File(["rom"], "game.bin")],
+      onCreateRomDrop,
+      onInputsChange,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalled());
+    onInputsChange.mockClear();
+    const rom = new File(["other"], "other.bin");
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-create") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [rom] });
+      fireEvent.change(fileInput);
+    });
+    const option = await findByRole("button", { name: new RegExp(choice) });
+    expect(onCreateRomDrop).not.toHaveBeenCalled();
+    expect(onInputsChange).not.toHaveBeenCalled();
+    await act(async () => fireEvent.click(option));
+    if (slot === "modified") {
+      expect(onCreateRomDrop).toHaveBeenCalledExactlyOnceWith([rom], true);
+      expect(onInputsChange).not.toHaveBeenCalled();
+    } else {
+      await vi.waitFor(() => expect(onInputsChange).toHaveBeenCalledWith([rom]));
+      expect(onCreateRomDrop).not.toHaveBeenCalled();
+    }
+  });
+
+  it("cancels queued execution without aborting the reusable workflow", async () => {
+    const onApplyComplete = vi.fn();
+    const { container, getByRole } = renderForm({
+      defaultInputs: [new File(["rom"], "game.bin")],
+      defaultPatches: [new File(["patch"], "change.ips")],
+      onApplyComplete,
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+    const workflow = latestFakeWorkflow;
+    if (!workflow) throw new Error("Expected a staged apply workflow");
+    let finishOptions: () => void = () => undefined;
+    workflow.setPatchOption.mockClear();
+    workflow.setPatchOption.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOptions = resolve;
+        }),
+    );
+    const applyButton = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+    await act(async () => fireEvent.click(applyButton));
+    await vi.waitFor(() => expect(workflow.setPatchOption).toHaveBeenCalled());
+    await act(async () => fireEvent.click(getByRole("button", { name: /cancel/i })));
+    await act(async () => finishOptions());
+
+    expect(workflow.abort).not.toHaveBeenCalled();
+    expect(workflow.run).not.toHaveBeenCalled();
+    expect(onApplyComplete).not.toHaveBeenCalled();
+    const retryButton = () => getByRole("button", { name: /apply.*download/i }) as HTMLButtonElement;
+    await vi.waitFor(() => expect(retryButton().disabled).toBe(false));
+    await act(async () => fireEvent.click(retryButton()));
+    await vi.waitFor(() => expect(onApplyComplete).toHaveBeenCalledOnce());
+  });
+
+  it("keeps combined creation disabled until patch validation settles", async () => {
+    let finishValidation: () => void = () => undefined;
+    validationBarrier = new Promise<void>((resolve) => {
+      finishValidation = resolve;
+    });
+    try {
+      const { getByRole } = renderForm({
+        mode: "create",
+        defaultInputs: [new File(["rom"], "game.bin")],
+        defaultPatches: [new File(["patch"], "change.ips")],
+      });
+      await vi.waitFor(() => expect(latestFakeWorkflow?.validatePatches).toHaveBeenCalled());
+      const createButton = getByRole("button", { name: /create patch.*download/i }) as HTMLButtonElement;
+      expect(createButton.disabled).toBe(true);
+      await act(async () => finishValidation());
+      await vi.waitFor(() => expect(createButton.disabled).toBe(false));
+    } finally {
+      await act(async () => finishValidation());
+      validationBarrier = null;
+    }
   });
 
   it("surfaces an apply error from the fake workflow's run()", async () => {
@@ -380,6 +642,58 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     expect(container.textContent).toContain("custom-output.bin");
   });
 
+  it("keeps Apply disabled until imported weave defaults settle, then uses the final output name", async () => {
+    let pending = false;
+    const useSession = weaveApplySession.useWeaveApplySession;
+    const sessionSpy = vi.spyOn(weaveApplySession, "useWeaveApplySession").mockImplementation((options) => ({
+      ...useSession(options),
+      weaveDefaultsPending: pending,
+    }));
+    const form = () => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm />
+      </RomWeaverSettingsProvider>
+    );
+    const rendered = render(form());
+    try {
+      const fileInput = rendered.container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+      await act(async () => {
+        Object.defineProperty(fileInput, "files", {
+          configurable: true,
+          value: [
+            new File(["rom-bytes"], "game.bin"),
+            new File(["patch-bytes"], "change.ips"),
+            new File(["patch-two"], "second.ips"),
+          ],
+        });
+        fireEvent.change(fileInput);
+      });
+      await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+      const apply = () => rendered.container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+      await vi.waitFor(() => expect(apply().disabled).toBe(false));
+      pending = true;
+      rendered.rerender(form());
+      expect(apply().disabled).toBe(true);
+      const handle = rendered.container.querySelector("#rom-weaver-list-patch-stack .handle") as HTMLButtonElement;
+      expect(handle).not.toBeNull();
+      expect(handle.disabled).toBe(false);
+      fireEvent.click(apply());
+      expect(latestFakeWorkflow?.run).not.toHaveBeenCalled();
+      const outputName = rendered.container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement;
+      fireEvent.change(outputName, { target: { value: "weave-final-name" } });
+      fireEvent.blur(outputName);
+      pending = false;
+      rendered.rerender(form());
+      await vi.waitFor(() => expect(apply().disabled).toBe(false));
+      expect(latestFakeWorkflow?.run).not.toHaveBeenCalled();
+      await act(async () => fireEvent.click(apply()));
+      await vi.waitFor(() => expect(latestFakeWorkflow?.run).toHaveBeenCalledOnce());
+      expect(latestFakeWorkflow?.setOutputName).toHaveBeenCalledWith("weave-final-name");
+    } finally {
+      sessionSpy.mockRestore();
+    }
+  });
+
   it("replaces a staged patch and clears the staged input through card actions", async () => {
     const { container } = renderForm();
     const fileInput = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
@@ -400,7 +714,7 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     fireEvent.change(replacementInput, { target: { files: [replacement] } });
     expect(replacementInput.value).toBe("");
 
-    const clear = container.querySelector('#rom-weaver-list-input-stack button.rm[title="Clear ROM input"]');
+    const clear = container.querySelector('#rom-weaver-list-input-stack button.rm[title="Remove ROM"]');
     expect(clear).toBeTruthy();
     fireEvent.click(clear as HTMLButtonElement);
     await vi.waitFor(() => expect(latestFakeWorkflow?.clearInput).toHaveBeenCalled());

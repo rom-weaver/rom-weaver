@@ -1,18 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { minifyInlineScripts } from "../minify-inline-scripts.mjs";
+import { documentNodes, parseDocument, replaceSourceRanges } from "../html-document.mjs";
 import { rootDir } from "./paths.mjs";
 
 // Head spacing has no visual effect. Script and style contents MUST retain their whitespace.
-export const minifyDocumentHead = (html) =>
-  html.replace(
-    /<head>([\s\S]*?)<\/head>/,
-    (_, head) =>
-      `<head>${head
-        .split(/(<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>)/g)
-        .map((part, index) => (index % 2 ? part : part.replace(/>\s+</g, "><").trim()))
-        .join("")}</head>`,
-  );
+export const minifyDocumentHead = (html) => {
+  const head = [...documentNodes(parseDocument(html))].find((node) => node.tagName === "head");
+  const edits = [];
+  for (const node of head.childNodes) {
+    if (node.nodeName !== "#text" || !/^\s*$/.test(node.value)) continue;
+    const location = node.sourceCodeLocation;
+    if (location) edits.push({ start: location.startOffset, end: location.endOffset, text: "" });
+  }
+  return replaceSourceRanges(html, edits);
+};
 
 // Every route document is derived from dist/index.html after the bundle is
 // written, and PRERENDER_ROOT injects two more inline scripts on the way, so

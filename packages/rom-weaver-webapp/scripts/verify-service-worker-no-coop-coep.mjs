@@ -12,10 +12,16 @@ const PORT = new URL(ROOT_URL).port || "4173";
 const STARTUP_TIMEOUT_MS = Number(process.env.ROM_WEAVER_VERIFY_STARTUP_TIMEOUT_MS || 300000);
 const PAGE_TIMEOUT_MS = 20000;
 const OFFLINE_PAGES = [
-  { expectedView: "patcher", label: "apex", path: "" },
+  { expectedView: "home", label: "apex", path: "" },
+  { expectedView: "patcher", label: "apply canonical", path: "apply-patches" },
+  { expectedView: "patcher", label: "apply canonical directory", path: "apply-patches/" },
+  { expectedView: "patcher", label: "apply canonical document", path: "apply-patches/index.html" },
   { expectedView: "patcher", label: "apply slashless", path: "apply.html" },
   { expectedView: "patcher", label: "apply directory", path: "apply/" },
   { expectedView: "patcher", label: "apply directory document", path: "apply/index.html" },
+  { expectedView: "creator", label: "create canonical", path: "create-rom-patch" },
+  { expectedView: "creator", label: "create canonical directory", path: "create-rom-patch/" },
+  { expectedView: "creator", label: "create canonical document", path: "create-rom-patch/index.html" },
   { expectedView: "creator", label: "create slashless", path: "create.html" },
   { expectedView: "creator", label: "create directory", path: "create/" },
   { expectedView: "creator", label: "create directory document", path: "create/index.html" },
@@ -23,14 +29,21 @@ const OFFLINE_PAGES = [
   // the same assertion for all of them.
   { expectedView: "trim", label: "trim directory", path: "trim/" },
   { expectedView: "trim", label: "trim directory document", path: "trim/index.html" },
+  { expectedView: "trim", label: "trim canonical", path: "trim-rom" },
+  { expectedView: "trim", label: "trim canonical directory", path: "trim-rom/" },
+  { expectedView: "trim", label: "trim canonical document", path: "trim-rom/index.html" },
   { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/" },
   { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html" },
   { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/" },
   { expectedView: "save-editor", label: "save-editor directory document", path: "save-editor/index.html" },
   // The retired /tools/ slug still serves the PPF undo page.
   { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/" },
+  { expectedView: "ppf-undo", label: "tools legacy directory document", path: "tools/index.html" },
   { expectedView: "test", label: "test directory", path: "test/" },
   { expectedView: "test", label: "test directory document", path: "test/index.html" },
+  { expectedView: "test", label: "test canonical", path: "test-rom" },
+  { expectedView: "test", label: "test canonical directory", path: "test-rom/" },
+  { expectedView: "test", label: "test canonical document", path: "test-rom/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
 ];
 const OFFLINE_ONLY_PAGES = [{ expectedNotFound: true, label: "unknown first offline visit", path: "not-a-real-route" }];
@@ -145,7 +158,10 @@ const collectPageState = async (page, { probeHeaders = true } = {}) =>
       : null;
     const root = document.getElementById("webapp-root");
     return {
-      activePanel: document.querySelector("main.workbench section.panel:not([hidden])")?.id || null,
+      activePanel:
+        document.querySelector(
+          "main.workbench section.panel:not([hidden]), main.workbench section.home-page:not([hidden])",
+        )?.id || null,
       activeView: document.querySelector('.side-nav [aria-current="page"]')?.id.replace(/^tab-/, "") || null,
       controller: Boolean(navigator.serviceWorker?.controller),
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
@@ -189,7 +205,7 @@ const waitForPageReadyInner = async (page, pageCase) => {
         document.querySelector('.side-nav [aria-current="page"]')?.id === `tab-${expectedView}` &&
         panel &&
         !panel.hasAttribute("hidden") &&
-        Boolean(panel.querySelector(".workflow-body")?.textContent?.trim())
+        Boolean(panel.querySelector(expectedView === "home" ? "#home-title" : ".workflow-body")?.textContent?.trim())
       );
     },
     pageCase,
@@ -208,7 +224,7 @@ const enableBetaToolsForRouteChecks = async (page) => {
         common: { ...stored.common, betaToolsEnabled: true },
         // Must match SETTINGS_STORAGE_VERSION (src/webapp/settings/settings-schema.ts);
         // a mismatch makes the app wipe these settings and re-gate the beta routes.
-        version: 6,
+        version: 10,
       }),
     );
   });
@@ -256,7 +272,7 @@ try {
   }
 
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
-  browser = await chromium.launch({ ...launchOptions, args: ["--ignore-certificate-errors"] });
+  browser = await chromium.launch({ ...launchOptions, args: ["--ignore-certificate-errors"], headless: true });
   const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: "allow" });
   const page = await context.newPage();
   const consoleErrors = [];

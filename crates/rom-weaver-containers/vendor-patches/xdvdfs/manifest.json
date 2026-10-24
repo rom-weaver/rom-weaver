@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "name": "xdvdfs",
+  "source": {
+    "url": "https://static.crates.io/crates/xdvdfs/xdvdfs-0.8.3.crate",
+    "revision": "0.8.3",
+    "sha256": "1777c1ccae32a2185ac98adae015aed3fb06242084b5e7f8b08a811fe0e7b936",
+    "format": "tar",
+    "root": "xdvdfs-0.8.3/src"
+  },
+  "destination": "crates/rom-weaver-containers/src/xdvdfs",
+  "exclude": [],
+  "patches": [
+    {
+      "file": "0001-directory-cycle-guards.patch",
+      "stage": "source",
+      "reason": "Reject repeated binary-tree offsets and ancestor directory sectors in lookup and recursive traversal; allow empty directories and shared non-ancestor extents. Adds the CyclicDirectory error these guards return.",
+      "upstream": {
+        "status": "no-submission-found",
+        "url": "https://github.com/antangelo/xdvdfs/blob/v0.8.3/xdvdfs-core/src/read.rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"
+      ]
+    },
+    {
+      "file": "0002-disable-remap.patch",
+      "stage": "integration",
+      "reason": "Remove the unused wax-dependent remap module; corresponds to upstream optional-remap change with the feature disabled.",
+      "upstream": {
+        "status": "merged",
+        "url": "https://github.com/antangelo/xdvdfs/pull/189"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"
+      ]
+    },
+    {
+      "file": "0003-module-paths.patch",
+      "stage": "integration",
+      "reason": "Inline the library as a workspace module: rename lib.rs to mod.rs and rewrite crate:: paths to crate::xdvdfs::. mod.rs appears as a delete and add because patch renames are unsupported.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"
+      ]
+    },
+    {
+      "file": "0004-pinned-features.patch",
+      "stage": "integration",
+      "reason": "Resolve feature gates to the pinned set (std, read, write, sync on; logging, checksum, ciso_support off), delete disabled code, drop no_std, make logging macros no-ops and document the vendoring.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"
+      ]
+    },
+    {
+      "file": "0005-proc-bitfield-repr.patch",
+      "stage": "integration",
+      "reason": "Drop #[repr(C)] from DirentAttributes; proc-bitfield 0.5 makes bitfields repr(transparent) and rejects the explicit repr.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib xdvdfs::xdvdfs_tests::"
+      ]
+    },
+    {
+      "file": "0006-edition-lint-compat.patch",
+      "stage": "integration",
+      "reason": "Edition 2024 and workspace clippy fixes: elided lifetimes, let chains, is_multiple_of, match ergonomics, io::Error::other, test-only AVL iterator gating and rustfmt 2024 import order.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": [
+        "cargo clippy -p rom-weaver-containers --all-targets -- -D warnings"
+      ]
+    },
+    {
+      "file": "0007-test-adaptations.patch",
+      "stage": "integration",
+      "reason": "Attach the project's xdvdfs unit-test modules, port AVL tests to the rand 0.9 API and drop two futures-dependent layout tests, as the existing tree already did.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/antangelo/xdvdfs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers --lib"
+      ]
+    }
+  ],
+  "materialized": true,
+  "preserve": [
+    "XDVDFS_VERSION",
+    "LICENSE"
+  ]
+}

@@ -18,6 +18,8 @@ import {
   waitForApplyOutcome,
 } from "./patcher-test-shared.js";
 
+const CHEAT_ROM = "tests/fixtures/cheats/hello-world.nes";
+
 installPatcherTestHooks();
 
 test("manual output name is used for patchless apply download", async () => {
@@ -135,7 +137,7 @@ test("clearing the ROM clears the generated output name", async () => {
     .toBe(2);
   await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 
-  const clearInputButton = document.querySelector("button[aria-label='Clear ROM input']");
+  const clearInputButton = document.querySelector("button[aria-label='Remove ROM']");
   if (!(clearInputButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
   clearInputButton.click();
 
@@ -204,5 +206,172 @@ test("editing output name after download is ready keeps the prepared output", as
   } finally {
     HTMLAnchorElement.prototype.click = originalAnchorClick;
     URL.createObjectURL = originalCreateObjectUrl;
+  }
+});
+
+test("warns when a typed output name ends in a different supported extension", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  await expect
+    .poll(() => document.getElementById("rom-weaver-input-output-file-name"), { timeout: 30000 })
+    .not.toBeNull();
+  const warning = () => document.querySelector(".apply-output .outname-ext-warn")?.textContent || null;
+
+  setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), "custom.gba");
+  await expect.poll(warning).toBe("The name ends in .gba, but the output is .bin.");
+
+  for (const name of ["custom.bin", "Hack v1.2", "custom"]) {
+    setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), name);
+    await expect.poll(warning).toBeNull();
+  }
+});
+
+test.each([[""], [":::"]])(
+  "clearing the output name (%j) after a run with a typed name restores the automatic name",
+  async (cleared) => {
+    const downloadNames = [];
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+      downloadNames.push(this.download || "");
+    });
+    try {
+      mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+      await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+      selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+      selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
+      await waitForApplyButtonEnabled();
+      const getAutomaticName = () => document.getElementById("rom-weaver-input-output-file-name")?.value || "";
+      await expect.poll(getAutomaticName, { timeout: 30000 }).not.toBe("");
+      const automaticName = getAutomaticName();
+      setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), "valid-name");
+      await clickApplyButton();
+      const applyState = await waitForApplyOutcome();
+      expect(applyState?.kind).toBe("download");
+      await expect
+        .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+        .toContain("Download");
+      await clickApplyButton();
+      await expect.poll(() => downloadNames.at(-1)).toBe("valid-name.bin");
+
+      setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), cleared);
+      // A cleared field shows the automatic name; a typed ":::" stays as typed.
+      await expect.poll(getAutomaticName, { timeout: 30000 }).toBe(cleared || automaticName);
+      await clickApplyButton();
+      await expect.poll(() => downloadNames.at(-1)).toBe(`${automaticName}.bin`);
+    } finally {
+      clickSpy.mockRestore();
+    }
+  },
+);
+
+const NAME_FIELD_ID = "rom-weaver-input-output-file-name";
+const getNameField = () => document.getElementById(NAME_FIELD_ID)?.value || "";
+
+const clickButtonByText = async (text) => {
+  const find = () =>
+    [...document.querySelectorAll("button")].find(
+      (button) =>
+        (button.textContent?.includes(text) || button.getAttribute("aria-label") === text) && !button.disabled,
+    );
+  await expect.poll(() => !!find()).toBe(true);
+  find().click();
+};
+
+const recordDownloadNames = () => {
+  const downloadNames = [];
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+    downloadNames.push(this.download || "");
+  });
+  return { clickSpy, downloadNames };
+};
+
+/** Mounts the practice ROM with one cheat on and waits for the cheat-labelled automatic name. */
+const mountCheatedRom = async () => {
+  window.history.replaceState(null, "", "/apply-patches?guide=apply");
+  mount(
+    createElement(ApplyPatchForm, {
+      cheatsPage: true,
+      defaultSettings: { output: { compression: "none" } },
+    }),
+  );
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  await expect.poll(() => document.querySelector('[aria-label="Practice run steps"]')).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(CHEAT_ROM));
+  await clickButtonByText("Add cheats to the patch order");
+  await clickButtonByText("Add Make the greeting start with M");
+  await clickButtonByText("Close");
+  await expect.poll(getNameField, { timeout: 30000 }).toContain("[cht");
+  return getNameField();
+};
+
+const runAndDownload = async () => {
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+  expect((await waitForApplyOutcome())?.kind).toBe("download");
+  await expect
+    .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+    .toContain("Download");
+  await clickApplyButton();
+};
+
+test.each([[""], [":::"]])(
+  "clearing the output name (%j) after a typed run keeps the cheat label in the field and the download",
+  async (cleared) => {
+    const { clickSpy, downloadNames } = recordDownloadNames();
+    try {
+      const automaticName = await mountCheatedRom();
+      setFormControlValue(document.getElementById(NAME_FIELD_ID), "valid-name");
+      await runAndDownload();
+      await expect.poll(() => downloadNames.at(-1)).toBe("valid-name.nes");
+
+      setFormControlValue(document.getElementById(NAME_FIELD_ID), cleared);
+      await expect.poll(getNameField, { timeout: 30000 }).toBe(cleared || automaticName);
+      await clickApplyButton();
+      await expect.poll(() => downloadNames.at(-1)).toBe(`${automaticName}.nes`);
+    } finally {
+      clickSpy.mockRestore();
+    }
+  },
+);
+
+test("a run typed as ':::' downloads the name the run produced", async () => {
+  const { clickSpy, downloadNames } = recordDownloadNames();
+  try {
+    const automaticName = await mountCheatedRom();
+    setFormControlValue(document.getElementById(NAME_FIELD_ID), ":::");
+    await runAndDownload();
+    await expect.poll(() => downloadNames.at(-1)).toBe(`${automaticName}.nes`);
+    expect(getNameField()).toBe(":::");
+  } finally {
+    clickSpy.mockRestore();
+  }
+});
+
+test("changing the output format after clearing a typed name keeps the automatic name", async () => {
+  const { clickSpy } = recordDownloadNames();
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: { output: { compression: "none" } },
+      }),
+    );
+    await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+    selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+    selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_PATCH));
+    await expect.poll(getNameField, { timeout: 30000 }).not.toBe("");
+    const automaticName = getNameField();
+    setFormControlValue(document.getElementById(NAME_FIELD_ID), "valid-name");
+    await runAndDownload();
+
+    setFormControlValue(document.getElementById(NAME_FIELD_ID), "");
+    await expect.poll(getNameField, { timeout: 30000 }).toBe(automaticName);
+    setFormControlValue(document.getElementById("rom-weaver-select-output-format"), "zip");
+    await expect
+      .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
+      .not.toContain("Download");
+    await expect.poll(getNameField, { timeout: 30000 }).toBe(automaticName);
+  } finally {
+    clickSpy.mockRestore();
   }
 });

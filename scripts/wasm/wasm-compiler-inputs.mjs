@@ -6,23 +6,44 @@ import { pathToFileURL } from "node:url";
 const STANDALONE_RUST_TARGET =
   /(?:^|\/)(?:tests?|examples|benches)\/|\/src\/(?:.*\/)?test[^/]*\.rs$/u;
 
-export const isWasmCompilerInput = (path) =>
-  path.startsWith("crates/") && !STANDALONE_RUST_TARGET.test(path);
+// No crate embeds its Markdown (no `include_str!` of a `.md` file). LICENSE
+// files stay inputs: gen-third-party-licenses.mjs copies them into the
+// module's attribution bundle. Vendored trees are never narrowed.
+const CRATE_PROSE = /\.md$/u;
 
-export const filterWasmCompilerInputTree = (tree) =>
+export const isWasmCompilerInput = (path) =>
+  path.startsWith("crates/") &&
+  !STANDALONE_RUST_TARGET.test(path) &&
+  (path.includes("/vendor/") || !CRATE_PROSE.test(path));
+
+const filterTree = (tree, select) =>
   tree
     .split(/\r?\n/u)
     .filter((line) => {
       if (!line) return false;
       const separator = line.indexOf("\t");
-      return separator !== -1 && isWasmCompilerInput(line.slice(separator + 1));
+      return separator !== -1 && select(line.slice(separator + 1));
     })
     .join("\n");
+
+export const filterWasmCompilerInputTree = (tree) => filterTree(tree, isWasmCompilerInput);
+
+export const filterWasmCacheInputTree = (tree) =>
+  filterTree(tree, (path) => {
+    if (path.startsWith("crates/")) return isWasmCompilerInput(path);
+    if (path.startsWith("scripts/wasm/")) {
+      return !path.endsWith(".test.mjs") && path !== "scripts/wasm/README.md";
+    }
+    return true;
+  });
 
 const main = async () => {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
-  const filtered = filterWasmCompilerInputTree(Buffer.concat(chunks).toString("utf8"));
+  const filter = process.argv.includes("--cache-inputs")
+    ? filterWasmCacheInputTree
+    : filterWasmCompilerInputTree;
+  const filtered = filter(Buffer.concat(chunks).toString("utf8"));
   if (filtered) process.stdout.write(`${filtered}\n`);
 };
 

@@ -10,7 +10,11 @@ const DATABASE_NAME = "rom-weaver-emulator-saves";
 const DATABASE_VERSION = 4;
 const STORE_NAME = "games";
 const PENDING_TEST_SAVE_STORE_NAME = "pending-test-save";
-const PENDING_TEST_SAVE_KEY = "current";
+/**
+ * Two kinds of held save never share a slot: the Save editor's edit waiting to be tested (`handoff`, key
+ * `current` for saves staged before slots existed) and a raw save the visitor dropped without its ROM.
+ */
+const PENDING_TEST_SAVE_KEYS = { dropped: "dropped", handoff: "current" } as const;
 const MESSAGE_SOURCE = "rom-weaver-emulator";
 const SAVE_FORMAT = "rom-weaver-emulator-save";
 const SAVE_FORMAT_VERSION = 3;
@@ -55,13 +59,20 @@ type EmulatorSavePartImport = {
   sha1: string;
 };
 
+type PendingSaveSlot = keyof typeof PENDING_TEST_SAVE_KEYS;
+
+/** A raw save dropped without its ROM has no `platform` or `gameId`; its file name may still name the system. */
 type PendingTestSave = {
   bytes: Uint8Array;
   fileName: string;
-  platform: string;
-  gameId: string;
+  platform?: string;
+  gameId?: string;
   romSha1?: string;
   updatedAt: number;
+  /** Which kind of hold this is. Set on reads; staging takes it as input. */
+  slot?: PendingSaveSlot;
+  /** Held only in this page because save storage was off, so a reload loses it. */
+  memoryOnly?: true;
 };
 
 type SerializedEmulatorSave = {
@@ -83,8 +94,8 @@ type EmulatorSaveMessage = {
   data?: ArrayBuffer | ArrayBufferView | null;
 };
 
-let bridgeInstalled = false;
 let saveStorageEnabled = true;
+const memoryPendingTestSaves = new Map<PendingSaveSlot, PendingTestSave>();
 
 const storageUnavailable = () => new Error("Emulator save storage is unavailable in this browser.");
 
@@ -297,35 +308,140 @@ const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
 };
 
 /**
- * Read and normalize a saved record without changing the stored bytes or metadata.
+ * Conflicting legacy records MUST remain available for export instead of losing bytes or metadata.
  */
 const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | undefined> => {
-  const result = await readTransaction<unknown>((store) => store.get(gameId));
-  const record = normalizeRecord(result);
-  return record ? copyRecord(record) : undefined;
+  if (!/^[a-f0-9]{40}$/.test(gameId)) {
+    return normalizeRecord(await readTransaction<unknown>((store) => store.get(gameId)));
+  }
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    let result: EmulatorSaveRecord | undefined;
+    const canonical = store.get(gameId);
+    canonical.onsuccess = () => {
+      result = normalizeRecord(canonical.result);
+      const legacy = store.get(`${gameId}.chd`);
+      legacy.onsuccess = () => {
+        const previous = normalizeRecord(legacy.result);
+        if (!previous) return;
+        const existing = result;
+        result = existing
+          ? { ...existing, state: existing.state || previous.state, sram: existing.sram || previous.sram }
+          : { ...previous, gameId, gameName: gameId };
+        store.put(copyRecord(result), gameId);
+        if (existing) {
+          const archive = (index: number) => {
+            const key = `${gameId}.chd-conflict${index ? `-${index}` : ""}`;
+            const request = store.get(key);
+            request.onsuccess = () => {
+              if (request.result !== undefined) {
+                archive(index + 1);
+                return;
+              }
+              store.put(copyRecord({ ...previous, gameId: key }), key);
+            };
+          };
+          archive(0);
+        }
+        store.delete(`${gameId}.chd`);
+      };
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(result ? copyRecord(result) : undefined);
+    };
+    transaction.onabort = transaction.onerror = () => {
+      database.close();
+      reject(transaction.error || new Error("Could not migrate the emulator save identity."));
+    };
+  });
+};
+
+type UpdatePartResult = { record: EmulatorSaveRecord; written: boolean };
+
+/** `keepExisting` leaves a part that is already stored alone, decided inside the writing transaction. */
+const updatePartResult = async (
+  kind: EmulatorSavePart,
+  update: EmulatorSaveUpdate,
+  { keepExisting = false, preserveMetadata = false }: { keepExisting?: boolean; preserveMetadata?: boolean } = {},
+): Promise<UpdatePartResult> => {
+  await readEmulatorSave(update.gameId);
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    let transaction: IDBTransaction;
+    let next: EmulatorSaveRecord | undefined;
+    let written = false;
+    let failure: Error | undefined;
+    try {
+      transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(update.gameId);
+      request.onerror = () => {
+        failure = requestError(request);
+      };
+      request.onsuccess = () => {
+        try {
+          const previous = normalizeRecord(request.result);
+          if (keepExisting && previous?.[kind]) {
+            next = previous;
+            return;
+          }
+          written = true;
+          next = {
+            gameId: update.gameId,
+            gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
+            label: preserveMetadata && previous ? previous.label : update.label,
+            ...(previous?.state ? { state: previous.state } : {}),
+            ...(previous?.sram ? { sram: previous.sram } : {}),
+            [kind]: copyBytes(update.data),
+            updatedAt: Date.now(),
+          };
+          store.put(copyRecord(next), update.gameId);
+        } catch (error) {
+          failure = error instanceof Error ? error : new Error(String(error));
+          transaction.abort();
+        }
+      };
+    } catch (error) {
+      database.close();
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    transaction.onerror = () => {
+      failure ||= transaction.error || new Error("Emulator save transaction failed.");
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(failure || transaction.error || new Error("Emulator save transaction was aborted."));
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      if (!next) {
+        reject(new Error("Emulator save transaction completed without a record."));
+        return;
+      }
+      resolve({ record: copyRecord(next), written });
+    };
+  });
 };
 
 const updatePart = async (
   kind: EmulatorSavePart,
   update: EmulatorSaveUpdate,
-  { preserveMetadata = false }: { preserveMetadata?: boolean } = {},
-): Promise<EmulatorSaveRecord> => {
-  const previous = await readEmulatorSave(update.gameId);
-  const next: EmulatorSaveRecord = {
-    gameId: update.gameId,
-    gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
-    label: preserveMetadata && previous ? previous.label : update.label,
-    ...(previous?.state ? { state: previous.state } : {}),
-    ...(previous?.sram ? { sram: previous.sram } : {}),
-    [kind]: copyBytes(update.data),
-    updatedAt: Date.now(),
-  };
-  await writeRecord(next);
-  return copyRecord(next);
-};
+  options?: { preserveMetadata?: boolean },
+): Promise<EmulatorSaveRecord> => (await updatePartResult(kind, update, options)).record;
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
-  const result = await readTransaction<unknown[]>((store) => store.getAll());
+  let result = await readTransaction<unknown[]>((store) => store.getAll());
+  for (const raw of result || []) {
+    const record = normalizeRecord(raw);
+    if (record && /^[a-f0-9]{40}\.chd$/.test(record.gameId)) {
+      await readEmulatorSave(record.gameId.slice(0, -4));
+    }
+  }
+  result = await readTransaction<unknown[]>((store) => store.getAll());
   return (result || [])
     .map((raw) => {
       return normalizeRecord(raw);
@@ -358,6 +474,7 @@ const replaceEmulatorSaveSram = async (
   data: Uint8Array,
   expected?: Uint8Array,
 ): Promise<EmulatorSaveRecord> => {
+  await readEmulatorSave(gameId);
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");
@@ -548,10 +665,11 @@ const normalizePendingText = (value: unknown, label: string, maxLength: number):
 const copyPendingTestSave = (save: PendingTestSave): PendingTestSave => ({
   bytes: new Uint8Array(save.bytes),
   fileName: save.fileName,
-  platform: save.platform,
-  gameId: save.gameId,
+  ...(save.platform ? { platform: save.platform, gameId: save.gameId } : {}),
   ...(save.romSha1 ? { romSha1: save.romSha1 } : {}),
   updatedAt: save.updatedAt,
+  ...(save.slot ? { slot: save.slot } : {}),
+  ...(save.memoryOnly ? { memoryOnly: true } : {}),
 });
 
 const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined => {
@@ -563,12 +681,13 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
     typeof candidate.fileName !== "string" ||
     !candidate.fileName ||
     candidate.fileName.length > MAX_LABEL_LENGTH ||
-    typeof candidate.platform !== "string" ||
-    !candidate.platform ||
-    candidate.platform.length > 128 ||
-    typeof candidate.gameId !== "string" ||
-    !candidate.gameId ||
-    candidate.gameId.length > MAX_LABEL_LENGTH ||
+    (candidate.platform !== undefined &&
+      (typeof candidate.platform !== "string" ||
+        !candidate.platform ||
+        candidate.platform.length > 128 ||
+        typeof candidate.gameId !== "string" ||
+        !candidate.gameId ||
+        candidate.gameId.length > MAX_LABEL_LENGTH)) ||
     (candidate.romSha1 !== undefined && !/^[a-f0-9]{40}$/.test(candidate.romSha1)) ||
     typeof candidate.updatedAt !== "number" ||
     !Number.isFinite(candidate.updatedAt)
@@ -578,8 +697,7 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
   return {
     bytes,
     fileName: candidate.fileName,
-    platform: candidate.platform,
-    gameId: candidate.gameId,
+    ...(candidate.platform ? { platform: candidate.platform, gameId: candidate.gameId } : {}),
     ...(candidate.romSha1 ? { romSha1: candidate.romSha1 } : {}),
     updatedAt: candidate.updatedAt,
   };
@@ -588,37 +706,97 @@ const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined =
 const stagePendingTestSave = async (input: {
   data: Blob | ArrayBuffer | ArrayBufferView;
   fileName: string;
-  platform: string;
-  gameId: string;
+  platform?: string;
+  gameId?: string;
   romSha1?: string;
+  slot?: PendingSaveSlot;
 }): Promise<PendingTestSave> => {
+  const slot = input.slot ?? "handoff";
   const save: PendingTestSave = {
     bytes: await readImportBytes(input.data),
     fileName: normalizePendingText(input.fileName, "file name", MAX_LABEL_LENGTH),
-    platform: normalizePendingText(input.platform, "platform", 128),
-    gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
+    ...(input.platform === undefined && input.gameId === undefined
+      ? {}
+      : {
+          platform: normalizePendingText(input.platform, "platform", 128),
+          gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
+        }),
     ...(input.romSha1 === undefined ? {} : { romSha1: normalizeSha1(input.romSha1) }),
+    slot,
     updatedAt: Date.now(),
   };
+  if (!saveStorageEnabled) {
+    // With save storage off the held save MUST NOT outlive the page; Test warns that a reload loses it.
+    memoryPendingTestSaves.set(slot, copyPendingTestSave({ ...save, memoryOnly: true }));
+    await runTransaction(
+      "readwrite",
+      (store) => store.delete(PENDING_TEST_SAVE_KEYS[slot]),
+      PENDING_TEST_SAVE_STORE_NAME,
+    ).catch((error) =>
+      logger.warn("could not clear the stored held save", {
+        message: error instanceof Error ? error.message : String(error),
+        slot,
+      }),
+    );
+    return copyPendingTestSave({ ...save, memoryOnly: true });
+  }
+  memoryPendingTestSaves.delete(slot);
   await runTransaction(
     "readwrite",
-    (store) => store.put(copyPendingTestSave(save), PENDING_TEST_SAVE_KEY),
+    (store) => store.put(copyPendingTestSave(save), PENDING_TEST_SAVE_KEYS[slot]),
     PENDING_TEST_SAVE_STORE_NAME,
   );
   return copyPendingTestSave(save);
 };
 
-const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => {
+const readPendingSlot = async (slot: PendingSaveSlot): Promise<PendingTestSave | undefined> => {
+  const memory = memoryPendingTestSaves.get(slot);
+  if (memory) return copyPendingTestSave(memory);
   const value = await readTransaction<unknown>(
-    (store) => store.get(PENDING_TEST_SAVE_KEY),
+    (store) => store.get(PENDING_TEST_SAVE_KEYS[slot]),
     PENDING_TEST_SAVE_STORE_NAME,
   );
   const save = normalizePendingTestSave(value);
-  return save ? copyPendingTestSave(save) : undefined;
+  return save ? copyPendingTestSave({ ...save, slot }) : undefined;
 };
 
-const clearPendingTestSave = async (): Promise<void> => {
-  await runTransaction("readwrite", (store) => store.delete(PENDING_TEST_SAVE_KEY), PENDING_TEST_SAVE_STORE_NAME);
+/** Every held save, newest first, so a caller can pick the one that fits and leave the rest held. */
+const readPendingTestSaves = async (): Promise<PendingTestSave[]> => {
+  const results = await Promise.allSettled(
+    (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]).map(readPendingSlot),
+  );
+  const held = results.flatMap((result) => (result.status === "fulfilled" && result.value ? [result.value] : []));
+  // Memory-held saves survive unreadable storage. An enabled store surfaces failures when nothing is held.
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure && !held.length && saveStorageEnabled) throw failure.reason;
+  return held.sort((left, right) => right.updatedAt - left.updatedAt);
+};
+
+const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => (await readPendingTestSaves())[0];
+
+/** Clears one slot, or both when none is named. */
+const clearPendingTestSave = async (slot?: PendingSaveSlot): Promise<void> => {
+  const slots = slot ? [slot] : (Object.keys(PENDING_TEST_SAVE_KEYS) as PendingSaveSlot[]);
+  const pendingMemory = new Map(slots.map((name) => [name, memoryPendingTestSaves.get(name)]));
+  const memoryOnly = slots.every((name) => pendingMemory.get(name) !== undefined);
+  try {
+    await runTransaction(
+      "readwrite",
+      (store) => {
+        for (const name of slots) store.delete(PENDING_TEST_SAVE_KEYS[name]);
+      },
+      PENDING_TEST_SAVE_STORE_NAME,
+    );
+  } catch (error) {
+    if (!memoryOnly) throw error;
+    logger.warn("could not clear the stored held save", {
+      message: error instanceof Error ? error.message : String(error),
+      slots,
+    });
+  }
+  for (const name of slots) {
+    if (memoryPendingTestSaves.get(name) === pendingMemory.get(name)) memoryPendingTestSaves.delete(name);
+  }
 };
 
 const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {
@@ -637,23 +815,74 @@ const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImpo
   );
 };
 
+/**
+ * A dropped raw save is stored for its ROM so later progress persists. A ROM that already has stored SRAM
+ * MUST keep it, so the upload then only plays as a preview, as it does while save storage is off or fails.
+ */
+const loadDroppedSram = async (sha1: string, data: Uint8Array, label: string): Promise<"preview" | "stored"> => {
+  const gameId = normalizeSha1(sha1);
+  try {
+    if (saveStorageEnabled) {
+      // One transaction decides and writes, so an in-game save arriving meanwhile is never overwritten.
+      const { written } = await updatePartResult(
+        "sram",
+        { data, gameId, gameName: gameId, label },
+        { keepExisting: true },
+      );
+      if (written) {
+        clearEmulatorSavePreview(gameId);
+        logger.debug("stored dropped SRAM", { gameId, size: data.byteLength });
+        return "stored";
+      }
+    }
+  } catch (error) {
+    logger.warn("could not store dropped SRAM; previewing it instead", {
+      gameId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  setEmulatorSavePreview(gameId, data);
+  logger.debug("previewing dropped SRAM", { gameId, saveStorageEnabled, size: data.byteLength });
+  return "preview";
+};
+
 const isSaveMessage = (value: unknown): value is EmulatorSaveMessage => {
   if (!value || typeof value !== "object") return false;
   const message = value as Partial<EmulatorSaveMessage>;
   return message.source === MESSAGE_SOURCE && typeof message.kind === "string" && typeof message.gameId === "string";
 };
 
-const postToSource = (source: MessageEventSource | null, message: unknown) => {
-  if (!source || typeof source.postMessage !== "function") return;
-  (source as unknown as { postMessage: (value: unknown, targetOrigin: string) => void }).postMessage(message, "*");
+type EmulatorSaveSession = {
+  frame: HTMLIFrameElement;
+  source: Window;
+  gameId: string;
+  origin: string;
+  active: boolean;
 };
 
-const handleSaveMessage = async (event: MessageEvent<unknown>) => {
-  if (!isSaveMessage(event.data)) return;
+const isCurrentSession = (session: EmulatorSaveSession) =>
+  session.active && session.frame.isConnected && session.frame.contentWindow === session.source;
+
+const postToSession = (session: EmulatorSaveSession, message: unknown) => {
+  if (!isCurrentSession(session)) return;
+  // Opaque sandbox origins cannot be named as a postMessage target. The exact
+  // registered iframe window remains the authority in that case.
+  session.source.postMessage(message, session.origin === "null" ? "*" : session.origin);
+};
+
+const handleSaveMessage = async (event: MessageEvent<unknown>, session: EmulatorSaveSession) => {
+  if (
+    !isCurrentSession(session) ||
+    event.source !== session.source ||
+    event.origin !== session.origin ||
+    !isSaveMessage(event.data) ||
+    event.data.gameId !== session.gameId
+  )
+    return;
   const message = event.data;
   const preview = savePreviews.get(message.gameId);
   if (preview && message.kind === "request-load-sram") {
-    postToSource(event.source, {
+    postToSession(session, {
       data: new Uint8Array(preview),
       gameId: message.gameId,
       kind: "load-sram",
@@ -664,7 +893,7 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (preview && message.kind === "save-sram") return;
   if (!saveStorageEnabled) {
     if (message.kind === "request-load-state" || message.kind === "request-load-sram") {
-      postToSource(event.source, {
+      postToSession(session, {
         data: null,
         gameId: message.gameId,
         kind: message.kind === "request-load-state" ? "load-state" : "load-sram",
@@ -689,7 +918,7 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (message.kind !== "request-load-state" && message.kind !== "request-load-sram") return;
   const record = await readEmulatorSave(message.gameId);
   const data = message.kind === "request-load-state" ? record?.state : record?.sram;
-  postToSource(event.source, {
+  postToSession(session, {
     data: data ? copyBytes(data) : null,
     gameId: message.gameId,
     kind: message.kind === "request-load-state" ? "load-state" : "load-sram",
@@ -697,16 +926,30 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   });
 };
 
-const ensureEmulatorSaveBridge = () => {
-  if (bridgeInstalled || typeof window === "undefined") return;
-  bridgeInstalled = true;
-  window.addEventListener("message", (event) => {
-    void handleSaveMessage(event).catch((error) => {
+/** Register only the mounted srcdoc player; disposing it revokes pending replies. */
+const registerEmulatorSaveBridge = (frame: HTMLIFrameElement, gameId: string): (() => void) => {
+  const host = frame.ownerDocument.defaultView;
+  const source = frame.contentWindow;
+  if (!(host && source)) return () => undefined;
+  const session: EmulatorSaveSession = {
+    frame,
+    source,
+    gameId,
+    origin: frame.hasAttribute("sandbox") && !frame.sandbox.contains("allow-same-origin") ? "null" : host.origin,
+    active: true,
+  };
+  const listener = (event: MessageEvent<unknown>) => {
+    void handleSaveMessage(event, session).catch((error) => {
       logger.warn("EmulatorJS save bridge message failed", {
         message: error instanceof Error ? error.message : String(error),
       });
     });
-  });
+  };
+  host.addEventListener("message", listener);
+  return () => {
+    session.active = false;
+    host.removeEventListener("message", listener);
+  };
 };
 
 const configureEmulatorSaveStorage = (enabled: boolean) => {
@@ -720,12 +963,17 @@ export {
   createEmulatorSaveExport,
   configureEmulatorSaveStorage,
   deleteEmulatorSave,
-  ensureEmulatorSaveBridge,
+  registerEmulatorSaveBridge,
   importEmulatorSave,
   importEmulatorSavePart,
   listEmulatorSaves,
+  loadDroppedSram,
+  parseEmulatorSaveFile,
   parseSerializedEmulatorSave,
+  readImportBytes,
+  readEmulatorSave,
   readPendingTestSave,
+  readPendingTestSaves,
   replaceEmulatorSaveSram,
   setEmulatorSavePreview,
   stagePendingTestSave,

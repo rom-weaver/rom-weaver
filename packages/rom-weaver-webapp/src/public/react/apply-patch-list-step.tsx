@@ -1,14 +1,14 @@
 import { Pencil, TriangleAlert } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { reorder, useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { chainChipText } from "./apply-patch-chain-labels.tsx";
@@ -16,27 +16,45 @@ import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { PatchCard } from "./apply-patch-card.tsx";
 import { EditableCheckRow } from "./apply-patch-check-row.tsx";
 
+type MixedEntry = { kind: "patch"; index: number } | { kind: "cheat"; id: string };
+type CheatOrder = Parameters<CheatStackRenderState["onOrderChange"]>[0];
+
+const getCheatOrder = (entries: MixedEntry[], disabledFlags?: readonly boolean[]): CheatOrder => {
+  let position = 0;
+  let weavePosition = 0;
+  const order: CheatOrder = [];
+  for (const entry of entries) {
+    if (entry.kind === "patch") {
+      weavePosition += 1;
+      if (!disabledFlags?.[entry.index]) position += 1;
+    } else {
+      order.push({ id: entry.id, position, weavePosition });
+    }
+  }
+  return order;
+};
+
 const commonPatchMetaValue = (
-  bundleMeta: readonly (BundlePatchMeta | undefined)[],
+  weaveMeta: readonly (WeavePatchMeta | undefined)[],
   field: "author" | "version",
 ): string | undefined => {
-  const values = bundleMeta.map((meta) => meta?.[field] || "");
+  const values = weaveMeta.map((meta) => meta?.[field] || "");
   return values.every((value) => value === values[0]) ? values[0] : undefined;
 };
 
 const SharedPatchMetaEditor = ({
-  bundleMeta,
+  weaveMeta,
   onCancel,
   onApply,
 }: {
-  bundleMeta: readonly (BundlePatchMeta | undefined)[];
+  weaveMeta: readonly (WeavePatchMeta | undefined)[];
   onCancel: () => void;
-  onApply: (updates: Partial<BundlePatchMeta>, enabled?: boolean) => void;
+  onApply: (updates: Partial<WeavePatchMeta>, enabled?: boolean) => void;
 }) => {
-  const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
+  const [author, setAuthor] = useState(commonPatchMetaValue(weaveMeta, "author") || "");
   const [authorChanged, setAuthorChanged] = useState(false);
   const [enabled, setEnabled] = useState<"all" | "none" | "unchanged">("unchanged");
-  const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
+  const [version, setVersion] = useState(commonPatchMetaValue(weaveMeta, "version") || "");
   const [versionChanged, setVersionChanged] = useState(false);
   const versionInputRef = useRef<HTMLInputElement>(null);
   const localizer = useUiLocalizer();
@@ -44,7 +62,7 @@ const SharedPatchMetaEditor = ({
   useEffect(() => versionInputRef.current?.focus(), []);
 
   const apply = () => {
-    const updates: Partial<BundlePatchMeta> = {};
+    const updates: Partial<WeavePatchMeta> = {};
     if (authorChanged) updates.author = author.trim() || undefined;
     if (versionChanged) updates.version = version.trim() || undefined;
     onApply(updates, enabled === "unchanged" ? undefined : enabled === "all");
@@ -79,7 +97,7 @@ const SharedPatchMetaEditor = ({
             setVersionChanged(true);
           }}
           placeholder={localizer.message(
-            commonPatchMetaValue(bundleMeta, "version") === undefined ? "ui.patch.multipleValues" : "ui.patch.version",
+            commonPatchMetaValue(weaveMeta, "version") === undefined ? "ui.patch.multipleValues" : "ui.patch.version",
           )}
           ref={versionInputRef}
           type="text"
@@ -96,7 +114,7 @@ const SharedPatchMetaEditor = ({
             setAuthorChanged(true);
           }}
           placeholder={localizer.message(
-            commonPatchMetaValue(bundleMeta, "author") === undefined ? "ui.patch.multipleValues" : "ui.patch.author",
+            commonPatchMetaValue(weaveMeta, "author") === undefined ? "ui.patch.multipleValues" : "ui.patch.author",
           )}
           type="text"
           value={author}
@@ -128,14 +146,17 @@ const SharedPatchMetaEditor = ({
 };
 
 const ApplyPatchListStep = ({
-  bundleOutputCheckHint,
-  bundleSessionMatches,
+  title,
+  headerExtra,
+  weaveOutputCheckHint,
+  weaveSessionMatches,
   disabledFlags,
   emptyState,
   fault,
-  bundleMeta,
-  onBundleMetaChange,
-  onBundleMetaBulkChange,
+  weaveMeta,
+  onWeaveMetaChange,
+  onDraftValidityChange,
+  onWeaveMetaBulkChange,
   onTogglePatch,
   notice,
   overrideAvailable,
@@ -151,19 +172,22 @@ const ApplyPatchListStep = ({
   cheats,
   woven,
 }: {
+  title?: ReactNode;
+  headerExtra?: ReactNode;
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
-  bundleOutputCheckHint?: boolean;
-  /** A loaded bundle's delivered patch names match the current patch list. */
-  bundleSessionMatches?: boolean;
+  weaveOutputCheckHint?: boolean;
+  /** A loaded weave's delivered patch names match the current patch list. */
+  weaveSessionMatches?: boolean;
   disabledFlags?: readonly boolean[];
   /** Fixture shown when no patches are present. */
   emptyState?: ReactNode;
   fault?: boolean;
-  /** Per-index editable bundle metadata. */
-  bundleMeta?: readonly (BundlePatchMeta | undefined)[];
-  onBundleMetaChange?: (index: number, updates: Partial<BundlePatchMeta>) => void;
-  onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
+  /** Per-index editable weave metadata. */
+  weaveMeta?: readonly (WeavePatchMeta | undefined)[];
+  onWeaveMetaChange?: (index: number, updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (index: number, error: string | null) => void;
+  onWeaveMetaBulkChange?: (updates: Partial<WeavePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
   /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
@@ -172,7 +196,7 @@ const ApplyPatchListStep = ({
    * the real ROM (the chain-input patch's target). */
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
   /** Checks declared for the single selected ROM, repeated as card evidence. */
-  sharedRomChecks?: ParsedBundleChecks;
+  sharedRomChecks?: ParsedWeaveChecks;
   patches: PatchStackItemState[];
   patchKeys?: readonly string[];
   patchStack: PatcherStackController;
@@ -209,16 +233,7 @@ const ApplyPatchListStep = ({
   const visibleEntries = mixedEntries;
   const canReorder = visibleEntries.length > 1 && patches.every((item) => item.progress || item.canRemove);
   const publishCheatOrder = (entries: typeof mixedEntries) => {
-    let patchPosition = 0;
-    const nextOrder: Array<{ id: string; position: number }> = [];
-    for (const entry of entries) {
-      if (entry.kind === "patch") {
-        if (!disabledFlags?.[entry.index]) patchPosition += 1;
-      } else {
-        nextOrder.push({ id: entry.id, position: patchPosition });
-      }
-    }
-    cheats?.onOrderChange(nextOrder);
+    cheats?.onOrderChange(getCheatOrder(entries, disabledFlags));
   };
   const reorderMixed = (from: number, to: number) => {
     const next = reorder(visibleEntries, from, to);
@@ -257,16 +272,7 @@ const ApplyPatchListStep = ({
       disabledFlags?: readonly boolean[];
     };
     if (!snapshot.hasCheats) return;
-    let patchPosition = 0;
-    const order: Array<{ id: string; position: number }> = [];
-    for (const entry of snapshot.entries) {
-      if (entry.kind === "patch") {
-        if (!snapshot.disabledFlags?.[entry.index]) patchPosition += 1;
-      } else {
-        order.push({ id: entry.id, position: patchPosition });
-      }
-    }
-    cheatOrderCallbackRef.current?.(order);
+    cheatOrderCallbackRef.current?.(getCheatOrder(snapshot.entries, snapshot.disabledFlags));
   }, [cheatOrderKey]);
   const disabledCount = (disabledFlags || []).filter(Boolean).length;
   const enabledBytes = patches.reduce(
@@ -307,19 +313,22 @@ const ApplyPatchListStep = ({
         </InfoPopover>
       }
       headerExtra={
-        total > 1 && onBundleMetaBulkChange ? (
-          <button
-            aria-controls="rom-weaver-bulk-patch-meta"
-            aria-expanded={bulkEditing}
-            className="patch-bulk-edit-button"
-            onClick={() => setBulkEditing((editing) => !editing)}
-            ref={bulkEditButtonRef}
-            type="button"
-          >
-            <Pencil aria-hidden="true" />
-            {localizer.message("ui.patch.bulkEdit")}
-          </button>
-        ) : undefined
+        <>
+          {headerExtra}
+          {total > 1 && onWeaveMetaBulkChange ? (
+            <button
+              aria-controls="rom-weaver-bulk-patch-meta"
+              aria-expanded={bulkEditing}
+              className="patch-bulk-edit-button"
+              onClick={() => setBulkEditing((editing) => !editing)}
+              ref={bulkEditButtonRef}
+              type="button"
+            >
+              <Pencil aria-hidden="true" />
+              {localizer.message("ui.patch.bulkEdit")}
+            </button>
+          ) : undefined}
+        </>
       }
       meta={
         total > 0 ? (
@@ -333,15 +342,15 @@ const ApplyPatchListStep = ({
         ) : undefined
       }
       num="0x03"
-      title={localizer.message(cheats ? "ui.step.patchesCheats" : "ui.step.patches")}
+      title={title ?? localizer.message(cheats ? "ui.step.patchesCheats" : "ui.step.patches")}
       woven={woven}
     >
-      {bulkEditing && onBundleMetaBulkChange ? (
+      {bulkEditing && onWeaveMetaBulkChange ? (
         <SharedPatchMetaEditor
           key="bulk-patch-meta-editor"
-          bundleMeta={bundleMeta || patches.map(() => undefined)}
+          weaveMeta={weaveMeta || patches.map(() => undefined)}
           onApply={(updates, enabled) => {
-            onBundleMetaBulkChange(updates);
+            onWeaveMetaBulkChange(updates);
             if (enabled !== undefined && onTogglePatch) {
               disabledFlags?.forEach((disabled, index) => {
                 if (disabled === enabled) onTogglePatch(index);
@@ -379,19 +388,19 @@ const ApplyPatchListStep = ({
           return (
             <PatchCard
               basisChoice={
-                index === chainInputIndex && (bundleMeta?.[index]?.basis || patchInputBasis) === "previous"
+                index === chainInputIndex && (weaveMeta?.[index]?.basis || patchInputBasis) === "previous"
                   ? "base"
-                  : bundleMeta?.[index]?.basis || patchInputBasis
+                  : weaveMeta?.[index]?.basis || patchInputBasis
               }
               basisDisabled={patchInputBasisDisabled}
-              bundleSessionMatches={bundleSessionMatches}
+              weaveSessionMatches={weaveSessionMatches}
               canReorder={canReorder}
               chainChip={chainChipText(
                 item,
                 implicitPredecessors[index] ?? false,
                 enabledIndexes,
                 localizer,
-                patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
+                patches.map((patch, patchIndex) => weaveMeta?.[patchIndex]?.name || patch.fileName),
               )}
               handleProps={reorderList.handleProps(orderIndex)}
               hasImplicitPredecessor={implicitPredecessors[index] ?? false}
@@ -402,16 +411,17 @@ const ApplyPatchListStep = ({
               isDisabled={!!disabledFlags?.[index]}
               item={item}
               key={item.key ?? `${index}:${item.fileName}`}
-              meta={bundleMeta?.[index]}
+              meta={weaveMeta?.[index]}
               onBasisChange={(basis) => onPatchInputBasisChange?.(index, basis)}
-              onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+              onDraftValidityChange={(error) => onDraftValidityChange?.(index, error)}
+              onMetaChange={onWeaveMetaChange ? (updates) => onWeaveMetaChange(index, updates) : undefined}
               onReorder={reorderMixed}
               onTogglePatch={onTogglePatch}
-              outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
+              outputCheckHint={!!weaveOutputCheckHint && index === chainOutputIndex}
               overrideAvailable={overrideAvailable}
               patchStack={patchStack}
               predecessors={patches.slice(0, index).map((predecessor, predecessorIndex) => {
-                const predecessorMeta = bundleMeta?.[predecessorIndex];
+                const predecessorMeta = weaveMeta?.[predecessorIndex];
                 return {
                   id: predecessorMeta?.id,
                   label: predecessorMeta?.name || predecessor.fileName || `Patch ${predecessorIndex + 1}`,

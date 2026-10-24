@@ -149,7 +149,7 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   expect(host.textContent).toContain("abcd1234");
 });
 
-test("an unknown ROM reports no checksum match, never that identification failed", async () => {
+test("an unknown ROM reports one calm no-match notice, never an error or failure", async () => {
   identifyRom.mockResolvedValue({
     candidates: [candidate("homebrew.gba", "unknown")],
     input: "homebrew.gba",
@@ -158,16 +158,87 @@ test("an unknown ROM reports no checksum match, never that identification failed
   await mountIdentifyForm();
   await selectRom("homebrew.gba");
   await runIdentify();
-  await waitForText("No matching checksum found in the identification data.");
+  await waitForText("Unknown does not mean corrupt");
 
-  expect(host.textContent).toContain("may be modified, an unlisted revision");
+  expect(host.textContent).toContain("homebrew, modified, or an unlisted revision");
   expect(host.textContent).not.toContain("Identification data could not be loaded");
   expect(host.textContent).not.toContain("Identification unavailable");
-  // The verdict reads as an error notice above the ROM card.
-  expect(host.querySelector(".notice.error")).not.toBeNull();
-  expect(host.querySelector(".identify-state").textContent).toContain("No checksum match");
+  // One neutral info notice: no error notice, no extra chip or card line.
+  expect(host.querySelector(".notice.info")).not.toBeNull();
+  expect(host.querySelector(".notice.error")).toBeNull();
+  expect(host.querySelector(".identify-state")).toBeNull();
+  expect(host.querySelector(".identify-unknown-lead")).toBeNull();
+  expect(host.textContent).not.toContain("No checksum match");
+  expect(host.textContent).not.toContain("Unidentified");
+  expect(host.querySelector(".notice.info a").getAttribute("href")).toContain("docs/identify-roms-browser");
   // Checksums open on their own: they are all a no-match result can still offer.
   expect(host.textContent).toContain("abcd1234");
+});
+
+test("several dropped ROMs are each identified and get their own card", async () => {
+  identifyRom.mockImplementation(async (file) => ({
+    candidates: [
+      candidate(file.name, file.name === "metroid.gba" ? "matched" : "ambiguous", [gbaMatch(`${file.name} title`)]),
+    ],
+    input: file.name,
+    status: file.name === "metroid.gba" ? "matched" : "ambiguous",
+  }));
+  await mountIdentifyForm();
+  const input = host.querySelector("#identify-input-picker");
+  expect(input.multiple).toBe(true);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([new Uint8Array([1])], "metroid.gba"));
+  transfer.items.add(new File([new Uint8Array([2])], "twin.gba"));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitForText("metroid.gba title");
+  await waitForText("twin.gba title");
+
+  expect(identifyRom).toHaveBeenCalledTimes(2);
+  expect(host.querySelectorAll(".workflow-file-list > *")).toHaveLength(2);
+});
+
+test("several unknown ROMs each show one calm no-match notice and no error", async () => {
+  identifyRom.mockImplementation(async (file) => ({
+    candidates: [candidate(file.name, "unknown")],
+    input: file.name,
+    status: "unknown",
+  }));
+  await mountIdentifyForm();
+  const input = host.querySelector("#identify-input-picker");
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([new Uint8Array([1])], "one.gba"));
+  transfer.items.add(new File([new Uint8Array([2])], "two.gba"));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitFor(() => host.querySelectorAll(".notice.info").length === 2);
+
+  expect(host.querySelectorAll(".workflow-file-list > *")).toHaveLength(2);
+  expect(host.querySelector(".notice.error")).toBeNull();
+  expect(host.querySelector(".identify-state")).toBeNull();
+  expect(host.textContent).not.toContain("No checksum match");
+  for (const card of host.querySelectorAll(".workflow-file-list > *")) {
+    expect(card.querySelectorAll(".notice.info")).toHaveLength(1);
+  }
+});
+
+test("a cancelled identification can be retried", async () => {
+  identifyRom.mockImplementationOnce(() => new Promise(() => undefined));
+  await mountIdentifyForm();
+  await selectRom("later.gba");
+  const cancel = () => host.querySelector('[aria-label="Cancel identification"]');
+  await waitFor(cancel);
+  cancel().click();
+  await waitFor(() => buttonMatching(/Retry identification/));
+
+  identifyRom.mockResolvedValue({
+    candidates: [candidate("later.gba", "matched", [gbaMatch("Later Game (USA)")])],
+    input: "later.gba",
+    status: "matched",
+  });
+  buttonMatching(/Retry identification/).click();
+  await waitForText("Later Game (USA)");
+  expect(identifyRom).toHaveBeenCalledTimes(2);
 });
 
 test("an ambiguous ROM names the count and lists every candidate", async () => {
@@ -316,6 +387,19 @@ test("an empty form shows the ghost steps next to the ROM search", async () => {
   expect(host.querySelector(".identify-search-label")?.textContent).toBe("Identify by checksum or game name");
 });
 
+test("the sample checksum searches and opens a match without a ROM", async () => {
+  lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Tetris (World) (Rev 1)")], status: "matched" });
+  await mountIdentifyForm();
+  await page.getByRole("button", { name: "Try a checksum lookup" }).click();
+  await waitFor(() => lookupExpectedRom.mock.calls.length > 0);
+  expect(host.querySelector(".identify-search-input").value).toBe("46df91ad");
+  expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "46df91ad" } }, expect.anything());
+  expect(identifyRom).not.toHaveBeenCalled();
+  await chooseRelease("Tetris (World) (Rev 1)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
+  expect(buttonMatching(/Try a checksum lookup/)).toBeUndefined();
+});
+
 test("a pasted checksum raises the expected-ROM card without a file", async () => {
   lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
   await mountIdentifyForm();
@@ -378,6 +462,83 @@ test("text that is not a checksum searches the titles, and no title is not an an
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
   expect(host.querySelector(".unified-drop-step--hero")).not.toBeNull();
 });
+
+test("reopening title results keeps the selected game visible", async () => {
+  searchExpectedRomTitles.mockResolvedValue({
+    status: "ok",
+    titles: Array.from({ length: 50 }, (_, index) => ({
+      name: `Game ${index}`,
+      platform: "Nintendo - Game Boy Advance",
+      slug: `game-${index}`,
+    })),
+  });
+  await mountIdentifyForm();
+  setHashInput("games");
+  submitSearch();
+  await waitFor(() => host.querySelectorAll('[role="option"]').length === 50);
+  const input = host.querySelector(".identify-search-input");
+  input.focus();
+  const press = (key) => input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+  const selectedVisible = () => {
+    const selected = host.querySelector('[role="option"][aria-selected="true"]');
+    const list = host.querySelector('[role="listbox"]');
+    if (!(selected && list)) return false;
+    const row = selected.getBoundingClientRect();
+    const viewport = list.getBoundingClientRect();
+    return row.top >= viewport.top - 1 && row.bottom <= viewport.bottom + 1;
+  };
+
+  press("ArrowUp");
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+  press("Escape");
+  await waitFor(() => !host.querySelector('[role="listbox"]'));
+  press("ArrowUp");
+  await waitFor(() => host.querySelector('[role="listbox"]'));
+  await waitFor(selectedVisible);
+  expect(host.querySelector('[role="option"][aria-selected="true"]').textContent).toContain("Game 49");
+});
+
+test.each(["Pokemon Emerald", "Metroid Fusion"])(
+  "an external title handoff reopens dismissed results for %s",
+  async (nextTitle) => {
+    const renderRequest = (id, name) => {
+      searchExpectedRomByName.mockResolvedValue({ status: "matched", matches: [gbaMatch(`${name} (USA)`)] });
+      root.render(
+        createElement(
+          RomWeaverSettingsProvider,
+          { settings: { detailedViewEnabled: true } },
+          createElement(IdentifyForm, {
+            lookupRequest: {
+              id,
+              selection: {
+                kind: "title",
+                query: name,
+                title: { name, platform: "Nintendo - Game Boy Advance", slug: "nintendo-game-boy-advance" },
+              },
+            },
+          }),
+        ),
+      );
+    };
+    await mountIdentifyForm();
+    renderRequest(1, "Metroid Fusion");
+    await waitFor(() => host.querySelector('[role="option"]'));
+    const input = host.querySelector('[role="combobox"]');
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await waitFor(() => !host.querySelector('[role="listbox"]'));
+    expect(input.value).toBe("Metroid Fusion");
+    input.blur();
+
+    renderRequest(2, nextTitle);
+    await waitFor(() => searchExpectedRomByName.mock.calls.length === 2 && !host.querySelector('[aria-busy="true"]'));
+    const nextInput = host.querySelector('[role="combobox"]');
+    expect(nextInput.value).toBe(nextTitle);
+    expect(nextInput.getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector('[role="option"]').textContent).toContain(`${nextTitle} (USA)`);
+  },
+);
 
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();

@@ -11,9 +11,11 @@
 
 Your ROM workflow. One toolkit.
 
-Patch, compress, extract, convert, and identify ROMs and disc images. Bake in cheat codes and edit supported game saves in your browser or CLI. Play supported games in the browser with EmulatorJS.
+An open-source ROM, cheat, patch, and save toolkit for desktop browsers, supported mobile browsers, and CLI.
 
-Works offline in your browser or CLI. Your files stay on your device. No telemetry.
+Drop in a compressed ROM and your patches, apply them in order, and recompress the result. One workflow, without unpacking each file by hand.
+
+Files stay on your device. No uploads, accounts, or telemetry. Works offline after caching needed browser assets, databases, and emulator cores, or setting up the CLI.
 
 <p>
   <a href="https://rom-weaver.com/apply-patches"><img alt="Open the webapp" src="https://img.shields.io/badge/Open_the_webapp-d9690f?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNCAzaDd2N00yMSAzIDEwIDE0Ii8%2BPHBhdGggZD0iTTEwIDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNSIvPjwvc3ZnPg%3D%3D"></a>
@@ -29,6 +31,12 @@ Works offline in your browser or CLI. Your files stay on your device. No telemet
   <a href=".config/mise.toml"><img alt="Rust 1.97.1" src="https://img.shields.io/badge/Rust-1.97.1-2c323b?logo=rust&amp;logoColor=white"></a>
   <a href="LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
+
+<!-- apply-video:start -->
+Apply two sample patches and download the result as 7z.
+
+<https://github.com/user-attachments/assets/63054bb7-5496-4506-a73d-a185ec5ad0e1>
+<!-- apply-video:end -->
 
 <details>
 <summary>Contents</summary>
@@ -81,11 +89,11 @@ Native release assets cover macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64
 Three recommended ways to install:
 
 ```bash
-brew install rom-weaver/tap/rom-weaver
+curl -fsSL https://rom-weaver.com/install.sh | sh
 ```
 
 ```bash
-curl -fsSL https://rom-weaver.com/install.sh | sh
+brew install rom-weaver/tap/rom-weaver
 ```
 
 ```bash
@@ -93,13 +101,13 @@ npm install --global rom-weaver
 ```
 
 
-Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless strict verification is enabled; see [Verify a download](docs/how-to/verify-downloads.md). npm is the only channel covering every supported target at once, and needs Node.js 22+.
+The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless strict verification is enabled; see [Verify a download](docs/how-to/verify-downloads.md). Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. npm is the only channel covering every supported target at once, and needs Node.js 22+.
 
 <a name="build-from-source"></a>
 
 Windows, Scoop, PowerShell, cargo-binstall, mise, Docker, shell completions, and building from source are all in [Install the CLI](./docs/how-to/install-cli.md).
 
-All three methods above carry the identify and cheat databases, so they need no extra step. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - need `rom-weaver setup` afterwards to download that data, which `identify`, `probe --identify`, and cheat baking read.
+All three methods above carry the identify and cheat databases, so they need no extra step. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - need `rom-weaver setup` afterwards to download that data, which `identify` and cheat baking read.
 
 Hitting `Permission denied`? See [File permissions](./docs/reference/cli.md#file-permissions).
 
@@ -107,7 +115,7 @@ The [development guide](./docs/development/development.md) covers the full toolc
 
 ## Why
 
-A patch job can require extraction, several patches in order, checksum checks, and compression. rom-weaver runs those steps together and can save the recipe as a bundle.
+A patch job can require extraction, several patches in order, checksum checks, and compression. rom-weaver runs those steps together and can save the recipe as a weave.
 
 [Browser and CLI](docs/explanation/browser-and-cli.md) explains the two interfaces. [Comparison with similar tools](docs/explanation/comparisons.md) covers alternatives.
 
@@ -119,10 +127,17 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 
 ## Features
 
-- **Change games.** Apply or create patches, arrange patch chains, bake supported cheats, and share patch bundles.
-- **Prepare files.** Identify games and revisions, compare checksums, extract archives, convert containers, compress files, trim padding, and undo PPF3 patches with undo data.
-- **Play and manage progress.** Test supported games in the browser. Import or export emulator saves, edit supported game saves, and create fresh supported saves.
-- **Work locally.** Process files without uploads or accounts. Cached app assets work offline; CLI commands support scripts and JSON output.
+- **Apply and create patches.** IPS, BPS, UPS, PPF, RUP, xdelta, and more. Chain compatible patches in order: a weave.
+- **Open archives directly.** Read ROMs and patches inside ZIP, 7z, RAR, and nested archives. Extract many formats through libarchive; create ZIP and 7z.
+- **Convert game images.** Extract and create RVZ, CHD, and Z3DS. Read CSO, PBP, GCZ, WIA, and more. See [format limits](docs/reference/formats.md#container-and-compression-formats) and [benchmarks](#performance).
+- **Identify and verify ROMs.** Match checksums to known games, regions, and revisions. Compare fingerprints and check patch requirements.
+- **Handle dump differences.** Resolve supported copier headers and N64 byte orders. Optionally repair supported ROM compatibility fields.
+- **Bake in cheats.** Apply supported ROM-writing codes, or turn them into patches. Live-memory codes cannot be baked.
+- **Try the result.** Play supported games in your browser with EmulatorJS. Import and export emulator saves.
+- **Reuse patch weaves.** Preserve patches, order, choices, and ROM checksums. Patch-only weaves omit the ROM; each user supplies their matching original.
+- **Trim and edit saves (beta).** Trim supported ROM padding, edit supported saves, and generate saves within [game-specific limits](docs/reference/save-editor.md#save-generation). Browser Trim and Save Editor require the beta setting.
+- **Undo patches.** Reverse PPF3 patches containing undo data.
+- **Automate or self-host.** CLI scripts, JSON output, and your own webapp hosting. Both interfaces share one Rust engine.
 
 The [plain-language feature map](docs/reference/features.md) links every feature to its browser or CLI guide. Exact limits live in the [format tables](docs/reference/formats.md), [cheat reference](docs/reference/cheat-database.md), and [save reference](docs/reference/save-editor.md).
 
@@ -130,7 +145,7 @@ The [plain-language feature map](docs/reference/features.md) links every feature
 
 ### Beta status
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and bundling are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Some browser features are hidden behind [the beta setting](docs/how-to/browser-settings.md#enable-beta-tools). The [feature map](docs/reference/features.md#app-and-automation) lists them. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
+rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and creating weaves are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Some browser features are hidden behind [the beta setting](docs/how-to/browser-settings.md#enable-beta-tools). The [feature map](docs/reference/features.md#app-and-automation) lists them. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
 
 ### First complete public release
 
@@ -156,6 +171,28 @@ Localized translations are early and may be entirely wrong in places. Manual edi
     </tr>
   </thead>
   <tbody>
+    <tr>
+      <td>Desktop: Apply with two ordered patches</td>
+      <td>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="docs/screenshots/apply-page-desktop-dark.avif">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-desktop-dark.webp">
+          <source type="image/avif" srcset="docs/screenshots/apply-page-desktop-light.avif">
+          <img src="docs/screenshots/apply-page-desktop-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on desktop">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile: Apply with two ordered patches</td>
+      <td align="center">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="docs/screenshots/apply-page-mobile-dark.avif">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-mobile-dark.webp">
+          <source type="image/avif" srcset="docs/screenshots/apply-page-mobile-light.avif">
+          <img src="docs/screenshots/apply-page-mobile-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on mobile" width="390">
+        </picture>
+      </td>
+    </tr>
     <tr>
       <td>Desktop: ordered patch stack</td>
       <td>
@@ -184,11 +221,11 @@ Localized translations are early and may be entirely wrong in places. Manual edi
       </td>
     </tr>
     <tr>
-      <td>Mobile: bundle output options</td>
+      <td>Mobile: weave output options</td>
       <td align="center">
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/bundle-output-mobile-dark.webp">
-          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
+          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only weave controls on mobile" width="390">
         </picture>
       </td>
     </tr>

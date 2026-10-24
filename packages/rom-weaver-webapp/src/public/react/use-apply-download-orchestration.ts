@@ -563,6 +563,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           setCompletedApplyTimeMs,
           setCompletedCompressionTimeMs,
           setCompletedSizeSummary,
+          setCompletedWarnings,
           setOutputErrorMessage,
           setPatchProgress,
           setPatchProgressByKey,
@@ -727,6 +728,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
             percent: 100,
           });
           setCompletedSizeSummary(sizeSummary);
+          setCompletedWarnings(result.warnings ?? []);
           rememberActiveOutputCleanup(
             result.outputs.length > 0
               ? async () => {
