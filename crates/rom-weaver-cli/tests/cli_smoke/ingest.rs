@@ -1398,6 +1398,43 @@ fn ingest_patch_reads_filename_requirements_from_input_name() {
     );
 }
 
+// `:` is not a legal Windows file name character, so this layout only exists on Unix hosts.
+#[cfg(not(windows))]
+#[test]
+fn ingest_patch_reads_md5_and_size_tokens_from_the_input_file_name() {
+    // The browser mounts INPUT under its original name (`:` kept), so these tokens are read from the
+    // path like every other command.
+    let temp = setup_temp_dir();
+    let patch = temp.child("hack [md5:0123456789abcdef0123456789abcdef] [size:524288].ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: b"x".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let out_dir = temp.child("ingest-filename-token-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.path().to_str().expect("path"),
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(
+        descriptor["filename_checksums"]["md5"],
+        "0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(descriptor["filename_size"], 524_288);
+}
+
 #[test]
 fn ingest_patch_archive_extracts_and_describes_leaves() {
     let temp = setup_temp_dir();

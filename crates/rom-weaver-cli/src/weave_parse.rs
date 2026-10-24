@@ -903,4 +903,41 @@ mod tests {
         ));
         assert!(!weave_bytes_are_valid(b"not json at all"));
     }
+
+    fn weave_with_states(states: &str, rom: &str) -> String {
+        format!(
+            r#"{{ "version": 2, "patchBasis": "auto", "checkStates": {states}, "rom": {rom},
+                "patches": [ {{ "path": "a.ips", "input": {{ "rom": true }} }} ] }}"#
+        )
+    }
+
+    #[test]
+    fn rejects_check_references_that_resolve_to_nothing() {
+        let states = r#"[ { "id": "rom", "checks": { "checksums": { "crc32": "12345678" } } } ]"#;
+        assert_eq!(
+            parse_err(&weave_with_states(states, r#"{ "checksRef": "missing" }"#)),
+            "bundle.checks.reference.unresolved"
+        );
+    }
+
+    #[test]
+    fn rejects_check_references_beside_inline_checks() {
+        let states = r#"[ { "id": "rom", "checks": { "checksums": { "crc32": "12345678" } } } ]"#;
+        assert_eq!(
+            parse_err(&weave_with_states(
+                states,
+                r#"{ "checksRef": "rom", "checks": { "checksums": { "crc32": "12345678" } } }"#
+            )),
+            "bundle.checks.reference.conflict"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_check_state_ids() {
+        let states = r#"[ { "id": "rom", "checks": { "size": 1 } }, { "id": "rom", "checks": { "size": 2 } } ]"#;
+        assert_eq!(
+            parse_err(&weave_with_states(states, r#"{ "checksRef": "rom" }"#)),
+            "bundle.check_state.id.duplicate"
+        );
+    }
 }

@@ -4,13 +4,32 @@
  * normalization/validation the patch cards and the ROM weave-checks editor
  * both apply before committing a value.
  */
-const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
+import {
+  ROM_WEAVER_CHECKSUM_ALGORITHMS,
+  ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS,
+} from "../../../../wasm/generated/rom-weaver-format-metadata.ts";
+
+const CHECK_ALGORITHMS = ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS;
 const CHECK_FIELDS = ["crc32", "md5", "sha1", "bytes"] as const;
 /** Render order for editable check grids: CRC32 pairs with BYTES on one grid
  * row (the short values), the long hashes follow full-width. */
 const CHECK_FIELDS_PAIRED = ["crc32", "bytes", "md5", "sha1"] as const;
-const CHECK_LABELS = { bytes: "BYTES", crc32: "CRC32", md5: "MD5", sha1: "SHA-1" } as const;
-const CHECK_HEX_LENGTHS = { crc32: 8, md5: 32, sha1: 40 } as const;
+const algorithmInfo = (id: CheckAlgorithm) => {
+  const info = ROM_WEAVER_CHECKSUM_ALGORITHMS.find((algorithm) => algorithm.id === id);
+  if (!info) throw new Error(`Unknown checksum algorithm: ${id}`);
+  return info;
+};
+const CHECK_LABELS = {
+  bytes: "BYTES",
+  crc32: algorithmInfo("crc32").label,
+  md5: algorithmInfo("md5").label,
+  sha1: algorithmInfo("sha1").label,
+} as const;
+const CHECK_HEX_LENGTHS = {
+  crc32: algorithmInfo("crc32").hexLength,
+  md5: algorithmInfo("md5").hexLength,
+  sha1: algorithmInfo("sha1").hexLength,
+} as const;
 
 type CheckAlgorithm = (typeof CHECK_ALGORITHMS)[number];
 type CheckField = (typeof CHECK_FIELDS)[number];

@@ -12,12 +12,12 @@ use rom_weaver_core::{
 };
 use serde_json::json;
 
-use super::expect_tokens::checksum_hex_len;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, LogLevel,
     N64ByteOrder, N64ByteOrderTransform, RomWeaverWeave, log_filter_spec,
 };
+use rom_weaver_checksum::checksum_hex_len;
 
 #[test]
 fn dependency_trace_keeps_application_logging_at_warning() {
@@ -1206,9 +1206,10 @@ fn libretro_sidecar_matches_basename_stem_and_order() {
 
 // --------------------------------------------------------------------------------------------
 // patch-validate helper coverage. `parse_patch_apply_checksum_values`,
-// `validate_patch_input_size`, `validate_patch_apply_expected_checksums`, and `checksum_hex_len`
+// `validate_patch_input_size`, and `validate_patch_apply_expected_checksums`
 // back the weave check-token parser (`weave_entry_checks` -> `--output-check` and the per-patch
-// check flags) and have no other in-source tests. Each error case asserts the matched
+// check flags) and have no other in-source tests. (`checksum_hex_len` is covered in
+// rom-weaver-checksum; the assertions below are a CLI-side smoke check.) Each error case asserts the matched
 // `RomWeaverError` variant plus the guard message so the intended branch is the one hit.
 // --------------------------------------------------------------------------------------------
 

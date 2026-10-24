@@ -30,8 +30,11 @@ use super::{
     compute_parallel_blake3, compute_parallel_crc16, compute_parallel_crc32,
     compute_parallel_crc32c, compute_parallel_fanout, compute_sequential,
     compute_sequential_stream, crc16_arc_combine, crc32_parallel_chunk_size, crc32c_append,
-    execute_plan, gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, partition_algorithms,
-    plan_checksum, supported_algorithms,
+    execute_plan, gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, parallel_max_threads,
+    partition_algorithms, plan_checksum, supported_algorithms,
+};
+use crate::{
+    ALGORITHM_TABLE, BARE_FILENAME_ALGORITHMS, checksum_hex_len, standard_algorithm_for_hex_len,
 };
 
 #[test]
@@ -605,6 +608,65 @@ fn planner_keeps_standalone_algorithms_sequential_below_threshold() {
         };
         let plan = plan_checksum(&algorithms, &range);
         assert_eq!(plan.mode, ChecksumMode::Sequential);
+    }
+}
+
+#[test]
+fn planner_pins_mode_and_thread_cap_per_standalone_algorithm() {
+    let cases: &[(&str, ChecksumMode, u64, usize)] = &[
+        (
+            "crc32",
+            ChecksumMode::ParallelCrc32,
+            CRC32_PARALLEL_THRESHOLD,
+            4,
+        ),
+        (
+            "crc32c",
+            ChecksumMode::ParallelCrc32c,
+            CRC32C_PARALLEL_THRESHOLD,
+            4,
+        ),
+        (
+            "crc16",
+            ChecksumMode::ParallelCrc16,
+            CRC16_PARALLEL_THRESHOLD,
+            4,
+        ),
+        (
+            "adler32",
+            ChecksumMode::ParallelAdler32,
+            ADLER32_PARALLEL_THRESHOLD,
+            4,
+        ),
+        (
+            "blake3",
+            ChecksumMode::ParallelBlake3,
+            BLAKE3_PARALLEL_THRESHOLD,
+            8,
+        ),
+    ];
+    for (id, mode, threshold, cap) in cases {
+        let algorithms = super::resolve_algorithms(&[(*id).to_owned()]).expect("algorithms");
+        for len in [*threshold, 1024 * 1024 * 1024] {
+            let range = ResolvedRange {
+                start: 0,
+                len,
+                file_len: len,
+                explicit: false,
+            };
+            let plan = plan_checksum(&algorithms, &range);
+            assert_eq!(plan.mode, *mode, "{id} mode at {len}");
+            let expected_cap = if len == *threshold {
+                parallel_max_threads(len, 16 * 1024 * 1024, *cap)
+            } else {
+                *cap
+            };
+            assert_eq!(
+                plan.capability,
+                ThreadCapability::parallel(Some(expected_cap)),
+                "{id} cap at {len}"
+            );
+        }
     }
 }
 
@@ -1864,4 +1926,53 @@ proptest! {
         prop_assert_eq!(combine_crc16_partials(crc16_parts).expect("combine"), crc16_reference);
         prop_assert_eq!(combine_adler32_partials(adler_parts).expect("combine"), (b << 16) | a);
     }
+}
+
+#[test]
+fn algorithm_table_drives_supported_algorithms_and_hex_lengths() {
+    let ids: Vec<&str> = ALGORITHM_TABLE.iter().map(|info| info.id).collect();
+    assert_eq!(ids, supported_algorithms());
+    for (id, hex_len) in [
+        ("crc16", 4),
+        ("crc32", 8),
+        ("crc32c", 8),
+        ("adler32", 8),
+        ("md5", 32),
+        ("sha1", 40),
+        ("sha256", 64),
+        ("blake3", 64),
+    ] {
+        assert_eq!(checksum_hex_len(id), Some(hex_len), "{id}");
+    }
+    assert_eq!(checksum_hex_len("nope"), None);
+}
+
+#[test]
+fn standard_algorithm_inference_is_limited_to_the_standard_set() {
+    // Inferable widths must be unambiguous across the whole table.
+    for id in BARE_FILENAME_ALGORITHMS {
+        let len = checksum_hex_len(id).expect("table id");
+        let sharing = ALGORITHM_TABLE
+            .iter()
+            .filter(|info| info.hex_len == len)
+            .count();
+        // crc32 shares 8 hex with crc32c/adler32 by deliberate convention (crc32 dominates).
+        assert!(
+            sharing == 1 || *id == "crc32",
+            "{id} width {len} is ambiguous"
+        );
+    }
+    assert_eq!(standard_algorithm_for_hex_len(8), Some("crc32"));
+    assert_eq!(standard_algorithm_for_hex_len(32), Some("md5"));
+    assert_eq!(standard_algorithm_for_hex_len(40), Some("sha1"));
+    assert_eq!(standard_algorithm_for_hex_len(4), None);
+    assert_eq!(standard_algorithm_for_hex_len(64), None);
+}
+
+#[test]
+fn parallel_max_threads_scales_with_length_and_clamps() {
+    assert_eq!(parallel_max_threads(0, 16, 4), 1);
+    assert_eq!(parallel_max_threads(47, 16, 4), 2);
+    assert_eq!(parallel_max_threads(48, 16, 4), 3);
+    assert_eq!(parallel_max_threads(1_000, 16, 4), 4);
 }

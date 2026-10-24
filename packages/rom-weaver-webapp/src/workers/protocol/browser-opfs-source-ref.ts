@@ -64,7 +64,8 @@ const CONTROL_FILE_CHARS_REGEX = new RegExp(
   `[${String.fromCharCode(0x00)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}-${String.fromCharCode(0x9f)}]+`,
   "g",
 );
-const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
+// `:` is kept: Rust reads `[md5:...]`-style tokens from the mounted file name (patch_filename_checksum.rs).
+const RESERVED_FILE_CHARS_REGEX = /[*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
 // Virtual input names remain reserved until their source references are cleaned up.

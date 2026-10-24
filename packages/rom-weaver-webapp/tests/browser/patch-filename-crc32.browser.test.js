@@ -43,7 +43,7 @@ test("a patch whose filename crc32 token mismatches the ROM is blocked until App
   await expect
     .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad"), { timeout: 60000 })
     .not.toBeNull();
-  // The engine's dry run lands after the cheap preflight and knows nothing of the file-name token;
+  // The engine's dry run lands after the cheap preflight and also honors the file-name token;
   // the mismatch must survive it instead of flipping the card to Verified.
   await expect
     .poll(() => document.getElementById("rom-weaver-list-patch-stack")?.textContent ?? "", { timeout: 60000 })

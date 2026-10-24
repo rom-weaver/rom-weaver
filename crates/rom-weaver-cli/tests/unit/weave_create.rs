@@ -918,6 +918,29 @@ fn weave_create_refuses_an_existing_archive_before_writing_the_definition() {
     fs::remove_dir_all(&dir).ok();
 }
 
+// `:` is not a legal Windows file name character, so the fixture only exists on Unix hosts.
+#[cfg(not(windows))]
+#[test]
+fn weave_create_archive_member_names_replace_colons() {
+    let dir = scratch_dir("archive-colon-member");
+    let patch = write_fixture(&dir, "hack [crc32:1a2b3c4d].ips", &ips_patch_bytes());
+    let app = test_app();
+    let args = WeaveCreateCommand {
+        patch: vec![patch],
+        bundle: Some(dir.join("release.zip")),
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+
+    let result = app.weave_create_inner(&args, &context).expect("create");
+
+    assert_eq!(
+        result.bundle.patches[0].path.as_deref(),
+        Some("hack [crc32_1a2b3c4d].ips")
+    );
+    fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn weave_create_validates_the_archive_format_before_writing_the_definition() {
     let dir = scratch_dir("invalid-archive-format");

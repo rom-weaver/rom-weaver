@@ -42,22 +42,17 @@ import {
   toWorkflowFileProgressProps,
   useWorkflowProgressState,
 } from "../../public/react/workflow-run-hooks.ts";
+import {
+  ROM_WEAVER_CHECKSUM_ALGORITHMS,
+  ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 const logger = createLogger("checksum-form");
 
 /* Every algorithm the checksum engine supports (`rom-weaver formats`), with the
-   hex length its digest has. Staging always computes the first three. */
-const CHECKSUM_ALGORITHMS = [
-  { hexLength: 8, id: "crc32", label: "CRC32" },
-  { hexLength: 32, id: "md5", label: "MD5" },
-  { hexLength: 40, id: "sha1", label: "SHA-1" },
-  { hexLength: 64, id: "sha256", label: "SHA-256" },
-  { hexLength: 64, id: "blake3", label: "BLAKE3" },
-  { hexLength: 8, id: "crc32c", label: "CRC32C" },
-  { hexLength: 4, id: "crc16", label: "CRC16" },
-  { hexLength: 8, id: "adler32", label: "Adler-32" },
-] as const;
-const DEFAULT_ALGORITHMS = ["crc32", "md5", "sha1"];
+   hex length its digest has. Staging always computes the standard subset. */
+const CHECKSUM_ALGORITHMS = ROM_WEAVER_CHECKSUM_ALGORITHMS;
+const DEFAULT_ALGORITHMS: string[] = [...ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS];
 
 type ChecksumFormProps = { pageDrop?: PageFileDrop | null };
 type ChecksumSet = { checksums: Record<string, string>; id: string; label: string };

@@ -154,6 +154,26 @@ const parseWeaveOutput = (value: unknown): ParsedWeaveOutput | undefined => {
   return Object.keys(output).length ? output : undefined;
 };
 
+/**
+ * `weave parse` validates every `checksRef` and returns the checks each one resolves to beside the
+ * weave. Overlay them so the parsed weave reads the same whether a check was inline or shared;
+ * the webapp has no resolver of its own.
+ */
+const overlayResolvedChecks = (weave: ParsedWeave, record: Record<string, unknown>): void => {
+  const sources = Array.isArray(record.patch_sources) ? record.patch_sources : [];
+  const romChecks = parseChecks(record.rom_checks);
+  if (weave.rom && romChecks) weave.rom.checks = romChecks;
+  const outputChecks = parseChecks(record.output_checks);
+  if (weave.output && outputChecks) weave.output.checks = outputChecks;
+  for (const [index, patch] of weave.patches.entries()) {
+    const source = asRecord(sources[index]);
+    const input = parseChecks(source?.input_checks);
+    if (input) patch.inputChecks = input;
+    const output = parseChecks(source?.output_checks);
+    if (output) patch.outputChecks = output;
+  }
+};
+
 const parseWeave = (value: unknown): ParsedWeave | undefined => {
   const record = asRecord(value) as WireRecord<RomWeaverWeave> | undefined;
   if (!record) return undefined;
@@ -219,6 +239,7 @@ const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undef
   if (!record) return undefined;
   const weave = parseWeave(record.weave ?? record.bundle);
   if (!weave) return undefined;
+  overlayResolvedChecks(weave, record);
   const sourceKindRaw = record.source_kind;
   const sourceKind: WeaveSourceKind =
     sourceKindRaw === "compressed-json" || sourceKindRaw === "archive" ? sourceKindRaw : "json";

@@ -13,7 +13,6 @@ import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { WeaveApplySession, WeaveApplySessionEntry } from "./weave-session-model.ts";
 import { weaveSessionDefaults, weavePatchMetadata, weaveRomExpectation } from "./weave-session-model.ts";
-import { resolveWeaveChecks } from "./weave-targets.ts";
 
 // The archive-nesting chain a fanned-out leaf patch carries on its File so a re-stage still renders
 // the "extract section"; a weave-extracted patch rides the same channel (see apply-prepared-metadata).
@@ -154,17 +153,7 @@ function buildWeaveApplySession(
   const romExpectation = romFile ? undefined : weaveRomExpectation(result.weave);
   return {
     ...weaveSessionDefaults(result.weave),
-    entries: result.weave.patches.map((patch, index) =>
-      toWeaveSessionEntry(
-        {
-          ...patch,
-          inputChecks: resolveWeaveChecks(result.weave, patch.inputChecks, patch.inputChecksRef),
-          outputChecks: resolveWeaveChecks(result.weave, patch.outputChecks, patch.outputChecksRef),
-        },
-        patchFiles[index],
-        index,
-      ),
-    ),
+    entries: result.weave.patches.map((patch, index) => toWeaveSessionEntry(patch, patchFiles[index], index)),
     key: `local:${weaveFile.name}:${weaveFile.size}:${weaveFile.lastModified}`,
     ...(romFile ? { romFileName: romFile.name } : {}),
     ...(romExpectation ? { romExpectation } : {}),
