@@ -75,6 +75,9 @@ const invokeRomWeaverIngestWorker = async (
   input: {
     checksumAlgorithms?: string[];
     databasePaths?: string[];
+    // The source's original file name; staging rewrites characters such as `:` that patch names use
+    // to declare checks (`[crc32:..]`).
+    inputName?: string;
     interactiveSelectionEnabled?: boolean;
     invalidateMountCacheBeforeRun?: boolean;
     knownInputPaths?: string[];
@@ -104,6 +107,7 @@ const invokeRomWeaverIngestWorker = async (
   const command = createRomWeaverCommand("ingest", {
     output: outDirPath,
     input: sourcePath,
+    ...(input.inputName ? { input_name: input.inputName } : {}),
     ...(database.length ? { database } : {}),
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),

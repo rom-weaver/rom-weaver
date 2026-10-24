@@ -1359,6 +1359,46 @@ fn ingest_patch_parses_filename_requirements() {
 }
 
 #[test]
+fn ingest_patch_reads_filename_requirements_from_input_name() {
+    let temp = setup_temp_dir();
+    // The browser stages files under sanitized names, so `:` arrives as `_`.
+    let patch = temp.child("hack [crc32_1a2b3c4d].ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: b"x".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let out_dir = temp.child("ingest-input-name-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.path().to_str().expect("path"),
+        "--input-name",
+        "hack [crc32:1a2b3c4d] [md5:00112233445566778899aabbccddeeff].ips",
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(descriptor["filename_checksums"]["crc32"], "1a2b3c4d");
+    assert_eq!(
+        descriptor["filename_checksums"]["md5"],
+        "00112233445566778899aabbccddeeff"
+    );
+    assert_eq!(
+        descriptor["file_name"], "hack [crc32_1a2b3c4d].ips",
+        "the descriptor keeps naming the staged leaf"
+    );
+}
+
+#[test]
 fn ingest_patch_archive_extracts_and_describes_leaves() {
     let temp = setup_temp_dir();
     let patch = create_bps_patch(&temp, b"abcdefgh", b"abXYefgh", "fix.bps");

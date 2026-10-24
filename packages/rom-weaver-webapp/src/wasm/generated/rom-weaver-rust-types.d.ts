@@ -448,7 +448,13 @@ export type IngestCommand = { input: string, output: string, database?: Array<st
  * Optional loose patch names to match against `source` without ingesting it. This keeps the
  * browser's sibling-sidecar lookup on the ingest command surface while reusing Rust's matcher.
  */
-sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+sidecar_names?: Array<string>, sidecar_only?: boolean,
+/**
+ * Original file name of a bare `input` that the host staged under another name. Checks a
+ * patch declares in its name (`[crc32:..]`) are read from it, because staging rewrites
+ * characters such as `:`.
+ */
+input_name?: string, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
 export type CheatCommand = { input: string,
 /**

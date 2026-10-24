@@ -235,6 +235,7 @@ impl CliApp {
             selections = args.select.len(),
             sidecar_count = args.sidecar_names.len(),
             sidecar_only = args.sidecar_only,
+            input_name = args.input_name.as_deref(),
             no_ignore = args.no_ignore,
             no_nested_extract = args.no_nested_extract,
             checksum_algorithms = args.checksum.len(),
@@ -248,6 +249,7 @@ impl CliApp {
             select,
             sidecar_names,
             sidecar_only,
+            input_name,
             no_ignore,
             no_nested_extract,
             split_bin,
@@ -337,16 +339,19 @@ impl CliApp {
             return self.finish("ingest", report);
         }
 
-        let report = match self.run_ingest_inner(IngestRequest {
-            source: &source,
-            out_dir: &out_dir,
-            raw_selections: select,
-            no_ignore,
-            no_nested_extract,
-            split_bin,
-            algorithms: &algorithms,
-            context: &context,
-        }) {
+        let report = match self.run_ingest_inner(
+            IngestRequest {
+                source: &source,
+                out_dir: &out_dir,
+                raw_selections: select,
+                no_ignore,
+                no_nested_extract,
+                split_bin,
+                algorithms: &algorithms,
+                context: &context,
+            },
+            input_name.as_deref(),
+        ) {
             Ok(outcome) => match self.ingest_success_report(
                 &source,
                 outcome,
@@ -373,7 +378,11 @@ impl CliApp {
         self.finish("ingest", report)
     }
 
-    fn run_ingest_inner(&self, request: IngestRequest<'_>) -> Result<IngestOutcome> {
+    fn run_ingest_inner(
+        &self,
+        request: IngestRequest<'_>,
+        input_name: Option<&str>,
+    ) -> Result<IngestOutcome> {
         let IngestRequest {
             source,
             out_dir,
@@ -427,7 +436,7 @@ impl CliApp {
                 },
             );
         }
-        self.ingest_bare_source(source, algorithms, context)
+        self.ingest_bare_source(source, input_name, algorithms, context)
     }
 
     fn ingest_container(
@@ -699,6 +708,7 @@ impl CliApp {
     fn ingest_bare_source(
         &self,
         source: &Path,
+        input_name: Option<&str>,
         algorithms: &[String],
         context: &OperationContext,
     ) -> Result<IngestOutcome> {
@@ -706,7 +716,7 @@ impl CliApp {
             return Ok(outcome);
         }
         if is_patch_filter_candidate_name(&source.to_string_lossy()) {
-            let descriptor = self.build_patch_descriptor(source, None, context)?;
+            let descriptor = self.build_patch_descriptor(source, input_name, None, context)?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
                 is_rom: false,
@@ -938,7 +948,7 @@ impl CliApp {
             if !is_patch_filter_candidate_name(path) {
                 continue;
             }
-            patches.push(self.build_patch_descriptor(leaf_path, rom_hint, context)?);
+            patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
         }
         Ok(patches)
     }
@@ -1160,9 +1170,12 @@ impl CliApp {
 
     /// Aggregate one patch's consolidated descriptor: format + embedded metadata (`handler.parse`),
     /// file-name requirements (`parse_filename_requirements`), and libretro sidecar order.
+    /// `original_name` replaces the leaf's own name for the file-name requirements when the host
+    /// staged the patch under another name.
     pub(super) fn build_patch_descriptor(
         &self,
         leaf_path: &Path,
+        original_name: Option<&str>,
         rom_hint: Option<&str>,
         context: &OperationContext,
     ) -> Result<PatchDescriptor> {
@@ -1171,7 +1184,14 @@ impl CliApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let requirements = parse_filename_requirements(&file_name);
+        if let Some(original_name) = original_name {
+            trace!(
+                staged_name = %file_name,
+                original_name,
+                "reading patch file-name requirements from the original name"
+            );
+        }
+        let requirements = parse_filename_requirements(original_name.unwrap_or(&file_name));
         let sidecar_order =
             rom_hint.and_then(|rom| Self::entry_matches_libretro_sidecar(rom, &file_name));
 
