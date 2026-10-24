@@ -234,6 +234,7 @@ impl CliApp {
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
         flags: AutoExtractResolutionFlags,
+        group_disc_payloads: bool,
     ) -> Result<ResolvedChecksumSource> {
         self.resolve_source_with_auto_extract_with_mode(
             source,
@@ -241,31 +242,7 @@ impl CliApp {
             context,
             labels,
             AutoExtractResolutionOptions {
-                group_disc_payloads: false,
-                no_extract: flags.no_extract,
-                no_ignore: flags.no_ignore,
-                kind_filter: flags.kind_filter,
-                mode: AutoExtractMode::Recursive,
-                stop_on_single_payload_codec: flags.stop_on_single_payload_codec,
-            },
-        )
-    }
-
-    pub(super) fn resolve_ppf_undo_rom_source(
-        &self,
-        source: &Path,
-        select: &[String],
-        context: &OperationContext,
-        labels: AutoExtractResolutionLabels<'_>,
-        flags: AutoExtractResolutionFlags,
-    ) -> Result<ResolvedChecksumSource> {
-        self.resolve_source_with_auto_extract_with_mode(
-            source,
-            select,
-            context,
-            labels,
-            AutoExtractResolutionOptions {
-                group_disc_payloads: true,
+                group_disc_payloads,
                 no_extract: flags.no_extract,
                 no_ignore: flags.no_ignore,
                 kind_filter: flags.kind_filter,

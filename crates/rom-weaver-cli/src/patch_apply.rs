@@ -2884,6 +2884,7 @@ impl CliApp {
                     temp_prefix,
                 },
                 flags,
+                false,
             )?;
             if resolved_patch_extracted_archives > 0 {
                 let note = if patches.len() == 1 {

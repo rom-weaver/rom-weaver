@@ -957,9 +957,9 @@ impl CliApp {
             system = ?args.system,
             database_dir = ?args.database_dir,
             exhaustive = args.exhaustive_database_search,
-            selections = args.select.len(),
-            no_extract = args.no_extract,
-            no_ignore = args.no_ignore,
+            selections = args.selection.select.len(),
+            no_extract = args.selection.no_extract,
+            no_ignore = args.selection.no_ignore,
             no_trim_fix = args.no_trim_fix,
             threads = %args.threads,
             "starting identify command"
@@ -977,10 +977,13 @@ impl CliApp {
             database_dir,
             exhaustive_database_search,
             subcommand: _,
-            select,
-            filter,
-            no_extract,
-            no_ignore,
+            selection:
+                ArchiveSelectionArgs {
+                    select,
+                    filter,
+                    no_extract,
+                    no_ignore,
+                },
             no_trim_fix,
             threads,
         } = args;

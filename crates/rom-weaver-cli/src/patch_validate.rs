@@ -241,6 +241,7 @@ impl CliApp {
                 kind_filter: args.input_kind_filter,
                 stop_on_single_payload_codec: false,
             },
+            false,
         )?;
         // Reuse the host-provided input checksums (the CRC32 the webapp already computed during
         // staging) for the handler's source-checksum verification - preflight otherwise
