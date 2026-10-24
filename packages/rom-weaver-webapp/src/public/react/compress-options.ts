@@ -25,7 +25,11 @@ import {
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
-import { getChdAutoCreateMode, getDiscFormatLabel } from "../../lib/input/rom-specific-file-utils.ts";
+import {
+  discFormatToChdMode,
+  getChdAutoCreateMode,
+  getDiscFormatLabel,
+} from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import type { SourceMetadata } from "../../types/workflow-source.ts";
 
@@ -373,9 +377,12 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     // so the output reflects the GD-vs-CD media the create will actually produce.
     // The verdict comes from the Rust ingest/checksum identity pass (`metadata.format`),
     // not a TS regex over the cue text / file name.
+    // A staged generic-codec hint hides only an identity medium that contradicts it.
+    const stagedCodecMode = (source as SourceLike | undefined)?.chdCodecMode;
+    const identityFormat = (source as SourceLike | undefined)?.metadata?.format;
     const discLabel =
-      source && !(source as SourceLike).chdCodecMode
-        ? getDiscFormatLabel((source as SourceLike).metadata?.format)
+      source && (!stagedCodecMode || discFormatToChdMode(identityFormat) === stagedCodecMode)
+        ? getDiscFormatLabel(identityFormat)
         : null;
     const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
     const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);

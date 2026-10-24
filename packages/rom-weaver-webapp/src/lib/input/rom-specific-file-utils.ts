@@ -165,6 +165,9 @@ const hasUdfDescriptor = (source: ByteProbeableSource, size: number | undefined)
   return false;
 };
 
+/** Whether a cooked image's leading bytes announce UDF; `size` is the whole image length. */
+const hasChdUdfDescriptor = (prefix: Uint8Array, size: number): boolean => hasUdfDescriptor({ _u8array: prefix }, size);
+
 const getChdStructuralMode = (source: { fileName?: string; metadata?: SourceMetadata }): ChdCodecMode | undefined => {
   const metadata = source.metadata;
   if (metadata?.mode === "cd" || metadata?.mode === "dvd") return metadata.mode;
@@ -231,6 +234,7 @@ export {
   getChdAutoCreateMode,
   getDiscFormatLabel,
   hasChdHardDiskHeader,
+  hasChdUdfDescriptor,
   isLooseChdAutoSource,
   parseCueFile,
   replaceCuePatchFileName,
