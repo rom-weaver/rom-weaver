@@ -502,6 +502,37 @@ test.each(["input", "output"].flatMap((side) => ["crc32", "md5", "sha1", "bytes"
   },
 );
 
+test("malformed output check draft disables Download weave until corrected", async () => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [await loadFixtureFile(RAW_PATCH)]);
+  await waitForApplyButtonEnabled();
+  const exportButton = () => document.getElementById("rom-weaver-button-export-weave");
+  await expect.poll(() => exportButton()?.disabled).toBe(false);
+  document.querySelector("#rom-weaver-list-patch-stack .patch-checks .cks-head")?.click();
+  const add = await waitForState(() => document.getElementById("rom-weaver-patch-output-add-check-0"), 30000);
+  add.value = "sha1";
+  add.dispatchEvent(new Event("change", { bubbles: true }));
+  const input = await waitForState(() => document.getElementById("rom-weaver-patch-output-sha1-0"), 30000);
+  setFormControlValue(input, "a".repeat(41));
+  await expect.poll(() => exportButton()?.disabled).toBe(true);
+  // A disabled patch still exports as an optional entry with its checks.
+  const toggle = document.querySelector("#rom-weaver-list-patch-stack .patch-enable input");
+  toggle.click();
+  await expect.poll(() => toggle.checked).toBe(false);
+  await expect.poll(() => exportButton()?.disabled).toBe(true);
+  // The reason sits beside the action, so it stays visible with the drawer collapsed.
+  const exportNotice = () => exportButton()?.parentElement?.querySelector(".notice.error");
+  await expect.poll(() => exportNotice()?.textContent).toContain("40");
+  toggle.click();
+  await expect.poll(() => toggle.checked).toBe(true);
+  setFormControlValue(input, "");
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await expect.poll(() => exportButton()?.disabled).toBe(false);
+  expect(exportNotice()).toBeNull();
+});
+
 test.each(["9007199254740992", "9".repeat(310)])("unsafe byte count %s cannot replace exact metadata", async (raw) => {
   const onMetaChange = vi.fn();
   const onDraftValidityChange = vi.fn();
