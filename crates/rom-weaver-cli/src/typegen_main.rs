@@ -343,7 +343,7 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
@@ -366,6 +366,10 @@ fn render_metadata() -> String {
         render_ts_const("ROM_WEAVER_DISC_IMAGE_POLICY", disc_image_policy_value()),
         render_ts_const("ROM_WEAVER_ARCHIVE_FORMATS", archive_formats_value()),
         render_ts_const("ROM_WEAVER_Z3DS_SUBTYPES", z3ds_subtypes_value()),
+        render_ts_const(
+            "ROM_WEAVER_ERROR_KIND_PREFIXES",
+            error_kind_prefixes_value()
+        ),
         "export const ROM_WEAVER_FORMAT_METADATA = {\n  archiveFormats: ROM_WEAVER_ARCHIVE_FORMATS,\n  compression: ROM_WEAVER_COMPRESSION_METADATA,\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  discImagePolicy: ROM_WEAVER_DISC_IMAGE_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n  z3dsSubtypes: ROM_WEAVER_Z3DS_SUBTYPES,\n} as const;",
     )
 }
@@ -683,6 +687,15 @@ fn z3ds_subtypes_value() -> Value {
                     "underlyingMagic": subtype.underlying_magic.map(|magic| magic.to_vec()),
                 })
             })
+            .collect(),
+    )
+}
+
+fn error_kind_prefixes_value() -> Value {
+    Value::Array(
+        RomWeaverErrorKind::MESSAGE_PREFIXES
+            .iter()
+            .map(|(prefix, kind)| json!({ "prefix": prefix, "kind": kind }))
             .collect(),
     )
 }
