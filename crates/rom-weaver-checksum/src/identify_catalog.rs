@@ -12,6 +12,8 @@ use rom_weaver_core::{Result, RomWeaverError};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
+pub use crate::platform_name::normalize_platform_name;
+
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -260,25 +262,6 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         entry("VTech V.Flash & V.Smile Pro"),
         entry("ZAPiT Games Game Wave Family Entertainment System"),
     ]
-}
-
-/// Normalize a platform name for alias matching: lowercase, collapse every
-/// non-alphanumeric run to one space, trim.
-pub fn normalize_platform_name(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut pending_space = false;
-    for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if pending_space && !out.is_empty() {
-                out.push(' ');
-            }
-            pending_space = false;
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            pending_space = true;
-        }
-    }
-    out
 }
 
 /// The compiled OpenGood platforms with curated aliases.
