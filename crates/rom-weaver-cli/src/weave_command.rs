@@ -1,5 +1,6 @@
 use rom_weaver_containers::libarchive::RegularArchiveFileEntry;
 
+use super::weave_apply::resolve_weave_checks;
 use super::weave_load::{LoadedWeaveSource, WeaveOutputGuard, weave_archive_target};
 use super::weave_parse::parse_weave_bytes;
 use super::*;
@@ -39,6 +40,14 @@ pub struct WeavePatchSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub descriptor: Option<PatchDescriptor>,
+    /// The entry's input checks with any `inputChecksRef` resolved against `checkStates`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub input_checks: Option<WeaveChecks>,
+    /// The entry's output checks with any `outputChecksRef` resolved against `checkStates`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub output_checks: Option<WeaveChecks>,
 }
 
 /// The consolidated result of one `weave parse` command, returned under
@@ -62,6 +71,14 @@ pub struct WeaveParseResult {
     pub rom_source: Option<WeaveSourceRef>,
     /// Index-aligned with `weave.patches`.
     pub patch_sources: Vec<WeavePatchSource>,
+    /// `weave.rom` checks with any `checksRef` resolved against `checkStates`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_checks: Option<WeaveChecks>,
+    /// `weave.output` checks with any `checksRef` resolved against `checkStates`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub output_checks: Option<WeaveChecks>,
     /// Non-fatal issues (ignored members, extra weaves, …).
     pub warnings: Vec<String>,
 }
@@ -274,6 +291,16 @@ impl CliApp {
             patch_sources.push(WeavePatchSource {
                 source: source_ref,
                 descriptor: None,
+                input_checks: resolve_weave_checks(
+                    &weave,
+                    patch.input_checks.as_ref(),
+                    patch.input_checks_ref.as_deref(),
+                )?,
+                output_checks: resolve_weave_checks(
+                    &weave,
+                    patch.output_checks.as_ref(),
+                    patch.output_checks_ref.as_deref(),
+                )?,
             });
         }
         // Resolve and validate every destination before extracting anything.
@@ -318,13 +345,32 @@ impl CliApp {
                     patch.descriptor = Some(self.build_patch_descriptor(
                         Path::new(extracted_path),
                         None,
+                        None,
                         context,
                     )?);
                 }
             }
         }
         outputs.commit();
+        let rom_checks = resolve_weave_checks(
+            &weave,
+            weave.rom.as_ref().and_then(|rom| rom.checks.as_ref()),
+            weave.rom.as_ref().and_then(|rom| rom.checks_ref.as_deref()),
+        )?;
+        let output_checks = resolve_weave_checks(
+            &weave,
+            weave
+                .output
+                .as_ref()
+                .and_then(|output| output.checks.as_ref()),
+            weave
+                .output
+                .as_ref()
+                .and_then(|output| output.checks_ref.as_deref()),
+        )?;
         Ok(WeaveParseResult {
+            rom_checks,
+            output_checks,
             bundle: weave,
             source_kind: loaded.kind,
             archive_member: loaded.archive_member,

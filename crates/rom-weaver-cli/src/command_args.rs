@@ -868,6 +868,12 @@ pub struct IngestCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub sidecar_only: bool,
+    /// Original file name of INPUT when the host staged it under a different one (the browser
+    /// sanitizes `:`). A bare patch's checksum/size tokens are read from this name.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "source-name", hide = true))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub source_name: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

@@ -203,6 +203,8 @@ struct IngestOutcome {
 
 struct IngestRequest<'a> {
     source: &'a Path,
+    /// Original file name of `source` when the host staged it under a different one.
+    source_name: Option<&'a str>,
     out_dir: &'a Path,
     raw_selections: Vec<String>,
     no_ignore: bool,
@@ -248,6 +250,7 @@ impl CliApp {
             select,
             sidecar_names,
             sidecar_only,
+            source_name,
             no_ignore,
             no_nested_extract,
             split_bin,
@@ -339,6 +342,7 @@ impl CliApp {
 
         let report = match self.run_ingest_inner(IngestRequest {
             source: &source,
+            source_name: source_name.as_deref(),
             out_dir: &out_dir,
             raw_selections: select,
             no_ignore,
@@ -376,6 +380,7 @@ impl CliApp {
     fn run_ingest_inner(&self, request: IngestRequest<'_>) -> Result<IngestOutcome> {
         let IngestRequest {
             source,
+            source_name,
             out_dir,
             raw_selections,
             no_ignore,
@@ -417,6 +422,7 @@ impl CliApp {
                 handler.as_ref(),
                 IngestRequest {
                     source,
+                    source_name,
                     out_dir,
                     raw_selections,
                     no_ignore,
@@ -427,7 +433,7 @@ impl CliApp {
                 },
             );
         }
-        self.ingest_bare_source(source, algorithms, context)
+        self.ingest_bare_source(source, source_name, algorithms, context)
     }
 
     fn ingest_container(
@@ -437,6 +443,7 @@ impl CliApp {
     ) -> Result<IngestOutcome> {
         let IngestRequest {
             source,
+            source_name: _,
             out_dir,
             raw_selections,
             no_ignore,
@@ -699,6 +706,7 @@ impl CliApp {
     fn ingest_bare_source(
         &self,
         source: &Path,
+        source_name: Option<&str>,
         algorithms: &[String],
         context: &OperationContext,
     ) -> Result<IngestOutcome> {
@@ -706,7 +714,7 @@ impl CliApp {
             return Ok(outcome);
         }
         if is_patch_filter_candidate_name(&source.to_string_lossy()) {
-            let descriptor = self.build_patch_descriptor(source, None, context)?;
+            let descriptor = self.build_patch_descriptor(source, source_name, None, context)?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
                 is_rom: false,
@@ -938,7 +946,7 @@ impl CliApp {
             if !is_patch_filter_candidate_name(path) {
                 continue;
             }
-            patches.push(self.build_patch_descriptor(leaf_path, rom_hint, context)?);
+            patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
         }
         Ok(patches)
     }
@@ -1159,10 +1167,12 @@ impl CliApp {
     }
 
     /// Aggregate one patch's consolidated descriptor: format + embedded metadata (`handler.parse`),
-    /// file-name requirements (`parse_filename_requirements`), and libretro sidecar order.
+    /// file-name requirements (`parse_filename_requirements`, over `declared_name` when given), and
+    /// libretro sidecar order.
     pub(super) fn build_patch_descriptor(
         &self,
         leaf_path: &Path,
+        declared_name: Option<&str>,
         rom_hint: Option<&str>,
         context: &OperationContext,
     ) -> Result<PatchDescriptor> {
@@ -1171,7 +1181,9 @@ impl CliApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let requirements = parse_filename_requirements(&file_name);
+        // A host that stages the patch under a sanitized name (the browser turns `:` into `_`) passes
+        // the original, so the checksum/size tokens the author wrote are still read.
+        let requirements = parse_filename_requirements(declared_name.unwrap_or(&file_name));
         let sidecar_order =
             rom_hint.and_then(|rom| Self::entry_matches_libretro_sidecar(rom, &file_name));
 

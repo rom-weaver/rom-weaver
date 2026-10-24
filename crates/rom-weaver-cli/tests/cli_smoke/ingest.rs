@@ -1359,6 +1359,43 @@ fn ingest_patch_parses_filename_requirements() {
 }
 
 #[test]
+fn ingest_patch_reads_requirements_from_the_declared_source_name() {
+    // The browser stages a patch under a sanitized name (`:` becomes `_`), so the host passes the
+    // original name and the tokens the author wrote must still be read from it.
+    let temp = setup_temp_dir();
+    let patch = temp.child("hack [md5_0123456789abcdef0123456789abcdef].ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: b"x".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("ips fixture");
+    let out_dir = temp.child("ingest-source-name-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        patch.path().to_str().expect("path"),
+        "--output",
+        out_dir.path().to_str().expect("path"),
+        "--source-name",
+        "hack [md5:0123456789abcdef0123456789abcdef] [size:524288].ips",
+        "--json",
+    ]);
+    let descriptor = &terminal["details"]["ingest"]["patches"][0];
+    assert_eq!(
+        descriptor["filename_checksums"]["md5"],
+        "0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(descriptor["filename_size"], 524_288);
+}
+
+#[test]
 fn ingest_patch_archive_extracts_and_describes_leaves() {
     let temp = setup_temp_dir();
     let patch = create_bps_patch(&temp, b"abcdefgh", b"abXYefgh", "fix.bps");

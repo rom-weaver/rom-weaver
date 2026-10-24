@@ -448,7 +448,12 @@ export type IngestCommand = { input: string, output: string, database?: Array<st
  * Optional loose patch names to match against `source` without ingesting it. This keeps the
  * browser's sibling-sidecar lookup on the ingest command surface while reusing Rust's matcher.
  */
-sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+sidecar_names?: Array<string>, sidecar_only?: boolean,
+/**
+ * Original file name of INPUT when the host staged it under a different one (the browser
+ * sanitizes `:`). A bare patch's checksum/size tokens are read from this name.
+ */
+source_name?: string | null, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
 export type CheatCommand = { input: string,
 /**
@@ -769,7 +774,15 @@ export type WeavePatchSource = { source: WeaveSourceRef,
  * archive (spares the host a second describe round-trip). `None` for
  * URL / unresolved-path entries.
  */
-descriptor?: PatchDescriptor | null, };
+descriptor?: PatchDescriptor | null,
+/**
+ * The entry's input checks with any `inputChecksRef` resolved against `checkStates`.
+ */
+input_checks?: WeaveChecks | null,
+/**
+ * The entry's output checks with any `outputChecksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null, };
 
 export type WeaveParseResult = {
 /**
@@ -790,6 +803,14 @@ rom_source?: WeaveSourceRef | null,
  * Index-aligned with `weave.patches`.
  */
 patch_sources: Array<WeavePatchSource>,
+/**
+ * `weave.rom` checks with any `checksRef` resolved against `checkStates`.
+ */
+rom_checks?: WeaveChecks | null,
+/**
+ * `weave.output` checks with any `checksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null,
 /**
  * Non-fatal issues (ignored members, extra weaves, …).
  */
