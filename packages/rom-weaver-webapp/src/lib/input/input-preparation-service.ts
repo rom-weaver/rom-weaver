@@ -3,6 +3,7 @@ import {
   getNamedSourceFileName,
   getNamedSourcePath,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import type { RomTypeTag } from "../../types/checksum.ts";
 import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../types/selection.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -22,10 +23,8 @@ import {
   createSourceAccessFromSource,
   decodeUtf8,
   getPatchFileBytes,
-  getPatchFileBlob,
 } from "./binary-service.ts";
-import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
-import { CHD_MEDIA_PROBE_BYTES, hasChdHardDiskHeader, hasChdUdfDescriptor } from "./rom-specific-file-utils.ts";
+import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
   attachInputPreparationMetrics,
@@ -226,22 +225,6 @@ const getLazyBrowserSource = async (
       reason: "archive-magic-without-extension",
     });
     return null;
-  }
-  const sourceMetadata = (source as { metadata?: { mode?: string; cuePath?: string } }).metadata;
-  const unidentified = !(sourceMetadata?.mode || sourceMetadata?.cuePath);
-  if (
-    unidentified &&
-    (((/\.bin$/i.test(fileName) || !/\.[^./\\]+$/.test(fileName)) && hasChdHardDiskHeader(archiveHeader, blob.size)) ||
-      (/\.iso$/i.test(fileName) &&
-        blob.size % 2048 === 0 &&
-        hasChdUdfDescriptor(await readBlobPrefix(blob, CHD_MEDIA_PROBE_BYTES), blob.size)))
-  ) {
-    options?.onProgress?.({
-      details: { chdCodecMode: "dvd" },
-      stage: "input",
-      percent: null,
-      label: `Preparing ${fileName}`,
-    });
   }
   emitInputPreparationTrace(options, "lazy browser source accepted", {
     fileName,
@@ -475,29 +458,9 @@ const prepareInputAssets = async (
     const metadata = preparedFile.metadata;
     if (asset.kind !== "rom" || metadata?.mode || metadata?.cuePath || /\.(cue|gdi)$/i.test(preparedFile.fileName))
       continue;
-    // An unidentified `.iso` gets the DVD codec field when UDF marks it as DVD media.
-    const iso = /\.iso$/i.test(preparedFile.fileName);
-    if (/\.[^./\\]+$/.test(preparedFile.fileName) && !/\.bin$/i.test(preparedFile.fileName) && !iso) continue;
-    if (preparedFile.fileSize < 512 || preparedFile.fileSize % (iso ? 2048 : 512) !== 0) continue;
-    options?.signal?.throwIfAborted();
-    const length = iso ? CHD_MEDIA_PROBE_BYTES : 1024;
-    const blob = getPatchFileBlob(preparedFile);
-    let prefix = preparedFile._u8array?.subarray(0, length);
-    if (!prefix && blob) prefix = await readBlobPrefix(blob, length);
-    else if (!prefix && preparedFile.filePath)
-      prefix = await readBrowserOpfsPrefix(
-        preparedFile.filePath,
-        Math.min(length, preparedFile.fileSize),
-        options?.signal,
-      );
-    options?.signal?.throwIfAborted();
-    if (
-      !(
-        prefix &&
-        (iso ? hasChdUdfDescriptor(prefix, preparedFile.fileSize) : hasChdHardDiskHeader(prefix, preparedFile.fileSize))
-      )
-    )
-      continue;
+    // The Rust ingest verdict (native `chd` auto-inference over the file's bytes) picks the DVD codec field.
+    const romType = (preparedFile as { romType?: RomTypeTag }).romType;
+    if (chdCodecModeFromCreateMode(romType?.chdCreateMode) !== "dvd") continue;
     asset.chdCodecMode = "dvd";
     if (assets.length !== 1) continue;
     options?.onProgress?.({

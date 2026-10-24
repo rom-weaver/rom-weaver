@@ -54,6 +54,24 @@ describe("PPF Undo ingestion", () => {
     expect(ppf.dispose).toHaveBeenCalledOnce();
   });
 
+  it("carries the engine chd create mode into the staged ROM metadata", async () => {
+    const rom = output("/game.iso", "iso");
+    const ppf = output("/update.ppf", "patch");
+    mocks.ingest.mockResolvedValue({
+      result: {
+        assets: [{ ...asset(rom.path), chdCreateMode: "cd" }],
+        patches: [patch(ppf.path)],
+      },
+      outputs: [rom],
+      patchOutputs: [ppf],
+    });
+    const onInputs = vi.fn();
+    const { result } = renderHook(() => usePpfUndoInputs(onInputs, vi.fn()));
+    await act(async () => result.current.stage([new File(["iso"], "game.iso")]));
+    const [staged] = onInputs.mock.calls[0];
+    expect(result.current.getPrepared(staged)?.metadata?.chdCreateMode).toBe("cd");
+  });
+
   it("rejects unsupported and malformed patches without handing them to the undo action", async () => {
     mocks.ingest.mockResolvedValue({
       result: { assets: [], patches: [patch("/valid.ips", "ips"), patch("/bad.ppf", "ppf", false)] },

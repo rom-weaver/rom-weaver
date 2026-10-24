@@ -1653,6 +1653,68 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
     assert!(assert.get_output().stderr.is_empty());
 }
 
+/// A cooked image of `sectors` 2048-byte sectors with a UDF `NSR02` descriptor at LBA 19.
+fn udf_cooked_image(sectors: usize) -> Vec<u8> {
+    let mut bytes = vec![0_u8; sectors * 2048];
+    bytes[16 * 2048 + 1..16 * 2048 + 6].copy_from_slice(b"CD001");
+    bytes[19 * 2048 + 1..19 * 2048 + 6].copy_from_slice(b"NSR02");
+    bytes
+}
+
+#[test]
+fn ingest_reports_the_chd_create_mode_for_loose_images() {
+    // Hosts read the native `chd` auto-inference verdict instead of re-deriving it from bytes.
+    let temp = setup_temp_dir();
+    let cases: [(&str, Vec<u8>, &str); 3] = [
+        ("udf.iso", udf_cooked_image(40), "dvd"),
+        (
+            "plain.bin",
+            {
+                let mut bytes = udf_cooked_image(40);
+                bytes[19 * 2048 + 1..19 * 2048 + 6].fill(0);
+                bytes
+            },
+            "cd",
+        ),
+        ("blob.bin", vec![7_u8; 4096], "raw"),
+    ];
+    for (name, bytes, expected) in cases {
+        let rom = temp.child(name);
+        fs::write(rom.path(), bytes).expect("image fixture");
+        let out_dir = temp.child(format!("ingest-chd-mode-{name}"));
+        let terminal = ingest_terminal(&[
+            "ingest",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ]);
+        assert_eq!(terminal["status"], "succeeded", "{name}");
+        let asset = &terminal["details"]["ingest"]["assets"][0];
+        assert_eq!(asset["chd_create_mode"], expected, "{name}");
+    }
+    // Other extensions carry no verdict.
+    let nes = temp.child("game.nes");
+    fs::write(nes.path(), vec![0_u8; 4096]).expect("nes fixture");
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        nes.path().to_str().expect("path"),
+        "--output",
+        temp.child("ingest-chd-mode-nes")
+            .path()
+            .to_str()
+            .expect("path"),
+        "--json",
+    ]);
+    assert!(
+        terminal["details"]["ingest"]["assets"][0]
+            .get("chd_create_mode")
+            .is_none()
+    );
+}
+
 #[test]
 fn ingest_streams_recommended_format_for_bare_disc_before_completion() {
     // The host settles its automatic output format from this event, so it must arrive before the

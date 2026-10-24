@@ -104,36 +104,22 @@ describe("prepareMultipleDirectInputAssets", () => {
 describe("prepareInputAssets", () => {
   const runtime = { name: "browser" as const, sidecars: {} };
 
-  it("publishes a UI-only generic codec hint for an MBR/CD hybrid", async () => {
-    const bytes = new Uint8Array(204800);
-    bytes.set(new TextEncoder().encode("CD001"), 32769);
-    bytes.set([0x55, 0xaa], 510);
-    bytes[450] = 0x83;
-    const view = new DataView(bytes.buffer);
-    view.setUint32(454, 1, true);
-    view.setUint32(458, 399, true);
-    const onProgress = vi.fn();
-    const assets = await prepareInputAssets(
-      new File([bytes], "hybrid.bin"),
-      {
-        ...NO_CONTAINER_OPTIONS,
-        onProgress,
-      },
-      0,
-      runtime,
-    );
-    const event = onProgress.mock.calls.map(([event]) => event).find((event) => event.details?.chdCodecMode);
-    expect(event).toBeDefined();
-    const staged = getProgressStagedInputInfo(event);
+  // Byte-level inference lives in Rust; the early `probe-identity` manifest and the ingest asset carry
+  // its verdict (`chd_create_mode` / `chdCreateMode`), which the webapp turns into the UI codec hint.
+  const manifestEvent = (probeManifest: Record<string, unknown>) =>
+    ({ details: { probe_manifest: probeManifest }, stage: "probe-identity" }) as never;
+
+  it("publishes a UI-only generic codec hint for the Rust hard-disk verdict", () => {
+    const staged = getProgressStagedInputInfo(manifestEvent({ chd_create_mode: "hd", disc_format: "CD" }));
     expect(staged.chdCodecMode).toBe("dvd");
     expect(staged.chdMode).toBeUndefined();
-    expect(assets[0]?.file.metadata?.mode).toBeUndefined();
+    expect(staged.romType?.chdCreateMode).toBe("hd");
     const panel = buildCompressPanel(
       "chd",
       { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
       {
         fileName: "hybrid.bin",
-        size: bytes.length,
+        size: 204800,
         chdCodecMode: staged.chdCodecMode,
         metadata: { format: "CD" },
       },
@@ -144,30 +130,20 @@ describe("prepareInputAssets", () => {
   });
 
   it.each([
-    [true, "chdCreateDvdCodecs"],
-    [false, "chdCreateCdCodecs"],
-  ])("shows the codec field native CHD inference uses for an unidentified ISO (udf=%s)", async (udf, key) => {
+    ["dvd", "chdCreateDvdCodecs"],
+    ["cd", "chdCreateCdCodecs"],
+  ])("shows the codec field for the Rust create-mode verdict %s of an unidentified ISO", (verdict, key) => {
     const bytes = new Uint8Array(100 * 2048);
-    bytes.set([1, ...new TextEncoder().encode("CD001")], 16 * 2048);
-    if (udf) bytes.set([0, ...new TextEncoder().encode("NSR02")], 18 * 2048);
-    const onProgress = vi.fn();
-    const assets = await prepareInputAssets(
-      new File([bytes], "disc.iso"),
-      { ...NO_CONTAINER_OPTIONS, onProgress },
-      0,
-      runtime,
-    );
-    // The asset loop serves archive members; the progress hint serves direct files.
-    expect(assets[0]?.chdCodecMode).toBe(udf ? "dvd" : undefined);
-    const event = onProgress.mock.calls.map(([event]) => event).find((event) => event.details?.chdCodecMode);
-    expect(Boolean(event)).toBe(udf);
+    const staged = getProgressStagedInputInfo(manifestEvent({ chd_create_mode: verdict }));
+    expect(staged.chdCodecMode).toBe(verdict === "dvd" ? "dvd" : undefined);
     const panel = buildCompressPanel(
       "chd",
       { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
       {
         fileName: "disc.iso",
         size: bytes.length,
-        chdCodecMode: event ? getProgressStagedInputInfo(event).chdCodecMode : undefined,
+        chdCodecMode: staged.chdCodecMode,
+        metadata: { chdCreateMode: verdict },
       },
     );
     expect(panel?.fields[0]?.key).toBe(key);
