@@ -52,6 +52,7 @@ import {
   getEmulatorJsCore,
   getSaveFileCore,
   hasFdsDiskSignature,
+  hasWebgl2,
   isFdsGame,
 } from "./components/emulatorjs.ts";
 import { isSaveFileName } from "./drop-destination.ts";
@@ -95,15 +96,6 @@ const getTestSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>
 ];
 
 let localEntryCounter = 0;
-
-const hasWebgl2 = () => {
-  if (typeof document === "undefined") return true;
-  try {
-    return Boolean(document.createElement("canvas").getContext("webgl2"));
-  } catch {
-    return false;
-  }
-};
 
 const createLocalEntryId = (fileName: string) => {
   localEntryCounter += 1;

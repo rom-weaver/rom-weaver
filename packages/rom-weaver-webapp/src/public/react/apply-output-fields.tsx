@@ -378,7 +378,7 @@ export const ApplyOutputAction = ({
         platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
       />
-      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} />
+      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} platform={emulatorPlatform} />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
       {weaveTools?.memberChecksSkipped ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-track-checks-skipped">

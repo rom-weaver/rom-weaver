@@ -127,4 +127,22 @@ const hasFdsDiskSignature = async (blob: Blob): Promise<boolean> => {
   return matchesAt(0) || matchesAt(FDS_HEADER_BYTES);
 };
 
-export { coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore, getSaveFileCore, hasFdsDiskSignature, isFdsGame };
+/** Only WebGL 2 core builds are vendored, so no core starts without it. */
+const hasWebgl2 = () => {
+  if (typeof document === "undefined") return true;
+  try {
+    return Boolean(document.createElement("canvas").getContext("webgl2"));
+  } catch {
+    return false;
+  }
+};
+
+export {
+  coreReadsChd,
+  getEmulatorJsAspectRatio,
+  getEmulatorJsCore,
+  getSaveFileCore,
+  hasFdsDiskSignature,
+  hasWebgl2,
+  isFdsGame,
+};

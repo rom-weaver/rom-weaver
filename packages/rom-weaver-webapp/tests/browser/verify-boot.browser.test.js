@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { beforeAll, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
+import { runEmulatorBootCheck } from "../../src/public/react/components/emulator-boot-check.ts";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
 import {
   installPatcherTestHooks,
@@ -82,13 +83,23 @@ const openOutputOptions = async () => {
   await expect.poll(() => document.getElementById("rom-weaver-checkbox-verify-boot")).toBeInstanceOf(HTMLInputElement);
 };
 
-const applySample = async () => {
+const applyFiles = async ({ patch, rom }) => {
   mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
-  const { patch, rom } = await loadSampleFiles();
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), rom);
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), patch);
   await waitForApplyButtonEnabled();
+};
+
+const applySample = async () => applyFiles(await loadSampleFiles());
+
+/** One blank FDS disk side, optionally behind the 16-byte `FDS\x1A` header. */
+const createFdsImage = (headered) => {
+  const headerBytes = headered ? 16 : 0;
+  const image = new Uint8Array(headerBytes + 65_500);
+  if (headered) image.set([...new TextEncoder().encode("FDS\x1a"), 1]);
+  image.set([1, ...new TextEncoder().encode("*NINTENDO-HVC*")], headerBytes);
+  return image;
 };
 
 // A real click gives the page the user activation that lets the hidden
@@ -155,3 +166,53 @@ test(
   },
   CASE_TIMEOUT_MS,
 );
+
+// The FDS core crashes the tab without the BIOS the site does not supply, so
+// the check MUST NOT start it, whether the name or only the bytes say FDS.
+for (const { fileName, headered } of [
+  { fileName: "disk.fds", headered: true },
+  { fileName: "disk.nes", headered: false },
+]) {
+  test(
+    `Apply with Verify boot on never boots a Famicom Disk System image named ${fileName}`,
+    async () => {
+      await applyFiles({
+        patch: new File([createIpsPatch(64, [0x42])], "disk.ips"),
+        rom: new File([createFdsImage(headered)], fileName),
+      });
+      await openOutputOptions();
+      const option = document.getElementById("rom-weaver-checkbox-verify-boot");
+      if (!option.checked) await userEvent.click(option);
+      const watcher = watchBootCheckFrames();
+      try {
+        await clickApply();
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } finally {
+        watcher.stop();
+      }
+      expect(document.getElementById("rom-weaver-boot-check")).toBeNull();
+      expect(watcher.frames).toEqual([]);
+    },
+    CASE_TIMEOUT_MS,
+  );
+}
+
+test("the boot check names a PlayStation .bin track the way the Test player does", async () => {
+  const checksum = "a".repeat(40);
+  const frames = [];
+  const controller = new AbortController();
+  const check = runEmulatorBootCheck({
+    checksum,
+    core: "psx",
+    dataUrl: EMULATORJS_DATA_PATH,
+    fileName: "Game (Track 1).bin",
+    // A detached host: the player never loads, so only its document is checked.
+    host: { append: (frame) => frames.push(frame) },
+    rom: new Blob([new Uint8Array(16)]),
+    signal: controller.signal,
+  });
+  await expect.poll(() => frames.length).toBe(1);
+  controller.abort();
+  await expect(check).rejects.toMatchObject({ name: "AbortError" });
+  expect(frames[0].srcdoc).toContain(`${checksum}.bin`);
+});
