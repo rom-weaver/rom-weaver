@@ -58,6 +58,7 @@ import { createBrowserArchiveRuntime } from "./workflow-runtime-archive.ts";
 import { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
+import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 type BrowserWeaveCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["weave"]>["create"]>>[0];
 
@@ -398,7 +399,7 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
 // final workflow ownership releases each member and removes the scope after the last member is gone.
 const createBrowserWeaveRuntime = (
   workerIo: RuntimeWorkerIo,
-  jsonFileName = "rom-weaver-weave.json",
+  jsonFileName: string = ROM_WEAVER_WEAVE_FILE_NAMES.weave,
 ): NonNullable<WorkflowRuntime["weave"]> => ({
   create: async ({ rom, weaveRom, patches, weaveFileName, logLevel, onLog, onProgress, signal, ...options }) => {
     const staged: Array<{ cleanup: () => Promise<void> }> = [];
@@ -464,7 +465,7 @@ const createBrowserWeaveRuntime = (
       const weaveOutput = await createRuntimeOutputFromVfs(
         browserVfs,
         result.weavePath,
-        getPathBaseName(result.weavePath, "rom-weaver-weave.json"),
+        getPathBaseName(result.weavePath, ROM_WEAVER_WEAVE_FILE_NAMES.weave),
         { cleanup: outputCleanups[0] },
       );
       createdOutputs.push(weaveOutput);
@@ -629,7 +630,7 @@ const createBrowserRuntime = (): WorkflowRuntime => {
       assertSource: assertBrowserBinarySource,
     },
     weave,
-    bundle: createBundleRuntime(createBrowserWeaveRuntime(workerIo, "rom-weaver-bundle.json")),
+    bundle: createBundleRuntime(createBrowserWeaveRuntime(workerIo, ROM_WEAVER_WEAVE_FILE_NAMES.bundle)),
     cheat: createBrowserCheatRuntime(workerIo),
     checksum: createBrowserChecksumRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),

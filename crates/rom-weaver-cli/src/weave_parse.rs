@@ -3,7 +3,10 @@ use rom_weaver_core::ValidationCodeError;
 use super::*;
 
 /// Base file name that marks a file as a rom-weaver weave.
-pub(crate) const WEAVE_BASE_FILE_NAME: &str = "rom-weaver-weave.json";
+pub const WEAVE_BASE_FILE_NAME: &str = "rom-weaver-weave.json";
+
+/// Legacy base file name still recognized as a weave (`bundle` spelling).
+pub const BUNDLE_BASE_FILE_NAME: &str = "rom-weaver-bundle.json";
 
 /// Split a weave-shaped file name. Returns `None` when the name is not
 /// weave-shaped, `Some(None)` for a plain `rom-weaver-weave.json`, and `Some(Some(ext))`
@@ -11,7 +14,7 @@ pub(crate) const WEAVE_BASE_FILE_NAME: &str = "rom-weaver-weave.json";
 /// stream-codec extension (that check needs the container registry).
 pub(crate) fn weave_file_name_codec(file_name: &str) -> Option<Option<&str>> {
     let bytes = file_name.as_bytes();
-    for base_name in [WEAVE_BASE_FILE_NAME, "rom-weaver-bundle.json"] {
+    for base_name in [WEAVE_BASE_FILE_NAME, BUNDLE_BASE_FILE_NAME] {
         let base = base_name.as_bytes();
         if bytes.eq_ignore_ascii_case(base) {
             return Some(None);

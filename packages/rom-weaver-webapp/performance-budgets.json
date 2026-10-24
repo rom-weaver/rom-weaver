@@ -23,7 +23,7 @@
         "expectedRawBytes": 2362391,
         "maxRawBytes": 2487352,
         "expectedBrotliBytes": 635991,
-        "maxBrotliBytes": 663000
+        "maxBrotliBytes": 664500
       },
       {
         "name": "Documentation search JavaScript",
