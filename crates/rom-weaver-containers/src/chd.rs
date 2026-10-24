@@ -38,6 +38,19 @@ pub const CHD: FormatDescriptor = FormatDescriptor {
     extensions: &[".chd"],
 };
 
+/// CHD create-mode names accepted after `chd-`, each paired with the canonical
+/// mode it selects. Shared by the create-format parser and typegen so callers
+/// normalize `ld` to `av` from one table.
+pub const CHD_CREATE_MODES: &[(&str, &str)] = &[
+    ("cd", "cd"),
+    ("gd", "gd"),
+    ("dvd", "dvd"),
+    ("raw", "raw"),
+    ("hd", "hd"),
+    ("av", "av"),
+    ("ld", "av"),
+];
+
 /// CHD container file magic. Canonical source for the web UI's synchronous
 /// rom-specific magic probe (surfaced via typegen container metadata).
 pub const CHD_SIGNATURE: [u8; 8] = *b"MComprHD";

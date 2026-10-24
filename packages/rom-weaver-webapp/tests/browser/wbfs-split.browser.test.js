@@ -71,7 +71,9 @@ test("WASM extracts a split WBFS set byte for byte and rejects a set with a miss
     } finally {
       await Promise.all(result.outputs.map((output) => output.dispose()));
     }
-    await expect(extractAll(source, parts.slice(0, 1))).rejects.toThrow(/Invalid WBFS file size/i);
+    await expect(extractAll(source, parts.slice(0, 1))).rejects.toThrow(
+      /Invalid WBFS file size.*\[wbfs\.size_mismatch\] \(actual=\d+, expected=\d+\)/i,
+    );
   } finally {
     await resetRomWeaverRunner();
   }

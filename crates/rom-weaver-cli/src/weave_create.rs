@@ -3,7 +3,10 @@
 
 use flate2::{Compression as GzCompression, write::GzEncoder};
 
-use super::weave_parse::{is_weave_json_candidate, parse_weave_bytes, weave_file_name_codec};
+use super::weave_parse::{
+    BUNDLE_BASE_FILE_NAME, WEAVE_BASE_FILE_NAME, is_weave_json_candidate, parse_weave_bytes,
+    weave_file_name_codec,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use super::weave_schema::WEAVE_JSON_SCHEMA_V1_URL;
 use super::weave_schema::cheat_entry_count_label;
@@ -723,9 +726,9 @@ impl CliApp {
     ) -> Result<PathBuf> {
         let staging = context.temp_paths().next_path("weave-weave", None);
         fs::create_dir_all(&staging)?;
-        let bundle_path = staging.join("rom-weaver-weave.json");
+        let bundle_path = staging.join(WEAVE_BASE_FILE_NAME);
         fs::write(&bundle_path, weave_bytes)?;
-        let legacy_path = staging.join("rom-weaver-bundle.json");
+        let legacy_path = staging.join(BUNDLE_BASE_FILE_NAME);
         fs::write(&legacy_path, weave_bytes)?;
         let mut inputs = vec![bundle_path, legacy_path];
         if let (Some(rom), Some(member)) = (

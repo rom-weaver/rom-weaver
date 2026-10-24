@@ -10,7 +10,11 @@ impl CliApp {
         if path
             .extension()
             .and_then(|value| value.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
+            .is_some_and(|extension| {
+                TRIM_CONTENT_SNIFFED_EXTENSIONS
+                    .iter()
+                    .any(|sniffed| extension.eq_ignore_ascii_case(sniffed))
+            })
             && let Ok(source_file) = File::options().read(true).open(path)
         {
             let source_reader = BufReader::new(source_file);

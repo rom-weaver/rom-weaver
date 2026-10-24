@@ -1351,27 +1351,53 @@ enum TrimInputKind {
     RvzConvert,
 }
 
+/// Path-recognized trim extensions (lowercase, no dot) and the kind each selects.
+/// `xiso` kinds match the whole file name suffix (`game.xiso.iso`); the rest match
+/// the final extension.
+const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
+    ("nds", TrimInputKind::NdsFamily),
+    ("dsi", TrimInputKind::NdsFamily),
+    ("srl", TrimInputKind::NdsFamily),
+    ("gba", TrimInputKind::Gba),
+    ("3ds", TrimInputKind::ThreeDs),
+    ("xiso", TrimInputKind::Xiso),
+    ("xiso.iso", TrimInputKind::Xiso),
+];
+
+/// Extensions trim accepts only after sniffing the file's contents (an Xbox `.iso`).
+const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
+
+/// Extensions of GameCube/Wii disc images the container registry recommends RVZ for (by
+/// content), so trim converts them to RVZ. `.iso` is listed under the sniffed extensions.
+const TRIM_RVZ_CONVERT_EXTENSIONS: &[&str] = &["gcm", "wbfs", "rvz"];
+
+/// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
+/// supported-files list: path-recognized, content-sniffed, then RVZ-convert.
+pub fn trim_input_extensions() -> Vec<&'static str> {
+    TRIM_PATH_EXTENSIONS
+        .iter()
+        .map(|(extension, _)| *extension)
+        .chain(TRIM_CONTENT_SNIFFED_EXTENSIONS.iter().copied())
+        .chain(TRIM_RVZ_CONVERT_EXTENSIONS.iter().copied())
+        .collect()
+}
+
 impl TrimInputKind {
     fn from_path(path: &Path) -> Option<Self> {
         let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
-        if file_name.ends_with(".xiso") || file_name.ends_with(".xiso.iso") {
-            return Some(Self::Xiso);
+        for (extension, kind) in TRIM_PATH_EXTENSIONS {
+            if *kind == Self::Xiso && file_name.ends_with(&format!(".{extension}")) {
+                return Some(*kind);
+            }
         }
 
-        let extension = path.extension()?.to_str()?;
-        if extension.eq_ignore_ascii_case("nds")
-            || extension.eq_ignore_ascii_case("dsi")
-            || extension.eq_ignore_ascii_case("srl")
-        {
-            return Some(Self::NdsFamily);
-        }
-        if extension.eq_ignore_ascii_case("gba") {
-            return Some(Self::Gba);
-        }
-        if extension.eq_ignore_ascii_case("3ds") {
-            return Some(Self::ThreeDs);
-        }
-        None
+        let path_extension = path.extension()?.to_str()?;
+        TRIM_PATH_EXTENSIONS
+            .iter()
+            .find(|(extension, kind)| {
+                *kind != Self::Xiso && path_extension.eq_ignore_ascii_case(extension)
+            })
+            .map(|(_, kind)| *kind)
     }
 
     const fn mode_label(self) -> &'static str {
@@ -1658,6 +1684,7 @@ pub use patch_plan::{
 };
 
 mod weave_parse;
+pub use weave_parse::{BUNDLE_BASE_FILE_NAME, WEAVE_BASE_FILE_NAME};
 
 /// Production weave parsing seam for the owned fuzz harness only.
 #[cfg(feature = "fuzzing")]

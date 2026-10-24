@@ -1087,3 +1087,24 @@ fn rvz_rejects_markers_footer_restoration_and_in_place_dry_runs() {
     }
     fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn trim_input_extensions_cover_path_kinds_and_rvz_candidates() {
+    let extensions = trim_input_extensions();
+    for (extension, kind) in TRIM_PATH_EXTENSIONS {
+        assert!(extensions.contains(extension), "{extension}");
+        let path = PathBuf::from(format!("game.{extension}"));
+        assert_eq!(TrimInputKind::from_path(&path), Some(*kind), "{extension}");
+        let upper = PathBuf::from(format!("GAME.{}", extension.to_ascii_uppercase()));
+        assert_eq!(TrimInputKind::from_path(&upper), Some(*kind), "{extension}");
+    }
+    assert_eq!(TrimInputKind::from_path(Path::new("game.zip")), None);
+    assert_eq!(TrimInputKind::from_path(Path::new(".nds")), None);
+    for sniffed in TRIM_CONTENT_SNIFFED_EXTENSIONS {
+        assert!(extensions.contains(sniffed), "{sniffed}");
+        assert_eq!(
+            TrimInputKind::from_path(&PathBuf::from(format!("game.{sniffed}"))),
+            None
+        );
+    }
+}

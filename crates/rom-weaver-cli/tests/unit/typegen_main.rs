@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use super::{
-    COMMAND_TYPES_OUTPUT_PATH, METADATA_OUTPUT_PATH, TYPES_OUTPUT_PATH, render_command_types,
-    render_metadata, render_types, strip_trailing_whitespace,
+    COMMAND_TYPES_OUTPUT_PATH, METADATA_OUTPUT_PATH, TYPES_OUTPUT_PATH, identify_pack_slugs_value,
+    render_command_types, render_metadata, render_types, strip_trailing_whitespace,
+    threaded_commands_value,
 };
 
 // `typegen_main` renders straight from the Rust type/metadata registries; CI's
@@ -92,4 +93,51 @@ fn render_command_types_declares_known_command_type_guards() {
     assert!(rendered.contains("export const KNOWN_COMMAND_TYPES"));
     assert!(rendered.contains("export function isKnownRomWeaverCommandType"));
     assert!(rendered.contains("export function assertKnownRomWeaverCommandType"));
+}
+
+#[test]
+fn threaded_commands_follow_the_cli_definition() {
+    let value = threaded_commands_value();
+    let paths: Vec<&str> = value
+        .as_array()
+        .expect("threaded commands are an array")
+        .iter()
+        .filter_map(|path| path.as_str())
+        .collect();
+    for expected in [
+        "extract",
+        "compress",
+        "patch/apply",
+        "weave/parse",
+        "tools/ppf-undo",
+    ] {
+        assert!(
+            paths.contains(&expected),
+            "{expected} missing from {paths:?}"
+        );
+    }
+    // `probe`, `cheat`, and `save` take no thread budget; planning only echoes one back.
+    for excluded in ["probe", "cheat", "plan-extract-batch", "weave/schema"] {
+        assert!(!paths.contains(&excluded), "{excluded} in {paths:?}");
+    }
+    assert!(!paths.iter().any(|path| path.starts_with("save/")));
+}
+
+#[test]
+fn identify_pack_slugs_derive_three_ds_rows_from_the_z3ds_table() {
+    let value = identify_pack_slugs_value();
+    let extensions = &value["extensionSlugs"];
+    for extension in [
+        "3ds", "3dsx", "cci", "cxi", "cia", "zcia", "z3ds", "z3dsx", "zcci", "zcxi",
+    ] {
+        assert_eq!(
+            extensions[extension],
+            serde_json::json!(["nintendo-nintendo-3ds"]),
+            "{extension}"
+        );
+    }
+    assert_eq!(
+        extensions["gbc"],
+        serde_json::json!(["nintendo-game-boy-color"])
+    );
 }

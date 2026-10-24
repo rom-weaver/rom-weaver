@@ -51,7 +51,8 @@ pub use disc_sheet::{
 pub use env::{env_u64, env_u64_opt};
 pub use error::{
     ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, Result, RomWeaverError,
-    RomWeaverErrorKind, UnsupportedOp, ValidationCodeError, ValidationField, ValidationFieldValue,
+    RomWeaverErrorKind, UnsupportedOp, VALIDATION_CODE_EXTRACT_NO_CONTAINER,
+    VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError, ValidationField, ValidationFieldValue,
 };
 pub use formatting::format_human_bytes;
 pub use io::{
@@ -94,13 +95,13 @@ pub use report_details::{
     operation_report_details,
 };
 pub use save::{
-    SaveChangePreview, SaveConfidence, SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit,
-    SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind, SaveFieldValue, SaveFormatCandidate,
-    SaveGameCandidate, SaveGameDefinition, SaveGameIdentity, SaveGameRegistry, SaveIntegrity,
-    SaveIntegrityIssue, SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence,
-    SaveRecognitionOutcome, SaveRecognitionReason, SaveSection, SaveValue, SchemaSaveHandler,
-    apply_save_edits, candidate_save_formats, detect_save, parse_save, unwrap_save_container,
-    validate_save_edits,
+    RAW_SAVE_FILE_EXTENSIONS, SaveChangePreview, SaveConfidence, SaveConstraint, SaveContainerKind,
+    SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveField, SaveFieldChange,
+    SaveFieldKind, SaveFieldValue, SaveFormatCandidate, SaveGameCandidate, SaveGameDefinition,
+    SaveGameIdentity, SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState,
+    SaveRecognition, SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason,
+    SaveSection, SaveValue, SchemaSaveHandler, apply_save_edits, candidate_save_formats,
+    detect_save, parse_save, unwrap_save_container, validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use suggest::{closest_name, did_you_mean_suffix};

@@ -264,6 +264,63 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
     ]
 }
 
+/// Pack slug of the Nintendo 3DS identify pack. Its extension rows are derived
+/// from the z3ds container subtype table (see `rom-weaver-cli` typegen), so
+/// they are not listed in [`CARTRIDGE_EXTENSION_PACK_SLUGS`].
+pub const NINTENDO_3DS_PACK_SLUG: &str = "nintendo-nintendo-3ds";
+
+/// Cartridge file extension (lowercase, no dot) to the identify pack slug it
+/// narrows to. The browser uses it to pick packs before any header is read.
+pub const CARTRIDGE_EXTENSION_PACK_SLUGS: &[(&str, &str)] = &[
+    ("32x", "sega-32x"),
+    ("a26", "atari-2600"),
+    ("a52", "atari-5200"),
+    ("a78", "atari-7800"),
+    ("fig", "nintendo-super-nintendo-entertainment-system"),
+    ("gb", "nintendo-game-boy"),
+    ("gba", "nintendo-game-boy-advance"),
+    ("gbc", "nintendo-game-boy-color"),
+    ("gen", "sega-mega-drive-genesis"),
+    ("gg", "sega-game-gear"),
+    ("lnx", "atari-lynx"),
+    ("md", "sega-mega-drive-genesis"),
+    ("n64", "nintendo-nintendo-64"),
+    ("nes", "nintendo-nintendo-entertainment-system"),
+    ("ngc", "snk-neo-geo-pocket-color"),
+    ("ngp", "snk-neo-geo-pocket"),
+    ("pce", "nec-pc-engine-turbografx-16"),
+    ("sfc", "nintendo-super-nintendo-entertainment-system"),
+    ("sgx", "nec-pc-engine-turbografx-16"),
+    ("smc", "nintendo-super-nintendo-entertainment-system"),
+    ("smd", "sega-mega-drive-genesis"),
+    ("sms", "sega-master-system-mark-iii"),
+    ("swc", "nintendo-super-nintendo-entertainment-system"),
+    ("unf", "nintendo-nintendo-entertainment-system"),
+    ("unif", "nintendo-nintendo-entertainment-system"),
+    ("v64", "nintendo-nintendo-64"),
+    ("z64", "nintendo-nintendo-64"),
+];
+
+/// Pack slugs header detection cannot tell apart: a Game Boy Color cartridge
+/// carries a Game Boy header, a Game Gear ROM an SMS header (see
+/// `platform_for_rom_header`). Widening a detected slug to its whole family
+/// keeps a correct match reachable; a wrong sibling simply yields no CRC32
+/// hit. A PlayStation-family disc whose SYSTEM.CNF lies beyond the probe's
+/// bounded prefix is split from its sibling only by framing and size, and PS2
+/// shipped CD titles too, so both packs stay in play.
+pub const PLATFORM_SIBLING_PACK_SLUGS: &[(&str, &[&str])] = &[
+    ("nintendo-game-boy", &["nintendo-game-boy-color"]),
+    ("nintendo-game-boy-color", &["nintendo-game-boy"]),
+    ("sega-32x", &["sega-mega-drive-genesis"]),
+    ("sega-game-gear", &["sega-master-system-mark-iii"]),
+    ("sega-master-system-mark-iii", &["sega-game-gear"]),
+    ("sega-mega-drive-genesis", &["sega-32x"]),
+    ("snk-neo-geo-pocket", &["snk-neo-geo-pocket-color"]),
+    ("snk-neo-geo-pocket-color", &["snk-neo-geo-pocket"]),
+    ("sony-playstation", &["sony-playstation-2"]),
+    ("sony-playstation-2", &["sony-playstation"]),
+];
+
 /// The compiled OpenGood platforms with curated aliases.
 fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
     fn entry(canonical: &str, slug: &str) -> IdentifyPlatformCatalogEntry {
@@ -383,6 +440,30 @@ mod tests {
                 .map(|_| ())
                 .expect_err("slug with path characters must fail");
             assert!(error.to_string().contains("slug"), "slug `{slug}`: {error}");
+        }
+    }
+
+    #[test]
+    fn extension_pack_slugs_are_sorted_unique_and_sibling_closed() {
+        let extensions: Vec<&str> = CARTRIDGE_EXTENSION_PACK_SLUGS
+            .iter()
+            .map(|(extension, _)| *extension)
+            .collect();
+        let mut sorted = extensions.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(extensions, sorted);
+        for (slug, siblings) in PLATFORM_SIBLING_PACK_SLUGS {
+            for sibling in *siblings {
+                let back = PLATFORM_SIBLING_PACK_SLUGS
+                    .iter()
+                    .find(|(candidate, _)| candidate == sibling)
+                    .map(|(_, back)| *back);
+                assert!(
+                    back.is_some_and(|back| back.contains(slug)),
+                    "{sibling} must list {slug} back"
+                );
+            }
         }
     }
 

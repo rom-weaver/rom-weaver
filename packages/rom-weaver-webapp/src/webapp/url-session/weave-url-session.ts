@@ -10,6 +10,7 @@ import { createLogger } from "../../lib/logging.ts";
 import type { RemoteFetchEntry } from "../../lib/remote/remote-file-fetch.ts";
 import { fetchRemoteFiles } from "../../lib/remote/remote-file-fetch.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
+import { ROM_WEAVER_WEAVE_FILE_NAMES } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 const logger = createLogger("weave-url-session");
 
@@ -86,7 +87,7 @@ const loadWeaveUrlSession = async (
   const [weaveFetch] = await fetchRemoteFiles(
     [
       {
-        fallbackFileName: "rom-weaver-weave.json",
+        fallbackFileName: ROM_WEAVER_WEAVE_FILE_NAMES.weave,
         onProgress: (progress) => onProgress?.("weave", progress),
         url: weaveUrl,
       },
