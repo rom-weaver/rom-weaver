@@ -21,15 +21,6 @@ describe("getRunResultWarnings", () => {
     ).toEqual(["inputs are identical"]);
   });
 
-  it("falls back to the handler `; warning=` label segments and stops at the next label key", () => {
-    const label =
-      "applied IPS patch; warning=did not change output; input may already be patched; warning=second; elapsed=3";
-    expect(getRunResultWarnings(resultWith({ details: {}, label }))).toEqual([
-      "did not change output; input may already be patched",
-      "second",
-    ]);
-  });
-
   it("ignores the label when details.warnings is present", () => {
     expect(
       getRunResultWarnings(
@@ -41,15 +32,15 @@ describe("getRunResultWarnings", () => {
     ).toEqual(["IPS patch did not change output"]);
   });
 
-  it("cuts known CLI suffixes off label-only warnings", () => {
-    const label =
-      "applied IPS patch; warning=did not change output; input header stripped (512 bytes, snes); patch apply input source resolved via 1 container extract step(s)";
-    expect(getRunResultWarnings(resultWith({ details: {}, label }))).toEqual(["did not change output"]);
+  it("never reads warnings out of the label", () => {
+    expect(getRunResultWarnings(resultWith({ details: {}, label: "applied IPS patch; warning=only here" }))).toEqual(
+      [],
+    );
   });
 
-  it("does not repeat a warning present in both details and the label", () => {
+  it("does not repeat a warning", () => {
     expect(
-      getRunResultWarnings(resultWith({ details: { warnings: ["a warning"] }, label: "done; warning=a warning" })),
+      getRunResultWarnings(resultWith({ details: { warnings: ["a warning", " a warning "] }, label: "done" })),
     ).toEqual(["a warning"]);
   });
 });
