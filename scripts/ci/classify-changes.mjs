@@ -79,8 +79,8 @@ const DOCS_WEBAPP_ASSET = /^docs\/(?:screenshots\/|samples\/|rom-weaver-[\w-]+\.
 
 // Where case tables shared by a crate test and a webapp unit test live, so
 // the Rust and TypeScript checks stay in step; an edit MUST run both suites.
-// `wasm-runtime-coverage.test.mjs` fails if the unit suite reads a crate file
-// that does not select the webapp.
+// `wasm-runtime-coverage.test.mjs` (in `repo-lint`) fails if the unit suite
+// imports a crate file that does not select the webapp.
 const SHARED_CASE_TABLE = /^crates\/[^/]+\/tests\/fixtures\/[^/]+\.json$/;
 
 const WEBAPP_PACKAGE = "packages/rom-weaver-webapp/";
@@ -190,7 +190,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     return Object.fromEntries(Object.keys(result).map((key) => [key, true]));
   }
 
-  // Whether any path other than published guide Markdown selected the webapp.
+  // Whether any path other than published guide Markdown or a shared case table
+  // selected the webapp; the jobs `webapp_browser` gates cannot observe those.
   // `webapp` is cleared per path so each path's own selection is visible.
   let browserInput = false;
   for (const path of paths.filter(Boolean)) {
@@ -372,7 +373,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     )
       result.repo_lint = true;
 
-    if (result.webapp && !PUBLISHED_DOCS.has(path)) browserInput = true;
+    if (result.webapp && !PUBLISHED_DOCS.has(path) && !SHARED_CASE_TABLE.test(path))
+      browserInput = true;
     if (isLighthouseInput(path)) result.lighthouse = true;
     result.webapp ||= webappBefore;
   }
