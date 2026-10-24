@@ -611,6 +611,7 @@ fn ingest_mixed_archive_preserves_rom_selection_cancellation() {
                     select: Vec::new(),
                     sidecar_names: Vec::new(),
                     sidecar_only: false,
+                    input_name: None,
                     no_ignore: false,
                     no_nested_extract: false,
                     split_bin: None,

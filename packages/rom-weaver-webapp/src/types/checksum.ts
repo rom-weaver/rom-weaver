@@ -33,6 +33,8 @@ type RomTypeTag = {
   discFormat?: string;
   /** Engine-recommended rom-specific compression container (`chd`/`rvz`/`z3ds`) from ingest. */
   recommendedFormat?: string;
+  /** Create mode (`cd`/`dvd`/`hd`/`raw`) native `chd` auto-inference picks for a loose `.bin`/`.iso`. */
+  chdCreateMode?: string;
 };
 
 type ChecksumRomProbe = {

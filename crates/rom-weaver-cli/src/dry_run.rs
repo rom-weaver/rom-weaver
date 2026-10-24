@@ -298,7 +298,7 @@ impl CliApp {
             }
         };
         for source in [&args.rom, &args.patch] {
-            if super::patch_apply::paths_refer_to_same_file(source, &output) {
+            if crate::path_access::paths_refer_to_same_file(source, &output) {
                 return self.plan_failed(command, OperationFamily::Patch,
                     "PPF undo output and source resolve to the same file; choose a different --output path");
             }

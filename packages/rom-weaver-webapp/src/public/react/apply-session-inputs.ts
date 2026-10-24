@@ -1,4 +1,5 @@
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
+import { chdCodecModeFromCreateMode } from "../../lib/input/rom-specific-file-utils.ts";
 import { stripOperationScopeChain } from "../../lib/runtime/run-output-paths.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { ArchivePathEntry, StagedInputInfo } from "./apply-session-types.ts";
@@ -83,8 +84,14 @@ const getRomTypeFromProgressDetails = (details: Record<string, unknown>): Staged
   const platform = typeof record.platform === "string" ? record.platform : undefined;
   const discFormat = typeof record.disc_format === "string" ? record.disc_format : undefined;
   const recommendedFormat = typeof record.recommended_format === "string" ? record.recommended_format : undefined;
-  if (!(platform || discFormat || recommendedFormat)) return undefined;
-  return { discFormat, platform, ...(recommendedFormat ? { recommendedFormat } : {}) };
+  const chdCreateMode = typeof record.chd_create_mode === "string" ? record.chd_create_mode : undefined;
+  if (!(platform || discFormat || recommendedFormat || chdCreateMode)) return undefined;
+  return {
+    discFormat,
+    platform,
+    ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
+  };
 };
 
 // The early `probe-variant-plan` event (Rust) carries the labels of every checksum variant the ROM
@@ -124,9 +131,11 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
   const progressStage = typeof details.stage === "string" ? details.stage : event.stage;
   const isPreparedFileName =
     details.wasDecompressed === true || progressStage === "checksum" || progressStage === "decompress";
+  const romType = getRomTypeFromProgressDetails(details);
   return {
     archiveName: getArchiveNameFromProgressDetails(details),
     checksumVariantPlan: getVariantPlanFromProgressDetails(details),
+    chdCodecMode: details.chdCodecMode === "dvd" ? "dvd" : chdCodecModeFromCreateMode(romType?.chdCreateMode),
     chdMode: typeof details.chdMode === "string" ? details.chdMode : undefined,
     decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
     fileName: getInputDisplayFileName(fileName, isPreparedFileName),
@@ -134,7 +143,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
     isRom: getIsRomFromProgressDetails(details),
     order: typeof details.order === "number" ? details.order : undefined,
     parentCompressions: getArchivePathEntriesFromProgressDetails(details),
-    romType: getRomTypeFromProgressDetails(details),
+    romType,
     size: typeof details.size === "number" ? details.size : undefined,
     sourceSize: typeof details.sourceSize === "number" ? details.sourceSize : undefined,
     wasDecompressed: typeof details.wasDecompressed === "boolean" ? details.wasDecompressed : undefined,

@@ -6,6 +6,8 @@
 //! regression fails here instead of as a deep round-trip parity mismatch.
 
 use super::*;
+use crate::chd_rs::cdrom::CD_MAX_SECTOR_DATA;
+use crate::chd_rs::compression::ecc::ErrorCorrectedSector;
 
 #[test]
 fn split_checksum_workers_share_the_operation_thread_budget() {
@@ -23,24 +25,50 @@ const SYNC_HEADER: [u8; 12] = [
 
 /// Build a Mode 1 raw sector with a deterministic data payload and freshly
 /// generated P/Q ECC so it round-trips through verification.
-fn mode1_sector_with_ecc() -> Vec<u8> {
-    let mut sector = vec![0_u8; ChdContainerHandler::CD_SECTOR_DATA_BYTES];
+fn mode1_sector_with_ecc() -> [u8; CD_MAX_SECTOR_DATA as usize] {
+    let mut sector = [0_u8; CD_MAX_SECTOR_DATA as usize];
     sector[..12].copy_from_slice(&SYNC_HEADER);
     sector[0x0f] = 1; // Mode 1.
     for (index, byte) in sector.iter_mut().enumerate().skip(16) {
         *byte = (index % 251) as u8;
     }
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+    (&mut sector).generate_ecc();
     sector
+}
+
+/// `ErrorCorrectedSector` is implemented for `&mut` sectors only.
+fn verify_ecc(sector: &mut [u8; CD_MAX_SECTOR_DATA as usize]) -> bool {
+    sector.verify_ecc()
+}
+
+/// Known-answer P/Q parity (bytes 0x81c..0x930) for `mode1_sector_with_ecc()`,
+/// computed independently of chd_rs from the ECMA-130 Annex A definition
+/// (GF(2^8) with polynomial 0x11d; P over 86 columns of 24 bytes, Q over 52
+/// diagonals of 43 bytes including P), so a wrong chd_rs table entry fails here.
+const MODE1_SECTOR_P_PARITY_HEX: &str = "3edcdd22e3cd2df9b58ad5a692e7c0498fbdab99d967e8bbc414b0e6cef051a1055fb27d43671e3bc8eef19a5ea7d0744ea5216804937ba7b5e013f11f2cbde97000c1d79371aa1b0db38a0a07408c66fcf95b526ecafa718b1cdbcd15c9ed2a1d767a0728b987dd28347eda4beefbca4e24142677f3b4cc03e2d2f4ff37e4e2ddae6a930fb5ad64c699f7996999abda31a7b28b305ae58f243f73896af3fd2bea726728cc3ecc31fbface52";
+const MODE1_SECTOR_Q_PARITY_HEX: &str = "4c3f271c197053de2091bfdaa7d92aeeaa2bc0963e3392a4781bb837ccedcd8609c74203412e5e471406a32fbcbd3924465714d6a160eb5e3d38f5e924c3fce916676b4163ffb5e1fc72c7857c173c63f81bc27b8f111e63ee1d57832e32afeccaff86f02b377e14";
+
+fn hex_bytes(hex: &str) -> Vec<u8> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&hex[index..index + 2], 16).expect("hex digit pair"))
+        .collect()
+}
+
+#[test]
+fn cd_sector_ecc_matches_known_answer_parity() {
+    let sector = mode1_sector_with_ecc();
+    assert_eq!(
+        &sector[0x81c..0x81c + 172],
+        hex_bytes(MODE1_SECTOR_P_PARITY_HEX)
+    );
+    assert_eq!(&sector[0x81c + 172..], hex_bytes(MODE1_SECTOR_Q_PARITY_HEX));
 }
 
 #[test]
 fn cd_sector_ecc_round_trips_through_verification() {
-    let sector = mode1_sector_with_ecc();
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    let mut sector = mode1_sector_with_ecc();
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
@@ -48,48 +76,27 @@ fn cd_sector_ecc_rejects_corrupted_payload() {
     let mut sector = mode1_sector_with_ecc();
     // Flip a byte inside the ECC-covered data region.
     sector[100] ^= 0xff;
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(!verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_ecc_rejects_missing_sync_header() {
+fn cd_sector_ecc_ignores_sync_header() {
     let mut sector = mode1_sector_with_ecc();
-    // ECC is still valid, but a cleared sync header means it is not a
-    // reconstructable sector.
+    // ECC covers only the bytes after the sync header, so clearing it leaves
+    // the ECC valid; callers check the header separately.
     sector[1] = 0;
-    assert!(ChdContainerHandler::cd_sector_verify_ecc(&sector));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &sector
-    ));
+    assert!(verify_ecc(&mut sector));
 }
 
 #[test]
-fn cd_sector_clear_sync_and_ecc_zeroes_only_sync_and_ecc() {
+fn cd_sector_clear_ecc_zeroes_only_ecc() {
     let mut sector = mode1_sector_with_ecc();
-    let data_before = sector[12..0x81c].to_vec();
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut sector);
-    assert!(sector[..12].iter().all(|byte| *byte == 0));
+    let before = sector;
+    (&mut sector).clear_ecc();
     assert!(sector[0x81c..].iter().all(|byte| *byte == 0));
-    // The user-data region between the sync header and the ECC block is left
-    // intact so the sector can be rebuilt on extract.
-    assert_eq!(&sector[12..0x81c], data_before.as_slice());
-}
-
-#[test]
-fn cd_sector_ecc_helpers_reject_wrong_length() {
-    let mut short = vec![0_u8; 100];
-    assert!(!ChdContainerHandler::cd_sector_verify_ecc(&short));
-    assert!(!ChdContainerHandler::cd_sector_has_reconstructable_ecc(
-        &short
-    ));
-    // Generation and clearing are no-ops at the wrong length.
-    ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
-    ChdContainerHandler::cd_sector_clear_sync_and_ecc(&mut short);
-    assert!(short.iter().all(|byte| *byte == 0));
+    // Sync header and user data are left intact.
+    assert_eq!(&sector[..0x81c], &before[..0x81c]);
+    assert!(!verify_ecc(&mut sector));
 }
 
 // --- V5 compressed-map CRC and integer writers -----------------------------
@@ -923,6 +930,128 @@ fn has_known_volume_boot_sector_recognizes_each_filesystem() {
     assert!(!handler.has_known_volume_boot_sector(&signed_sector(), HD_VOLUME_BYTES));
 }
 
+/// Runs the shared cases on the same prefix the webapp used to check itself.
+#[test]
+fn hard_disk_headers_match_the_shared_cases() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/chd-hard-disk-headers.json"))
+            .expect("hard-disk header cases");
+    let handler = ChdContainerHandler;
+    let path = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
+        "rw-chd-unit-{}-hard-disk-header.img",
+        std::process::id()
+    )));
+    for case in cases.as_array().expect("cases") {
+        let name = case["name"].as_str().expect("name");
+        let size = case["size"].as_u64().expect("size");
+        let mut prefix = vec![0_u8; 1024];
+        for write in case["writes"].as_array().expect("writes") {
+            let at = usize::try_from(write["at"].as_u64().expect("at")).expect("offset");
+            let hex = write["hex"].as_str().expect("hex");
+            for (index, pair) in hex.as_bytes().chunks(2).enumerate() {
+                let pair = std::str::from_utf8(pair).expect("ascii hex");
+                prefix[at + index] = u8::from_str_radix(pair, 16).expect("hex byte");
+            }
+        }
+        // The webapp reads at most the first two sectors of the image.
+        prefix.truncate(usize::try_from(size.min(1024)).expect("prefix length"));
+        std::fs::write(&path, &prefix).expect("write prefix");
+        assert_eq!(
+            handler.should_auto_infer_hard_disk(&path, size),
+            case["hardDisk"].as_bool().expect("hardDisk"),
+            "{name}"
+        );
+    }
+}
+
+/// Writes `bytes` to a scratch file named `name` and returns the auto-inferred create mode.
+fn auto_create_mode(name: &str, bytes: &[u8]) -> Option<&'static str> {
+    let path = crate::test_support::TempPath::new(
+        std::env::temp_dir().join(format!("rw-chd-unit-{}-auto-{name}", std::process::id())),
+    );
+    std::fs::write(&path, bytes).expect("write image");
+    ChdContainerHandler.infer_auto_create_mode_label(&path)
+}
+
+fn cooked_image(sectors: usize, descriptors: &[(usize, u8, &[u8])]) -> Vec<u8> {
+    let mut bytes = vec![0_u8; sectors * 2048];
+    for (sector, kind, id) in descriptors {
+        bytes[sector * 2048] = *kind;
+        bytes[sector * 2048 + 1..sector * 2048 + 1 + id.len()].copy_from_slice(id);
+    }
+    bytes
+}
+
+#[test]
+fn auto_create_mode_label_follows_native_cooked_image_rules() {
+    let bridge = cooked_image(
+        40,
+        &[
+            (16, 1, b"CD001"),
+            (17, 255, b"CD001"),
+            (18, 0, b"BEA01"),
+            (19, 0, b"NSR02"),
+        ],
+    );
+    for name in ["bridge.bin", "bridge.iso", "bridge"] {
+        assert_eq!(auto_create_mode(name, &bridge), Some("dvd"), "{name}");
+    }
+    let udf = cooked_image(40, &[(16, 0, b"BEA01"), (17, 0, b"NSR03")]);
+    assert_eq!(auto_create_mode("udf.bin", &udf), Some("dvd"));
+    let plain = cooked_image(
+        40,
+        &[(16, 1, b"CD001"), (17, 0, b"BEA01"), (18, 1, b"NSR02")],
+    );
+    assert_eq!(auto_create_mode("plain.bin", &plain), Some("cd"));
+    assert_eq!(auto_create_mode("plain.iso", &plain), Some("cd"));
+    // UDF announced past the scanned volume recognition window is not UDF evidence.
+    let late = cooked_image(40, &[(16, 1, b"CD001"), (32, 0, b"NSR02")]);
+    assert_eq!(auto_create_mode("late.bin", &late), Some("cd"));
+    // A ragged tail is not whole sectors, so there is no CD evidence.
+    let mut ragged = bridge.clone();
+    ragged.push(0);
+    assert_eq!(auto_create_mode("ragged.bin", &ragged), Some("raw"));
+}
+
+#[test]
+fn auto_create_mode_label_recognizes_raw_cd_and_unrecognized_bins() {
+    let mut raw = vec![0_u8; 40 * 2352];
+    raw[1..11].fill(255);
+    assert_eq!(auto_create_mode("raw.bin", &raw), Some("cd"));
+    for size in [13_usize, 4096, 32768, 2352, 2352 * 20] {
+        assert_eq!(
+            auto_create_mode("blank.bin", &vec![0_u8; size]),
+            Some("raw"),
+            "{size}-byte blank bin"
+        );
+    }
+    // A cooked ISO without an ISO9660 descriptor is still a CD-sized single track.
+    assert_eq!(auto_create_mode("disc.iso", &vec![0_u8; 2048]), Some("cd"));
+}
+
+#[test]
+fn auto_create_mode_label_prefers_hard_disk_headers_over_cd_evidence() {
+    let mut bytes = vec![0_u8; 204_800];
+    bytes[32_769..32_774].copy_from_slice(b"CD001");
+    // A boot signature alone is not hard-disk evidence.
+    bytes[510] = 0x55;
+    bytes[511] = 0xaa;
+    assert_eq!(auto_create_mode("hybrid.bin", &bytes), Some("cd"));
+    // One valid MBR partition entry makes it a hard disk.
+    bytes[450] = 0x83;
+    bytes[454..458].copy_from_slice(&1_u32.to_le_bytes());
+    bytes[458..462].copy_from_slice(&399_u32.to_le_bytes());
+    for name in ["hybrid.bin", "hybrid"] {
+        assert_eq!(auto_create_mode(name, &bytes), Some("hd"), "{name}");
+    }
+}
+
+#[test]
+fn auto_create_mode_label_skips_other_extensions() {
+    assert_eq!(auto_create_mode("game.nes", &[0_u8; 4096]), None);
+    assert_eq!(auto_create_mode("game.cue", &[0_u8; 4096]), None);
+}
+
 #[test]
 fn should_auto_infer_single_track_cd_keys_on_extension() {
     let handler = ChdContainerHandler;
@@ -970,6 +1099,28 @@ fn parse_create_mode_override_maps_known_modes() {
     // A format lacking the `chd-` prefix and an unknown mode both error.
     assert!(handler.parse_create_mode_override("zip").is_err());
     assert!(handler.parse_create_mode_override("chd-xyz").is_err());
+}
+
+#[test]
+fn create_mode_table_entries_parse_and_resolve_to_canonical_modes() {
+    let handler = ChdContainerHandler;
+    for (mode, canonical) in CHD_CREATE_MODES {
+        let parsed = handler
+            .parse_create_mode_override(&format!("chd-{mode}"))
+            .unwrap_or_else(|error| panic!("chd-{mode} must parse: {error}"));
+        let canonical_parsed = handler
+            .parse_create_mode_override(&format!("chd-{canonical}"))
+            .expect("canonical mode parses");
+        assert!(parsed.is_some(), "chd-{mode}");
+        assert_eq!(
+            parsed, canonical_parsed,
+            "chd-{mode} aliases chd-{canonical}"
+        );
+        assert!(
+            CHD_CREATE_MODES.contains(&(*canonical, *canonical)),
+            "{canonical} must map to itself"
+        );
+    }
 }
 
 // --- Create-kind / media mapping -------------------------------------------

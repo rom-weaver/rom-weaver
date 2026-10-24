@@ -879,7 +879,10 @@ describe("handler warnings", () => {
     mocks.runRomWeaverJson.mockResolvedValue({
       events: [
         {
-          details: { emitted_files: [{ path: "/out/rom.bin", size_bytes: 4 }] },
+          details: {
+            emitted_files: [{ path: "/out/rom.bin", size_bytes: 4 }],
+            warnings: ["IPS patch did not change output; input may already be patched"],
+          },
           label: "applied IPS patch; warning=IPS patch did not change output; input may already be patched",
           status: "succeeded",
         },

@@ -89,6 +89,13 @@ export const OPFS_PROXY_STATUS_OK = 0;
 /** Generic I/O failure (WASI ERRNO_IO). Used for proxy poison and any unrecognised error. */
 export const OPFS_PROXY_STATUS_EIO = 29;
 
+/**
+ * The count Chromium's `FileSystemSyncAccessHandle.write` returns instead of throwing when origin
+ * storage is full: `base::File::FILE_ERROR_NO_SPACE` (-8) as an unsigned 32-bit value. The in-memory
+ * backend of incognito and ephemeral profiles caps an origin at about 1 GiB, so a disc image hits it.
+ */
+export const CHROMIUM_SYNC_WRITE_NO_SPACE_COUNT = 2 ** 32 - 8;
+
 // --- Sentinels & sizing --------------------------------------------------------------------------
 
 /** HANDLE_INDEX sentinel meaning "resolve by the path serialized into the data buffer". */

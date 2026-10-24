@@ -10,18 +10,21 @@ use std::{
     },
 };
 
+use crate::extract_support::{
+    ExtractedFileChecksum, ExtractedTrackChecksum, attach_extract_checksum_details,
+    create_extract_checksum,
+};
 use rom_weaver_checksum::{StreamingChecksum, detect_rom_identity_for_path};
 use rom_weaver_core::codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    OperationStatus, OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError,
-    SelectionMatcher, ThreadCapability, ThreadExecution, UnsupportedOp, attach_emitted_file_paths,
-    attach_extraction_details, build_emitted_file_detail, create_extract_output_file,
-    file_starts_with, insert_thread_execution_details, maybe_emit_container_byte_progress,
-    operation_report_details, ordered_streaming_compress, parallel_heap_reserve,
-    reserve_parallel_heap,
+    OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError, SelectionMatcher,
+    ThreadCapability, ThreadExecution, UnsupportedOp, attach_emitted_file_paths,
+    attach_extraction_details, create_extract_output_file, file_starts_with,
+    insert_thread_execution_details, maybe_emit_container_byte_progress, operation_report_details,
+    ordered_streaming_compress, parallel_heap_reserve, reserve_parallel_heap,
 };
 use serde_json::{Map, Value, json};
 use tracing::{debug, trace};
@@ -34,6 +37,19 @@ pub const CHD: FormatDescriptor = FormatDescriptor {
     ],
     extensions: &[".chd"],
 };
+
+/// CHD create-mode names accepted after `chd-`, each paired with the canonical
+/// mode it selects. Shared by the create-format parser and typegen so callers
+/// normalize `ld` to `av` from one table.
+pub const CHD_CREATE_MODES: &[(&str, &str)] = &[
+    ("cd", "cd"),
+    ("gd", "gd"),
+    ("dvd", "dvd"),
+    ("raw", "raw"),
+    ("hd", "hd"),
+    ("av", "av"),
+    ("ld", "av"),
+];
 
 /// CHD container file magic. Canonical source for the web UI's synchronous
 /// rom-specific magic probe (surfaced via typegen container metadata).
@@ -100,90 +116,6 @@ pub struct ChdHeader {
     raw_sha1: Option<[u8; 20]>,
 }
 
-#[derive(Clone, Debug)]
-struct ExtractedFileChecksum {
-    path: PathBuf,
-    values: BTreeMap<String, String>,
-    /// Per-track checksums streamed during a merged single-bin CD extract, so a
-    /// multi-track disc can still fingerprint against per-track database
-    /// entries when no per-track files exist. Empty on every other path.
-    track_values: Vec<ExtractedTrackChecksum>,
-}
-
-#[derive(Clone, Debug)]
-struct ExtractedTrackChecksum {
-    number: u32,
-    size_bytes: u64,
-    values: BTreeMap<String, String>,
-}
-
-fn create_extract_checksum(
-    context: &OperationContext,
-    allow_parallelism: bool,
-) -> Result<Option<StreamingChecksum>> {
-    if allow_parallelism {
-        StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
-    } else {
-        StreamingChecksum::new(context.extract_checksum_algorithms())
-    }
-}
-
-fn build_extract_checksum_emitted_file_detail(
-    path: &Path,
-    checksums: BTreeMap<String, String>,
-    track_values: Vec<ExtractedTrackChecksum>,
-) -> Option<Value> {
-    if checksums.is_empty() {
-        return None;
-    }
-    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let mut entry = build_emitted_file_detail(path)?;
-    entry.insert("checksums".to_string(), json!(checksums));
-    if !track_values.is_empty() {
-        let tracks = track_values
-            .into_iter()
-            .map(|track| {
-                json!({
-                    "track_number": track.number,
-                    "size_bytes": track.size_bytes,
-                    "checksums": track.values,
-                })
-            })
-            .collect::<Vec<_>>();
-        entry.insert("track_checksums".to_string(), Value::Array(tracks));
-    }
-    // Detect the decoded disc's platform/medium from the extracted track (a bounded prefix read of
-    // the just-written output - no re-decode of the CHD) so a CHD's emitted_files carry the same
-    // platform tag as other formats. A `.cue` sheet / non-disc track simply yields nothing.
-    detect_rom_identity_for_path(&canonical).write_into(&mut entry);
-    Some(Value::Object(entry))
-}
-
-fn attach_extract_checksum_details(
-    mut report: OperationReport,
-    checksums: Vec<ExtractedFileChecksum>,
-) -> OperationReport {
-    if checksums.is_empty() || report.status != OperationStatus::Succeeded {
-        return report;
-    }
-    let mut details = operation_report_details(&mut report);
-    let emitted = checksums
-        .into_iter()
-        .filter_map(|entry| {
-            build_extract_checksum_emitted_file_detail(
-                &entry.path,
-                entry.values,
-                entry.track_values,
-            )
-        })
-        .collect::<Vec<_>>();
-    if !emitted.is_empty() {
-        details.insert("emitted_files".to_string(), Value::Array(emitted));
-    }
-    report.details = Some(Value::Object(details));
-    report
-}
-
 fn push_finalized_extract_checksum(
     output_checksums: &mut Vec<ExtractedFileChecksum>,
     path: PathBuf,
@@ -199,9 +131,26 @@ fn push_finalized_extract_checksum_with_tracks(
     track_values: Vec<ExtractedTrackChecksum>,
 ) -> Result<()> {
     if let Some(checksum) = checksum {
+        let values = checksum.finalize()?;
+        // Skip entries whose output is not a readable regular file, as the emitted-file
+        // builder always has. The disc platform/medium is detected from a bounded prefix
+        // read of the just-written output (no re-decode of the CHD); a `.cue` sheet or
+        // non-disc track yields nothing.
+        let Some(size_bytes) = fs::metadata(&path)
+            .ok()
+            .filter(fs::Metadata::is_file)
+            .map(|metadata| metadata.len())
+        else {
+            return Ok(());
+        };
+        let canonical = fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
         output_checksums.push(ExtractedFileChecksum {
+            rom_identity: detect_rom_identity_for_path(&canonical),
             path,
-            values: checksum.finalize()?,
+            size_bytes,
+            values,
+            variants: Vec::new(),
+            timing: None,
             track_values,
         });
     }

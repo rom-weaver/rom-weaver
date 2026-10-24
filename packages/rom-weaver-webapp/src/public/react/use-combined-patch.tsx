@@ -2,8 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileDiff } from "lucide-react";
 import type { BrowserCreateResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import type { CreateSettings } from "../../types/settings.ts";
-import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
-import { getFileNameWithoutExtension, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
+import {
+  getPreferredCreatePatchFormat,
+  getSelectableCreatePatchFormats,
+} from "../../lib/create/patch-format-limits.ts";
+import { removeKnownOutputExtension } from "../../lib/output/output-name-validation.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { Notice } from "./components/ds/feedback.tsx";
 import type { OutputCardProps } from "./components/ds/output-card.tsx";
@@ -31,6 +35,7 @@ const useCombinedPatch = ({
   onPatchTypeChange,
   romSize,
   patchTargetSize,
+  maxKnownTargetSize,
   settings,
   onComplete,
   onError,
@@ -45,6 +50,7 @@ const useCombinedPatch = ({
   onPatchTypeChange?: (value: string) => void;
   romSize?: number;
   patchTargetSize?: number;
+  maxKnownTargetSize?: number;
   settings?: CreateSettings;
   onComplete?: (result: BrowserCreateResult) => void;
   onError?: (error: Error) => void;
@@ -53,11 +59,26 @@ const useCombinedPatch = ({
   const [fileName, setFileName] = useState("");
   const [internalFormat, setInternalFormat] = useState(defaultPatchType || "bps");
   // Preparing the run re-stages its sources and briefly clears their sizes, so a running job MUST keep the sizes it started with.
-  const [runSizes, setRunSizes] = useState<{ patchTargetSize?: number; romSize?: number } | null>(null);
-  const formatSizes = runSizes ?? { patchTargetSize, romSize };
+  const [runSizes, setRunSizes] = useState<{
+    patchTargetSize?: number;
+    maxKnownTargetSize?: number;
+    romSize?: number;
+  } | null>(null);
+  const formatSizes = runSizes ?? { patchTargetSize, maxKnownTargetSize, romSize };
+  // Known growth MUST still constrain format limits when another patch leaves shrinking uncertain.
+  // The largest known size also sets the best-first order, so the fallback matches its size bucket.
+  const knownTargetFormats = getSelectableCreatePatchFormats({
+    modifiedSize: Math.max(formatSizes.romSize ?? 0, formatSizes.maxKnownTargetSize ?? 0),
+  });
+  const finalTargetFormats = getSelectableCreatePatchFormats({
+    originalSize: formatSizes.romSize,
+    modifiedSize: formatSizes.patchTargetSize,
+  });
+  const candidateFormats = knownTargetFormats.filter((value) => finalTargetFormats.includes(value));
   // Create rejects formats outside the size policy, so a choice that no longer fits falls back to the first that does.
   const format = getPreferredCreatePatchFormat({
     automaticFormatSelection: false,
+    candidateFormats,
     modifiedSize: formatSizes.patchTargetSize,
     originalSize: formatSizes.romSize,
     requestedFormat: patchType || internalFormat,
@@ -78,7 +99,7 @@ const useCombinedPatch = ({
   const [runName, setRunName] = useState<string | null>(null);
   const resolvedName =
     sanitizeTypedOutputName(fileName) ||
-    `${getFileNameWithoutExtension(sanitizeTypedOutputName(runName ?? name) || "combined")}-combined`;
+    `${removeKnownOutputExtension(sanitizeTypedOutputName(runName ?? name) || "combined")}-combined`;
   const executionSettings: Partial<CreateSettings> = {
     ...settings,
     format: format as CreateSettings["format"],
@@ -169,9 +190,11 @@ const useCombinedPatch = ({
     fileNameLabel: localizer.message("ui.combinedPatch.filename"),
     onFileNameChange: setFileName,
     format,
+    outputExtensions: [format],
     formatId: "rom-weaver-combined-patch-format",
     formatLabel: localizer.message("ui.combinedPatch.format"),
     formatOptions: createCreatePatchFormatOptions({
+      candidateFormats,
       modifiedSize: formatSizes.patchTargetSize,
       originalSize: formatSizes.romSize,
     }),

@@ -173,6 +173,20 @@ describe("write", () => {
   });
 
   it("fails a sync write whose count exceeds the bytes requested", async () => {
+    const accessHandle = createSyncAccessHandle({ write: () => 3 });
+    mocks.getManagedOpfsFileHandle.mockResolvedValue({
+      createSyncAccessHandle: () => Promise.resolve(accessHandle),
+    });
+    const send = await loadWorker();
+
+    const response = await send({ action: "write", bytes: Uint8Array.from([1, 2]), filePath: "/a.bin", position: 4 });
+
+    expect(response).toMatchObject({ action: "stage-error", success: false });
+    expect(response.error?.message).toContain("OPFS sync write returned invalid byte count 3 at offset 4 (0/2 bytes)");
+    expect(accessHandle.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports Chromium's out-of-storage write count as no space left", async () => {
     // Chromium returns 2^32 - 8 instead of throwing when a write would exceed the storage quota.
     const accessHandle = createSyncAccessHandle({ write: () => 4294967288 });
     mocks.getManagedOpfsFileHandle.mockResolvedValue({
@@ -183,9 +197,7 @@ describe("write", () => {
     const response = await send({ action: "write", bytes: Uint8Array.from([1, 2]), filePath: "/a.bin", position: 4 });
 
     expect(response).toMatchObject({ action: "stage-error", success: false });
-    expect(response.error?.message).toContain(
-      "OPFS sync write returned invalid byte count 4294967288 at offset 4 (0/2 bytes)",
-    );
+    expect(response.error?.message).toContain("OPFS sync write: no space left at offset 4 (0/2 bytes)");
     expect(accessHandle.close).toHaveBeenCalledTimes(1);
   });
 
@@ -348,7 +360,9 @@ describe("truncate", () => {
     const response = await send({ action: "truncate", filePath: "/a.bin", size: 2 ** 30 });
 
     expect(response).toMatchObject({ success: false });
-    expect(response.error?.message).toContain("OPFS truncate of /a.bin to 1073741824 bytes left 0 bytes");
+    expect(response.error?.message).toContain(
+      "OPFS truncate of /a.bin to 1073741824 bytes left 0 bytes: no space left",
+    );
     expect(accessHandle.close).toHaveBeenCalledTimes(1);
   });
 

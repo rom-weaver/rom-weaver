@@ -263,31 +263,31 @@ fn compression_profile_prefers_explicit_codec_level() {
 #[test]
 fn z3ds_compressed_extension_mapping_covers_known_source_types() {
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cia")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cia")).as_deref(),
         Some(".zcia")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cci")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cci")).as_deref(),
         Some(".zcci")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cxi")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cxi")).as_deref(),
         Some(".zcxi")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.app")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.app")).as_deref(),
         Some(".zcxi")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3ds")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3ds")).as_deref(),
         Some(".z3ds")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3dsx")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3dsx")).as_deref(),
         Some(".z3dsx")
     );
     assert_eq!(
-        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.bin")),
+        CliApp::z3ds_compressed_extension_for_path(Path::new("disc.bin")).as_deref(),
         None
     );
 }

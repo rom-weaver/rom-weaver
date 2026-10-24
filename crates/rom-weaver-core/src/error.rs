@@ -30,28 +30,40 @@ pub enum RomWeaverErrorKind {
 }
 
 impl RomWeaverErrorKind {
+    /// The canonical [`RomWeaverError`] display prefix of each kind. Typegen
+    /// emits this table for the worker-error fallback that classifies errors
+    /// arriving in JS without a typed kind.
+    pub const MESSAGE_PREFIXES: &'static [(&'static str, RomWeaverErrorKind)] = &[
+        ("validation failed:", RomWeaverErrorKind::Validation),
+        ("unknown format for path", RomWeaverErrorKind::UnknownFormat),
+        ("unsupported operation:", RomWeaverErrorKind::Unsupported),
+        ("operation cancelled", RomWeaverErrorKind::Cancelled),
+        ("i/o error:", RomWeaverErrorKind::Io),
+        (
+            "thread pool build failed:",
+            RomWeaverErrorKind::ThreadPoolBuild,
+        ),
+    ];
+
     /// Classify a bare [`RomWeaverError`] display string by its canonical prefix.
-    /// This populates typed progress-event errors; JS regexes are fallback-only
-    /// for untyped or wrapped errors. Contract tests lock the display/classifier/
-    /// [`RomWeaverError::kind`] round trip.
+    /// This populates typed progress-event errors. Contract tests lock the
+    /// display/classifier/[`RomWeaverError::kind`] round trip.
     pub fn classify_message(message: &str) -> Option<Self> {
-        const PREFIXES: &[(&str, RomWeaverErrorKind)] = &[
-            ("validation failed:", RomWeaverErrorKind::Validation),
-            ("unknown format for path", RomWeaverErrorKind::UnknownFormat),
-            ("unsupported operation:", RomWeaverErrorKind::Unsupported),
-            ("operation cancelled", RomWeaverErrorKind::Cancelled),
-            ("i/o error:", RomWeaverErrorKind::Io),
-            (
-                "thread pool build failed:",
-                RomWeaverErrorKind::ThreadPoolBuild,
-            ),
-        ];
-        PREFIXES
+        Self::MESSAGE_PREFIXES
             .iter()
             .find(|(prefix, _)| message.starts_with(prefix))
             .map(|(_, kind)| *kind)
     }
 }
+
+/// Code of the validation error for an extract source no registered container
+/// recognizes. The webapp matches this code (surfaced via typegen) instead of
+/// the message text.
+pub const VALIDATION_CODE_EXTRACT_NO_CONTAINER: &str = "extract.no_container";
+
+/// Code of the validation error for a WBFS file or split set whose total size
+/// differs from its header's. Carries `actual` and `expected` byte fields.
+pub const VALIDATION_CODE_WBFS_SIZE_MISMATCH: &str = "wbfs.size_mismatch";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationCodeError {

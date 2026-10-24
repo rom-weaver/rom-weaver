@@ -1,0 +1,322 @@
+[
+  {
+    "name": "MBR with one partition inside the image",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 446, "hex": "80" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "01000000" },
+      { "at": 458, "hex": "0a000000" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "protective MBR entry may run past the end",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 450, "hex": "ee" },
+      { "at": 454, "hex": "01000000" },
+      { "at": 458, "hex": "ffffffff" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "MBR entries without the 55 AA signature",
+    "size": 51200,
+    "writes": [
+      { "at": 446, "hex": "80" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "01000000" },
+      { "at": 458, "hex": "0a000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "signed sector with an empty partition table",
+    "size": 51200,
+    "writes": [{ "at": 510, "hex": "55aa" }],
+    "hardDisk": false
+  },
+  {
+    "name": "MBR boot flag that is neither 00 nor 80",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 446, "hex": "01" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "01000000" },
+      { "at": 458, "hex": "0a000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "MBR partition starting past the end",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 446, "hex": "80" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "64000000" },
+      { "at": 458, "hex": "01000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "MBR partition running past the end",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 446, "hex": "80" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "32000000" },
+      { "at": 458, "hex": "3c000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "FAT boot sector",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 14, "hex": "0100" },
+      { "at": 16, "hex": "02" },
+      { "at": 19, "hex": "6400" },
+      { "at": 22, "hex": "0a00" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "FAT boot sector with 3 sectors per cluster",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "03" },
+      { "at": 14, "hex": "0100" },
+      { "at": 16, "hex": "02" },
+      { "at": 19, "hex": "6400" },
+      { "at": 22, "hex": "0a00" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "FAT boot sector with a 32-bit sector count",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 14, "hex": "0100" },
+      { "at": 16, "hex": "02" },
+      { "at": 22, "hex": "0a00" },
+      { "at": 32, "hex": "64000000" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "FAT boot sector declaring more sectors than the image holds",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 14, "hex": "0100" },
+      { "at": 16, "hex": "02" },
+      { "at": 19, "hex": "6500" },
+      { "at": 22, "hex": "0a00" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "FAT boot sector without the 55 AA signature",
+    "size": 51200,
+    "writes": [
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 14, "hex": "0100" },
+      { "at": 16, "hex": "02" },
+      { "at": 19, "hex": "6400" },
+      { "at": 22, "hex": "0a00" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "NTFS boot sector",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 3, "hex": "4e54465320202020" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 40, "hex": "6400000000000000" },
+      { "at": 48, "hex": "0400000000000000" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "NTFS boot sector without an MFT cluster",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 3, "hex": "4e54465320202020" },
+      { "at": 11, "hex": "0002" },
+      { "at": 13, "hex": "08" },
+      { "at": 40, "hex": "6400000000000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "exFAT boot sector",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 3, "hex": "4558464154202020" },
+      { "at": 72, "hex": "6400000000000000" },
+      { "at": 80, "hex": "01000000" },
+      { "at": 84, "hex": "01000000" },
+      { "at": 88, "hex": "0a000000" },
+      { "at": 92, "hex": "50000000" },
+      { "at": 108, "hex": "09" },
+      { "at": 109, "hex": "04" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "exFAT boot sector with a dirty reserved byte",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 3, "hex": "4558464154202020" },
+      { "at": 20, "hex": "01" },
+      { "at": 72, "hex": "6400000000000000" },
+      { "at": 80, "hex": "01000000" },
+      { "at": 84, "hex": "01000000" },
+      { "at": 88, "hex": "0a000000" },
+      { "at": 92, "hex": "50000000" },
+      { "at": 108, "hex": "09" },
+      { "at": 109, "hex": "04" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "exFAT boot sector whose FAT overruns the volume",
+    "size": 51200,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 3, "hex": "4558464154202020" },
+      { "at": 72, "hex": "6400000000000000" },
+      { "at": 80, "hex": "01000000" },
+      { "at": 84, "hex": "c8000000" },
+      { "at": 88, "hex": "0a000000" },
+      { "at": 92, "hex": "50000000" },
+      { "at": 108, "hex": "09" },
+      { "at": 109, "hex": "04" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "GPT header in the second sector",
+    "size": 51200,
+    "writes": [
+      { "at": 512, "hex": "4546492050415254" },
+      { "at": 524, "hex": "5c000000" },
+      { "at": 536, "hex": "0100000000000000" },
+      { "at": 544, "hex": "6300000000000000" },
+      { "at": 552, "hex": "0200000000000000" },
+      { "at": 560, "hex": "6200000000000000" },
+      { "at": 584, "hex": "0200000000000000" },
+      { "at": 592, "hex": "80000000" },
+      { "at": 596, "hex": "80000000" }
+    ],
+    "hardDisk": true
+  },
+  {
+    "name": "GPT header naming the wrong current LBA",
+    "size": 51200,
+    "writes": [
+      { "at": 512, "hex": "4546492050415254" },
+      { "at": 524, "hex": "5c000000" },
+      { "at": 536, "hex": "0200000000000000" },
+      { "at": 544, "hex": "6300000000000000" },
+      { "at": 552, "hex": "0200000000000000" },
+      { "at": 560, "hex": "6200000000000000" },
+      { "at": 584, "hex": "0200000000000000" },
+      { "at": 592, "hex": "80000000" },
+      { "at": 596, "hex": "80000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "GPT header with an inverted usable range",
+    "size": 51200,
+    "writes": [
+      { "at": 512, "hex": "4546492050415254" },
+      { "at": 524, "hex": "5c000000" },
+      { "at": 536, "hex": "0100000000000000" },
+      { "at": 544, "hex": "6300000000000000" },
+      { "at": 552, "hex": "6300000000000000" },
+      { "at": 560, "hex": "6200000000000000" },
+      { "at": 584, "hex": "0200000000000000" },
+      { "at": 592, "hex": "80000000" },
+      { "at": 596, "hex": "80000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "GPT header with a 130-byte entry stride",
+    "size": 51200,
+    "writes": [
+      { "at": 512, "hex": "4546492050415254" },
+      { "at": 524, "hex": "5c000000" },
+      { "at": 536, "hex": "0100000000000000" },
+      { "at": 544, "hex": "6300000000000000" },
+      { "at": 552, "hex": "0200000000000000" },
+      { "at": 560, "hex": "6200000000000000" },
+      { "at": 584, "hex": "0200000000000000" },
+      { "at": 592, "hex": "80000000" },
+      { "at": 596, "hex": "82000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "GPT header on a one-sector image",
+    "size": 512,
+    "writes": [
+      { "at": 512, "hex": "4546492050415254" },
+      { "at": 524, "hex": "5c000000" },
+      { "at": 536, "hex": "0100000000000000" },
+      { "at": 552, "hex": "0200000000000000" },
+      { "at": 592, "hex": "80000000" },
+      { "at": 596, "hex": "80000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "valid MBR on an image that is not a whole number of sectors",
+    "size": 51201,
+    "writes": [
+      { "at": 510, "hex": "55aa" },
+      { "at": 446, "hex": "80" },
+      { "at": 450, "hex": "83" },
+      { "at": 454, "hex": "01000000" },
+      { "at": 458, "hex": "0a000000" }
+    ],
+    "hardDisk": false
+  },
+  {
+    "name": "image smaller than one sector",
+    "size": 511,
+    "writes": [{ "at": 446, "hex": "80" }],
+    "hardDisk": false
+  },
+  {
+    "name": "all-zero sectors",
+    "size": 51200,
+    "writes": [],
+    "hardDisk": false
+  }
+]

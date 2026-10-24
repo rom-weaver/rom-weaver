@@ -162,6 +162,8 @@ type UseWeaveExportOptions = {
   initialWeaveRom?: boolean;
   initialFormat?: string;
   ready: boolean;
+  /** Why export is not ready when the user must fix something first; shown beside the action. */
+  blockedReason?: string;
   onComplete?: (result: ParsedWeaveCreateResult) => void;
 };
 
@@ -370,6 +372,7 @@ const useWeaveExport = ({
   initialWeaveRom = false,
   initialFormat = "zip",
   ready,
+  blockedReason,
   onComplete,
 }: UseWeaveExportOptions) => {
   const resolvedInitialFormat = initialFormat === "7z" ? "7z" : "zip";
@@ -618,6 +621,7 @@ const useWeaveExport = ({
 
   return {
     weaveRom,
+    blockedReason,
     busy,
     cancelExport,
     downloadable: downloadableOutput !== null,

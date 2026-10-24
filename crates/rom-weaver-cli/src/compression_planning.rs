@@ -729,18 +729,17 @@ impl CliApp {
             return (requested_output.to_path_buf(), false);
         };
 
-        let preferred_extension = if extensions
+        let z3ds_extension = if extensions
             .iter()
             .any(|extension| extension.eq_ignore_ascii_case(".z3ds"))
         {
-            Self::z3ds_compressed_extension_for_path(requested_output)
-                .or_else(|| {
-                    source_extension_hint.and_then(Self::z3ds_compressed_extension_for_path)
-                })
-                .unwrap_or(primary_extension)
+            Self::z3ds_compressed_extension_for_path(requested_output).or_else(|| {
+                source_extension_hint.and_then(Self::z3ds_compressed_extension_for_path)
+            })
         } else {
-            primary_extension
+            None
         };
+        let preferred_extension = z3ds_extension.as_deref().unwrap_or(primary_extension);
 
         let Some(file_name) = requested_output.file_name() else {
             return (requested_output.to_path_buf(), false);
@@ -760,16 +759,16 @@ impl CliApp {
         (appended_path, true)
     }
 
-    pub(super) fn z3ds_compressed_extension_for_path(path: &Path) -> Option<&'static str> {
+    pub(super) fn z3ds_compressed_extension_for_path(path: &Path) -> Option<String> {
         let extension = path.extension()?.to_str()?.trim().to_ascii_lowercase();
-        match extension.as_str() {
-            "cia" | "zcia" => Some(".zcia"),
-            "3ds" | "z3d" | "z3ds" => Some(".z3ds"),
-            "cci" | "zcci" => Some(".zcci"),
-            "cxi" | "app" | "zcxi" => Some(".zcxi"),
-            "3dsx" | "z3dsx" => Some(".z3dsx"),
-            _ => None,
-        }
+        rom_weaver_containers::z3ds_subtype_metadata()
+            .iter()
+            .find(|subtype| {
+                subtype.underlying_extension == extension
+                    || subtype.compressed_extension == extension
+                    || subtype.underlying_aliases.contains(&extension.as_str())
+            })
+            .map(|subtype| format!(".{}", subtype.compressed_extension))
     }
 
     pub(super) fn normalize_trim_extension(extension: &str) -> Result<String> {

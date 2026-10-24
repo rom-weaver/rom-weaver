@@ -44,6 +44,7 @@ type StagedInputInfo = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   splitBinAvailable?: boolean;
   cueText?: string;
   gdiText?: string;
@@ -186,6 +187,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   ) => void | Promise<void>;
   applyReady?: boolean;
   applyDisabled?: boolean;
+  applyValidationError?: string;
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;
   resolvedOutputNameKey?: string;

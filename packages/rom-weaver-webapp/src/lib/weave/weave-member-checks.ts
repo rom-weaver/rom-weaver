@@ -19,7 +19,8 @@ const memberBaseName = (name: string): string => name.split(/[/\\]/).pop() || na
  * `data.bin` names no track, and so does a name whose first `track` word has
  * no number (`Soundtrack Bonus (Track 2).bin`). The rule MUST stay identical to
  * `member_track_number` in the CLI's weave apply, so both sides fill the same
- * lanes; numbers beyond u32 are rejected for the same reason.
+ * lanes; numbers beyond u32 are rejected for the same reason. Both sides run
+ * the cases in `crates/rom-weaver-cli/tests/fixtures/weave-member-lanes.json`.
  */
 const memberTrackNumber = (name: string): number | undefined => {
   const base = memberBaseName(name).toLowerCase();

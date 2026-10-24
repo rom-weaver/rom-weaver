@@ -41,8 +41,7 @@ use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::rom_headers::{
     A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
-    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
-    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
+    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, NGP_COPYRIGHT_MAGIC,
     PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
     SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
     detect_known_rom_header_from_prefix as detect_known_header_from_prefix,
@@ -51,26 +50,28 @@ use rom_weaver_checksum::rom_headers::{
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
     VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
-    supported_algorithms, unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
+    n64_byte_order_from_row_id, supported_algorithms, unsupported_checksum_algorithm,
+    unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
     extract_only_create_validation_message, is_ambiguous_disc_image_extension,
     unregistered_output_format_message,
 };
+pub use rom_weaver_core::N64ByteOrder;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ChecksumRequest, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandler, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, DiscSheetKind, OperationContext, OperationFamily, OperationReport,
     OperationStatus, PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation,
-    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchInputN64ByteOrder,
-    PatchValidateRequest, ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError,
-    Selection, SelectionList, SelectionMatcher, SelectionPrompter, SolidPatchMetadata,
-    ThreadBudget, ThreadCapability, ThreadExecution, UnsupportedOp, ValidationCodeError,
-    XdeltaSecondaryMode, detect_disc_sheet, emit_variant_plan, ensure_output_available,
-    enumerate_disc_sheet_refs, env_u64, is_dcp_patch_name, is_patch_filter_candidate_name,
-    is_rom_filter_candidate_name, normalize_archive_name, operation_report_details,
-    process_cancellation_token, should_ignore_common_container_file, sibling_gdi_path,
+    PatchCreateFormatOptions, PatchCreateRequest, PatchEndpointSelection, PatchValidateRequest,
+    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
+    SelectionMatcher, SelectionPrompter, SolidPatchMetadata, ThreadBudget, ThreadCapability,
+    ThreadExecution, UnsupportedOp, ValidationCodeError, XdeltaSecondaryMode, detect_disc_sheet,
+    emit_variant_plan, ensure_output_available, enumerate_disc_sheet_refs, env_u64,
+    is_dcp_patch_name, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
+    normalize_archive_name, operation_report_details, process_cancellation_token,
+    should_ignore_common_container_file, sibling_gdi_path,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -1370,27 +1371,53 @@ enum TrimInputKind {
     RvzConvert,
 }
 
+/// Path-recognized trim extensions (lowercase, no dot) and the kind each selects.
+/// `xiso` kinds match the whole file name suffix (`game.xiso.iso`); the rest match
+/// the final extension.
+const TRIM_PATH_EXTENSIONS: &[(&str, TrimInputKind)] = &[
+    ("nds", TrimInputKind::NdsFamily),
+    ("dsi", TrimInputKind::NdsFamily),
+    ("srl", TrimInputKind::NdsFamily),
+    ("gba", TrimInputKind::Gba),
+    ("3ds", TrimInputKind::ThreeDs),
+    ("xiso", TrimInputKind::Xiso),
+    ("xiso.iso", TrimInputKind::Xiso),
+];
+
+/// Extensions trim accepts only after sniffing the file's contents (an Xbox `.iso`).
+const TRIM_CONTENT_SNIFFED_EXTENSIONS: &[&str] = &["iso"];
+
+/// Extensions of GameCube/Wii disc images the container registry recommends RVZ for (by
+/// content), so trim converts them to RVZ. `.iso` is listed under the sniffed extensions.
+const TRIM_RVZ_CONVERT_EXTENSIONS: &[&str] = &["gcm", "wbfs", "rvz"];
+
+/// Every extension (lowercase, no dot) a trim input can carry, for the web UI's
+/// supported-files list: path-recognized, content-sniffed, then RVZ-convert.
+pub fn trim_input_extensions() -> Vec<&'static str> {
+    TRIM_PATH_EXTENSIONS
+        .iter()
+        .map(|(extension, _)| *extension)
+        .chain(TRIM_CONTENT_SNIFFED_EXTENSIONS.iter().copied())
+        .chain(TRIM_RVZ_CONVERT_EXTENSIONS.iter().copied())
+        .collect()
+}
+
 impl TrimInputKind {
     fn from_path(path: &Path) -> Option<Self> {
         let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
-        if file_name.ends_with(".xiso") || file_name.ends_with(".xiso.iso") {
-            return Some(Self::Xiso);
+        for (extension, kind) in TRIM_PATH_EXTENSIONS {
+            if *kind == Self::Xiso && file_name.ends_with(&format!(".{extension}")) {
+                return Some(*kind);
+            }
         }
 
-        let extension = path.extension()?.to_str()?;
-        if extension.eq_ignore_ascii_case("nds")
-            || extension.eq_ignore_ascii_case("dsi")
-            || extension.eq_ignore_ascii_case("srl")
-        {
-            return Some(Self::NdsFamily);
-        }
-        if extension.eq_ignore_ascii_case("gba") {
-            return Some(Self::Gba);
-        }
-        if extension.eq_ignore_ascii_case("3ds") {
-            return Some(Self::ThreeDs);
-        }
-        None
+        let path_extension = path.extension()?.to_str()?;
+        TRIM_PATH_EXTENSIONS
+            .iter()
+            .find(|(extension, kind)| {
+                *kind != Self::Xiso && path_extension.eq_ignore_ascii_case(extension)
+            })
+            .map(|(_, kind)| *kind)
     }
 
     const fn mode_label(self) -> &'static str {
@@ -1473,34 +1500,6 @@ enum HeaderRepairStatus {
     NotMatched,
     MatchedNoChange,
     Repaired,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
-#[cfg_attr(feature = "typescript-types", derive(TS))]
-#[serde(rename_all = "kebab-case")]
-pub enum N64ByteOrder {
-    BigEndian,
-    LittleEndian,
-    ByteSwapped,
-}
-
-impl N64ByteOrder {
-    const fn id(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
-
-    const fn label(self) -> &'static str {
-        match self {
-            Self::BigEndian => "big-endian",
-            Self::LittleEndian => "little-endian",
-            Self::ByteSwapped => "byte-swapped",
-        }
-    }
 }
 
 /// Which N64 byte order a patch should see. `Auto` matches the patch's required
@@ -1708,6 +1707,7 @@ pub use patch_plan::{
 };
 
 mod weave_parse;
+pub use weave_parse::{BUNDLE_BASE_FILE_NAME, WEAVE_BASE_FILE_NAME};
 
 /// Production weave parsing seam for the owned fuzz harness only.
 #[cfg(feature = "fuzzing")]
@@ -1745,15 +1745,16 @@ pub use parse_weave_for_fuzzing as parse_bundle_for_fuzzing;
 
 mod command_args;
 pub use command_args::{
-    CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand, CompressCommand,
-    ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
-    IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand,
-    IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
-    IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
-    PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
-    PlaylistCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand, SaveExportSchemaCommand,
-    SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand,
-    SetupCommand, TrimCommand, WeaveCreateCommand, WeaveCreatePatchSpec, WeaveParseCommand,
+    ArchiveSelectionArgs, CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand,
+    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
+    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
+    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
+    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
+    PlanExtractBatchCommand, PlaylistCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
+    SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
+    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand, WeaveCreateCommand,
+    WeaveCreatePatchSpec, WeaveParseCommand,
 };
 
 mod expect_tokens;

@@ -106,10 +106,9 @@ fn game(version: usize) -> GameDefinition {
                     bytes: magic.to_vec(),
                 }],
                 predicates: vec![selected],
-                checksums: vec![checksum.clone()],
-                repairs: vec![layout::Repair::Checksum { checksum }],
                 ..Default::default()
             }
+            .with_checksum(checksum)
         })
         .collect();
     let id = if version == 1 {

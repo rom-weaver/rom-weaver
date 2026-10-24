@@ -109,6 +109,7 @@ const useLocalApplyPatchFormSession = ({
   applyPatches,
   applyReady = false,
   applyDisabled = false,
+  applyValidationError,
   downloadOutput,
   defaultPatchBasis = "auto",
   resolvedOutputCompression,
@@ -177,6 +178,8 @@ const useLocalApplyPatchFormSession = ({
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
+  // Whether the pending result was produced under a manual name, noted when it is first seen.
+  const pendingResultManualNameRef = useRef<{ manual: boolean; result: ApplyWorkflowResult } | null>(null);
   const patchChangePendingRef = useRef(false);
   const previousPatchEnablementRef = useRef<ReadonlySet<string> | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
@@ -329,6 +332,16 @@ const useLocalApplyPatchFormSession = ({
     identifiedOutputBase,
   );
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
+  // Noted when a result is first seen, before the name can be cleared. A manually named
+  // run's resolved/result name must not leak back in as the automatic name afterwards.
+  const pendingDownloadResult = pendingDownloadResultRef.current;
+  if (pendingDownloadResult && pendingResultManualNameRef.current?.result !== pendingDownloadResult) {
+    pendingResultManualNameRef.current = {
+      manual: !!sanitizeTypedOutputName(requestedOutputName),
+      result: pendingDownloadResult,
+    };
+  }
+  const isPendingResultManuallyNamed = !!pendingDownloadResult && !!pendingResultManualNameRef.current?.manual;
   const currentResolvedOutputName =
     outputPatches.length && resolvedOutputName && (!resolvedOutputNameKey || resolvedOutputNameKey === outputSourceKey)
       ? resolvedOutputName
@@ -337,8 +350,8 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
-  const effectiveResolvedOutputName =
-    requestedOutputName || buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const automaticDisplayOutputName = buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
+  const effectiveResolvedOutputName = requestedOutputName || automaticDisplayOutputName;
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({
@@ -404,7 +417,6 @@ const useLocalApplyPatchFormSession = ({
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
-  const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
@@ -419,11 +431,17 @@ const useLocalApplyPatchFormSession = ({
     !!patchProgress ||
     Object.keys(patchProgressByKey).length > 0 ||
     romInputs.some((entry) => entry.loading || !!entry.progress);
+  const strictInputChecksumBlocked =
+    hasStrictInputChecksumMismatch && !checksumOverrideChecked && !applyPreparationPending;
   const patchValidationBlocked = stagedPatchInfos.some(
     (info) => info.validationState === "invalid" && info.checksumPreflightMismatch !== true,
   );
   const applyQueueBlocked =
-    !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
+    !!applyValidationError ||
+    !!failureMessage ||
+    !!outputErrorMessage ||
+    strictInputChecksumBlocked ||
+    patchValidationBlocked;
   const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
@@ -471,7 +489,8 @@ const useLocalApplyPatchFormSession = ({
     if (pendingDownloadResultRef.current && hasPendingDownload) {
       setPendingDownloadReadyFileName(
         resolvePendingDownloadFileName({
-          automaticOutputName: automaticResolvedOutputName,
+          automaticOutputName: automaticDisplayOutputName,
+          preferAutomaticName: isPendingResultManuallyNamed,
           requestedOutputName: configuredOutputName,
           resultOutputName: pendingDownloadResultRef.current.output.fileName,
         }),
@@ -479,8 +498,9 @@ const useLocalApplyPatchFormSession = ({
     }
   }, [
     activeSettings.output?.outputName,
-    automaticResolvedOutputName,
+    automaticDisplayOutputName,
     hasPendingDownload,
+    isPendingResultManuallyNamed,
     setPendingDownloadReadyFileName,
     setOutputName,
     setOutputNameEdited,
@@ -563,7 +583,7 @@ const useLocalApplyPatchFormSession = ({
     () =>
       buildOutputViewState({
         activeSettings,
-        applyBlocked: strictInputChecksumBlocked || patchValidationBlocked,
+        applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
@@ -588,6 +608,7 @@ const useLocalApplyPatchFormSession = ({
     [
       applyQueued,
       applyDisabled,
+      applyValidationError,
       activeSettings,
       strictInputChecksumBlocked,
       patchValidationBlocked,
@@ -733,6 +754,8 @@ const useLocalApplyPatchFormSession = ({
           archivePathEntries: info.parentCompressions?.length
             ? info.parentCompressions
             : ((patch as Partial<RomInputRowState>).archivePathEntries ?? existing.archivePathEntries),
+          chdCodecMode:
+            info.chdCodecMode === undefined ? (patch.chdCodecMode ?? existing.chdCodecMode) : info.chdCodecMode,
           chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           cueText: info.cueText ?? patch.cueText ?? existing.cueText,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,
@@ -1317,6 +1340,8 @@ const useLocalApplyPatchFormSession = ({
       ...applyDownloadOrchestration,
       getState: localOutputStoreController.getState,
       setDisplayFileName: (value: string) => {
+        // The field keeps what was typed; resolvePendingDownloadFileName treats a name that
+        // sanitizes to empty (":::") as automatic, matching setApplyOutputName.
         const nextOutputName = getRequestedOutputName(value);
         clearDismissibleErrors();
         setOutputName(value);
@@ -1324,8 +1349,9 @@ const useLocalApplyPatchFormSession = ({
         if (pendingDownloadResultRef.current && hasPendingDownload) {
           setPendingDownloadReadyFileName(
             resolvePendingDownloadFileName({
-              automaticOutputName: automaticResolvedOutputName,
+              automaticOutputName: automaticDisplayOutputName,
               fallbackOutputName: effectiveResolvedOutputName,
+              preferAutomaticName: isPendingResultManuallyNamed,
               requestedOutputName: nextOutputName,
               resultOutputName: pendingDownloadResultRef.current.output.fileName,
             }),
@@ -1380,11 +1406,12 @@ const useLocalApplyPatchFormSession = ({
     [
       activeSettings,
       applyDownloadOrchestration,
-      automaticResolvedOutputName,
+      automaticDisplayOutputName,
       clearDismissibleErrors,
       commitSettings,
       effectiveResolvedOutputName,
       hasPendingDownload,
+      isPendingResultManuallyNamed,
       localOutputStoreController,
       setPendingDownloadReadyFileName,
       setOutputName,

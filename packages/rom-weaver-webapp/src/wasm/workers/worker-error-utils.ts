@@ -3,6 +3,7 @@ import type {
   RomWeaverWorkerErrorContext,
   RomWeaverWorkerErrorKind,
 } from "../rom-weaver-types.d.ts";
+import { ROM_WEAVER_ERROR_KIND_PREFIXES } from "../generated/rom-weaver-format-metadata.ts";
 
 /**
  * Compile-time exhaustive set of generated Rust error kinds. Typed event kinds
@@ -34,7 +35,7 @@ export function resolveWorkerErrorKind(
 ): RomWeaverWorkerErrorKind {
   // Prefer the typed kind the Rust core attached to the error (the generated
   // RomWeaverErrorKind, propagated from a failed event's `error_kind`). This is
-  // the canonical classification; the message-prefix regex below is only a
+  // the canonical classification; the message-prefix table below is only a
   // fallback for errors that arrive without it (worker/panic strings, or
   // messages wrapped in extra context).
   const explicit = normalizeWorkerErrorKind(readOptionalRecord(error)?.kind);
@@ -105,33 +106,12 @@ export function readWorkerErrorContext(input: unknown): RomWeaverWorkerErrorCont
   return context;
 }
 
-// Fallback classifier: maps a bare RomWeaverError `Display` message to its kind
-// by prefix. These prefixes mirror Rust's `RomWeaverErrorKind::classify_message`
-// (crates/rom-weaver-core/src/error.rs), which is the source of truth and feeds
-// the typed `error_kind` preferred by resolveWorkerErrorKind. This regex only
-// runs for errors that reach JS without that typed kind; keep it in sync with
-// the Rust prefixes as a best-effort fallback.
+// Fallback for errors that reach JS without the typed kind: classify the bare
+// RomWeaverError `Display` message with the generated prefix table that also
+// backs Rust's `RomWeaverErrorKind::classify_message`.
 function inferCoreWorkerErrorKind(message: string): RomWeaverWorkerErrorKind | null {
-  if (/^validation failed:/i.test(message)) {
-    return "validation";
-  }
-  if (/^unknown format for path\b/i.test(message)) {
-    return "unknown_format";
-  }
-  if (/^unsupported operation:/i.test(message)) {
-    return "unsupported";
-  }
-  if (/^operation cancelled\b/i.test(message)) {
-    return "cancelled";
-  }
-  if (/^(?:i\/o|io) error:/i.test(message)) {
-    return "io";
-  }
-  if (/^thread pool build failed:/i.test(message)) {
-    return "thread_pool_build";
-  }
-
-  return null;
+  const normalized = message.toLowerCase();
+  return ROM_WEAVER_ERROR_KIND_PREFIXES.find(({ prefix }) => normalized.startsWith(prefix))?.kind ?? null;
 }
 
 function isWorkerErrorMessage(message: string): boolean {

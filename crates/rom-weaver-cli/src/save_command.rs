@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fs::OpenOptions, num::IntErrorKind};
 
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 use rom_weaver_core::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
     SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveRecognitionReason, SaveValue,
@@ -762,16 +763,6 @@ fn resolve_save_output(input: &Path, requested: Option<&Path>) -> Result<PathBuf
     Err(RomWeaverError::Validation(
         "could not find an unused edited save output path".to_string(),
     ))
-}
-
-fn paths_refer_to_same_file(input: &Path, output: &Path) -> bool {
-    if input == output {
-        return true;
-    }
-    match (fs::canonicalize(input), fs::canonicalize(output)) {
-        (Ok(input), Ok(output)) => input == output,
-        _ => false,
-    }
 }
 
 #[cfg(target_arch = "wasm32")]

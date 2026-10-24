@@ -8,7 +8,7 @@ import {
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
-import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
+import { removeKnownOutputExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type {
@@ -32,6 +32,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
+import { ROM_WEAVER_TRIM_INPUT_EXTENSIONS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
@@ -85,11 +86,11 @@ import {
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
-/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-convert
- * candidates), listed in the 0x01 info popover - not the full ROM registry. */
+/** Trim-eligible formats only (generated from Rust's trim extension tables), listed in
+ * the 0x01 info popover - not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
   {
-    extensions: ["nds", "dsi", "srl", "gba", "3ds", "xiso", "xiso.iso", "iso", "gcm", "wbfs", "rvz"],
+    extensions: ROM_WEAVER_TRIM_INPUT_EXTENSIONS,
     label: "Trimmable ROMs",
   },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
@@ -272,7 +273,8 @@ const getDefaultTrimOutputName = (sourceFileName: string, identifiedBase?: strin
 const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
-  const outputBaseName = getFileNameStem(normalizedOutputName).toLowerCase();
+  // The typed name is a stem, so only a known extension ends it: `Hack v1.2` keeps its `.2`.
+  const outputBaseName = removeKnownOutputExtension(normalizedOutputName).trim().toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
     return getDefaultTrimOutputName(sourceFileName);
@@ -288,8 +290,7 @@ const resolveTrimExecutionOutputName = (
 ) => {
   const normalizedOutputName = sanitizeTypedOutputName(outputName);
   if (!normalizedOutputName) return normalizedOutputName;
-  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  return appendFileNameExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
+  return withOutputExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
 };
 
 const getFiniteSize = (size?: number | null) => (typeof size === "number" && Number.isFinite(size) ? size : undefined);
@@ -1229,6 +1230,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     fileNameId: "trim-builder-output-file",
     fileNamePlaceholder: "Trimmed filename (no extension)",
     format: resolvedOutputFormat,
+    outputExtensions: [
+      getTrimOutputExtension(resolvedSourceFileName, resolvedOutputFormat, settings),
+      getSourceExtension(resolvedSourceFileName),
+    ],
     formatId: "trim-builder-select-output-format",
     formatOptions,
     info: (

@@ -46,6 +46,8 @@ export type WeaveToolsState = {
 
 export type WeaveExportState = {
   weaveRom: boolean;
+  /** Why export waits on the user (a malformed checks draft), shown beside the action. */
+  blockedReason?: string;
   busy: boolean;
   cancelExport: () => void;
   downloadable: boolean;
@@ -449,7 +451,9 @@ export const WeaveOutputStep = ({
       action={
         <>
           {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
-          {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
+          {weaveExport.error || weaveExport.blockedReason ? (
+            <Notice level="error">{weaveExport.error || weaveExport.blockedReason}</Notice>
+          ) : null}
           <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
         </>
       }
@@ -552,7 +556,9 @@ export const WeaveSecondaryJob = ({
     <SecondaryOutputJob hash="#weave" id="rom-weaver-weave-job" label={localizer.message("ui.secondary.downloadWeave")}>
       {combinedCheats ? <p className="patch-off-note">{localizer.message("ui.weaveExport.cheatSteps")}</p> : null}
       <WeaveOutputFields weaveExport={weaveExport} weaveTools={weaveTools} />
-      {weaveExport.error ? <Notice level="error">{weaveExport.error}</Notice> : null}
+      {weaveExport.error || weaveExport.blockedReason ? (
+        <Notice level="error">{weaveExport.error || weaveExport.blockedReason}</Notice>
+      ) : null}
       <WeaveExportAction weaveActionLabel={weaveActionLabel} weaveExport={weaveExport} disabled={disabled} />
     </SecondaryOutputJob>
   );

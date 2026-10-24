@@ -15,6 +15,8 @@ type ApplyFormSession = ReturnType<typeof useLocalApplyPatchFormSession>;
 type ApplyPatchEnablement = ReturnType<typeof useApplyPatchEnablement>;
 
 type ApplyWeaveExportInput = {
+  /** Set while any patch, enabled or not, has a malformed checks draft; blocks export. */
+  weaveValidationError?: string | null;
   getCheats: () => readonly WeaveCheatSelection[];
   cheatsOn: boolean;
   getSessionSources: () => Promise<ApplyWorkflowWeaveSources>;
@@ -40,6 +42,7 @@ type ApplyWeaveExportInput = {
 
 /** Weave export state for the apply form's sharing job, plus the package-choice callback it persists. */
 const useApplyWeaveExport = ({
+  weaveValidationError,
   getCheats,
   cheatsOn,
   getSessionSources,
@@ -80,7 +83,8 @@ const useApplyWeaveExport = ({
     waitForPendingWork: () => mutationQueueRef.current,
     initialWeaveRom: defaultWeaveContents === "rom",
     initialFormat: defaultWeaveFormat,
-    ready: weaveExportReady,
+    ready: weaveExportReady && !weaveValidationError,
+    blockedReason: weaveValidationError || undefined,
     onComplete: (result) => {
       props.onWeaveExportComplete?.(result);
       props.onBundleExportComplete?.(toBundleCreateResult(result));

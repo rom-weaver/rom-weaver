@@ -1780,6 +1780,11 @@ msgstr "Docs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.differsFromPatch"
+msgstr "Differs from the {check} built into the patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.doesNotMatchRom"
 msgstr "Does not match the ROM"
 
@@ -5112,6 +5117,11 @@ msgstr "The identification data is not available on this device, so this checksu
 #: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.before"
 msgstr "The name ends in"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.extensionMismatch"
+msgstr "The name ends in .{extension}, but the output is .{expected}."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

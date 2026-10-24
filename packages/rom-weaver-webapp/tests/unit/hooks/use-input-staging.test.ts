@@ -237,6 +237,23 @@ describe("useInputStaging syncRomInput", () => {
     expect((romInputsSetter.value[0] as { loading: boolean }).loading).toBe(false);
   });
 
+  it("clears a prior asset's generic codec hint when the selected asset finalizes without it", () => {
+    const rom = source("hybrid.bin");
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>[1] | undefined;
+    const stageInput = vi.fn(
+      (_snapshot, handlers) =>
+        new Promise<StagedInputInfo[]>(() => {
+          handlersRef = handlers;
+        }),
+    );
+    const { romInputsSetter, result } = createHarness({ stageInput });
+    act(() => result.current.staging.syncRomInput(snapshotOf([rom])));
+    act(() => handlersRef?.onPrepared?.([{ ...infoFor(rom, 0), chdCodecMode: "dvd" }]));
+    expect((romInputsSetter.value[0] as { chdCodecMode?: string }).chdCodecMode).toBe("dvd");
+    act(() => handlersRef?.onPrepared?.([{ ...infoFor(rom, 0), chdCodecMode: null }]));
+    expect((romInputsSetter.value[0] as { chdCodecMode?: string | null }).chdCodecMode).toBeNull();
+  });
+
   it("reflects partial staging: one input resolved via onPrepared while another stays pending", async () => {
     const romA = source("a.bin");
     const romB = source("b.bin");

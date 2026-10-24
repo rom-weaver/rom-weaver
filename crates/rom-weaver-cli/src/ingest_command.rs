@@ -80,6 +80,12 @@ pub struct IngestRomAsset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub recommended_format: Option<String>,
+    /// Create mode (`cd`/`dvd`/`hd`/`raw`) the native `chd` auto-inference picks for a loose
+    /// `.bin`/`.iso`/extensionless asset, read from the file's bytes. `None` for other extensions
+    /// or when inference fails. Hosts read this instead of re-deriving it from a byte prefix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub chd_create_mode: Option<String>,
     /// Disc-group id shared by a `.cue`/`.gdi` sheet and its tracks (multi-track disc grouping).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -235,6 +241,7 @@ impl CliApp {
             selections = args.select.len(),
             sidecar_count = args.sidecar_names.len(),
             sidecar_only = args.sidecar_only,
+            input_name = args.input_name.as_deref(),
             no_ignore = args.no_ignore,
             no_nested_extract = args.no_nested_extract,
             checksum_algorithms = args.checksum.len(),
@@ -248,6 +255,7 @@ impl CliApp {
             select,
             sidecar_names,
             sidecar_only,
+            input_name,
             no_ignore,
             no_nested_extract,
             split_bin,
@@ -337,16 +345,19 @@ impl CliApp {
             return self.finish("ingest", report);
         }
 
-        let report = match self.run_ingest_inner(IngestRequest {
-            source: &source,
-            out_dir: &out_dir,
-            raw_selections: select,
-            no_ignore,
-            no_nested_extract,
-            split_bin,
-            algorithms: &algorithms,
-            context: &context,
-        }) {
+        let report = match self.run_ingest_inner(
+            IngestRequest {
+                source: &source,
+                out_dir: &out_dir,
+                raw_selections: select,
+                no_ignore,
+                no_nested_extract,
+                split_bin,
+                algorithms: &algorithms,
+                context: &context,
+            },
+            input_name.as_deref(),
+        ) {
             Ok(outcome) => match self.ingest_success_report(
                 &source,
                 outcome,
@@ -373,7 +384,11 @@ impl CliApp {
         self.finish("ingest", report)
     }
 
-    fn run_ingest_inner(&self, request: IngestRequest<'_>) -> Result<IngestOutcome> {
+    fn run_ingest_inner(
+        &self,
+        request: IngestRequest<'_>,
+        input_name: Option<&str>,
+    ) -> Result<IngestOutcome> {
         let IngestRequest {
             source,
             out_dir,
@@ -427,7 +442,7 @@ impl CliApp {
                 },
             );
         }
-        self.ingest_bare_source(source, algorithms, context)
+        self.ingest_bare_source(source, input_name, algorithms, context)
     }
 
     fn ingest_container(
@@ -647,6 +662,7 @@ impl CliApp {
                     .disc_format
                     .map(|medium| medium.label().to_string()),
                 recommended_format: None,
+                chd_create_mode: None,
                 disc_group_id: Some(group_id.clone()),
                 track_number: Some(order as u32 + 1),
                 track_checksums: Vec::new(),
@@ -675,6 +691,7 @@ impl CliApp {
             platform: None,
             disc_format: None,
             recommended_format: None,
+            chd_create_mode: None,
             disc_group_id: Some(group_id),
             track_number: None,
             track_checksums: Vec::new(),
@@ -696,9 +713,15 @@ impl CliApp {
         }))
     }
 
+    /// The CHD create mode native `chd` auto-inference picks for a loose disc/raw image at `path`.
+    pub(super) fn chd_create_mode_for_path(path: &Path) -> Option<&'static str> {
+        rom_weaver_containers::chd::ChdContainerHandler.infer_auto_create_mode_label(path)
+    }
+
     fn ingest_bare_source(
         &self,
         source: &Path,
+        input_name: Option<&str>,
         algorithms: &[String],
         context: &OperationContext,
     ) -> Result<IngestOutcome> {
@@ -706,7 +729,7 @@ impl CliApp {
             return Ok(outcome);
         }
         if is_patch_filter_candidate_name(&source.to_string_lossy()) {
-            let descriptor = self.build_patch_descriptor(source, None, context)?;
+            let descriptor = self.build_patch_descriptor(source, input_name, None, context)?;
             return Ok(IngestOutcome {
                 kind: IngestKind::Patch,
                 is_rom: false,
@@ -724,7 +747,8 @@ impl CliApp {
                 .recommend_compress_format(source)
                 .format_name,
         );
-        self.emit_bare_identity_manifest(source, &identity, recommended_format);
+        let chd_create_mode = Self::chd_create_mode_for_path(source);
+        self.emit_bare_identity_manifest(source, &identity, recommended_format, chd_create_mode);
         let canonical = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
         let file_name = canonical
             .file_name()
@@ -743,6 +767,7 @@ impl CliApp {
                 .disc_format
                 .map(|medium| medium.label().to_string()),
             recommended_format: recommended_format.map(str::to_string),
+            chd_create_mode: chd_create_mode.map(str::to_string),
             disc_group_id: None,
             track_number: None,
             track_checksums: Vec::new(),
@@ -823,6 +848,7 @@ impl CliApp {
                     .and_then(Value::as_str)
                     .map(str::to_string),
                 recommended_format: None,
+                chd_create_mode: None,
                 disc_group_id: map
                     .get("disc_group_id")
                     .and_then(Value::as_str)
@@ -938,7 +964,7 @@ impl CliApp {
             if !is_patch_filter_candidate_name(path) {
                 continue;
             }
-            patches.push(self.build_patch_descriptor(leaf_path, rom_hint, context)?);
+            patches.push(self.build_patch_descriptor(leaf_path, None, rom_hint, context)?);
         }
         Ok(patches)
     }
@@ -1160,9 +1186,12 @@ impl CliApp {
 
     /// Aggregate one patch's consolidated descriptor: format + embedded metadata (`handler.parse`),
     /// file-name requirements (`parse_filename_requirements`), and libretro sidecar order.
+    /// `original_name` replaces the leaf's own name for the file-name requirements when the host
+    /// staged the patch under another name.
     pub(super) fn build_patch_descriptor(
         &self,
         leaf_path: &Path,
+        original_name: Option<&str>,
         rom_hint: Option<&str>,
         context: &OperationContext,
     ) -> Result<PatchDescriptor> {
@@ -1171,7 +1200,14 @@ impl CliApp {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let requirements = parse_filename_requirements(&file_name);
+        if let Some(original_name) = original_name {
+            trace!(
+                staged_name = %file_name,
+                original_name,
+                "reading patch file-name requirements from the original name"
+            );
+        }
+        let requirements = parse_filename_requirements(original_name.unwrap_or(&file_name));
         let sidecar_order =
             rom_hint.and_then(|rom| Self::entry_matches_libretro_sidecar(rom, &file_name));
 
@@ -1307,8 +1343,11 @@ impl CliApp {
         source: &Path,
         identity: &rom_weaver_checksum::rom_identity::RomIdentity,
         recommended_format: Option<&'static str>,
+        chd_create_mode: Option<&'static str>,
     ) {
-        if !self.emit_progress_events || (identity.is_empty() && recommended_format.is_none()) {
+        if !self.emit_progress_events
+            || (identity.is_empty() && recommended_format.is_none() && chd_create_mode.is_none())
+        {
             return;
         }
         let mut manifest = Map::new();
@@ -1316,12 +1355,16 @@ impl CliApp {
         if let Some(format_name) = recommended_format {
             manifest.insert("recommended_format".to_string(), json!(format_name));
         }
+        if let Some(mode) = chd_create_mode {
+            manifest.insert("chd_create_mode".to_string(), json!(mode));
+        }
         let mut details = Map::new();
         details.insert("probe_manifest".to_string(), Value::Object(manifest));
         trace!(
             source = %source.display(),
             platform = ?identity.platform,
             recommended_format = ?recommended_format,
+            chd_create_mode = ?chd_create_mode,
             "emitting bare source identity event"
         );
         self.reporter.emit(ProgressEvent {
@@ -1534,6 +1577,10 @@ impl CliApp {
                     Self::rom_specific_recommended_format(recommendation.format_name)
                 {
                     asset.recommended_format = Some(format_name.to_string());
+                }
+                if asset.chd_create_mode.is_none() && asset.disc_group_id.is_none() {
+                    asset.chd_create_mode =
+                        Self::chd_create_mode_for_path(Path::new(&asset.path)).map(str::to_string);
                 }
                 asset
             })

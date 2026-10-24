@@ -1,3 +1,5 @@
+import type { CheatSystem } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+
 const CHEAT_DATABASE_SYSTEMS = [
   "nes",
   "snes",
@@ -8,7 +10,7 @@ const CHEAT_DATABASE_SYSTEMS = [
   "mastersystem",
   "gamegear",
   "sega32x",
-] as const;
+] as const satisfies readonly CheatSystem[];
 
 /** The Rust `CheatSystem` identifier a shard's records carry. */
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
@@ -17,7 +19,7 @@ export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
  * Systems the code decoder handles but no cheat shard covers. The wire value is
  * the Rust `CheatSystem` variant name, not its CLI alias.
  */
-const CHEAT_MANUAL_ONLY_SYSTEMS = ["playstation"] as const;
+const CHEAT_MANUAL_ONLY_SYSTEMS = ["playstation"] as const satisfies readonly CheatSystem[];
 
 /** Every system a hand-entered code can be classified against. */
 export type CheatManualSystem = CheatDatabaseSystem | (typeof CHEAT_MANUAL_ONLY_SYSTEMS)[number];
@@ -76,6 +78,8 @@ export type ClassifiedCheatRecord = {
   record: CheatRecord;
   resolution: CheatResolution;
   detectedKind: CheatCodeKind | null;
+  /** The raw code split into individual codes by the Rust engine (`split_for_kind`). */
+  codes?: string[];
 };
 
 export type CheatGameRecord = {

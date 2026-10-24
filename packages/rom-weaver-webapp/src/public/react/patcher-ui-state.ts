@@ -70,6 +70,7 @@ type RomInputRowState = {
   size?: number;
   sourceSize?: number;
   chdMode?: string;
+  chdCodecMode?: "dvd" | null;
   cueText?: string;
   gdiText?: string;
   decompressionTimeMs?: number;

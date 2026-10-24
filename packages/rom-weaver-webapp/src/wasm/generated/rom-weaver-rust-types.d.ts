@@ -130,6 +130,12 @@ disc_format?: string | null,
  */
 recommended_format?: string | null,
 /**
+ * Create mode (`cd`/`dvd`/`hd`/`raw`) the native `chd` auto-inference picks for a loose
+ * `.bin`/`.iso`/extensionless asset, read from the file's bytes. `None` for other extensions
+ * or when inference fails. Hosts read this instead of re-deriving it from a byte prefix.
+ */
+chd_create_mode?: string | null,
+/**
  * Disc-group id shared by a `.cue`/`.gdi` sheet and its tracks (multi-track disc grouping).
  */
 disc_group_id?: string | null,
@@ -292,7 +298,12 @@ export type CheatRecord = { id: string, system: CheatSystem, gameId: string, des
 
 export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "unsupported", reason: string, };
 
-export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
+export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null,
+/**
+ * The record's raw code split into individual codes by [`split_for_kind`],
+ * so the webapp never re-implements the splitting rules.
+ */
+codes?: Array<string>, };
 
 export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
 
@@ -345,7 +356,7 @@ export type OutputEnforceableEntry = { patch_index: number, source: string, chec
 
 export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
 
-export type ProbeCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, split_bin?: boolean, };
+export type ProbeCommand = { input: string, split_bin?: boolean, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
 
 export type ExtractCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, output: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, force?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
@@ -441,14 +452,20 @@ export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabas
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 
-export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, title_index?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, title_index?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, no_trim_fix?: boolean, threads?: ThreadBudget, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**
  * Optional loose patch names to match against `source` without ingesting it. This keeps the
  * browser's sibling-sidecar lookup on the ingest command surface while reusing Rust's matcher.
  */
-sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+sidecar_names?: Array<string>, sidecar_only?: boolean,
+/**
+ * Original file name of a bare `input` that the host staged under another name. Checks a
+ * patch declares in its name (`[crc32:..]`) are read from it, because staging rewrites
+ * characters such as `:`.
+ */
+input_name?: string, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
 export type CheatCommand = { input: string,
 /**

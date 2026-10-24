@@ -2,6 +2,7 @@ import type { useCombinedPatch } from "./use-combined-patch.tsx";
 import { SecondaryOutputJob } from "./apply-output-fields.tsx";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { getLiteralFileNameExtension, getOutputExtensions } from "../../lib/output/output-name-validation.ts";
 import type { WeaveRomExpectation } from "../../lib/weave/weave-session-model.ts";
 import { validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
@@ -495,6 +496,8 @@ function ApplyWorkflowFormView({
   weaveRomExpectation,
   weaveTools,
   onWeaveMetaChange,
+  onDraftValidityChange,
+  applyValidationError,
   onWeaveMetaBulkChange,
   onSelectTab,
   onSelectView,
@@ -545,6 +548,8 @@ function ApplyWorkflowFormView({
   /** Shown while the weave session waits for the user to supply the expected ROM. */
   weaveRomExpectation?: WeaveRomExpectation;
   onWeaveMetaChange?: (id: string, updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (id: string, error: string | null) => void;
+  applyValidationError?: string;
   onWeaveMetaBulkChange?: (ids: readonly string[], updates: Partial<WeavePatchMeta>) => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
@@ -621,6 +626,7 @@ function ApplyWorkflowFormView({
     return id ? { id, ...metadata } : metadata;
   });
   const weaveVerificationError =
+    applyValidationError ||
     getWeaveVerificationError(weaveMeta, patches, localizer) ||
     validatePatchDependencies(
       weaveMeta.map((meta, index) => ({
@@ -906,6 +912,16 @@ function ApplyWorkflowFormView({
     fileNameId: "rom-weaver-input-output-file-name",
     fileNamePlaceholder: localizer.message("ui.apply.outputFilename"),
     format: outputState.compressionFormat,
+    // A header strip or restore swaps the ROM extension (smc/sfc), so either one is a real output name.
+    outputExtensions: getOutputExtensions(
+      [
+        ...romInputs.map((row) => getLiteralFileNameExtension(row.info.fileName)),
+        header.headeredExtension,
+        header.headerlessExtension,
+      ],
+      outputState.compressionFormat,
+      { inputFileName: romInputs[0]?.info.fileName },
+    ),
     formatPending: outputState.formatPending,
     formatId: "rom-weaver-select-output-format",
     formatOptions: outputState.options,
@@ -1103,6 +1119,10 @@ function ApplyWorkflowFormView({
                 disabledFlags={disabledPatchFlags}
                 emptyState={patchesNeedsInput}
                 fault={applyFailed}
+                onDraftValidityChange={(index, error) => {
+                  const id = patchIds[index];
+                  if (id) onDraftValidityChange?.(id, error);
+                }}
                 onWeaveMetaChange={(index, updates) => {
                   const id = patchIds[index];
                   if (id) onWeaveMetaChange?.(id, updates);

@@ -1,0 +1,38 @@
+{
+  "trackNumbers": [
+    { "name": "track01.bin", "track": 1 },
+    { "name": "track00.bin", "track": 0 },
+    { "name": "Game (USA) (Track 2).bin", "track": 2 },
+    { "name": "Game (Track 12).bin", "track": 12 },
+    { "name": "Track_3.raw", "track": 3 },
+    { "name": "game-track-3.bin", "track": 3 },
+    { "name": "disc/Game_Track_10.bin", "track": 10 },
+    { "name": "discs\\Game - Track 4.bin", "track": 4 },
+    { "name": "track9/data.bin", "track": null },
+    { "name": "data.bin", "track": null },
+    { "name": "soundtrack.bin", "track": null },
+    { "name": "Soundtrack Bonus (Track 2).bin", "track": null },
+    { "name": "Bonus Track - Track 02.bin", "track": null },
+    { "name": "Track\t2.bin", "track": null },
+    { "name": "track4294967295.bin", "track": 4294967295 },
+    { "name": "track4294967296.bin", "track": null },
+    { "name": "track99999999999.bin", "track": null }
+  ],
+  "components": [
+    { "filename": "Game (USA) (Track 1).bin", "track": 1 },
+    { "filename": "Game (USA) (Track 2).bin", "track": 2 },
+    { "track": 3 },
+    { "filename": "bonus/track02.bin", "track": 4 }
+  ],
+  "memberMatches": [
+    { "member": "disc/game (usa) (track 2).bin", "component": 1 },
+    { "member": "discs\\GAME (USA) (TRACK 1).BIN", "component": 0 },
+    { "member": "TRACK02.BIN", "component": 3 },
+    { "member": "track2.bin", "component": 1 },
+    { "member": "Track 3.bin", "component": 2 },
+    { "member": "track 4.bin", "component": 3 },
+    { "member": "track05.bin", "component": null },
+    { "member": "data.bin", "component": null },
+    { "member": "disc.cue", "component": null }
+  ]
+}

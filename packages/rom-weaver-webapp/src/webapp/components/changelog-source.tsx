@@ -11,7 +11,8 @@ const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
 type ReleaseEntry = { commit?: string; pr?: string; scope?: string; summary: string };
 type ReleaseSection = { entries: ReleaseEntry[]; title: string };
 type ReleaseGroup = ReleaseSection & { sections?: ReleaseSection[] };
-type ReleaseNote = { groups: ReleaseGroup[]; version: string };
+/** `date` is the CHANGELOG heading's `YYYY-MM-DD`; assets built before it was read carry none. */
+type ReleaseNote = { date?: string; groups: ReleaseGroup[]; version: string };
 type ReleaseChangelog = {
   changelogUrl: string;
   notes: ReleaseNote[];
@@ -26,6 +27,19 @@ const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryU
 // The commit range between two releases, which the version heading no longer links to.
 type CompareRange = { from: string; to: string };
 const compareUrl = (repositoryUrl: string, { from, to }: CompareRange) => `${repositoryUrl}/compare/v${from}...v${to}`;
+
+// A calendar date with no time of day, so it is formatted in UTC: a local zone
+// west of UTC would otherwise show the day before.
+const RELEASE_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ReleaseDate = ({ className, date, locale }: { className: string; date?: string; locale: string }) => {
+  const day = date && RELEASE_DATE_REGEX.test(date) ? new Date(`${date}T00:00:00Z`) : undefined;
+  if (!day || Number.isNaN(day.getTime())) return null;
+  return (
+    <time className={className} dateTime={date}>
+      {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(day)}
+    </time>
+  );
+};
 
 const isReleaseSection = (value: unknown): value is ReleaseSection => {
   if (!value || typeof value !== "object") return false;
@@ -258,6 +272,7 @@ export {
   commitGroups,
   fetchChangelog,
   HIGHLIGHTS_TITLE,
+  ReleaseDate,
   ReleaseGroups,
   releaseTagUrl,
   REPOSITORY_URL,

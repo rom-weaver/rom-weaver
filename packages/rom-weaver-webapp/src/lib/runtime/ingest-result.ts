@@ -241,6 +241,8 @@ const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
   if (discFormat !== undefined) asset.discFormat = discFormat;
   const recommendedFormat = toStringValue(record.recommended_format);
   if (recommendedFormat !== undefined) asset.recommendedFormat = recommendedFormat;
+  const chdCreateMode = toStringValue(record.chd_create_mode);
+  if (chdCreateMode !== undefined) asset.chdCreateMode = chdCreateMode;
   const discGroupId = toStringValue(record.disc_group_id);
   if (discGroupId !== undefined) asset.discGroupId = discGroupId;
   const trackNumber = toNumberValue(record.track_number);

@@ -95,9 +95,34 @@ impl ChdContainerHandler {
     }
 
     pub(super) fn is_cd_sized_iso(&self, input: &Path, logical_bytes: u64) -> bool {
+        !Self::is_extension(input, "iso") || Self::fits_cd(logical_bytes)
+    }
+
+    /// Whether `logical_bytes` of 2048-byte sectors fit on a CD (450,000 frames).
+    pub(super) fn fits_cd(logical_bytes: u64) -> bool {
         let max_iso_bytes = Self::CD_ISO_MAX_FRAMES
             * u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048);
-        !Self::is_extension(input, "iso") || logical_bytes <= max_iso_bytes
+        logical_bytes <= max_iso_bytes
+    }
+
+    /// Whether a cooked 2048-byte image announces UDF in its volume recognition sequence
+    /// (LBA 16 onward). DVD images carry UDF; CD-ROM game images carry ISO9660 alone.
+    pub(super) fn has_udf_descriptor(&self, input: &Path, logical_bytes: u64) -> bool {
+        let start = Self::ISO9660_COOKED_DESCRIPTOR_OFFSET - 1;
+        let scan_bytes =
+            u64::from(rom_weaver_checksum::platform_detection::UDF_VRS_SCAN_SECTORS) * 2048;
+        let len = logical_bytes.saturating_sub(start).min(scan_bytes);
+        let Ok(len) = usize::try_from(len) else {
+            return false;
+        };
+        let found = len > 0
+            && self.read_bytes_at(input, start, len).is_some_and(|bytes| {
+                bytes
+                    .chunks(2048)
+                    .any(rom_weaver_checksum::platform_detection::is_udf_nsr_descriptor)
+            });
+        trace!(input = %input.display(), found, "chd infer: udf volume descriptor probe");
+        found
     }
 
     /// Read `len` bytes from `input` at `offset`, returning `None` on any open/seek/read
@@ -140,8 +165,19 @@ impl ChdContainerHandler {
         }
 
         logical_bytes.is_multiple_of(mode1_bytes)
-            && self.is_cd_sized_iso(input, logical_bytes)
+            && Self::fits_cd(logical_bytes)
             && self.has_iso9660_descriptor_at(input, Self::ISO9660_COOKED_DESCRIPTOR_OFFSET)
+            && !self.has_udf_descriptor(input, logical_bytes)
+    }
+
+    /// Positive evidence that a raw/extensionless input without CD evidence is a cooked DVD
+    /// image: whole 2048-byte sectors announcing UDF, or an ISO9660 image too large for a CD.
+    pub(super) fn has_single_track_dvd_evidence(&self, input: &Path, logical_bytes: u64) -> bool {
+        logical_bytes.is_multiple_of(u64::from(Self::DVD_SECTOR_BYTES))
+            && (self.has_udf_descriptor(input, logical_bytes)
+                || (!Self::fits_cd(logical_bytes)
+                    && self
+                        .has_iso9660_descriptor_at(input, Self::ISO9660_COOKED_DESCRIPTOR_OFFSET)))
     }
 
     pub(super) fn has_sector_signature(sector: &[u8]) -> bool {
@@ -397,6 +433,7 @@ impl ChdContainerHandler {
             || self.has_valid_exfat_boot_sector(sector, logical_bytes)
     }
 
+    /// Runs the cases in `tests/fixtures/chd-hard-disk-headers.json`.
     pub(super) fn should_auto_infer_hard_disk(&self, input: &Path, logical_bytes: u64) -> bool {
         if logical_bytes < u64::from(Self::HD_SECTOR_BYTES)
             || !logical_bytes.is_multiple_of(u64::from(Self::HD_SECTOR_BYTES))
@@ -442,7 +479,9 @@ impl ChdContainerHandler {
             Some("gdi") => Ok(ChdCreateKind::Disc(self.parse_gdi_file(input)?)),
             Some("iso")
                 if self.is_cd_sized_iso(input, logical_bytes)
-                    && self.is_single_track_cd_sector_sized(logical_bytes) =>
+                    && self.is_single_track_cd_sector_sized(logical_bytes)
+                    && !(logical_bytes.is_multiple_of(u64::from(Self::DVD_SECTOR_BYTES))
+                        && self.has_udf_descriptor(input, logical_bytes)) =>
             {
                 Ok(ChdCreateKind::Disc(
                     self.infer_single_track_cd_layout(input, logical_bytes)?,
@@ -465,6 +504,11 @@ impl ChdContainerHandler {
                 Ok(ChdCreateKind::Disc(
                     self.infer_single_track_cd_layout(input, logical_bytes)?,
                 ))
+            }
+            _ if self.should_auto_infer_single_track_cd(input)
+                && self.has_single_track_dvd_evidence(input, logical_bytes) =>
+            {
+                Ok(ChdCreateKind::Dvd)
             }
             // A/V (laserdisc) sources are raw `chav` frame streams; detect them so
             // the output is compressed as A/V media without requiring the caller to
@@ -500,16 +544,27 @@ impl ChdContainerHandler {
             )));
         };
 
-        match mode {
-            "cd" => Ok(Some(ChdCreateModeOverride::Cd)),
-            "gd" => Ok(Some(ChdCreateModeOverride::Gd)),
-            "dvd" => Ok(Some(ChdCreateModeOverride::Dvd)),
-            "raw" => Ok(Some(ChdCreateModeOverride::Raw)),
-            "hd" => Ok(Some(ChdCreateModeOverride::HardDisk)),
-            "av" | "ld" => Ok(Some(ChdCreateModeOverride::Av)),
-            _ => Err(RomWeaverError::Validation(format!(
-                "unsupported chd mode `{mode}` in `{format}`; expected one of: cd, gd, dvd, raw, hd, av, ld"
-            ))),
+        let canonical = CHD_CREATE_MODES
+            .iter()
+            .find(|(name, _)| *name == mode)
+            .map(|(_, canonical)| *canonical);
+        match canonical {
+            Some("cd") => Ok(Some(ChdCreateModeOverride::Cd)),
+            Some("gd") => Ok(Some(ChdCreateModeOverride::Gd)),
+            Some("dvd") => Ok(Some(ChdCreateModeOverride::Dvd)),
+            Some("raw") => Ok(Some(ChdCreateModeOverride::Raw)),
+            Some("hd") => Ok(Some(ChdCreateModeOverride::HardDisk)),
+            Some("av") => Ok(Some(ChdCreateModeOverride::Av)),
+            _ => {
+                let accepted = CHD_CREATE_MODES
+                    .iter()
+                    .map(|(name, _)| *name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(RomWeaverError::Validation(format!(
+                    "unsupported chd mode `{mode}` in `{format}`; expected one of: {accepted}"
+                )))
+            }
         }
     }
 
@@ -604,7 +659,11 @@ impl ChdContainerHandler {
         } else {
             self.infer_create_kind(input, logical_bytes)?
         };
-        Ok(match create_kind {
+        Ok(Self::create_kind_label(&create_kind))
+    }
+
+    fn create_kind_label(create_kind: &ChdCreateKind) -> &'static str {
+        match create_kind {
             ChdCreateKind::Raw => "raw",
             ChdCreateKind::HardDisk(_) => "hd",
             ChdCreateKind::Dvd => "dvd",
@@ -613,7 +672,24 @@ impl ChdContainerHandler {
                 DiscKind::GdRom => "gd",
             },
             ChdCreateKind::Av(_) => "av",
-        })
+        }
+    }
+
+    /// The create mode (`cd`/`dvd`/`hd`/`raw`/...) native `chd` auto-inference would pick for a
+    /// loose `.bin`/`.iso`/extensionless image, so hosts read the verdict instead of re-deriving it
+    /// from bytes. `None` for any other extension or when inference fails (unreadable, or an
+    /// `.iso` that is not whole 2048-byte sectors).
+    pub fn infer_auto_create_mode_label(&self, input: &Path) -> Option<&'static str> {
+        let loose =
+            Self::is_extension(input, "iso") || self.should_auto_infer_single_track_cd(input);
+        if !loose {
+            return None;
+        }
+        let logical_bytes = std::fs::metadata(input).ok()?.len();
+        let create_kind = self.infer_create_kind(input, logical_bytes).ok()?;
+        let label = Self::create_kind_label(&create_kind);
+        trace!(input = %input.display(), label, "chd infer: auto create mode");
+        Some(label)
     }
 
     pub(super) fn unit_bytes(&self, create_kind: &ChdCreateKind) -> u32 {

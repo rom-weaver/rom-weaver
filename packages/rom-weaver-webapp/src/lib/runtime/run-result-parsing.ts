@@ -71,33 +71,18 @@ const getRunResultTiming = (result: RomWeaverRunJsonResult) => {
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 
-const WARNING_LABEL_MARKER = "; warning=";
-// Label segments the CLI appends after handler warnings: `; key=value` pairs and the
-// header/extension/container-extract notes from patch apply.
-const LABEL_SUFFIX_BOUNDARY = /; (?=\w+=|input header |patch apply input source |output extension )/;
-
 /**
- * Handler warnings of a finished run (for example "IPS patch did not change output").
- * Current Rust copies them into `details.warnings`, which is authoritative. Older builds
- * only append `; warning=<text>` to the terminal label, so the label is parsed solely when
- * `details.warnings` is absent or empty; a warning there ends at the first known CLI suffix
- * (a limitation: unknown free-text suffixes would be kept).
+ * Handler warnings of a finished run (for example "IPS patch did not change output"). The
+ * engine copies every warning it puts in the terminal label into `details.warnings`, so the
+ * label is never parsed.
  */
 const getRunResultWarnings = (result: RomWeaverRunJsonResult): string[] => {
   const terminal = getTerminalEvent(result);
   if (!terminal) return [];
   const details = asRecord(getRomWeaverRunEventDetails(terminal));
-  const fromDetails = Array.isArray(details?.warnings)
+  const warnings = Array.isArray(details?.warnings)
     ? details.warnings.filter((entry): entry is string => typeof entry === "string")
     : [];
-  const warnings = [...fromDetails];
-  if (!fromDetails.some((entry) => entry.trim())) {
-    const label = getRomWeaverRunEventLabel(terminal);
-    if (typeof label === "string" && label.includes(WARNING_LABEL_MARKER)) {
-      for (const tail of label.split(WARNING_LABEL_MARKER).slice(1))
-        warnings.push(tail.split(LABEL_SUFFIX_BOUNDARY)[0] ?? "");
-    }
-  }
   const unique = new Set<string>();
   for (const warning of warnings) {
     const text = warning.trim();
@@ -220,16 +205,18 @@ const parseChecksumVariants = (details: unknown): ChecksumVariant[] | undefined 
 };
 
 const romTypeFromEmittedFile = (
-  entry: { platform?: string; discFormat?: string; recommendedFormat?: string } | undefined,
+  entry: { platform?: string; discFormat?: string; recommendedFormat?: string; chdCreateMode?: string } | undefined,
 ): RomTypeTag | undefined => {
   const platform = entry?.platform?.trim() ? entry.platform.trim() : undefined;
   const discFormat = entry?.discFormat?.trim() ? entry.discFormat.trim() : undefined;
   const recommendedFormat = entry?.recommendedFormat?.trim() ? entry.recommendedFormat.trim() : undefined;
-  if (!(platform || discFormat || recommendedFormat)) return undefined;
+  const chdCreateMode = entry?.chdCreateMode?.trim() ? entry.chdCreateMode.trim() : undefined;
+  if (!(platform || discFormat || recommendedFormat || chdCreateMode)) return undefined;
   return {
     ...(platform ? { platform } : {}),
     ...(discFormat ? { discFormat } : {}),
     ...(recommendedFormat ? { recommendedFormat } : {}),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
   };
 };
 

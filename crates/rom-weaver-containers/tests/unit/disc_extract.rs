@@ -5,7 +5,7 @@
 //! single-bin/split-track/GD-ROM writers, sector-mode byte handling, and the
 //! CD output-selection plan. None of these require a real CHD binary.
 
-use rom_weaver_core::ArchiveEntryKindFilter;
+use rom_weaver_core::{ArchiveEntryKindFilter, OperationStatus};
 
 use super::*;
 

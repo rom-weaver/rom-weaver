@@ -139,7 +139,7 @@ const useCompressionResolver = ({
   const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
     const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
     // Coarse CHD codec mode discovered pre-identity (drives codec selection, not the label).
-    const chdMode = romInputs[0]?.chdMode;
+    const chdMode = romInputs[0]?.chdCodecMode === "dvd" ? undefined : romInputs[0]?.chdMode;
     // Engine-derived optical medium ("CD"/"GD-ROM"/"DVD") from the ingest/checksum
     // identity pass; the CHD output panel reads it for the disc label instead of
     // re-deriving GD-vs-CD from the cue text / file name in TS.
@@ -148,6 +148,8 @@ const useCompressionResolver = ({
     // pass. Content-detected (works on a bare .iso), so it drives the auto output format
     // ahead of the extension heuristics - a GameCube .iso picks RVZ, not 7z/CHD.
     const recommendedFormat = romInputs[0]?.info?.romType?.recommendedFormat;
+    // Native `chd` auto-inference verdict for the source's bytes (Rust ingest), read by the panel mode.
+    const chdCreateMode = romInputs[0]?.info?.romType?.chdCreateMode;
     const baseSource = effectiveInputs[0];
     if (!selectedInputFileName) return baseSource;
     if (baseSource && typeof baseSource === "object") {
@@ -156,9 +158,10 @@ const useCompressionResolver = ({
       const baseSize = romInputs[0]?.size ?? getBinarySourceSize(baseSource);
       return {
         ...(baseSource as unknown as Record<string, unknown>),
-        ...(chdMode || discFormat || recommendedFormat
+        ...(chdMode || discFormat || recommendedFormat || chdCreateMode
           ? {
               metadata: {
+                ...(chdCreateMode ? { chdCreateMode } : {}),
                 ...(chdMode ? { mode: chdMode } : {}),
                 ...(discFormat ? { format: discFormat } : {}),
                 ...(recommendedFormat ? { recommendedFormat } : {}),
@@ -166,6 +169,7 @@ const useCompressionResolver = ({
             }
           : {}),
         ...(typeof baseSize === "number" && Number.isFinite(baseSize) ? { size: baseSize } : {}),
+        chdCodecMode: romInputs[0]?.chdCodecMode,
         fileName: selectedInputFileName,
         name: selectedInputFileName,
       } as unknown as BinarySource;

@@ -7,6 +7,8 @@ import {
   prepareInputFile,
   prepareMultipleDirectInputAssets,
 } from "../../src/lib/input/input-preparation-service.ts";
+import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
+import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 import type { SourceRef } from "../../src/types/source.ts";
 
 const makeFile = (contents: string, fileName: string, type = "application/octet-stream") =>
@@ -101,6 +103,64 @@ describe("prepareMultipleDirectInputAssets", () => {
 
 describe("prepareInputAssets", () => {
   const runtime = { name: "browser" as const, sidecars: {} };
+
+  // Byte-level inference lives in Rust; the early `probe-identity` manifest and the ingest asset carry
+  // its verdict (`chd_create_mode` / `chdCreateMode`), which the webapp turns into the UI codec hint.
+  const manifestEvent = (probeManifest: Record<string, unknown>) =>
+    ({ details: { probe_manifest: probeManifest }, stage: "probe-identity" }) as never;
+
+  it("publishes a UI-only generic codec hint for the Rust hard-disk verdict", () => {
+    const staged = getProgressStagedInputInfo(manifestEvent({ chd_create_mode: "hd", disc_format: "CD" }));
+    expect(staged.chdCodecMode).toBe("dvd");
+    expect(staged.chdMode).toBeUndefined();
+    expect(staged.romType?.chdCreateMode).toBe("hd");
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      {
+        fileName: "hybrid.bin",
+        size: 204800,
+        chdCodecMode: staged.chdCodecMode,
+        metadata: { format: "CD" },
+      },
+    );
+    expect(panel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(panel?.fields[0]?.value).toBe("zstd");
+    expect(panel?.note).toBeUndefined();
+  });
+
+  it.each([
+    ["dvd", "chdCreateDvdCodecs"],
+    ["cd", "chdCreateCdCodecs"],
+  ])("shows the codec field for the Rust create-mode verdict %s of an unidentified ISO", (verdict, key) => {
+    const bytes = new Uint8Array(100 * 2048);
+    const staged = getProgressStagedInputInfo(manifestEvent({ chd_create_mode: verdict }));
+    expect(staged.chdCodecMode).toBe(verdict === "dvd" ? "dvd" : undefined);
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      {
+        fileName: "disc.iso",
+        size: bytes.length,
+        chdCodecMode: staged.chdCodecMode,
+        metadata: { chdCreateMode: verdict },
+      },
+    );
+    expect(panel?.fields[0]?.key).toBe(key);
+  });
+
+  it.each([
+    ["DVD", "DVD"],
+    ["CD", undefined],
+  ])("keeps a %s identity note only when it agrees with the staged DVD hint", (format, note) => {
+    const panel = buildCompressPanel(
+      "chd",
+      { chdCreateCdCodecs: "cdlz", chdCreateDvdCodecs: "zstd" },
+      { fileName: "game.iso", chdCodecMode: "dvd", metadata: { format } },
+    );
+    expect(panel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(panel?.note).toBe(note);
+  });
 
   it("throws a descriptive error when the source is not path/blob backed", async () => {
     const source = { fileName: "orphan.bin", source: new Uint8Array([1, 2, 3]) } as unknown as SourceRef;

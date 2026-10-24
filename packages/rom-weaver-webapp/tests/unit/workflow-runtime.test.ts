@@ -309,6 +309,26 @@ describe("browser ingest and weave runtime", () => {
     );
   });
 
+  it("hands ingest the original name, not the sanitized staged one", async () => {
+    // Staging rewrites `:` to `_`, which would hide the `[crc32:..]` token from the engine.
+    state.workerIo.stageSource.mockImplementationOnce(async (input: { pathPrefix: string }) => ({
+      cleanup: vi.fn(async () => undefined),
+      fileName: "hack [crc32_4af1a4bb].ips",
+      filePath: `/work/${input.pathPrefix}/hack [crc32_4af1a4bb].ips`,
+      size: 12,
+    }));
+    await browserRuntime.ingest.run({
+      fileName: "hack [crc32:4af1a4bb].ips",
+      identify: false,
+      source: new Blob(["patch"]),
+    } as never);
+    expect(state.ingest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ inputName: "hack [crc32:4af1a4bb].ips" }),
+      undefined,
+      undefined,
+    );
+  });
+
   it("creates and parses weaves, then releases extracted members and their scope", async () => {
     const created = await browserRuntime.weave.create?.({
       weaveFileName: "exports/weave.zip",

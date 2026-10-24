@@ -64,6 +64,13 @@ describe("readReleaseNotes", () => {
     expect(release?.truncated).toBe(false);
   });
 
+  it("carries each release's heading date, and none when the heading has no date", () => {
+    expect(notesFor("2.0.0")?.notes.map((note) => note.date)).toEqual(["2026-07-29", "2026-07-01", "2026-06-01"]);
+    const source = path.join(fixtureDir, "UNDATED.md");
+    fs.writeFileSync(source, "## [3.0.0](https://example.com)\n### Features\n* Undated thing\n");
+    expect(notesFor("3.0.0", source)?.notes[0]?.date).toBeUndefined();
+  });
+
   it("starts at the requested version rather than the newest one", () => {
     expect(notesFor("1.1.0")?.notes.map((note) => note.version)).toEqual(["1.1.0", "1.0.0"]);
   });

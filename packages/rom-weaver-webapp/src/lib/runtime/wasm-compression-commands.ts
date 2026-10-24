@@ -268,8 +268,10 @@ const runRomWeaverProbeWorker = async (
   const recommendedFormat = String(
     container?.recommended_compress_format ?? details?.recommended_compress_format ?? "",
   ).trim();
+  const chdCreateMode = typeof details?.chd_create_mode === "string" ? details.chd_create_mode.trim() : "";
   return {
     entries: getContainerEntriesFromProbe(result),
+    ...(chdCreateMode ? { chdCreateMode } : {}),
     ...(platform ? { platform } : {}),
     ...(discFormat ? { discFormat } : {}),
     ...(recommendedFormat ? { recommendedFormat } : {}),

@@ -6,9 +6,10 @@ const mocks = vi.hoisted(() => ({
   invokeRomWeaverPpfUndoWorker: vi.fn(),
   loadIdentifyPacks: vi.fn(),
   preloadCapability: vi.fn(),
+  readBrowserOpfsPrefix: vi.fn(),
   scheduleBrowserRuntimeWarmupExtraction: vi.fn(),
   runtime: {
-    compression: { create: vi.fn() },
+    compression: { create: vi.fn(), probe: vi.fn() },
     output: { createSource: vi.fn() },
     ingest: { run: vi.fn() },
     patch: { createPatchCandidates: vi.fn() },
@@ -39,6 +40,10 @@ vi.mock("../../src/platform/browser/identify-packs.ts", () => ({
 vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({
   invokeRomWeaverIdentifyHashWorker: mocks.identifyHashWorker,
   invokeRomWeaverPpfUndoWorker: mocks.invokeRomWeaverPpfUndoWorker,
+}));
+
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({
+  readBrowserOpfsPrefix: mocks.readBrowserOpfsPrefix,
 }));
 
 const api = await import("../../src/platform/browser/browser-api.ts");
@@ -229,7 +234,7 @@ describe("browser ingest and identify API", () => {
 });
 
 describe("browser runtime helpers", () => {
-  it("preserves content-detected DVD metadata for shared CHD auto mode", async () => {
+  it.each([true, false])("preserves genuine DVD mode or probes advisory DVD identity (genuine=%s)", async (genuine) => {
     const vfs = { normalizePath: (path: string) => path, getFile: vi.fn() };
     const raw = { path: "/out/restored.bin", fileName: "restored.bin", size: 2048, vfs, dispose: vi.fn() };
     const compressed = { ...raw, path: "/out/restored.chd", fileName: "restored.chd", dispose: vi.fn() };
@@ -244,20 +249,29 @@ describe("browser runtime helpers", () => {
     mocks.runtime.workerIo.createWorkerOutput.mockResolvedValue(raw);
     mocks.runtime.compression.create.mockResolvedValue({ output: compressed });
     mocks.runtime.output.createSource.mockResolvedValue(compressed);
+    // The engine reports the create mode native `chd` auto-inference picks for the restored bytes.
+    mocks.runtime.compression.probe.mockResolvedValue({ chdCreateMode: "dvd", entries: [] });
     await api.undoPpf({
       rom: blob("game.bin"),
       patch: blob("undo.ppf"),
       outputName: "restored.bin",
       compression: "chd",
-      metadata: { format: "DVD", recommendedFormat: "chd" },
+      metadata: { format: "DVD", recommendedFormat: "chd", ...(genuine ? { mode: "dvd" } : {}) },
+      settings: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "zstd" } } },
     });
     expect(mocks.runtime.compression.create).toHaveBeenCalledWith(
       expect.objectContaining({
         format: "chd",
         source: expect.objectContaining({ path: raw.path, vfs }),
-        romSpecific: { chd: expect.objectContaining({ mode: "dvd" }) },
+        romSpecific: { chd: expect.objectContaining({ mode: genuine ? "dvd" : "auto", compressionCodecs: "zstd:22" }) },
       }),
     );
+    if (genuine) {
+      expect(mocks.runtime.compression.probe).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.runtime.compression.probe).toHaveBeenCalledOnce();
+      expect(mocks.runtime.compression.create.mock.calls[0]?.[0].romSpecific.chd.sourceMode).toBeUndefined();
+    }
     expect(vfs.getFile).not.toHaveBeenCalled();
   });
 

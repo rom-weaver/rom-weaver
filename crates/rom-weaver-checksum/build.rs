@@ -4,13 +4,10 @@ use std::fmt::Write;
 use std::fs;
 use std::path::PathBuf;
 
-fn normalize_platform_name(name: &str) -> String {
-    name.split(|ch: char| !ch.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(str::to_ascii_lowercase)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+#[path = "src/platform_name.rs"]
+mod platform_name;
+
+use platform_name::normalize_platform_name;
 
 fn generate_platform_aliases() {
     const SOURCE: &str = "src/platform-names.json";

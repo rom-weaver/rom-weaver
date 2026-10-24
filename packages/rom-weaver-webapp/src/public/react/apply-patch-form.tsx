@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
 import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
+import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { throwIfAborted } from "../../lib/errors.ts";
 import type {
   ApplyWorkflow,
@@ -98,7 +99,7 @@ import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressE
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
-import { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSize } from "./apply-workflow-snapshot-store.ts";
+import { createApplyWorkflowSnapshotStore, getEnabledPatchTargetSizes } from "./apply-workflow-snapshot-store.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 import type { WeaveRomExpectation } from "../../lib/workflow/apply-weave-rom-check.ts";
 
@@ -284,8 +285,31 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const queuedInputsRef = useRef<BinarySource[]>([]);
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
+  const { onSettingsChange } = props;
+  const handleSettingsChange = useCallback(
+    (nextSettings: Parameters<NonNullable<ApplyPatchFormProps["onSettingsChange"]>>[0]) => {
+      onSettingsChange?.(nextSettings);
+      // Prepare/run sync the workflow's name, but clearing the field must hand naming back to the
+      // workflow now, or its stale manual name keeps resolving as the "automatic" name.
+      const workflow = workflowHandle.peek();
+      const previous = JSON.parse(workflowOutputOverridesKeyRef.current || "{}") as {
+        compression?: string;
+        outputName?: string;
+      };
+      if (sanitizeTypedOutputName(nextSettings.output?.outputName) || !previous.outputName) return;
+      if (!workflow) return;
+      workflowOutputOverridesKeyRef.current = JSON.stringify({ ...previous, outputName: "" });
+      const run = mutationQueueRef.current.catch(() => undefined).then(() => workflow.setOutputName(""));
+      mutationQueueRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+    },
+    [onSettingsChange, workflowHandle],
+  );
   const propsWithSettings = {
     ...props,
+    onSettingsChange: handleSettingsChange,
     defaultSettings: props.defaultSettings || providerSettings,
     settings: props.settings,
   };
@@ -366,6 +390,26 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     syncPatchTracking,
     togglePatchEnabled,
   } = useApplyPatchEnablement();
+
+  const [invalidDraftPatchErrors, setInvalidDraftPatchErrors] = useState<ReadonlyMap<string, string>>(new Map());
+  const onDraftValidityChange = useCallback((id: string, error: string | null) => {
+    setInvalidDraftPatchErrors((previous) => {
+      if ((previous.get(id) || null) === error) return previous;
+      const next = new Map(previous);
+      if (error) next.set(id, error);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const applyValidationError = getPatchIds()
+    .filter((id) => !disabledPatchIds.has(id))
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
+  // Weave export still writes disabled patches (as optional entries with their
+  // checks), so a malformed draft on any patch blocks it.
+  const weaveValidationError = getPatchIds()
+    .map((id) => invalidDraftPatchErrors.get(id))
+    .find(Boolean);
 
   // A `?weave=` boot session: once the delivered patch files land, it seeds
   // enablement/output defaults exactly once and keeps the per-patch metadata.
@@ -720,7 +764,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       typeof snapshot.options.output?.outputName === "string" && snapshot.options.output.outputName.trim()
         ? snapshot.options.output.outputName
         : "";
-    if (manualOutputName) await workflow.setOutputName(manualOutputName);
+    // An empty name hands naming back to the workflow's automatic name (cheats, archive names).
+    await workflow.setOutputName(manualOutputName);
     const compressionMode = snapshot.options.output?.compression || "auto";
     if (compressionMode !== "auto") await workflow.setOutputFormat(compressionMode);
   }, []);
@@ -1704,6 +1749,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     applyPatches,
     applyReady: applyReady && !weaveDefaultsPending,
     applyDisabled: weaveDefaultsPending,
+    applyValidationError,
     defaultPatchBasis: patchInputBasis,
     disabledPatchIds,
     downloadOutput,
@@ -1767,6 +1813,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     runInput.inputs.length === 1 &&
     (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
   const { weaveExport, changeWeavePackage } = useApplyWeaveExport({
+    weaveValidationError,
     getCheats: () =>
       selectedCheatsRef.current.flatMap((entry, index) =>
         cheatDelivery(entry) === "rom"
@@ -1802,7 +1849,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     defaultPatchType: props.defaultPatchType,
     onPatchTypeChange: props.onPatchTypeChange,
     romSize: workflowSnapshot.romSize,
-    patchTargetSize: getEnabledPatchTargetSize(workflowSnapshot.patchTargetSizes, getPatchIds(), disabledPatchIds),
+    ...getEnabledPatchTargetSizes(workflowSnapshot.patchTargetSizes, getPatchIds(), disabledPatchIds),
     settings: props.createSettings,
     onComplete: props.onCreateComplete,
     onError: props.onError,
@@ -1977,7 +2024,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               weaveRom: weaveExport.weaveRom,
               busy: weaveExport.busy,
               downloadable: weaveExport.downloadable,
-              error: weaveExport.error || null,
+              error: weaveExport.error || weaveExport.blockedReason || null,
               format: weaveExport.format,
               progress: weaveExport.progress,
               ready: weaveExport.ready,
@@ -2082,6 +2129,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setWeavePackage: changeWeavePackage,
         }}
         onWeaveMetaChange={updateWeaveMetaImmediately}
+        onDraftValidityChange={onDraftValidityChange}
+        applyValidationError={applyValidationError}
         onWeaveMetaBulkChange={updateWeaveMetaForIdsImmediately}
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}

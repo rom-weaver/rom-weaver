@@ -1464,6 +1464,32 @@ describe("apply workflow view - output and diagnostics notices", () => {
     expect(setOutputHeader).toHaveBeenCalledWith("keep");
   });
 
+  it("accepts either header extension and a literal # in the ROM name for the output-name warning", () => {
+    const warningFor = (romFileName: string, displayFileName: string) => {
+      const rom = romRow(romFileName);
+      rom.info.checksumVariants = [
+        {
+          applyCompatibility: { removeHeader: true },
+          checksums: { crc32: "C6FB1252" },
+          id: "raw",
+          transforms: { removeHeader: { headeredExtension: ".smc", headerlessExtension: ".sfc" } },
+        },
+      ];
+      const { container, unmount } = renderView({
+        outputOverrides: { compressionFormat: "zip", disabled: false, displayFileName },
+        ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+      });
+      const text = container.querySelector(".outname-ext-warn")?.textContent ?? null;
+      unmount();
+      return text;
+    };
+
+    expect(warningFor("Super Mario World.smc", "My Hack.sfc")).toBeNull();
+    expect(warningFor("Super Mario World.smc", "My Hack.smc")).toBeNull();
+    expect(warningFor("Kaizo Mario #2.smc", "Kaizo 2.smc")).toBeNull();
+    expect(warningFor("Super Mario World.smc", "My Hack.gba")).toBe("The name ends in .gba, but the output is .smc.");
+  });
+
   it("renders apply and compression timing chips after completion", () => {
     const { container } = renderView({
       outputOverrides: {

@@ -11,6 +11,7 @@ mod error;
 mod formatting;
 mod io;
 mod media_topology;
+mod n64;
 mod parallel_heap;
 mod patch_support;
 mod progress;
@@ -41,7 +42,7 @@ pub use concurrency::{
 };
 pub use context::{
     OperationContext, PatchApplyDirection, PatchCheckScopes, PatchChecksumValidation,
-    PatchEndpointSelection, PatchInputN64ByteOrder, PatchPolicy, XdeltaSecondaryMode,
+    PatchEndpointSelection, PatchPolicy, XdeltaSecondaryMode,
 };
 pub use disc_sheet::{
     DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs,
@@ -50,13 +51,14 @@ pub use disc_sheet::{
 pub use env::{env_u64, env_u64_opt};
 pub use error::{
     ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, Result, RomWeaverError,
-    RomWeaverErrorKind, UnsupportedOp, ValidationCodeError, ValidationField, ValidationFieldValue,
+    RomWeaverErrorKind, UnsupportedOp, VALIDATION_CODE_EXTRACT_NO_CONTAINER,
+    VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError, ValidationField, ValidationFieldValue,
 };
 pub use formatting::format_human_bytes;
 pub use io::{
     BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark, OrderedChunkWriter, OrderedStreamingMessages,
-    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads, copy_cancelable,
     copy_file_retrying_interrupted, copy_retrying_interrupted, create_extract_output_file,
     ensure_output_available, file_starts_with, ordered_streaming_compress, read_full, read_up_to,
     retry_interrupted,
@@ -64,6 +66,9 @@ pub use io::{
 pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,
     MediaTopology, PlatformCandidate,
+};
+pub use n64::{
+    N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, N64ByteOrder,
 };
 pub use parallel_heap::{parallel_heap_reserve, reserve_parallel_heap};
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
@@ -90,13 +95,13 @@ pub use report_details::{
     operation_report_details,
 };
 pub use save::{
-    SaveChangePreview, SaveConfidence, SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit,
-    SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind, SaveFieldValue, SaveFormatCandidate,
-    SaveGameCandidate, SaveGameDefinition, SaveGameIdentity, SaveGameRegistry, SaveIntegrity,
-    SaveIntegrityIssue, SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence,
-    SaveRecognitionOutcome, SaveRecognitionReason, SaveSection, SaveValue, SchemaSaveHandler,
-    apply_save_edits, candidate_save_formats, detect_save, parse_save, unwrap_save_container,
-    validate_save_edits,
+    RAW_SAVE_FILE_EXTENSIONS, SaveChangePreview, SaveConfidence, SaveConstraint, SaveContainerKind,
+    SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveField, SaveFieldChange,
+    SaveFieldKind, SaveFieldValue, SaveFormatCandidate, SaveGameCandidate, SaveGameDefinition,
+    SaveGameIdentity, SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState,
+    SaveRecognition, SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason,
+    SaveSection, SaveValue, SchemaSaveHandler, apply_save_edits, candidate_save_formats,
+    detect_save, parse_save, unwrap_save_container, validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use suggest::{closest_name, did_you_mean_suffix};

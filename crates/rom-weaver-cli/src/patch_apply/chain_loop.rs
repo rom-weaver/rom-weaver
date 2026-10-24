@@ -495,11 +495,7 @@ impl CliApp {
                     .and_then(|representation| representation.n64_byte_order)
             })
         {
-            patch_context = patch_context.with_patch_input_n64_byte_order(match order {
-                N64ByteOrder::BigEndian => PatchInputN64ByteOrder::BigEndian,
-                N64ByteOrder::LittleEndian => PatchInputN64ByteOrder::LittleEndian,
-                N64ByteOrder::ByteSwapped => PatchInputN64ByteOrder::ByteSwapped,
-            });
+            patch_context = patch_context.with_patch_input_n64_byte_order(order);
         }
         let report = match step.handler.apply(&request, &patch_context) {
             Ok(report) => report,

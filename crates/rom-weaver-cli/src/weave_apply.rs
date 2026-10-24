@@ -12,6 +12,7 @@ use super::weave_parse::{
     is_weave_json_candidate, parse_weave_bytes, weave_bytes_are_valid, weave_file_name_codec,
 };
 use super::*;
+use crate::path_access::path_basename;
 
 /// What a weave contributed beyond the merged command fields: expected
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
@@ -420,7 +421,7 @@ impl CliApp {
             .path
             .as_deref()
             .filter(|_| rom_unbundled)
-            .and_then(|path| path.trim().rsplit(['/', '\\']).next());
+            .map(|path| path_basename(path.trim()));
         if let Some(name) = rom
             .name
             .as_deref()
@@ -1039,11 +1040,8 @@ fn weave_entry_file_name(entry: &WeavePatchEntry) -> Option<&str> {
         .as_deref()
         .or(entry.url.as_deref())?
         .trim_end_matches(['/', '\\']);
-    source
-        .rsplit(['/', '\\'])
-        .next()
-        .map(|name| name.split(['?', '#']).next().unwrap_or(name))
-        .filter(|name| !name.is_empty())
+    let name = path_basename(source);
+    Some(name.split(['?', '#']).next().unwrap_or(name)).filter(|name| !name.is_empty())
 }
 
 fn weave_entry_prompt_label(entry: &WeavePatchEntry) -> String {
@@ -1325,7 +1323,9 @@ fn fill_member_lane_checks_from(
 }
 
 /// The record component a weave member names: by file name first, then by
-/// track number, so a renamed track file still finds its record.
+/// track number, so a renamed track file still finds its record. The webapp's
+/// `memberComponent` and `memberTrackNumber` must agree; both run the cases in
+/// `tests/fixtures/weave-member-lanes.json`.
 fn member_component<'a>(
     components: &'a [super::identify_command::IdentifyComponent],
     member: &str,
@@ -1348,7 +1348,7 @@ fn member_component<'a>(
 }
 
 fn member_file_name(member: &str) -> &str {
-    member.rsplit(['/', '\\']).next().unwrap_or(member)
+    path_basename(member)
 }
 
 /// The N after the first `track` word in a name, case-insensitive, with any
@@ -1517,6 +1517,58 @@ mod tests {
         assert_eq!(member_track_number("Track_3.raw"), Some(3));
         assert_eq!(member_track_number("data.bin"), None);
         assert_eq!(member_track_number("soundtrack.bin"), None);
+    }
+
+    /// The webapp's `memberTrackNumber` and `memberComponent` run the same
+    /// cases, so both sides fill the same member lanes.
+    #[test]
+    fn member_lanes_match_the_shared_cases() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/weave-member-lanes.json"))
+                .expect("weave member lane cases");
+        let as_u32 = |value: &serde_json::Value| {
+            value
+                .as_u64()
+                .map(|number| u32::try_from(number).expect("u32"))
+        };
+        for case in cases["trackNumbers"]
+            .as_array()
+            .expect("track number cases")
+        {
+            let name = case["name"].as_str().expect("name");
+            assert_eq!(
+                member_track_number(member_file_name(name)),
+                as_u32(&case["track"]),
+                "{name}"
+            );
+        }
+        let components: Vec<_> = cases["components"]
+            .as_array()
+            .expect("components")
+            .iter()
+            .map(|entry| {
+                let mut component =
+                    component(as_u32(&entry["track"]).expect("track"), "", "00000000");
+                component.filename = entry["filename"].as_str().map(str::to_owned);
+                component
+            })
+            .collect();
+        for case in cases["memberMatches"]
+            .as_array()
+            .expect("member match cases")
+        {
+            let member = case["member"].as_str().expect("member");
+            let found = member_component(&components, member).map(|found| {
+                components
+                    .iter()
+                    .position(|listed| std::ptr::eq(listed, found))
+                    .expect("a listed component")
+            });
+            let expected = case["component"]
+                .as_u64()
+                .map(|index| usize::try_from(index).expect("index"));
+            assert_eq!(found, expected, "{member}");
+        }
     }
 
     #[test]

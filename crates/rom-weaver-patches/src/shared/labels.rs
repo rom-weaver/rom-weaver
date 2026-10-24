@@ -1,6 +1,7 @@
 //! Shared label and report assembly helpers for patch format handlers. They
 //! keep common report labels and Byuu parse details consistent.
 
+use crate::checksum_validation_suffix;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use rom_weaver_core::{FormatDescriptor, OperationReport, ThreadExecution};
 use serde_json::json;
@@ -133,4 +134,44 @@ pub(crate) fn byuu_metadata_report(
         )],
     );
     report
+}
+
+/// Build the apply success report shared by record-based patch formats:
+/// `"applied <name> patch with <n> record(s)<checksum suffix>"`.
+pub(crate) fn patch_apply_report(
+    descriptor: &'static FormatDescriptor,
+    record_count: usize,
+    validate_checksums: bool,
+    execution: ThreadExecution,
+) -> OperationReport {
+    crate::patch_success_report(
+        descriptor,
+        "apply",
+        format!(
+            "applied {} patch with {record_count} record(s){}",
+            descriptor.name,
+            checksum_validation_suffix(validate_checksums)
+        ),
+        Some(execution),
+    )
+}
+
+/// Build the validate success report shared by record-based patch formats:
+/// `"validated <name> patch source with <n> record(s)<checksum suffix>"`.
+pub(crate) fn patch_validate_report(
+    descriptor: &'static FormatDescriptor,
+    record_count: usize,
+    validate_checksums: bool,
+    execution: Option<ThreadExecution>,
+) -> OperationReport {
+    crate::patch_success_report(
+        descriptor,
+        "validate",
+        format!(
+            "validated {} patch source with {record_count} record(s){}",
+            descriptor.name,
+            checksum_validation_suffix(validate_checksums)
+        ),
+        execution,
+    )
 }

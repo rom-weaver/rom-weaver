@@ -12,7 +12,6 @@ import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../l
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
 import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../lib/path-utils.ts";
-import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
 import { createLogger } from "../lib/logging.ts";
@@ -21,6 +20,7 @@ import { isArchiveFileName } from "../public/react/file-classification.ts";
 import type { WorkflowRuntime } from "../types/workflow-runtime-adapter.ts";
 import type {
   ApplyWorkflowOptions,
+  CompressionProbeResult,
   CompressionWorkflowOptions,
   PublicOutput,
 } from "../types/workflow-runtime-types.ts";
@@ -45,7 +45,11 @@ type ValidatedCompressInput = {
   files: File[];
   sheetProblem?: string;
   source: CompressSource;
+  /** Engine probe of a single loose `.bin`/`.iso`, when a runtime was available. */
+  probe?: CompressionProbeResult;
 };
+
+type LoadCompressRuntime = () => Promise<WorkflowRuntime>;
 
 const logger = createLogger("compress-service");
 const ARCHIVE_FORMATS = ["zip", "7z"] as const;
@@ -62,20 +66,40 @@ const assertFiles = (files: File[]) => {
   }
 };
 
-const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> => {
+/**
+ * Engine probe of a loose disc image: the Rust verdicts (`chdCreateMode`, `discFormat`, `recommendedFormat`)
+ * come from reading the file's bytes. Without a runtime or on a probe failure there is no verdict.
+ */
+const probeLooseImage = async (
+  file: File,
+  loadRuntime?: LoadCompressRuntime,
+): Promise<CompressionProbeResult | undefined> => {
+  try {
+    const probe = (await loadRuntime?.())?.compression.probe;
+    return probe ? await probe({ source: file }) : undefined;
+  } catch (error) {
+    logger.debug("loose image probe failed", { error: String(error), fileName: file.name });
+    return undefined;
+  }
+};
+
+const validateInputs = async (files: File[], loadRuntime?: LoadCompressRuntime): Promise<ValidatedCompressInput> => {
   assertFiles(files);
   const sheetFiles = files.filter((file) => ["cue", "gdi"].includes(getExtension(file.name)));
   if (sheetFiles.length === 0) {
+    const first = files[0];
+    const probe =
+      first && /\.(bin|iso)$/i.test(first.name) && isLikelyDiscImageSize(first.size)
+        ? await probeLooseImage(first, loadRuntime)
+        : undefined;
+    const chdCreateMode = probe?.chdCreateMode;
     return {
       files,
+      ...(probe ? { probe } : {}),
       source: {
-        fileName: files[0]?.name || "input.bin",
-        size: files[0]?.size || 0,
-        ...(/\.(bin|iso)$/i.test(files[0]?.name || "")
-          ? {
-              metadata: { mode: getChdAutoCreateMode({ fileName: files[0]?.name, size: files[0]?.size }) },
-            }
-          : {}),
+        fileName: first?.name || "input.bin",
+        size: first?.size || 0,
+        ...(chdCreateMode ? { metadata: { chdCreateMode, mode: chdCreateMode } } : {}),
       },
     };
   }
@@ -122,9 +146,9 @@ const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> =>
   };
 };
 
-const getCompressSource = async (files: File[]): Promise<CompressSource | null> => {
+const getCompressSource = async (files: File[], loadRuntime?: LoadCompressRuntime): Promise<CompressSource | null> => {
   if (files.length === 0) return null;
-  return (await validateInputs(files)).source;
+  return (await validateInputs(files, loadRuntime)).source;
 };
 
 /**
@@ -133,24 +157,15 @@ const getCompressSource = async (files: File[]): Promise<CompressSource | null> 
  * media (a GameCube DVD dump named `.bin`) are not CD evidence. Without a runtime or on a probe failure there is
  * no evidence, so a cartridge `.bin` is never offered a CD CHD.
  */
-const hasBinDiscEvidence = async (file: File, loadRuntime?: () => Promise<WorkflowRuntime>): Promise<boolean> => {
-  try {
-    const probe = (await loadRuntime?.())?.compression.probe;
-    if (!probe) return false;
-    const result = await probe({ source: file });
-    return String(result.recommendedFormat || "").toLowerCase() === "chd" || result.discFormat === "CD";
-  } catch (error) {
-    logger.debug("bin disc probe failed", { error: String(error), fileName: file.name });
-    return false;
-  }
-};
+const hasBinDiscEvidence = (probe: CompressionProbeResult | undefined): boolean =>
+  !!probe && (String(probe.recommendedFormat || "").toLowerCase() === "chd" || probe.discFormat === "CD");
 
 const getCompressFormats = async (
   files: File[],
   loadRuntime?: () => Promise<WorkflowRuntime>,
 ): Promise<ConcreteCompressFormat[]> => {
   if (files.length === 0) return [];
-  const input = await validateInputs(files);
+  const input = await validateInputs(files, loadRuntime);
   if (input.sheet) return input.sheetProblem ? [...ARCHIVE_FORMATS] : [...ARCHIVE_FORMATS, "chd"];
   if (input.files.length !== 1) return [...ARCHIVE_FORMATS];
 
@@ -160,7 +175,7 @@ const getCompressFormats = async (
     return [...ARCHIVE_FORMATS];
   const discEvidence =
     !isAmbiguousDiscImageExtension(extension) ||
-    (isLikelyDiscImageSize(source.size) && (await hasBinDiscEvidence(files[0] as File, loadRuntime)));
+    (isLikelyDiscImageSize(source.size) && hasBinDiscEvidence(input.probe));
   return [
     ...ARCHIVE_FORMATS,
     ...ROM_SPECIFIC_FORMATS.filter(
@@ -417,7 +432,7 @@ const compressFiles = async (
       runtime,
     });
   }
-  const input = await validateInputs(files);
+  const input = await validateInputs(files, async () => runtime);
   if (compression === "chd" && input.sheetProblem) throw new Error(input.sheetProblem);
   const supported = await getCompressFormats(files, async () => runtime);
   if (!supported.includes(compression as ConcreteCompressFormat)) {

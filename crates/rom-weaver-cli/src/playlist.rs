@@ -311,7 +311,7 @@ fn plan_playlist(
         if detect_disc_sheet(input).is_none()
             && named
                 .iter()
-                .any(|track| super::patch_apply::paths_refer_to_same_file(input, track))
+                .any(|track| super::path_access::paths_refer_to_same_file(input, track))
         {
             trace!(input = %input.display(), "playlist input is a track file of a given sheet");
             continue;
@@ -343,7 +343,7 @@ fn unique_zip_entries(
             .iter()
             .position(|taken| taken.eq_ignore_ascii_case(&name))
         {
-            if super::patch_apply::paths_refer_to_same_file(&inputs[index], &source) {
+            if super::path_access::paths_refer_to_same_file(&inputs[index], &source) {
                 continue;
             }
             return Err(RomWeaverError::Validation(format!(
@@ -386,7 +386,7 @@ impl CliApp {
                     input.display()
                 )));
             }
-            if super::patch_apply::paths_refer_to_same_file(input, &args.output) {
+            if super::path_access::paths_refer_to_same_file(input, &args.output) {
                 return Err(RomWeaverError::Validation(format!(
                     "playlist output and input `{}` are the same file",
                     input.display()

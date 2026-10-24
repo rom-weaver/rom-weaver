@@ -139,6 +139,7 @@ fn no_extract_returns_the_source_untouched() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("no-extract short circuits");
     assert_eq!(resolved.source, PathBuf::from("/games/archive.zip"));
@@ -165,6 +166,7 @@ fn a_source_no_handler_matches_is_returned_as_is() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("plain file resolves to itself");
     assert_eq!(resolved.source, rom);
@@ -194,6 +196,7 @@ fn an_archive_resolves_to_its_single_extracted_payload() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("archive resolves");
     assert_eq!(resolved.extracted_archives, 1);
@@ -232,6 +235,7 @@ fn nested_archives_are_unwrapped_until_a_plain_payload_is_reached() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect("nested archives resolve");
     assert_eq!(resolved.extracted_archives, 2);
@@ -305,6 +309,7 @@ fn nesting_deeper_than_the_depth_limit_is_refused() {
                 kind_filter: no_filter(),
                 stop_on_single_payload_codec: false,
             },
+            false,
         )
         .expect_err("depth limit");
     assert!(

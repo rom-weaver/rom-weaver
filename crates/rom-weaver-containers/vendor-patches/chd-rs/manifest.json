@@ -167,6 +167,18 @@
         "cargo test -p rom-weaver-containers chd",
         "cargo test -p rom-weaver-containers --lib chd_rs::compression::lzma::tests::levels_use_the_lzma_enc_props_encoder_settings -- --exact"
       ]
+    },
+    {
+      "file": "0013-crate-visible-ecc.patch",
+      "stage": "integration",
+      "reason": "Make the cdrom, compression and compression::ecc modules crate-visible so the CHD container tests build CD sectors with the vendored ECC generator instead of a duplicate implementation.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers chd"
+      ]
     }
   ]
 }

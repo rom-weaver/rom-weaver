@@ -1,4 +1,5 @@
 import type { SetStateAction } from "react";
+import { appendFileNameExtension } from "../../lib/input/path-utils.ts";
 import { getLiteralFileNameExtension, withOutputExtension } from "../../lib/output/output-name-validation.ts";
 import { sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -31,11 +32,14 @@ const getRequestedOutputName = (outputName: string): string | undefined => {
 const resolvePendingDownloadFileName = ({
   automaticOutputName,
   fallbackOutputName,
+  preferAutomaticName,
   requestedOutputName,
   resultOutputName,
 }: {
   automaticOutputName?: string;
   fallbackOutputName?: string;
+  /** The result was named by a manual name that is now gone, so its file name is stale. */
+  preferAutomaticName?: boolean;
   requestedOutputName?: string;
   resultOutputName?: string;
 }) => {
@@ -43,12 +47,16 @@ const resolvePendingDownloadFileName = ({
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
   if (normalizedRequestedOutputName)
     return withOutputExtension(normalizedRequestedOutputName, getLiteralFileNameExtension(normalizedResultOutputName));
-  return (
-    normalizedResultOutputName ||
-    sanitizeTypedOutputName(automaticOutputName) ||
-    sanitizeTypedOutputName(fallbackOutputName) ||
-    "output"
-  );
+  // The result's file name is stale when it came from a manual name that has
+  // since been cleared; then the automatic name wins and the result only
+  // supplies the real extension (.bin, .zip, ...).
+  const automaticBaseName = sanitizeTypedOutputName(automaticOutputName) || sanitizeTypedOutputName(fallbackOutputName);
+  if (preferAutomaticName && automaticBaseName) {
+    const resultExtension = getLiteralFileNameExtension(normalizedResultOutputName);
+    if (getLiteralFileNameExtension(automaticBaseName) === resultExtension) return automaticBaseName;
+    return appendFileNameExtension(automaticBaseName, resultExtension);
+  }
+  return normalizedResultOutputName || automaticBaseName || "output";
 };
 
 const formatElapsedTiming = (elapsedMs: number | null) => {

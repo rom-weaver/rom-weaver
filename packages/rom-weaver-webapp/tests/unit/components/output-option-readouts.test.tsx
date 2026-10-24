@@ -110,6 +110,13 @@ describe("output options header chips", () => {
     expect(auto?.note).toBe("CD-ROM");
   });
 
+  it("shows generic codecs for a raw BIN and preserves their override", () => {
+    const panel = buildCompressPanel("chd", { chdCreateDvdCodecs: "zstd:7" }, { fileName: "game.bin", size: 4096 });
+    expect(panel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(panel?.fields[0]?.value).toBe("zstd:7");
+    expect(panel?.note).toBeUndefined();
+  });
+
   it("defaults unknown CHD media to no codec field and rejects uncompressed formats", () => {
     const unknown = buildCompressPanel("chd", {}, { metadata: { format: "tape" } });
     expect(unknown?.fields[0]?.key).toBe("chdCreateDvdCodecs");

@@ -955,3 +955,73 @@ fn copy_file_retry_replaces_a_read_only_partial_destination() {
     let _ = fs::set_permissions(&source, fs::Permissions::from_mode(0o644));
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+struct FailingWriter;
+
+impl Write for FailingWriter {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        Err(io::Error::new(ErrorKind::BrokenPipe, "closed"))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn copy_cancelable_copies_all_bytes_across_blocks() {
+    let input = vec![7_u8; 64 * 1024 * 2 + 5];
+    let mut output = Vec::new();
+    let copied = super::copy_cancelable(
+        &mut input.as_slice(),
+        &mut output,
+        &crate::CancellationToken::new(),
+    )
+    .expect("copy");
+    assert_eq!(copied, input.len() as u64);
+    assert_eq!(output, input);
+}
+
+#[test]
+fn copy_cancelable_stops_when_token_is_cancelled() {
+    let token = crate::CancellationToken::new();
+    token.cancel();
+    let mut output = Vec::new();
+    let error = super::copy_cancelable(&mut [1_u8, 2].as_slice(), &mut output, &token)
+        .expect_err("cancelled");
+    assert!(matches!(error, RomWeaverError::Cancelled));
+    assert!(output.is_empty());
+}
+
+#[test]
+fn copy_cancelable_reports_write_error_when_not_cancelled() {
+    let error = super::copy_cancelable(
+        &mut [1_u8].as_slice(),
+        &mut FailingWriter,
+        &crate::CancellationToken::new(),
+    )
+    .expect_err("write error");
+    assert!(!matches!(error, RomWeaverError::Cancelled));
+}
+
+#[test]
+fn copy_cancelable_prefers_cancellation_over_write_error() {
+    struct CancelThenFail(crate::CancellationToken);
+    impl Write for CancelThenFail {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            self.0.cancel();
+            Err(io::Error::new(ErrorKind::BrokenPipe, "closed"))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let token = crate::CancellationToken::new();
+    let error = super::copy_cancelable(
+        &mut [1_u8].as_slice(),
+        &mut CancelThenFail(token.clone()),
+        &token,
+    )
+    .expect_err("cancelled");
+    assert!(matches!(error, RomWeaverError::Cancelled));
+}
