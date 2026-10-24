@@ -1808,6 +1808,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     runInput.inputs.length === 1 &&
     (runInput.patches.some((_patch, index) => !disabledPatchIds.has(getPatchIds()[index] || "")) || cheatsOn);
   const { weaveExport, changeWeavePackage } = useApplyWeaveExport({
+    applyValidationError,
     getCheats: () =>
       selectedCheatsRef.current.flatMap((entry, index) =>
         cheatDelivery(entry) === "rom"
