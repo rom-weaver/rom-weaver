@@ -12,12 +12,12 @@ use rom_weaver_core::{
 };
 use serde_json::json;
 
-use super::expect_tokens::checksum_hex_len;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, LogLevel,
     N64ByteOrder, N64ByteOrderTransform, RomWeaverWeave, log_filter_spec,
 };
+use rom_weaver_checksum::checksum_hex_len;
 
 #[test]
 fn dependency_trace_keeps_application_logging_at_warning() {

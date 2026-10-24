@@ -28,6 +28,7 @@ use rom_weaver_checksum::identify_catalog::{
     CARTRIDGE_EXTENSION_PACK_SLUGS, NINTENDO_3DS_PACK_SLUG, PLATFORM_SIBLING_PACK_SLUGS,
 };
 use rom_weaver_containers::chd::CHD_CREATE_MODES;
+use rom_weaver_checksum::{ALGORITHM_TABLE, STANDARD_ALGORITHMS};
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerThreadCapabilityMetadata,
@@ -350,7 +351,7 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
@@ -373,6 +374,19 @@ fn render_metadata() -> String {
         render_ts_const("ROM_WEAVER_DISC_IMAGE_POLICY", disc_image_policy_value()),
         render_ts_const("ROM_WEAVER_ARCHIVE_FORMATS", archive_formats_value()),
         render_ts_const("ROM_WEAVER_Z3DS_SUBTYPES", z3ds_subtypes_value()),
+        render_ts_const(
+            "ROM_WEAVER_CHECKSUM_ALGORITHMS",
+            checksum_algorithms_value()
+        ),
+        render_ts_const(
+            "ROM_WEAVER_STANDARD_CHECKSUM_ALGORITHMS",
+            Value::Array(string_values(
+                STANDARD_ALGORITHMS
+                    .iter()
+                    .map(|id| (*id).to_string())
+                    .collect()
+            ))
+        ),
         render_ts_const(
             "ROM_WEAVER_ERROR_KIND_PREFIXES",
             error_kind_prefixes_value()
@@ -701,6 +715,21 @@ fn archive_formats_value() -> Value {
         "multipartExtensions": metadata.multipart_extensions,
         "supportedExtensions": metadata.supported_extensions,
     })
+}
+
+fn checksum_algorithms_value() -> Value {
+    Value::Array(
+        ALGORITHM_TABLE
+            .iter()
+            .map(|info| {
+                json!({
+                    "id": info.id,
+                    "hexLength": info.hex_len,
+                    "label": info.label,
+                })
+            })
+            .collect(),
+    )
 }
 
 fn z3ds_subtypes_value() -> Value {

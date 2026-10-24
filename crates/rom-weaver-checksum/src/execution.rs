@@ -658,29 +658,12 @@ pub(super) fn partition_algorithms(
         .collect()
 }
 
-pub(super) fn parallel_crc32_max_threads(range_len: u64) -> usize {
-    ((range_len / CRC32_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
-        .clamp(1, CRC32_PARALLEL_MAX_THREADS)
-}
-
-pub(super) fn parallel_crc32c_max_threads(range_len: u64) -> usize {
-    ((range_len / CRC32C_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
-        .clamp(1, CRC32C_PARALLEL_MAX_THREADS)
-}
-
-pub(super) fn parallel_crc16_max_threads(range_len: u64) -> usize {
-    ((range_len / CRC16_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
-        .clamp(1, CRC16_PARALLEL_MAX_THREADS)
-}
-
-pub(super) fn parallel_adler32_max_threads(range_len: u64) -> usize {
-    ((range_len / ADLER32_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
-        .clamp(1, ADLER32_PARALLEL_MAX_THREADS)
-}
-
-pub(super) fn parallel_blake3_max_threads(range_len: u64) -> usize {
-    ((range_len / BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
-        .clamp(1, BLAKE3_PARALLEL_MAX_THREADS)
+pub(super) fn parallel_max_threads(
+    range_len: u64,
+    min_bytes_per_thread: u64,
+    max_threads: usize,
+) -> usize {
+    ((range_len / min_bytes_per_thread) as usize).clamp(1, max_threads)
 }
 
 pub(super) fn crc32_parallel_chunk_size(range_len: u64, worker_count: usize) -> usize {
