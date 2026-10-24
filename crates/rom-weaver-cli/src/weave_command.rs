@@ -2,7 +2,9 @@ use rom_weaver_containers::libarchive::RegularArchiveFileEntry;
 
 use super::weave_load::{LoadedWeaveSource, WeaveOutputGuard, weave_archive_target};
 use super::weave_parse::parse_weave_bytes;
+use super::weave_schema::cheat_entry_count_label;
 use super::*;
+use crate::path_access::path_basename;
 
 /// How the weave source was packaged.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -83,11 +85,7 @@ fn cheat_entry_summary(cheats: &[WeaveCheatEntry]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    format!(
-        "; {} cheat entr{}: {named}",
-        cheats.len(),
-        if cheats.len() == 1 { "y" } else { "ies" }
-    )
+    format!("; {}: {named}", cheat_entry_count_label(cheats.len()))
 }
 
 impl CliApp {
@@ -386,5 +384,5 @@ impl CliApp {
 /// of its `path` (or `url` when it is a URL-only entry).
 fn entry_basename(path: Option<&str>, url: Option<&str>) -> String {
     let raw = path.or(url).map(str::trim).unwrap_or_default();
-    raw.rsplit(['/', '\\']).next().unwrap_or(raw).to_owned()
+    path_basename(raw).to_owned()
 }

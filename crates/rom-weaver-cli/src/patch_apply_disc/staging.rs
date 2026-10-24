@@ -1,6 +1,7 @@
 //! Source paths may leave the sheet directory; generated paths must never do so.
 
 use super::{DiscFile, DiscSheetKind, Path, PathBuf, Result, RomWeaverError, fs};
+use crate::path_access::path_basename;
 use std::collections::BTreeSet;
 
 fn portable_file_name(name: &str) -> bool {
@@ -66,7 +67,7 @@ pub(super) fn output_names(sheets: &[PathBuf], names: &[String]) -> Vec<String> 
             if preserve {
                 return name.clone();
             }
-            let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
+            let base = path_basename(name);
             if portable_file_name(base) && used.insert(base.to_ascii_lowercase()) {
                 return base.to_owned();
             }
@@ -151,7 +152,7 @@ fn check_case_alias(source: &Path, name: &str, file: &DiscFile) -> Result<()> {
             file.name
         )));
     }
-    if !super::super::patch_apply::paths_refer_to_same_file(&alias, &file.path) {
+    if !crate::path_access::paths_refer_to_same_file(&alias, &file.path) {
         return Err(RomWeaverError::Validation(format!(
             "disc sheet `{}` references `{}` and `{name}`, which differ only by case but are different files",
             source.display(),

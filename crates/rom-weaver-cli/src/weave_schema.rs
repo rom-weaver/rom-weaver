@@ -302,6 +302,15 @@ pub struct WeaveOutput {
     pub checks_ref: Option<String>,
 }
 
+/// `1 cheat entry` / `N cheat entries`.
+pub(super) fn cheat_entry_count_label(count: usize) -> String {
+    if count == 1 {
+        "1 cheat entry".to_string()
+    } else {
+        format!("{count} cheat entries")
+    }
+}
+
 #[cfg(test)]
 mod schema_tests {
     use super::*;

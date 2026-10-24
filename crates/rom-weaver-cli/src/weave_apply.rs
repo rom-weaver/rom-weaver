@@ -12,6 +12,7 @@ use super::weave_parse::{
     is_weave_json_candidate, parse_weave_bytes, weave_bytes_are_valid, weave_file_name_codec,
 };
 use super::*;
+use crate::path_access::path_basename;
 
 /// What a weave contributed beyond the merged command fields: expected
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
@@ -420,7 +421,7 @@ impl CliApp {
             .path
             .as_deref()
             .filter(|_| rom_unbundled)
-            .and_then(|path| path.trim().rsplit(['/', '\\']).next());
+            .map(|path| path_basename(path.trim()));
         if let Some(name) = rom
             .name
             .as_deref()
@@ -1039,11 +1040,8 @@ fn weave_entry_file_name(entry: &WeavePatchEntry) -> Option<&str> {
         .as_deref()
         .or(entry.url.as_deref())?
         .trim_end_matches(['/', '\\']);
-    source
-        .rsplit(['/', '\\'])
-        .next()
-        .map(|name| name.split(['?', '#']).next().unwrap_or(name))
-        .filter(|name| !name.is_empty())
+    let name = path_basename(source);
+    Some(name.split(['?', '#']).next().unwrap_or(name)).filter(|name| !name.is_empty())
 }
 
 fn weave_entry_prompt_label(entry: &WeavePatchEntry) -> String {
@@ -1350,7 +1348,7 @@ fn member_component<'a>(
 }
 
 fn member_file_name(member: &str) -> &str {
-    member.rsplit(['/', '\\']).next().unwrap_or(member)
+    path_basename(member)
 }
 
 /// The N after the first `track` word in a name, case-insensitive, with any

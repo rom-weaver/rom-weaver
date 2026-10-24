@@ -28,12 +28,12 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
         ));
     }
 
-    let address = parse_hex(
+    let address = super::parse_hex(
         &normalized[0..5],
         raw,
         "Gold Finger address must be hexadecimal",
     )?;
-    let checksum = parse_hex(
+    let checksum = super::parse_hex(
         &normalized[11..13],
         raw,
         "Gold Finger checksum must be hexadecimal",
@@ -81,7 +81,7 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
                 raw,
             ));
         }
-        let byte = parse_hex(
+        let byte = super::parse_hex(
             pair,
             raw,
             "Gold Finger data bytes must be hexadecimal or XX",
@@ -115,10 +115,6 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
         compare: None,
         width,
     })
-}
-
-fn parse_hex(slice: &str, raw: &str, message: &'static str) -> Result<u32> {
-    u32::from_str_radix(slice, 16).map_err(|_| coded("cheat_bad_code", message, raw))
 }
 
 #[cfg(test)]

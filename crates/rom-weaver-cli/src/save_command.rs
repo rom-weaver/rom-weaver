@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fs::OpenOptions, num::IntErrorKind};
 
-use super::patch_apply::paths_refer_to_same_file;
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 use rom_weaver_core::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
     SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveRecognitionReason, SaveValue,

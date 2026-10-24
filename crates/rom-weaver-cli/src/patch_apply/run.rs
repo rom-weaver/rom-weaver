@@ -3,6 +3,7 @@
 //! and report the output.
 
 use super::*;
+use crate::path_access::path_basename;
 use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
 use super::super::cheats_apply::CheatApplySummary;
@@ -868,13 +869,7 @@ impl CliApp {
     /// weave names no `rom.member`, since those checks then describe the root
     /// ROM rather than a member).
     fn bare_input_matches_member(&self, run: &PatchApplyRun, member: &str) -> Result<bool> {
-        let name_of = |value: &str| {
-            value
-                .rsplit(['/', '\\'])
-                .next()
-                .unwrap_or(value)
-                .to_lowercase()
-        };
+        let name_of = |value: &str| path_basename(value).to_lowercase();
         let input_name = run
             .resolved_input
             .file_name()

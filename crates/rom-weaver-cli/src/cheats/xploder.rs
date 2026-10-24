@@ -20,24 +20,11 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
 }
 
 fn parse_hex(slice: &str, raw: &str) -> Result<u32> {
-    u32::from_str_radix(slice, 16).map_err(|_| {
-        coded(
-            "cheat_bad_code",
-            "Xploder code is not valid hexadecimal",
-            raw,
-        )
-    })
+    super::parse_hex(slice, raw, "Xploder code is not valid hexadecimal")
 }
 
 fn require_hex(code: &str, raw: &str) -> Result<()> {
-    if code.is_empty() || !code.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(coded(
-            "cheat_bad_code",
-            "Xploder code must be hexadecimal",
-            raw,
-        ));
-    }
-    Ok(())
+    super::require_hex(code, raw, "Xploder code must be hexadecimal")
 }
 
 fn unsupported(raw: &str, message: &'static str) -> rom_weaver_core::RomWeaverError {

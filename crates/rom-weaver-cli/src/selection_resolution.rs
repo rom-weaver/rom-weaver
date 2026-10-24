@@ -1,4 +1,5 @@
 use super::*;
+use crate::path_access::path_basename;
 
 /// The destination and selection settings for an extract-with-interactive-fallback call,
 /// grouped so the helper takes one descriptor instead of six positional arguments.
@@ -103,7 +104,7 @@ impl CliApp {
     /// and a trailing `(Track N)` segment. Returns `None` for non-disc entries so unrelated ROMs
     /// never collapse together.
     fn disc_base_key(name: &str) -> Option<String> {
-        let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+        let base = path_basename(name);
         let lower = base.to_ascii_lowercase();
         let is_disc_member = [".bin", ".cue", ".gdi", ".iso", ".img", ".raw", ".wav"]
             .iter()
