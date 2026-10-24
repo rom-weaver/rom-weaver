@@ -74,11 +74,13 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
         <StageStatus
           id={`rom-weaver-progress-identify-${drop.id}`}
           label={
-            drop.weave
-              ? localizer.message("ui.apply.drop.readingWeave")
-              : drop.entryCount === undefined
-                ? localizer.message("ui.apply.drop.identifying")
-                : localizer.message("ui.apply.drop.identified")
+            drop.downloading
+              ? localizer.message("ui.tutorial.loading")
+              : drop.weave
+                ? localizer.message("ui.apply.drop.readingWeave")
+                : drop.entryCount === undefined
+                  ? localizer.message("ui.apply.drop.identifying")
+                  : localizer.message("ui.apply.drop.identified")
           }
           percent={null}
         />

@@ -34,6 +34,8 @@ const MIN_PENDING_DISPLAY_MS = 180;
 
 /** UI-only row shown while an archive or weave is being identified and routed. */
 type PendingDrop = {
+  /** A practice file still downloading, before it reaches the drop path. */
+  downloading?: boolean;
   entryCount?: number;
   extracting: boolean;
   id: string;

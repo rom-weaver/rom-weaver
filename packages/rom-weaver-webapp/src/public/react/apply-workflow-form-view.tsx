@@ -509,7 +509,7 @@ function ApplyWorkflowFormView({
   patchInputBasis,
   onPatchInputBasisChange,
   dropError = null,
-  pendingDrops = [],
+  pendingDrops: stagedDrops = [],
   romLookupRequest,
   startup = { message: "", status: "ready" },
 }: {
@@ -811,6 +811,20 @@ function ApplyWorkflowFormView({
     onPracticeCheatSampleChange,
     onStartWeave: () => weaveTools?.setWeavePackage("patches"),
   });
+  // While the practice files download, the bench shows them as a pending card -
+  // the same loading state a real drop shows - instead of sitting empty.
+  const pendingDrops: PendingDrop[] =
+    sampleLoading && !stagedDrops.length
+      ? [
+          {
+            downloading: true,
+            extracting: false,
+            id: "practice-sample",
+            kind: "rom",
+            name: sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET,
+          },
+        ]
+      : stagedDrops;
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.
