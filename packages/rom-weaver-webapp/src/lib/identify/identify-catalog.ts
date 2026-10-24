@@ -26,7 +26,9 @@ type IdentifyCatalog = {
 
 const IDENTIFY_CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
-/** Mirrors the platform alias normalizer used by the identify data scripts. */
+/** The webapp's one platform-name key, for catalog aliases and abbreviations.
+ * Mirrors Rust `normalize_platform_name` and `normalizeAlias` in
+ * `scripts/build-identify-index.mjs`. */
 const normalizePlatformAlias = (value: string): string =>
   value
     .toLowerCase()
