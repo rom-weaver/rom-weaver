@@ -1358,7 +1358,7 @@ fn file_parser_rejects_a_read_past_the_declared_file_length() {
 }
 
 #[test]
-fn md5_hex_formats_every_nibble_and_maps_out_of_range_values_to_zero() {
+fn md5_hex_formats_every_nibble() {
     let mut value = [0u8; SOLID_MD5_LEN];
     value[0] = 0x0a;
     value[SOLID_MD5_LEN - 1] = 0xf9;
@@ -1367,7 +1367,10 @@ fn md5_hex_formats_every_nibble_and_maps_out_of_range_values_to_zero() {
     assert!(hex.starts_with("0a"));
     assert!(hex.ends_with("f9"));
     assert_eq!(hex.len(), SOLID_MD5_LEN * 2);
-    assert_eq!(hex_nibble(16), '0');
+    assert_eq!(
+        format_md5_hex([0xff; SOLID_MD5_LEN]),
+        "ff".repeat(SOLID_MD5_LEN)
+    );
 }
 
 #[test]

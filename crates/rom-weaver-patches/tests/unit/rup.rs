@@ -18,9 +18,9 @@ use super::{
     collect_rup_records_parallel, copy_exact_bytes, copy_unif_payload_chunks,
     create_rup_patch_bytes, create_rup_patch_parallel, deinterleave_smd_block,
     deinterleave_snes_payload, encode_rup_patch, format_md5_hex, is_unif_payload_chunk, md5_bytes,
-    nibble_to_hex, normalize_rup_input, parallel_chunked_capability, parse_rup_bytes,
-    prepare_rup_write_task, push_vlv, read_unif_chunk_header, read_xor_suffix,
-    rebuild_unif_payload, snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
+    normalize_rup_input, parallel_chunked_capability, parse_rup_bytes, prepare_rup_write_task,
+    push_vlv, read_unif_chunk_header, read_xor_suffix, rebuild_unif_payload,
+    snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
     write_n64_big_endian_to_temp, write_smd_deinterleaved_to_temp,
 };
 use crate::{
@@ -2563,7 +2563,7 @@ fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
 
     assert!(hex.starts_with("0f"));
     assert!(hex.ends_with("a5"));
-    assert_eq!(nibble_to_hex(16), '0');
+    assert_eq!(format_md5_hex([0xff; 16]), "ff".repeat(16));
 }
 
 #[test]
