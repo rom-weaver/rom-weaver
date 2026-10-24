@@ -12,7 +12,7 @@ import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../l
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
 import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../lib/path-utils.ts";
-import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
+import { CHD_MEDIA_PROBE_BYTES, getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isAmbiguousDiscImageExtension, isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
 import { createLogger } from "../lib/logging.ts";
@@ -77,9 +77,7 @@ const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> =>
                 mode: getChdAutoCreateMode({
                   fileName: files[0]?.name,
                   size: files[0]?.size,
-                  _u8array: /\.bin$/i.test(files[0]?.name || "")
-                    ? new Uint8Array(await (files[0] as File).slice(0, 16 * 2352 + 22).arrayBuffer())
-                    : undefined,
+                  _u8array: new Uint8Array(await (files[0] as File).slice(0, CHD_MEDIA_PROBE_BYTES).arrayBuffer()),
                 }),
               },
             }

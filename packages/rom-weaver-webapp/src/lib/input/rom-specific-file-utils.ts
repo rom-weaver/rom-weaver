@@ -147,6 +147,24 @@ const matchesSourceBytes = (source: ByteProbeableSource, offset: number, expecte
   }
 };
 
+const CD_MAX_COOKED_BYTES = 450_000 * 2048;
+/** Bytes covering raw CD descriptors and the UDF recognition sequence (LBA 16-31). */
+const CHD_MEDIA_PROBE_BYTES = 32 * 2048;
+const UDF_NSR_IDS = [
+  [78, 83, 82, 48, 50],
+  [78, 83, 82, 48, 51],
+];
+
+// Mirrors native `has_udf_descriptor`: a type-0 `NSR02`/`NSR03` descriptor in LBA 16-31.
+const hasUdfDescriptor = (source: ByteProbeableSource, size: number | undefined): boolean => {
+  if (typeof size !== "number" || size <= 0 || size % 2048 !== 0) return false;
+  for (let sector = 16; sector < 32 && (sector + 1) * 2048 <= size; sector += 1) {
+    const offset = sector * 2048;
+    if (UDF_NSR_IDS.some((id) => matchesSourceBytes(source, offset, [0, ...id]))) return true;
+  }
+  return false;
+};
+
 const getChdStructuralMode = (source: { fileName?: string; metadata?: SourceMetadata }): ChdCodecMode | undefined => {
   const metadata = source.metadata;
   if (metadata?.mode === "cd" || metadata?.mode === "dvd") return metadata.mode;
@@ -173,7 +191,8 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
   const fileName = String(source.fileName || "");
   const size = source.fileSize ?? source.size;
   const sectorSized = typeof size === "number" && size > 0 && (size % 2048 === 0 || size % 2352 === 0);
-  if (/\.iso$/i.test(fileName)) return sectorSized && size <= 450_000 * 2048 ? "cd" : "dvd";
+  if (/\.iso$/i.test(fileName))
+    return sectorSized && size <= CD_MAX_COOKED_BYTES && !hasUdfDescriptor(source, size) ? "cd" : "dvd";
   // Ambiguous inputs MUST carry the same CD signatures used by the native CHD inference.
   if (typeof size === "number" && size > 0 && isLooseChdAutoSource(source)) {
     let header = source._u8array;
@@ -188,13 +207,17 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
     if (header && hasChdHardDiskHeader(header, size)) return "raw";
     const isoId = [67, 68, 48, 48, 49];
     if (
-      (sectorSized &&
-        size % 2352 === 0 &&
-        (matchesSourceBytes(source, 0, [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]) ||
-          matchesSourceBytes(source, 16 * 2352 + 17, isoId))) ||
-      (sectorSized && size % 2048 === 0 && matchesSourceBytes(source, 16 * 2048 + 1, isoId))
+      size % 2352 === 0 &&
+      (matchesSourceBytes(source, 0, [0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]) ||
+        matchesSourceBytes(source, 16 * 2352 + 17, isoId))
     )
       return "cd";
+    if (size % 2048 === 0) {
+      const cooked = matchesSourceBytes(source, 16 * 2048 + 1, isoId);
+      const udf = hasUdfDescriptor(source, size);
+      if (udf || (cooked && size > CD_MAX_COOKED_BYTES)) return "dvd";
+      if (cooked) return "cd";
+    }
     // Readable bytes decide, as native `auto` does; advisory identity applies only when unreadable.
     if (header) return "raw";
   }
@@ -202,6 +225,7 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
 };
 
 export {
+  CHD_MEDIA_PROBE_BYTES,
   chdModeFromMetadata,
   discFormatToChdMode,
   getChdAutoCreateMode,

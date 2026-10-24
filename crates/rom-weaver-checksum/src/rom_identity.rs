@@ -263,12 +263,14 @@ fn detect_disc_identity(
         data_offset,
     };
     let console = detect_disc_platform(&source);
+    // UDF only separates media on cooked 2048-byte images; raw framing is already CD.
+    let udf = !cd_raw && platform_detection::has_udf_descriptor(&source);
     // SYSTEM.CNF can lie beyond the bounded prefix (its BOOT/BOOT2 line is what
     // separates PS1 from PS2), but the PVD system identifier still names the
-    // PlayStation family; split the two by CD framing and size.
+    // PlayStation family; split the two by CD framing, UDF, and size.
     let console = console.or_else(|| {
         platform_detection::pvd_names_playstation(&source).then_some(
-            if cd_raw || total_len < PS2_DVD_THRESHOLD_BYTES {
+            if cd_raw || (!udf && total_len < PS2_DVD_THRESHOLD_BYTES) {
                 platform::PS1
             } else {
                 platform::PS2
@@ -276,7 +278,7 @@ fn detect_disc_identity(
         )
     });
     let has_pvd = has_iso9660_pvd(&source);
-    let is_disc = cd_raw || console.is_some() || has_pvd;
+    let is_disc = cd_raw || console.is_some() || has_pvd || udf;
     if !is_disc {
         return None;
     }
@@ -286,11 +288,11 @@ fn detect_disc_identity(
     // `compress`'s CHD layout rule. Other extensions keep their medium-less identity.
     let plain_iso_bin = !cd_raw
         && console.is_none()
-        && has_pvd
+        && (has_pvd || udf)
         && total_len.is_multiple_of(USER_SECTOR_BYTES as u64)
         && extension.is_none_or(|ext| ext.eq_ignore_ascii_case(".bin"));
-    let disc_format = medium_for(console, cd_raw, total_len).or_else(|| {
-        plain_iso_bin.then_some(if total_len > CD_ISO_MAX_BYTES {
+    let disc_format = medium_for(console, cd_raw, udf, total_len).or_else(|| {
+        plain_iso_bin.then_some(if udf || total_len > CD_ISO_MAX_BYTES {
             DiscFormat::Dvd
         } else {
             DiscFormat::Cd
@@ -310,19 +312,27 @@ fn has_iso9660_pvd(source: &dyn DiscSectorSource) -> bool {
     )
 }
 
-/// Map a detected platform (and the framing/size fallbacks) to an optical medium.
-fn medium_for(console: Option<&str>, cd_raw: bool, total_len: u64) -> Option<DiscFormat> {
+/// Map a detected platform (and the framing/UDF/size fallbacks) to an optical medium.
+fn medium_for(
+    console: Option<&str>,
+    cd_raw: bool,
+    udf: bool,
+    total_len: u64,
+) -> Option<DiscFormat> {
     match console {
         Some(platform::DREAMCAST) => Some(DiscFormat::GdRom),
         Some(platform::GAMECUBE | platform::WII | platform::PSP) => Some(DiscFormat::Dvd),
         Some(platform::PS1 | platform::SATURN | platform::SEGA_CD | platform::PCE_CD) => {
             Some(DiscFormat::Cd)
         }
-        Some(platform::PS2) => Some(if total_len >= PS2_DVD_THRESHOLD_BYTES {
-            DiscFormat::Dvd
-        } else {
-            DiscFormat::Cd
-        }),
+        // Raw 2352-byte framing only exists on CDs, even when a full CD exceeds the size cut.
+        Some(platform::PS2) => Some(
+            if !cd_raw && (udf || total_len >= PS2_DVD_THRESHOLD_BYTES) {
+                DiscFormat::Dvd
+            } else {
+                DiscFormat::Cd
+            },
+        ),
         // 3DS/DS are card dumps detected via the disc path but have no medium.
         Some(platform::N3DS | platform::NDS) => None,
         // Unknown console: only the raw-sector framing tells us it is a CD.
@@ -483,6 +493,60 @@ mod tests {
 
         let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
         assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
+    }
+
+    #[test]
+    fn udf_marks_small_cooked_images_as_dvd_and_raw_framing_stays_cd() {
+        let udf_sector = 17 * USER_SECTOR_BYTES;
+        // A PS2 DVD below the size cut is a DVD when it carries the ISO9660/UDF bridge.
+        let mut ps2 = ps2_iso_image();
+        write(&mut ps2, udf_sector + 1, b"NSR02");
+        let small = detect_rom_identity(&ps2, 600 * 1024 * 1024, Some(".iso"));
+        assert_eq!(small.platform, Some(platform::PS2));
+        assert_eq!(small.disc_format, Some(DiscFormat::Dvd));
+
+        // The PVD fallback names PS2, not PS1, for a small UDF image.
+        let mut fallback = logical_image(32);
+        write(&mut fallback, PVD_LBA * USER_SECTOR_BYTES, &[1]);
+        write(&mut fallback, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        write(
+            &mut fallback,
+            PVD_LBA * USER_SECTOR_BYTES + 8,
+            b"PLAYSTATION",
+        );
+        write(&mut fallback, udf_sector + 1, b"NSR03");
+        let identity = detect_rom_identity(&fallback, 600 * 1024 * 1024, Some(".bin"));
+        assert_eq!(identity.platform, Some(platform::PS2));
+        assert_eq!(identity.disc_format, Some(DiscFormat::Dvd));
+
+        // Unknown console: a UDF `.bin` is a DVD, with or without ISO9660.
+        let mut plain = logical_image(32);
+        write(&mut plain, udf_sector + 1, b"NSR02");
+        let len = plain.len() as u64;
+        assert_eq!(
+            detect_rom_identity(&plain, len, Some(".bin")).disc_format,
+            Some(DiscFormat::Dvd)
+        );
+        write(&mut plain, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        assert_eq!(
+            detect_rom_identity(&plain, len, None).disc_format,
+            Some(DiscFormat::Dvd)
+        );
+
+        // A raw PS2 CD past the size cut keeps its CD medium.
+        let mut raw = vec![0u8; RAW_SECTOR_BYTES * 32];
+        for sector in 0..32 {
+            write(&mut raw, sector * RAW_SECTOR_BYTES, &CD_SYNC);
+            raw[sector * RAW_SECTOR_BYTES + 15] = 0x02;
+        }
+        let ps2_cd = ps2_iso_image();
+        for sector in 0..32 {
+            let user = &ps2_cd[sector * USER_SECTOR_BYTES..(sector + 1) * USER_SECTOR_BYTES];
+            write(&mut raw, sector * RAW_SECTOR_BYTES + 24, user);
+        }
+        let identity = detect_rom_identity(&raw, 900 * 1024 * 1024, Some(".bin"));
+        assert_eq!(identity.platform, Some(platform::PS2));
+        assert_eq!(identity.disc_format, Some(DiscFormat::Cd));
     }
 
     #[test]

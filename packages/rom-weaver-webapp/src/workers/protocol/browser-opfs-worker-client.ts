@@ -112,8 +112,8 @@ const readBrowserOpfsPrefix = (filePath: string, length: number, signal?: AbortS
       reject(signal.reason ?? new DOMException("OPFS prefix read aborted", "AbortError"));
       return;
     }
-    if (!Number.isInteger(length) || length < 0 || length > 16 * 2352 + 22) {
-      reject(new Error("OPFS prefix length must be an integer between 0 and 37654"));
+    if (!Number.isInteger(length) || length < 0 || length > 32 * 2048) {
+      reject(new Error("OPFS prefix length must be an integer between 0 and 65536"));
       return;
     }
     let worker: Worker;

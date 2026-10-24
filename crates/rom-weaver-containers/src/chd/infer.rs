@@ -95,9 +95,34 @@ impl ChdContainerHandler {
     }
 
     pub(super) fn is_cd_sized_iso(&self, input: &Path, logical_bytes: u64) -> bool {
+        !Self::is_extension(input, "iso") || Self::fits_cd(logical_bytes)
+    }
+
+    /// Whether `logical_bytes` of 2048-byte sectors fit on a CD (450,000 frames).
+    pub(super) fn fits_cd(logical_bytes: u64) -> bool {
         let max_iso_bytes = Self::CD_ISO_MAX_FRAMES
             * u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048);
-        !Self::is_extension(input, "iso") || logical_bytes <= max_iso_bytes
+        logical_bytes <= max_iso_bytes
+    }
+
+    /// Whether a cooked 2048-byte image announces UDF in its volume recognition sequence
+    /// (LBA 16 onward). DVD images carry UDF; CD-ROM game images carry ISO9660 alone.
+    pub(super) fn has_udf_descriptor(&self, input: &Path, logical_bytes: u64) -> bool {
+        let start = Self::ISO9660_COOKED_DESCRIPTOR_OFFSET - 1;
+        let scan_bytes =
+            u64::from(rom_weaver_checksum::platform_detection::UDF_VRS_SCAN_SECTORS) * 2048;
+        let len = logical_bytes.saturating_sub(start).min(scan_bytes);
+        let Ok(len) = usize::try_from(len) else {
+            return false;
+        };
+        let found = len > 0
+            && self.read_bytes_at(input, start, len).is_some_and(|bytes| {
+                bytes
+                    .chunks(2048)
+                    .any(rom_weaver_checksum::platform_detection::is_udf_nsr_descriptor)
+            });
+        trace!(input = %input.display(), found, "chd infer: udf volume descriptor probe");
+        found
     }
 
     /// Read `len` bytes from `input` at `offset`, returning `None` on any open/seek/read
@@ -140,8 +165,19 @@ impl ChdContainerHandler {
         }
 
         logical_bytes.is_multiple_of(mode1_bytes)
-            && self.is_cd_sized_iso(input, logical_bytes)
+            && Self::fits_cd(logical_bytes)
             && self.has_iso9660_descriptor_at(input, Self::ISO9660_COOKED_DESCRIPTOR_OFFSET)
+            && !self.has_udf_descriptor(input, logical_bytes)
+    }
+
+    /// Positive evidence that a raw/extensionless input without CD evidence is a cooked DVD
+    /// image: whole 2048-byte sectors announcing UDF, or an ISO9660 image too large for a CD.
+    pub(super) fn has_single_track_dvd_evidence(&self, input: &Path, logical_bytes: u64) -> bool {
+        logical_bytes.is_multiple_of(u64::from(Self::DVD_SECTOR_BYTES))
+            && (self.has_udf_descriptor(input, logical_bytes)
+                || (!Self::fits_cd(logical_bytes)
+                    && self
+                        .has_iso9660_descriptor_at(input, Self::ISO9660_COOKED_DESCRIPTOR_OFFSET)))
     }
 
     pub(super) fn has_sector_signature(sector: &[u8]) -> bool {
@@ -442,7 +478,9 @@ impl ChdContainerHandler {
             Some("gdi") => Ok(ChdCreateKind::Disc(self.parse_gdi_file(input)?)),
             Some("iso")
                 if self.is_cd_sized_iso(input, logical_bytes)
-                    && self.is_single_track_cd_sector_sized(logical_bytes) =>
+                    && self.is_single_track_cd_sector_sized(logical_bytes)
+                    && !(logical_bytes.is_multiple_of(u64::from(Self::DVD_SECTOR_BYTES))
+                        && self.has_udf_descriptor(input, logical_bytes)) =>
             {
                 Ok(ChdCreateKind::Disc(
                     self.infer_single_track_cd_layout(input, logical_bytes)?,
@@ -465,6 +503,11 @@ impl ChdContainerHandler {
                 Ok(ChdCreateKind::Disc(
                     self.infer_single_track_cd_layout(input, logical_bytes)?,
                 ))
+            }
+            _ if self.should_auto_infer_single_track_cd(input)
+                && self.has_single_track_dvd_evidence(input, logical_bytes) =>
+            {
+                Ok(ChdCreateKind::Dvd)
             }
             // A/V (laserdisc) sources are raw `chav` frame streams; detect them so
             // the output is compressed as A/V media without requiring the caller to

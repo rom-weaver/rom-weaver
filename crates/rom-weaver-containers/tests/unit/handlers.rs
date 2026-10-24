@@ -3923,6 +3923,86 @@ mod tests {
 
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
+    fn chd_create_auto_infers_cooked_dvd_from_udf_or_size() {
+        fn descriptor(bytes: &mut [u8], sector: usize, kind: u8, id: &[u8; 5]) {
+            bytes[sector * 2048] = kind;
+            bytes[sector * 2048 + 1..sector * 2048 + 6].copy_from_slice(id);
+        }
+        let temp_dir = temp_dir_path("chd-dvd-auto-infer");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let handler = ChdContainerHandler;
+        let kind = |name: &str, bytes: &[u8]| {
+            let path = temp_dir.join(name);
+            fs::write(&path, bytes).expect("write image");
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &path,
+                    u64::try_from(bytes.len()).expect("size"),
+                )
+                .expect("auto kind")
+        };
+
+        // ISO9660/UDF bridge (CD001, BEA01, NSR02) -> dvd for every auto-inferred name.
+        let mut bridge = vec![0_u8; 2048 * 40];
+        descriptor(&mut bridge, 16, 1, b"CD001");
+        descriptor(&mut bridge, 17, 255, b"CD001");
+        descriptor(&mut bridge, 18, 0, b"BEA01");
+        descriptor(&mut bridge, 19, 0, b"NSR02");
+        descriptor(&mut bridge, 20, 0, b"TEA01");
+        for name in ["bridge.bin", "bridge.iso", "bridge"] {
+            assert_eq!(kind(name, &bridge), "dvd", "{name}");
+        }
+        // UDF-only (NSR03, no ISO9660) -> dvd.
+        let mut udf = vec![0_u8; 2048 * 40];
+        descriptor(&mut udf, 16, 0, b"BEA01");
+        descriptor(&mut udf, 17, 0, b"NSR03");
+        assert_eq!(kind("udf.bin", &udf), "dvd");
+        // BEA01 alone is not UDF, and an NSR id with a nonzero type byte is not a descriptor.
+        let mut not_udf = vec![0_u8; 2048 * 40];
+        descriptor(&mut not_udf, 16, 1, b"CD001");
+        descriptor(&mut not_udf, 17, 0, b"BEA01");
+        descriptor(&mut not_udf, 18, 1, b"NSR02");
+        assert_eq!(kind("plain.bin", &not_udf), "cd");
+        assert_eq!(kind("plain.iso", &not_udf), "cd");
+        // UDF past the scanned recognition sequence (LBA 32) is ignored.
+        let mut late = not_udf.clone();
+        descriptor(&mut late, 32, 0, b"NSR02");
+        assert_eq!(kind("late.bin", &late), "cd");
+        // Raw CD framing wins over UDF-looking bytes.
+        let mut raw = vec![0_u8; 2352 * 40];
+        raw[..12].copy_from_slice(&[0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
+        descriptor(&mut raw, 17, 0, b"NSR02");
+        assert_eq!(kind("raw.bin", &raw), "cd");
+        // UDF without whole 2048-byte sectors is not a cooked DVD image.
+        let mut ragged = bridge.clone();
+        ragged.push(0);
+        assert_eq!(kind("ragged.bin", &ragged), "raw");
+
+        // ISO9660 without UDF: CD up to 450,000 sectors, DVD one sector beyond (sparse files).
+        for (sectors, expected) in [(450_000_u64, "cd"), (450_001_u64, "dvd")] {
+            let path = temp_dir.join(format!("large-{sectors}.bin"));
+            let mut file = fs::File::create(&path).expect("create sparse image");
+            file.seek(std::io::SeekFrom::Start(16 * 2048))
+                .expect("seek descriptor");
+            file.write_all(&[1, b'C', b'D', b'0', b'0', b'1'])
+                .expect("write descriptor");
+            file.set_len(sectors * 2048).expect("size sparse image");
+            drop(file);
+            assert_eq!(
+                handler
+                    .infer_create_kind_label_for_tests("chd", &path, sectors * 2048)
+                    .expect("large auto kind"),
+                expected,
+                "{sectors} sectors"
+            );
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+    #[test]
     fn chd_create_auto_infers_hd_only_from_disk_signatures() {
         fn write_mbr_disk(path: &Path, sectors: usize) -> Vec<u8> {
             let mut bytes = vec![0_u8; sectors * 512];

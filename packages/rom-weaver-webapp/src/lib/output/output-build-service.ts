@@ -33,6 +33,7 @@ import type { InputAsset } from "../input/input-assets.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
+  CHD_MEDIA_PROBE_BYTES,
   chdModeFromMetadata,
   getChdAutoCreateMode,
   isLooseChdAutoSource,
@@ -132,7 +133,7 @@ const getOutputChdAutoMode = async (
   const sourceRef = getPatchFileExternalSource(file, file.fileName);
   if (!sourceRef) return mode;
   options?.signal?.throwIfAborted();
-  const length = Math.min(size, 16 * 2352 + 22);
+  const length = Math.min(size, CHD_MEDIA_PROBE_BYTES);
   let prefix: Uint8Array;
   if (sourceRef.source instanceof Blob) {
     prefix = await createBinaryObjectReader(sourceRef.source).readRange(0, length);

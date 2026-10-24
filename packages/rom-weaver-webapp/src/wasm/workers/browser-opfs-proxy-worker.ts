@@ -43,8 +43,8 @@ interface ProxyReadPrefixMessage {
 
 const readPrefix = async (data: ProxyReadPrefixMessage): Promise<void> => {
   try {
-    if (!Number.isInteger(data.length) || data.length < 0 || data.length > 16 * 2352 + 22)
-      throw new Error("OPFS prefix length must be an integer between 0 and 37654");
+    if (!Number.isInteger(data.length) || data.length < 0 || data.length > 32 * 2048)
+      throw new Error("OPFS prefix length must be an integer between 0 and 65536");
     if (typeof data.filePath !== "string" || !data.filePath.trim()) throw new Error("OPFS prefix path is required");
     const handle = await getManagedOpfsFileHandle(data.filePath, { create: false });
     if (!handle) throw new Error(`OPFS prefix file not found: ${data.filePath}`);

@@ -46,6 +46,42 @@ describe("getChdAutoCreateMode", () => {
     expect(getChdAutoCreateMode({ ...raw, _u8array: iso, metadata: { format: "DVD" } })).toBe("cd");
   });
 
+  it("matches native UDF and size rules for cooked images", () => {
+    const descriptor = (bytes: Uint8Array, sector: number, kind: number, id: string) => {
+      bytes[sector * 2048] = kind;
+      bytes.set(new TextEncoder().encode(id), sector * 2048 + 1);
+    };
+    const image = (...descriptors: [number, number, string][]) => {
+      const bytes = new Uint8Array(40 * 2048);
+      for (const [sector, kind, id] of descriptors) descriptor(bytes, sector, kind, id);
+      return bytes;
+    };
+    const mode = (fileName: string, bytes: Uint8Array) =>
+      getChdAutoCreateMode({ fileName, size: bytes.length, _u8array: bytes });
+    const bridge = image([16, 1, "CD001"], [17, 255, "CD001"], [18, 0, "BEA01"], [19, 0, "NSR02"]);
+    for (const fileName of ["bridge.bin", "bridge.iso", "bridge"]) expect(mode(fileName, bridge)).toBe("dvd");
+    expect(mode("udf.bin", image([16, 0, "BEA01"], [17, 0, "NSR03"]))).toBe("dvd");
+    const plain = image([16, 1, "CD001"], [17, 0, "BEA01"], [18, 1, "NSR02"]);
+    expect(mode("plain.bin", plain)).toBe("cd");
+    expect(mode("plain.iso", plain)).toBe("cd");
+    expect(mode("late.bin", image([16, 1, "CD001"], [32, 0, "NSR02"]))).toBe("cd");
+    const raw = new Uint8Array(40 * 2352);
+    raw.set([0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0]);
+    descriptor(raw, 17, 0, "NSR02");
+    expect(mode("raw.bin", raw)).toBe("cd");
+    const ragged = new Uint8Array(bridge.length + 1);
+    ragged.set(bridge);
+    expect(mode("ragged.bin", ragged)).toBe("raw");
+
+    const head = image([16, 1, "CD001"]);
+    const readIntoAt = (buffer: Uint8Array, bufferOffset = 0, len = buffer.length, fileOffset = 0) => {
+      buffer.set(head.subarray(fileOffset, fileOffset + len), bufferOffset);
+      return len;
+    };
+    expect(getChdAutoCreateMode({ fileName: "large.bin", size: 450_000 * 2048, readIntoAt })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "large.bin", size: 450_001 * 2048, readIntoAt })).toBe("dvd");
+  });
+
   it.each([13, 4096, 32768, 2352, 2352 * 20])("keeps an unrecognized %i-byte BIN raw", (size) => {
     expect(getChdAutoCreateMode({ fileName: "game.bin", size, _u8array: new Uint8Array(size) })).toBe("raw");
   });
@@ -203,10 +239,10 @@ describe("getChdAutoCreateMode", () => {
     expect(getChdAutoCreateMode(source)).toBe("cd");
   });
 
-  it("keeps a cooked BIN CD descriptor above the ISO size limit", () => {
+  it("treats a cooked BIN descriptor above the CD size limit as DVD", () => {
     const bytes = new Uint8Array(32774);
     bytes.set(new TextEncoder().encode("CD001"), 32769);
-    expect(getChdAutoCreateMode({ fileName: "disc.bin", size: 450001 * 2048, _u8array: bytes })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "disc.bin", size: 450001 * 2048, _u8array: bytes })).toBe("dvd");
   });
 
   it("does not treat a boot signature alone as hard-disk evidence", () => {

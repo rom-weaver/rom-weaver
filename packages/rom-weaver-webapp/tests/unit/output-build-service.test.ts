@@ -541,7 +541,7 @@ describe("lazy CHD output codec planning", () => {
     const probe = vi
       .mocked(readBrowserOpfsPrefix)
       .mockReset()
-      .mockResolvedValue(bytes.subarray(0, 16 * 2352 + 22));
+      .mockResolvedValue(bytes.subarray(0, 32 * 2048));
     const create = vi.fn(async () => ({ output: { fileName: "patched.chd" } }));
     mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "patched.chd"));
     await buildSessionOutputFiles(
@@ -560,11 +560,11 @@ describe("lazy CHD output codec planning", () => {
     expect(materialize).not.toHaveBeenCalled();
     expect(read).not.toHaveBeenCalled();
     if (storage === "vfs") {
-      expect(probe).toHaveBeenCalledExactlyOnceWith("/patched.bin", 16 * 2352 + 22, undefined);
+      expect(probe).toHaveBeenCalledExactlyOnceWith("/patched.bin", 32 * 2048, undefined);
       expect(slice).not.toHaveBeenCalled();
     } else {
       expect(probe).not.toHaveBeenCalled();
-      expect(slice).toHaveBeenCalledExactlyOnceWith(0, 16 * 2352 + 22);
+      expect(slice).toHaveBeenCalledExactlyOnceWith(0, 32 * 2048);
     }
   });
 });

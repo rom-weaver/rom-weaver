@@ -147,7 +147,7 @@ describe("one-shot OPFS prefix worker", () => {
     const controller = new AbortController();
     controller.abort(new Error("cancelled"));
     await expect(readBrowserOpfsPrefix("/work/result.bin", 12, controller.signal)).rejects.toThrow("cancelled");
-    for (const length of [-1, 37655, NaN, 1.5])
+    for (const length of [-1, 65537, NaN, 1.5])
       await expect(readBrowserOpfsPrefix("/work/result.bin", length)).rejects.toThrow("prefix length");
     expect(FakeWorker.instances).toHaveLength(0);
   });

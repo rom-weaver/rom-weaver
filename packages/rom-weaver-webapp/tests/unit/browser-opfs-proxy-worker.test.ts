@@ -49,7 +49,7 @@ describe("OPFS proxy worker prefix control", () => {
     expect(posted).toHaveBeenCalledWith(reply, [reply.bytes.buffer]);
   });
 
-  it.each([-1, 37655, NaN, 1.5])("rejects invalid prefix length %s before opening OPFS", async (length) => {
+  it.each([-1, 65537, NaN, 1.5])("rejects invalid prefix length %s before opening OPFS", async (length) => {
     const reply = await dispatch({ filePath: "/work/output/patched.bin", length });
     expect(reply).toMatchObject({ type: "read-prefix-error", requestId: "prefix-1" });
     expect(getDirectory).not.toHaveBeenCalled();
