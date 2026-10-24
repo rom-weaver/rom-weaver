@@ -647,6 +647,55 @@ test.each(["input", "output"])(
   },
 );
 
+test.each([
+  ["a differing", "deadbeef", true],
+  ["a matching", "C6FB1252", false],
+])("an opened committed check stays open and warns only on %s embedded check", async (_label, embedded, warns) => {
+  const Harness = () => {
+    const [staged, setStaged] = useState(false);
+    return createElement(
+      "div",
+      null,
+      createElement(
+        "button",
+        { id: "finish-staging", type: "button", onClick: () => setStaged(true) },
+        "Finish staging",
+      ),
+      createElement(PatchChecksDrawer, {
+        basisChoice: "base",
+        index: 0,
+        item: {
+          key: "patch-1",
+          fileName: "change.bps",
+          format: "bps",
+          validationValues: staged ? [`in crc32=${embedded}`] : [],
+        },
+        meta: { inputChecks: { checksums: { crc32: "c6fb1252" } } },
+        onMetaChange: () => undefined,
+        patchStack: {},
+      }),
+    );
+  };
+  mount(createElement(Harness));
+  (await waitForState(() => document.querySelector(".patch-checks .cks-head"))).click();
+  const inputId = "rom-weaver-patch-input-crc32-0";
+  (await waitForState(() => document.getElementById(`${inputId}-open`))).click();
+  const input = await waitForState(() => document.getElementById(inputId));
+  expect(document.querySelector(".patch-checks .ck-warn")).toBeNull();
+  document.getElementById("finish-staging").click();
+  await expect.poll(() => document.querySelector(".patch-checks")?.textContent).toContain(embedded);
+  expect(document.getElementById(inputId)).toBe(input);
+  expect(input.value).toBe("c6fb1252");
+  const warning = document.querySelector(".patch-checks .ck-warn");
+  if (warns) {
+    expect(warning?.textContent).toContain("CRC32");
+    expect(input.getAttribute("aria-describedby")).toBe(warning.id);
+  } else {
+    expect(warning).toBeNull();
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+  }
+});
+
 test("clearing an edited committed check removes its row without taking focus", async () => {
   const Harness = () => {
     const [meta, setMeta] = useState({ inputChecks: { checksums: { crc32: "c6fb1252" } } });

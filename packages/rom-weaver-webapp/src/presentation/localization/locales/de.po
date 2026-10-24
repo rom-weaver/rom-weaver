@@ -1780,6 +1780,11 @@ msgstr "Doku"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.differsFromPatch"
+msgstr "Weicht von der im Patch enthaltenen {check}-Prüfung ab"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.doesNotMatchRom"
 msgstr "Passt nicht zur ROM"
 
