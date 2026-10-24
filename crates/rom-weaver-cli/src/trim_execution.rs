@@ -1,5 +1,5 @@
-use super::patch_apply::paths_refer_to_same_file;
 use super::*;
+use crate::path_access::paths_refer_to_same_file;
 
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.

@@ -1059,6 +1059,38 @@ fn save_create_generates_zelda_and_requires_a_pokemon_template() {
     assert!(!red.path().exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn save_create_rejects_a_hard_linked_output_as_the_source() {
+    let temp = setup_temp_dir();
+    let source = temp.child("template.sav");
+    let original = pokemon_gen1_fixture();
+    fs::write(source.path(), &original).unwrap();
+    let linked = temp.child("linked.sav");
+    fs::hard_link(source.path(), linked.path()).unwrap();
+
+    let collision = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--output",
+            linked.path().to_str().unwrap(),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        collision["details"]["save_editor"]["error"]["code"],
+        "save_output_is_source"
+    );
+    assert_eq!(fs::read(source.path()).unwrap(), original);
+}
+
 #[test]
 fn save_create_templates_copy_edit_wrapped_data_and_reject_collisions() {
     let temp = setup_temp_dir();
