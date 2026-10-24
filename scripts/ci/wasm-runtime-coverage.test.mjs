@@ -12,6 +12,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 // inputs are not coverage this classifier owes anything to.
 const SUITE_DIR = "packages/rom-weaver-webapp/tests/wasm";
 const SUITE_ENTRY = /\.test\.mjs$/;
+// Mirrors `test.include` in packages/rom-weaver-webapp/vitest.unit.config.mjs.
+const UNIT_SUITE_DIR = "packages/rom-weaver-webapp/tests/unit";
+const UNIT_SUITE_ENTRY = /\.test\.tsx?$/;
 
 const PARSEABLE = /\.(?:mjs|js|ts|tsx)$/;
 const RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".mjs", ".js", "/index.ts", "/index.mjs"];
@@ -50,11 +53,12 @@ function resolveReference(fromFile, specifier) {
   return relative(repoRoot, base);
 }
 
-function reachableFiles() {
-  const entries = readdirSync(join(repoRoot, SUITE_DIR))
-    .filter((name) => SUITE_ENTRY.test(name))
-    .map((name) => `${SUITE_DIR}/${name}`);
-  assert.ok(entries.length > 0, `${SUITE_DIR} has no *.test.mjs entry points`);
+function reachableFiles(suiteDir = SUITE_DIR, suiteEntry = SUITE_ENTRY, recursive = false) {
+  const entries = readdirSync(join(repoRoot, suiteDir), { recursive })
+    .map((name) => name.replaceAll("\\", "/"))
+    .filter((name) => suiteEntry.test(name))
+    .map((name) => `${suiteDir}/${name}`);
+  assert.ok(entries.length > 0, `${suiteDir} has no test entry points`);
 
   const seen = new Set(entries);
   const queue = [...entries];
@@ -100,4 +104,24 @@ test("the walk reaches sources, workers, and the Rust fixture trees", () => {
   ]) {
     assert.ok(reachable.has(path), `${path} should be reachable from the suite`);
   }
+});
+
+// Unit tests read crate files directly to share case tables with a Rust test.
+// Crate test trees otherwise select Rust alone, so a table missing from
+// `SHARED_CASE_TABLE` would let one side change while the other never runs.
+test("every crate file the webapp unit suite reads selects the webapp", () => {
+  const reachable = reachableFiles(UNIT_SUITE_DIR, UNIT_SUITE_ENTRY, true);
+  assert.ok(
+    reachable.includes("crates/rom-weaver-checksum/src/platform-names.json"),
+    "the walk should follow JSON imports into crates/",
+  );
+  const uncovered = reachable.filter(
+    (path) => path.startsWith("crates/") && classifyChanges([path]).webapp !== true,
+  );
+  assert.deepEqual(
+    uncovered,
+    [],
+    `these are reachable from ${UNIT_SUITE_DIR} but do not select the webapp; ` +
+      "widen SHARED_CASE_TABLE in scripts/ci/classify-changes.mjs",
+  );
 });
