@@ -529,10 +529,7 @@ impl CliApp {
                 format: None,
             },
             "compat",
-            format!(
-                "transforming N64 input byte order to {}",
-                target_order.label()
-            ),
+            format!("transforming N64 input byte order to {}", target_order.id()),
             None,
             context.single_thread_execution(),
         );
@@ -1921,53 +1918,28 @@ impl CliApp {
         {
             let n64_variants = (|| {
                 trace!(?algorithms, "computing N64 base byte-order checksums");
-                let name_hint = input.file_name().and_then(|name| name.to_str());
-                let mut engine = StreamingVariantChecksums::new(
-                    algorithms,
-                    input_size,
-                    name_hint,
-                    context.variant_hash_execution().effective_threads,
-                )?;
-                let mut file = File::open(input)?;
-                let mut buffer = vec![0_u8; 1024 * 1024];
-                loop {
-                    context.cancel().check()?;
-                    let read = file.read(&mut buffer)?;
-                    if read == 0 {
-                        break;
-                    }
-                    engine.update(&buffer[..read])?;
-                }
-
-                let variants = engine
-                    .finalize()?
-                    .rows
-                    .into_iter()
-                    .filter_map(|row| {
-                        let order = match row.id.as_str() {
-                            "n64-byte-order:big-endian" => N64ByteOrder::BigEndian,
-                            "n64-byte-order:little-endian" => N64ByteOrder::LittleEndian,
-                            "n64-byte-order:byte-swapped" => N64ByteOrder::ByteSwapped,
-                            _ => return None,
-                        };
-                        let name = if raw_representation.n64_byte_order == Some(order) {
-                            format!("{name_prefix}raw")
-                        } else {
-                            format!("{name_prefix}n64-{}", order.id())
-                        };
-                        Some(patch_plan::BaseVariant {
-                            name,
-                            state: patch_plan::PlanState {
-                                checksums: row.checksums,
-                                size: Some(input_size),
-                            },
-                            representation: patch_plan::BaseRepresentation {
-                                n64_byte_order: Some(order),
-                                ..raw_representation
-                            },
+                let variants =
+                    Self::hash_n64_byte_order_rows(input, algorithms, input_size, context)?
+                        .into_iter()
+                        .map(|(order, row)| {
+                            let name = if raw_representation.n64_byte_order == Some(order) {
+                                format!("{name_prefix}raw")
+                            } else {
+                                format!("{name_prefix}n64-{}", order.id())
+                            };
+                            patch_plan::BaseVariant {
+                                name,
+                                state: patch_plan::PlanState {
+                                    checksums: row.checksums,
+                                    size: Some(input_size),
+                                },
+                                representation: patch_plan::BaseRepresentation {
+                                    n64_byte_order: Some(order),
+                                    ..raw_representation
+                                },
+                            }
                         })
-                    })
-                    .collect::<Vec<_>>();
+                        .collect::<Vec<_>>();
                 Ok::<_, RomWeaverError>(variants)
             })();
             match n64_variants {

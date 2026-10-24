@@ -11,6 +11,7 @@ mod error;
 mod formatting;
 mod io;
 mod media_topology;
+mod n64;
 mod parallel_heap;
 mod patch_support;
 mod progress;
@@ -41,7 +42,7 @@ pub use concurrency::{
 };
 pub use context::{
     OperationContext, PatchApplyDirection, PatchCheckScopes, PatchChecksumValidation,
-    PatchEndpointSelection, PatchInputN64ByteOrder, PatchPolicy, XdeltaSecondaryMode,
+    PatchEndpointSelection, PatchPolicy, XdeltaSecondaryMode,
 };
 pub use disc_sheet::{
     DiscSheetKind, DiscSheetRefs, detect_disc_sheet, enumerate_disc_sheet_refs,
@@ -64,6 +65,9 @@ pub use io::{
 pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,
     MediaTopology, PlatformCandidate,
+};
+pub use n64::{
+    N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, N64ByteOrder,
 };
 pub use parallel_heap::{parallel_heap_reserve, reserve_parallel_heap};
 pub use patch_support::{checksum_validation_suffix, require_single_patch_file};
