@@ -457,37 +457,7 @@ impl<R: Read> HdiffFileParser<R> {
         first_byte: u8,
         label: &'static str,
     ) -> Result<u64> {
-        if tag_bits > 6 {
-            return Err(RomWeaverError::Validation(
-                "HDiffPatch varint tag_bits must be <= 6".into(),
-            ));
-        }
-
-        let first = if tag_bits == 0 {
-            self.read_u8(label)?
-        } else {
-            first_byte
-        };
-        let continuation_bit = 1u8 << (7 - tag_bits);
-        let payload_mask = continuation_bit - 1;
-
-        let mut value = u64::from(first & payload_mask);
-        if (first & continuation_bit) == 0 {
-            return Ok(value);
-        }
-
-        loop {
-            let byte = self.read_u8(label)?;
-            value = value
-                .checked_shl(7)
-                .and_then(|value| value.checked_add(u64::from(byte & 0x7f)))
-                .ok_or_else(|| RomWeaverError::Validation("HDiffPatch varint overflowed".into()))?;
-            if (byte & 0x80) == 0 {
-                break;
-            }
-        }
-
-        Ok(value)
+        decode_hdiff_varint(tag_bits, first_byte, || self.read_u8(label))
     }
 
     fn read_null_terminated_string(&mut self, max_len: usize) -> Result<String> {
@@ -1111,9 +1081,8 @@ fn apply_hdiff13_with_chunks(
             })?
         };
 
-        let copy_length = read_var_u64_slice(cover_raw.as_slice(), &mut cover_index, "cover copy")?;
-        let cover_length =
-            read_var_u64_slice(cover_raw.as_slice(), &mut cover_index, "cover length")?;
+        let copy_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover copy")?;
+        let cover_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover length")?;
 
         let new_pos = last_new_end.checked_add(copy_length).ok_or_else(|| {
             RomWeaverError::Validation("HDiffPatch cover new position overflowed".into())
@@ -1385,22 +1354,14 @@ fn parse_hdiffsf20_steps(
     let mut steps = Vec::<Sf20StepPlan>::new();
 
     while remaining_covers > 0 {
-        let cover_buf_size = usize::try_from(read_var_u64_slice(
-            diff,
-            &mut diff_index,
-            "sf20 cover_buf_size",
-        )?)
-        .map_err(|_| {
-            RomWeaverError::Validation("HDIFFSF20 cover_buf_size overflowed usize".into())
-        })?;
-        let rle_buf_size = usize::try_from(read_var_u64_slice(
-            diff,
-            &mut diff_index,
-            "sf20 rle_buf_size",
-        )?)
-        .map_err(|_| {
-            RomWeaverError::Validation("HDIFFSF20 rle_buf_size overflowed usize".into())
-        })?;
+        let cover_buf_size =
+            usize::try_from(read_var_u64(diff, &mut diff_index, "sf20 cover_buf_size")?).map_err(
+                |_| RomWeaverError::Validation("HDIFFSF20 cover_buf_size overflowed usize".into()),
+            )?;
+        let rle_buf_size =
+            usize::try_from(read_var_u64(diff, &mut diff_index, "sf20 rle_buf_size")?).map_err(
+                |_| RomWeaverError::Validation("HDIFFSF20 rle_buf_size overflowed usize".into()),
+            )?;
         let step_size = cover_buf_size
             .checked_add(rle_buf_size)
             .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 step size overflowed".into()))?;
@@ -1442,8 +1403,8 @@ fn parse_hdiffsf20_steps(
                     RomWeaverError::Validation("HDIFFSF20 old position underflowed".into())
                 })?
             };
-            let new_gap = read_var_u64_slice(covers, &mut cover_index, "sf20 new gap")?;
-            let cover_length = read_var_u64_slice(covers, &mut cover_index, "sf20 cover length")?;
+            let new_gap = read_var_u64(covers, &mut cover_index, "sf20 new gap")?;
+            let cover_length = read_var_u64(covers, &mut cover_index, "sf20 cover length")?;
             let new_pos = last_new_end.checked_add(new_gap).ok_or_else(|| {
                 RomWeaverError::Validation("HDIFFSF20 new position overflowed".into())
             })?;
@@ -2199,16 +2160,23 @@ fn read_var_u64(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<
     read_var_u64_tagged_slice(bytes, index, 0, 0, label)
 }
 
-fn read_var_u64_slice(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<u64> {
-    read_var_u64(bytes, index, label)
-}
-
 fn read_var_u64_tagged_slice(
     bytes: &[u8],
     index: &mut usize,
     tag_bits: u8,
     first_byte: u8,
     label: &'static str,
+) -> Result<u64> {
+    decode_hdiff_varint(tag_bits, first_byte, || read_u8_slice(bytes, index, label))
+}
+
+/// Decode an HDiffPatch tagged varint: `tag_bits` high bits of the first byte are a caller tag
+/// (the first byte is `first_byte` unless `tag_bits == 0`, in which case it is read), then
+/// 7-bit continuation groups follow. Shared by the stream and slice readers via `read_byte`.
+fn decode_hdiff_varint(
+    tag_bits: u8,
+    first_byte: u8,
+    mut read_byte: impl FnMut() -> Result<u8>,
 ) -> Result<u64> {
     if tag_bits > 6 {
         return Err(RomWeaverError::Validation(
@@ -2217,11 +2185,10 @@ fn read_var_u64_tagged_slice(
     }
 
     let first = if tag_bits == 0 {
-        read_u8_slice(bytes, index, label)?
+        read_byte()?
     } else {
         first_byte
     };
-
     let continuation_bit = 1u8 << (7 - tag_bits);
     let payload_mask = continuation_bit - 1;
 
@@ -2231,7 +2198,7 @@ fn read_var_u64_tagged_slice(
     }
 
     loop {
-        let byte = read_u8_slice(bytes, index, label)?;
+        let byte = read_byte()?;
         value = value
             .checked_shl(7)
             .and_then(|value| value.checked_add(u64::from(byte & 0x7f)))

@@ -2,7 +2,6 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write},
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use rayon::prelude::*;
@@ -16,11 +15,11 @@ use rom_weaver_core::{
 use tracing::debug;
 
 use crate::checksum_validation_suffix;
-use crate::shared::civil_from_days;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
 };
+use crate::shared::{hex_encode, utc_today};
 
 const SOLID_MAGIC: &[u8; 2] = b"SP";
 const SOLID_FORMAT_VERSION: u8 = 4;
@@ -1608,11 +1607,7 @@ impl<R: Read> SolidFileParser<R> {
 }
 
 fn current_patch_date() -> PatchDate {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-    let days_since_epoch = (now.as_secs() / 86_400) as i64;
-    let (year, month, day) = civil_from_days(days_since_epoch);
+    let (year, month, day) = utc_today();
     PatchDate {
         year: year as u16,
         month: month as u8,
@@ -1729,20 +1724,7 @@ fn write_u64_le(output: &mut Vec<u8>, value: u64, width: usize, label: &'static 
 }
 
 fn format_md5_hex(value: [u8; SOLID_MD5_LEN]) -> String {
-    let mut output = String::with_capacity(SOLID_MD5_LEN * 2);
-    for byte in value {
-        output.push(hex_nibble(byte >> 4));
-        output.push(hex_nibble(byte & 0x0F));
-    }
-    output
-}
-
-fn hex_nibble(value: u8) -> char {
-    match value {
-        0..=9 => (b'0' + value) as char,
-        10..=15 => (b'a' + (value - 10)) as char,
-        _ => '0',
-    }
+    hex_encode(&value)
 }
 
 fn usize_from_u64(value: u64, label: &'static str) -> Result<usize> {

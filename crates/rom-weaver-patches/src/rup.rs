@@ -21,12 +21,14 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::civil_from_days;
+#[cfg(test)]
+use crate::shared::checked::checked_add_usize;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
     run_with_optional_pool, scan_create_chunks,
 };
+use crate::shared::{hex_encode, utc_today};
 
 const RUP_MAGIC: &[u8; 6] = b"NINJA2";
 const RUP_HEADER_SIZE: usize = 0x800;
@@ -2291,37 +2293,12 @@ fn usize_from_u64(value: u64, label: &str) -> Result<usize> {
         .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded usize")))
 }
 
-#[cfg(test)]
-fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
-}
-
 fn format_md5_hex(value: [u8; 16]) -> String {
-    let mut output = String::with_capacity(32);
-    for byte in value {
-        output.push(nibble_to_hex(byte >> 4));
-        output.push(nibble_to_hex(byte & 0x0f));
-    }
-    output
-}
-
-fn nibble_to_hex(value: u8) -> char {
-    match value {
-        0..=9 => (b'0' + value) as char,
-        10..=15 => (b'a' + (value - 10)) as char,
-        _ => '0',
-    }
+    hex_encode(&value)
 }
 
 fn current_utc_yyyymmdd() -> String {
-    let now = std::time::SystemTime::now();
-    let duration = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-    let days = (duration.as_secs() / 86_400) as i64;
-
-    let (year, month, day) = civil_from_days(days);
+    let (year, month, day) = utc_today();
     format!("{year:04}{month:02}{day:02}")
 }
 

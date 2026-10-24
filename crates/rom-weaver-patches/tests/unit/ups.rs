@@ -1,7 +1,7 @@
 use std::fs;
 
 use rom_weaver_core::{
-    PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchApplyRequest, PatchCheckScopes, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
     PatchValidateRequest, ProbeConfidence,
 };
 
@@ -1004,4 +1004,44 @@ fn create_in_parallel_zero_fills_past_the_end_of_a_shorter_source() {
         )
         .expect("apply");
     assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn apply_label_reports_skipped_validation_unless_source_and_target_are_checked() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ups");
+    let (source, target) = (b"source-data", b"target-data");
+    fs::write(&input_path, source).expect("fixture");
+    fs::write(
+        &patch_path,
+        create_ups_patch_bytes(source, target).expect("patch").bytes,
+    )
+    .expect("fixture");
+    let handler = UpsPatchHandler::new(&UPS);
+
+    for (source_scope, target_scope) in [(true, true), (true, false), (false, true)] {
+        let output_path = temp.child("output.bin");
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1).with_patch_check_scopes(PatchCheckScopes {
+                    patch_integrity: true,
+                    source: source_scope,
+                    target: target_scope,
+                }),
+            )
+            .expect("apply");
+        assert_eq!(
+            report.label.contains("; checksum validation skipped"),
+            !(source_scope && target_scope),
+            "scopes ({source_scope}, {target_scope}): {}",
+            report.label
+        );
+        assert_eq!(fs::read(output_path).expect("output"), target);
+    }
 }
