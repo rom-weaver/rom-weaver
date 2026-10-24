@@ -786,7 +786,15 @@ export type WeavePatchSource = { source: WeaveSourceRef,
  * archive (spares the host a second describe round-trip). `None` for
  * URL / unresolved-path entries.
  */
-descriptor?: PatchDescriptor | null, };
+descriptor?: PatchDescriptor | null,
+/**
+ * The entry's input checks with any `inputChecksRef` resolved against `checkStates`.
+ */
+input_checks?: WeaveChecks | null,
+/**
+ * The entry's output checks with any `outputChecksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null, };
 
 export type WeaveParseResult = {
 /**
@@ -807,6 +815,14 @@ rom_source?: WeaveSourceRef | null,
  * Index-aligned with `weave.patches`.
  */
 patch_sources: Array<WeavePatchSource>,
+/**
+ * `weave.rom` checks with any `checksRef` resolved against `checkStates`.
+ */
+rom_checks?: WeaveChecks | null,
+/**
+ * `weave.output` checks with any `checksRef` resolved against `checkStates`.
+ */
+output_checks?: WeaveChecks | null,
 /**
  * Non-fatal issues (ignored members, extra weaves, …).
  */

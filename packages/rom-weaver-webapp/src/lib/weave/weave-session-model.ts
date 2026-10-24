@@ -11,7 +11,7 @@ import type {
   ParsedWeaveSourceRef,
 } from "../../types/weave.ts";
 import { getPathBaseName } from "../path-utils.ts";
-import { readsWeaveRootRom, resolveWeaveChecks } from "./weave-targets.ts";
+import { readsWeaveRootRom } from "./weave-targets.ts";
 
 type WeaveAcquisition = { kind: "url"; url: string } | { kind: "extracted"; extractedPath: string };
 
@@ -100,13 +100,11 @@ type WeaveChainEndpointChecks = {
 const weaveChainEndpointChecks = (weave: ParsedWeave): WeaveChainEndpointChecks => {
   const first = weave.patches[0];
   const last = weave.patches.at(-1);
-  const rom = resolveWeaveChecks(weave, weave.rom?.checks, weave.rom?.checksRef);
+  const rom = weave.rom?.checks;
   const firstReadsRom = !!first && readsWeaveRootRom(first, weave.rom?.member);
-  const input = (firstReadsRom && resolveWeaveChecks(weave, first.inputChecks, first.inputChecksRef)) || rom;
-  const weaveOutput = resolveWeaveChecks(weave, weave.output?.checks, weave.output?.checksRef);
-  const output = last?.target
-    ? weaveOutput
-    : resolveWeaveChecks(weave, last?.outputChecks, last?.outputChecksRef) || weaveOutput;
+  const input = (firstReadsRom && first.inputChecks) || rom;
+  const weaveOutput = weave.output?.checks;
+  const output = last?.target ? weaveOutput : last?.outputChecks || weaveOutput;
   return { ...(input ? { input } : {}), ...(output ? { output } : {}) };
 };
 
@@ -117,7 +115,7 @@ const weaveSessionDisplayName = (weave: ParsedWeave): string | undefined => weav
 const weaveRomExpectation = (weave: ParsedWeave): WeaveRomExpectation | undefined => {
   const rom = weave.rom;
   if (!rom || rom.url) return undefined;
-  const checks = resolveWeaveChecks(weave, rom.checks, rom.checksRef);
+  const checks = rom.checks;
   // Callers only ask when no ROM source resolved, so a `path` here is unbundled (and, for archives, no
   // member matched the rom checksums): it names the ROM to supply.
   const name = rom.name || getPathBaseName(rom.path);
@@ -151,7 +149,7 @@ const weaveSessionDefaults = (
   "chainEndpointChecks" | "romChecks" | "romMember" | "name" | "patchBasis" | "outputDefaults"
 > => {
   const name = weaveSessionDisplayName(weave);
-  const romChecks = resolveWeaveChecks(weave, weave.rom?.checks, weave.rom?.checksRef);
+  const romChecks = weave.rom?.checks;
   return {
     chainEndpointChecks: weaveChainEndpointChecks(weave),
     ...(romChecks ? { romChecks } : {}),
@@ -193,25 +191,15 @@ const toWeavePlanEntry = (
 
 /**
  * Build the acquisition + session plan from a `weave parse` result. Every patch is acquired and
- * remains toggleable; `optional` only seeds its initial on/off state.
+ * remains toggleable; `optional` only seeds its initial on/off state. The parsed weave already
+ * carries Rust-resolved checks (`checksRef` lookups happen in `weave parse`).
  */
 const buildWeaveApplySessionPlan = (parsed: ParsedWeaveParseResult, weaveUrl: string): WeaveApplySessionPlan => {
   const entries: WeavePlanEntry[] = [];
   parsed.weave.patches.forEach((patch, index) => {
     const patchSource = parsed.patchSources[index];
     if (!patchSource) throw new Error(`Weave patch ${index + 1} has no resolved source`);
-    entries.push(
-      toWeavePlanEntry(
-        {
-          ...patch,
-          inputChecks: resolveWeaveChecks(parsed.weave, patch.inputChecks, patch.inputChecksRef),
-          outputChecks: resolveWeaveChecks(parsed.weave, patch.outputChecks, patch.outputChecksRef),
-        },
-        patchSource.source,
-        weaveUrl,
-        index,
-      ),
-    );
+    entries.push(toWeavePlanEntry(patch, patchSource.source, weaveUrl, index));
   });
   const romExpectation = parsed.romSource ? undefined : weaveRomExpectation(parsed.weave);
   return {

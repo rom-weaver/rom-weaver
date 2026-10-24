@@ -1,10 +1,9 @@
-import { parseWeaveCreateResult } from "../../src/lib/runtime/weave-result.ts";
+import { parseWeaveCreateResult, parseWeaveParseResult } from "../../src/lib/runtime/weave-result.ts";
 import { describe, expect, it } from "vitest";
 import {
   compareWeaveRomChecks,
   gateWeaveChainChecks,
   readsWeaveRootRom,
-  resolveWeaveChecks,
   selectWeaveMembers,
   validatePatchDependencies,
 } from "../../src/lib/weave/weave-targets.ts";
@@ -21,20 +20,23 @@ describe("weave state references", () => {
     patches: [{ id: "a", path: "a.ips", input: { rom: true }, inputChecksRef: "rom" }],
   };
 
-  it("shows shared checks at the ROM and consuming patch without copying stored values", () => {
-    const plan = buildWeaveApplySessionPlan(
-      {
-        weave,
-        patchSources: [{ source: { kind: "path", path: "a.ips" } }],
-        sourceKind: "json",
+  it("shows shared checks at the ROM and consuming patch from the Rust-resolved parse result", () => {
+    const parsed = parseWeaveParseResult({
+      weave: {
+        weave: weave as never,
+        source_kind: "json",
+        rom_checks: checks,
+        patch_sources: [{ source: { path: "a.ips" }, input_checks: checks }],
         warnings: [],
       },
-      "https://example.test/weave.json",
-    );
+    });
+    expect(parsed).toBeDefined();
+    if (!parsed) return;
+    const plan = buildWeaveApplySessionPlan(parsed, "https://example.test/weave.json");
     expect(plan.romExpectation?.checks).toEqual(checks);
     expect(plan.entries[0]?.inputChecks).toEqual(checks);
     expect(plan.entries[0]?.input).toEqual({ rom: true });
-    expect(weave.patches[0]?.inputChecks).toBeUndefined();
+    expect(plan.chainEndpointChecks.input).toEqual(checks);
   });
 
   it("retains references and track locators at the Rust boundary", () => {
@@ -51,25 +53,6 @@ describe("weave state references", () => {
       },
     });
     expect(result?.weave).toEqual(wireWeave);
-  });
-
-  it("rejects missing, duplicate, and conflicting check references", () => {
-    expect(() => resolveWeaveChecks(weave, undefined, "missing")).toThrow("missing or duplicated");
-    expect(() => resolveWeaveChecks(weave, checks, "rom")).toThrow("both values and a reference");
-    expect(() => resolveWeaveChecks(weave, checks, "missing")).toThrow("both values and a reference");
-    expect(() =>
-      resolveWeaveChecks(
-        {
-          ...weave,
-          checkStates: [
-            { id: "rom", checks },
-            { id: "rom", checks },
-          ],
-        },
-        undefined,
-        "rom",
-      ),
-    ).toThrow("missing or duplicated");
   });
 });
 

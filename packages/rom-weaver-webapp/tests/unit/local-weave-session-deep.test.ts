@@ -29,7 +29,6 @@ describe("loadLocalWeaveSession acquisition", () => {
       ]),
       result: {
         weave: {
-          checkStates: [{ checks: { checksums: { crc32: "b" } }, id: "patch:fix-id:output" }],
           output: { header: "strip", name: "Patched Game", checks: { size: 12 } },
           patchBasis: "base",
           patches: [
@@ -43,7 +42,7 @@ describe("loadLocalWeaveSession acquisition", () => {
               label: "1.0",
               name: "Fix",
               optional: true,
-              outputChecksRef: "patch:fix-id:output",
+              outputChecks: { checksums: { crc32: "b" } },
               version: "1.0.0",
             },
           ],
