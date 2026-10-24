@@ -306,8 +306,9 @@ impl NodHandlerCore {
                 })?;
                 NodDiscReader::new_from_non_cloneable_read(file, &fallback_options).map_err(
                     |stream_error| {
-                        let wbfs_size = wbfs_size_mismatch(&stream_error)
-                            .or_else(|| wbfs_size_mismatch(&path_error));
+                        // The path attempt reads the whole split set; the stream fallback sees one file.
+                        let wbfs_size = wbfs_size_mismatch(&path_error)
+                            .or_else(|| wbfs_size_mismatch(&stream_error));
                         let stream_message = stream_error.to_string();
                         let path_message = path_error.to_string();
                         // Both attempts usually fail identically; report that once.
@@ -819,20 +820,24 @@ fn display_input_name(input: &Path) -> String {
     )
 }
 
-/// Hint appended when a create input is not a disc image the nod reader recognizes.
 /// A failed disc open: the joined message of every attempt, plus the last WBFS size mismatch.
 struct DiscOpenFailure {
     message: String,
     wbfs_size: Option<(u64, u64)>,
 }
 
+/// Reads the sizes out of nod's `Invalid WBFS file size: {actual}, expected {expected}` error.
+/// The mapping lives here so the vendored nod source stays unmodified.
 fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
-    match error {
-        crate::nod::Error::WbfsFileSize { actual, expected } => Some((*actual, *expected)),
-        _ => None,
-    }
+    let crate::nod::Error::DiscFormat(message) = error else {
+        return None;
+    };
+    let sizes = message.strip_prefix("Invalid WBFS file size: ")?;
+    let (actual, expected) = sizes.split_once(", expected ")?;
+    Some((actual.parse().ok()?, expected.parse().ok()?))
 }
 
+/// Hint appended when a create input is not a disc image the nod reader recognizes.
 fn unknown_disc_hint(error: &str) -> &'static str {
     if error.contains("Unknown disc format") {
         "; the input must be a GameCube or Wii disc image"

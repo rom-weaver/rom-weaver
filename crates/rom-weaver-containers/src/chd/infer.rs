@@ -556,9 +556,16 @@ impl ChdContainerHandler {
             Some("raw") => Ok(Some(ChdCreateModeOverride::Raw)),
             Some("hd") => Ok(Some(ChdCreateModeOverride::HardDisk)),
             Some("av") => Ok(Some(ChdCreateModeOverride::Av)),
-            _ => Err(RomWeaverError::Validation(format!(
-                "unsupported chd mode `{mode}` in `{format}`; expected one of: cd, gd, dvd, raw, hd, av, ld"
-            ))),
+            _ => {
+                let accepted = CHD_CREATE_MODES
+                    .iter()
+                    .map(|(name, _)| *name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(RomWeaverError::Validation(format!(
+                    "unsupported chd mode `{mode}` in `{format}`; expected one of: {accepted}"
+                )))
+            }
         }
     }
 

@@ -128,7 +128,7 @@ fn identify_pack_slugs_derive_three_ds_rows_from_the_z3ds_table() {
     let value = identify_pack_slugs_value();
     let extensions = &value["extensionSlugs"];
     for extension in [
-        "3ds", "3dsx", "cia", "zcia", "z3ds", "z3dsx", "zcci", "zcxi",
+        "3ds", "3dsx", "cci", "cxi", "cia", "zcia", "z3ds", "z3dsx", "zcci", "zcxi",
     ] {
         assert_eq!(
             extensions[extension],

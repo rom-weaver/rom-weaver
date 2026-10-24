@@ -50,9 +50,11 @@ type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
 
 // Raw and wrapper extensions come from Rust (`RAW_SAVE_FILE_EXTENSIONS`, `SaveContainerKind::file_extensions`).
 const SAVE_CONTAINERS = ROM_WEAVER_SAVE_FILE_EXTENSIONS.containers;
-const saveContainerExtensions = (isGroup: (id: string) => boolean): string[] =>
+const saveContainerExtensions = (isGroup: (id: SaveContainerId) => boolean): string[] =>
   SAVE_CONTAINERS.filter((container) => isGroup(container.id)).flatMap((container) => [...container.extensions]);
-const isGameSharkSpContainer = (id: string): boolean => id === "shark_port_save" || id === "gameshark_sp_snapshot";
+type SaveContainerId = (typeof SAVE_CONTAINERS)[number]["id"];
+const isGameSharkSpContainer = (id: SaveContainerId): boolean =>
+  id === "shark_port_save" || id === "gameshark_sp_snapshot";
 const SAVE_SUPPORTED_FILES = [
   { extensions: ROM_WEAVER_SAVE_FILE_EXTENSIONS.raw, labelId: "ui.saves.editor.supported.raw" },
   { extensions: saveContainerExtensions(isGameSharkSpContainer), labelId: "ui.saves.editor.supported.gamesharkSp" },

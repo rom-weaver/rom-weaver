@@ -168,14 +168,6 @@ pub enum Error {
     /// An error for disc format related issues.
     #[error("disc format error: {0}")]
     DiscFormat(String),
-    /// A WBFS file, or split set, whose total size differs from its header's size.
-    #[error("disc format error: Invalid WBFS file size: {actual}, expected {expected}")]
-    WbfsFileSize {
-        /// Bytes the stream actually holds.
-        actual: u64,
-        /// Bytes the WBFS header declares.
-        expected: u64,
-    },
     /// A general I/O error.
     #[error("{0}: {1}")]
     Io(String, #[source] std::io::Error),

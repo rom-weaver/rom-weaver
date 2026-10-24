@@ -84,10 +84,10 @@ impl BlockReaderWBFS {
         let file_len = inner.stream_len().context("Determining stream length")?;
         let expected_file_len = header.num_sectors.get() as u64 * header.sector_size() as u64;
         if file_len != expected_file_len {
-            return Err(Error::WbfsFileSize {
-                actual: file_len,
-                expected: expected_file_len,
-            });
+            return Err(Error::DiscFormat(format!(
+                "Invalid WBFS file size: {}, expected {}",
+                file_len, expected_file_len
+            )));
         }
 
         let disc_table: Box<[u8]> = read_box_slice_at(

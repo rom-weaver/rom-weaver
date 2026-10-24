@@ -764,14 +764,17 @@ fn threaded_commands_value() -> Value {
         if name == "plan-extract-batch" {
             continue;
         }
-        let Some(command) = root.find_subcommand(&name) else {
-            continue;
-        };
+        let command = root
+            .find_subcommand(&name)
+            .unwrap_or_else(|| panic!("command tag `{name}` has no clap subcommand"));
         if takes_threads(command) {
             paths.push(name);
         } else if let Some((_, subtypes)) = nested.iter().find(|(family, _)| *family == name) {
             for subtype in subtypes {
-                if command.find_subcommand(subtype).is_some_and(takes_threads) {
+                let subcommand = command.find_subcommand(subtype).unwrap_or_else(|| {
+                    panic!("command tag `{name}/{subtype}` has no clap subcommand")
+                });
+                if takes_threads(subcommand) {
                     paths.push(format!("{name}/{subtype}"));
                 }
             }
