@@ -315,9 +315,10 @@ fn default_code_kind() -> String {
     "auto".to_string()
 }
 
-/// Archive-selection flags shared by `probe` and `identify`: which archive
-/// member to use and how to filter members. Flattened into both commands so
-/// the CLI flags and the wasm JSON shape stay identical.
+// Archive-selection flags shared by `probe` and `identify`: which archive
+// member to use and how to filter members. Flattened into both commands so
+// the CLI flags and the wasm JSON shape stay identical. Plain comment on
+// purpose: a `///` doc would set clap about text on the flattening command.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
