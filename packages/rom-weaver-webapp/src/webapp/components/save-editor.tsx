@@ -11,6 +11,7 @@ import {
 import { readRuntimeOutputBlob } from "../../storage/vfs/runtime-output.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { SaveGameDefinition } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
+import { ROM_WEAVER_SAVE_FILE_EXTENSIONS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import {
   saveValueFromText,
   saveValueToText,
@@ -47,10 +48,18 @@ type FieldErrors = Record<string, string>;
 type FieldGroup = { id: string; title: string; fields: SaveField[] };
 type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
 
+// Raw and wrapper extensions come from Rust (`RAW_SAVE_FILE_EXTENSIONS`, `SaveContainerKind::file_extensions`).
+const SAVE_CONTAINERS = ROM_WEAVER_SAVE_FILE_EXTENSIONS.containers;
+const saveContainerExtensions = (isGroup: (id: string) => boolean): string[] =>
+  SAVE_CONTAINERS.filter((container) => isGroup(container.id)).flatMap((container) => [...container.extensions]);
+const isGameSharkSpContainer = (id: string): boolean => id === "shark_port_save" || id === "gameshark_sp_snapshot";
 const SAVE_SUPPORTED_FILES = [
-  { extensions: ["sav", "srm", "sra", "eep", "fla", "mpk", "mcr", "mcd"], labelId: "ui.saves.editor.supported.raw" },
-  { extensions: ["sps", "xps", "gsv"], labelId: "ui.saves.editor.supported.gamesharkSp" },
-  { extensions: ["dsv", "gme", "mem", "vgs"], labelId: "ui.saves.editor.supported.wrappers" },
+  { extensions: ROM_WEAVER_SAVE_FILE_EXTENSIONS.raw, labelId: "ui.saves.editor.supported.raw" },
+  { extensions: saveContainerExtensions(isGameSharkSpContainer), labelId: "ui.saves.editor.supported.gamesharkSp" },
+  {
+    extensions: saveContainerExtensions((id) => !isGameSharkSpContainer(id)),
+    labelId: "ui.saves.editor.supported.wrappers",
+  },
 ] as const;
 const SAVE_ACCEPT = `${SAVE_SUPPORTED_FILES.flatMap((group) => group.extensions.map((extension) => `.${extension}`)).join(",")},application/octet-stream`;
 const GHOST_STEPS = [

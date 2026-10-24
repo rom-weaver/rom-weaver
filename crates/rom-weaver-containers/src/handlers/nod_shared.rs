@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::{VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -214,23 +215,32 @@ impl NodHandlerCore {
         }
     }
 
-    fn open_disc_with<E, F>(
+    fn open_disc_with<F>(
         &self,
         source: &Path,
         preloader_threads: usize,
         open_disc: F,
     ) -> Result<NodDiscReader>
     where
-        E: std::fmt::Display,
-        F: FnOnce(&Path, &NodDiscOptions) -> std::result::Result<NodDiscReader, E>,
+        F: FnOnce(&Path, &NodDiscOptions) -> std::result::Result<NodDiscReader, DiscOpenFailure>,
     {
         let options = self.read_options(preloader_threads);
-        open_disc(source, &options).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "failed to open {} source `{}`: {error}",
+        open_disc(source, &options).map_err(|failure| {
+            let message = format!(
+                "failed to open {} source `{}`: {}",
                 self.format_name(),
-                source.display()
-            ))
+                source.display(),
+                failure.message
+            );
+            match failure.wbfs_size {
+                Some((actual, expected)) => RomWeaverError::ValidationCode(
+                    ValidationCodeError::new(VALIDATION_CODE_WBFS_SIZE_MISMATCH)
+                        .with_message(message)
+                        .with_field("actual", actual)
+                        .with_field("expected", expected),
+                ),
+                None => RomWeaverError::Validation(message),
+            }
         })
     }
 
@@ -240,7 +250,7 @@ impl NodHandlerCore {
         preloader_threads: usize,
     ) -> Result<NodDiscReader> {
         self.open_disc_with(source, preloader_threads, |path, options| {
-            self.open_disc_from_path_or_stream(path, options)
+            self.open_disc_detailed(path, options)
         })
     }
 
@@ -249,6 +259,17 @@ impl NodHandlerCore {
         source: &Path,
         options: &NodDiscOptions,
     ) -> std::result::Result<NodDiscReader, String> {
+        self.open_disc_detailed(source, options)
+            .map_err(|failure| failure.message)
+    }
+
+    /// Opens a disc by path, falling back to a stream. The failure keeps the last WBFS size
+    /// mismatch, because the message joins every attempt's report.
+    fn open_disc_detailed(
+        &self,
+        source: &Path,
+        options: &NodDiscOptions,
+    ) -> std::result::Result<NodDiscReader, DiscOpenFailure> {
         #[cfg(target_family = "wasm")]
         if self.nod_format != NodFormat::Nfs {
             // Browser WASI thread workers have their own fd tables, so cloned NOD readers must
@@ -260,7 +281,11 @@ impl NodHandlerCore {
                 Ok(disc) => return Ok(disc),
                 Err(stream_error) => {
                     return NodDiscReader::new(source, options).map_err(|path_error| {
-                        format!("{stream_error}; path fallback failed: {path_error}")
+                        DiscOpenFailure {
+                            message: format!("{stream_error}; path fallback failed: {path_error}"),
+                            wbfs_size: wbfs_size_mismatch(&path_error)
+                                .or_else(|| wbfs_size_mismatch(&stream_error)),
+                        }
                     });
                 }
             }
@@ -273,23 +298,32 @@ impl NodHandlerCore {
                 // Non-cloneable stream fallback is mutex-serialized, so preloader fanout only
                 // adds startup thread spawn overhead without improving throughput.
                 fallback_options.preloader_threads = 0;
-                let file = File::open(source).map_err(|stream_open_error| {
-                    format!("{path_error}; stream fallback open failed: {stream_open_error}")
+                let file = File::open(source).map_err(|stream_open_error| DiscOpenFailure {
+                    message: format!(
+                        "{path_error}; stream fallback open failed: {stream_open_error}"
+                    ),
+                    wbfs_size: wbfs_size_mismatch(&path_error),
                 })?;
                 NodDiscReader::new_from_non_cloneable_read(file, &fallback_options).map_err(
                     |stream_error| {
-                        let stream_error = stream_error.to_string();
-                        let path_error = path_error.to_string();
+                        let wbfs_size = wbfs_size_mismatch(&stream_error)
+                            .or_else(|| wbfs_size_mismatch(&path_error));
+                        let stream_message = stream_error.to_string();
+                        let path_message = path_error.to_string();
                         // Both attempts usually fail identically; report that once.
-                        if stream_error == path_error {
-                            path_error
+                        let message = if stream_message == path_message {
+                            path_message
                         } else {
-                            format!("{path_error}; stream fallback failed: {stream_error}")
-                        }
+                            format!("{path_message}; stream fallback failed: {stream_message}")
+                        };
+                        DiscOpenFailure { message, wbfs_size }
                     },
                 )
             }
-            Err(path_error) => Err(path_error.to_string()),
+            Err(path_error) => Err(DiscOpenFailure {
+                message: path_error.to_string(),
+                wbfs_size: wbfs_size_mismatch(&path_error),
+            }),
         }
     }
 
@@ -786,6 +820,19 @@ fn display_input_name(input: &Path) -> String {
 }
 
 /// Hint appended when a create input is not a disc image the nod reader recognizes.
+/// A failed disc open: the joined message of every attempt, plus the last WBFS size mismatch.
+struct DiscOpenFailure {
+    message: String,
+    wbfs_size: Option<(u64, u64)>,
+}
+
+fn wbfs_size_mismatch(error: &crate::nod::Error) -> Option<(u64, u64)> {
+    match error {
+        crate::nod::Error::WbfsFileSize { actual, expected } => Some((*actual, *expected)),
+        _ => None,
+    }
+}
+
 fn unknown_disc_hint(error: &str) -> &'static str {
     if error.contains("Unknown disc format") {
         "; the input must be a GameCube or Wii disc image"
