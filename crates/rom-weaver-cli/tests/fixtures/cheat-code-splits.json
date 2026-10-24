@@ -1,0 +1,93 @@
+[
+  {
+    "name": "splits on +, commas, newlines and spaces, keeping intra-code separators",
+    "text": "SXIOPO+AEEPYZ, GXNENV\n004-BCE-E66",
+    "system": "nes",
+    "kind": "auto",
+    "codes": ["SXIOPO", "AEEPYZ", "GXNENV", "004-BCE-E66"]
+  },
+  {
+    "name": "splits on semicolons",
+    "text": "SXIOPO;AEEPYZ",
+    "system": "nes",
+    "kind": "auto",
+    "codes": ["SXIOPO", "AEEPYZ"]
+  },
+  {
+    "name": "returns nothing for blank input",
+    "text": "  \n + , ",
+    "system": "nes",
+    "kind": "auto",
+    "codes": []
+  },
+  {
+    "name": "keeps the plain split for systems whose codes are single words",
+    "text": "SXIOPO AEEPYZ",
+    "system": "nes",
+    "kind": "auto",
+    "codes": ["SXIOPO", "AEEPYZ"]
+  },
+  {
+    "name": "keeps an 8+4 Xploder pair together for PlayStation",
+    "text": "800B4CD4 0063",
+    "system": "playstation",
+    "kind": "auto",
+    "codes": ["800B4CD40063"]
+  },
+  {
+    "name": "keeps an 8+8 Xploder pair together for Game Boy Advance",
+    "text": "800B4CD4 00000063\n800B4CD8 0001",
+    "system": "gameboyadvance",
+    "kind": "auto",
+    "codes": ["800B4CD400000063", "800B4CD80001"]
+  },
+  {
+    "name": "keeps a four-word GBA ROM patch together",
+    "text": "00000000 1801F2E0 00000063 00000000",
+    "system": "gameboyadvance",
+    "kind": "auto",
+    "codes": ["000000001801F2E00000006300000000"]
+  },
+  {
+    "name": "uses the Xploder split when the kind says so, whatever the system",
+    "text": "800B4CD4 0063",
+    "system": "nes",
+    "kind": "xploder",
+    "codes": ["800B4CD40063"]
+  },
+  {
+    "name": "keeps an unpaired Xploder word on its own",
+    "text": "800B4CD4 12 0063",
+    "system": "playstation",
+    "kind": "auto",
+    "codes": ["800B4CD4", "12", "0063"]
+  },
+  {
+    "name": "keeps an entire multiline GBA GameShark v1 block together",
+    "text": "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000",
+    "system": "gameboyadvance",
+    "kind": "game-shark-v1",
+    "codes": ["DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000"]
+  },
+  {
+    "name": "keeps an entire multiline GBA GameShark v1 raw block together",
+    "text": "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000",
+    "system": "gameboyadvance",
+    "kind": "game-shark-v1-raw",
+    "codes": ["DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000"]
+  },
+  {
+    "name": "keeps an entire multiline GBA Action Replay v3 block together",
+    "text": "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000",
+    "system": "gameboyadvance",
+    "kind": "action-replay-v3",
+    "codes": ["DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000"]
+  },
+  {
+    "name": "keeps an entire multiline GBA Action Replay v3 raw block together",
+    "text": "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000",
+    "system": "gameboyadvance",
+    "kind": "action-replay-v3-raw",
+    "codes": ["DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000"]
+  }
+]
