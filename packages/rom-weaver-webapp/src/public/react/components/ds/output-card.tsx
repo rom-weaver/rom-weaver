@@ -75,7 +75,7 @@ const OutputField = ({
   children: ReactNode;
 }) => (
   <div
-    className={join("ofld ofield", className)}
+    className={join("ofld ofield", labelInfo ? "ofld-has-info" : false, className)}
     // Phone layouts keep the cell wide enough for its label.
     style={typeof label === "string" ? ({ "--ofld-label-ch": label.length, ...style } as CSSProperties) : style}
   >
