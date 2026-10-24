@@ -8,7 +8,7 @@ use std::{
 
 use tracing::{debug, trace};
 
-use crate::checksum_validation_suffix;
+use crate::shared::checked::{checked_add, checked_add_usize};
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
 use crate::shared::labels::byuu_parse_report;
 use crate::shared::threading::{
@@ -145,17 +145,11 @@ impl PatchHandler for UpsPatchHandler {
             }
         }
 
-        let checksum_suffix = checksum_validation_suffix(scopes.source && scopes.target);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_apply_report(
             self.descriptor,
-            "apply",
-            format!(
-                "applied {} patch with {} record(s){}",
-                self.descriptor.name,
-                patch.changes.len(),
-                checksum_suffix
-            ),
-            Some(execution),
+            patch.changes.len(),
+            scopes.source && scopes.target,
+            execution,
         ))
     }
 
@@ -977,19 +971,9 @@ fn encode_ups_patch(
     })
 }
 
-fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
-}
-
 fn checked_sub(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
     lhs.checked_sub(rhs)
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} underflowed")))
-}
-
-fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
 }
 
 fn read_ups_footer(path: &Path, footer_offset: u64) -> Result<[u8; UPS_FOOTER_SIZE]> {

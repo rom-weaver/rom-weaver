@@ -15,7 +15,6 @@ use rom_weaver_core::{
 };
 use tracing::{debug, trace};
 
-use crate::checksum_validation_suffix;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::threading::{
@@ -170,17 +169,11 @@ impl PatchHandler for ApsGbaPatchHandler {
             execution
         };
 
-        let checksum_suffix = checksum_validation_suffix(validate_checksums);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_apply_report(
             self.descriptor,
-            "apply",
-            format!(
-                "applied {} patch with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
-            Some(execution),
+            patch.records.len(),
+            validate_checksums,
+            execution,
         ))
     }
 
@@ -220,16 +213,10 @@ impl PatchHandler for ApsGbaPatchHandler {
             )?;
         }
 
-        let checksum_suffix = checksum_validation_suffix(validate_checksums);
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_validate_report(
             self.descriptor,
-            "validate",
-            format!(
-                "validated {} patch source with {} record(s){}",
-                self.descriptor.name,
-                patch.records.len(),
-                checksum_suffix
-            ),
+            patch.records.len(),
+            validate_checksums,
             context.single_thread_execution(),
         ))
     }
