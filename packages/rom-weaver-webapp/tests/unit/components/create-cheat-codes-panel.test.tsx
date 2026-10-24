@@ -152,6 +152,21 @@ describe("CreateCheatCodesPanel", () => {
     await waitFor(() => expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ kind: "pro-action-rocky" })));
   });
 
+  it("lists the codes the engine split out of the typed block", async () => {
+    const classifier = vi.fn<ManualCheatClassifier>(async (request) => {
+      const base = await classifyManualCode(request);
+      return request.code.includes(" ")
+        ? { ...base, record: { ...base.record, codes: ["800B4CD40063"] } }
+        : { ...base, record: { ...base.record, codes: [request.code] } };
+    });
+    const { onEntriesChange } = renderPanel("800B4CD4 0063", { classifyManualCode: classifier });
+    await waitFor(() =>
+      expect(onEntriesChange).toHaveBeenLastCalledWith([expect.objectContaining({ code: "800B4CD40063" })]),
+    );
+    expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ code: "800B4CD4 0063" }));
+    expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ code: "800B4CD40063" }));
+  });
+
   it("blocks a database code that would reinterpret staged codes", async () => {
     const { onKindChange, onValueChange, view } = renderPanel("SXIOPO");
     await waitFor(() => expect(view.getByRole("status").textContent).toContain("Game Genie"));

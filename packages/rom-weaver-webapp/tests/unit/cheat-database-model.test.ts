@@ -5,6 +5,7 @@ import {
   isCheatManualSystem,
   isUnsupportedCheatSystem,
   matchCheatGame,
+  normalizeCheatText,
   reconcileSelectedCheatIds,
   resolveCheatDatabaseEntry,
   resolveManualOnlyCheatSystem,
@@ -16,6 +17,7 @@ import {
   type CheatRecord,
   type ClassifiedCheatRecord,
 } from "../../src/lib/cheats/index.ts";
+import titleCases from "../../../../crates/rom-weaver-cli/tests/fixtures/cheat-title-normalization.json";
 
 const raw = (id: string, description: string): CheatDatabaseRecord => ({
   id,
@@ -116,6 +118,29 @@ const catalog = {
     },
   ],
 };
+
+// The CLI's `normalize_text` runs the same cases, so a title matches the same
+// game in the browser and on the command line.
+describe("normalizeCheatText", () => {
+  it.each(titleCases)("$name", ({ input, normalized }) => {
+    expect(normalizeCheatText(input)).toBe(normalized);
+  });
+
+  it("matches an accented ROM name to its accented shard title", () => {
+    const accented: CheatSystemShard = {
+      ...shard,
+      games: shard.games.map((game) => ({
+        ...game,
+        id: "pokemon",
+        normalizedTitle: "pokémon red",
+        title: "Pokémon Red",
+      })),
+    };
+    expect(
+      matchCheatGame({ key: "rom-a", platform: snesEntry.platform, fileName: "Pokemon Red.sfc" }, snesEntry, accented),
+    ).toMatchObject({ kind: "title", game: { id: "pokemon" } });
+  });
+});
 
 describe("cheat database catalog", () => {
   it("matches a known checksum before it considers the title", () => {

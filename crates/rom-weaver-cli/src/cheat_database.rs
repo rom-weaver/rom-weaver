@@ -481,11 +481,19 @@ fn decompress_shard(raw: &[u8], path: &Path, limit: u64) -> Result<Vec<u8>> {
     Ok(decompressed)
 }
 
-/// Fold a title or file name into the comparison form the webapp uses:
-/// lower-case, extension dropped, bracketed region/revision tags dropped, and
-/// every run of non-alphanumerics collapsed to a single space.
+/// Fold a title, file name, or search query into its comparison form: accents
+/// folded to their base letter (NFKD, marks dropped), lower-case, extension
+/// dropped, bracketed region/revision tags dropped (nested brackets included),
+/// and every run of non-alphanumerics collapsed to a single space. The webapp's
+/// `normalizeCheatText` mirrors this; both run
+/// `tests/fixtures/cheat-title-normalization.json`.
 pub(crate) fn normalize_text(value: &str) -> String {
-    let mut without_extension = value.to_ascii_lowercase();
+    use unicode_normalization::UnicodeNormalization;
+    let decomposed = value.nfkd().collect::<String>().to_lowercase();
+    let mut without_extension = decomposed
+        .chars()
+        .filter(|character| !unicode_normalization::char::is_combining_mark(*character))
+        .collect::<String>();
     if let Some(dot) = without_extension.rfind('.') {
         let extension = &without_extension[dot + 1..];
         if (1..=8).contains(&extension.len())
@@ -524,7 +532,8 @@ pub(crate) fn normalize_text(value: &str) -> String {
 }
 
 /// Match a ROM to a shard game: any checksum hit first, then the normalized
-/// title. Mirrors `matchCheatGame` in the webapp's `lib/cheats/catalog.ts`.
+/// title. The webapp's `matchCheatGame` in `lib/cheats/catalog.ts` follows the same
+/// order; this module is native-only, so the browser keeps its own copy.
 pub(crate) fn match_game<'a>(
     shard: &'a CheatShard,
     checksums: &BTreeMap<String, String>,
@@ -672,6 +681,31 @@ mod tests {
             normalize_text("Super Mario Bros. [!].nes"),
             "super mario bros"
         );
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TitleCase {
+        name: String,
+        input: String,
+        normalized: String,
+    }
+
+    /// The webapp's `normalizeCheatText` runs the same cases, so the title the
+    /// browser matches on is the title the CLI matches on.
+    #[test]
+    fn normalize_text_matches_the_shared_cases() {
+        let cases: Vec<TitleCase> = serde_json::from_str(include_str!(
+            "../tests/fixtures/cheat-title-normalization.json"
+        ))
+        .expect("cheat title normalization cases");
+        for case in cases {
+            assert_eq!(
+                normalize_text(&case.input),
+                case.normalized,
+                "{}",
+                case.name
+            );
+        }
     }
 
     #[test]

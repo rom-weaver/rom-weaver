@@ -1,0 +1,16 @@
+[
+  { "name": "drops the extension and region tags", "input": "10-Yard Fight (USA, Europe).nes", "normalized": "10 yard fight" },
+  { "name": "keeps a dotted title and drops [!]", "input": "Super Mario Bros. [!].nes", "normalized": "super mario bros" },
+  { "name": "folds accents to their base letter", "input": "Pokémon Red.gb", "normalized": "pokemon red" },
+  { "name": "folds accents typed as combining marks", "input": "Pokémon Red", "normalized": "pokemon red" },
+  { "name": "folds compatibility forms", "input": "Ｓｕｐｅｒ Ｍａｒｉｏ", "normalized": "super mario" },
+  { "name": "lowercases non-ASCII capitals before folding", "input": "ÉCOLE", "normalized": "ecole" },
+  { "name": "drops nested brackets whole", "input": "Game (Rev (A) B) Final", "normalized": "game final" },
+  { "name": "drops mixed nested brackets whole", "input": "Game [Beta (v1)] Final", "normalized": "game final" },
+  { "name": "drops an unclosed bracket to the end", "input": "Game (USA", "normalized": "game" },
+  { "name": "tolerates a stray closer", "input": "Game) Two", "normalized": "game two" },
+  { "name": "keeps a nine-character tail that is not an extension", "input": "Title.abcdefghi", "normalized": "title abcdefghi" },
+  { "name": "drops only the last extension", "input": "A.B.sfc", "normalized": "a b" },
+  { "name": "collapses punctuation runs", "input": "  Zelda: --A  Link's_Awakening  ", "normalized": "zelda a link s awakening" },
+  { "name": "leaves nothing for symbols only", "input": " - ! ", "normalized": "" }
+]

@@ -16,7 +16,8 @@ import {
   formatCheatWrite,
   getCheatCodeWrites,
   getCheatCompareLabel,
-  splitCheatCodes,
+  getClassifiedCheatCodes,
+  splitPlainCheatCodes,
   type CreateCheatCodeEntry,
 } from "../create-cheat-codes-model.ts";
 import { useUiLocalizer } from "../settings-context.tsx";
@@ -50,18 +51,21 @@ type CreateCheatCodesPanelProps = {
   onSystemChange: (system: CheatManualSystem | undefined) => void;
 };
 
+/** Waits for typing to pause before asking the engine to split and classify. */
+const SPLIT_DEBOUNCE_MS = 200;
+
 /**
  * A database row's `rawCode` can hold several codes at once ("A+B"), so every
  * membership test works on that row's split codes rather than the whole string.
  * Otherwise a multi-code row is never recognized as staged, and both the picker
- * and the description lookup miss it.
+ * and the description lookup miss it. The engine splits them; this reads its
+ * answer.
  */
-const recordCodes = (record: ClassifiedCheatRecord, system?: string): string[] =>
-  splitCheatCodes(record.record.rawCode || "", system, record.record.codeKind);
+const recordCodes = getClassifiedCheatCodes;
 
 /** Codes the picker adds are appended to the textarea. */
-const appendCodes = (value: string, codes: readonly string[], system?: string, kind?: string): string => {
-  const existing = new Set(splitCheatCodes(value, system, kind).map((code) => code.toUpperCase()));
+const appendCodes = (value: string, typedCodes: readonly string[], codes: readonly string[]): string => {
+  const existing = new Set(typedCodes.map((code) => code.toUpperCase()));
   const added: string[] = [];
   for (const code of codes) {
     const normalized = code.toUpperCase();
@@ -96,6 +100,9 @@ const CreateCheatCodesPanel = ({
 }: CreateCheatCodesPanelProps) => {
   const localizer = useUiLocalizer();
   const [entries, setEntries] = useState<CreateCheatCodeEntry[]>([]);
+  // The textarea's codes as the engine last split them (with the text they came from);
+  // entries mirror them one to one.
+  const [engineSplit, setEngineSplit] = useState<{ codes: string[]; value: string }>({ codes: [], value: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [kindConflict, setKindConflict] = useState("");
   // Only the newest classification pass may write state; a slower earlier pass
@@ -121,68 +128,87 @@ const CreateCheatCodesPanel = ({
   }, [manualSystem]);
 
   useEffect(() => {
-    const codes = splitCheatCodes(value, manualSystem, kind);
+    const plainCodes = splitPlainCheatCodes(value);
     const sequence = ++classifySequence.current;
-    if (!codes.length) {
+    if (!plainCodes.length) {
+      setEngineSplit({ codes: [], value });
       setEntries([]);
       reportEntries.current([]);
       reportClassifying.current(false);
       return;
     }
     if (!manualSystem) {
-      const pending = codes.map((code, index) => ({
+      // No ROM means no system and no WASM run, so the engine cannot split yet.
+      const pending = plainCodes.map((code, index) => ({
         code,
         description: "",
         error: localizer.message("ui.cheats.needRom"),
         id: `${index}:${code}`,
       }));
+      setEngineSplit({ codes: plainCodes, value });
       setEntries(pending);
       reportEntries.current(pending);
       reportClassifying.current(false);
       return;
     }
     reportClassifying.current(true);
-    void Promise.all(
-      codes.map(async (code, index): Promise<CreateCheatCodeEntry> => {
-        const id = `${index}:${code}`;
-        const description =
-          records.find((entry) =>
-            recordCodes(entry, manualSystem).some((entryCode) => entryCode.toUpperCase() === code.toUpperCase()),
-          )?.record.description || "";
-        try {
-          const result = await classifyManualCode({
-            code,
-            description: description || code,
-            kind,
-            system: manualSystem as CheatManualSystem,
-          });
-          return { code, description, id, record: result.record };
-        } catch (reason) {
-          return {
-            code,
-            description,
-            error: reason instanceof Error ? reason.message : localizer.message("ui.cheats.classifyFailed"),
-            id,
-          };
-        }
-      }),
-    ).then((nextEntries) => {
-      if (classifySequence.current !== sequence) return;
-      setEntries(nextEntries);
-      reportEntries.current(nextEntries);
-      reportClassifying.current(false);
-    });
+    const classifyOne = async (code: string, index: number): Promise<CreateCheatCodeEntry> => {
+      const id = `${index}:${code}`;
+      const description =
+        records.find((entry) => recordCodes(entry).some((entryCode) => entryCode.toUpperCase() === code.toUpperCase()))
+          ?.record.description || "";
+      try {
+        const result = await classifyManualCode({
+          code,
+          description: description || code,
+          kind,
+          system: manualSystem as CheatManualSystem,
+        });
+        return { code, description, id, record: result.record };
+      } catch (reason) {
+        return {
+          code,
+          description,
+          error: reason instanceof Error ? reason.message : localizer.message("ui.cheats.classifyFailed"),
+          id,
+        };
+      }
+    };
+    const timer = setTimeout(() => {
+      void (async () => {
+        // The engine splits the whole block: it alone knows the Xploder and GBA pairing rules.
+        const codes = await classifyManualCode({
+          code: value,
+          description: "",
+          kind,
+          system: manualSystem as CheatManualSystem,
+        })
+          .then((block) => getClassifiedCheatCodes(block.record))
+          .catch(() => plainCodes);
+        if (classifySequence.current !== sequence) return;
+        const nextEntries = await Promise.all(codes.map(classifyOne));
+        if (classifySequence.current !== sequence) return;
+        setEngineSplit({ codes, value });
+        setEntries(nextEntries);
+        reportEntries.current(nextEntries);
+        reportClassifying.current(false);
+      })();
+    }, SPLIT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [classifyManualCode, kind, localizer, manualSystem, records, value]);
 
+  // While the engine is still splitting freshly typed text, the plain split stands in
+  // so membership checks do not flicker.
+  const typedCodes = engineSplit.value === value ? engineSplit.codes : splitPlainCheatCodes(value);
   const detected = describeCheatCodes(entries, localizer);
   // The picker keys "added" by record id, so map the codes in the textarea back
   // onto the database rows that carry them.
   // A row counts as added only once every code it carries is in the textarea.
-  const stagedCodes = new Set(splitCheatCodes(value, manualSystem, kind).map((code) => code.toUpperCase()));
+  const stagedCodes = new Set(typedCodes.map((code) => code.toUpperCase()));
   const addedIds = new Set(
     records
       .filter((entry) => {
-        const codes = recordCodes(entry, manualSystem);
+        const codes = recordCodes(entry);
         return codes.length > 0 && codes.every((code) => stagedCodes.has(code.toUpperCase()));
       })
       .map((entry) => entry.record.id),
@@ -193,11 +219,7 @@ const CreateCheatCodesPanel = ({
   // Entries mirror the split codes one to one, so the position picks out the
   // card's own code even when the same code is typed twice.
   const removeCode = (position: number) => {
-    onValueChange(
-      splitCheatCodes(value, manualSystem, kind)
-        .filter((_code, index) => index !== position)
-        .join("\n"),
-    );
+    onValueChange(typedCodes.filter((_code, index) => index !== position).join("\n"));
   };
 
   const addPickedRecord = (record: ClassifiedCheatRecord) => {
@@ -210,7 +232,7 @@ const CreateCheatCodesPanel = ({
     }
     setKindConflict("");
     if (recordKind && kind !== recordKind) onKindChange(recordKind);
-    onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem, recordKind ?? kind));
+    onValueChange(appendCodes(value, typedCodes, recordCodes(record)));
   };
 
   const manualSystems = [
@@ -346,12 +368,8 @@ const CreateCheatCodesPanel = ({
         onAdd={addPickedRecord}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {
-          const dropped = new Set(recordCodes(record, manualSystem).map((code) => code.toUpperCase()));
-          onValueChange(
-            splitCheatCodes(value, manualSystem, kind)
-              .filter((code) => !dropped.has(code.toUpperCase()))
-              .join("\n"),
-          );
+          const dropped = new Set(recordCodes(record).map((code) => code.toUpperCase()));
+          onValueChange(typedCodes.filter((code) => !dropped.has(code.toUpperCase())).join("\n"));
         }}
         open={dialogOpen}
         records={records}

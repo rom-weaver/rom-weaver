@@ -51,85 +51,22 @@ const SYSTEM_LABELS: Record<CheatManualSystem, string> = {
 
 const CODE_SEPARATOR_REGEX = /[+,;\s]+/u;
 
-/** Mirrors Rust `is_gba_rom_patch_word`: the second word of a GBA ROM patch. */
-const isGbaRomPatchWord = (token: string): boolean => token.length === 8 && /^1[8ace]/iu.test(token);
-
 /**
- * Mirrors Rust `split_xploder_codes`: an Xploder code spans several
- * whitespace-separated words, so splitting on whitespace alone would tear one
- * code apart. A four-word GBA ROM patch stays whole, and an 8+4 or 8+8 pair is
- * one code.
+ * The plain separator split, used only where the Rust engine cannot answer yet:
+ * before a ROM has picked the cheat system (WASM needs the ROM to run), and for
+ * a classified record that arrived without the engine's `codes`. Whenever a ROM
+ * is loaded the engine's `codes` win - it alone knows the Xploder and GBA
+ * word-pairing rules (`cheats::split_for_kind` in the Rust crate).
  */
-const splitXploderCodes = (tokens: readonly string[]): string[] => {
-  const codes: string[] = [];
-  let index = 0;
-  while (index < tokens.length) {
-    const [first, second, third, fourth] = [
-      tokens[index] as string,
-      tokens[index + 1],
-      tokens[index + 2],
-      tokens[index + 3],
-    ];
-    if (
-      second !== undefined &&
-      third !== undefined &&
-      fourth !== undefined &&
-      first.length === 8 &&
-      second.length === 8 &&
-      third.length === 8 &&
-      fourth.length === 8 &&
-      first.toUpperCase() === "00000000" &&
-      isGbaRomPatchWord(second) &&
-      fourth.toUpperCase() === "00000000"
-    ) {
-      codes.push(`${first}${second}${third}${fourth}`);
-      index += 4;
-      continue;
-    }
-    if (second !== undefined && first.length === 8 && (second.length === 4 || second.length === 8)) {
-      codes.push(`${first}${second}`);
-      index += 2;
-      continue;
-    }
-    codes.push(first);
-    index += 1;
-  }
-  return codes;
-};
-
-/**
- * Mirrors Rust `codes_for_kind`: Xploder codes are word-pairs, so the plain
- * whitespace split would cut them in half. The kind override decides, and
- * `auto` follows the system the way the engine does.
- */
-const usesXploderSplit = (system?: string, kind?: string): boolean => {
-  const normalizedKind = String(kind || "auto").toLowerCase();
-  if (normalizedKind === "xploder") return true;
-  return normalizedKind === "auto" && (system === "gameboyadvance" || system === "playstation");
-};
-
-const GBA_BLOCK_KINDS = new Set(["game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"]);
-
-/**
- * Split a raw block of codes the way the Rust engine does: cheat lists arrive
- * joined with `+`, newlines, commas, semicolons or spaces, and each piece is one
- * code - except for Xploder codes, whose words are re-joined by
- * `splitXploderCodes`. Intra-code separators (`-`, `:`) are left alone.
- * `crates/rom-weaver-cli/tests/fixtures/cheat-code-splits.json` holds the
- * cases both this and the engine's `codes_for_kind` must pass; add a case there
- * when either side changes.
- */
-const splitCheatCodes = (text: string, system?: string, kind?: string): string[] => {
-  const block = String(text || "").trim();
-  if (system === "gameboyadvance" && GBA_BLOCK_KINDS.has(String(kind || "").toLowerCase())) {
-    return block ? [block] : [];
-  }
-  const tokens = String(text || "")
+const splitPlainCheatCodes = (text: string): string[] =>
+  String(text || "")
     .split(CODE_SEPARATOR_REGEX)
     .map((code) => code.trim())
     .filter((code) => !!code);
-  return usesXploderSplit(system, kind) ? splitXploderCodes(tokens) : tokens;
-};
+
+/** The codes a classified record holds, as the Rust engine split them. */
+const getClassifiedCheatCodes = (record: ClassifiedCheatRecord): string[] =>
+  record.codes ?? splitPlainCheatCodes(record.record.rawCode || "");
 
 const toHex = (value: number, digits: number) =>
   `$${Math.max(0, Math.trunc(value)).toString(16).toUpperCase().padStart(digits, "0")}`;
@@ -220,6 +157,7 @@ export {
   getCheatCodesPatchName,
   getCheatCodesValidationMessage,
   getCheatCompareLabel,
-  splitCheatCodes,
+  getClassifiedCheatCodes,
+  splitPlainCheatCodes,
   type CreateCheatCodeEntry,
 };

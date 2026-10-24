@@ -728,6 +728,31 @@ fn split_codes_separates_joined_codes() {
     assert_eq!(split_codes("  "), Vec::<&str>::new());
 }
 
+#[test]
+fn classify_record_reports_the_engine_split_codes() {
+    let rom = vec![0u8; 0x200];
+    let mut xploder = record(CheatSystem::PlayStation, "800B4CD4 0063\n800B4CD8 0001");
+    xploder.code_kind = None; // auto: the system picks the Xploder split
+    assert_eq!(
+        classify_record(&rom, &xploder).codes,
+        Some(vec!["800B4CD40063".to_owned(), "800B4CD80001".to_owned()])
+    );
+    // The kind, not the system, decides that a GBA Action Replay block stays whole.
+    xploder.system = CheatSystem::Nes;
+    xploder.code_kind = Some(CheatKind::GameSharkV1);
+    assert_eq!(
+        classify_record(&rom, &xploder).codes,
+        Some(vec!["800B4CD4 0063\n800B4CD8 0001".to_owned()])
+    );
+    // Codes come back even when the record cannot be baked.
+    let mut plain = record(CheatSystem::Nes, "SXIOPO+AEEPYZ");
+    plain.code_kind = None;
+    assert_eq!(
+        classify_record(&rom, &plain).codes,
+        Some(vec!["SXIOPO".to_owned(), "AEEPYZ".to_owned()])
+    );
+}
+
 // --- Sega 8-bit ------------------------------------------------------------
 //
 // The expected values below are derived from the Genesis Plus GX decode
