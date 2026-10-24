@@ -110,6 +110,18 @@ export const isUnsupportedCheatSystem = (
   !resolveCheatDatabaseEntry(index, catalog, identity) &&
   !resolveManualOnlyCheatSystem(catalog, identity);
 
+/** Accent-fold and lower-case only, so free text keeps bracketed words and raw codes. */
+const foldCheatSearchText = (value: string): string =>
+  value
+    .normalize("NFKD")
+    .toLocaleLowerCase("en-US")
+    .replace(/\p{M}+/gu, "");
+
+const normalizeCheatSearchText = (value: string): string =>
+  foldCheatSearchText(value)
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim();
+
 /**
  * Fold a title, file name, or search query into its comparison form: accents
  * folded to their base letter, lower-case, extension dropped, bracketed
@@ -120,11 +132,7 @@ export const isUnsupportedCheatSystem = (
  * Rust module is native-only, so the browser keeps this copy.
  */
 export const normalizeCheatText = (value: string): string => {
-  const folded = value
-    .normalize("NFKD")
-    .toLocaleLowerCase("en-US")
-    .replace(/\p{M}+/gu, "")
-    .replace(/\.[a-z0-9]{1,8}$/u, "");
+  const folded = foldCheatSearchText(value).replace(/\.[a-z0-9]{1,8}$/u, "");
   let depth = 0;
   let stripped = "";
   for (const character of folded) {
@@ -181,10 +189,10 @@ export const selectManualGame = (shard: CheatSystemShard | undefined, gameId: st
 };
 
 export const filterCheats = (cheats: ClassifiedCheatRecord[], query: string): ClassifiedCheatRecord[] => {
-  const needle = normalizeCheatText(query);
+  const needle = normalizeCheatSearchText(query);
   if (!needle) return cheats;
   return cheats.filter((cheat) =>
-    normalizeCheatText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle),
+    normalizeCheatSearchText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle),
   );
 };
 

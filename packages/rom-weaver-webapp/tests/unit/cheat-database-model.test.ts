@@ -252,6 +252,18 @@ describe("cheat database catalog", () => {
     expect(filterCheats(classified, "c2b4").map(({ record }) => record.id)).toEqual(["rom", "ram"]);
   });
 
+  it("keeps the raw code searchable after an unclosed bracket in the description", () => {
+    const [template] = classified;
+    if (!template) throw new Error("fixture missing");
+    const cheat = {
+      ...template,
+      record: { ...template.record, id: "open", description: "Infinite Health (P1", rawCode: "8009C6E4 03E7" },
+    };
+    expect(filterCheats([cheat], "8009C6E4").map(({ record }) => record.id)).toEqual(["open"]);
+    expect(filterCheats([cheat], "(p1").map(({ record }) => record.id)).toEqual(["open"]);
+    expect(filterCheats([cheat], "zzz")).toEqual([]);
+  });
+
   it("keeps only selections that exist after records change", () => {
     expect([...reconcileSelectedCheatIds(new Set(["rom", "gone"]), classified)]).toEqual(["rom"]);
   });

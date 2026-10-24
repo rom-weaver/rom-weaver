@@ -197,9 +197,19 @@ const CreateCheatCodesPanel = ({
     return () => clearTimeout(timer);
   }, [classifyManualCode, kind, localizer, manualSystem, records, value]);
 
+  // Leaving mid-split must not strand the parent's classifying flag at true.
+  useEffect(
+    () => () => {
+      classifySequence.current += 1;
+      reportClassifying.current(false);
+    },
+    [],
+  );
+
   // While the engine is still splitting freshly typed text, the plain split stands in
   // so membership checks do not flicker.
-  const typedCodes = engineSplit.value === value ? engineSplit.codes : splitPlainCheatCodes(value);
+  const splitSettled = engineSplit.value === value;
+  const typedCodes = splitSettled ? engineSplit.codes : splitPlainCheatCodes(value);
   const detected = describeCheatCodes(entries, localizer);
   // The picker keys "added" by record id, so map the codes in the textarea back
   // onto the database rows that carry them.
@@ -218,11 +228,15 @@ const CreateCheatCodesPanel = ({
 
   // Entries mirror the split codes one to one, so the position picks out the
   // card's own code even when the same code is typed twice.
+  // Until the engine split settles, card positions and the plain-split codes can disagree
+  // (Xploder and GBA pairs), so edits wait for the settled split.
   const removeCode = (position: number) => {
+    if (!splitSettled) return;
     onValueChange(typedCodes.filter((_code, index) => index !== position).join("\n"));
   };
 
   const addPickedRecord = (record: ClassifiedCheatRecord) => {
+    if (!splitSettled) return;
     const recordKind = record.record.codeKind ?? record.detectedKind ?? undefined;
     const autoEntriesMatch =
       kind === "auto" && entries.length > 0 && entries.every((entry) => entry.record?.detectedKind === recordKind);
@@ -368,6 +382,7 @@ const CreateCheatCodesPanel = ({
         onAdd={addPickedRecord}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {
+          if (!splitSettled) return;
           const dropped = new Set(recordCodes(record).map((code) => code.toUpperCase()));
           onValueChange(typedCodes.filter((code) => !dropped.has(code.toUpperCase())).join("\n"));
         }}
