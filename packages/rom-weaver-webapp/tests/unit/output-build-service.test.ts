@@ -499,6 +499,35 @@ describe("lazy CHD output codec planning", () => {
   });
 
   it.each([
+    [true, undefined, "lzma"],
+    [false, undefined, "cdzl"],
+    [true, { mode: "cd" }, "cdzl"],
+  ])("probes an unidentified lazy ISO for UDF (udf=%s, metadata=%o)", async (udf, metadata, codec) => {
+    const bytes = new Uint8Array(100 * 2048);
+    bytes.set([1, 67, 68, 48, 48, 49], 16 * 2048);
+    if (udf) bytes.set([0, 78, 83, 82, 48, 50], 17 * 2048);
+    const blob = new Blob([bytes]);
+    const slice = vi.spyOn(blob, "slice");
+    const file = await createPatchFileFromPublicOutput(
+      { fileName: "disc.iso", size: blob.size, blob } as never,
+      "disc.iso",
+      { materializeBlob: false },
+    );
+    if (metadata) file.metadata = metadata as never;
+    const create = vi.fn(async () => ({ output: { fileName: "disc.chd" } }));
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(await makeFile("out", "disc.chd"));
+    await createSingleFileRomSpecificOutput({
+      compression: "chd",
+      outputFile: file,
+      options: { output: { container: { chdCreateCdCodecs: "cdzl", chdCreateDvdCodecs: "lzma" } } } as never,
+      runtime: { compression: { create, probe: vi.fn() } } as unknown as WorkflowRuntime,
+    });
+    expect(create.mock.calls[0]?.[0].romSpecific.chd.compressionCodecs.split(":")[0]).toBe(codec);
+    if (metadata) expect(slice).not.toHaveBeenCalled();
+    else expect(slice).toHaveBeenCalledExactlyOnceWith(0, 32 * 2048);
+  });
+
+  it.each([
     ["blob", "sync", "raw"],
     ["vfs", "sync", "raw"],
     ["blob", "iso2048", "raw"],

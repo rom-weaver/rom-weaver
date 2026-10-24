@@ -126,10 +126,13 @@ const getOutputChdAutoMode = async (
   options: OutputWorkflowOptions | undefined,
 ): Promise<string> => {
   const mode = getChdAutoCreateMode(file);
-  if (!(isLooseChdAutoSource(file) && isLazyExternalPatchFile(file))) return mode;
+  // An unidentified `.iso` also needs its bytes: native `auto` reads UDF to pick DVD.
+  const unidentifiedIso =
+    /\.iso$/i.test(file.fileName) && !chdModeFromMetadata(file.metadata) && !file.metadata?.cuePath;
+  if (!((isLooseChdAutoSource(file) || unidentifiedIso) && isLazyExternalPatchFile(file))) return mode;
   const size = file.fileSize;
   if (!(size > 0)) return mode;
-  if (!/\.bin$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
+  if (!/\.(bin|iso)$/i.test(file.fileName) && /\.[^./\\]+$/.test(file.fileName)) return mode;
   const sourceRef = getPatchFileExternalSource(file, file.fileName);
   if (!sourceRef) return mode;
   options?.signal?.throwIfAborted();

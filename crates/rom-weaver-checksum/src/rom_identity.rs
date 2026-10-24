@@ -27,8 +27,8 @@ const RAW_SECTOR_BYTES: usize = 2352;
 const USER_SECTOR_BYTES: usize = 2048;
 /// Largest 2048-byte-sector image that still fits a CD (450,000 sectors); larger is DVD.
 const CD_ISO_MAX_BYTES: u64 = 450_000 * 2048;
-/// PS2 discs at or above this size are DVDs; smaller ones are CDs. PS2 CD-ROM
-/// titles top out around 700 MiB (a single CD), DVD titles start well above it.
+/// PlayStation family split for a PVD-only identity (SYSTEM.CNF beyond the prefix): cooked
+/// images without UDF below this size are PS1. PS2 CD-ROM titles top out around 700 MiB.
 const PS2_DVD_THRESHOLD_BYTES: u64 = 800 * 1024 * 1024;
 
 /// Optical medium of a disc image. Cartridge/card dumps have no medium.
@@ -326,13 +326,11 @@ fn medium_for(
             Some(DiscFormat::Cd)
         }
         // Raw 2352-byte framing only exists on CDs, even when a full CD exceeds the size cut.
-        Some(platform::PS2) => Some(
-            if !cd_raw && (udf || total_len >= PS2_DVD_THRESHOLD_BYTES) {
-                DiscFormat::Dvd
-            } else {
-                DiscFormat::Cd
-            },
-        ),
+        Some(platform::PS2) => Some(if !cd_raw && (udf || total_len > CD_ISO_MAX_BYTES) {
+            DiscFormat::Dvd
+        } else {
+            DiscFormat::Cd
+        }),
         // 3DS/DS are card dumps detected via the disc path but have no medium.
         Some(platform::N3DS | platform::NDS) => None,
         // Unknown console: only the raw-sector framing tells us it is a CD.
@@ -493,6 +491,12 @@ mod tests {
 
         let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
         assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
+
+        // Without UDF the medium follows CD capacity, as native CHD inference does.
+        let full_cd = detect_rom_identity(&image, CD_ISO_MAX_BYTES, Some(".bin"));
+        assert_eq!(full_cd.disc_format, Some(DiscFormat::Cd));
+        let past_cd = detect_rom_identity(&image, CD_ISO_MAX_BYTES + 2048, Some(".bin"));
+        assert_eq!(past_cd.disc_format, Some(DiscFormat::Dvd));
     }
 
     #[test]
@@ -514,6 +518,11 @@ mod tests {
             PVD_LBA * USER_SECTOR_BYTES + 8,
             b"PLAYSTATION",
         );
+        // Without UDF the fallback splits PS1 from PS2 exactly at the size cut.
+        let below = detect_rom_identity(&fallback, PS2_DVD_THRESHOLD_BYTES - 1, Some(".bin"));
+        assert_eq!(below.platform, Some(platform::PS1));
+        let at = detect_rom_identity(&fallback, PS2_DVD_THRESHOLD_BYTES, Some(".bin"));
+        assert_eq!(at.platform, Some(platform::PS2));
         write(&mut fallback, udf_sector + 1, b"NSR03");
         let identity = detect_rom_identity(&fallback, 600 * 1024 * 1024, Some(".bin"));
         assert_eq!(identity.platform, Some(platform::PS2));
