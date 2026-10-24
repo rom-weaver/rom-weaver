@@ -95,17 +95,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     build(vec![game], BTreeMap::new(), true)
 }
 
-fn crc32(bytes: &[u8]) -> u32 {
-    let crc = bytes.iter().fold(u32::MAX, |mut crc, byte| {
-        crc ^= u32::from(*byte);
-        for _ in 0..8 {
-            crc = (crc >> 1) ^ if crc & 1 != 0 { 0xedb88320 } else { 0 };
-        }
-        crc
-    });
-    !crc
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

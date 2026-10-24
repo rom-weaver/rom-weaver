@@ -120,10 +120,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                     layout::Candidate {
                         spans: vec![span],
                         predicates: vec![active],
-                        checksums: vec![checksum.clone()],
-                        repairs: vec![layout::Repair::Checksum { checksum }],
                         ..Default::default()
-                    },
+                    }
+                    .with_checksum(checksum),
                 ],
             },
             selection: layout::Selection::FirstValid,

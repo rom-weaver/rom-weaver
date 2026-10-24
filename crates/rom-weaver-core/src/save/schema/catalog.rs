@@ -149,6 +149,30 @@ impl FieldAddress {
     }
 }
 
+fn extend_fields(
+    fields: &mut Vec<FieldDefinition>,
+    scope: &FieldScope,
+    repetition: Repetition,
+    build: fn(&FieldScope) -> Vec<FieldDefinition>,
+) {
+    for item in 0..repetition.count {
+        let number = item + repetition.start;
+        let index = format!("{number:0width$}", width = repetition.width);
+        let mut child = FieldScope {
+            base: scope.base + scope.bits / 8 + repetition.base,
+            bits: item * repetition.stride,
+            bit_stride: repetition.bit_stride,
+            index,
+            ordinal: item + 1,
+            prefix: String::new(),
+            group: scope.group.clone(),
+            guards: scope.guards.clone(),
+        };
+        child.prefix = scope.id(repetition.prefix);
+        fields.extend(build(&child));
+    }
+}
+
 fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
     let offset =
         usize::try_from(offset).map_err(|_| invalid("save read offset is out of range"))?;
