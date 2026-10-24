@@ -647,6 +647,37 @@ test.each(["input", "output"])(
   },
 );
 
+test("clearing an edited committed check removes its row without taking focus", async () => {
+  const Harness = () => {
+    const [meta, setMeta] = useState({ inputChecks: { checksums: { crc32: "c6fb1252" } } });
+    return createElement(
+      "div",
+      null,
+      createElement("input", { id: "other", type: "text" }),
+      createElement(PatchChecksDrawer, {
+        basisChoice: "base",
+        index: 0,
+        item: { key: "patch-1", fileName: "change.ips", format: "ips", validationValues: [] },
+        meta,
+        onMetaChange: (updates) => setMeta((previous) => ({ ...previous, ...updates })),
+        patchStack: {},
+      }),
+    );
+  };
+  mount(createElement(Harness));
+  (await waitForState(() => document.querySelector(".patch-checks .cks-head"))).click();
+  const inputId = "rom-weaver-patch-input-crc32-0";
+  (await waitForState(() => document.getElementById(`${inputId}-open`))).click();
+  const input = await waitForState(() => document.getElementById(inputId));
+  setFormControlValue(input, "");
+  const other = document.getElementById("other");
+  other.focus();
+  input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+  await expect.poll(() => document.getElementById(inputId)).toBeNull();
+  expect(document.getElementById(`${inputId}-open`)).toBeNull();
+  expect(document.activeElement).toBe(other);
+});
+
 test("malformed draft follows its patch when reordered and clears when removed", async () => {
   mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();

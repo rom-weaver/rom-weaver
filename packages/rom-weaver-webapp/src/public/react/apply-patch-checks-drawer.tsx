@@ -85,6 +85,9 @@ const PatchChecksDrawer = ({
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
+  // Committed fields the user has typed into: they stay editors when the
+  // patch's embedded value arrives, but never take focus like an added field.
+  const [editedFields, setEditedFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
   const invalidChecksRef = useRef(invalidChecks);
   const validityCallbackRef = useRef(onDraftValidityChange);
@@ -143,6 +146,7 @@ const PatchChecksDrawer = ({
   };
   const removeCheck = (side: "input" | "output", field: CheckField) => {
     setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+    setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
     setInvalid(`${side}:${field}`, false);
     if (field === "bytes") {
       commitSize(side, "");
@@ -163,6 +167,7 @@ const PatchChecksDrawer = ({
     const editableFields = CHECK_FIELDS_PAIRED.filter(
       (field) =>
         !!draftFields[`${side}:${field}`] ||
+        !!editedFields[`${side}:${field}`] ||
         !!invalidChecks[`${side}:${field}`] ||
         (!embedded[field] && !!userValue(field)),
     );
@@ -284,10 +289,15 @@ const PatchChecksDrawer = ({
                   onDraftChange={(raw) => {
                     // Typing keeps the row an editor when its embedded value arrives mid-edit.
                     const key = `${side}:${field}`;
-                    setDraftFields((previous) => (previous[key] ? previous : { ...previous, [key]: true }));
+                    setEditedFields((previous) => (previous[key] ? previous : { ...previous, [key]: true }));
                     validateDraft(side, field, raw);
                   }}
-                  onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
+                  onCommit={(raw) => {
+                    // Clearing a committed check removes its row, as before it was edited.
+                    if (!raw.trim()) setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+                    if (field === "bytes") commitSize(side, raw);
+                    else commitCheck(side, field, raw);
+                  }}
                   onRemove={() => removeCheck(side, field)}
                   value={userValue(field)}
                 />
