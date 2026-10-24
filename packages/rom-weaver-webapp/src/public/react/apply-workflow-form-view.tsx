@@ -36,7 +36,13 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { OutputCard, type OutputCardProps } from "./components/ds/output-card.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
-import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
+import {
+  ARCHIVE_FILE_EXTENSIONS,
+  PATCH_FILE_EXTENSIONS,
+  ROM_FILE_EXTENSIONS,
+  isArchiveFileName,
+  isRomFileName,
+} from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import type {
   NoticeController,
@@ -813,15 +819,18 @@ function ApplyWorkflowFormView({
   });
   // While the practice files download, the bench shows them as a pending card -
   // the same loading state a real drop shows - instead of sitting empty.
+  const practiceName = sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET;
   const pendingDrops: PendingDrop[] =
     sampleLoading && !stagedDrops.length
       ? [
           {
             downloading: true,
-            extracting: false,
+            // Shaped like the card the drop path will stage, so the hand-off
+            // reserves no drawer that then vanishes.
+            extracting: isArchiveFileName(practiceName),
             id: "practice-sample",
-            kind: "rom",
-            name: sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET,
+            kind: isRomFileName(practiceName) ? "rom" : "patch",
+            name: practiceName,
           },
         ]
       : stagedDrops;

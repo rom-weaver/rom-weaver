@@ -1,5 +1,5 @@
 import { Archive, Disc3, ListChecks } from "lucide-react";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractName } from "./components/ds/extraction-tree.tsx";
@@ -123,12 +123,25 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
   );
 };
 
+const AWAITING_HANDOFF = "awaiting";
+
 export const ApplyDropAfter = ({ pendingDrops }: { pendingDrops: PendingDrop[] }) => {
+  // The real card that replaces a downloading practice card keeps its React key,
+  // so it updates in place instead of remounting and replaying its entrance.
+  const [handoff, setHandoff] = useState<string | null>(null);
+  const first = pendingDrops[0];
+  if (first?.downloading) {
+    if (handoff !== AWAITING_HANDOFF) setHandoff(AWAITING_HANDOFF);
+  } else if (handoff === AWAITING_HANDOFF) {
+    setHandoff(first?.id ?? null);
+  } else if (handoff && !pendingDrops.some((drop) => drop.id === handoff)) {
+    setHandoff(null);
+  }
   if (!pendingDrops.length) return null;
   return (
     <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
       {pendingDrops.map((drop) => (
-        <div className="rw-pending" key={drop.id}>
+        <div className="rw-pending" key={drop.downloading || drop.id === handoff ? "practice-sample" : drop.id}>
           <PendingDropCard drop={drop} />
         </div>
       ))}
