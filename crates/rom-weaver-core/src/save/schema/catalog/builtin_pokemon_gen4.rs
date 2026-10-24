@@ -946,7 +946,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1094,7 +1093,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1363,7 +1361,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1511,7 +1508,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1823,7 +1819,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 0,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
@@ -1971,7 +1966,6 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
                                         physical_offset: 262144,
                                         length: 262144,
                                     }],
-
                                     predicates: vec![
                                         rules::Condition::new(move |bytes| {
                                             Ok((rules::Scalar {
