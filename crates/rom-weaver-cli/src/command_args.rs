@@ -868,6 +868,13 @@ pub struct IngestCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub sidecar_only: bool,
+    /// Original file name of a bare `input` that the host staged under another name. Checks a
+    /// patch declares in its name (`[crc32:..]`) are read from it, because staging rewrites
+    /// characters such as `:`.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "input-name", hide = true))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input_name: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
