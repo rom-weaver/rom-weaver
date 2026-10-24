@@ -106,10 +106,9 @@ fn group(id: &str, logical: usize, length: usize, tag: usize, records: usize) ->
                         && (0..record)
                             .all(|previous| usize::from(bytes[previous * length + 7]) != tag))
                 })],
-                checksums: vec![checksum.clone()],
-                repairs: vec![layout::Repair::Checksum { checksum }],
                 ..Default::default()
             }
+            .with_checksum(checksum)
         })
         .collect();
     layout::Group {
