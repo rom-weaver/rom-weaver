@@ -85,6 +85,9 @@ const PatchChecksDrawer = ({
   const [invalidChecks, setInvalidChecks] = useState<Record<string, boolean>>({});
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
+  // Committed fields the user has opened or typed into: they stay editors when
+  // the patch's embedded value arrives, but never take focus like an added field.
+  const [editedFields, setEditedFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
   const invalidChecksRef = useRef(invalidChecks);
   const validityCallbackRef = useRef(onDraftValidityChange);
@@ -141,8 +144,11 @@ const PatchChecksDrawer = ({
     if ((meta?.[field]?.size ?? undefined) === size) return;
     onMetaChange?.({ [field]: { ...meta?.[field], size } });
   };
+  const markEdited = (key: string) =>
+    setEditedFields((previous) => (previous[key] ? previous : { ...previous, [key]: true }));
   const removeCheck = (side: "input" | "output", field: CheckField) => {
     setDraftFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+    setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
     setInvalid(`${side}:${field}`, false);
     if (field === "bytes") {
       commitSize(side, "");
@@ -163,6 +169,7 @@ const PatchChecksDrawer = ({
     const editableFields = CHECK_FIELDS_PAIRED.filter(
       (field) =>
         !!draftFields[`${side}:${field}`] ||
+        !!editedFields[`${side}:${field}`] ||
         !!invalidChecks[`${side}:${field}`] ||
         (!embedded[field] && !!userValue(field)),
     );
@@ -174,7 +181,14 @@ const PatchChecksDrawer = ({
       side === "input" && isChainInput && !invalidChecks[`${side}:${field}`]
         ? matchInputCheck(field, userValue(field), romActuals)
         : undefined;
-    return { addableFields, builtInRows, editableFields, markFor, metaField, side, userValue };
+    // A row kept open beside the patch's own check warns when the two disagree.
+    const warningFor = (field: CheckField): string | undefined => {
+      const value = userValue(field);
+      return embedded[field] && value && embedded[field].toLowerCase() !== value.toLowerCase()
+        ? localizer.message("ui.patch.differsFromPatch", { check: CHECK_LABELS[field] })
+        : undefined;
+    };
+    return { addableFields, builtInRows, editableFields, markFor, metaField, side, userValue, warningFor };
   });
   const hasUserChecks = sides.some((entry) => entry.editableFields.length > 0);
   // A user-entered input check that disagrees with the real ROM fails the drawer
@@ -213,7 +227,7 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, localizer.message("ui.patch.checks"))}
       verifying={verifying}
     >
-      {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue }) => {
+      {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue, warningFor }) => {
         const inputHeading =
           side === "input"
             ? localizer.message("ui.patchChecks.input", {
@@ -281,10 +295,22 @@ const PatchChecksDrawer = ({
                   invalid={!!invalidChecks[`${side}:${field}`]}
                   key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
                   mark={markFor(field)}
-                  onDraftChange={(raw) => validateDraft(side, field, raw)}
-                  onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
+                  onDraftChange={(raw) => {
+                    // Typing keeps the row an editor when its embedded value arrives mid-edit.
+                    markEdited(`${side}:${field}`);
+                    validateDraft(side, field, raw);
+                  }}
+                  onCommit={(raw) => {
+                    // Clearing a committed check removes its row, as before it was edited.
+                    if (!raw.trim()) setEditedFields((previous) => ({ ...previous, [`${side}:${field}`]: false }));
+                    if (field === "bytes") commitSize(side, raw);
+                    else commitCheck(side, field, raw);
+                  }}
+                  // So does opening it, even before the first keystroke.
+                  onOpen={() => markEdited(`${side}:${field}`)}
                   onRemove={() => removeCheck(side, field)}
                   value={userValue(field)}
+                  warning={warningFor(field)}
                 />
               ))}
             </div>

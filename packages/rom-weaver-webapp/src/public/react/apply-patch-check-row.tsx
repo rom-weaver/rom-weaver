@@ -28,8 +28,10 @@ const EditableCheckRow = ({
   mark,
   onCommit,
   onDraftChange,
+  onOpen,
   onRemove,
   value,
+  warning,
 }: {
   /** A field just opened via "Add check": move focus into it (a user-gesture
    * focus handoff, not a page-load autofocus). */
@@ -42,11 +44,17 @@ const EditableCheckRow = ({
   mark?: "bad" | "ok";
   onCommit: (raw: string) => void;
   onDraftChange?: (raw: string) => void;
+  /** The user opened the at-rest value for editing. */
+  onOpen?: () => void;
   onRemove: () => void;
   value: string;
+  /** A non-blocking note under the row, e.g. the value differs from the patch's own check. */
+  warning?: string;
 }) => {
   const localizer = useUiLocalizer();
   const errorId = `${id}-err`;
+  const warnId = `${id}-warn`;
+  const describedBy = invalid ? errorId : warning ? warnId : undefined;
   /* The ref callback is a fresh identity every render, so React detaches and
      reattaches it each time. Without this latch the handoff would re-focus on
      every render, and two freshly added rows would then trade focus forever -
@@ -82,7 +90,7 @@ const EditableCheckRow = ({
       )}
       {showField ? (
         <input
-          aria-describedby={invalid ? errorId : undefined}
+          aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           className="input mono popt-input"
           defaultValue={value}
@@ -120,7 +128,7 @@ const EditableCheckRow = ({
         />
       ) : (
         <button
-          aria-describedby={invalid ? errorId : undefined}
+          aria-describedby={describedBy}
           // The name ends with the shown value so it holds the button's visible text.
           aria-label={`${localizer.message("ui.patch.editCheck", { check: label })}${value ? `: ${value}` : ""}`}
           className="ck-open mono"
@@ -129,6 +137,7 @@ const EditableCheckRow = ({
           onClick={() => {
             openedByUser.current = true;
             setEditing(true);
+            onOpen?.();
           }}
           title={invalid ? checkErrorMessage(field, localizer) : value}
           type="button"
@@ -160,6 +169,10 @@ const EditableCheckRow = ({
       {invalid ? (
         <p className="ck-err" id={errorId}>
           {checkErrorMessage(field, localizer)}
+        </p>
+      ) : warning ? (
+        <p className="ck-warn" id={warnId}>
+          {warning}
         </p>
       ) : null}
     </div>

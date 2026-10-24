@@ -1780,6 +1780,11 @@ msgstr "Documentación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.differsFromPatch"
+msgstr "Difiere de la comprobación {check} incluida en el parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.doesNotMatchRom"
 msgstr "No coincide con la ROM"
 

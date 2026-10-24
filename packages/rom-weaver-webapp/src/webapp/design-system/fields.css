@@ -780,7 +780,7 @@
   width: 12px;
   height: 12px;
 }
-.rw-app .patch-checks-body .verification-row .ck-err {
+.rw-app .patch-checks-body .verification-row :is(.ck-err, .ck-warn) {
   grid-column: 2 / -1;
   padding-inline-start: 4px;
   margin: 0 0 2px;
@@ -788,6 +788,13 @@
   line-height: 1.2;
   color: var(--fault);
   letter-spacing: 0.01em;
+}
+.rw-app .patch-checks-body .verification-row .ck-warn {
+  color: var(--care);
+}
+/* Use a darker amber in light mode to preserve 4.5:1 contrast. */
+:root[data-theme="light"] .patch-checks-body .verification-row .ck-warn {
+  color: #7a5300;
 }
 .rw-app .patch-checks-body .verification-row .vrow-tail {
   display: inline-flex;

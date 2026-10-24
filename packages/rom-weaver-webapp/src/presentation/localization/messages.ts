@@ -237,6 +237,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.disabledCount",
     message: "{count, plural, one {# off} other {# off}}",
   }),
+  "ui.patch.differsFromPatch": msg({
+    id: "ui.patch.differsFromPatch",
+    message: "Differs from the {check} built into the patch",
+  }),
   "ui.patch.doesNotMatchRom": msg({ id: "ui.patch.doesNotMatchRom", message: "Does not match the ROM" }),
   "ui.patch.editCheck": msg({ id: "ui.patch.editCheck", message: "Edit {check} check" }),
   "ui.patch.editPosition": msg({
