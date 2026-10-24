@@ -186,6 +186,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
   ) => void | Promise<void>;
   applyReady?: boolean;
   applyDisabled?: boolean;
+  applyValidationError?: string;
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;
   resolvedOutputNameKey?: string;

@@ -109,6 +109,7 @@ const useLocalApplyPatchFormSession = ({
   applyPatches,
   applyReady = false,
   applyDisabled = false,
+  applyValidationError,
   downloadOutput,
   defaultPatchBasis = "auto",
   resolvedOutputCompression,
@@ -436,7 +437,11 @@ const useLocalApplyPatchFormSession = ({
     (info) => info.validationState === "invalid" && info.checksumPreflightMismatch !== true,
   );
   const applyQueueBlocked =
-    !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
+    !!applyValidationError ||
+    !!failureMessage ||
+    !!outputErrorMessage ||
+    strictInputChecksumBlocked ||
+    patchValidationBlocked;
   const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
@@ -578,7 +583,7 @@ const useLocalApplyPatchFormSession = ({
     () =>
       buildOutputViewState({
         activeSettings,
-        applyBlocked: strictInputChecksumBlocked || patchValidationBlocked,
+        applyBlocked: !!applyValidationError || strictInputChecksumBlocked || patchValidationBlocked,
         applyQueued,
         applyTimingText,
         busy,
@@ -603,6 +608,7 @@ const useLocalApplyPatchFormSession = ({
     [
       applyQueued,
       applyDisabled,
+      applyValidationError,
       activeSettings,
       strictInputChecksumBlocked,
       patchValidationBlocked,

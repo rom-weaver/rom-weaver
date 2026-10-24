@@ -1,5 +1,5 @@
 import { Plus, TriangleAlert } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import {
   CHECK_FIELDS_PAIRED,
@@ -25,7 +25,7 @@ import {
   weaveCheckRows,
 } from "./apply-patch-list-helpers.tsx";
 import { checkInputBasisLabel, IdentifiedCheckTitle } from "./apply-patch-chain-labels.tsx";
-import { type RomCheckActuals, matchInputCheck } from "./apply-patch-input-checks.ts";
+import { type RomCheckActuals, matchInputCheck, checkErrorMessage } from "./apply-patch-input-checks.ts";
 import { EditableCheckRow } from "./apply-patch-check-row.tsx";
 
 const PatchChecksDrawer = ({
@@ -39,6 +39,7 @@ const PatchChecksDrawer = ({
   item,
   meta,
   onMetaChange,
+  onDraftValidityChange,
   outputCheckHint,
   patchType,
   patchStack,
@@ -66,6 +67,7 @@ const PatchChecksDrawer = ({
   item: PatchStackItemState;
   meta?: WeavePatchMeta;
   onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
+  onDraftValidityChange?: (error: string | null) => void;
   /** Chain-output card of a run with optional/skipped patches: remind that the
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
@@ -84,8 +86,24 @@ const PatchChecksDrawer = ({
   // Fields opened via "Add check" that have no committed value yet.
   const [draftFields, setDraftFields] = useState<Record<string, boolean>>({});
   const { inputRows, outputRows } = getPatchVerificationRows(item);
-  const setInvalid = (fieldKey: string, invalid: boolean) =>
-    setInvalidChecks((previous) => (previous[fieldKey] === invalid ? previous : { ...previous, [fieldKey]: invalid }));
+  const invalidChecksRef = useRef(invalidChecks);
+  const validityCallbackRef = useRef(onDraftValidityChange);
+  validityCallbackRef.current = onDraftValidityChange;
+  useEffect(() => () => validityCallbackRef.current?.(null), []);
+  const setInvalid = (fieldKey: string, invalid: boolean) => {
+    if (invalidChecksRef.current[fieldKey] === invalid) return;
+    const next = { ...invalidChecksRef.current, [fieldKey]: invalid };
+    invalidChecksRef.current = next;
+    setInvalidChecks(next);
+    const invalidKey = Object.keys(next).find((key) => next[key]);
+    onDraftValidityChange?.(invalidKey ? checkErrorMessage(invalidKey.split(":")[1] as CheckField, localizer) : null);
+  };
+  const validateDraft = (side: "input" | "output", field: CheckField, raw: string) => {
+    const value = field === "bytes" ? raw.trim() : normalizeCheckInput(raw);
+    const valid =
+      field === "bytes" ? /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) : isValidCheckValue(field, value);
+    setInvalid(`${side}:${field}`, !!value && !valid);
+  };
   // A valid check on a chain endpoint feeds the run's validation option so the
   // ROM re-verifies immediately (card coloring) and the apply enforces it.
   const syncEndpointValidation = (side: "input" | "output", checksums: Record<string, string>) => {
@@ -111,11 +129,11 @@ const PatchChecksDrawer = ({
     onMetaChange?.({ [field]: { ...meta?.[field], checksums } });
     syncEndpointValidation(side, checksums);
   };
-  // The bytes field carries the endpoint's exact size into the weave metadata
-  // (inputChecks/outputChecks.size); it is descriptive, not a live run gate.
+  // Bytes MUST remain exact in the exported metadata; malformed drafts block
+  // readiness without replacing the previously committed size.
   const commitSize = (side: "input" | "output", raw: string) => {
     const value = raw.trim();
-    const invalid = !!value && !/^\d+$/.test(value);
+    const invalid = !!value && !(/^\d+$/.test(value) && Number.isSafeInteger(Number(value)));
     setInvalid(`${side}:bytes`, invalid);
     if (invalid) return;
     const field = side === "input" ? "inputChecks" : "outputChecks";
@@ -143,7 +161,10 @@ const PatchChecksDrawer = ({
       return userChecks[field] || "";
     };
     const editableFields = CHECK_FIELDS_PAIRED.filter(
-      (field) => !embedded[field] && (!!userValue(field) || !!draftFields[`${side}:${field}`]),
+      (field) =>
+        !!draftFields[`${side}:${field}`] ||
+        !!invalidChecks[`${side}:${field}`] ||
+        (!embedded[field] && !!userValue(field)),
     );
     const addableFields = CHECK_FIELDS_PAIRED.filter((field) => !(embedded[field] || editableFields.includes(field)));
     // Only the chain-input side's checks describe the ROM we actually hold, so
@@ -260,6 +281,7 @@ const PatchChecksDrawer = ({
                   invalid={!!invalidChecks[`${side}:${field}`]}
                   key={`${side}:${field}:${item.key ?? index}:${userValue(field)}`}
                   mark={markFor(field)}
+                  onDraftChange={(raw) => validateDraft(side, field, raw)}
                   onCommit={(raw) => (field === "bytes" ? commitSize(side, raw) : commitCheck(side, field, raw))}
                   onRemove={() => removeCheck(side, field)}
                   value={userValue(field)}
