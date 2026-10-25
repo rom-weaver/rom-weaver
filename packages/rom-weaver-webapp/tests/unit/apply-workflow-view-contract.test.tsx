@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
+import { ApplyDropAfter } from "../../src/public/react/apply-drop-after.tsx";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
@@ -21,6 +22,7 @@ import {
   setPostApplyTestBehaviorOverride,
 } from "../../src/public/react/use-apply-download-orchestration.ts";
 import type { PostApplyActionBehavior } from "../../src/types/settings.ts";
+import type { PendingDrop } from "../../src/public/react/use-unified-apply-drop.ts";
 
 // The checksum search is the shared expected-ROM lookup; stubbing it keeps
 // this contract on markup, not on the identify data.
@@ -652,6 +654,60 @@ describe("apply workflow view - empty bench", () => {
     // Identify sits between the sheet and Checks, exactly where the resolved
     // ROM card puts it, so the ghost card does not reorder on arrival.
     expect(labels).toEqual(["Files", "CUE", "Identify", "Checks"]);
+  });
+
+  it("shows the practice files as a loading card while they download", async () => {
+    const onUnifiedDrop = vi.fn();
+    let finishDownload: (response: unknown) => void = () => undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finishDownload = resolve;
+          }),
+      ),
+    );
+    const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
+
+    act(() => requestGuidedSampleStart("apply"));
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    const card = container.querySelector("#rom-weaver-pending-drops .rw-pending .card.pending-card");
+    expect(card?.textContent).toContain("first-weave");
+    expect(card?.textContent).toContain("Loading practice files");
+    expect(card?.textContent).toContain("Files");
+    expect(card?.textContent).not.toContain("Checks");
+
+    await act(async () => finishDownload({ blob: () => Promise.resolve(new Blob(["sample"])), ok: true }));
+    await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-pending-drops")).toBeNull());
+  });
+
+  it("hands the practice card's element to the first real pending card", () => {
+    const renderDrops = (pendingDrops: PendingDrop[]) => (
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: true }}>
+        <ApplyDropAfter pendingDrops={pendingDrops} />
+      </RomWeaverSettingsProvider>
+    );
+    const staged: PendingDrop = { extracting: true, id: "pending-1", kind: "patch", name: "first-weave.zip" };
+    const { container, rerender } = render(renderDrops([{ ...staged, downloading: true, id: "practice-sample" }]));
+    const row = container.querySelector(".rw-pending");
+    expect(row?.textContent).toContain("Loading practice files");
+
+    rerender(renderDrops([staged]));
+    expect(container.querySelector(".rw-pending")).toBe(row);
+    expect(row?.textContent).toContain("Identifying");
+
+    rerender(renderDrops([staged, { extracting: true, id: "pending-2", kind: "patch", name: "more.zip" }]));
+    const rows = container.querySelectorAll(".rw-pending");
+    expect(rows[0]).toBe(row);
+    expect(rows[1]).not.toBe(row);
+
+    // Once the handed-off card resolves, a later drop mounts its own card.
+    rerender(renderDrops([{ extracting: true, id: "pending-3", kind: "patch", name: "next.zip" }]));
+    expect(container.querySelector(".rw-pending")).not.toBe(row);
   });
 });
 
