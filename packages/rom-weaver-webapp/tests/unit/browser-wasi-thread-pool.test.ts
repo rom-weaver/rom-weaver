@@ -209,9 +209,8 @@ describe("thread worker pool commands", () => {
         streamRequestId: 4,
       }),
     );
-    await flush();
-    commandReady(command.commandId);
     await command.ready;
+    command.arm();
 
     expect(command.commandId).toBe(1);
     expect(command.slots).toHaveLength(1);
@@ -220,6 +219,7 @@ describe("thread worker pool commands", () => {
       __streamBroadcastChannelName: "rw-stream",
       __streamRequestId: 4,
       commandId: 1,
+      controlBuffer: command.slots[0]?.control.buffer,
       envList: ["A=1"],
       mode: "pool-command",
       wasiArgs: ["rom-weaver"],
@@ -227,6 +227,67 @@ describe("thread worker pool commands", () => {
     // Nested-worker bootstrap passes paths so the worker can resolve its own directory handles.
     expect(payload?.runtime).toEqual({ cwdMountPath: "/work", resolveMountHandlesInWorker: true });
     expect(trace.some((line) => line.includes("[perf] thread pool command ready id=1 slots=1"))).toBe(true);
+    expect(trace.some((line) => line.includes("[perf] thread pool command armed id=1 slots=1"))).toBe(true);
+  });
+
+  it("claims its shells without posting to them until it is armed", async () => {
+    const pool = createBrowserWasiThreadWorkerPool({ initialSize: 2 });
+    shellsOnline();
+    await pool.ready;
+
+    const command = pool.createCommand(commandOptions({ poolSize: 2 }));
+
+    await expect(command.ready).resolves.toBeUndefined();
+    expect(pool.isReady(2)).toBe(false);
+    expect(FakeWorker.instances.map((worker) => worker.posted)).toEqual([
+      [{ mode: "pool-shell" }],
+      [{ mode: "pool-shell" }],
+    ]);
+    expect(command.slots.map((slot) => slot.armed)).toEqual([false, false]);
+
+    command.arm();
+    command.arm();
+    expect(FakeWorker.instances.map((worker) => worker.posted.map((message) => message.mode))).toEqual([
+      ["pool-shell", "pool-command"],
+      ["pool-shell", "pool-command"],
+    ]);
+    const slot = command.slots[0] as ThreadPoolCommandSlot;
+    expect(slot.armed).toBe(true);
+    expect(slot.primed).toBe(false);
+    commandReady(command.commandId);
+    expect(slot.primed).toBe(true);
+  });
+
+  it("holds the command until every claimed shell is online", async () => {
+    const pool = createBrowserWasiThreadWorkerPool({ initialSize: 2 });
+    let started = false;
+    const command = pool.createCommand(commandOptions({ poolSize: 2 }));
+    void command.ready.then(() => {
+      started = true;
+    });
+    await flush();
+
+    // Both shells are claimed, but a worker that has not started could not take the command.
+    expect(command.slots).toHaveLength(2);
+    shellsOnline(1);
+    await flush();
+    expect(started).toBe(false);
+
+    shellsOnline();
+    await command.ready;
+    expect(started).toBe(true);
+  });
+
+  it("claims no shell for a single-thread budget", async () => {
+    const pool = createBrowserWasiThreadWorkerPool({ initialSize: 0 });
+
+    const command = pool.createCommand(commandOptions({ poolSize: 0 }));
+
+    await expect(command.ready).resolves.toBeUndefined();
+    command.arm();
+    expect(command.slots).toEqual([]);
+    expect(FakeWorker.instances).toHaveLength(0);
+    await expect(command.shutdown()).resolves.toBeUndefined();
   });
 
   it("numbers commands in order", async () => {
@@ -248,8 +309,6 @@ describe("thread worker pool commands", () => {
     expect(FakeWorker.instances).toHaveLength(3);
 
     shellsOnline();
-    await flush();
-    commandReady(command.commandId);
     await command.ready;
     expect(command.slots).toHaveLength(3);
   });
@@ -265,16 +324,23 @@ describe("thread worker pool commands", () => {
     );
   });
 
-  it("tears the slot back down when the command post fails", async () => {
+  it("fails the slot without throwing when the command post fails", async () => {
     const pool = createBrowserWasiThreadWorkerPool({ initialSize: 1 });
     shellsOnline();
     await pool.ready;
     const worker = FakeWorker.instances[0];
     if (!worker) throw new Error("fixture must create a shell");
     worker.postMessageError = new Error("worker is gone");
-
     const command = pool.createCommand(commandOptions());
-    await expect(command.ready).rejects.toThrow("worker is gone");
+    await command.ready;
+    const slot = command.slots[0] as ThreadPoolCommandSlot;
+
+    // Arming runs inside the guest's spawn, so it must not throw.
+    expect(() => command.arm()).not.toThrow();
+
+    expect(slot.failure?.message).toBe("worker is gone");
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_FAILED);
+    await expect(slot.done).resolves.toBeUndefined();
     expect(trace.some((line) => line.includes("thread pool command post failed worker=0 id=1"))).toBe(true);
     // The shell is free again rather than left holding a dead command.
     expect(pool.isReady(1)).toBe(true);
@@ -287,7 +353,8 @@ describe("thread worker pool shell replies", () => {
     shellsOnline();
     await pool.ready;
     const command = pool.createCommand(commandOptions());
-    await flush();
+    await command.ready;
+    command.arm();
     const worker = FakeWorker.instances[0];
     if (!worker) throw new Error("fixture must create a shell");
     return { command, pool, worker };
@@ -295,11 +362,12 @@ describe("thread worker pool shell replies", () => {
 
   it("ignores a reply for a command the shell is no longer running", async () => {
     const { command, worker } = await armedCommand();
+    const slot = command.slots[0] as ThreadPoolCommandSlot;
 
     worker.reply({ commandId: 999, type: "ready" });
+    expect(slot.primed).toBe(false);
     worker.reply({ commandId: command.commandId, type: "ready" });
-
-    await expect(command.ready).resolves.toBeUndefined();
+    expect(slot.primed).toBe(true);
   });
 
   it("frees the shell when the command reports done", async () => {
@@ -326,14 +394,17 @@ describe("thread worker pool shell replies", () => {
     expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_FAILED);
   });
 
-  it("ends the command when an error arrives with no thread id", async () => {
-    const { command, worker } = await armedCommand();
+  it("ends the slot and frees the shell when an error arrives with no thread id", async () => {
+    const { command, pool, worker } = await armedCommand();
     const slot = command.slots[0] as ThreadPoolCommandSlot;
 
     worker.reply({ commandId: command.commandId, error: { message: "boom" }, type: "error" });
 
-    await expect(command.ready).rejects.toThrow(/boom/);
+    expect(slot.failure?.message).toMatch(/boom/);
+    expect(slot.primed).toBe(false);
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_FAILED);
     await expect(slot.done).resolves.toBeUndefined();
+    expect(pool.isReady(1)).toBe(true);
   });
 
   it("annotates a worker error with the slot and the worker url", async () => {
@@ -344,7 +415,10 @@ describe("thread worker pool shell replies", () => {
       type: "error",
     });
 
-    await expect(command.ready).rejects.toThrow(/browser wasi thread worker 0 failed/);
+    expect(command.slots[0]?.failure).toMatchObject({
+      message: expect.stringMatching(/browser wasi thread worker 0 failed/),
+      name: "RuntimeError",
+    });
   });
 });
 
@@ -380,10 +454,24 @@ describe("thread worker pool shell failures", () => {
     await pool.ready;
     const command = pool.createCommand(commandOptions());
     await vi.advanceTimersByTimeAsync(0);
+    await command.ready;
+    command.arm();
 
     FakeWorker.instances[0]?.emit("messageerror", { preventDefault: () => undefined });
 
-    await expect(command.ready).rejects.toThrow(/could not receive its message/);
+    expect(command.slots[0]?.failure?.message).toMatch(/could not receive its message/);
+    await expect(command.slots[0]?.done).resolves.toBeUndefined();
+  });
+
+  it("fails the command when a claimed shell dies before it comes online", async () => {
+    const pool = createBrowserWasiThreadWorkerPool({ initialSize: 1 });
+    const command = pool.createCommand(commandOptions());
+    await flush();
+
+    FakeWorker.instances[0]?.emit("error", { message: "SyntaxError", preventDefault: () => undefined });
+
+    await expect(command.ready).rejects.toThrow(/browser wasi thread worker 0 failed.*message=SyntaxError/);
+    expect(command.slots[0]?.failure?.message).toMatch(/message=SyntaxError/);
   });
 
   it("fails a shell that never becomes ready within the timeout", async () => {
@@ -441,33 +529,33 @@ describe("thread worker pool shell failures", () => {
 });
 
 describe("thread worker pool shutdown and dispose", () => {
-  it("quiesces every live slot, signals shutdown and waits for done", async () => {
+  async function armedSlot() {
     const pool = createBrowserWasiThreadWorkerPool({ initialSize: 1 });
     shellsOnline();
     await pool.ready;
     const command = pool.createCommand(commandOptions());
-    await flush();
-    commandReady(command.commandId);
     await command.ready;
-    const slot = command.slots[0] as ThreadPoolCommandSlot;
+    command.arm();
+    const worker = FakeWorker.instances[0];
+    if (!worker) throw new Error("fixture must create a shell");
+    return { command, pool, slot: command.slots[0] as ThreadPoolCommandSlot, worker };
+  }
+
+  it("quiesces every live slot, signals shutdown and waits for done", async () => {
+    const { command, slot, worker } = await armedSlot();
+    commandReady(command.commandId);
 
     const shutdown = command.shutdown();
     expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_SHUTDOWN);
-    FakeWorker.instances[0]?.reply({ commandId: command.commandId, type: "command-done" });
+    worker.reply({ commandId: command.commandId, type: "command-done" });
 
     await expect(shutdown).resolves.toBeUndefined();
     expect(trace.some((line) => line.includes("thread pool command shutdown done id=1"))).toBe(true);
   });
 
   it("waits for a running slot to leave its running state before signalling shutdown", async () => {
-    const pool = createBrowserWasiThreadWorkerPool({ initialSize: 1 });
-    shellsOnline();
-    await pool.ready;
-    const command = pool.createCommand(commandOptions());
-    await flush();
+    const { command, slot, worker } = await armedSlot();
     commandReady(command.commandId);
-    await command.ready;
-    const slot = command.slots[0] as ThreadPoolCommandSlot;
     Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_RUNNING);
 
     // Only another thread can leave the running state, so Atomics.wait plays that part.
@@ -477,22 +565,69 @@ describe("thread worker pool shutdown and dispose", () => {
     }) as unknown as typeof Atomics.wait);
 
     const shutdown = command.shutdown();
-    FakeWorker.instances[0]?.reply({ commandId: command.commandId, type: "command-done" });
+    worker.reply({ commandId: command.commandId, type: "command-done" });
     await shutdown;
 
     expect(trace.some((line) => line.includes("thread pool command shutdown wait worker=0"))).toBe(true);
   });
 
-  it("skips a slot whose shell has already moved on", async () => {
+  it("releases a slot that was never armed without messaging its shell", async () => {
     const pool = createBrowserWasiThreadWorkerPool({ initialSize: 1 });
     shellsOnline();
     await pool.ready;
     const command = pool.createCommand(commandOptions());
-    await flush();
-    commandReady(command.commandId);
     await command.ready;
+    const slot = command.slots[0] as ThreadPoolCommandSlot;
 
-    FakeWorker.instances[0]?.reply({ commandId: command.commandId, type: "command-done" });
+    await expect(command.shutdown()).resolves.toBeUndefined();
+
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_IDLE);
+    expect(FakeWorker.instances[0]?.posted).toEqual([{ mode: "pool-shell" }]);
+    expect(pool.isReady(1)).toBe(true);
+  });
+
+  it("shuts down a slot that is still priming and hands its shell to the next command", async () => {
+    const { command, pool, slot, worker } = await armedSlot();
+
+    let stopped = false;
+    const shutdown = command.shutdown().then(() => {
+      stopped = true;
+    });
+    // An unprimed slot is still IDLE, so shutdown is signalled at once rather than waiting on priming.
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_SHUTDOWN);
+    await flush();
+    expect(stopped).toBe(false);
+
+    // The shell finishes priming, sees SHUTDOWN instead of a request, and returns the command.
+    worker.reply({ commandId: command.commandId, type: "ready" });
+    worker.reply({ commandId: command.commandId, type: "command-done" });
+    await shutdown;
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_SHUTDOWN);
+
+    const next = pool.createCommand(commandOptions());
+    await next.ready;
+    next.arm();
+    expect(next.slots[0]?.shell).toBe(slot.shell);
+    expect(worker.posted.at(-1)).toMatchObject({ commandId: next.commandId, mode: "pool-command" });
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
+  it("finishes shutdown when a slot fails to prime after shutdown was signalled", async () => {
+    const { command, pool, slot, worker } = await armedSlot();
+
+    const shutdown = command.shutdown();
+    worker.reply({ commandId: command.commandId, error: { message: "mount gone" }, type: "error" });
+
+    await expect(shutdown).resolves.toBeUndefined();
+    expect(slot.failure?.message).toMatch(/mount gone/);
+    expect(pool.isReady(1)).toBe(true);
+  });
+
+  it("skips a slot whose shell has already moved on", async () => {
+    const { command, worker } = await armedSlot();
+    commandReady(command.commandId);
+
+    worker.reply({ commandId: command.commandId, type: "command-done" });
     await expect(command.shutdown()).resolves.toBeUndefined();
   });
 

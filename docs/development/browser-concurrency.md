@@ -48,6 +48,8 @@ The state values are:
 
 The caller writes the thread ID and argument, stores `REQUESTED`, and wakes the worker. It then blocks in 100 ms slices until the state changes to `RUNNING`, `IDLE`, or `FAILED`. Startup acknowledgement times out after 8 seconds. A worker shell has 5 seconds to report that it is ready. A synchronous spawn waits up to 250 ms for a free pooled worker before returning `EAGAIN` so the guest can retry; asynchronous pool selection and command teardown retain a 30 second limit.
 
+A run with a thread budget claims its pool shells and starts the guest once they are online, without sending them anything. The guest's first spawn posts the command to every claimed shell, so a run that never spawns never wakes its shells and releases them at teardown without a message. Each shell then primes its OPFS mount handles; a spawn that reaches a shell that is still priming waits in the barrier until the shell reaches its request loop. A shell whose priming fails marks its slot `FAILED`, so a waiting spawn returns `EAGAIN` at once, and the run fails with the priming error.
+
 ### Nested spawns
 
 A spawned WASI thread can spawn threads of its own. Those nested spawns never draw from the runner's bounded pool: a parent blocks in `Atomics.wait` on its children, so queueing a child behind a pool slot that a blocked parent holds deadlocks the run. As a result, `browser-wasi-nested-thread-workers.ts` gives every worker realm its own unbounded free list of thread workers.

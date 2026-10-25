@@ -94,14 +94,14 @@ export type ThreadPoolShell = {
 };
 
 export type ThreadPoolCommandSlot = ThreadWorkerSlot & {
+  /** Set once the command has been posted to the shell; an unarmed slot has nothing to shut down. */
+  armed: boolean;
   commandId: number;
   done: Promise<void> | null;
   online: boolean;
-  ready: Promise<void> | null;
-  readyResolved: boolean;
-  rejectReady: ((error: unknown) => void) | null;
+  /** Set when the shell reports `ready`: its runtime is primed and it is waiting for spawns. */
+  primed: boolean;
   resolveDone: (() => void) | null;
-  resolveReady: (() => void) | null;
   shell: ThreadPoolShell;
 };
 

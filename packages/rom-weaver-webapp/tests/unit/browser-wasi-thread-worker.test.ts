@@ -226,6 +226,26 @@ describe("pool command", () => {
     ]);
   });
 
+  it("fails the slot itself when priming fails so a spawn blocked on it returns", async () => {
+    const { buffer, control } = createControl();
+    mocks.primeThreadRuntime.mockRejectedValue(new Error("mount gone"));
+    await loadWorker();
+
+    await send({ commandId: "cmd-p", controlBuffer: buffer, mode: "pool-command" });
+
+    expect(control[STATE_INDEX]).toBe(STATE_FAILED);
+    expect(control[ERROR_INDEX]).toBe(1);
+    expect(mocks.runWasiThread).not.toHaveBeenCalled();
+    expect(posted).toEqual([
+      {
+        commandId: "cmd-p",
+        error: expect.objectContaining({ message: "mount gone" }),
+        tid: null,
+        type: "error",
+      },
+    ]);
+  });
+
   it("parks on a failed slot until the spawner hands it back", async () => {
     const { buffer } = createControl();
     stateScript = [STATE_IDLE, STATE_FAILED, STATE_FAILED, STATE_SHUTDOWN, STATE_SHUTDOWN];

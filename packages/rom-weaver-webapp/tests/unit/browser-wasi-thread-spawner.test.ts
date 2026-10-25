@@ -280,11 +280,13 @@ describe("nested thread spawner", () => {
 });
 
 type PooledSlot = {
+  armed: boolean;
   busy: boolean;
   control: ThreadStartControl;
   failure: Error | null;
   index: number;
   online: boolean;
+  primed?: boolean;
   tid: number | null;
 };
 
@@ -292,11 +294,16 @@ function makePooledCommand(slotCount: number, overrides: Partial<BrowserWasiThre
   const slots: PooledSlot[] = Array.from({ length: slotCount }, (_value, index) => {
     const control = makeControl();
     Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_IDLE);
-    return { busy: false, control, failure: null, index, online: true, tid: null };
+    return { armed: false, busy: false, control, failure: null, index, online: true, tid: null };
   });
   const shutdown = vi.fn(async () => undefined);
+  const arm = vi.fn(() => {
+    for (const slot of slots) slot.armed = true;
+  });
   return {
+    arm,
     command: {
+      arm,
       commandId: 42,
       ready: Promise.resolve(),
       shutdown,
@@ -308,13 +315,17 @@ function makePooledCommand(slotCount: number, overrides: Partial<BrowserWasiThre
   };
 }
 
-function pooledSpawner(command: BrowserWasiThreadPoolCommand, threadIdState: unknown = createThreadIdState()) {
+function pooledSpawner(
+  command: BrowserWasiThreadPoolCommand,
+  threadIdState: unknown = createThreadIdState(),
+  threads = 4,
+) {
   const createCommand = vi.fn(() => command);
   return {
     createCommand,
     spawner: createBrowserWasiThreadSpawner({
       moduleImports: THREAD_SPAWN_IMPORT,
-      runtime: { request: { command: { args: { threads: 4 }, type: "compress" }, output: {} } },
+      runtime: { request: { command: { args: { threads }, type: "compress" }, output: {} } },
       threadIdState,
       threadWorkerPool: {
         createCommand,
@@ -414,6 +425,8 @@ describe("pooled thread spawner", () => {
     const slot = firstSlot(slots);
     const { spawner } = pooledSpawner(command);
     const tid = spawner.spawn(0);
+    // A shell only runs a thread after reporting that it primed.
+    slot.primed = true;
     slot.failure = new Error("worker aborted");
     Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED);
 
@@ -464,6 +477,51 @@ describe("pooled thread spawner", () => {
     expect(spawner.spawn(1)).toBe(-6);
     expect(trace.some((line) => line.includes("waiting for idle pooled worker"))).toBe(true);
     expect(trace.some((line) => line.includes("wait for idle pooled worker timed out"))).toBe(true);
+  });
+
+  it("sizes a single-thread request to a command with no slots", () => {
+    const { command } = makePooledCommand(0);
+    const { createCommand } = pooledSpawner(command, createThreadIdState(), 1);
+
+    expect(createCommand.mock.calls[0]?.[0]).toMatchObject({ poolSize: 0 });
+  });
+
+  it("arms the command on the first spawn, before it dispatches", () => {
+    const { arm, command, slots } = makePooledCommand(1);
+    const { spawner } = pooledSpawner(command);
+    expect(arm).not.toHaveBeenCalled();
+
+    spawner.spawn(0);
+
+    expect(arm).toHaveBeenCalled();
+    expect(firstSlot(slots).armed).toBe(true);
+  });
+
+  it("reports the priming failure rather than the spawn it made fail", async () => {
+    // A shell whose priming fails marks its slot FAILED, failing the start barrier of the spawn that armed it.
+    fake.ackError = new Error("wasi thread 43 failed before start acknowledgement");
+    const { command, shutdown, slots } = makePooledCommand(1);
+    const slot = firstSlot(slots);
+    const { spawner } = pooledSpawner(command);
+    expect(spawner.spawn(0)).toBe(-6);
+
+    // The shell's error reply is only read once the guest returns, after the spawn already failed.
+    const failure = new Error("browser wasi thread worker 0 failed (tid=ready): NotFoundError");
+    slot.failure = failure;
+
+    await expect(spawner.waitForWorkers()).rejects.toBe(failure);
+    expect(shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a failed slot that was never armed or had already primed", async () => {
+    const { command, slots } = makePooledCommand(2);
+    const [unarmed, primed] = slots;
+    if (!(unarmed && primed)) throw new Error("fixture must provide two slots");
+    unarmed.failure = new Error("shell crashed while claimed");
+    Object.assign(primed, { armed: true, failure: new Error("shell crashed while idle"), primed: true });
+    const { spawner } = pooledSpawner(command);
+
+    await expect(spawner.waitForWorkers()).resolves.toBeUndefined();
   });
 
   it("shuts the command down and rethrows when the pool command never becomes ready", async () => {

@@ -372,6 +372,7 @@ function createBrowserWasiThreadSpawnerForCommand({
 
   const spawn = function spawn(startArg: number, errorOrTidPtr?: number): number {
     trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0} command=${command.commandId}`);
+    command.arm();
     reapCompletedWorkers();
 
     const tid = allocateThreadId(threadIdState);
@@ -450,6 +451,10 @@ function createBrowserWasiThreadSpawnerForCommand({
       for (const [tid, slot] of activeWorkers.entries()) settlePooledWorker(tid, slot);
     }
     await shutdownCommandWithDeadline();
+    // Shells prime after the guest's first spawn, so a shell that failed before it finished priming
+    // fails the command here. It outranks thread failures, which it may have caused at a start barrier.
+    const primingFailure = command.slots.find((slot) => slot.armed && slot.failure && !slot.primed)?.failure;
+    if (primingFailure) throw primingFailure;
     if (firstThreadFailure) throw firstThreadFailure;
     trace?.(`[browser-opfs] thread wait done command=${command.commandId}`);
   };
