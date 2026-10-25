@@ -10,7 +10,7 @@ use super::{
     SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
     create_extract_output_file, ensure_output_available, file_starts_with,
-    ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
+    ordered_streaming_compress, read_full, read_up_to, replace_file, retry_interrupted,
 };
 use crate::RomWeaverError;
 
@@ -1086,6 +1086,34 @@ fn staged_output_replaces_an_existing_file_only_on_commit() {
     staged.commit().expect("commit");
     assert_eq!(fs::read(&output).expect("read replaced output"), b"new");
     assert!(staged_siblings(&root).is_empty());
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn replace_file_copies_in_place_when_the_target_cannot_be_renamed_over() {
+    let root = io_temp_path("staged-replace");
+    fs::create_dir_all(&root).expect("create root");
+    let staged = root.join(".rw-partial-out.zip");
+    let target = root.join("out.zip");
+
+    // A mount point refuses the rename (EBUSY, or EXDEV across filesystems), so the
+    // new content is written through it instead.
+    for kind in [ErrorKind::ResourceBusy, ErrorKind::CrossesDevices] {
+        fs::write(&staged, b"new archive").expect("seed staged");
+        fs::write(&target, b"old").expect("seed target");
+        replace_file(&staged, &target, |_, _| Err(io::Error::from(kind))).expect("copy");
+        assert_eq!(fs::read(&target).expect("read target"), b"new archive");
+    }
+
+    // Any other rename failure leaves the original alone.
+    fs::write(&target, b"old").expect("seed target");
+    let error = replace_file(&staged, &target, |_, _| {
+        Err(io::Error::from(ErrorKind::PermissionDenied))
+    })
+    .expect_err("rename fails");
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(fs::read(&target).expect("read target"), b"old");
 
     fs::remove_dir_all(&root).expect("cleanup");
 }

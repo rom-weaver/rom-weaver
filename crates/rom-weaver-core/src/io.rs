@@ -233,17 +233,42 @@ impl StagedOutput {
         if let Ok(metadata) = fs::metadata(&self.target) {
             let _ = fs::set_permissions(&staged, metadata.permissions());
         }
-        let renamed = fs::rename(&staged, &self.target).io_op(IoOp::Write, &self.target);
-        if renamed.is_err() {
-            let _ = fs::remove_file(&staged);
-        }
+        let replaced = replace_file(&staged, &self.target, |from, to| fs::rename(from, to))
+            .io_op(IoOp::Write, &self.target);
+        // Gone after a rename; left over after a copy or a failure.
+        let _ = fs::remove_file(&staged);
         crate::unregister_live_temp_dir(&staged);
         tracing::debug!(
             target = %self.target.display(),
-            committed = renamed.is_ok(),
+            committed = replaced.is_ok(),
             "staged output committed"
         );
-        renamed
+        replaced
+    }
+}
+
+/// Renames `staged` over `target`. A file mounted over the target (a bind mount)
+/// cannot be replaced, so the finished content is copied into it in place instead.
+fn replace_file(
+    staged: &Path,
+    target: &Path,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    match rename(staged, target) {
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::ResourceBusy | ErrorKind::CrossesDevices
+            ) =>
+        {
+            tracing::debug!(
+                target = %target.display(),
+                %error,
+                "the output cannot be replaced; copying into it in place"
+            );
+            fs::copy(staged, target).map(|_| ())
+        }
+        result => result,
     }
 }
 
