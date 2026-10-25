@@ -7,7 +7,7 @@ use std::{
 
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
-    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
     create_extract_output_file, ensure_output_available, file_starts_with,
     ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
@@ -1024,4 +1024,127 @@ fn copy_cancelable_prefers_cancellation_over_write_error() {
     )
     .expect_err("cancelled");
     assert!(matches!(error, RomWeaverError::Cancelled));
+}
+
+fn staged_siblings(dir: &std::path::Path) -> Vec<String> {
+    fs::read_dir(dir)
+        .expect("list dir")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|name| name.starts_with(".rw-partial-"))
+        .collect()
+}
+
+#[test]
+fn staged_output_writes_new_outputs_and_directories_in_place() {
+    let root = io_temp_path("staged-in-place");
+    fs::create_dir_all(&root).expect("create root");
+
+    let fresh = root.join("fresh.7z");
+    let staged = StagedOutput::new(&fresh).expect("stage a new output");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), fresh);
+    staged.commit().expect("commit an in-place output");
+    assert!(!fresh.exists(), "nothing is written for the caller");
+
+    let dir = root.join("dir.7z");
+    fs::create_dir_all(&dir).expect("create dir output");
+    let staged = StagedOutput::new(&dir).expect("stage a directory");
+    assert!(!staged.is_staged(), "only a regular file is replaced");
+    drop(staged);
+    assert!(dir.is_dir());
+    assert!(staged_siblings(&root).is_empty());
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn staged_output_replaces_an_existing_file_only_on_commit() {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    let root = io_temp_path("staged-commit");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.7z");
+    fs::write(&output, b"old").expect("seed output");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    assert!(staged.is_staged());
+    assert_eq!(staged.path().parent(), Some(root.as_path()));
+    assert_eq!(
+        staged.path().file_name().and_then(|name| name.to_str()),
+        Some(".rw-partial-out.7z")
+    );
+    fs::write(staged.path(), b"new").expect("write staged output");
+    assert_eq!(fs::read(&output).expect("read original"), b"old");
+
+    staged.commit().expect("commit");
+    assert_eq!(fs::read(&output).expect("read replaced output"), b"new");
+    assert!(staged_siblings(&root).is_empty());
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn dropping_a_staged_output_keeps_the_original() {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    let root = io_temp_path("staged-drop");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.chd");
+    fs::write(&output, b"old").expect("seed output");
+    // Another file already holds the first sibling name; it must survive.
+    let taken = root.join(".rw-partial-out.chd");
+    fs::write(&taken, b"someone else's").expect("seed taken sibling");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    assert_eq!(
+        staged.path().file_name().and_then(|name| name.to_str()),
+        Some(".rw-partial-1-out.chd")
+    );
+    fs::write(staged.path(), b"partial").expect("write staged output");
+    drop(staged);
+
+    assert_eq!(fs::read(&output).expect("read original"), b"old");
+    assert_eq!(staged_siblings(&root), vec![".rw-partial-out.chd"]);
+    assert_eq!(fs::read(&taken).expect("read taken"), b"someone else's");
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_replaces_the_file_a_symlink_points_at() {
+    let root = io_temp_path("staged-symlink");
+    let store = root.join("store");
+    let links = root.join("links");
+    fs::create_dir_all(&store).expect("create store");
+    fs::create_dir_all(&links).expect("create links");
+    let target = store.join("out.rvz");
+    fs::write(&target, b"old").expect("seed target");
+    let link = links.join("out.rvz");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+    let staged = StagedOutput::new(&link).expect("stage through a symlink");
+    let store = fs::canonicalize(&store).expect("canonical store");
+    assert_eq!(staged.path().parent(), Some(store.as_path()));
+    fs::write(staged.path(), b"new").expect("write staged output");
+    staged.commit().expect("commit");
+
+    assert!(
+        fs::symlink_metadata(&link)
+            .expect("link metadata")
+            .file_type()
+            .is_symlink(),
+        "the link stays a link"
+    );
+    assert_eq!(fs::read(&target).expect("read target"), b"new");
+
+    fs::remove_dir_all(&root).expect("cleanup");
 }

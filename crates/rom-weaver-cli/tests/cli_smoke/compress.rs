@@ -89,6 +89,62 @@ fn compress_routes_through_registered_container_format() {
     assert!(output_path.path().exists());
 }
 
+#[test]
+fn compress_force_replaces_an_existing_output_and_reports_its_real_path() {
+    let temp = setup_temp_dir();
+    temp.child("file.bin")
+        .write_str("payload")
+        .expect("fixture");
+    let output_path = temp.child("out.zip");
+    output_path
+        .write_str("old archive")
+        .expect("existing output");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("file.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--force",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    // The archive is built beside the original and renamed over it; the report
+    // names the output, never the sibling.
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains(output_path.path().to_str().expect("path")),
+        "{label}"
+    );
+    assert!(!label.contains(".rw-partial-"), "{label}");
+    assert_emitted_file(&json, output_path.path(), Some("archive"));
+    assert!(
+        fs::read(output_path.path())
+            .expect("replaced output")
+            .starts_with(b"PK"),
+        "the old file was replaced by a zip"
+    );
+    let leftovers = fs::read_dir(temp.path())
+        .expect("list output dir")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".rw-partial-")
+        })
+        .count();
+    assert_eq!(leftovers, 0);
+}
+
 fn assert_no_compressed_write_progress(events: &[Value], format: &str) {
     assert!(
         !events.iter().any(|event| {

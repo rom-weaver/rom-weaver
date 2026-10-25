@@ -114,6 +114,104 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
     )))
 }
 
+/// Where a command writes an output that may replace an existing file. A new output
+/// is written in place. Replacing a regular file goes through a new hidden sibling
+/// that [`StagedOutput::commit`] renames over it, so a run that fails or is cancelled
+/// leaves the original as it was. Dropping an uncommitted output removes the sibling.
+/// Native only: the browser never replaces an existing output.
+#[derive(Debug)]
+pub struct StagedOutput {
+    target: PathBuf,
+    staged: Option<PathBuf>,
+}
+
+impl StagedOutput {
+    pub fn new(output: &Path) -> Result<Self> {
+        // Devices and directories keep failing (or writing) the way they always did.
+        let replaces_file = fs::metadata(output).is_ok_and(|metadata| metadata.is_file());
+        if cfg!(target_arch = "wasm32") || !replaces_file {
+            return Ok(Self {
+                target: output.to_path_buf(),
+                staged: None,
+            });
+        }
+        // Replace the file a symlink points at, as writing through the link did.
+        let is_symlink = fs::symlink_metadata(output)
+            .io_op(IoOp::Inspect, output)?
+            .file_type()
+            .is_symlink();
+        let target = if is_symlink {
+            fs::canonicalize(output).io_op(IoOp::Inspect, output)?
+        } else {
+            output.to_path_buf()
+        };
+        let parent = target.parent().unwrap_or_else(|| Path::new(""));
+        let name = target
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut staged = parent.join(format!(".rw-partial-{name}"));
+        for index in 1usize.. {
+            if fs::symlink_metadata(&staged).is_err() {
+                break;
+            }
+            staged = parent.join(format!(".rw-partial-{index}-{name}"));
+        }
+        tracing::debug!(
+            output = %output.display(),
+            staged = %staged.display(),
+            "staging output that replaces an existing file"
+        );
+        // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
+        crate::register_live_temp_dir(&staged);
+        Ok(Self {
+            target,
+            staged: Some(staged),
+        })
+    }
+
+    /// The path to write the output to.
+    pub fn path(&self) -> &Path {
+        self.staged.as_deref().unwrap_or(&self.target)
+    }
+
+    pub fn is_staged(&self) -> bool {
+        self.staged.is_some()
+    }
+
+    /// Moves a staged output over the file it replaces; a no-op for an output written
+    /// in place. On failure the original is left as it was.
+    pub fn commit(mut self) -> Result<()> {
+        let Some(staged) = self.staged.take() else {
+            return Ok(());
+        };
+        // The sibling was created with default permissions; keep the replaced file's.
+        if let Ok(metadata) = fs::metadata(&self.target) {
+            let _ = fs::set_permissions(&staged, metadata.permissions());
+        }
+        let renamed = fs::rename(&staged, &self.target).io_op(IoOp::Write, &self.target);
+        if renamed.is_err() {
+            let _ = fs::remove_file(&staged);
+        }
+        crate::unregister_live_temp_dir(&staged);
+        tracing::debug!(
+            target = %self.target.display(),
+            committed = renamed.is_ok(),
+            "staged output committed"
+        );
+        renamed
+    }
+}
+
+impl Drop for StagedOutput {
+    fn drop(&mut self) {
+        if let Some(staged) = self.staged.take() {
+            let _ = fs::remove_file(&staged);
+            crate::unregister_live_temp_dir(&staged);
+        }
+    }
+}
+
 pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result<File> {
     if overwrite {
         return File::create(output_path).io_op(IoOp::Create, output_path);

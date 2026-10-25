@@ -58,10 +58,10 @@ pub use formatting::format_human_bytes;
 pub use io::{
     BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark, OrderedChunkWriter, OrderedStreamingMessages,
-    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads, copy_cancelable,
-    copy_file_retrying_interrupted, copy_retrying_interrupted, create_extract_output_file,
-    ensure_output_available, file_starts_with, ordered_streaming_compress, read_full, read_up_to,
-    retry_interrupted,
+    SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
+    copy_cancelable, copy_file_retrying_interrupted, copy_retrying_interrupted,
+    create_extract_output_file, ensure_output_available, file_starts_with,
+    ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
 };
 pub use media_topology::{
     ComponentId, ComponentRole, DetectionConfidence, DetectionEvidence, MediaComponent, MediaKind,
