@@ -16,16 +16,16 @@ import type {
 } from "../../types/identify.ts";
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type {
+  IdentifyComponent,
   IdentifyLookupResult,
-  IdentifyResult,
-  IdentifyTitleSearchResult,
+  IdentifyProvenance,
   IdentifyTitleMatch,
-  IngestResult,
   IngestRomAsset,
   PatchDescriptor,
 } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
-import { parseChecksumVariants, type WireRecord } from "./run-result-parsing.ts";
-import { asRecord, toNumberValue, toStringValue } from "./strict-wire-values.ts";
+import { parseChecksumVariants } from "./run-result-parsing.ts";
+import { asRecord, getCommandResult, toNumberValue, toStringValue } from "./strict-wire-values.ts";
+import type { WireRecord } from "./strict-wire-values.ts";
 
 const toChecksumMap = (value: unknown): ChecksumMap => {
   const record = asRecord(value);
@@ -43,7 +43,7 @@ const parseExpectedComponents = (value: unknown): ParsedIdentifyExpectedComponen
   if (!Array.isArray(value)) return [];
   return value
     .map((entry): ParsedIdentifyExpectedComponent | undefined => {
-      const record = asRecord(entry);
+      const record = asRecord(entry) as WireRecord<IdentifyComponent> | undefined;
       if (!record) return undefined;
       const size = toNumberValue(record.size) ?? 0;
       const crc32 = toStringValue(record.crc32);
@@ -76,11 +76,10 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
   const name = toStringValue(match.name);
   const platform = toStringValue(match.platform);
   if (!(name && platform)) return undefined;
-  const record = match as Record<string, unknown>;
-  const provenance = Array.isArray(record.provenance)
-    ? record.provenance
+  const provenance = Array.isArray(match.provenance)
+    ? match.provenance
         .map((value): ParsedIdentifyProvenance | undefined => {
-          const item = asRecord(value);
+          const item = asRecord(value) as WireRecord<IdentifyProvenance> | undefined;
           const source = toStringValue(item?.source);
           if (!source) return undefined;
           const license = toStringValue(item?.license);
@@ -97,15 +96,15 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
         })
         .filter((item): item is ParsedIdentifyProvenance => item !== undefined)
     : [];
-  const dumpTags = toStringList(record.dump_tags);
-  const alternateNames = toStringList(record.alternate_names);
-  const expectedComponents = parseExpectedComponents(record.expected_components);
-  const gameId = toStringValue(record.game_id);
-  const region = toStringValue(record.region);
-  const language = toStringValue(record.language);
-  const discNumber = toNumberValue(record.disc_number);
-  const revision = toStringValue(record.revision);
-  const parent = toStringValue(record.parent);
+  const dumpTags = toStringList(match.dump_tags);
+  const alternateNames = toStringList(match.alternate_names);
+  const expectedComponents = parseExpectedComponents(match.expected_components);
+  const gameId = toStringValue(match.game_id);
+  const region = toStringValue(match.region);
+  const language = toStringValue(match.language);
+  const discNumber = toNumberValue(match.disc_number);
+  const revision = toStringValue(match.revision);
+  const parent = toStringValue(match.parent);
   return {
     algorithm: toStringValue(match.algorithm) || "",
     database: toStringValue(match.database) || "",
@@ -113,7 +112,7 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
     platform,
     variant: toStringValue(match.variant) || "raw",
     ...(provenance.length ? { provenance } : {}),
-    ...(record.legacy_variant === true ? { legacyVariant: true } : {}),
+    ...(match.legacy_variant === true ? { legacyVariant: true } : {}),
     ...(dumpTags ? { dumpTags } : {}),
     ...(alternateNames ? { alternateNames } : {}),
     ...(expectedComponents.length ? { expectedComponents } : {}),
@@ -306,7 +305,7 @@ export const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | un
  * is missing or malformed (so callers can fail loudly rather than route on a half-formed result).
  */
 export const parseIngestResult = (details: unknown): ParsedIngestResult | undefined => {
-  const ingest = asRecord(asRecord(details)?.ingest) as WireRecord<IngestResult> | undefined;
+  const ingest = getCommandResult(details, "ingest");
   if (!ingest) return undefined;
   const kind = ingest.kind === "patch" ? "patch" : ingest.kind === "rom" ? "rom" : undefined;
   if (!kind) return undefined;
@@ -340,7 +339,7 @@ export type ParsedIdentifyTitleSearchResult = {
 };
 
 export const parseIdentifyTitleSearchResult = (details: unknown): ParsedIdentifyTitleSearchResult | undefined => {
-  const search = asRecord(asRecord(details)?.identifyTitles) as WireRecord<IdentifyTitleSearchResult> | undefined;
+  const search = getCommandResult(details, "identifyTitles");
   if (!(search && Array.isArray(search.matches))) return undefined;
   const matches: ParsedIdentifyTitleSearchResult["matches"] = [];
   for (const entry of search.matches) {
@@ -363,7 +362,7 @@ export const parseIdentifyTitleSearchResult = (details: unknown): ParsedIdentify
 };
 
 export const parseIdentifyCommandResult = (details: unknown): ParsedIdentifyCommandResult | undefined => {
-  const identify = asRecord(asRecord(details)?.identify) as WireRecord<IdentifyResult> | undefined;
+  const identify = getCommandResult(details, "identify");
   if (!(identify && isIdentifyLookupStatus(identify.status))) return undefined;
   const matches = Array.isArray(identify.matches)
     ? identify.matches.map(parseIdentifyMatch).filter((match): match is ParsedIdentifyTitleMatch => match !== undefined)

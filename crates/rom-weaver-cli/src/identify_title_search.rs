@@ -216,6 +216,12 @@ pub(super) fn search_title_index(
         Some(100.0),
         None,
     );
-    report.details = Some(json!({ "identifyTitles": IdentifyTitleSearchResult { matches } }));
+    report.details = Some(
+        CommandResultDetails {
+            identify_titles: Some(IdentifyTitleSearchResult { matches }),
+            ..CommandResultDetails::default()
+        }
+        .into_value(),
+    );
     Ok(report)
 }

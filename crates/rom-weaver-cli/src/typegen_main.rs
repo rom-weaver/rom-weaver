@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, env, fs, path::Path};
 use rom_weaver_app::{
     BUNDLE_BASE_FILE_NAME, CheatCommand, CheatCommandResult, CheatKind, CheatPatchSnapshot,
     CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite, CheatWriteConflict,
-    ChecksumCommand, ClassifiedCheatRecord, Commands, CompressCommand, CompressionLevelProfile,
-    ExtractCommand, ExtractStepDetails, ExtractedFileEntry, FilterKind, IdentifyCommand,
-    IdentifyComponent, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
+    ChecksumCommand, ClassifiedCheatRecord, CommandResultDetails, Commands, CompressCommand,
+    CompressionLevelProfile, ExtractCommand, ExtractStepDetails, ExtractedFileEntry, FilterKind,
+    IdentifyCommand, IdentifyComponent, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
     IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInfo,
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
     IdentifyEvidence, IdentifyLookupResult, IdentifyMedia, IdentifyProvenance, IdentifyResult,
@@ -311,6 +311,7 @@ fn render_types() -> String {
         export_decl::<WeaveCreateResult>(&config),
         export_decl::<WeaveCommands>(&config),
         export_decl::<PlanExtractBatchCommand>(&config),
+        export_decl::<CommandResultDetails>(&config),
         format!(
             "{} | {{ type: \"bundle\"; args: BundleCommands }};",
             export_decl::<Commands>(&config).trim_end_matches(';')
