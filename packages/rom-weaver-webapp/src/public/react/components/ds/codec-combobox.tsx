@@ -144,6 +144,8 @@ const CodecCombobox = ({
   const listboxId = `${inputId}-options`;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const blurTimeoutRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const pointerDownRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [cursor, setCursor] = useState(value.length);
   const [filtering, setFiltering] = useState(false);
@@ -157,6 +159,14 @@ const CodecCombobox = ({
   });
   const invalid = !!forceInvalid || !validation.valid;
   const suggestionOptions = suggestions || options;
+
+  const clearBlurTimeout = useCallback(() => {
+    if (blurTimeoutRef.current === null) return;
+    globalThis.clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = null;
+  }, []);
+
+  useEffect(() => clearBlurTimeout, [clearBlurTimeout]);
 
   const filteredSuggestions = useMemo(() => {
     if (!filtering) return [...suggestionOptions];
@@ -414,7 +424,11 @@ const CodecCombobox = ({
         disabled={disabled}
         id={inputId}
         onBlur={() => {
-          globalThis.setTimeout(() => setOpen(false), 100);
+          clearBlurTimeout();
+          blurTimeoutRef.current = globalThis.setTimeout(() => {
+            blurTimeoutRef.current = null;
+            setOpen(false);
+          }, 100);
         }}
         onChange={(event) => {
           onChange(event.currentTarget.value);
@@ -424,19 +438,33 @@ const CodecCombobox = ({
           updateDropdownFrame();
         }}
         onClick={(event) => {
-          const nextCursor = event.currentTarget.selectionStart ?? value.length;
-          setCursor(nextCursor);
-          setFiltering(false);
-          setActiveIndex(getActiveSuggestionIndex(value, nextCursor, multiple, suggestionOptions));
-          updateDropdownFrame();
-        }}
-        onFocus={(event) => {
+          clearBlurTimeout();
           const nextCursor = event.currentTarget.selectionStart ?? value.length;
           setCursor(nextCursor);
           setFiltering(false);
           setActiveIndex(getActiveSuggestionIndex(value, nextCursor, multiple, suggestionOptions));
           setOpen(true);
-          focusInputIntoView();
+          updateDropdownFrame();
+        }}
+        onPointerCancel={() => {
+          pointerDownRef.current = false;
+        }}
+        onPointerDown={() => {
+          pointerDownRef.current = true;
+        }}
+        onPointerUp={() => {
+          pointerDownRef.current = false;
+        }}
+        onFocus={(event) => {
+          clearBlurTimeout();
+          const nextCursor = event.currentTarget.selectionStart ?? value.length;
+          setCursor(nextCursor);
+          setFiltering(false);
+          setActiveIndex(getActiveSuggestionIndex(value, nextCursor, multiple, suggestionOptions));
+          if (!pointerDownRef.current) {
+            setOpen(true);
+            focusInputIntoView();
+          }
         }}
         onKeyDown={handleKeyDown}
         onKeyUp={(event) => setCursor(event.currentTarget.selectionStart ?? value.length)}

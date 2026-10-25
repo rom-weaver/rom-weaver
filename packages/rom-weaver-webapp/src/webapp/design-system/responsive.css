@@ -386,6 +386,13 @@
 .post-apply-fields > .ofld {
   flex-basis: max(156px, var(--ofld-label-basis));
 }
+/* The boot check toggle and its hint fill a cell of their own line, on the
+   plate like every other cell so the hint keeps its contrast. */
+.apply-output .post-apply-fields > .verify-boot-field {
+  flex: 1 1 100%;
+  padding: 6px;
+  background: var(--plate);
+}
 /* The identified title gets its own line under the label so it wraps whole. */
 .apply-output .outname-source {
   flex: 1 1 100%;

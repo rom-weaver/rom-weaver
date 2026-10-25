@@ -3,6 +3,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -36,6 +37,7 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
+import { prepareBootCheckAudioContext, releaseBootCheckAudioContext } from "./boot-check-audio.ts";
 import { addEntry, getApplyEntry, setCurrentGame, type EmulatorSessionEntry } from "./emulator-session-store.ts";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
@@ -296,6 +298,22 @@ const setPostApplyTestBehaviorOverride = postApplyTestBehaviorStore.set;
 const subscribePostApplyTestBehaviorOverride = postApplyTestBehaviorStore.subscribe;
 const syncPostApplyTestBehaviorSetting = postApplyTestBehaviorStore.syncSetting;
 
+const verifyBootAfterApplyStore = createSettingSessionOverride((value: unknown): boolean => value === true);
+const setVerifyBootAfterApplyOverride = verifyBootAfterApplyStore.set;
+
+/** The Verify boot checkbox's controlled value: the override once set, else the live setting. */
+const useVerifyBootAfterApplyValue = (settingValue: unknown): boolean => {
+  const override = useSyncExternalStore(
+    verifyBootAfterApplyStore.subscribe,
+    verifyBootAfterApplyStore.get,
+    verifyBootAfterApplyStore.get,
+  );
+  useEffect(() => {
+    verifyBootAfterApplyStore.syncSetting(settingValue);
+  }, [settingValue]);
+  return override ?? settingValue === true;
+};
+
 /** The Post Apply Download select's controlled value: the override once set, else the live setting. */
 const usePostApplyDownloadBehaviorValue = (settingValue: unknown): PostApplyActionBehavior => {
   const override = useSyncExternalStore(
@@ -426,6 +444,21 @@ const runPostApplyActions = async ({
   return { downloaded, tested: true };
 };
 
+/**
+ * Whether the boot check can have a core for this ROM, judged at the Apply
+ * click. The ROM's name and identified platform decide the core the same way
+ * after Apply. A ROM that is still loading shows a placeholder name, such as
+ * its archive's, so its core is unknown and the click prepares for a check
+ * anyway: a queued Apply starts later, without the click WebKit needs.
+ */
+const mayHaveEmulatorCore = (romInput: RomInputRowState | undefined): boolean => {
+  if (!romInput || romInput.loading) return true;
+  const fileName = romInput.info.fileName || romInput.info.archiveName;
+  const platform = romInput?.info.romType?.platform;
+  if (!(fileName || platform)) return true;
+  return !!getEmulatorJsCore(platform, fileName);
+};
+
 const focusPendingDownload = () => {
   const focus = () => {
     if (typeof document === "undefined") return;
@@ -511,9 +544,13 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
     usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior),
   );
   const postApplyTestBehaviorRef = useLatestRef(usePostApplyTestBehaviorValue(settings.postApplyTestBehavior));
+  const verifyBootAfterApplyRef = useLatestRef(useVerifyBootAfterApplyValue(settings.verifyBootAfterApply));
+  // Names this form's boot checks, so a hidden form cannot take them.
+  const bootCheckOwner = useId();
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
+      bootCheckOwner,
       cancelPrimaryAction: () => {
         const { lifecycle, request } = contextRef.current;
         lifecycle.setApplyQueued(false);
@@ -583,6 +620,18 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           patchChangePendingRef,
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
+        // This MUST stay before the first await: WebKit resumes only an
+        // AudioContext created while the Apply click is still a user action.
+        if (
+          verifyBootAfterApplyRef.current &&
+          !busy &&
+          !(pendingDownloadResult && hasPendingDownload) &&
+          !applyQueueBlocked &&
+          (canStartApply || canQueueApply) &&
+          mayHaveEmulatorCore(session.localState.romInputs[0])
+        ) {
+          prepareBootCheckAudioContext(bootCheckOwner);
+        }
         if (patchChangePendingRef.current && !busy) {
           setApplyQueued(true);
           return;
@@ -731,6 +780,8 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           onApplyComplete?.(result);
         } catch (error) {
           const normalizedError = toError(error);
+          // No output will come from this run, so no boot check will use the context.
+          releaseBootCheckAudioContext(bootCheckOwner);
           if (abortController.signal.aborted && getErrorCode(normalizedError) === "CANCELLED") {
             resetCompletedOutputState();
             clearActiveApplyProgress();
@@ -756,7 +807,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef],
+    [bootCheckOwner, contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef, verifyBootAfterApplyRef],
   );
 };
 
@@ -768,6 +819,7 @@ export {
   runPostApplyActions,
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
+  setVerifyBootAfterApplyOverride,
   subscribePostApplyDownloadBehaviorOverride,
   subscribePostApplyTestBehaviorOverride,
   syncPostApplyDownloadBehaviorSetting,
@@ -775,4 +827,5 @@ export {
   useApplyDownloadOrchestration,
   usePostApplyDownloadBehaviorValue,
   usePostApplyTestBehaviorValue,
+  useVerifyBootAfterApplyValue,
 };

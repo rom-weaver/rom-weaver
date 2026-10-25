@@ -28,9 +28,11 @@ import {
   setPostApplyTestBehaviorOverride,
   usePostApplyDownloadBehaviorValue,
   usePostApplyTestBehaviorValue,
+  useVerifyBootAfterApplyValue,
 } from "./use-apply-download-orchestration.ts";
 import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { EmulatorJsAction } from "./apply-emulatorjs-action.tsx";
+import { BootCheckStatus, VerifyBootField } from "./apply-boot-check.tsx";
 
 /** Weave-related notices and export reveal state, threaded from the form. */
 export type WeaveToolsState = {
@@ -153,13 +155,17 @@ const PostApplyActionField = ({
 
 /** These fields override the read-only host settings for the current Apply session. */
 export const PostApplyBehaviorFields = ({
+  bootCheckOwner,
   disabled,
   downloadSetting,
   testSetting,
+  verifyBootSetting,
 }: {
+  bootCheckOwner?: string;
   disabled: boolean;
   downloadSetting: unknown;
   testSetting: unknown;
+  verifyBootSetting: unknown;
 }) => {
   const localizer = useUiLocalizer();
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
@@ -182,6 +188,7 @@ export const PostApplyBehaviorFields = ({
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
       />
+      <VerifyBootField disabled={disabled} owner={bootCheckOwner} setting={verifyBootSetting} />
     </div>
   );
 };
@@ -321,6 +328,8 @@ export const ApplyOutputAction = ({
   const postApplyDownloadOption = postApplyDownloadBehaviorOption(postApplyDownloadBehavior);
   const postApplyTestOption = postApplyTestBehaviorOption(postApplyTestBehavior);
   const showDownloadFallback = !emulatorCore && (postApplyTestOption.visible || postApplyTestOption.automatic);
+  const verifyBoot = useVerifyBootAfterApplyValue(settings.verifyBootAfterApply);
+  const completedOutput = outputState.pendingDownloadFileName ? emulatorOutput : null;
   return (
     <>
       <ApplyErrorNotice notice={errorNotice} noticeController={noticeController} />
@@ -342,9 +351,16 @@ export const ApplyOutputAction = ({
         core={emulatorCore}
         fileName={emulatorFileName}
         onSelectView={onSelectView}
-        output={outputState.pendingDownloadFileName ? emulatorOutput : null}
+        output={completedOutput}
         platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
+      />
+      <BootCheckStatus
+        core={emulatorCore}
+        enabled={verifyBoot}
+        output={completedOutput}
+        owner={controllers.output.bootCheckOwner}
+        platform={emulatorPlatform}
       />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
       {weaveTools?.outputVerification ? (

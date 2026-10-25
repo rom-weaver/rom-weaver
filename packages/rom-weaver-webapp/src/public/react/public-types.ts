@@ -22,6 +22,8 @@ type RomWeaverReactSettings = ApplySettings &
     offlineCopyEnabled?: boolean;
     postApplyDownloadBehavior?: PostApplyActionBehavior;
     postApplyTestBehavior?: PostApplyActionBehavior;
+    /** Boot the Apply result in a hidden emulator and report whether it draws a picture. */
+    verifyBootAfterApply?: boolean;
   };
 type ApplyWorkflowSettings = ApplySettings;
 type CreateWorkflowSettings = CreateSettings;

@@ -4,6 +4,14 @@ type EmulatorDocumentOptions = {
   gameId?: number;
   gameLabel?: string;
   saveId?: string;
+  /**
+   * Build a silent player for an unattended boot check. It starts at once,
+   * never takes focus, and leaves out the save and audio bridges, so it
+   * never imports or exports the app saves that the Test player owns, and it
+   * leaves the saved settings alone. EmulatorJS still mounts its own IDBFS
+   * save folder, but RetroArch autosaves only after 60 s.
+   */
+  headless?: boolean;
 };
 
 type EmulatorGameIdentityInput = {
@@ -290,6 +298,58 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
         });
       })();`;
 
+/** The EmulatorJS globals that differ between the Test player and a boot check. */
+const playerConfigScript = (gameName: string) => `
+      EJS_disableLocalStorage = false;
+      // WebKit MUST receive the context created by the parent user action.
+      // EmulatorJS creates its own context after the activation has expired.
+      const romWeaverAudioBridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
+      const romWeaverHasPreparedAudio = !!romWeaverAudioBridge && romWeaverAudioBridge.hasPrepared(${toScriptString(gameName)});
+      EJS_startOnLoaded = !(navigator.maxTouchPoints > 0) || romWeaverHasPreparedAudio;`;
+
+const HEADLESS_CONFIG = `
+      // A boot check MUST NOT touch the saved EmulatorJS settings, take focus
+      // from the page, or make a sound.
+      EJS_disableLocalStorage = true;
+      EJS_disableDatabases = true;
+      EJS_noAutoFocus = true;
+      EJS_volume = 0;
+      EJS_startOnLoaded = true;`;
+
+/**
+ * Hand the boot check's player the AudioContext that its host frame element
+ * carries. The core stops after a few frames while its context is suspended,
+ * and WebKit resumes only a context that was created during a user action, so
+ * the page creates one when Apply is clicked and passes it in here.
+ */
+const HEADLESS_AUDIO_CONTEXT_SCRIPT = `
+      (() => {
+        const host = window.frameElement;
+        const NativeAudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!host || !NativeAudioContext) return;
+        function RomWeaverBootCheckAudioContext(options) {
+          const prepared = host.romWeaverAudioContext;
+          if (prepared && prepared.state !== 'closed') {
+            host.romWeaverAudioContext = null;
+            return prepared;
+          }
+          return arguments.length ? new NativeAudioContext(options) : new NativeAudioContext();
+        }
+        RomWeaverBootCheckAudioContext.prototype = NativeAudioContext.prototype;
+        Object.setPrototypeOf(RomWeaverBootCheckAudioContext, NativeAudioContext);
+        window.AudioContext = RomWeaverBootCheckAudioContext;
+        window.webkitAudioContext = RomWeaverBootCheckAudioContext;
+      })();`;
+
+const playerBridgeScripts = (gameName: string, gameLabel: string, gameId: number, saveId: string) => `
+    <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
+    <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${LABEL_MENU_BUTTONS}</script>
+    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
+    <script>${createMigrateBareSettings(gameId, saveId, gameName)}</script>
+    <script>${CLEAR_HIDDEN_SETTINGS}</script>
+    <script>${createEmulatorBridgeScript(gameName, gameLabel, saveId)}</script>`;
+
 const createEmulatorDocument = (
   dataUrl: string,
   gameUrl: string,
@@ -299,7 +359,7 @@ const createEmulatorDocument = (
 ) => {
   const threads = !SINGLE_THREADED_CORES.has(core);
   return `<!doctype html>
-<html lang="en">
+  <html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>html,body,#game{width:100%;height:100%;margin:0;background:#000;overflow:hidden}#game{display:block}</style>
@@ -324,30 +384,17 @@ const createEmulatorDocument = (
       // long-press fires. Holding the d-pad therefore covers the game with the
       // Restart/Save State panel, so touch keeps the menu button as its only
       // route in.
-      if (navigator.maxTouchPoints > 0) EJS_Buttons = { rightClick: false };
-      EJS_disableLocalStorage = false;
-      // WebKit MUST receive the context created by the parent user action.
-      // EmulatorJS creates its own context after the activation has expired.
-      const romWeaverAudioBridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
-      const romWeaverHasPreparedAudio = !!romWeaverAudioBridge && romWeaverAudioBridge.hasPrepared(${toScriptString(gameName)});
-      EJS_startOnLoaded = !(navigator.maxTouchPoints > 0) || romWeaverHasPreparedAudio;
+      if (navigator.maxTouchPoints > 0) EJS_Buttons = { rightClick: false };${options.headless ? HEADLESS_CONFIG : playerConfigScript(gameName)}
       EJS_gameID = ${options.gameId ?? hashString(gameName)};
       EJS_player = '#game';
       EJS_core = ${toScriptString(core)};
       EJS_gameName = ${toScriptString(gameName)};
       EJS_gameUrl = ${toScriptString(gameUrl)};
       EJS_pathtodata = ${toScriptString(dataUrl)};
-    </script>
-    <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
-    <script>${DISABLE_UPDATE_CHECK}</script>
-    <script>${LABEL_MENU_BUTTONS}</script>
-    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
-    <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName)}</script>
-    <script>${CLEAR_HIDDEN_SETTINGS}</script>
-    <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName, options.saveId || gameName)}</script>
+    </script>${options.headless ? `\n    <script>${HEADLESS_AUDIO_CONTEXT_SCRIPT}</script>\n    <script>${DISABLE_UPDATE_CHECK}</script>\n    <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>` : playerBridgeScripts(gameName, options.gameLabel || gameName, options.gameId ?? hashString(gameName), options.saveId || gameName)}
     <script src="${dataUrl}loader.js"></script>
   </body>
-</html>`;
+  </html>`;
 };
 
 export { createEmulatorDocument, createEmulatorGameIdentity };

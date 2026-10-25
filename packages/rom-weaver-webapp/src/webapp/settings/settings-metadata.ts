@@ -51,6 +51,7 @@ type SettingsState = {
   weavePackage: string;
   postApplyDownloadBehavior: PostApplyActionBehavior;
   postApplyTestBehavior: PostApplyActionBehavior;
+  verifyBootAfterApply: boolean;
   betaToolsEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
   offlineCopyEnabled: boolean;
@@ -180,6 +181,7 @@ const SETTINGS_FIELD_ORDER = [
   "weavePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
+  "verifyBootAfterApply",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -256,6 +258,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "weavePackage",
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
+      "verifyBootAfterApply",
       "emulatorSaveStorageEnabled",
       "fixChecksum",
       "identifiedOutputName",
@@ -377,6 +380,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     options: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map(withPostApplyLabelId),
     validationLabel: "Open Test after patching",
     validValues: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map((option) => option.value),
+  },
+  verifyBootAfterApply: {
+    defaultValue: false,
+    id: "settings-verify-boot-after-apply",
+    key: "verifyBootAfterApply",
+    suggestion: (_context, localizer) => localizer.message("settings.verifyBootAfterApplyHelp"),
+    kind: "checkbox",
+    label: getSettingsLabel("verifyBootAfterApply"),
+    labelId: "settings.verifyBootAfterApply",
+    layout: "large",
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
