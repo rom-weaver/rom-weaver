@@ -29,7 +29,7 @@ struct Manifest {
     generation_date: Option<String>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 enum Scope {
     FullFile,
     TrackFile,
@@ -44,6 +44,14 @@ impl Scope {
         }
     }
 }
+// Scopes compare by name, as the scope strings did: a pack may spell `full_file` as an
+// `Other` string, and that must still match the coded scope.
+impl PartialEq for Scope {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+impl Eq for Scope {}
 
 /// A hash row kept as raw digest bytes. Hex text is built only for the
 /// components that own it, so parsing a pack does one hex pass per component.
@@ -1581,5 +1589,29 @@ mod tests {
         let hashes = [owner_hash(1)];
         let error = owner_error(&[vec![0]], 2, &[0, 0], &hashes);
         assert!(error.contains("do not cover all components"), "{error}");
+    }
+
+    #[test]
+    fn validate_owners_matches_a_scope_spelled_as_a_string() {
+        // Row 1 stores `full_file` as an `Other` string; it must still match row 0's coded scope.
+        let spelled = Hash {
+            scope: Scope::Other("full_file".to_owned()),
+            ..owner_hash(1)
+        };
+        let hashes = [owner_hash(1), spelled];
+        let components = vec![owner_component(); 1];
+        validate_owners(&[vec![0], vec![]], &components, &[1], &hashes)
+            .expect("a scope string equal to the coded scope matches it");
+    }
+
+    #[test]
+    fn validate_owners_rejects_owner_with_different_scope() {
+        let track = Hash {
+            scope: Scope::TrackFile,
+            ..owner_hash(1)
+        };
+        let hashes = [owner_hash(1), track];
+        let error = owner_error(&[vec![0], vec![]], 1, &[1], &hashes);
+        assert!(error.contains("owner mapping is invalid"), "{error}");
     }
 }
