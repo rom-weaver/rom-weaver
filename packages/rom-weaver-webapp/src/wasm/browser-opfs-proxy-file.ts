@@ -56,6 +56,8 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   private cacheBuf: Uint8Array | null = null;
   private cacheStart = -1;
   private cacheLen = 0;
+  // The cached block ends at end of file (a short fill, or a full block whose tail read found nothing).
+  private cacheAtEof = false;
   private cacheVersion = -1;
   // Sequential write-back buffer: coalesces contiguous writes before hitting the proxy.
   private wbuf: Uint8Array | null = null;
@@ -105,19 +107,18 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     if (version !== this.cacheVersion) {
       this.cacheStart = -1;
       this.cacheLen = 0;
+      this.cacheAtEof = false;
       this.cacheVersion = version;
     }
-    // A block shorter than the block size ended at EOF, so a request running past it is clamped to the
-    // cached end instead of missing every time.
+    // A request running past a block that ends at EOF is clamped to the cached end instead of missing
+    // every time.
     const cacheEnd = this.cacheStart + this.cacheLen;
-    const reqEnd =
-      this.cacheLen < PROXY_READ_CACHE_BLOCK_BYTES
-        ? Math.min(start + dst.byteLength, cacheEnd)
-        : start + dst.byteLength;
-    if (this.cacheBuf && start >= this.cacheStart && reqEnd <= cacheEnd && start <= reqEnd) {
-      const n = reqEnd - start;
+    const reqEnd = this.cacheAtEof ? Math.min(start + dst.byteLength, cacheEnd) : start + dst.byteLength;
+    if (this.cacheBuf && start >= this.cacheStart && reqEnd <= cacheEnd) {
+      // Only a clamped request can end at or before its start: it begins at or past EOF.
+      if (start >= reqEnd) return 0;
       dst.set(this.cacheBuf.subarray(start - this.cacheStart, reqEnd - this.cacheStart));
-      return n;
+      return reqEnd - start;
     }
     if (!this.cacheBuf) {
       this.cacheBuf = new Uint8Array(PROXY_READ_CACHE_BLOCK_BYTES);
@@ -127,18 +128,22 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     const filled = this.client.readInto(handleId, blockStart, this.cacheBuf);
     this.cacheStart = blockStart;
     this.cacheLen = filled;
+    // readInto returns short only at EOF.
+    this.cacheAtEof = filled < PROXY_READ_CACHE_BLOCK_BYTES;
     this.cacheVersion = version;
     const available = blockStart + filled - start;
     if (available <= 0) return 0;
     const fromCache = Math.min(available, dst.byteLength);
     dst.set(this.cacheBuf.subarray(start - blockStart, start - blockStart + fromCache));
     // A short block means the fill already hit EOF, so there is no tail to fetch.
-    if (fromCache >= dst.byteLength || filled < PROXY_READ_CACHE_BLOCK_BYTES) return fromCache;
+    if (fromCache >= dst.byteLength || this.cacheAtEof) return fromCache;
     // The request runs past the end of this 1-block cache. Returning the partial count here is a short
     // read mid-file; positional readers that do not retry (e.g. the CHD scoped reader's read_exact_at)
     // then fail with "read error". Fill the remainder directly so readAt always satisfies the full
     // request up to EOF. (`rest` is 0 only at true EOF, which is a correct short read.)
     const rest = this.client.readInto(handleId, start + fromCache, dst.subarray(fromCache));
+    // The tail starts at the cached end, so nothing there means the full block ends at EOF.
+    if (rest === 0) this.cacheAtEof = true;
     return fromCache + rest;
   }
 

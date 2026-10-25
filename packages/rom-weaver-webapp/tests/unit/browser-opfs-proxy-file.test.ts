@@ -288,6 +288,26 @@ describe("BrowserProxyRandomAccessFile reads", () => {
     // One block fill plus one direct read for the tail past the block.
     expect(proxy.reads).toHaveLength(2);
     expect(proxy.reads[1]).toMatchObject({ offset: READ_CACHE_BLOCK_BYTES });
+
+    // A full block that does not end at EOF is never clamped: the same read again returns every byte.
+    const again = new Uint8Array(128);
+    expect(file.readAt(start, again)).toBe(128);
+    expect(again).toEqual(dst);
+  });
+
+  it("serves repeated reads past end of file when the file ends on a block boundary", () => {
+    const size = READ_CACHE_BLOCK_BYTES;
+    proxy.setBytes("/work/rom.iso", patterned(size));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/rom.iso");
+
+    for (let call = 0; call < 2; call += 1) {
+      const dst = new Uint8Array(64 * 1024);
+      expect(file.readAt(size - 1024, dst)).toBe(1024);
+      expect(dst[1023]).toBe((size - 1) & 0xff);
+    }
+    expect(file.readAt(size, new Uint8Array(64))).toBe(0);
+    // One block fill plus one empty tail read that finds EOF; every later read is served from the cache.
+    expect(proxy.reads).toHaveLength(2);
   });
 
   it("serves repeated reads that run past end of file from the cached block", () => {
@@ -304,6 +324,7 @@ describe("BrowserProxyRandomAccessFile reads", () => {
     expect(file.readAt(size - 10, tail)).toBe(10);
     expect(tail[9]).toBe((size - 1) & 0xff);
     expect(file.readAt(size, tail)).toBe(0);
+    expect(file.readAt(size + 1, tail)).toBe(0);
     expect(proxy.reads).toHaveLength(1);
   });
 
