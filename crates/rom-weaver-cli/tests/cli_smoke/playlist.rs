@@ -609,3 +609,145 @@ fn playlist_dry_run_lists_every_file_a_folder_output_writes() {
     );
     assert!(!roms.path().exists(), "dry run must not write");
 }
+
+#[test]
+fn playlist_dry_run_refuses_a_folder_output_that_already_holds_a_file() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let roms = temp.child("roms");
+    fs::create_dir_all(roms.path().join("Game")).expect("game dir");
+    fs::write(roms.path().join("Game/Game.m3u"), "kept\n").expect("m3u");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p")],
+            roms.path().to_str().expect("p"),
+            &["--layout", "folder", "--dry-run"],
+        ),
+        1,
+    );
+    assert!(json.to_string().contains("refusing to overwrite"), "{json}");
+    assert_eq!(
+        fs::read_to_string(roms.path().join("Game/Game.m3u")).expect("m3u"),
+        "kept\n"
+    );
+}
+
+#[test]
+fn playlist_copy_refuses_track_names_that_differ_only_by_case() {
+    let temp = setup_temp_dir();
+    fs::write(temp.path().join("Q.BIN"), b"upper").expect("bin");
+    fs::write(temp.path().join("q.bin"), b"lower").expect("bin");
+    fs::write(
+        temp.path().join("Game.cue"),
+        "FILE \"Q.BIN\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"q.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue");
+    let cue = temp.path().join("Game.cue");
+    let zip = temp.path().join("Game.zip");
+    let json = run_single_json_event(
+        &playlist_args(&[cue.to_str().expect("p")], zip.to_str().expect("p"), &[]),
+        1,
+    );
+    assert!(
+        json.to_string().contains("names both `Q.BIN` and `q.bin`"),
+        "{json}"
+    );
+    assert!(!zip.exists(), "a refused bundle writes nothing");
+    let m3u = temp.path().join("Game.m3u");
+    run_single_json_event(
+        &playlist_args(&[cue.to_str().expect("p")], m3u.to_str().expect("p"), &[]),
+        0,
+    );
+}
+
+#[test]
+fn playlist_refuses_a_file_as_the_output_folder() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let file = temp.path().join("afile");
+    fs::write(&file, "not a folder").expect("file");
+    let json = run_single_json_event(
+        &playlist_args(
+            &[cue.to_str().expect("p")],
+            &format!("{}/", file.display()),
+            &["--dry-run"],
+        ),
+        1,
+    );
+    assert!(
+        json.to_string()
+            .contains("is a file, so it cannot hold the --output folder"),
+        "{json}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn playlist_failed_copies_name_the_path_and_leave_no_partial_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let inputs = [cue.to_str().expect("p")];
+
+    let track = temp.path().join("Game (Disc 1).bin");
+    fs::set_permissions(&track, fs::Permissions::from_mode(0o000)).expect("chmod");
+    if fs::File::open(&track).is_ok() {
+        // Root reads any file, so the copy cannot fail here.
+        fs::set_permissions(&track, fs::Permissions::from_mode(0o644)).expect("chmod");
+        return;
+    }
+    let zip = temp.path().join("Game.zip");
+    let roms = temp.path().join("roms");
+    let zip_result =
+        run_single_json_event(&playlist_args(&inputs, zip.to_str().expect("p"), &[]), 1);
+    let folder_result =
+        run_single_json_event(&playlist_args(&inputs, roms.to_str().expect("p"), &[]), 1);
+    fs::set_permissions(&track, fs::Permissions::from_mode(0o644)).expect("chmod");
+    assert!(!zip.exists(), "partial ZIP left behind: {zip_result}");
+    assert!(
+        !roms.exists(),
+        "partial folder left behind: {folder_result}"
+    );
+    for result in [zip_result, folder_result] {
+        assert!(result.to_string().contains("Game (Disc 1).bin"), "{result}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn playlist_names_a_read_only_output_folder() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let locked = temp.path().join("locked");
+    fs::create_dir_all(&locked).expect("dir");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).expect("chmod");
+    if fs::write(locked.join("probe"), b"").is_ok() {
+        // Root writes anywhere, so the output cannot be refused here.
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("chmod");
+        return;
+    }
+    let results = ["Game.m3u", "Game.zip"].map(|name| {
+        run_single_json_event(
+            &playlist_args(
+                &[cue.to_str().expect("p")],
+                locked.join(name).to_str().expect("p"),
+                &[],
+            ),
+            1,
+        )
+    });
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).expect("chmod");
+    for result in results {
+        assert!(
+            result.to_string().contains(locked.to_str().expect("p")),
+            "{result}"
+        );
+    }
+}

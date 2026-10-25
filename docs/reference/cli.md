@@ -542,7 +542,7 @@ Disc numbers come from `Disc 1`, `(Disc 2)`, `[Disk 3]`, `CD1`, and `.disc02` in
 
 The game name drops the disc marker with its brackets, a TOSEC count such as ` of 2`, and the separators before it. `Game (USA) (Disc 1).cue` gives `Game (USA)`, and `Game (Disc 1 of 2)[!].gdi` gives `Game[!]`. A name with `/`, `\`, or `"` is rejected.
 
-A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file name, and the files each disc needs: the files its `.cue` or `.gdi` names, at their relative paths, and the `.img`, `.sub`, or `.mdf` stored with a `.ccd` or `.mds`. Two different files that would share a path are rejected. Each layout places them like this:
+A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file name, and the files each disc needs: the files its `.cue` or `.gdi` names, at their relative paths, and the `.img`, `.sub`, or `.mdf` stored with a `.ccd` or `.mds`. Two different files that would share a path are rejected, and so is a sheet that names two files whose names differ only in case. Each layout places them like this:
 
 | Layout | Files | Playlist lines | Frontends |
 | --- | --- | --- | --- |

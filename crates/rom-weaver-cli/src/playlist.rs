@@ -8,6 +8,7 @@ use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
 
 use super::*;
+use rom_weaver_core::{IoOp, IoResultExt};
 
 const PLAYLIST_FORMAT: &str = "m3u";
 
@@ -353,6 +354,29 @@ fn plan_playlist(
         if detect_disc_sheet(input).is_some() {
             let refs = enumerate_disc_sheet_refs(input)?;
             let sheet_dir = input.parent().unwrap_or_else(|| Path::new(""));
+            if bundle {
+                // The parser keeps one of two names that differ only by case, so a copied sheet
+                // could name a track the bundle lacks on a case-sensitive filesystem.
+                let mut written = Vec::new();
+                super::patch_apply_disc::rewrite_sheet(input, |reference| {
+                    written.push(reference.to_string());
+                    Ok(reference.to_string())
+                })?;
+                if let Some(variant) = written
+                    .iter()
+                    .find(|name| !refs.referenced_files.contains(*name))
+                {
+                    let kept = refs
+                        .referenced_files
+                        .iter()
+                        .find(|name| name.eq_ignore_ascii_case(variant))
+                        .map_or("", String::as_str);
+                    return Err(RomWeaverError::Validation(format!(
+                        "`{}` names both `{kept}` and `{variant}`; use one spelling so the copied sheet finds its tracks",
+                        input.display()
+                    )));
+                }
+            }
             for reference in refs.referenced_files {
                 let archive_name = reference.replace('\\', "/");
                 let escapes = Path::new(&archive_name).is_absolute()
@@ -703,6 +727,35 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
             "two discs share the name `{duplicate}`; rename one so each playlist line is unique"
         )));
     }
+    if kind == PlaylistOutput::Folder {
+        let folder: PathBuf = output.components().collect();
+        if let Some(file) = folder
+            .ancestors()
+            .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
+            .filter(|dir| !dir.is_dir())
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "`{}` is a file, so it cannot hold the --output folder",
+                file.display()
+            )));
+        }
+        if let Some(existing) = entries
+            .iter()
+            .map(|entry| output.join(&entry.path))
+            .find(|target| fs::symlink_metadata(target).is_ok())
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "refusing to overwrite existing `{}`; choose a different --output folder",
+                existing.display()
+            )));
+        }
+    }
+    for entry in &entries {
+        if let BundleSource::File(source) = &entry.source {
+            // Name an unreadable disc file before anything is written.
+            fs::File::open(source).io_op(IoOp::Open, source)?;
+        }
+    }
     debug!(
         ?kind,
         layout = ?args.layout,
@@ -729,22 +782,13 @@ pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {
     )
 }
 
-/// Copy a folder output's files under `folder`, refusing any that exists. A failed run removes
+/// Copy a folder output's files under `folder`, never replacing a file. A failed run removes
 /// the files and folders it made, so no partial game is left behind.
 fn write_playlist_folder(
     folder: &Path,
     targets: &[PathBuf],
     entries: &[BundleEntry],
 ) -> Result<()> {
-    if let Some(existing) = targets
-        .iter()
-        .find(|target| fs::symlink_metadata(target).is_ok())
-    {
-        return Err(RomWeaverError::Validation(format!(
-            "refusing to overwrite existing `{}`; choose a different --output folder",
-            existing.display()
-        )));
-    }
     let mut made_dirs: Vec<PathBuf> = Vec::new();
     let mut made_files: Vec<&Path> = Vec::new();
     let result = (|| -> Result<()> {
@@ -755,17 +799,21 @@ fn write_playlist_folder(
                 .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())
                 .map(Path::to_path_buf)
                 .collect();
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).io_op(IoOp::CreateDir, parent)?;
             made_dirs.extend(missing);
             let mut file = fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(target)?;
+                .open(target)
+                .io_op(IoOp::Create, target)?;
             made_files.push(target.as_path());
             match &entry.source {
-                BundleSource::Text(text) => io::Write::write_all(&mut file, text.as_bytes())?,
+                BundleSource::Text(text) => {
+                    io::Write::write_all(&mut file, text.as_bytes()).io_op(IoOp::Write, target)?;
+                }
                 BundleSource::File(source) => {
-                    io::copy(&mut fs::File::open(source)?, &mut file)?;
+                    let mut source = fs::File::open(source).io_op(IoOp::Open, source)?;
+                    io::copy(&mut source, &mut file).io_op(IoOp::Write, target)?;
                 }
             }
         }
@@ -809,21 +857,23 @@ impl CliApp {
         if job.kind == PlaylistOutput::Folder {
             write_playlist_folder(&job.output, &writes, &job.entries)?;
         } else {
-            if let Some(parent) = job
+            // The ZIP writer's errors name no path, so a denied folder is reported here first.
+            let parent = job
                 .output
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
-            {
-                fs::create_dir_all(parent)?;
-            }
+                .unwrap_or_else(|| Path::new("."));
+            super::path_access::check_writable_dir(parent)?;
             if job.kind == PlaylistOutput::Zip {
                 self.write_playlist_zip(&job)?;
             } else {
                 let mut file = fs::OpenOptions::new()
                     .write(true)
                     .create_new(true)
-                    .open(&job.output)?;
-                io::Write::write_all(&mut file, render_m3u(&job.lines).as_bytes())?;
+                    .open(&job.output)
+                    .io_op(IoOp::Create, &job.output)?;
+                io::Write::write_all(&mut file, render_m3u(&job.lines).as_bytes())
+                    .io_op(IoOp::Write, &job.output)?;
             }
         }
         let playlist = match job.kind {
@@ -891,6 +941,10 @@ impl CliApp {
         })();
         for path in &staged {
             let _ = fs::remove_file(path);
+        }
+        if result.is_err() {
+            // `plan_job` refused an existing output, so a file here is this run's partial ZIP.
+            let _ = fs::remove_file(&job.output);
         }
         result
     }
