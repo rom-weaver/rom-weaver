@@ -126,7 +126,7 @@ describe("addVirtualFilesToMount", () => {
     ...overrides,
   });
 
-  it("mounts a direct file as a closeOnLastFdClose inode", () => {
+  it("mounts a direct file as a held-open inode so its read cache survives fd churn", () => {
     const contents = new Map<string, wasiShim.Inode>();
     const trace: string[] = [];
 
@@ -140,7 +140,7 @@ describe("addVirtualFilesToMount", () => {
 
     const inode = contents.get("rom.iso");
     expect(inode).toBeInstanceOf(WasiRandomAccessFileInode);
-    expect((inode as WasiRandomAccessFileInode).closeOnLastFdClose).toBe(true);
+    expect((inode as WasiRandomAccessFileInode).closeOnLastFdClose).toBe(false);
     expect((inode as WasiRandomAccessFileInode).readonly).toBe(true);
     expect(restores).toEqual([{ entries: contents, hadExisting: false, name: "rom.iso", value: null }]);
     expect(trace).toContain("[browser-opfs] virtual file mounted name=rom.iso proxyHandle=false");

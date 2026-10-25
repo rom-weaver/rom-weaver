@@ -2,6 +2,31 @@ const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
 const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
+// Virtual Blob inputs are held open for the whole run, so their cache blocks outlive individual fd
+// closes (a detector re-opening the file reuses them instead of re-reading the Blob). Retention is
+// bounded per adapter by min(blockBytes, file size) x VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT, and across
+// one worker's adapters by this budget. Module state is per worker, so the runner and each WASI thread
+// worker hold at most one full adapter's worth each, which is what a single open input held before
+// inputs stayed open. Past the budget an adapter reuses its least-recently-used block instead of
+// allocating. An adapter's first block may use headroom up to twice the budget, so many small inputs
+// still cache; past that hard limit an adapter holds no block and reads the Blob directly. close(),
+// which restoreVirtualFiles calls at run end, releases everything.
+const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES =
+  VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES * VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT;
+const VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES = VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES * 2;
+let virtualBlobCacheRetainedBytes = 0;
+
+const virtualBlobCacheBudget: ReadCacheBudget = {
+  release(bytes) {
+    virtualBlobCacheRetainedBytes = Math.max(0, virtualBlobCacheRetainedBytes - bytes);
+  },
+  reserve(bytes, first) {
+    const limit = first ? VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES : VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES;
+    if (virtualBlobCacheRetainedBytes + bytes > limit) return false;
+    virtualBlobCacheRetainedBytes += bytes;
+    return true;
+  },
+};
 
 type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
@@ -30,8 +55,15 @@ type ReadCacheStatKeys = {
   misses: keyof RandomAccessFileIoStats;
 };
 
+type ReadCacheBudget = {
+  release: (bytes: number) => void;
+  // `first` marks a cache's first block, which may use the budget's headroom.
+  reserve: (bytes: number, first: boolean) => boolean;
+};
+
 type ReadCacheOptions = {
   blockBytes: number;
+  budget?: ReadCacheBudget;
   blockCount: number;
   // Reads the backing store into `buf` starting at `blockStart`, returning bytes actually read. The
   // adapter owns this so the cache stays oblivious to OPFS vs Blob/proxy I/O.
@@ -46,22 +78,27 @@ type ReadCacheOptions = {
 // backing read and the bumped ioStats counters differ, both injected via options. This is a hot path.
 class LruReadCache {
   private readonly blockBytes: number;
+  private readonly budget: ReadCacheBudget | undefined;
   private readonly blockCount: number;
   private readonly blocks: ReadCacheBlock[];
   private readonly fill: (blockStart: number, buf: Uint8Array) => number;
   private readonly reusableBlockErrorMessage: string;
   private readonly statKeys: ReadCacheStatKeys;
   private readonly stats: RandomAccessFileIoStats;
+  // Bytes this cache took from the budget; clear() returns exactly these.
+  private reservedBytes: number;
   private tick: number;
 
   constructor(options: ReadCacheOptions) {
     this.blockBytes = options.blockBytes;
     this.blockCount = options.blockCount;
+    this.budget = options.budget;
     this.fill = options.fill;
     this.reusableBlockErrorMessage = options.reusableBlockErrorMessage;
     this.statKeys = options.statKeys;
     this.stats = options.stats;
     this.blocks = [];
+    this.reservedBytes = 0;
     this.tick = 0;
   }
 
@@ -80,6 +117,8 @@ class LruReadCache {
 
     const blockStart = Math.floor(offset / this.blockBytes) * this.blockBytes;
     const block = this.acquireBlock();
+    // No block under the hard limit: the caller reads the backing store directly.
+    if (!block) return null;
     this.stats[this.statKeys.misses] += 1;
     const bytesRead = this.fill(blockStart, block.bytes);
     if (bytesRead <= 0) return bytesRead;
@@ -100,8 +139,11 @@ class LruReadCache {
     return null;
   }
 
-  acquireBlock(): ReadCacheBlock {
-    if (this.blocks.length < this.blockCount) {
+  acquireBlock(): ReadCacheBlock | null {
+    const canGrow = this.blocks.length < this.blockCount;
+    const reserved = canGrow && (this.budget?.reserve(this.blockBytes, this.blocks.length === 0) ?? false);
+    if (reserved) this.reservedBytes += this.blockBytes;
+    if (reserved || (canGrow && !this.budget)) {
       const block = {
         bytes: new Uint8Array(this.blockBytes),
         lastUsed: 0,
@@ -112,7 +154,10 @@ class LruReadCache {
       return block;
     }
     let oldest = this.blocks[0];
-    if (!oldest) throw new Error(this.reusableBlockErrorMessage);
+    if (!oldest) {
+      if (this.budget) return null;
+      throw new Error(this.reusableBlockErrorMessage);
+    }
     for (const block of this.blocks) {
       if (block.lastUsed < oldest.lastUsed) oldest = block;
     }
@@ -130,6 +175,8 @@ class LruReadCache {
   }
 
   clear(): void {
+    this.budget?.release(this.reservedBytes);
+    this.reservedBytes = 0;
     this.blocks.length = 0;
   }
 
@@ -162,7 +209,9 @@ class BrowserVirtualRandomAccessFile {
     this.reader = isBlobLike(source) ? new FileReaderSync() : null;
     this.ioStats = createRandomAccessFileIoStats();
     this.readCache = new LruReadCache({
-      blockBytes: VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES,
+      // Small files get a file-sized block instead of a 2 MiB one.
+      blockBytes: Math.max(1, Math.min(VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES, this.size())),
+      budget: virtualBlobCacheBudget,
       blockCount: VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT,
       fill: (blockStart, buf) => this.readBlobAt(blockStart, buf, Math.min(buf.byteLength, this.size() - blockStart)),
       reusableBlockErrorMessage: "virtual read cache has no reusable blocks",
@@ -192,11 +241,16 @@ class BrowserVirtualRandomAccessFile {
       dst.set(new Uint8Array(this.source, start, length));
       return length;
     }
+    // Size the request by what the file can actually supply: a caller's oversized buffer (a detector
+    // asking for 1 MiB of a 24 KB file) is still a small read and should hit the cache.
+    // A file that fits in one block is cached whole whatever the request size: every later pass over it
+    // (hash, detect, extract) is then a memcpy instead of another Blob read.
+    const wholeFileCached = this.size() <= VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES;
     if (
-      dst.byteLength <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES &&
-      this.readCache.fitsWithinBlock(start, dst.byteLength)
+      (wholeFileCached || length <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES) &&
+      this.readCache.fitsWithinBlock(start, length)
     ) {
-      const cachedRead = this.readCache.read(start, dst);
+      const cachedRead = this.readCache.read(start, length === dst.byteLength ? dst : dst.subarray(0, length));
       if (cachedRead !== null) return cachedRead;
     }
     return this.readBlobAt(start, dst, length);
