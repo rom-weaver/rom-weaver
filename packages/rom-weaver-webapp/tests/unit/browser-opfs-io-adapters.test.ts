@@ -324,3 +324,26 @@ describe("BrowserVirtualRandomAccessFile timing fallback", () => {
     }
   });
 });
+
+describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
+  it("sizes the cache block to a small file and serves an oversized request from it", () => {
+    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1000));
+    const dst = new Uint8Array(1024 * 1024);
+
+    expect(file.readAt(0, dst)).toBe(1000);
+    expect(file.readAt(0, dst)).toBe(1000);
+    expect(dst[999]).toBe(expectedByte(999));
+    expect(sliceCalls).toEqual([{ end: 1000, start: 0 }]);
+    expect(file.snapshotIoStats().blobReadBytes).toBe(1000);
+  });
+
+  it("drops cached blocks on close so a closed file retains nothing", () => {
+    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1000));
+    file.readAt(0, new Uint8Array(16));
+    file.close();
+    file.reopen();
+    file.readAt(0, new Uint8Array(16));
+
+    expect(sliceCalls).toHaveLength(2);
+  });
+});

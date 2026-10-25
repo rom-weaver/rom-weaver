@@ -2,6 +2,25 @@ const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
 const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
+// Virtual Blob inputs are held open for the whole run, so their cache blocks outlive individual fd
+// closes (a detector re-opening the file reuses them instead of re-reading the Blob). Each WASI thread
+// mount owns its own adapter, so retention is bounded twice: per adapter by min(blockBytes, file size)
+// x VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT, and across all live adapters by this shared budget. Past the
+// budget an adapter reuses its least-recently-used block instead of allocating (but always keeps at
+// least one). Everything is released by close(), which restoreVirtualFiles calls at run end.
+const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES = 64 * 1024 * 1024;
+let virtualBlobCacheRetainedBytes = 0;
+
+const virtualBlobCacheBudget: ReadCacheBudget = {
+  release(bytes) {
+    virtualBlobCacheRetainedBytes = Math.max(0, virtualBlobCacheRetainedBytes - bytes);
+  },
+  reserve(bytes) {
+    if (virtualBlobCacheRetainedBytes + bytes > VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES) return false;
+    virtualBlobCacheRetainedBytes += bytes;
+    return true;
+  },
+};
 
 type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
@@ -30,8 +49,14 @@ type ReadCacheStatKeys = {
   misses: keyof RandomAccessFileIoStats;
 };
 
+type ReadCacheBudget = {
+  release: (bytes: number) => void;
+  reserve: (bytes: number) => boolean;
+};
+
 type ReadCacheOptions = {
   blockBytes: number;
+  budget?: ReadCacheBudget;
   blockCount: number;
   // Reads the backing store into `buf` starting at `blockStart`, returning bytes actually read. The
   // adapter owns this so the cache stays oblivious to OPFS vs Blob/proxy I/O.
@@ -46,6 +71,7 @@ type ReadCacheOptions = {
 // backing read and the bumped ioStats counters differ, both injected via options. This is a hot path.
 class LruReadCache {
   private readonly blockBytes: number;
+  private readonly budget: ReadCacheBudget | undefined;
   private readonly blockCount: number;
   private readonly blocks: ReadCacheBlock[];
   private readonly fill: (blockStart: number, buf: Uint8Array) => number;
@@ -57,6 +83,7 @@ class LruReadCache {
   constructor(options: ReadCacheOptions) {
     this.blockBytes = options.blockBytes;
     this.blockCount = options.blockCount;
+    this.budget = options.budget;
     this.fill = options.fill;
     this.reusableBlockErrorMessage = options.reusableBlockErrorMessage;
     this.statKeys = options.statKeys;
@@ -101,7 +128,12 @@ class LruReadCache {
   }
 
   acquireBlock(): ReadCacheBlock {
-    if (this.blocks.length < this.blockCount) {
+    const mayAllocate =
+      this.blocks.length < this.blockCount &&
+      (this.blocks.length === 0 || !this.budget || this.budget.reserve(this.blockBytes));
+    if (mayAllocate) {
+      // The first block is always allowed; reserve it unconditionally so release() stays balanced.
+      if (this.blocks.length === 0) this.budget?.reserve(this.blockBytes);
       const block = {
         bytes: new Uint8Array(this.blockBytes),
         lastUsed: 0,
@@ -130,6 +162,7 @@ class LruReadCache {
   }
 
   clear(): void {
+    this.budget?.release(this.blocks.length * this.blockBytes);
     this.blocks.length = 0;
   }
 
@@ -162,7 +195,9 @@ class BrowserVirtualRandomAccessFile {
     this.reader = isBlobLike(source) ? new FileReaderSync() : null;
     this.ioStats = createRandomAccessFileIoStats();
     this.readCache = new LruReadCache({
-      blockBytes: VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES,
+      // Small files get a file-sized block instead of a 2 MiB one.
+      blockBytes: Math.max(1, Math.min(VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES, this.size())),
+      budget: virtualBlobCacheBudget,
       blockCount: VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT,
       fill: (blockStart, buf) => this.readBlobAt(blockStart, buf, Math.min(buf.byteLength, this.size() - blockStart)),
       reusableBlockErrorMessage: "virtual read cache has no reusable blocks",
@@ -192,11 +227,16 @@ class BrowserVirtualRandomAccessFile {
       dst.set(new Uint8Array(this.source, start, length));
       return length;
     }
+    // Size the request by what the file can actually supply: a caller's oversized buffer (a detector
+    // asking for 1 MiB of a 24 KB file) is still a small read and should hit the cache.
+    // A file that fits in one block is cached whole whatever the request size: every later pass over it
+    // (hash, detect, extract) is then a memcpy instead of another Blob read.
+    const wholeFileCached = this.size() <= VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES;
     if (
-      dst.byteLength <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES &&
-      this.readCache.fitsWithinBlock(start, dst.byteLength)
+      (wholeFileCached || length <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES) &&
+      this.readCache.fitsWithinBlock(start, length)
     ) {
-      const cachedRead = this.readCache.read(start, dst);
+      const cachedRead = this.readCache.read(start, length === dst.byteLength ? dst : dst.subarray(0, length));
       if (cachedRead !== null) return cachedRead;
     }
     return this.readBlobAt(start, dst, length);

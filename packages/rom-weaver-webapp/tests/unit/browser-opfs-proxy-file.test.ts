@@ -248,6 +248,15 @@ describe("BrowserProxyRandomAccessFile reads", () => {
     expect(file.readAt(32, second)).toBe(16);
     expect(second[0]).toBe(32);
     expect(proxy.reads).toHaveLength(1);
+    // A read-only 1 KiB file gets a file-sized block, not a 4 MiB one.
+    expect(proxy.reads[0]).toMatchObject({ length: 1024, offset: 0 });
+  });
+
+  it("keeps the full cache block for a large read-only file", () => {
+    proxy.setBytes("/work/rom.iso", patterned(READ_CACHE_BLOCK_BYTES + 64));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/rom.iso");
+
+    expect(file.readAt(0, new Uint8Array(16))).toBe(16);
     expect(proxy.reads[0]).toMatchObject({ length: READ_CACHE_BLOCK_BYTES, offset: 0 });
   });
 

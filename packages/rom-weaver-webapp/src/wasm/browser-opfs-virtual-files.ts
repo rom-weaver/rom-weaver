@@ -131,10 +131,11 @@ function addVirtualFileEntry(
   // re-opens to list/extract. This is one input file per run, so it is held open for the run rather
   // than cycled - unlike the per-entry extract outputs, whose count is unbounded and which therefore
   // do use closeOnLastFdClose plus the mount's idle pool. restoreVirtualFiles closes it at run end
-  // (matching staged-OPFS inodes). The virtual-Blob path keeps closeOnLastFdClose since
-  // BrowserVirtualRandomAccessFile.reopen() recreates its reader on demand.
-  const inodeOptions = proxyOptions.useProxyHandle ? { readonly: true } : { closeOnLastFdClose: true, readonly: true };
-  entries.set(name, new WasiRandomAccessFileInode(file, inodeOptions));
+  // (matching staged-OPFS inodes). The virtual-Blob path is held open for the run too: a Blob is
+  // immutable and FileReaderSync pins no OS handle, so keeping it (and its read-cache blocks) across fd
+  // churn avoids re-reading the Blob on every detector re-open. The cache is bounded (see
+  // browser-opfs-io-adapters.ts) and restoreVirtualFiles releases it.
+  entries.set(name, new WasiRandomAccessFileInode(file, { readonly: true }));
 }
 
 export function restoreVirtualFiles(restores: VirtualFileRestore[]) {

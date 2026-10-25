@@ -112,10 +112,16 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       return dst.byteLength;
     }
     if (!this.cacheBuf) {
-      this.cacheBuf = new Uint8Array(PROXY_READ_CACHE_BLOCK_BYTES);
-      liveAdapterBufferBytes += PROXY_READ_CACHE_BLOCK_BYTES;
+      // A read-only file cannot grow, so a KB-sized input does not need a 4 MiB block. Writable files
+      // may grow between reads and keep the full block.
+      const blockBytes = this.writable
+        ? PROXY_READ_CACHE_BLOCK_BYTES
+        : Math.max(1, Math.min(PROXY_READ_CACHE_BLOCK_BYTES, this.client.size(handleId)));
+      this.cacheBuf = new Uint8Array(blockBytes);
+      liveAdapterBufferBytes += blockBytes;
     }
-    const blockStart = Math.floor(start / PROXY_READ_CACHE_BLOCK_BYTES) * PROXY_READ_CACHE_BLOCK_BYTES;
+    const cacheBlockBytes = this.cacheBuf.byteLength;
+    const blockStart = Math.floor(start / cacheBlockBytes) * cacheBlockBytes;
     const filled = this.client.readInto(handleId, blockStart, this.cacheBuf);
     this.cacheStart = blockStart;
     this.cacheLen = filled;
