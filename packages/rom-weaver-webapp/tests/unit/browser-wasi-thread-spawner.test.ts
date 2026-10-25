@@ -460,6 +460,58 @@ describe("pooled thread spawner", () => {
     expect(slot.tid).toBe(second);
   });
 
+  // A shell that fails while priming stores FAILED from its own thread, which can land after the idle check.
+  const failSlotOnceClaimed = (slot: PooledSlot) => {
+    const realStore = Atomics.store;
+    return vi.spyOn(Atomics, "store").mockImplementation(((target: Int32Array, index: number, value: number) => {
+      const stored = realStore(target, index, value);
+      if (target === slot.control && index === THREAD_SLOT_START_ARG_INDEX) {
+        realStore(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED);
+      }
+      return stored;
+    }) as typeof Atomics.store);
+  };
+
+  it("keeps a priming failure that lands after the idle check and returns EAGAIN without an ack wait", () => {
+    const { command, slots } = makePooledCommand(1);
+    const slot = firstSlot(slots);
+    const { spawner } = pooledSpawner(command);
+    const store = failSlotOnceClaimed(slot);
+
+    try {
+      expect(spawner.spawn(7)).toBe(-6);
+    } finally {
+      store.mockRestore();
+    }
+
+    expect(Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_FAILED);
+    expect(slot.busy).toBe(false);
+    expect(slot.tid).toBeNull();
+    expect(trace.some((line) => line.includes("thread spawn slot lost before dispatch"))).toBe(true);
+    expect(trace.some((line) => line.includes("thread spawn ack failed"))).toBe(false);
+  });
+
+  it("dispatches to the next idle slot when the first one fails before it can be claimed", () => {
+    const { command, slots } = makePooledCommand(2);
+    const [lost, next] = slots;
+    if (!(lost && next)) throw new Error("fixture must provide two slots");
+    const { spawner } = pooledSpawner(command);
+    const store = failSlotOnceClaimed(lost);
+
+    let tid: number;
+    try {
+      tid = spawner.spawn(7);
+    } finally {
+      store.mockRestore();
+    }
+
+    expect(tid).toBeGreaterThan(0);
+    expect(Atomics.load(lost.control, THREAD_SLOT_STATE_INDEX)).toBe(THREAD_SLOT_STATE_FAILED);
+    expect(lost.busy).toBe(false);
+    expect(next.busy).toBe(true);
+    expect(next.tid).toBe(tid);
+  });
+
   it("gives up with EAGAIN when every pooled worker stays busy", () => {
     const { command } = makePooledCommand(1);
     const { spawner } = pooledSpawner(command);

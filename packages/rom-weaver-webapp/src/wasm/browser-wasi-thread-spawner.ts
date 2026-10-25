@@ -381,19 +381,37 @@ function createBrowserWasiThreadSpawnerForCommand({
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
-    const slot = findIdlePooledWorker() ?? waitForIdlePooledWorker(tid);
-    if (!slot) {
-      trace?.(`[browser-opfs] thread spawn no idle pooled worker tid=${tid} command=${command.commandId}`);
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+    let slot: ThreadPoolCommandSlot;
+    while (true) {
+      const candidate = findIdlePooledWorker() ?? waitForIdlePooledWorker(tid);
+      if (!candidate) {
+        trace?.(`[browser-opfs] thread spawn no idle pooled worker tid=${tid} command=${command.commandId}`);
+        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      }
+      candidate.busy = true;
+      candidate.tid = tid;
+      activeWorkers.set(tid, candidate);
+      Atomics.store(candidate.control, THREAD_SLOT_TID_INDEX, tid);
+      Atomics.store(candidate.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
+      Atomics.store(candidate.control, THREAD_SLOT_ERROR_INDEX, 0);
+      // A shell that is still priming can store FAILED after the idle check above. Claim the slot only
+      // while it is still IDLE, so that failure is never overwritten by a request nothing will ack.
+      if (
+        Atomics.compareExchange(
+          candidate.control,
+          THREAD_SLOT_STATE_INDEX,
+          THREAD_SLOT_STATE_IDLE,
+          THREAD_SLOT_STATE_REQUESTED,
+        ) === THREAD_SLOT_STATE_IDLE
+      ) {
+        slot = candidate;
+        break;
+      }
+      candidate.busy = false;
+      candidate.tid = null;
+      activeWorkers.delete(tid);
+      trace?.(`[browser-opfs] thread spawn slot lost before dispatch tid=${tid} worker=${candidate.index}`);
     }
-
-    slot.busy = true;
-    slot.tid = tid;
-    activeWorkers.set(tid, slot);
-    Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
-    Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
-    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
-    Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
     Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
     trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index} command=${command.commandId}`);
 
