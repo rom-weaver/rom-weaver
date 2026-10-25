@@ -1148,3 +1148,65 @@ fn staged_output_replaces_the_file_a_symlink_points_at() {
 
     fs::remove_dir_all(&root).expect("cleanup");
 }
+
+#[cfg(unix)]
+#[test]
+fn staged_output_keeps_the_replaced_files_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = io_temp_path("staged-mode");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.zip");
+    fs::write(&output, b"old").expect("seed output");
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o640)).expect("chmod");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    fs::write(staged.path(), b"new").expect("write staged output");
+    staged.commit().expect("commit");
+
+    let mode = fs::metadata(&output)
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o640);
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_writes_in_place_when_no_sibling_can_replace_the_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = io_temp_path("staged-fallback");
+    fs::create_dir_all(&root).expect("create root");
+
+    // A sibling name past the 255-byte limit cannot be created.
+    let long = root.join(format!("{}.bin", "x".repeat(246)));
+    fs::write(&long, b"old").expect("seed long name");
+    assert!(!StagedOutput::new(&long).expect("stage").is_staged());
+
+    // Root writes through permission bits, so these two cannot be checked as root.
+    if crate::effective_ids().is_some_and(|(uid, _)| uid == 0) {
+        fs::remove_dir_all(&root).expect("cleanup");
+        return;
+    }
+    // A rename would replace a file the run could not write before.
+    let read_only = root.join("read-only.zip");
+    fs::write(&read_only, b"old").expect("seed read-only output");
+    fs::set_permissions(&read_only, fs::Permissions::from_mode(0o444)).expect("chmod");
+    assert!(!StagedOutput::new(&read_only).expect("stage").is_staged());
+
+    // A writable file in a directory that takes no new names is still written in place.
+    let locked_dir = root.join("locked");
+    fs::create_dir_all(&locked_dir).expect("create locked dir");
+    let in_locked = locked_dir.join("out.zip");
+    fs::write(&in_locked, b"old").expect("seed output");
+    fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o555)).expect("chmod");
+    let staged = StagedOutput::new(&in_locked).expect("stage");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), in_locked);
+    fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o755)).expect("restore");
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}

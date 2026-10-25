@@ -426,16 +426,19 @@ impl CliApp {
         let mut report = handler
             .create(&request, context)
             .unwrap_or_else(create_failed);
-        if report.status == OperationStatus::Succeeded && staged_output.is_staged() {
-            // A cancel that lands after the create still keeps the original.
-            report = match context
-                .cancel()
-                .check()
-                .and_then(|()| staged_output.commit())
-            {
-                Ok(()) => rename_reported_path(report, &request.output, &expected_output),
-                Err(error) => create_failed(error),
-            };
+        if staged_output.is_staged() {
+            if report.status == OperationStatus::Succeeded {
+                // A cancel that lands after the create still keeps the original.
+                report = match context
+                    .cancel()
+                    .check()
+                    .and_then(|()| staged_output.commit())
+                {
+                    Ok(()) => report,
+                    Err(error) => create_failed(error),
+                };
+            }
+            report = rename_reported_path(report, &request.output, &expected_output);
         }
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
@@ -1398,7 +1401,7 @@ impl CliApp {
     }
 }
 
-/// A staged create reports the sibling it wrote; name the output it became instead.
+/// A staged create reports the sibling it wrote; name the output the user asked for.
 fn rename_reported_path(mut report: OperationReport, from: &Path, to: &Path) -> OperationReport {
     fn replace_strings(value: &mut Value, from: &str, to: &str) {
         match value {

@@ -115,10 +115,12 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
 }
 
 /// Where a command writes an output that may replace an existing file. A new output
-/// is written in place. Replacing a regular file goes through a new hidden sibling
-/// that [`StagedOutput::commit`] renames over it, so a run that fails or is cancelled
-/// leaves the original as it was. Dropping an uncommitted output removes the sibling.
-/// Native only: the browser never replaces an existing output.
+/// is written in place. Replacing a writable regular file goes through a new hidden
+/// sibling that [`StagedOutput::commit`] renames over it, so a run that fails or is
+/// cancelled leaves the original as it was. Dropping an uncommitted output removes the
+/// sibling. When no sibling can be made (an unwritable directory, a name too long for
+/// the prefix), the output is written in place as before. Native only: the browser
+/// never replaces an existing output.
 #[derive(Debug)]
 pub struct StagedOutput {
     target: PathBuf,
@@ -127,13 +129,16 @@ pub struct StagedOutput {
 
 impl StagedOutput {
     pub fn new(output: &Path) -> Result<Self> {
-        // Devices and directories keep failing (or writing) the way they always did.
-        let replaces_file = fs::metadata(output).is_ok_and(|metadata| metadata.is_file());
-        if cfg!(target_arch = "wasm32") || !replaces_file {
-            return Ok(Self {
-                target: output.to_path_buf(),
-                staged: None,
-            });
+        let in_place = || Self {
+            target: output.to_path_buf(),
+            staged: None,
+        };
+        // Devices, directories, and files this process cannot write keep failing (or
+        // writing) the way they always did; a rename would replace a read-only file.
+        let replaceable = fs::metadata(output).is_ok_and(|metadata| metadata.is_file())
+            && OpenOptions::new().write(true).open(output).is_ok();
+        if cfg!(target_arch = "wasm32") || !replaceable {
+            return Ok(in_place());
         }
         // Replace the file a symlink points at, as writing through the link did.
         let is_symlink = fs::symlink_metadata(output)
@@ -150,13 +155,9 @@ impl StagedOutput {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let mut staged = parent.join(format!(".rw-partial-{name}"));
-        for index in 1usize.. {
-            if fs::symlink_metadata(&staged).is_err() {
-                break;
-            }
-            staged = parent.join(format!(".rw-partial-{index}-{name}"));
-        }
+        let Some(staged) = Self::claim_sibling(parent, &name) else {
+            return Ok(in_place());
+        };
         tracing::debug!(
             output = %output.display(),
             staged = %staged.display(),
@@ -168,6 +169,38 @@ impl StagedOutput {
             target,
             staged: Some(staged),
         })
+    }
+
+    /// Finds a free sibling name by creating it, which also proves the directory takes
+    /// the name. The file is removed again, so the writer creates a new output there.
+    fn claim_sibling(parent: &Path, name: &str) -> Option<PathBuf> {
+        for index in 0usize.. {
+            let staged = if index == 0 {
+                parent.join(format!(".rw-partial-{name}"))
+            } else {
+                parent.join(format!(".rw-partial-{index}-{name}"))
+            };
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&staged)
+            {
+                Ok(_) => {
+                    let _ = fs::remove_file(&staged);
+                    return Some(staged);
+                }
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    tracing::debug!(
+                        %error,
+                        staged = %staged.display(),
+                        "cannot stage beside the original; writing in place"
+                    );
+                    return None;
+                }
+            }
+        }
+        None
     }
 
     /// The path to write the output to.
