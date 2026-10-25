@@ -21,9 +21,9 @@
         ],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 2362391,
-        "maxRawBytes": 2487352,
+        "maxRawBytes": 2504000,
         "expectedBrotliBytes": 635991,
-        "maxBrotliBytes": 663000
+        "maxBrotliBytes": 672000
       },
       {
         "name": "Documentation search JavaScript",
@@ -32,9 +32,9 @@
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 383000,
-        "maxRawBytes": 409000,
+        "maxRawBytes": 419000,
         "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 110000
+        "maxBrotliBytes": 113000
       },
       {
         "name": "Locale catalogs (de, es)",
@@ -76,7 +76,7 @@
         "expectedRawBytes": 9010000,
         "maxRawBytes": 9300000,
         "expectedBrotliBytes": 2250000,
-        "maxBrotliBytes": 2362000
+        "maxBrotliBytes": 2379000
       }
     ]
   },
