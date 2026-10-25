@@ -8,18 +8,21 @@ const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
 // one worker's adapters by this budget. Module state is per worker, so the runner and each WASI thread
 // worker hold at most one full adapter's worth each, which is what a single open input held before
 // inputs stayed open. Past the budget an adapter reuses its least-recently-used block instead of
-// allocating (but always keeps at least one). close(), which restoreVirtualFiles calls at run end,
-// releases everything.
+// allocating. An adapter's first block may use headroom up to twice the budget, so many small inputs
+// still cache; past that hard limit an adapter holds no block and reads the Blob directly. close(),
+// which restoreVirtualFiles calls at run end, releases everything.
 const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES =
   VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES * VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT;
+const VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES = VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES * 2;
 let virtualBlobCacheRetainedBytes = 0;
 
 const virtualBlobCacheBudget: ReadCacheBudget = {
   release(bytes) {
     virtualBlobCacheRetainedBytes = Math.max(0, virtualBlobCacheRetainedBytes - bytes);
   },
-  reserve(bytes) {
-    if (virtualBlobCacheRetainedBytes + bytes > VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES) return false;
+  reserve(bytes, first) {
+    const limit = first ? VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES : VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES;
+    if (virtualBlobCacheRetainedBytes + bytes > limit) return false;
     virtualBlobCacheRetainedBytes += bytes;
     return true;
   },
@@ -54,7 +57,8 @@ type ReadCacheStatKeys = {
 
 type ReadCacheBudget = {
   release: (bytes: number) => void;
-  reserve: (bytes: number) => boolean;
+  // `first` marks a cache's first block, which may use the budget's headroom.
+  reserve: (bytes: number, first: boolean) => boolean;
 };
 
 type ReadCacheOptions = {
@@ -81,7 +85,7 @@ class LruReadCache {
   private readonly reusableBlockErrorMessage: string;
   private readonly statKeys: ReadCacheStatKeys;
   private readonly stats: RandomAccessFileIoStats;
-  // Bytes this cache took from the budget; clear() returns exactly these, never an uncounted block.
+  // Bytes this cache took from the budget; clear() returns exactly these.
   private reservedBytes: number;
   private tick: number;
 
@@ -113,6 +117,8 @@ class LruReadCache {
 
     const blockStart = Math.floor(offset / this.blockBytes) * this.blockBytes;
     const block = this.acquireBlock();
+    // No block under the hard limit: the caller reads the backing store directly.
+    if (!block) return null;
     this.stats[this.statKeys.misses] += 1;
     const bytesRead = this.fill(blockStart, block.bytes);
     if (bytesRead <= 0) return bytesRead;
@@ -133,11 +139,11 @@ class LruReadCache {
     return null;
   }
 
-  acquireBlock(): ReadCacheBlock {
-    const reserved = this.blocks.length < this.blockCount && (this.budget?.reserve(this.blockBytes) ?? false);
+  acquireBlock(): ReadCacheBlock | null {
+    const canGrow = this.blocks.length < this.blockCount;
+    const reserved = canGrow && (this.budget?.reserve(this.blockBytes, this.blocks.length === 0) ?? false);
     if (reserved) this.reservedBytes += this.blockBytes;
-    // The first block is always allowed, even past the budget; it then stays uncounted.
-    if (reserved || (this.blocks.length < this.blockCount && (this.blocks.length === 0 || !this.budget))) {
+    if (reserved || (canGrow && !this.budget)) {
       const block = {
         bytes: new Uint8Array(this.blockBytes),
         lastUsed: 0,
@@ -148,7 +154,10 @@ class LruReadCache {
       return block;
     }
     let oldest = this.blocks[0];
-    if (!oldest) throw new Error(this.reusableBlockErrorMessage);
+    if (!oldest) {
+      if (this.budget) return null;
+      throw new Error(this.reusableBlockErrorMessage);
+    }
     for (const block of this.blocks) {
       if (block.lastUsed < oldest.lastUsed) oldest = block;
     }

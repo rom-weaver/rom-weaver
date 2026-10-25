@@ -358,7 +358,7 @@ describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
     expect(sliceCalls).toHaveLength(2);
   });
 
-  it("returns only reserved blocks to the worker's cache budget", async () => {
+  it("bounds a worker's cached bytes at twice the budget and returns them on close", async () => {
     // The budget is module state, so start from a fresh module that no earlier test has filled.
     vi.resetModules();
     const { BrowserVirtualRandomAccessFile: FreshFile } = await import("../../src/wasm/browser-opfs-io-adapters.ts");
@@ -367,22 +367,25 @@ describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
     };
     const full = new FreshFile(fakeBlob(32 * MIB));
     readBlocks(full, [0, 1, 2, 3, 4, 5, 6, 7]);
-    // Past the budget each adapter still gets one block, which must stay uncounted.
-    const overBudget = [new FreshFile(fakeBlob(32 * MIB)), new FreshFile(fakeBlob(32 * MIB))];
-    for (const file of overBudget) readBlocks(file, [0]);
-    for (const file of overBudget) file.close();
+    // Past the budget each adapter's first block still fits in the headroom up to twice the budget.
+    const firsts = Array.from({ length: 8 }, () => new FreshFile(fakeBlob(32 * MIB)));
+    for (const file of firsts) readBlocks(file, [0]);
 
     sliceCalls = [];
-    const next = new FreshFile(fakeBlob(32 * MIB));
-    readBlocks(next, [0, 1, 0]);
-    // The budget is still full, so `next` keeps one block and re-reading block 0 misses.
-    expect(sliceCalls).toHaveLength(3);
+    readBlocks(firsts[0] as InstanceType<typeof FreshFile>, [0]);
+    expect(sliceCalls).toHaveLength(0);
+    // The headroom is spent, so the next adapter holds no block and every read goes to the Blob.
+    const starved = new FreshFile(fakeBlob(32 * MIB));
+    readBlocks(starved, [0, 0]);
+    expect(sliceCalls).toHaveLength(2);
 
     full.close();
-    next.close();
+    for (const file of firsts) file.close();
+    starved.close();
     sliceCalls = [];
     const afterRelease = new FreshFile(fakeBlob(32 * MIB));
     readBlocks(afterRelease, [0, 1, 0]);
     expect(sliceCalls).toHaveLength(2);
+    afterRelease.close();
   });
 });
