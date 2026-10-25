@@ -43,12 +43,23 @@ function fakeBlob(size: number): FakeBlob {
 
 const expectedByte = (offset: number) => offset & 0xff;
 
+// Blob files share the worker's cache budget, so each test closes what it opened, as restoreVirtualFiles does at run end.
+let openedBlobFiles: BrowserVirtualRandomAccessFile[];
+
+function openBlobFile(size: number): BrowserVirtualRandomAccessFile {
+  const file = new BrowserVirtualRandomAccessFile(fakeBlob(size));
+  openedBlobFiles.push(file);
+  return file;
+}
+
 beforeEach(() => {
   sliceCalls = [];
+  openedBlobFiles = [];
   vi.stubGlobal("FileReaderSync", FakeFileReaderSync);
 });
 
 afterEach(() => {
+  for (const file of openedBlobFiles) file.close();
   vi.unstubAllGlobals();
 });
 
@@ -171,7 +182,7 @@ describe("BrowserVirtualRandomAccessFile over in-memory sources", () => {
 
 describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   it("reads through the reader and records the blob io counters", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1024));
+    const file = openBlobFile(1024);
     const dst = new Uint8Array(16);
 
     expect(file.readAt(32, dst)).toBe(16);
@@ -184,7 +195,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("serves a second read of the same block from the cache", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
     const first = new Uint8Array(64);
     const second = new Uint8Array(64);
 
@@ -200,7 +211,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("streams a request larger than the cache request cap straight through", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
     const dst = new Uint8Array(CACHE_MAX_REQUEST_BYTES + 1);
 
     expect(file.readAt(0, dst)).toBe(dst.byteLength);
@@ -210,7 +221,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("streams a request that straddles two cache blocks", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
     const dst = new Uint8Array(64);
 
     expect(file.readAt(CACHE_BLOCK_BYTES - 32, dst)).toBe(64);
@@ -220,7 +231,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("evicts the least recently used block once the cache is full", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob((CACHE_BLOCK_COUNT + 2) * CACHE_BLOCK_BYTES));
+    const file = openBlobFile((CACHE_BLOCK_COUNT + 2) * CACHE_BLOCK_BYTES);
     const dst = new Uint8Array(16);
 
     for (let block = 0; block <= CACHE_BLOCK_COUNT; block += 1) {
@@ -239,7 +250,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("returns nothing past the end of the blob", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(128));
+    const file = openBlobFile(128);
 
     expect(file.readAt(200, new Uint8Array(16))).toBe(0);
     expect(file.readBlobAt(0, new Uint8Array(0))).toBe(0);
@@ -247,7 +258,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("reads nothing once the reader is released, until reopen restores it", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1024));
+    const file = openBlobFile(1024);
     file.readAt(0, new Uint8Array(16));
 
     file.close();
@@ -261,7 +272,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
   });
 
   it("drops its cached blocks on close so a reopened file re-reads the blob", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
     file.readAt(0, new Uint8Array(16));
     expect(file.ioStats.blobCacheMisses).toBe(1);
 
@@ -280,7 +291,7 @@ describe("BrowserVirtualRandomAccessFile over a Blob source", () => {
 
 describe("BrowserVirtualRandomAccessFile read-cache invalidation", () => {
   it("empties only the blocks that overlap the invalidated range", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
     const dst = new Uint8Array(16);
     file.readAt(0, dst);
     file.readAt(CACHE_BLOCK_BYTES, dst);
@@ -295,7 +306,7 @@ describe("BrowserVirtualRandomAccessFile read-cache invalidation", () => {
   });
 
   it("does nothing for an empty cache or an already-empty block", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(4 * MIB));
+    const file = openBlobFile(4 * MIB);
 
     expect(() => {
       file.readCache.invalidateRange(0, 1024);
@@ -315,7 +326,7 @@ describe("BrowserVirtualRandomAccessFile timing fallback", () => {
     const original = globalThis.performance;
     Reflect.deleteProperty(globalThis, "performance");
     try {
-      const file = new BrowserVirtualRandomAccessFile(fakeBlob(1024));
+      const file = openBlobFile(1024);
       expect(file.readAt(0, new Uint8Array(16))).toBe(16);
       expect(file.ioStats.blobReadCalls).toBe(1);
       expect(file.ioStats.blobReadMs).toBeGreaterThanOrEqual(0);
@@ -327,7 +338,7 @@ describe("BrowserVirtualRandomAccessFile timing fallback", () => {
 
 describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
   it("sizes the cache block to a small file and serves an oversized request from it", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1000));
+    const file = openBlobFile(1000);
     const dst = new Uint8Array(1024 * 1024);
 
     expect(file.readAt(0, dst)).toBe(1000);
@@ -338,12 +349,40 @@ describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
   });
 
   it("drops cached blocks on close so a closed file retains nothing", () => {
-    const file = new BrowserVirtualRandomAccessFile(fakeBlob(1000));
+    const file = openBlobFile(1000);
     file.readAt(0, new Uint8Array(16));
     file.close();
     file.reopen();
     file.readAt(0, new Uint8Array(16));
 
+    expect(sliceCalls).toHaveLength(2);
+  });
+
+  it("returns only reserved blocks to the worker's cache budget", async () => {
+    // The budget is module state, so start from a fresh module that no earlier test has filled.
+    vi.resetModules();
+    const { BrowserVirtualRandomAccessFile: FreshFile } = await import("../../src/wasm/browser-opfs-io-adapters.ts");
+    const readBlocks = (file: InstanceType<typeof FreshFile>, blocks: number[]) => {
+      for (const block of blocks) file.readAt(block * CACHE_BLOCK_BYTES, new Uint8Array(16));
+    };
+    const full = new FreshFile(fakeBlob(32 * MIB));
+    readBlocks(full, [0, 1, 2, 3, 4, 5, 6, 7]);
+    // Past the budget each adapter still gets one block, which must stay uncounted.
+    const overBudget = [new FreshFile(fakeBlob(32 * MIB)), new FreshFile(fakeBlob(32 * MIB))];
+    for (const file of overBudget) readBlocks(file, [0]);
+    for (const file of overBudget) file.close();
+
+    sliceCalls = [];
+    const next = new FreshFile(fakeBlob(32 * MIB));
+    readBlocks(next, [0, 1, 0]);
+    // The budget is still full, so `next` keeps one block and re-reading block 0 misses.
+    expect(sliceCalls).toHaveLength(3);
+
+    full.close();
+    next.close();
+    sliceCalls = [];
+    const afterRelease = new FreshFile(fakeBlob(32 * MIB));
+    readBlocks(afterRelease, [0, 1, 0]);
     expect(sliceCalls).toHaveLength(2);
   });
 });

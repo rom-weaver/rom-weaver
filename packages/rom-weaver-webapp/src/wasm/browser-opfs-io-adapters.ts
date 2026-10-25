@@ -3,12 +3,15 @@ const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
 const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
 const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
 // Virtual Blob inputs are held open for the whole run, so their cache blocks outlive individual fd
-// closes (a detector re-opening the file reuses them instead of re-reading the Blob). Each WASI thread
-// mount owns its own adapter, so retention is bounded twice: per adapter by min(blockBytes, file size)
-// x VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT, and across all live adapters by this shared budget. Past the
-// budget an adapter reuses its least-recently-used block instead of allocating (but always keeps at
-// least one). Everything is released by close(), which restoreVirtualFiles calls at run end.
-const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES = 64 * 1024 * 1024;
+// closes (a detector re-opening the file reuses them instead of re-reading the Blob). Retention is
+// bounded per adapter by min(blockBytes, file size) x VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT, and across
+// one worker's adapters by this budget. Module state is per worker, so the runner and each WASI thread
+// worker hold at most one full adapter's worth each, which is what a single open input held before
+// inputs stayed open. Past the budget an adapter reuses its least-recently-used block instead of
+// allocating (but always keeps at least one). close(), which restoreVirtualFiles calls at run end,
+// releases everything.
+const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES =
+  VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES * VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT;
 let virtualBlobCacheRetainedBytes = 0;
 
 const virtualBlobCacheBudget: ReadCacheBudget = {
@@ -78,6 +81,8 @@ class LruReadCache {
   private readonly reusableBlockErrorMessage: string;
   private readonly statKeys: ReadCacheStatKeys;
   private readonly stats: RandomAccessFileIoStats;
+  // Bytes this cache took from the budget; clear() returns exactly these, never an uncounted block.
+  private reservedBytes: number;
   private tick: number;
 
   constructor(options: ReadCacheOptions) {
@@ -89,6 +94,7 @@ class LruReadCache {
     this.statKeys = options.statKeys;
     this.stats = options.stats;
     this.blocks = [];
+    this.reservedBytes = 0;
     this.tick = 0;
   }
 
@@ -128,12 +134,10 @@ class LruReadCache {
   }
 
   acquireBlock(): ReadCacheBlock {
-    const mayAllocate =
-      this.blocks.length < this.blockCount &&
-      (this.blocks.length === 0 || !this.budget || this.budget.reserve(this.blockBytes));
-    if (mayAllocate) {
-      // The first block is always allowed; reserve it unconditionally so release() stays balanced.
-      if (this.blocks.length === 0) this.budget?.reserve(this.blockBytes);
+    const reserved = this.blocks.length < this.blockCount && (this.budget?.reserve(this.blockBytes) ?? false);
+    if (reserved) this.reservedBytes += this.blockBytes;
+    // The first block is always allowed, even past the budget; it then stays uncounted.
+    if (reserved || (this.blocks.length < this.blockCount && (this.blocks.length === 0 || !this.budget))) {
       const block = {
         bytes: new Uint8Array(this.blockBytes),
         lastUsed: 0,
@@ -162,7 +166,8 @@ class LruReadCache {
   }
 
   clear(): void {
-    this.budget?.release(this.blocks.length * this.blockBytes);
+    this.budget?.release(this.reservedBytes);
+    this.reservedBytes = 0;
     this.blocks.length = 0;
   }
 
