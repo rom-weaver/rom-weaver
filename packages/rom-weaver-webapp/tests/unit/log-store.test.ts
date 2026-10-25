@@ -85,3 +85,56 @@ describe("log store buffer", () => {
     expect(entries.at(-1)?.message).toBe(`entry ${pushed - 1}`);
   });
 });
+
+/**
+ * Boot records (info, debug, trace) wait for the first idle moment so their
+ * sanitize and sink work leaves the path to hydration; none may be lost.
+ */
+describe("log store boot deferral", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("keeps a boot info record out of the store until idle, then stores it once, in order", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("early one");
+    log.info("early two");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual([]);
+    vi.advanceTimersByTime(2500);
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["early one", "early two"]);
+    log.info("after boot");
+    expect(store.getLogEntries().at(-1)?.message).toBe("after boot");
+    vi.unstubAllGlobals();
+  });
+
+  it("flushes queued boot records on pagehide and puts a warning after them", async () => {
+    vi.resetModules();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("queued");
+    log.warn("immediate");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["queued", "immediate"]);
+    log.info("queued again");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(store.getLogEntries().at(-1)?.message).toBe("queued again");
+    expect(
+      JSON.parse(localStorage.getItem("currentLog") || "[]").map((entry: { message: string }) => entry.message),
+    ).toEqual(["queued", "immediate", "queued again"]);
+    vi.unstubAllGlobals();
+  });
+});

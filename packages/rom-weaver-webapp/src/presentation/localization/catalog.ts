@@ -80,12 +80,13 @@ const LOCALE_LABELS: Record<LocaleCode, string> = {
 };
 
 // The default locale leads (it is the fallback every other catalog degrades to);
-// the rest sort by code so the order is stable as catalogs are added.
+// the rest sort by code so the order is stable as catalogs are added. Codes are ASCII, so plain
+// code-unit order stands in for `localeCompare`, which would build the ICU collator at module load.
 const compareLocales = (left: LocaleCode, right: LocaleCode): number => {
   if (left === right) return 0;
   if (left === DEFAULT_LOCALE) return -1;
   if (right === DEFAULT_LOCALE) return 1;
-  return left.localeCompare(right);
+  return left < right ? -1 : 1;
 };
 
 /**
