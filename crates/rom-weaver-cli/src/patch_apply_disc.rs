@@ -4,6 +4,7 @@
 //! untouched tracks and sheets. Reports unreferenced data files beside the sheet.
 
 mod staging;
+pub(crate) use staging::rewrite_sheet;
 
 use super::patch_filename_checksum::parse_filename_requirements;
 use super::*;

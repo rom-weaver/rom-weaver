@@ -526,18 +526,32 @@ Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo P
 
 ## Playlist
 
-`playlist` writes an `.m3u` for a multi-disc game, or a ZIP holding the playlist and its discs. Required flags: `--input` (repeat for each disc) and `--output`. The output extension picks the form: `.m3u` or `.m3u8` for the playlist alone, `.zip` for the bundle. An existing output is never overwritten, and the output cannot be one of the inputs.
+`playlist` writes an `.m3u` for a multi-disc game, a ZIP holding the playlist and its discs, or a copy of both in a folder. Required flag: `--input` (repeat for each disc). The `--output` path picks the form: `.m3u` or `.m3u8` for the playlist alone, `.zip` for the bundle, and a folder for the copy. A folder is an existing folder, a path ending in `/`, or a path without an extension. Without `--output`, the playlist is `<game>.m3u` beside the first disc. An existing file is never overwritten, and the output cannot be one of the inputs.
 
 | Flag | Meaning |
 | --- | --- |
 | `-i`, `--input DISC` | A disc file (`.cue`, `.gdi`, `.chd`, `.iso`, `.pbp`, and so on). Repeat for each disc. |
-| `-o`, `--output PATH` | The `.m3u` or `.zip` to write. |
+| `-o`, `--output PATH` | The `.m3u`, `.zip`, or folder to write. |
+| `--name GAME` | The game's name. Defaults to the `.zip` name, else the first disc's name without its extension and disc marker. Not valid with an `.m3u` output, which names the playlist itself. |
+| `--layout LAYOUT` | How a ZIP or folder output arranges the files (default `flat`). |
+| `--rename` | Name the discs `<game> (Disc N)` in playlist order, with their track files and sheets to match. Needs a ZIP or folder output. |
 | `--no-sort` | List the discs in the order given instead of by disc number. |
 | `--flat` | Write each disc as its bare file name instead of a path relative to the playlist. |
 
 Disc numbers come from `Disc 1`, `(Disc 2)`, `[Disk 3]`, `CD1`, and `.disc02` in the file name, compared as numbers (`Disc 2` before `Disc 10`). Files without a number follow the numbered ones, in name order. Files that a given `.cue` or `.gdi` names are track files, not discs, and are not listed. The playlist uses UTF-8, one `/`-separated path per line, LF line endings, and no `#EXTM3U` header.
 
-A ZIP stores the playlist as `<output name>.m3u` and each disc by its file name, plus the files its sheet names, all at the sheet's relative paths. Two files that would share a name in the ZIP are rejected.
+The game name drops the disc marker with its brackets, a TOSEC count such as ` of 2`, and the separators before it. `Game (USA) (Disc 1).cue` gives `Game (USA)`, and `Game (Disc 1 of 2)[!].gdi` gives `Game[!]`. A name with `/`, `\`, or `"` is rejected.
+
+A ZIP or folder output holds the playlist as `<game>.m3u`, each disc by its file name, and the files each disc needs: the files its `.cue` or `.gdi` names, at their relative paths, and the `.img`, `.sub`, or `.mdf` stored with a `.ccd` or `.mds`. Two different files that would share a path are rejected. Each layout places them like this:
+
+| Layout | Files | Playlist lines | Frontends |
+| --- | --- | --- | --- |
+| `flat` | `<game>.m3u` beside the discs | `<disc>` | RetroArch, Batocera, Recalbox |
+| `folder` | `<game>/` holding `<game>.m3u` and the discs | `<disc>` | MinUI, muOS |
+| `m3u-folder` | `<game>.m3u/` holding `<game>.m3u` and the discs | `<disc>` | ES-DE, RetroDECK |
+| `disc-folders` | `<game>.m3u` beside one `<disc name>/` folder per disc | `<disc name>/<disc>` | igir layouts |
+
+`--rename` numbers the discs from 1 in playlist order and keeps each extension. A disc's single sheet file takes the disc's name, for example `Game (Disc 1).bin`. Several take `<disc> (Track N)`, zero-padded to the width of the file count, for example `Game (Disc 1) (Track 01).bin`. The rewritten sheet quotes names that contain spaces, and the source sheet is not changed. An `.mds` disc cannot be renamed, because it can name its `.mdf` inside.
 
 Procedures: [Make an M3U playlist in the browser](../how-to/make-m3u-playlist-browser.md) and [from the CLI](../how-to/cli-playlist.md).
 

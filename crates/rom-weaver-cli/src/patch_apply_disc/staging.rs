@@ -162,33 +162,36 @@ fn check_case_alias(source: &Path, name: &str, file: &DiscFile) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Result<()> {
+/// The text of the sheet at `source` with each file reference replaced by `rename(reference)`
+/// and every other byte kept. A new name with whitespace gains quotes when the reference had none.
+pub(crate) fn rewrite_sheet(
+    source: &Path,
+    mut rename: impl FnMut(&str) -> Result<String>,
+) -> Result<String> {
     let text = fs::read_to_string(source)?;
     let kind = super::detect_disc_sheet(source).ok_or_else(|| {
         RomWeaverError::Validation(format!("unrecognized disc sheet `{}`", source.display()))
     })?;
     let mut output = String::with_capacity(text.len());
+    let mut written = Vec::new();
     let mut saw_gdi_header = false;
     for line in text.split_inclusive('\n') {
-        let range = reference_range(kind, line, &mut saw_gdi_header);
-        if let Some(range) = range {
-            let name = &line[range.clone()];
-            let file = files
-                .iter()
-                .find(|file| file.name.eq_ignore_ascii_case(name))
-                .ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "disc sheet `{}` changed its referenced files before staging",
-                        source.display()
-                    ))
-                })?;
-            check_case_alias(source, name, file)?;
-            output.push_str(&line[..range.start]);
-            output.push_str(&file.output_name);
-            output.push_str(&line[range.end..]);
-        } else {
+        let Some(range) = reference_range(kind, line, &mut saw_gdi_header) else {
             output.push_str(line);
+            continue;
+        };
+        let name = rename(&line[range.clone()])?;
+        let quote = !line[..range.start].ends_with('"') && name.contains(char::is_whitespace);
+        output.push_str(&line[..range.start]);
+        if quote {
+            output.push('"');
         }
+        output.push_str(&name);
+        if quote {
+            output.push('"');
+        }
+        output.push_str(&line[range.end..]);
+        written.push(name);
     }
     // Reject any unhandled reference before copying track bytes.
     let refs = rom_weaver_core::parse_disc_sheet_refs_from_text(
@@ -196,15 +199,29 @@ pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Res
         &output,
         &source.display().to_string(),
     )?;
-    if refs
-        .iter()
-        .any(|name| !files.iter().any(|file| &file.output_name == name))
-    {
+    if refs.iter().any(|name| !written.contains(name)) {
         return Err(RomWeaverError::Validation(format!(
             "disc sheet `{}` has an unexpected staged reference",
             source.display()
         )));
     }
+    Ok(output)
+}
+
+pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Result<()> {
+    let output = rewrite_sheet(source, |name| {
+        let file = files
+            .iter()
+            .find(|file| file.name.eq_ignore_ascii_case(name))
+            .ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "disc sheet `{}` changed its referenced files before staging",
+                    source.display()
+                ))
+            })?;
+        check_case_alias(source, name, file)?;
+        Ok(file.output_name.clone())
+    })?;
     let mut target = fs::OpenOptions::new()
         .write(true)
         .create_new(true)

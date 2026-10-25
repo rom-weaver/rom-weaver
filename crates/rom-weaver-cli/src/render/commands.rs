@@ -19,7 +19,7 @@ impl OutputSelection {
         let mut selection = Self::default();
         selection.explicit_output = match command {
             Commands::Compress(args) => Some(args.output.clone()),
-            Commands::Playlist(args) => Some(args.output.clone()),
+            Commands::Playlist(args) => args.output.clone(),
             Commands::Patch(PatchCommands::Apply(args)) => args.output.clone(),
             Commands::Patch(PatchCommands::Create(args)) => args.output.clone(),
             Commands::Bundle(WeaveCommands::Create(args)) => Some(args.output.clone()),

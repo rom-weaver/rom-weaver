@@ -122,16 +122,19 @@ impl CliApp {
                 return outcome;
             }
         }
-        self.plan_succeeded(
-            command,
-            OperationFamily::Command,
-            "dry run: would write the playlist; nothing written",
-            vec![args.output.display().to_string()],
-            vec![
-                "disc sheets, track files, and the output path are not validated during dry run"
-                    .to_string(),
-            ],
-        )
+        match super::playlist::plan_job(args) {
+            Ok(job) => self.plan_succeeded(
+                command,
+                OperationFamily::Command,
+                "dry run: would write the playlist; nothing written",
+                job.writes()
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+                Vec::new(),
+            ),
+            Err(error) => self.finish(command, super::playlist::playlist_failure(error)),
+        }
     }
 
     fn plan_ingest_dry_run(&self, args: &IngestCommand) -> AppRunOutcome {

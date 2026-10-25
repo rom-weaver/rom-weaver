@@ -221,12 +221,20 @@ can change discs.
 Repeat --input for each disc (.cue, .gdi, .chd, .iso, .pbp, ...). Discs are
 ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`;
 --no-sort keeps the order given instead. Each playlist line is a path
-relative to the playlist.
+relative to the playlist. Without --output, the playlist is `<game>.m3u`
+beside the first disc, where the game is the disc name without its number.
 
   rom-weaver playlist -i Game.disc02.cue -i Game.disc01.cue -o Game.m3u
 
-A .zip --output holds the playlist and its discs (with the files each .cue or
-.gdi names) side by side. An existing output is never overwritten."
+A .zip --output holds the playlist and its discs, with the files each .cue,
+.gdi, .ccd, or .mds needs. A folder --output (ending in `/`, or without an
+extension) gets a copy of them instead. --layout arranges both for a frontend,
+and --rename names the discs `<game> (Disc N)`:
+
+  rom-weaver playlist -i 'FF7 (Disc 1).cue' -i 'FF7 (Disc 2).cue' \\
+    -o roms/psx --layout folder
+
+An existing file is never overwritten."
         )
     )]
     Playlist(PlaylistCommand),
@@ -1583,6 +1591,24 @@ pub enum PatchApplyOutputHeaderMode {
 pub enum FilterKind {
     Rom,
     Patch,
+}
+
+/// Where a `.zip` or folder `playlist` output puts the playlist and discs, matching what each
+/// frontend expects of a multi-disc game.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+pub enum PlaylistLayout {
+    /// `<game>.m3u` beside the discs (RetroArch, Batocera, Recalbox)
+    #[default]
+    Flat,
+    /// A `<game>` folder holding `<game>.m3u` and the discs (MinUI, muOS)
+    Folder,
+    /// A `<game>.m3u` folder holding `<game>.m3u` and the discs (ES-DE, RetroDECK)
+    M3uFolder,
+    /// `<game>.m3u` beside one folder per disc (igir)
+    DiscFolders,
 }
 
 #[path = "command_dispatch.rs"]
