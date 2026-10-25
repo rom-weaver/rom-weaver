@@ -119,10 +119,10 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
 /// sibling that [`StagedOutput::commit`] renames over it, so a run that fails or is
 /// cancelled leaves the original as it was. Dropping an uncommitted output removes the
 /// sibling. The output is written in place as before whenever a rename would lose
-/// something that writing in place keeps (other hard links, owner or group, extended
-/// attributes, room for both copies) or no sibling can be made (an unwritable
-/// directory, a name too long for the prefix). Native only: the browser never replaces
-/// an existing output.
+/// something that writing in place keeps (other hard links, an owner, group, extended
+/// attribute, or ACL that a new file in the directory would not get, room for both
+/// copies) or no sibling can be made (an unwritable directory, a name too long for the
+/// prefix). Native only: the browser never replaces an existing output.
 #[derive(Debug)]
 pub struct StagedOutput {
     target: PathBuf,
@@ -154,10 +154,6 @@ impl StagedOutput {
         } else {
             output.to_path_buf()
         };
-        if let Some(reason) = crate::output_replace::rename_would_lose(&target, &metadata) {
-            tracing::debug!(output = %output.display(), reason, "replacing the output in place");
-            return Ok(in_place());
-        }
         let parent = target.parent().unwrap_or_else(|| Path::new(""));
         let name = target
             .file_name()
@@ -166,21 +162,31 @@ impl StagedOutput {
         let Some(staged) = Self::claim_sibling(parent, &name) else {
             return Ok(in_place());
         };
+        // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
+        crate::register_live_temp_dir(&staged);
+        // The claimed sibling is a new, empty file beside the original, so it shows what
+        // a rename would keep.
+        let lost = crate::output_replace::rename_would_lose(&target, &metadata, &staged);
+        let _ = fs::remove_file(&staged);
+        if let Some(reason) = lost {
+            crate::unregister_live_temp_dir(&staged);
+            tracing::debug!(output = %output.display(), reason, "replacing the output in place");
+            return Ok(in_place());
+        }
         tracing::debug!(
             output = %output.display(),
             staged = %staged.display(),
             "staging output that replaces an existing file"
         );
-        // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
-        crate::register_live_temp_dir(&staged);
         Ok(Self {
             target,
             staged: Some(staged),
         })
     }
 
-    /// Finds a free sibling name by creating it, which also proves the directory takes
-    /// the name. The file is removed again, so the writer creates a new output there.
+    /// Claims a free sibling name by creating an empty file there, which also proves the
+    /// directory takes the name. The caller removes it, so the writer creates a new
+    /// output there.
     fn claim_sibling(parent: &Path, name: &str) -> Option<PathBuf> {
         for index in 0usize.. {
             let staged = if index == 0 {
@@ -193,10 +199,7 @@ impl StagedOutput {
                 .create_new(true)
                 .open(&staged)
             {
-                Ok(_) => {
-                    let _ = fs::remove_file(&staged);
-                    return Some(staged);
-                }
+                Ok(_) => return Some(staged),
                 Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
                 Err(error) => {
                     tracing::debug!(

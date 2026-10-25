@@ -1195,26 +1195,79 @@ fn staged_output_writes_in_place_when_a_rename_would_lose_something() {
     // A new file would drop a user-set extended attribute.
     #[cfg(target_os = "linux")]
     {
-        use std::os::unix::ffi::OsStrExt;
-
         let tagged = root.join("tagged.zip");
         fs::write(&tagged, b"old").expect("seed output");
-        let path = std::ffi::CString::new(tagged.as_os_str().as_bytes()).expect("c path");
-        let value = b"1";
-        // SAFETY: `path`, the name, and `value` are valid for the lengths passed.
-        let set = unsafe {
-            libc::setxattr(
-                path.as_ptr(),
-                c"user.rom-weaver-test".as_ptr(),
-                value.as_ptr().cast(),
-                value.len(),
-                0,
-            )
-        };
         // Some filesystems (older tmpfs) take no user attributes; nothing to check there.
-        if set == 0 {
+        if set_xattr(&tagged, c"user.rom-weaver-test", b"1") {
             assert!(!StagedOutput::new(&tagged).expect("stage").is_staged());
         }
+    }
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(target_os = "linux")]
+fn set_xattr(path: &std::path::Path, name: &std::ffi::CStr, value: &[u8]) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes()).expect("c path");
+    // SAFETY: `path`, `name`, and `value` are valid for the lengths passed.
+    unsafe {
+        libc::setxattr(
+            path.as_ptr(),
+            name.as_ptr(),
+            value.as_ptr().cast(),
+            value.len(),
+            0,
+        ) == 0
+    }
+}
+
+/// A POSIX ACL in the kernel's extended attribute form: (tag, permissions, id) entries.
+#[cfg(target_os = "linux")]
+fn posix_acl(entries: &[(u16, u16, u32)]) -> Vec<u8> {
+    let mut acl = 2u32.to_le_bytes().to_vec();
+    for &(tag, permissions, id) in entries {
+        acl.extend(tag.to_le_bytes());
+        acl.extend(permissions.to_le_bytes());
+        acl.extend(id.to_le_bytes());
+    }
+    acl
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn staged_output_compares_acls_with_what_a_new_file_gets() {
+    const USER_OBJ: u16 = 0x01;
+    const USER: u16 = 0x02;
+    const GROUP_OBJ: u16 = 0x04;
+    const MASK: u16 = 0x10;
+    const OTHER: u16 = 0x20;
+    let root = io_temp_path("staged-acl");
+    fs::create_dir_all(&root).expect("create root");
+    let uid = crate::effective_ids().map_or(0, |(uid, _)| uid);
+    let acl = |user_permissions| {
+        posix_acl(&[
+            (USER_OBJ, 6, u32::MAX),
+            (USER, user_permissions, uid),
+            (GROUP_OBJ, 4, u32::MAX),
+            (MASK, 6, u32::MAX),
+            (OTHER, 4, u32::MAX),
+        ])
+    };
+    // Filesystems without POSIX ACLs have nothing to check.
+    if set_xattr(&root, c"system.posix_acl_default", &acl(4)) {
+        // A new file inherits the same ACL, so a rename keeps it.
+        let inherited = root.join("inherited.zip");
+        fs::write(&inherited, b"old").expect("seed output");
+        assert!(StagedOutput::new(&inherited).expect("stage").is_staged());
+
+        // An ACL set on the file itself differs from the inherited one.
+        let custom = root.join("custom.zip");
+        fs::write(&custom, b"old").expect("seed output");
+        assert!(set_xattr(&custom, c"system.posix_acl_access", &acl(6)));
+        assert!(!StagedOutput::new(&custom).expect("stage").is_staged());
+        assert!(staged_siblings(&root).is_empty());
     }
 
     fs::remove_dir_all(&root).expect("cleanup");
