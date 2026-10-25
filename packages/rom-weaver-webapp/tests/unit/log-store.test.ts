@@ -137,4 +137,24 @@ describe("log store boot deferral", () => {
     ).toEqual(["queued", "immediate", "queued again"]);
     vi.unstubAllGlobals();
   });
+
+  it("delivers queued boot records as soon as a reader subscribes, then stops deferring", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("before the dialog opens");
+    expect(store.getLogEntries()).toEqual([]);
+    const unsubscribe = store.subscribeLogEntries(() => undefined);
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["before the dialog opens"]);
+    log.info("while it is open");
+    expect(store.getLogEntries().at(-1)?.message).toBe("while it is open");
+    unsubscribe();
+    vi.unstubAllGlobals();
+  });
 });

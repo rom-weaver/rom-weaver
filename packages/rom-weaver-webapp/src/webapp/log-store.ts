@@ -230,6 +230,8 @@ const getLogEntries = (): readonly LogStoreEntry[] => {
 
 const subscribeLogEntries = (listener: () => void) => {
   listeners.add(listener);
+  // A reader is showing the live log, so the queued boot records cannot wait for idle any longer.
+  flushDeferredLogs();
   return () => {
     listeners.delete(listener);
   };
