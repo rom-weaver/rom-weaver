@@ -1018,6 +1018,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                         |task: &PbpDiscExtractTask| task.expected_len,
                         |task| self.decode_disc_extract_task(&source, disc, &task),
                         |chunk: PbpDiscDecodedChunk, task_len| {
+                            progress_context.cancel().check()?;
                             let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
                                 RomWeaverError::Validation(
                                     "pbp extract chunk length overflowed".into(),
@@ -1065,6 +1066,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                     )
                 } else {
                     tasks.iter().try_for_each(|task| {
+                        context.cancel().check()?;
                         let chunk = self.decode_disc_extract_task(&source, disc, task)?;
                         let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
                             RomWeaverError::Validation("pbp extract chunk length overflowed".into())
@@ -1110,6 +1112,8 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                     })
                 };
                 if let Err(error) = decode_result {
+                    // Close the output first: Windows cannot remove an open file.
+                    drop(ordered_writer);
                     let _ = fs::remove_file(&bin_path);
                     return Err(error);
                 }

@@ -267,7 +267,16 @@ impl ChdContainerHandler {
         output: &Path,
     ) -> Result<ChdHeader> {
         let logical_bytes = fs::metadata(source)?.len();
-        self.create_uncompressed_rust_raw(source, output, logical_bytes, &ChdCreateKind::Raw, None)
+        self.create_uncompressed_rust_raw(
+            source,
+            UncompressedCreateParams {
+                output,
+                logical_bytes,
+                create_kind: &ChdCreateKind::Raw,
+                on_progress: None,
+                cancel: &CancellationToken::new(),
+            },
+        )
     }
 
     #[cfg(test)]
@@ -283,10 +292,13 @@ impl ChdContainerHandler {
         if codec == ChdCodec::NONE {
             self.create_uncompressed_rust_raw(
                 source,
-                output,
-                logical_bytes,
-                &ChdCreateKind::Raw,
-                None,
+                UncompressedCreateParams {
+                    output,
+                    logical_bytes,
+                    create_kind: &ChdCreateKind::Raw,
+                    on_progress: None,
+                    cancel: &CancellationToken::new(),
+                },
             )
         } else {
             self.create_compressed_rust_raw(
@@ -300,6 +312,7 @@ impl ChdContainerHandler {
                     thread_count,
                     parent_source: None,
                     on_progress: None,
+                    cancel: &CancellationToken::new(),
                 },
             )
         }
@@ -323,7 +336,7 @@ impl ChdContainerHandler {
         let mut sink = std::io::BufWriter::new(File::create(output).map_err(|error| {
             RomWeaverError::Validation(format!("failed to create `{}`: {error}", output.display()))
         })?);
-        session.stream_with_progress(thread_count, None, |chunk| {
+        session.stream_with_progress(thread_count, None, &CancellationToken::new(), |chunk| {
             std::io::Write::write_all(&mut sink, chunk).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to write `{}`: {error}",

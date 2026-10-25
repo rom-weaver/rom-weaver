@@ -588,7 +588,7 @@ mod read_session;
 const CD_SYNC_HEADER: [u8; 12] = [
     0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
 ];
-use create_pipeline::CompressedCreateParams;
+use create_pipeline::{CompressedCreateParams, UncompressedCreateParams};
 use read_session::ChdReadSession;
 
 #[cfg(test)]

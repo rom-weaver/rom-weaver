@@ -77,3 +77,21 @@ fn local_cancellation_and_output_cleanup_have_expected_lifecycles() {
 
     clear_in_progress_outputs();
 }
+
+#[test]
+fn or_cancelled_reports_failures_after_a_cancel_as_cancelled() {
+    let token = CancellationToken::new();
+    let failure = || -> Result<()> { Err(RomWeaverError::Validation("cancelled".to_string())) };
+    assert!(matches!(token.or_cancelled(Ok(1)), Ok(1)));
+    assert!(matches!(
+        token.or_cancelled(failure()),
+        Err(RomWeaverError::Validation(_))
+    ));
+
+    token.cancel();
+    assert!(matches!(token.or_cancelled(Ok(1)), Ok(1)));
+    assert!(matches!(
+        token.or_cancelled(failure()),
+        Err(RomWeaverError::Cancelled)
+    ));
+}

@@ -223,6 +223,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         chd.stream_with_progress(
             execution.effective_threads,
             Some(&extract_progress),
+            context.cancel(),
             |chunk| {
                 output.write_all(chunk)?;
                 if let Some(checksum) = output_checksum.as_mut() {
@@ -375,18 +376,24 @@ impl ChdContainerHandler {
                         self.create_uncompressed_rust_stream(
                             &mut source,
                             &source_label,
-                            &request.output,
-                            logical_bytes,
-                            &create_kind,
-                            Some(&create_progress),
+                            UncompressedCreateParams {
+                                output: &request.output,
+                                logical_bytes,
+                                create_kind: &create_kind,
+                                on_progress: Some(&create_progress),
+                                cancel: context.cancel(),
+                            },
                         )?
                     }
                     _ => self.create_uncompressed_rust_raw(
                         input,
-                        &request.output,
-                        logical_bytes,
-                        &create_kind,
-                        Some(&create_progress),
+                        UncompressedCreateParams {
+                            output: &request.output,
+                            logical_bytes,
+                            create_kind: &create_kind,
+                            on_progress: Some(&create_progress),
+                            cancel: context.cancel(),
+                        },
                     )?,
                 }
             } else {
@@ -408,6 +415,7 @@ impl ChdContainerHandler {
                                 thread_count: execution.effective_threads,
                                 parent_source: request.parent.as_deref(),
                                 on_progress: Some(&create_progress),
+                                cancel: context.cancel(),
                             },
                         )?
                     }
@@ -424,6 +432,7 @@ impl ChdContainerHandler {
                             thread_count: execution.effective_threads,
                             parent_source: request.parent.as_deref(),
                             on_progress: Some(&create_progress),
+                            cancel: context.cancel(),
                         },
                     )?,
                 }

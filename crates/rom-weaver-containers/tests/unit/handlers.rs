@@ -6116,4 +6116,172 @@ mod tests {
 
         let _ = fs::remove_dir_all(temp_dir);
     }
+
+    fn cancelled_context(temp_root: &Path, threads: usize) -> OperationContext {
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        OperationContext::new(
+            ThreadBudget::Fixed(threads),
+            temp_root.to_path_buf(),
+            Arc::new(NoopProgressSink),
+            cancel,
+        )
+    }
+
+    fn single_input_create_request(
+        input: &Path,
+        output: &Path,
+        format: &str,
+    ) -> ContainerCreateRequest {
+        ContainerCreateRequest {
+            rvz_block_size: None,
+            archive_names: None,
+            inputs: vec![input.to_path_buf()],
+            output: output.to_path_buf(),
+            format: format.to_string(),
+            codec: None,
+            level: None,
+            parent: None,
+        }
+    }
+
+    #[test]
+    fn cancelled_creates_stop_with_cancelled() {
+        let temp_dir = temp_dir_path("cancelled-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let data = temp_dir.join("data.bin");
+        write_xorshift_fixture(&data, 512 * 1024, 0x1234_5678);
+        let disc = temp_dir.join("disc.iso");
+        fs::write(&disc, build_test_gamecube_iso(0x8_0000)).expect("gamecube fixture");
+
+        let registry = ContainerRegistry::new();
+        for (format, input) in [
+            ("zip", &data),
+            ("7z", &data),
+            ("chd", &data),
+            ("rvz", &disc),
+            ("z3ds", &data),
+        ] {
+            // One thread and several take different paths through most writers.
+            for threads in [1, 4] {
+                let handler = registry
+                    .find_creatable_by_name(format)
+                    .expect("creatable handler");
+                let output = temp_dir.join(format!("out-{threads}.{format}"));
+                let error = handler
+                    .create(
+                        &single_input_create_request(input, &output, format),
+                        &cancelled_context(&temp_dir, threads),
+                    )
+                    .expect_err("a cancelled create must not finish");
+                assert!(
+                    matches!(error, RomWeaverError::Cancelled),
+                    "{format} create with {threads} threads: {error:?}"
+                );
+            }
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cancelled_extracts_stop_with_cancelled_and_leave_no_output() {
+        let temp_dir = temp_dir_path("cancelled-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let data = temp_dir.join("data.bin");
+        write_xorshift_fixture(&data, 512 * 1024, 0x2468_ACE0);
+        let disc = temp_dir.join("disc.iso");
+        fs::write(&disc, build_test_gamecube_iso(0x8_0000)).expect("gamecube fixture");
+
+        let registry = ContainerRegistry::new();
+        let live = test_context(&temp_dir, 2);
+        let mut sources = Vec::new();
+        for (format, input) in [
+            ("zip", &data),
+            ("7z", &data),
+            ("chd", &data),
+            ("rvz", &disc),
+            ("z3ds", &data),
+        ] {
+            let source = temp_dir.join(format!("source.{format}"));
+            registry
+                .find_creatable_by_name(format)
+                .expect("creatable handler")
+                .create(&single_input_create_request(input, &source, format), &live)
+                .expect("create extract fixture");
+            sources.push((format, source));
+        }
+        let gz = temp_dir.join("data.bin.gz");
+        let mut encoder = flate2::write::GzEncoder::new(
+            File::create(&gz).expect("create gz fixture"),
+            DeflateCompression::new(6),
+        );
+        encoder
+            .write_all(&fs::read(&data).expect("read payload"))
+            .expect("gz encode payload");
+        encoder.finish().expect("gz finish");
+        sources.push(("gz", gz));
+        let cso_source = temp_dir.join("blocks.iso");
+        fs::write(
+            &cso_source,
+            (0..TEST_CSO_BLOCK_BYTES * 64)
+                .map(|index| (index % 251) as u8)
+                .collect::<Vec<_>>(),
+        )
+        .expect("cso source fixture");
+        let cso = temp_dir.join("disc.cso");
+        write_test_cso(&cso_source, &cso);
+        sources.push(("cso", cso));
+        let ciso = temp_dir.join("disc.ciso");
+        write_test_gc_ciso(&disc, &ciso);
+        sources.push(("gc-ciso", ciso));
+        let pbp = temp_dir.join("game.pbp");
+        fs::write(
+            &pbp,
+            build_test_pbp_fixture(vec![("SLUS00001", build_test_pbp_iso(64, 7))]),
+        )
+        .expect("pbp fixture");
+        sources.push(("pbp", pbp));
+
+        for (format, source) in &sources {
+            for threads in [1, 4] {
+                let out_dir = temp_dir.join(format!("out-{format}-{threads}"));
+                let error = registry
+                    .find_by_name(format)
+                    .expect("extract handler")
+                    .extract(
+                        &rom_weaver_core::ContainerExtractRequest {
+                            source: source.clone(),
+                            out_dir: out_dir.clone(),
+                            selections: Vec::new(),
+                            kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                            containing_archive: None,
+                            split_bin: false,
+                            ignore_common_files: false,
+                            overwrite: false,
+                            parent: None,
+                        },
+                        &cancelled_context(&temp_dir, threads),
+                    )
+                    .expect_err("a cancelled extract must not finish");
+                assert!(
+                    matches!(error, RomWeaverError::Cancelled),
+                    "{format} extract with {threads} threads: {error:?}"
+                );
+                let left = fs::read_dir(&out_dir)
+                    .map(|entries| {
+                        entries
+                            .map(|entry| entry.expect("entry").file_name())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                assert!(
+                    left.is_empty(),
+                    "{format} extract with {threads} threads left {left:?}"
+                );
+            }
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
 }

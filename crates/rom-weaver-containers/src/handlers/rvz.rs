@@ -212,6 +212,7 @@ impl RvzContainerHandler {
 
         if first_bytes_read > 0 && checksum.is_some() {
             loop {
+                context.cancel().check()?;
                 let mut buffer = vec![0_u8; buffer_size];
                 let bytes_read = Self::fill_extract_buffer(reader, &mut buffer)?;
                 if bytes_read == 0 {
@@ -244,6 +245,7 @@ impl RvzContainerHandler {
         } else if first_bytes_read > 0 {
             let mut buffer = vec![0_u8; buffer_size];
             loop {
+                context.cancel().check()?;
                 let bytes_read = Self::fill_extract_buffer(reader, &mut buffer)?;
                 if bytes_read == 0 {
                     break;
@@ -353,15 +355,25 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             .output_path
             .extension()
             .map(|ext| format!(".{}", ext.to_string_lossy()));
-        let (bytes_written, checksums, identity) = self.copy_extract_with_progress(
-            &mut plan.disc,
-            &mut output,
-            plan.disc_size,
-            context,
-            &plan.execution,
-            extension.as_deref(),
-        )?;
-        output.flush()?;
+        let copied = self
+            .copy_extract_with_progress(
+                &mut plan.disc,
+                &mut output,
+                plan.disc_size,
+                context,
+                &plan.execution,
+                extension.as_deref(),
+            )
+            .and_then(|copied| Ok(output.flush().map(|()| copied)?));
+        let (bytes_written, checksums, identity) = match copied {
+            Ok(copied) => copied,
+            Err(error) => {
+                // A failed or cancelled copy leaves a partial disc image.
+                drop(output);
+                let _ = fs::remove_file(&plan.output_path);
+                return Err(error);
+            }
+        };
         let rom_identity = identity.detect(extension.as_deref());
 
         let report = RVZ_NOD_CORE.extracted_report(
@@ -431,6 +443,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             &request.output,
             &options,
             &execution,
+            context.cancel(),
             |processed_bytes, total| {
                 Self::maybe_emit_create_progress(
                     context,
@@ -489,6 +502,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             input,
             &options,
             &execution,
+            context.cancel(),
             |processed_bytes, total| {
                 Self::maybe_emit_create_progress(
                     context,

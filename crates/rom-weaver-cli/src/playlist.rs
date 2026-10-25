@@ -919,8 +919,8 @@ impl CliApp {
                 io::Write::write_all(&mut file, render_m3u(&job.lines).as_bytes())
                     .io_op(IoOp::Write, &job.output)?;
             }
-            // The ZIP writer does not stop on Ctrl-C, so a run cancelled while it wrote ends
-            // here, and the registry removes its output.
+            // A Ctrl-C after the last write ends the run here, and the registry removes the
+            // output, so a cancelled run never keeps it.
             rom_weaver_core::process_cancellation_token().check()?;
             rom_weaver_core::complete_in_progress_output(&job.output);
         }

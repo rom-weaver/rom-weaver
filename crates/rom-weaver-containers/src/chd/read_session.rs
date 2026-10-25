@@ -314,25 +314,35 @@ impl ChdReadSession {
         Ok(())
     }
 
+    /// Decodes the hunks in order into `on_bytes`. Once `cancel` trips, it stops at the next
+    /// hunk with `Cancelled`.
     pub(super) fn stream_with_progress<F>(
         &self,
         thread_count: usize,
         on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+        cancel: &CancellationToken,
         mut on_bytes: F,
     ) -> Result<()>
     where
         F: FnMut(&[u8]) -> Result<()>,
     {
+        let mut on_bytes = |bytes: &[u8]| {
+            cancel.check()?;
+            on_bytes(bytes)
+        };
         match &self.backend {
-            ChdReadBackend::Rust { .. } => Self::stream_with_rust(
-                &self.source,
-                self.parent_source.as_deref(),
-                self.header.logical_bytes,
-                thread_count,
-                on_progress,
-                &mut on_bytes,
-            )
-            .map_err(RomWeaverError::Validation),
+            // The decoders report errors as text, so the cancel is restored here.
+            ChdReadBackend::Rust { .. } => cancel.or_cancelled(
+                Self::stream_with_rust(
+                    &self.source,
+                    self.parent_source.as_deref(),
+                    self.header.logical_bytes,
+                    thread_count,
+                    on_progress,
+                    &mut on_bytes,
+                )
+                .map_err(RomWeaverError::Validation),
+            ),
         }
     }
 

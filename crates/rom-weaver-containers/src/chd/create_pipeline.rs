@@ -18,6 +18,16 @@ pub(super) struct CompressedCreateParams<'a> {
     pub(super) thread_count: usize,
     pub(super) parent_source: Option<&'a Path>,
     pub(super) on_progress: Option<&'a Arc<dyn Fn(u64) + Send + Sync>>,
+    pub(super) cancel: &'a CancellationToken,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct UncompressedCreateParams<'a> {
+    pub(super) output: &'a Path,
+    pub(super) logical_bytes: u64,
+    pub(super) create_kind: &'a ChdCreateKind,
+    pub(super) on_progress: Option<&'a Arc<dyn Fn(u64) + Send + Sync>>,
+    pub(super) cancel: &'a CancellationToken,
 }
 
 /// The CHD file being written: buffered for the header, metadata, and map writes. chd-rs
@@ -28,34 +38,28 @@ impl ChdContainerHandler {
     pub(super) fn create_uncompressed_rust_raw(
         &self,
         input: &Path,
-        output: &Path,
-        logical_bytes: u64,
-        create_kind: &ChdCreateKind,
-        on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+        params: UncompressedCreateParams<'_>,
     ) -> Result<ChdHeader> {
         let mut source = BufReader::new(File::open(input).map_err(|error| {
             RomWeaverError::Validation(format!("failed to open `{}`: {error}", input.display()))
         })?);
         let source_label = input.display().to_string();
-        self.create_uncompressed_rust_stream(
-            &mut source,
-            &source_label,
-            output,
-            logical_bytes,
-            create_kind,
-            on_progress,
-        )
+        self.create_uncompressed_rust_stream(&mut source, &source_label, params)
     }
 
     pub(super) fn create_uncompressed_rust_stream(
         &self,
         source: &mut dyn Read,
         source_label: &str,
-        output: &Path,
-        logical_bytes: u64,
-        create_kind: &ChdCreateKind,
-        on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+        params: UncompressedCreateParams<'_>,
     ) -> Result<ChdHeader> {
+        let UncompressedCreateParams {
+            output,
+            logical_bytes,
+            create_kind,
+            on_progress,
+            cancel,
+        } = params;
         if matches!(create_kind, ChdCreateKind::Av(_)) {
             return Err(RomWeaverError::Unsupported(UnsupportedOp::ChdStoreModeOnly));
         }
@@ -88,6 +92,7 @@ impl ChdContainerHandler {
                 hunk_bytes,
                 hunk_bytes_usize,
                 on_progress,
+                cancel,
             )?;
             writer
                 .write_hunk(&hunk)
@@ -182,6 +187,7 @@ impl ChdContainerHandler {
             thread_count,
             parent_source,
             on_progress,
+            cancel,
         } = params;
         let mut codec_types = arrayvec::ArrayVec::<CodecType, CHD_MAX_COMPRESSORS>::new();
         let mut codec_levels = [None; CHD_MAX_COMPRESSORS];
@@ -265,6 +271,7 @@ impl ChdContainerHandler {
                     hunk_bytes,
                     hunk_bytes_usize,
                     on_progress,
+                    cancel,
                 )?;
                 writer
                     .write_hunk(&hunk)
@@ -299,6 +306,7 @@ impl ChdContainerHandler {
                         hunk_bytes,
                         hunk_bytes_usize,
                         on_progress,
+                        cancel,
                     )
                 },
                 || -> Option<HunkCompressor> {
@@ -435,7 +443,8 @@ impl ChdContainerHandler {
 mod create_pipeline_tests;
 
 /// Reads the next hunk of the create source into a zero-padded hunk buffer, feeding the
-/// progress callback with only the bytes read.
+/// progress callback with only the bytes read. Every create path reads each hunk here, so
+/// this is where a cancelled create stops.
 fn read_source_hunk(
     source: &mut dyn Read,
     source_label: &str,
@@ -443,7 +452,9 @@ fn read_source_hunk(
     hunk_bytes: u32,
     hunk_bytes_usize: usize,
     on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+    cancel: &CancellationToken,
 ) -> Result<Vec<u8>> {
+    cancel.check()?;
     let read_len = usize::try_from((*remaining).min(u64::from(hunk_bytes))).map_err(|_| {
         RomWeaverError::Validation("decoded CHD chunk exceeded addressable memory".to_string())
     })?;

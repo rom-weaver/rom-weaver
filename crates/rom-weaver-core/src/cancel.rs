@@ -30,6 +30,16 @@ impl CancellationToken {
             Ok(())
         }
     }
+
+    /// `result`, or `Cancelled` when it failed after this token tripped. A check inside a
+    /// callback whose error the caller rewraps (as text or a library error) comes back as
+    /// some other error; this reports it as the cancellation it was.
+    pub fn or_cancelled<T>(&self, result: Result<T>) -> Result<T> {
+        match result {
+            Err(_) if self.is_cancelled() => Err(RomWeaverError::Cancelled),
+            result => result,
+        }
+    }
 }
 
 /// The process-wide cancellation token. The native CLI's Ctrl-C handler trips

@@ -1,5 +1,5 @@
 use super::*;
-use rom_weaver_core::{VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
+use rom_weaver_core::{CancellationToken, VALIDATION_CODE_WBFS_SIZE_MISMATCH, ValidationCodeError};
 #[cfg(target_family = "wasm")]
 use std::collections::HashMap;
 #[cfg(target_family = "wasm")]
@@ -541,23 +541,35 @@ impl NodHandlerCore {
     ) -> Result<OperationReport> {
         let mut plan = self.prepare_extract(request, context)?;
         let output = create_extract_output_file(&plan.output_path, request.overwrite)?;
-        output.set_len(plan.disc_size)?;
-        let mut output = BufWriter::new(output);
         let progress_label = format!("extracting `{}`", self.format_name());
-        let bytes_written = copy_reader_with_progress(
-            &mut plan.disc,
-            &mut output,
-            plan.disc_size,
-            &ContainerProgressContext {
-                context,
-                command: "extract",
-                format: self.format_name(),
-                stage: "extract",
-                thread_execution: Some(&plan.execution),
-            },
-            &progress_label,
-        )?;
-        output.flush()?;
+        let copied = (|| {
+            output.set_len(plan.disc_size)?;
+            let mut output = BufWriter::new(output);
+            let bytes_written = copy_reader_with_progress(
+                &mut plan.disc,
+                &mut output,
+                plan.disc_size,
+                &ContainerProgressContext {
+                    context,
+                    command: "extract",
+                    format: self.format_name(),
+                    stage: "extract",
+                    thread_execution: Some(&plan.execution),
+                },
+                &progress_label,
+            )?;
+            output.flush()?;
+            Ok(bytes_written)
+        })();
+        let bytes_written = match copied {
+            Ok(bytes_written) => bytes_written,
+            Err(error) => {
+                // A failed or cancelled copy leaves a partial disc image; the closure has
+                // already closed it.
+                let _ = fs::remove_file(&plan.output_path);
+                return Err(error);
+            }
+        };
 
         Ok(self.extracted_report(
             &request.source,
@@ -623,6 +635,7 @@ impl NodHandlerCore {
         output_path: &Path,
         options: &NodFormatOptions,
         execution: &ThreadExecution,
+        cancel: &CancellationToken,
         mut emit_progress: F,
     ) -> Result<u64>
     where
@@ -666,6 +679,7 @@ impl NodHandlerCore {
         let finalization = writer
             .process(
                 |data, processed, total| {
+                    cancel_nod_write(cancel)?;
                     output.write_all(data.as_ref())?;
                     if total > 0 {
                         emit_progress(processed.min(total), total);
@@ -676,7 +690,8 @@ impl NodHandlerCore {
             )
             .map_err(|error| {
                 RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            })?;
+            });
+        let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output.seek(SeekFrom::Start(0))?;
             output.write_all(finalization.header.as_ref())?;
@@ -695,6 +710,7 @@ impl NodHandlerCore {
         input: &Path,
         options: &NodFormatOptions,
         execution: &ThreadExecution,
+        cancel: &CancellationToken,
         mut emit_progress: F,
     ) -> Result<u64>
     where
@@ -728,6 +744,7 @@ impl NodHandlerCore {
         let finalization = writer
             .process(
                 |data, processed, total| {
+                    cancel_nod_write(cancel)?;
                     output_bytes = output_bytes.saturating_add(data.as_ref().len() as u64);
                     if total > 0 {
                         emit_progress(processed.min(total), total);
@@ -738,7 +755,8 @@ impl NodHandlerCore {
             )
             .map_err(|error| {
                 RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
-            })?;
+            });
+        let finalization = cancel.or_cancelled(finalization)?;
         if !finalization.header.is_empty() {
             output_bytes = output_bytes.max(finalization.header.len() as u64);
         }
@@ -811,6 +829,15 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// Fails nod's per-block write callback once `cancel` trips, which stops its reader and
+/// compressor threads; the caller reports the error as `Cancelled`.
+fn cancel_nod_write(cancel: &CancellationToken) -> std::io::Result<()> {
+    if cancel.is_cancelled() {
+        return Err(std::io::Error::other("operation cancelled"));
+    }
+    Ok(())
+}
 
 /// File name only, so errors do not leak internal staging directories (e.g. `/work` in the browser).
 fn display_input_name(input: &Path) -> String {

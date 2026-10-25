@@ -939,7 +939,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 },
             )
         } else {
-            for task in &tasks {
+            tasks.iter().try_for_each(|task| {
                 let chunk = self.extract_chunk_task(
                     &source,
                     payload_start,
@@ -947,11 +947,12 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                     &seek_table,
                     task,
                 )?;
-                extract_writer.write(chunk.index, chunk.data, task.len)?;
-            }
-            Ok(())
+                extract_writer.write(chunk.index, chunk.data, task.len)
+            })
         };
         if let Err(error) = decode_result {
+            // Close the output first: Windows cannot remove an open file.
+            drop(extract_writer);
             let _ = fs::remove_file(&output_path);
             return Err(error);
         }
@@ -1106,6 +1107,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                         result_closed: "z3ds compression pipeline ended before all frames were produced",
                     },
                     |_, task| {
+                        context.cancel().check()?;
                         let read_len = usize::try_from(task.len).map_err(|_| {
                             RomWeaverError::Validation(
                                 "z3ds create chunk size exceeded supported range".into(),
@@ -1131,6 +1133,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 )?;
             } else {
                 for task in &create_tasks {
+                    context.cancel().check()?;
                     let frame = self.compress_create_task(&source, level, task)?;
                     report_chunk_progress(task.len);
                     self.write_create_frame(&mut output, &mut seek_table, &mut totals, frame)?;
