@@ -95,6 +95,7 @@ Procedures for specific tasks.
 - [Decompress Z3DS or ZCCI to CCI](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
+- [Make an M3U playlist](how-to/make-m3u-playlist-browser.md)
 - [Use the online ROM tester](how-to/test-roms-in-browser.md)
 - [Fix a source ROM checksum mismatch](how-to/fix-checksum-errors.md)
 - [Edit a game save](how-to/edit-gen3-saves.md)
@@ -114,6 +115,7 @@ Procedures for specific tasks.
 - [Edit a game save from the CLI](how-to/cli-save.md)
 - [Create game saves with the CLI](how-to/create-game-saves-cli.md)
 - [Trim a ROM from the CLI](how-to/cli-trim.md)
+- [Make an M3U playlist from the CLI](how-to/cli-playlist.md)
 - [Extract, convert, and compress archives](how-to/work-with-archives.md)
 - [Fix a permission error](how-to/fix-permission-errors.md)
 

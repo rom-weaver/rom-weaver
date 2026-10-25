@@ -22,6 +22,7 @@ export {
 } from "./wasm-patch-create-commands.ts";
 export { invokeRomWeaverPatchValidateWorker } from "./wasm-patch-validate-commands.ts";
 export { invokeRomWeaverPpfUndoWorker, invokeRomWeaverTrimWorker } from "./wasm-rom-edit-commands.ts";
+export { invokeRomWeaverPlaylistWorker } from "./wasm-playlist-commands.ts";
 export {
   invokeRomWeaverSaveIdentifyWorker,
   invokeRomWeaverSaveCreateWorker,

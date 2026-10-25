@@ -86,6 +86,22 @@ fn libarchive_open_create_archive(
             ),
         )?;
 
+        // Entry names are UTF-8 (see `WriteArchive::start_entry`). On Windows the
+        // zip writer would otherwise transcode them to the ANSI code page; this
+        // stores them as UTF-8 and sets the zip UTF-8 name flag.
+        #[cfg(windows)]
+        if let LibarchiveCreateFormat::Zip = config.format {
+            archive.set_format_option(
+                Some("zip"),
+                "hdrcharset",
+                "UTF-8",
+                &format!(
+                    "{} create failed while setting format option `hdrcharset`",
+                    config.format_name
+                ),
+            )?;
+        }
+
         if let LibarchiveCreateFormat::SevenZ = config.format
             && total_uncompressed_bytes > 0
         {
@@ -3211,5 +3227,75 @@ mod tests {
         );
         drop(transaction);
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Entry names beyond Latin-1 must survive the create path: on Windows the 7z writer used to
+    /// drop them to an empty name (UTF-8 -> C-locale conversion failed).
+    ///
+    /// Off Windows the process stays in the C locale, where libarchive's 7z writer and reader
+    /// cannot convert non-ASCII names (an existing limitation this change leaves alone), so 7z
+    /// is only checked with non-ASCII names on Windows; zip is checked everywhere.
+    #[test]
+    fn non_latin1_entry_names_round_trip_through_7z_and_zip() {
+        let unicode = ["日本語.bin", "Game \u{2013} Disc 1.iso", "Pokémon.bin"];
+        let ascii = ["plain.bin", "Game - Disc 1.iso", "x.bin"];
+        for (format_name, format, extension, names) in [
+            (
+                "7z",
+                LibarchiveCreateFormat::SevenZ,
+                "7z",
+                if cfg!(windows) { unicode } else { ascii },
+            ),
+            ("zip", LibarchiveCreateFormat::Zip, "zip", unicode),
+        ] {
+            let dir = unique_temp_dir(&format!("unicode-names-{extension}"));
+            let output = dir.join(format!("names.{extension}"));
+            let config = LibarchiveCreateConfig {
+                format_name,
+                format,
+                filter: LibarchiveCreateFilter::None,
+                format_compression: None,
+                compression_level: None,
+                format_threads: None,
+                filter_threads: None,
+                io_buffer_bytes: LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES,
+            };
+            let mut archive = libarchive_open_create_archive(&output, config, 3, None, None)
+                .expect("open the archive");
+            for name in names {
+                archive
+                    .start_entry(
+                        crate::libarchive::EntrySpec {
+                            pathname: name,
+                            file_type: crate::libarchive::EntryFileType::Regular,
+                            perm: 0o644,
+                            size: 3,
+                        },
+                        "start entry",
+                    )
+                    .expect("start the entry");
+                archive
+                    .write_data_all(b"abc", "write entry")
+                    .expect("write the entry");
+                archive
+                    .finish_entry("finish entry")
+                    .expect("finish the entry");
+            }
+            archive
+                .close("close archive", "release archive")
+                .expect("close the archive");
+
+            let listed = crate::libarchive::list_regular_archive_file_entries(&output, format_name)
+                .expect("list the archive");
+            assert_eq!(
+                listed
+                    .iter()
+                    .map(|entry| entry.name.as_str())
+                    .collect::<Vec<_>>(),
+                names,
+                "{format_name} entry names"
+            );
+            fs::remove_dir_all(&dir).ok();
+        }
     }
 }
