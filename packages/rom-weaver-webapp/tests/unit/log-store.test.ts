@@ -157,4 +157,25 @@ describe("log store boot deferral", () => {
     unsubscribe();
     vi.unstubAllGlobals();
   });
+
+  it("puts a direct console line after the boot records queued before it, in the store and the console report", async () => {
+    vi.resetModules();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    window.ROM_WEAVER_CONSOLE_LOGS?.clear();
+    const log = logging.createLogger("boot-test");
+    log.info("queued first");
+    console.log("direct line");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["queued first", "direct line"]);
+    const reportLines = (window.ROM_WEAVER_CONSOLE_LOGS?.getReport().logs ?? []).map((record) => record.args.join(" "));
+    expect(reportLines).toHaveLength(2);
+    expect(reportLines[0]).toContain("boot-test: queued first");
+    expect(reportLines[1]).toBe("direct line");
+    vi.unstubAllGlobals();
+  });
 });

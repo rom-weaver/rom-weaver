@@ -1,3 +1,5 @@
+import { drainDeferredLogs } from "../lib/logging.ts";
+
 type ConsoleLogLevel = "debug" | "error" | "info" | "log" | "trace" | "warn";
 type ConsoleLogSource = "console" | "unhandledrejection" | "window.error";
 
@@ -122,6 +124,9 @@ const subscribeConsoleLogRecords = (listener: (record: ConsoleLogRecord) => void
 };
 
 const captureRecord = (level: ConsoleLogLevel, source: ConsoleLogSource, args: unknown[]) => {
+  // Boot records logged before this line are still queued; deliver them first so the report and the
+  // log store list them ahead of it. A record delivered by this drain does not drain again.
+  drainDeferredLogs();
   const record: ConsoleLogRecord = {
     args: args.map((arg) => serializeLogValue(arg)),
     elapsedMs: elapsedMs(),

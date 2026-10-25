@@ -2,7 +2,6 @@ import {
   configureLogger,
   createLogger,
   deferLogRecords,
-  drainDeferredLogs,
   flushDeferredLogs,
   getConsoleLogSink,
   type LogSink,
@@ -200,8 +199,7 @@ const installLogStore = () => {
   subscribeConsoleLogRecords((record) => {
     const entry = toConsoleEntry(record);
     if (!entry) return;
-    // Keep a direct console line after the boot records queued before it.
-    drainDeferredLogs();
+    // The capture already delivered any boot records queued before this line, so they come first.
     push(entry);
   });
   // Boot records (info, debug, trace) wait for the first idle moment, then sanitize and reach the
