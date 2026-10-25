@@ -30,13 +30,39 @@ struct Manifest {
 }
 
 #[derive(Debug)]
+enum Scope {
+    FullFile,
+    TrackFile,
+    Other(String),
+}
+impl Scope {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::FullFile => "full_file",
+            Self::TrackFile => "track_file",
+            Self::Other(value) => value,
+        }
+    }
+}
+// Scopes compare by name, as the scope strings did: a pack may spell `full_file` as an
+// `Other` string, and that must still match the coded scope.
+impl PartialEq for Scope {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+impl Eq for Scope {}
+
+/// A hash row kept as raw digest bytes. Hex text is built only for the
+/// components that own it, so parsing a pack does one hex pass per component.
+#[derive(Debug, PartialEq, Eq)]
 struct Hash {
     size: u64,
-    scope: String,
-    crc32: Option<String>,
-    md5: Option<String>,
-    sha1: Option<String>,
-    sha256: Option<String>,
+    scope: Scope,
+    crc32: Option<[u8; 4]>,
+    md5: Option<[u8; 16]>,
+    sha1: Option<[u8; 20]>,
+    sha256: Option<[u8; 32]>,
 }
 type HashKey = (
     u64,
@@ -63,7 +89,7 @@ impl ArtifactPack {
         let members = read_members_with_magic(bytes, PACK_V1_MAGIC, "RWFP1")?;
         let strings = Strings::parse(required_member(&members, "strings.bin")?)?;
         let hashes = parse_hashes(required_member(&members, "hashes.bin")?, &strings)?;
-        let components = parse_components(
+        let (components, component_hashes) = parse_components(
             required_member(&members, "components.bin")?,
             &hashes,
             &strings,
@@ -89,7 +115,7 @@ impl ArtifactPack {
             hashes.len(),
             components.len(),
         )?;
-        validate_owners(&owners, &components, &hashes)?;
+        validate_owners(&owners, &components, &component_hashes, &hashes)?;
         let routes = parse_routes(
             required_member(&members, "routes.bin")?,
             &hashes,
@@ -99,7 +125,7 @@ impl ArtifactPack {
         let games = parse_games(
             required_member(&members, "games.bin")?,
             &strings,
-            &components,
+            components,
             &manifest,
             &provenance_sets,
             &tag_sets,
@@ -149,7 +175,7 @@ impl ArtifactPack {
                 .hashes
                 .get(id as usize)
                 .ok_or_else(|| invalid_pack("route hash id is out of range"))?;
-            if h.size != size || h.crc32.as_deref().map(hex_crc) != Some(crc) {
+            if h.size != size || h.crc32 != Some(crc) {
                 continue;
             }
             for &component in self
@@ -185,15 +211,19 @@ impl ArtifactPack {
             .filter(|hash| {
                 crc32
                     .as_deref()
-                    .is_some_and(|value| hash.crc32.as_deref() == Some(value))
+                    .is_some_and(|value| hex_matches(hash.crc32.as_ref(), value))
                     || md5
                         .as_deref()
-                        .is_some_and(|value| hash.md5.as_deref() == Some(value))
+                        .is_some_and(|value| hex_matches(hash.md5.as_ref(), value))
                     || sha1
                         .as_deref()
-                        .is_some_and(|value| hash.sha1.as_deref() == Some(value))
+                        .is_some_and(|value| hex_matches(hash.sha1.as_ref(), value))
             })
-            .filter_map(|hash| hash.crc32.clone().map(|crc32| (hash.size, crc32)))
+            .filter_map(|hash| {
+                hash.crc32
+                    .as_ref()
+                    .map(|crc32| (hash.size, hex_lower(crc32)))
+            })
             .collect::<Vec<_>>();
         sizes.sort_unstable();
         sizes.dedup();
@@ -715,6 +745,37 @@ impl Strings {
     }
 }
 
+/// Lowercase hex of `bytes`, written into one preallocated string.
+fn hex_lower(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(char::from(DIGITS[usize::from(b >> 4)]));
+        out.push(char::from(DIGITS[usize::from(b & 15)]));
+    }
+    out
+}
+
+/// Copy a slice that `Cursor` already length-checked into a fixed array.
+fn digest<const N: usize>(bytes: &[u8]) -> [u8; N] {
+    let mut out = [0u8; N];
+    out.copy_from_slice(bytes);
+    out
+}
+
+/// Whether lowercase `hex` spells exactly `digest`.
+fn hex_matches<const N: usize>(digest: Option<&[u8; N]>, hex: &str) -> bool {
+    digest.is_some_and(|digest| {
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let hex = hex.as_bytes();
+        hex.len() == N * 2
+            && digest.iter().enumerate().all(|(i, &b)| {
+                hex[i * 2] == DIGITS[usize::from(b >> 4)]
+                    && hex[i * 2 + 1] == DIGITS[usize::from(b & 15)]
+            })
+    })
+}
+
 fn parse_hashes(b: &[u8], s: &Strings) -> Result<Vec<Hash>> {
     let mut c = Cursor::new(b, b"RWH5")?;
     let n = c.count()?;
@@ -729,16 +790,16 @@ fn parse_hashes(b: &[u8], s: &Strings) -> Result<Vec<Hash>> {
                 .ok_or_else(|| invalid_pack("RWFP1 hash size overflows"))?
         };
         let scope = match c.byte()? {
-            0 => "full_file".into(),
-            1 => "track_file".into(),
-            255 => s.get(c.u32()?)?,
+            0 => Scope::FullFile,
+            1 => Scope::TrackFile,
+            255 => Scope::Other(s.get(c.u32()?)?),
             x => return Err(invalid_pack(format!("RWFP1 hash scope {x} is invalid"))),
         };
         let mask = c.byte()?;
         if mask & !15 != 0 {
             return Err(invalid_pack("RWFP1 hash mask is invalid"));
         }
-        let mut next = |width: usize| -> Result<String> {
+        let mut next = |width: usize| -> Result<&[u8]> {
             let end =
                 c.p.checked_add(width)
                     .ok_or_else(|| invalid_pack("RWFP1 hash offset overflows"))?;
@@ -746,12 +807,28 @@ fn parse_hashes(b: &[u8], s: &Strings) -> Result<Vec<Hash>> {
                 c.b.get(c.p..end)
                     .ok_or_else(|| invalid_pack("RWFP1 hash is truncated"))?;
             c.p = end;
-            Ok(x.iter().map(|b| format!("{b:02x}")).collect())
+            Ok(x)
         };
-        let crc = if mask & 1 != 0 { Some(next(4)?) } else { None };
-        let md5 = if mask & 2 != 0 { Some(next(16)?) } else { None };
-        let sha1 = if mask & 4 != 0 { Some(next(20)?) } else { None };
-        let sha256 = if mask & 8 != 0 { Some(next(32)?) } else { None };
+        let crc = if mask & 1 != 0 {
+            Some(digest::<4>(next(4)?))
+        } else {
+            None
+        };
+        let md5 = if mask & 2 != 0 {
+            Some(digest::<16>(next(16)?))
+        } else {
+            None
+        };
+        let sha1 = if mask & 4 != 0 {
+            Some(digest::<20>(next(20)?))
+        } else {
+            None
+        };
+        let sha256 = if mask & 8 != 0 {
+            Some(digest::<32>(next(32)?))
+        } else {
+            None
+        };
         out.push(Hash {
             size,
             scope,
@@ -765,10 +842,16 @@ fn parse_hashes(b: &[u8], s: &Strings) -> Result<Vec<Hash>> {
     Ok(out)
 }
 
-fn parse_components(b: &[u8], hashes: &[Hash], s: &Strings) -> Result<Vec<PackComponent>> {
+/// Each component also reports the hash row it was built from.
+fn parse_components(
+    b: &[u8],
+    hashes: &[Hash],
+    s: &Strings,
+) -> Result<(Vec<PackComponent>, Vec<u32>)> {
     let mut c = Cursor::new(b, b"RWC5")?;
     let n = c.count()?;
     let mut out = Vec::with_capacity(n);
+    let mut hash_ids = Vec::with_capacity(n);
     for _ in 0..n {
         let h = c.u32()?;
         if h as usize >= hashes.len() {
@@ -812,21 +895,22 @@ fn parse_components(b: &[u8], hashes: &[Hash], s: &Strings) -> Result<Vec<PackCo
         out.push(PackComponent {
             role,
             ordinal: 0,
-            hash_scope: x.scope.clone(),
+            hash_scope: x.scope.as_str().to_string(),
             filename,
             size: x.size,
-            crc32: x.crc32.clone(),
-            md5: x.md5.clone(),
-            sha1: x.sha1.clone(),
-            sha256: x.sha256.clone(),
+            crc32: x.crc32.as_ref().map(|v| hex_lower(v)),
+            md5: x.md5.as_ref().map(|v| hex_lower(v)),
+            sha1: x.sha1.as_ref().map(|v| hex_lower(v)),
+            sha256: x.sha256.as_ref().map(|v| hex_lower(v)),
             required: flags & 1 != 0,
             discriminating: flags & 2 != 0,
             track,
             session,
         });
+        hash_ids.push(h);
     }
     c.finish()?;
-    Ok(out)
+    Ok((out, hash_ids))
 }
 
 fn parse_owners(b: &[u8], hashes: usize, components: usize) -> Result<Vec<Vec<u32>>> {
@@ -863,20 +947,15 @@ fn parse_owners(b: &[u8], hashes: usize, components: usize) -> Result<Vec<Vec<u3
 fn validate_owners(
     owners: &[Vec<u32>],
     components: &[PackComponent],
+    component_hashes: &[u32],
     hashes: &[Hash],
 ) -> Result<()> {
     let mut seen = vec![false; components.len()];
     for (hash_id, component_ids) in owners.iter().enumerate() {
         let hash = &hashes[hash_id];
         for &component_id in component_ids {
-            let component = &components[component_id as usize];
             if seen[component_id as usize]
-                || component.size != hash.size
-                || component.hash_scope != hash.scope
-                || component.crc32 != hash.crc32
-                || component.md5 != hash.md5
-                || component.sha1 != hash.sha1
-                || component.sha256 != hash.sha256
+                || hashes[component_hashes[component_id as usize] as usize] != *hash
             {
                 return Err(invalid_pack("RWFP1 owner mapping is invalid"));
             }
@@ -906,8 +985,6 @@ fn parse_routes(
             .ok_or_else(|| invalid_pack("RWFP1 route hash id is out of range"))?;
         let crc = hash
             .crc32
-            .as_deref()
-            .map(hex_crc)
             .ok_or_else(|| invalid_pack("RWFP1 routed hash has no crc32"))?;
         if hash.size == 0
             || !owners[id as usize]
@@ -939,7 +1016,7 @@ fn parse_routes(
         })
         .map(|(id, hash)| {
             (
-                hex_crc(hash.crc32.as_deref().expect("filtered crc32")),
+                hash.crc32.expect("filtered crc32"),
                 hash.size,
                 hash.scope.as_str(),
                 id as u32,
@@ -1018,7 +1095,7 @@ fn parse_alternate_names(bytes: Option<&[u8]>, s: &Strings) -> Result<Option<Vec
 fn parse_games(
     b: &[u8],
     s: &Strings,
-    all: &[PackComponent],
+    all: Vec<PackComponent>,
     m: &Manifest,
     ps: &[Vec<u32>],
     ts: &[Vec<u32>],
@@ -1035,7 +1112,9 @@ fn parse_games(
         ));
     }
     let mut out = Vec::with_capacity(n);
+    let total = all.len();
     let mut component = 0usize;
+    let mut remaining = all.into_iter();
     for index in 0..n {
         let name = s.get(c.u32()?)?;
         let bits = c.byte()?;
@@ -1079,10 +1158,10 @@ fn parse_games(
         let end = component
             .checked_add(count)
             .ok_or_else(|| invalid_pack("RWFP1 component range overflows"))?;
-        if end > all.len() {
+        if end > total {
             return Err(invalid_pack("RWFP1 game component range is out of bounds"));
         }
-        let mut components = all[component..end].to_vec();
+        let mut components: Vec<PackComponent> = remaining.by_ref().take(count).collect();
         for (i, x) in components.iter_mut().enumerate() {
             x.ordinal = i as u32;
         }
@@ -1117,19 +1196,11 @@ fn parse_games(
         });
     }
     c.finish()?;
-    if component != all.len() {
+    if component != total {
         return Err(invalid_pack("RWFP1 unused components remain"));
     }
     Ok(out)
 }
-fn hex_crc(s: &str) -> [u8; 4] {
-    let mut out = [0; 4];
-    for (i, x) in out.iter_mut().enumerate() {
-        *x = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap_or(0);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1209,6 +1280,108 @@ mod tests {
         assert_eq!(pack.games()[0].provenance, input_game.provenance);
         assert_eq!(pack.games()[0].dump_tags, input_game.dump_tags);
         assert_eq!(pack.route("aabbccdd", 4).unwrap(), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn hex_lower_writes_every_nibble_in_order() {
+        assert_eq!(hex_lower(&[]), "");
+        assert_eq!(hex_lower(&[0x00, 0x0f, 0xa5, 0xff]), "000fa5ff");
+        assert_eq!(hex_lower(&[0x12, 0x34, 0xab, 0xcd]), "1234abcd");
+    }
+
+    #[test]
+    fn hex_matches_compares_every_nibble_and_the_length() {
+        let digest = [0x12u8, 0xab, 0x0f];
+        assert!(hex_matches(Some(&digest), "12ab0f"));
+        assert!(!hex_matches(Some(&digest), "12ab0e"));
+        assert!(!hex_matches(Some(&digest), "02ab0f"));
+        assert!(!hex_matches(Some(&digest), "13ab0f"));
+        assert!(!hex_matches(Some(&digest), "12bb0f"));
+        assert!(!hex_matches(Some(&digest), "12ab1f"));
+        assert!(!hex_matches(Some(&digest), "12ab"));
+        assert!(!hex_matches(Some(&digest), "12ab0f00"));
+        assert!(!hex_matches(None::<&[u8; 3]>, "12ab0f"));
+    }
+
+    #[test]
+    fn route_and_matching_routes_use_the_decoded_digests() {
+        let first = game();
+        let mut second = game();
+        second.name = "Second".to_string();
+        second.components[0].size = 8;
+        second.components[0].crc32 = Some("11223344".to_string());
+        second.components[0].md5 = Some("00112233445566778899aabbccddeeff".to_string());
+        second.components[0].sha1 = Some("0123456789abcdef0123456789abcdef01234567".to_string());
+        second.components[0].sha256 = None;
+        // A hash row without a crc32 cannot be routed; its other digests
+        // still have to decode from the right offsets.
+        let mut third = game();
+        third.name = "Third".to_string();
+        third.components[0].size = 12;
+        third.components[0].crc32 = None;
+        third.components[0].md5 = Some("ffeeddccbbaa99887766554433221100".to_string());
+        third.components[0].sha1 = None;
+        third.components[0].sha256 =
+            Some("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_string());
+        third.components[0].discriminating = false;
+        let bytes = encode(
+            "Test",
+            IdentifySource::Redump,
+            "test-v1",
+            &json!([]),
+            vec![first.clone(), second.clone(), third.clone()],
+        )
+        .expect("pack encodes");
+        let pack = ArtifactPack::parse(&bytes).expect("pack parses");
+        let games = pack.games();
+        assert_eq!(games.len(), 3);
+        for (decoded, expected) in games.iter().zip([&first, &second, &third]) {
+            assert_eq!(decoded.name, expected.name);
+            let (got, want) = (&decoded.components[0], &expected.components[0]);
+            assert_eq!(got.size, want.size);
+            assert_eq!(got.crc32, want.crc32);
+            assert_eq!(got.md5, want.md5);
+            assert_eq!(got.sha1, want.sha1);
+            assert_eq!(got.sha256, want.sha256);
+            assert_eq!(got.hash_scope, "full_file");
+        }
+
+        assert_eq!(pack.route("aabbccdd", 4).unwrap(), vec![(0, 0)]);
+        assert_eq!(pack.route("AABBCCDD", 4).unwrap(), vec![(0, 0)]);
+        assert_eq!(pack.route("11223344", 8).unwrap(), vec![(1, 0)]);
+        assert!(pack.route("aabbccdd", 8).unwrap().is_empty());
+        assert!(pack.route("11223344", 4).unwrap().is_empty());
+        assert!(pack.route("aabbccde", 4).unwrap().is_empty());
+        assert!(pack.route("aabbcc", 4).is_err());
+
+        assert_eq!(
+            pack.matching_routes(Some("AABBCCDD"), None, None),
+            vec![(4, "aabbccdd".to_string())]
+        );
+        assert_eq!(
+            pack.matching_routes(None, Some("00112233445566778899AABBCCDDEEFF"), None),
+            vec![(8, "11223344".to_string())]
+        );
+        assert_eq!(
+            pack.matching_routes(None, None, Some("da39a3ee5e6b4b0d3255bfef95601890afd80709")),
+            vec![(4, "aabbccdd".to_string())]
+        );
+        assert_eq!(
+            pack.matching_routes(
+                Some("aabbccdd"),
+                Some("00112233445566778899aabbccddeeff"),
+                None
+            ),
+            vec![(4, "aabbccdd".to_string()), (8, "11223344".to_string())]
+        );
+        assert!(
+            pack.matching_routes(None, Some("ffeeddccbbaa99887766554433221100"), None)
+                .is_empty()
+        );
+        assert!(
+            pack.matching_routes(Some("aabbccdf"), None, None)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1344,5 +1517,101 @@ mod tests {
                 .to_string()
                 .contains("overflows")
         );
+    }
+
+    fn owner_component() -> PackComponent {
+        PackComponent {
+            role: PackComponentRole::PrimaryPayload,
+            ordinal: 0,
+            hash_scope: "full_file".to_string(),
+            filename: None,
+            size: 1,
+            crc32: None,
+            md5: None,
+            sha1: None,
+            sha256: None,
+            required: true,
+            discriminating: true,
+            track: None,
+            session: None,
+        }
+    }
+
+    fn owner_hash(size: u64) -> Hash {
+        Hash {
+            size,
+            scope: Scope::FullFile,
+            crc32: Some([0, 0, 0, 1]),
+            md5: None,
+            sha1: None,
+            sha256: None,
+        }
+    }
+
+    fn owner_error(
+        owners: &[Vec<u32>],
+        component_count: usize,
+        component_hashes: &[u32],
+        hashes: &[Hash],
+    ) -> String {
+        let components = vec![owner_component(); component_count];
+        validate_owners(owners, &components, component_hashes, hashes)
+            .expect_err("owners must be rejected")
+            .to_string()
+    }
+
+    #[test]
+    fn validate_owners_accepts_matching_cover() {
+        let hashes = [owner_hash(1), owner_hash(2)];
+        let components = vec![owner_component(); 2];
+        validate_owners(&[vec![0], vec![1]], &components, &[0, 1], &hashes)
+            .expect("matching owners are valid");
+    }
+
+    #[test]
+    fn validate_owners_rejects_owner_with_different_hash() {
+        // Component 0 is not claimed twice; only its hash disagrees.
+        let hashes = [owner_hash(1), owner_hash(2)];
+        let error = owner_error(&[vec![0], vec![]], 1, &[1], &hashes);
+        assert!(error.contains("owner mapping is invalid"), "{error}");
+    }
+
+    #[test]
+    fn validate_owners_rejects_component_claimed_twice() {
+        // Both owner lists point at the same hash row, so only the repeat is wrong.
+        let hashes = [owner_hash(1)];
+        let error = owner_error(&[vec![0, 0]], 1, &[0], &hashes);
+        assert!(error.contains("owner mapping is invalid"), "{error}");
+    }
+
+    #[test]
+    fn validate_owners_rejects_uncovered_component() {
+        let hashes = [owner_hash(1)];
+        let error = owner_error(&[vec![0]], 2, &[0, 0], &hashes);
+        assert!(error.contains("do not cover all components"), "{error}");
+    }
+
+    #[test]
+    fn validate_owners_matches_a_scope_spelled_as_a_string() {
+        // Row 1 stores `full_file` as an `Other` string; it must still match row 0's coded scope.
+        let spelled = Hash {
+            scope: Scope::Other("full_file".to_owned()),
+            ..owner_hash(1)
+        };
+        let hashes = [owner_hash(1), spelled];
+        let components = vec![owner_component(); 1];
+        validate_owners(&[vec![0], vec![]], &components, &[1], &hashes)
+            .expect("a scope string equal to the coded scope matches it");
+    }
+
+    #[test]
+    fn validate_owners_rejects_owner_with_different_scope() {
+        let track = Hash {
+            scope: Scope::TrackFile,
+            ..owner_hash(1)
+        };
+        let hashes = [owner_hash(1), track];
+        let error = owner_error(&[vec![0], vec![]], 1, &[1], &hashes);
+        assert!(error.contains("owner mapping is invalid"), "{error}");
     }
 }
