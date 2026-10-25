@@ -397,18 +397,7 @@ impl CliApp {
             create_threads.clone(),
         );
 
-        let expected_output = output.clone();
-        let request = ContainerCreateRequest {
-            rvz_block_size,
-            archive_names: archive_names.clone(),
-            inputs: input,
-            output,
-            format: resolved_format.clone(),
-            codec,
-            level,
-            parent: None,
-        };
-        let mut report = handler.create(&request, context).unwrap_or_else(|error| {
+        let create_failed = |error| {
             OperationReport::failed_with_error(
                 OperationFamily::Container,
                 Some(handler.descriptor().name.to_string()),
@@ -416,7 +405,41 @@ impl CliApp {
                 error,
                 context.single_thread_execution(),
             )
-        });
+        };
+        // `--force` over an existing file builds a sibling first, so a failed or
+        // cancelled run keeps the original.
+        let staged_output = match StagedOutput::new(&output) {
+            Ok(staged_output) => staged_output,
+            Err(error) => return create_failed(error),
+        };
+        let expected_output = output;
+        let request = ContainerCreateRequest {
+            rvz_block_size,
+            archive_names: archive_names.clone(),
+            inputs: input,
+            output: staged_output.path().to_path_buf(),
+            format: resolved_format.clone(),
+            codec,
+            level,
+            parent: None,
+        };
+        let mut report = handler
+            .create(&request, context)
+            .unwrap_or_else(create_failed);
+        if staged_output.is_staged() {
+            if report.status == OperationStatus::Succeeded {
+                // A cancel that lands after the create still keeps the original.
+                report = match context
+                    .cancel()
+                    .check()
+                    .and_then(|()| staged_output.commit())
+                {
+                    Ok(()) => report,
+                    Err(error) => create_failed(error),
+                };
+            }
+            report = rename_reported_path(report, &request.output, &expected_output);
+        }
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -1376,6 +1399,28 @@ impl CliApp {
         }
         Ok(())
     }
+}
+
+/// A staged create reports the sibling it wrote; name the output the user asked for.
+fn rename_reported_path(mut report: OperationReport, from: &Path, to: &Path) -> OperationReport {
+    fn replace_strings(value: &mut Value, from: &str, to: &str) {
+        match value {
+            Value::String(text) if text.contains(from) => *text = text.replace(from, to),
+            Value::Array(items) => items
+                .iter_mut()
+                .for_each(|item| replace_strings(item, from, to)),
+            Value::Object(map) => map
+                .values_mut()
+                .for_each(|item| replace_strings(item, from, to)),
+            _ => {}
+        }
+    }
+    let (from, to) = (from.display().to_string(), to.display().to_string());
+    report.label = report.label.replace(&from, &to);
+    if let Some(details) = report.details.as_mut() {
+        replace_strings(details, &from, &to);
+    }
+    report
 }
 
 fn ensure_compress_preserves_inputs(inputs: &[PathBuf], output: &Path, format: &str) -> Result<()> {

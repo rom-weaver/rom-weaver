@@ -114,6 +114,173 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
     )))
 }
 
+/// Where a command writes an output that may replace an existing file. A new output
+/// is written in place. Replacing a writable regular file goes through a new hidden
+/// sibling that [`StagedOutput::commit`] renames over it, so a run that fails or is
+/// cancelled leaves the original as it was. Dropping an uncommitted output removes the
+/// sibling. The output is written in place as before whenever a rename would lose
+/// something that writing in place keeps (other hard links, an owner, group, extended
+/// attribute, or ACL that a new file in the directory would not get, room for both
+/// copies) or no sibling can be made (an unwritable directory, a name too long for the
+/// prefix). Native only: the browser never replaces an existing output.
+#[derive(Debug)]
+pub struct StagedOutput {
+    target: PathBuf,
+    staged: Option<PathBuf>,
+}
+
+impl StagedOutput {
+    pub fn new(output: &Path) -> Result<Self> {
+        let in_place = || Self {
+            target: output.to_path_buf(),
+            staged: None,
+        };
+        // Devices, directories, and files this process cannot write keep failing (or
+        // writing) the way they always did; a rename would replace a read-only file.
+        let metadata = match fs::metadata(output) {
+            Ok(metadata) if metadata.is_file() => metadata,
+            _ => return Ok(in_place()),
+        };
+        if cfg!(target_arch = "wasm32") || OpenOptions::new().write(true).open(output).is_err() {
+            return Ok(in_place());
+        }
+        // Replace the file a symlink points at, as writing through the link did.
+        let is_symlink = fs::symlink_metadata(output)
+            .io_op(IoOp::Inspect, output)?
+            .file_type()
+            .is_symlink();
+        let target = if is_symlink {
+            fs::canonicalize(output).io_op(IoOp::Inspect, output)?
+        } else {
+            output.to_path_buf()
+        };
+        let parent = target.parent().unwrap_or_else(|| Path::new(""));
+        let name = target
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let Some(staged) = Self::claim_sibling(parent, &name) else {
+            return Ok(in_place());
+        };
+        // A forced second Ctrl-C skips `Drop`, so track the sibling for that exit.
+        crate::register_live_temp_dir(&staged);
+        // The claimed sibling is a new, empty file beside the original, so it shows what
+        // a rename would keep.
+        let lost = crate::output_replace::rename_would_lose(&target, &metadata, &staged);
+        let _ = fs::remove_file(&staged);
+        if let Some(reason) = lost {
+            crate::unregister_live_temp_dir(&staged);
+            tracing::debug!(output = %output.display(), reason, "replacing the output in place");
+            return Ok(in_place());
+        }
+        tracing::debug!(
+            output = %output.display(),
+            staged = %staged.display(),
+            "staging output that replaces an existing file"
+        );
+        Ok(Self {
+            target,
+            staged: Some(staged),
+        })
+    }
+
+    /// Claims a free sibling name by creating an empty file there, which also proves the
+    /// directory takes the name. The caller removes it, so the writer creates a new
+    /// output there.
+    fn claim_sibling(parent: &Path, name: &str) -> Option<PathBuf> {
+        for index in 0usize.. {
+            let staged = if index == 0 {
+                parent.join(format!(".rw-partial-{name}"))
+            } else {
+                parent.join(format!(".rw-partial-{index}-{name}"))
+            };
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&staged)
+            {
+                Ok(_) => return Some(staged),
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    tracing::debug!(
+                        %error,
+                        staged = %staged.display(),
+                        "cannot stage beside the original; writing in place"
+                    );
+                    return None;
+                }
+            }
+        }
+        None
+    }
+
+    /// The path to write the output to.
+    pub fn path(&self) -> &Path {
+        self.staged.as_deref().unwrap_or(&self.target)
+    }
+
+    pub fn is_staged(&self) -> bool {
+        self.staged.is_some()
+    }
+
+    /// Moves a staged output over the file it replaces; a no-op for an output written
+    /// in place. On failure the original is left as it was.
+    pub fn commit(mut self) -> Result<()> {
+        let Some(staged) = self.staged.take() else {
+            return Ok(());
+        };
+        // The sibling was created with default permissions; keep the replaced file's.
+        if let Ok(metadata) = fs::metadata(&self.target) {
+            let _ = fs::set_permissions(&staged, metadata.permissions());
+        }
+        let replaced = replace_file(&staged, &self.target, |from, to| fs::rename(from, to))
+            .io_op(IoOp::Write, &self.target);
+        // Gone after a rename; left over after a copy or a failure.
+        let _ = fs::remove_file(&staged);
+        crate::unregister_live_temp_dir(&staged);
+        tracing::debug!(
+            target = %self.target.display(),
+            committed = replaced.is_ok(),
+            "staged output committed"
+        );
+        replaced
+    }
+}
+
+/// Renames `staged` over `target`. A file mounted over the target (a bind mount)
+/// cannot be replaced, so the finished content is copied into it in place instead.
+fn replace_file(
+    staged: &Path,
+    target: &Path,
+    rename: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    match rename(staged, target) {
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::ResourceBusy | ErrorKind::CrossesDevices
+            ) =>
+        {
+            tracing::debug!(
+                target = %target.display(),
+                %error,
+                "the output cannot be replaced; copying into it in place"
+            );
+            fs::copy(staged, target).map(|_| ())
+        }
+        result => result,
+    }
+}
+
+impl Drop for StagedOutput {
+    fn drop(&mut self) {
+        if let Some(staged) = self.staged.take() {
+            let _ = fs::remove_file(&staged);
+            crate::unregister_live_temp_dir(&staged);
+        }
+    }
+}
+
 pub fn create_extract_output_file(output_path: &Path, overwrite: bool) -> Result<File> {
     if overwrite {
         return File::create(output_path).io_op(IoOp::Create, output_path);

@@ -7,10 +7,10 @@ use std::{
 
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
-    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    SharedBlockCacheReader, StagedOutput, TempPathAllocator, bounded_items_for_threads,
     copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
     create_extract_output_file, ensure_output_available, file_starts_with,
-    ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
+    ordered_streaming_compress, read_full, read_up_to, replace_file, retry_interrupted,
 };
 use crate::RomWeaverError;
 
@@ -1024,4 +1024,317 @@ fn copy_cancelable_prefers_cancellation_over_write_error() {
     )
     .expect_err("cancelled");
     assert!(matches!(error, RomWeaverError::Cancelled));
+}
+
+fn staged_siblings(dir: &std::path::Path) -> Vec<String> {
+    fs::read_dir(dir)
+        .expect("list dir")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|name| name.starts_with(".rw-partial-"))
+        .collect()
+}
+
+#[test]
+fn staged_output_writes_new_outputs_and_directories_in_place() {
+    let root = io_temp_path("staged-in-place");
+    fs::create_dir_all(&root).expect("create root");
+
+    let fresh = root.join("fresh.7z");
+    let staged = StagedOutput::new(&fresh).expect("stage a new output");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), fresh);
+    staged.commit().expect("commit an in-place output");
+    assert!(!fresh.exists(), "nothing is written for the caller");
+
+    let dir = root.join("dir.7z");
+    fs::create_dir_all(&dir).expect("create dir output");
+    let staged = StagedOutput::new(&dir).expect("stage a directory");
+    assert!(!staged.is_staged(), "only a regular file is replaced");
+    drop(staged);
+    assert!(dir.is_dir());
+    assert!(staged_siblings(&root).is_empty());
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn staged_output_replaces_an_existing_file_only_on_commit() {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    let root = io_temp_path("staged-commit");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.7z");
+    fs::write(&output, b"old").expect("seed output");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    assert!(staged.is_staged());
+    assert_eq!(staged.path().parent(), Some(root.as_path()));
+    assert_eq!(
+        staged.path().file_name().and_then(|name| name.to_str()),
+        Some(".rw-partial-out.7z")
+    );
+    fs::write(staged.path(), b"new").expect("write staged output");
+    assert_eq!(fs::read(&output).expect("read original"), b"old");
+
+    staged.commit().expect("commit");
+    assert_eq!(fs::read(&output).expect("read replaced output"), b"new");
+    assert!(staged_siblings(&root).is_empty());
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn replace_file_copies_in_place_when_the_target_cannot_be_renamed_over() {
+    let root = io_temp_path("staged-replace");
+    fs::create_dir_all(&root).expect("create root");
+    let staged = root.join(".rw-partial-out.zip");
+    let target = root.join("out.zip");
+
+    // A mount point refuses the rename (EBUSY, or EXDEV across filesystems), so the
+    // new content is written through it instead.
+    for kind in [ErrorKind::ResourceBusy, ErrorKind::CrossesDevices] {
+        fs::write(&staged, b"new archive").expect("seed staged");
+        fs::write(&target, b"old").expect("seed target");
+        replace_file(&staged, &target, |_, _| Err(io::Error::from(kind))).expect("copy");
+        assert_eq!(fs::read(&target).expect("read target"), b"new archive");
+    }
+
+    // Any other rename failure leaves the original alone.
+    fs::write(&target, b"old").expect("seed target");
+    let error = replace_file(&staged, &target, |_, _| {
+        Err(io::Error::from(ErrorKind::PermissionDenied))
+    })
+    .expect_err("rename fails");
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(fs::read(&target).expect("read target"), b"old");
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn dropping_a_staged_output_keeps_the_original() {
+    if cfg!(target_arch = "wasm32") {
+        return;
+    }
+    let root = io_temp_path("staged-drop");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.chd");
+    fs::write(&output, b"old").expect("seed output");
+    // Another file already holds the first sibling name; it must survive.
+    let taken = root.join(".rw-partial-out.chd");
+    fs::write(&taken, b"someone else's").expect("seed taken sibling");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    assert_eq!(
+        staged.path().file_name().and_then(|name| name.to_str()),
+        Some(".rw-partial-1-out.chd")
+    );
+    fs::write(staged.path(), b"partial").expect("write staged output");
+    drop(staged);
+
+    assert_eq!(fs::read(&output).expect("read original"), b"old");
+    assert_eq!(staged_siblings(&root), vec![".rw-partial-out.chd"]);
+    assert_eq!(fs::read(&taken).expect("read taken"), b"someone else's");
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_replaces_the_file_a_symlink_points_at() {
+    let root = io_temp_path("staged-symlink");
+    let store = root.join("store");
+    let links = root.join("links");
+    fs::create_dir_all(&store).expect("create store");
+    fs::create_dir_all(&links).expect("create links");
+    let target = store.join("out.rvz");
+    fs::write(&target, b"old").expect("seed target");
+    let link = links.join("out.rvz");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+    let staged = StagedOutput::new(&link).expect("stage through a symlink");
+    let store = fs::canonicalize(&store).expect("canonical store");
+    assert_eq!(staged.path().parent(), Some(store.as_path()));
+    fs::write(staged.path(), b"new").expect("write staged output");
+    staged.commit().expect("commit");
+
+    assert!(
+        fs::symlink_metadata(&link)
+            .expect("link metadata")
+            .file_type()
+            .is_symlink(),
+        "the link stays a link"
+    );
+    assert_eq!(fs::read(&target).expect("read target"), b"new");
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_keeps_the_replaced_files_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = io_temp_path("staged-mode");
+    fs::create_dir_all(&root).expect("create root");
+    let output = root.join("out.zip");
+    fs::write(&output, b"old").expect("seed output");
+    fs::set_permissions(&output, fs::Permissions::from_mode(0o640)).expect("chmod");
+
+    let staged = StagedOutput::new(&output).expect("stage over an existing file");
+    fs::write(staged.path(), b"new").expect("write staged output");
+    staged.commit().expect("commit");
+
+    let mode = fs::metadata(&output)
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o640);
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_writes_in_place_when_a_rename_would_lose_something() {
+    let root = io_temp_path("staged-identity");
+    fs::create_dir_all(&root).expect("create root");
+
+    // Another hard link would keep the old content after a rename.
+    let linked = root.join("linked.zip");
+    fs::write(&linked, b"old").expect("seed output");
+    fs::hard_link(&linked, root.join("other-link.zip")).expect("hard link");
+    let staged = StagedOutput::new(&linked).expect("stage");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), linked);
+
+    // A plain file in the same directory is still staged.
+    let plain = root.join("plain.zip");
+    fs::write(&plain, b"old").expect("seed output");
+    assert!(StagedOutput::new(&plain).expect("stage").is_staged());
+
+    // A new file would drop a user-set extended attribute.
+    #[cfg(target_os = "linux")]
+    {
+        let tagged = root.join("tagged.zip");
+        fs::write(&tagged, b"old").expect("seed output");
+        // Some filesystems (older tmpfs) take no user attributes; nothing to check there.
+        if set_xattr(&tagged, c"user.rom-weaver-test", b"1") {
+            assert!(!StagedOutput::new(&tagged).expect("stage").is_staged());
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(target_os = "linux")]
+fn set_xattr(path: &std::path::Path, name: &std::ffi::CStr, value: &[u8]) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes()).expect("c path");
+    // SAFETY: `path`, `name`, and `value` are valid for the lengths passed.
+    unsafe {
+        libc::setxattr(
+            path.as_ptr(),
+            name.as_ptr(),
+            value.as_ptr().cast(),
+            value.len(),
+            0,
+        ) == 0
+    }
+}
+
+/// A POSIX ACL in the kernel's extended attribute form: (tag, permissions, id) entries.
+#[cfg(target_os = "linux")]
+fn posix_acl(entries: &[(u16, u16, u32)]) -> Vec<u8> {
+    let mut acl = 2u32.to_le_bytes().to_vec();
+    for &(tag, permissions, id) in entries {
+        acl.extend(tag.to_le_bytes());
+        acl.extend(permissions.to_le_bytes());
+        acl.extend(id.to_le_bytes());
+    }
+    acl
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn staged_output_compares_acls_with_what_a_new_file_gets() {
+    const USER_OBJ: u16 = 0x01;
+    const USER: u16 = 0x02;
+    const GROUP_OBJ: u16 = 0x04;
+    const MASK: u16 = 0x10;
+    const OTHER: u16 = 0x20;
+    let root = io_temp_path("staged-acl");
+    fs::create_dir_all(&root).expect("create root");
+    let uid = crate::effective_ids().map_or(0, |(uid, _)| uid);
+    let acl = |user_permissions| {
+        posix_acl(&[
+            (USER_OBJ, 6, u32::MAX),
+            (USER, user_permissions, uid),
+            (GROUP_OBJ, 4, u32::MAX),
+            (MASK, 6, u32::MAX),
+            (OTHER, 4, u32::MAX),
+        ])
+    };
+    // Filesystems without POSIX ACLs have nothing to check.
+    if set_xattr(&root, c"system.posix_acl_default", &acl(4)) {
+        // A new file inherits the same ACL, so a rename keeps it.
+        let inherited = root.join("inherited.zip");
+        fs::write(&inherited, b"old").expect("seed output");
+        assert!(StagedOutput::new(&inherited).expect("stage").is_staged());
+
+        // An ACL set on the file itself differs from the inherited one.
+        let custom = root.join("custom.zip");
+        fs::write(&custom, b"old").expect("seed output");
+        assert!(set_xattr(&custom, c"system.posix_acl_access", &acl(6)));
+        assert!(!StagedOutput::new(&custom).expect("stage").is_staged());
+        assert!(staged_siblings(&root).is_empty());
+    }
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_output_writes_in_place_when_no_sibling_can_replace_the_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = io_temp_path("staged-fallback");
+    fs::create_dir_all(&root).expect("create root");
+
+    // A sibling name past the 255-byte limit cannot be created.
+    let long = root.join(format!("{}.bin", "x".repeat(246)));
+    fs::write(&long, b"old").expect("seed long name");
+    assert!(!StagedOutput::new(&long).expect("stage").is_staged());
+
+    // Root writes through permission bits, so these two cannot be checked as root.
+    if crate::effective_ids().is_some_and(|(uid, _)| uid == 0) {
+        fs::remove_dir_all(&root).expect("cleanup");
+        return;
+    }
+    // A rename would replace a file the run could not write before.
+    let read_only = root.join("read-only.zip");
+    fs::write(&read_only, b"old").expect("seed read-only output");
+    fs::set_permissions(&read_only, fs::Permissions::from_mode(0o444)).expect("chmod");
+    assert!(!StagedOutput::new(&read_only).expect("stage").is_staged());
+
+    // A writable file in a directory that takes no new names is still written in place.
+    let locked_dir = root.join("locked");
+    fs::create_dir_all(&locked_dir).expect("create locked dir");
+    let in_locked = locked_dir.join("out.zip");
+    fs::write(&in_locked, b"old").expect("seed output");
+    fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o555)).expect("chmod");
+    let staged = StagedOutput::new(&in_locked).expect("stage");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), in_locked);
+    fs::set_permissions(&locked_dir, fs::Permissions::from_mode(0o755)).expect("restore");
+
+    fs::remove_dir_all(&root).expect("cleanup");
 }

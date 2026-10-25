@@ -105,6 +105,59 @@ fn read_only_output_directory_fails_before_any_work() {
     assert_eq!(stage, "validate", "the check must run before any work");
 }
 
+#[cfg(unix)]
+#[test]
+fn compress_force_keeps_the_original_when_the_create_fails() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if running_as_root() {
+        return;
+    }
+    let temp = setup_temp_dir();
+    let inputs = temp.child("inputs");
+    fs::create_dir_all(inputs.path()).expect("input dir");
+    fs::write(inputs.path().join("a.bin"), vec![1u8; 65536]).expect("readable input");
+    let locked = inputs.path().join("b.bin");
+    fs::write(&locked, vec![2u8; 65536]).expect("locked input");
+    // The archive is open and part written by the time this entry fails to read.
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod");
+    let output = temp.child("out.zip");
+    fs::write(output.path(), b"the original").expect("existing output");
+
+    let events = run_json_events(
+        &[
+            "compress",
+            "--input",
+            inputs.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--force",
+            "--jsonl",
+        ],
+        1,
+    );
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).expect("restore");
+
+    assert_eq!(
+        fs::read(output.path()).expect("original"),
+        b"the original",
+        "a failed --force run must leave the file it would have replaced"
+    );
+    let leftovers = fs::read_dir(temp.path())
+        .expect("list output dir")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".rw-partial-")
+        })
+        .count();
+    assert_eq!(leftovers, 0);
+    let label = terminal_label(&events);
+    assert!(!label.contains(".rw-partial-"), "{label}");
+}
+
 #[test]
 fn missing_input_is_still_reported_as_missing() {
     let temp = setup_temp_dir();
