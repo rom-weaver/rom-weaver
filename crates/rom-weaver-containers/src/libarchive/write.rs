@@ -380,6 +380,19 @@ impl WriteArchive {
         close_result.and(check_free_status(free_status, free_context))
     }
 
+    /// Frees the writer without finishing the archive, for output that is being thrown
+    /// away. Closing would still encode and write everything buffered, which takes
+    /// seconds to minutes for a large 7z.
+    pub fn abandon(mut self) {
+        if let Some(ptr) = self.ptr.take() {
+            // A failed writer skips the close that `archive_write_free` would run.
+            unsafe {
+                archive_write_fail(ptr.as_ptr());
+                archive_write_free(ptr.as_ptr());
+            }
+        }
+    }
+
     /// Passes one format option to libarchive and returns its raw status so
     /// each caller can choose how strictly to treat an unsupported option.
     fn write_format_option(

@@ -30,6 +30,16 @@ impl CancellationToken {
             Ok(())
         }
     }
+
+    /// `result`, or `Cancelled` when it failed after this token tripped. A check inside a
+    /// callback whose error the caller rewraps (as text or a library error) comes back as
+    /// some other error; this reports it as the cancellation it was.
+    pub fn or_cancelled<T>(&self, result: Result<T>) -> Result<T> {
+        match result {
+            Err(_) if self.is_cancelled() => Err(RomWeaverError::Cancelled),
+            result => result,
+        }
+    }
 }
 
 /// The process-wide cancellation token. The native CLI's Ctrl-C handler trips
@@ -46,9 +56,10 @@ fn in_progress_outputs() -> &'static Mutex<Vec<std::path::PathBuf>> {
     PATHS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Register a new output for cleanup if the native run is cancelled.
-/// Callers MUST register only paths that did not exist before the run; this is
-/// a no-op on WASM, where the browser manages output cleanup.
+/// Register a new output file or directory for cleanup if the native run is cancelled.
+/// Callers MUST register only paths that did not exist before the run, and a directory
+/// before the outputs inside it; this is a no-op on WASM, where the browser manages
+/// output cleanup.
 pub fn register_in_progress_output(path: &std::path::Path) {
     if cfg!(target_arch = "wasm32") {
         return;
@@ -66,14 +77,20 @@ pub fn complete_in_progress_output(path: &std::path::Path) {
     }
 }
 
-/// Delete every registered output that made it to disk. Called when a run ends
-/// cancelled, so Ctrl-C does not leave a half-written file behind.
+/// Delete every registered output that made it to disk, newest first. Called when a
+/// run ends cancelled, so Ctrl-C does not leave a half-written file behind. A directory
+/// goes only once it is empty, so anything else in it stays.
 pub fn remove_in_progress_outputs() {
     let Ok(mut paths) = in_progress_outputs().lock() else {
         return;
     };
-    for path in paths.drain(..) {
-        let _ = std::fs::remove_file(&path);
+    for path in paths.drain(..).rev() {
+        let is_dir = std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir());
+        let _ = if is_dir {
+            std::fs::remove_dir(&path)
+        } else {
+            std::fs::remove_file(&path)
+        };
     }
 }
 

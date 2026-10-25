@@ -219,6 +219,7 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
     let emitted_progress_bucket = AtomicU8::new(0);
 
     loop {
+        context.cancel().check()?;
         let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
@@ -716,6 +717,7 @@ impl<'a> ExtractChunkWriter<'a> {
         data: Vec<u8>,
         expected_len: u64,
     ) -> Result<()> {
+        self.context.cancel().check()?;
         let chunk_len = u64::try_from(data.len()).map_err(|_| {
             RomWeaverError::Validation(format!("{} extract chunk length overflowed", self.format))
         })?;

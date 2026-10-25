@@ -105,6 +105,7 @@ const WASM_BINDGEN_WRITE_FUNCTIONS: &[&str] = &[
     "archive_write_data",
     "archive_write_finish_entry",
     "archive_write_close",
+    "archive_write_fail",
     "archive_write_free",
     "archive_write_set_format_option",
     "archive_write_set_filter_option",

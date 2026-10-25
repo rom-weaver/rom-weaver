@@ -86,6 +86,7 @@ impl StreamContainerHandler {
             let mut copied = 0_u64;
             let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
             loop {
+                context.cancel().check()?;
                 let read = archive.read_data(
                     &mut buffer,
                     &format!("{format_name} extract failed while reading payload"),

@@ -1,8 +1,33 @@
 use super::*;
+use crate::xdvdfs::blockdev::BlockDeviceWrite as XdvdfsBlockDeviceWrite;
+use rom_weaver_core::CancellationToken;
 use tracing::debug;
 
 type XisoSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
 type XisoSourceFilesystem = XdvdfsFilesystem<io::Error, XisoSourceDevice>;
+
+/// The rebuilt image's writer. Each write fails once `cancel` trips, so a cancelled
+/// extract stops within one copied block.
+struct CancelCheckedImage<'a, W> {
+    inner: W,
+    cancel: &'a CancellationToken,
+}
+
+#[maybe_async::maybe_async]
+impl<W: XdvdfsBlockDeviceWrite<io::Error>> XdvdfsBlockDeviceWrite<io::Error>
+    for CancelCheckedImage<'_, W>
+{
+    async fn write(&mut self, offset: u64, buffer: &[u8]) -> io::Result<()> {
+        if self.cancel.is_cancelled() {
+            return Err(io::Error::other("operation cancelled"));
+        }
+        self.inner.write(offset, buffer).await
+    }
+
+    async fn len(&mut self) -> io::Result<u64> {
+        self.inner.len().await
+    }
+}
 
 pub(crate) struct XisoContainerHandler;
 
@@ -129,7 +154,10 @@ impl ContainerHandlerOperations for XisoContainerHandler {
         }
 
         let output_file = create_extract_output_file(&output_path, request.overwrite)?;
-        let mut output = BufWriter::new(output_file);
+        let mut output = CancelCheckedImage {
+            inner: BufWriter::new(output_file),
+            cancel: context.cancel(),
+        };
         let extract_progress_label = format!("extracting `{}`", XISO.name);
         let mut listed_entries = 0usize;
         let mut listed_directories = 0usize;
@@ -192,13 +220,17 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             },
         );
         if let Err(error) = extract_result {
+            // Close the output first: Windows cannot remove an open file.
+            drop(output);
             let _ = fs::remove_file(&output_path);
-            return Err(RomWeaverError::Validation(format!(
-                "xiso extract failed while rebuilding `{}`: {error}",
-                request.source.display()
-            )));
+            return context
+                .cancel()
+                .or_cancelled(Err(RomWeaverError::Validation(format!(
+                    "xiso extract failed while rebuilding `{}`: {error}",
+                    request.source.display()
+                ))));
         }
-        output.flush()?;
+        output.inner.flush()?;
         let output_bytes = fs::metadata(&output_path)?.len();
         debug!(
             format = XISO.name,

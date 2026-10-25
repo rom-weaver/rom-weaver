@@ -24,11 +24,12 @@ use crate::libarchive::{
 };
 use rayon::prelude::*;
 use rom_weaver_core::{
-    ArchiveEntryKindFilter, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
-    ContainerListEntry, OperationContext, OperationFamily, OperationReport, ProbeConfidence,
-    Result, RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
-    bounded_items_for_threads, create_extract_output_file, decode_memory_budget_bytes,
-    emit_container_running_progress, maybe_emit_container_byte_progress, normalize_archive_name,
+    ArchiveEntryKindFilter, CancellationToken, ContainerByteProgress, ContainerCreateRequest,
+    ContainerExtractRequest, ContainerListEntry, OperationContext, OperationFamily,
+    OperationReport, ProbeConfidence, Result, RomWeaverError, SelectionMatcher, SharedThreadPool,
+    ThreadCapability, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
+    decode_memory_budget_bytes, emit_container_running_progress,
+    maybe_emit_container_byte_progress, normalize_archive_name,
     should_ignore_common_container_file,
 };
 use tracing::{debug, trace};
@@ -219,6 +220,7 @@ fn libarchive_write_archive_entry<F>(
     entry: &ArchiveInputEntry,
     entry_size_bytes: u64,
     io_buffer_bytes: usize,
+    cancel: &CancellationToken,
     mut on_source_bytes: F,
 ) -> Result<u64>
 where
@@ -252,6 +254,7 @@ where
         let mut source = BufReader::new(File::open(&entry.source)?);
         let mut buffer = vec![0u8; io_buffer_bytes];
         loop {
+            cancel.check()?;
             let read = source.read(&mut buffer)?;
             if read == 0 {
                 break;
@@ -444,6 +447,7 @@ fn libarchive_create_write_entries(
             entry,
             entry_size_bytes,
             config.io_buffer_bytes,
+            context.cancel(),
             |delta| {
                 if !input_progress_enabled {
                     return;
@@ -532,6 +536,11 @@ pub(crate) fn write_archive_with_libarchive(
         execution,
         config,
     );
+    if let Err(RomWeaverError::Cancelled) = result {
+        // A cancelled archive is incomplete either way, so skip encoding what is still buffered.
+        archive.abandon();
+        return Err(RomWeaverError::Cancelled);
+    }
 
     match (
         result,
@@ -1133,6 +1142,7 @@ where
                         let mut write = Duration::ZERO;
                         let mut hash_feed = Duration::ZERO;
                         loop {
+                            context.cancel().check()?;
                             let read_at = SystemTime::now();
                             let read = reader.read(&mut buffer).map_err(|error| {
                                 RomWeaverError::Validation(format!(
@@ -1788,6 +1798,8 @@ fn extract_libarchive_tasks_parallel(
                 Ok(item) => item,
                 Err(_) => break,
             };
+            // Returning drops the receiver, so the decoders stop at their next send.
+            context.cancel().check()?;
             if let Err(error) = writer.handle(item)? {
                 write_result = Err(error);
                 drop(receiver.take());

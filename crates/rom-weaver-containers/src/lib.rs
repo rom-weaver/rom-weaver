@@ -78,7 +78,7 @@ use extract_support::{
     ContainerProgressContext, ExtractChunkWriter, ExtractedFileChecksum,
     attach_extract_checksum_details, copy_reader_with_progress, create_extract_checksum,
     decode_tasks_ordered, emit_container_indeterminate_progress, emit_container_step_progress,
-    stream_extract_identity,
+    ensure_extract_output_available, stream_extract_identity,
 };
 #[cfg(test)]
 use formats::SEVEN_Z;

@@ -36,7 +36,7 @@ fn read_back(path: &Path) -> Vec<u8> {
     let session = ChdReadSession::open(path, None).expect("open created chd");
     let mut out = Vec::new();
     session
-        .stream_with_progress(1, None, |chunk| {
+        .stream_with_progress(1, None, &CancellationToken::new(), |chunk| {
             out.extend_from_slice(chunk);
             Ok(())
         })
@@ -54,6 +54,20 @@ fn hd_geometry() -> HdGeometry {
 }
 
 // --- Uncompressed (store) create ---------------------------------------------
+
+fn store_params<'a>(
+    output: &'a Path,
+    logical_bytes: u64,
+    create_kind: &'a ChdCreateKind,
+) -> UncompressedCreateParams<'a> {
+    UncompressedCreateParams {
+        output,
+        logical_bytes,
+        create_kind,
+        on_progress: None,
+        cancel: &NOT_CANCELLED,
+    }
+}
 
 #[test]
 fn create_uncompressed_rust_raw_round_trips_a_partial_final_hunk() {
@@ -73,10 +87,10 @@ fn create_uncompressed_rust_raw_round_trips_a_partial_final_hunk() {
     let header = handler
         .create_uncompressed_rust_raw(
             &input,
-            &output,
-            source.len() as u64,
-            &ChdCreateKind::Raw,
-            Some(&progress),
+            UncompressedCreateParams {
+                on_progress: Some(&progress),
+                ..store_params(&output, source.len() as u64, &ChdCreateKind::Raw)
+            },
         )
         .expect("store-mode create");
 
@@ -106,10 +120,7 @@ fn create_uncompressed_rust_stream_handles_an_empty_source() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(Vec::new()),
             "empty",
-            &output,
-            0,
-            &ChdCreateKind::Raw,
-            None,
+            store_params(&output, 0, &ChdCreateKind::Raw),
         )
         .expect("store-mode create of an empty source");
 
@@ -130,10 +141,7 @@ fn create_uncompressed_rust_stream_writes_hard_disk_geometry() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(source.clone()),
             "disk",
-            &output,
-            source.len() as u64,
-            &create_kind,
-            None,
+            store_params(&output, source.len() as u64, &create_kind),
         )
         .expect("store-mode hard disk create");
     assert_eq!(header.unit_bytes, 512);
@@ -162,10 +170,7 @@ fn create_uncompressed_rust_stream_rejects_av_media() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(vec![0_u8; 1024]),
             "av",
-            &dir.join("av.chd"),
-            1024,
-            &create_kind,
-            None,
+            store_params(&dir.join("av.chd"), 1024, &create_kind),
         )
         .expect_err("av media has no store-mode rust writer");
     assert!(matches!(
@@ -188,10 +193,7 @@ fn create_uncompressed_rust_stream_rejects_degenerate_geometry() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(vec![0_u8; 512]),
             "disk",
-            &dir.join("disk.chd"),
-            512,
-            &create_kind,
-            None,
+            store_params(&dir.join("disk.chd"), 512, &create_kind),
         )
         .expect_err("zero unit size must be rejected");
     assert!(
@@ -209,10 +211,7 @@ fn create_uncompressed_rust_raw_reports_unreadable_inputs_and_outputs() {
     let err = handler
         .create_uncompressed_rust_raw(
             &dir.join("missing.bin"),
-            &dir.join("out.chd"),
-            0,
-            &ChdCreateKind::Raw,
-            None,
+            store_params(&dir.join("out.chd"), 0, &ChdCreateKind::Raw),
         )
         .expect_err("a missing input must not create an output");
     assert!(err.to_string().contains("failed to open"), "{err}");
@@ -221,10 +220,11 @@ fn create_uncompressed_rust_raw_reports_unreadable_inputs_and_outputs() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(vec![0_u8; 16]),
             "payload",
-            &dir.join("no-such-dir").join("out.chd"),
-            16,
-            &ChdCreateKind::Raw,
-            None,
+            store_params(
+                &dir.join("no-such-dir").join("out.chd"),
+                16,
+                &ChdCreateKind::Raw,
+            ),
         )
         .expect_err("an unwritable output path must be reported");
     assert!(err.to_string().contains("failed to create"), "{err}");
@@ -234,10 +234,7 @@ fn create_uncompressed_rust_raw_reports_unreadable_inputs_and_outputs() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(vec![0_u8; 16]),
             "payload",
-            &dir.join("short.chd"),
-            8192,
-            &ChdCreateKind::Raw,
-            None,
+            store_params(&dir.join("short.chd"), 8192, &ChdCreateKind::Raw),
         )
         .expect_err("a truncated source must be reported");
     assert!(err.to_string().contains("failed to read source"), "{err}");
@@ -270,8 +267,12 @@ fn compressed_params<'a>(
         thread_count,
         parent_source,
         on_progress: None,
+        cancel: &NOT_CANCELLED,
     }
 }
+
+static NOT_CANCELLED: std::sync::LazyLock<CancellationToken> =
+    std::sync::LazyLock::new(CancellationToken::new);
 
 #[test]
 fn compressed_create_matches_between_the_sequential_and_threaded_paths() {
@@ -600,7 +601,7 @@ fn read_back_with_parent(path: &Path, parent: &Path) -> Vec<u8> {
     let session = ChdReadSession::open(path, Some(parent)).expect("open differential chd");
     let mut out = Vec::new();
     session
-        .stream_with_progress(1, None, |chunk| {
+        .stream_with_progress(1, None, &CancellationToken::new(), |chunk| {
             out.extend_from_slice(chunk);
             Ok(())
         })
@@ -627,10 +628,7 @@ fn open_create_parent_rejects_mismatched_parents() {
         .create_uncompressed_rust_stream(
             &mut Cursor::new(source.clone()),
             "parent",
-            &parent,
-            source.len() as u64,
-            &ChdCreateKind::Raw,
-            None,
+            store_params(&parent, source.len() as u64, &ChdCreateKind::Raw),
         )
         .expect("parent create");
 

@@ -100,6 +100,10 @@ impl CliApp {
             .with_extract_checksum_algorithms(checksum_algorithms)
             .with_extract_checksum_rom_only(checksum_rom_only);
         let created_dirs = missing_dirs_to_create(&out_dir);
+        // Outermost first, so a cancelled run removes them after the outputs they hold.
+        for dir in created_dirs.iter().rev() {
+            rom_weaver_core::register_in_progress_output(dir);
+        }
         let handler = match self.probe_extract_source(&source, &out_dir, &context) {
             Ok(handler) => handler,
             Err(report) => {

@@ -636,6 +636,8 @@ impl ContainerHandlerOperations for CsoContainerHandler {
             })
         };
         if let Err(error) = decode_result {
+            // Close the output first: Windows cannot remove an open file.
+            drop(extract_writer);
             let _ = fs::remove_file(&output_path);
             return Err(error);
         }

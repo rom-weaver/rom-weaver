@@ -1350,7 +1350,14 @@ impl CliApp {
             level: None,
             parent: None,
         };
-        let report = handler.create(&request, context)?;
+        let report = match handler.create(&request, context) {
+            Ok(report) => report,
+            Err(error) => {
+                // A failed or cancelled create leaves a partial archive.
+                let _ = fs::remove_file(&temp_output);
+                return Err(error);
+            }
+        };
         if report.status != OperationStatus::Succeeded {
             let _ = fs::remove_file(&temp_output);
             return Err(RomWeaverError::Validation(format!(

@@ -1636,10 +1636,13 @@ fn read_disc_tracks_keeps_legacy_unaligned_gd_streams() {
     handler
         .create_uncompressed_rust_raw(
             &input,
-            &output,
-            3 * 2448,
-            &ChdCreateKind::Disc(layout),
-            None,
+            UncompressedCreateParams {
+                output: &output,
+                logical_bytes: 3 * 2448,
+                create_kind: &ChdCreateKind::Disc(layout),
+                on_progress: None,
+                cancel: &CancellationToken::new(),
+            },
         )
         .expect("write legacy gd chd");
 

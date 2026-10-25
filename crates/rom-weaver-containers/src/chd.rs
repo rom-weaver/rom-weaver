@@ -17,7 +17,7 @@ use crate::extract_support::{
 use rom_weaver_checksum::{StreamingChecksum, detect_rom_identity_for_path};
 use rom_weaver_core::codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
-    ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
+    CancellationToken, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, CreateInputOverride,
     CreateInputSource, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError, SelectionMatcher,

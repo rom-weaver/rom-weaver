@@ -1060,6 +1060,7 @@ impl ChdContainerHandler {
         chd: &ChdReadSession,
         thread_count: usize,
         on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+        cancel: &CancellationToken,
         mut on_frame: F,
     ) -> Result<()>
     where
@@ -1068,7 +1069,7 @@ impl ChdContainerHandler {
         let frame_len = Self::CD_FRAME_BYTES as usize;
         let mut frame = vec![0_u8; frame_len];
         let mut filled = 0_usize;
-        chd.stream_with_progress(thread_count, on_progress, |chunk| {
+        chd.stream_with_progress(thread_count, on_progress, cancel, |chunk| {
             let mut offset = 0_usize;
             while offset < chunk.len() {
                 if filled == 0 {
@@ -1423,6 +1424,7 @@ impl ChdContainerHandler {
             chd,
             execution.effective_threads,
             Some(extract_progress),
+            context.cancel(),
             |frame| {
                 router.route_frame(frame, |_track_index, track, data| {
                     if write_single_bin && track.has_subcode {
@@ -1871,6 +1873,7 @@ impl PerTrackOutputs {
             inputs.chd,
             inputs.execution.effective_threads,
             Some(inputs.extract_progress),
+            inputs.context.cancel(),
             |frame| {
                 router.route_frame(frame, |track_index, track, data| {
                     if write_tracks[track_index] {
