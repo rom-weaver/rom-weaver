@@ -3,6 +3,21 @@ use super::*;
 const CHECKSUM_VARIANT_CHUNK_SIZE: usize = 1024 * 1024;
 
 impl CliApp {
+    /// Thread plan reported for hashing a `file_len`-byte file through the variant engine: one
+    /// worker per algorithm, or single-threaded below the shared cut-off, where every variant
+    /// hashes inline whatever the budget. Progress events and the final report MUST share it.
+    pub(super) fn checksum_variant_execution(
+        context: &OperationContext,
+        algorithm_count: usize,
+        file_len: u64,
+    ) -> ThreadExecution {
+        context.plan_threads(if parallel_hashing_pays_off(file_len) {
+            ThreadCapability::parallel(Some(algorithm_count.max(1)))
+        } else {
+            ThreadCapability::single_threaded()
+        })
+    }
+
     /// Stream applicable checksum variants through `rom-weaver-checksum`, then
     /// finish deferred header repairs with an extra read when needed.
     /// Progress events use the invoking command's name and format.
@@ -27,10 +42,9 @@ impl CliApp {
         let name_hint = request.source.file_name().and_then(|name| name.to_str());
         // Give the variant engine the full shared budget so it can split threads
         // across variants. Report the per-variant algorithm cap, matching the
-        // common single-variant worker count and failure paths.
+        // common single-variant worker count and the callers' progress events.
         let engine_budget = context.variant_hash_execution().effective_threads;
-        let execution =
-            context.plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1))));
+        let execution = Self::checksum_variant_execution(context, algorithms.len(), file_len);
         trace!(
             source = %request.source.display(),
             file_len,

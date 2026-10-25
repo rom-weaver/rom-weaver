@@ -894,6 +894,41 @@ fn ingest_rom_archive_extracts_and_checksums() {
 }
 
 #[test]
+fn ingest_reports_small_rom_checksums_as_single_threaded() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), with_nes_header(b"small rom payload")).expect("rom fixture");
+    let out_dir = temp.child("ingest-out");
+
+    let events = run_json_events(
+        &[
+            "ingest",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "4",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let checksum_events = events
+        .iter()
+        .filter(|event| event["stage"] == "checksum" && event["status"] == "running")
+        .collect::<Vec<_>>();
+    assert!(
+        !checksum_events.is_empty(),
+        "expected checksum progress events"
+    );
+    for event in checksum_events {
+        assert_eq!(event["effective_threads"], 1, "event: {event}");
+        assert_eq!(event["used_parallelism"], false, "event: {event}");
+    }
+}
+
+#[test]
 fn ingest_nested_rom_archive_descends_to_leaf() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");

@@ -50,8 +50,8 @@ use rom_weaver_checksum::rom_headers::{
 use rom_weaver_checksum::{
     ChecksumProgress, IdentityPrefix, NativeChecksumEngine, StreamingVariantChecksums,
     VariantOutput, VariantRow, checksum_file_values, finish_deferred_fix_header,
-    n64_byte_order_from_row_id, supported_algorithms, unsupported_checksum_algorithm,
-    unsupported_checksum_algorithm_message,
+    n64_byte_order_from_row_id, parallel_hashing_pays_off, supported_algorithms,
+    unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
 };
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,

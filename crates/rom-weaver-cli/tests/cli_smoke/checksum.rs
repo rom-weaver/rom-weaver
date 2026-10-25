@@ -193,6 +193,42 @@ fn checksum_reports_auto_thread_mode() {
 }
 
 #[test]
+fn checksum_reports_small_files_as_single_threaded_in_every_event() {
+    let temp = setup_temp_dir();
+    temp.child("sample.bin")
+        .write_str("small enough to hash inline")
+        .expect("fixture");
+
+    let events = run_json_events(
+        &[
+            "checksum",
+            "--input",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--threads",
+            "4",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let running = events
+        .iter()
+        .filter(|event| event["stage"] == "checksum" && event["status"] == "running")
+        .collect::<Vec<_>>();
+    assert!(!running.is_empty(), "expected checksum progress events");
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "succeeded");
+    for event in running.into_iter().chain([terminal]) {
+        assert_eq!(event["effective_threads"], 1, "event: {event}");
+        assert_eq!(event["used_parallelism"], false, "event: {event}");
+    }
+}
+
+#[test]
 fn checksum_supports_sha256_blake3_and_crc32c() {
     let temp = setup_temp_dir();
     temp.child("sample.bin")
