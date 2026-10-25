@@ -7,7 +7,9 @@ type EmulatorDocumentOptions = {
   /**
    * Build a silent player for an unattended boot check. It starts at once,
    * never takes focus, and leaves out the save and audio bridges, so it
-   * cannot read or overwrite the saves and settings that the Test player owns.
+   * never imports or exports the app saves that the Test player owns, and it
+   * leaves the saved settings alone. EmulatorJS still mounts its own IDBFS
+   * save folder, but RetroArch autosaves only after 60 s.
    */
   headless?: boolean;
 };

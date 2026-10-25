@@ -83,8 +83,8 @@ const openOutputOptions = async () => {
   await expect.poll(() => document.getElementById("rom-weaver-checkbox-verify-boot")).toBeInstanceOf(HTMLInputElement);
 };
 
-const applyFiles = async ({ patch, rom }) => {
-  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression: "none" } } }));
+const applyFiles = async ({ patch, rom }, compression = "none") => {
+  mount(createElement(ApplyPatchForm, { defaultSettings: { output: { compression } } }));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), rom);
   selectFileInput(document.getElementById("rom-weaver-input-file-unified"), patch);
@@ -216,3 +216,33 @@ test("the boot check names a PlayStation .bin track the way the Test player does
   await expect(check).rejects.toMatchObject({ name: "AbortError" });
   expect(frames[0].srcdoc).toContain(`${checksum}.bin`);
 });
+
+// A zip output hides the FDS image until the check extracts it, so the
+// extracted ROM MUST pass the same gate.
+test(
+  "Apply with Verify boot on never boots a Famicom Disk System image inside a zip output",
+  async () => {
+    await applyFiles(
+      {
+        patch: new File([createIpsPatch(64, [0x42])], "disk.ips"),
+        rom: new File([createFdsImage(false)], "disk.nes"),
+      },
+      "zip",
+    );
+    await openOutputOptions();
+    const option = document.getElementById("rom-weaver-checkbox-verify-boot");
+    if (!option.checked) await userEvent.click(option);
+    const watcher = watchBootCheckFrames();
+    try {
+      await clickApply();
+      // The check shows Checking while it extracts the zip, then nothing.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await expect.poll(() => document.getElementById("rom-weaver-boot-check"), { timeout: 30_000 }).toBeNull();
+    } finally {
+      watcher.stop();
+    }
+    expect(document.getElementById("rom-weaver-boot-check")).toBeNull();
+    expect(watcher.frames).toEqual([]);
+  },
+  CASE_TIMEOUT_MS,
+);

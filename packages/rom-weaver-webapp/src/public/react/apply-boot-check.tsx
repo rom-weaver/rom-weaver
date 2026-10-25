@@ -87,6 +87,14 @@ const useBootCheck = (
       if (await hasFdsDiskSignature(blob)) return null;
       if (!signal.aborted) setState({ status: "checking" });
       const loaded = await loadEmulatorRom(blob, output.fileName, { signal });
+      // An archive output hides the ROM until it is extracted, so the
+      // extracted ROM passes the same gates Test applies to it.
+      if (
+        requiresUnsuppliedBios({ fileName: loaded.fileName, platform: loaded.platform ?? platform }) ||
+        (await hasFdsDiskSignature(loaded.blob))
+      ) {
+        return null;
+      }
       handedToPlayer = true;
       return runEmulatorBootCheck({
         audioContext,
@@ -103,6 +111,7 @@ const useBootCheck = (
       .then((result) => {
         if (!result) {
           logger.debug("Boot check skipped: FDS image", { core, fileName: output.fileName });
+          if (!signal.aborted) setState(null);
           return;
         }
         logger.debug("Boot check finished", { core, fileName: output.fileName, status: result.status });
