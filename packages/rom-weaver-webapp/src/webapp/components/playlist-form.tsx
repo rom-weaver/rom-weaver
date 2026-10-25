@@ -313,7 +313,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
     addFiles(pageDrop.files.map(toDisc));
     pageDrop.onConsumed?.();
   }, [addFiles, pageDrop]);
-  // Discs handed over by Extract or Compress.
+  // Discs handed over by Extract.
   useEffect(() => {
     const take = () => {
       const handed = takePlaylistHandoff();

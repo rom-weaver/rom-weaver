@@ -1,5 +1,5 @@
 /**
- * Hands the discs of a finished Extract or Compress run to the Playlist tool.
+ * Hands the discs of a finished Extract run to the Playlist tool.
  * The sender stores the files and switches the view; the Playlist form takes
  * them when it mounts or, if it is already mounted, as they arrive.
  */

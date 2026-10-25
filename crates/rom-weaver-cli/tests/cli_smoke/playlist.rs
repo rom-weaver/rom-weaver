@@ -751,3 +751,58 @@ fn playlist_names_a_read_only_output_folder() {
         );
     }
 }
+
+#[test]
+fn playlist_dry_run_refuses_a_file_where_the_game_folder_goes() {
+    let temp = setup_temp_dir();
+    let discs = temp.child("discs");
+    fs::create_dir_all(discs.path()).expect("discs dir");
+    for stem in ["FF (USA) (Disc 1)", "FF (USA) (Disc 2)"] {
+        write_cue_disc(discs.path(), stem);
+    }
+    let cue = |stem: &str| discs.path().join(format!("{stem}.cue"));
+    let (one, two) = (cue("FF (USA) (Disc 1)"), cue("FF (USA) (Disc 2)"));
+    let inputs = [one.to_str().expect("p"), two.to_str().expect("p")];
+    for (layout, blocker) in [("folder", "FF (USA)"), ("m3u-folder", "FF (USA).m3u")] {
+        let roms = temp.child(format!("roms-{layout}"));
+        fs::create_dir_all(roms.path()).expect("roms dir");
+        fs::write(roms.path().join(blocker), "a flat playlist\n").expect("blocker");
+        let json = run_single_json_event(
+            &playlist_args(
+                &inputs,
+                roms.path().to_str().expect("p"),
+                &["--layout", layout, "--dry-run"],
+            ),
+            1,
+        );
+        assert!(
+            json.to_string()
+                .contains(&format!("{blocker}` is a file, so it cannot hold")),
+            "{layout}: {json}"
+        );
+    }
+}
+
+#[test]
+fn playlist_refuses_stdout_output() {
+    let temp = setup_temp_dir();
+    write_cue_disc(temp.path(), "Game (Disc 1)");
+    let cue = temp.path().join("Game (Disc 1).cue");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["playlist", "--input"])
+        .arg(&cue)
+        .args(["--output", "-", "--json"])
+        .current_dir(temp.path())
+        .output()
+        .expect("run playlist");
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("playlist cannot write to stdout"),
+        "{output:?}"
+    );
+    assert!(
+        !temp.path().join("-").exists(),
+        "`-` must not become a folder"
+    );
+}

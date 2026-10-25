@@ -267,6 +267,12 @@ enum PlaylistOutput {
 
 impl PlaylistOutput {
     fn from_path(path: &Path) -> Result<Self> {
+        if path == Path::new("-") {
+            return Err(RomWeaverError::Validation(
+                "playlist cannot write to stdout; give a .m3u, .zip, or folder --output"
+                    .to_string(),
+            ));
+        }
         let text = path.as_os_str().to_string_lossy();
         if text.ends_with(['/', std::path::MAIN_SEPARATOR]) || path.is_dir() {
             return Ok(Self::Folder);
@@ -615,9 +621,17 @@ impl PlaylistJob {
         }
         self.entries
             .iter()
-            .map(|entry| self.output.join(&entry.path))
+            .map(|entry| folder_target(&self.output, &entry.path))
             .collect()
     }
+}
+
+/// Where a folder output writes an entry: its `/`-separated path joined part by part, so the
+/// result uses the platform's separator.
+fn folder_target(folder: &Path, entry_path: &str) -> PathBuf {
+    entry_path
+        .split('/')
+        .fold(folder.to_path_buf(), |path, part| path.join(part))
 }
 
 /// Validate a `playlist` request and decide every file it writes, without writing any.
@@ -739,15 +753,29 @@ pub(super) fn plan_job(args: &PlaylistCommand) -> Result<PlaylistJob> {
                 file.display()
             )));
         }
-        if let Some(existing) = entries
+        for target in entries
             .iter()
-            .map(|entry| output.join(&entry.path))
-            .find(|target| fs::symlink_metadata(target).is_ok())
+            .map(|entry| folder_target(&output, &entry.path))
         {
-            return Err(RomWeaverError::Validation(format!(
-                "refusing to overwrite existing `{}`; choose a different --output folder",
-                existing.display()
-            )));
+            if fs::symlink_metadata(&target).is_ok() {
+                return Err(RomWeaverError::Validation(format!(
+                    "refusing to overwrite existing `{}`; choose a different --output folder",
+                    target.display()
+                )));
+            }
+            // A file where the game's or a disc's folder goes would stop the copy midway.
+            if let Some(file) = target
+                .ancestors()
+                .skip(1)
+                .find(|dir| !dir.as_os_str().is_empty() && dir.exists())
+                .filter(|dir| !dir.is_dir())
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "`{}` is a file, so it cannot hold `{}`; choose a different --output folder",
+                    file.display(),
+                    target.display()
+                )));
+            }
         }
     }
     for entry in &entries {
@@ -782,13 +810,14 @@ pub(super) fn playlist_failure(error: RomWeaverError) -> OperationReport {
     )
 }
 
-/// Copy a folder output's files under `folder`, never replacing a file. A failed run removes
-/// the files and folders it made, so no partial game is left behind.
+/// Copy a folder output's files under `folder`, never replacing a file. A failed or cancelled
+/// run removes the files and folders it made, so no partial game is left behind.
 fn write_playlist_folder(
     folder: &Path,
     targets: &[PathBuf],
     entries: &[BundleEntry],
 ) -> Result<()> {
+    let token = rom_weaver_core::process_cancellation_token();
     let mut made_dirs: Vec<PathBuf> = Vec::new();
     let mut made_files: Vec<&Path> = Vec::new();
     let result = (|| -> Result<()> {
@@ -806,6 +835,8 @@ fn write_playlist_folder(
                 .create_new(true)
                 .open(target)
                 .io_op(IoOp::Create, target)?;
+            // A forced second Ctrl-C exits without unwinding; the registry still removes this.
+            rom_weaver_core::register_in_progress_output(target);
             made_files.push(target.as_path());
             match &entry.source {
                 BundleSource::Text(text) => {
@@ -813,13 +844,24 @@ fn write_playlist_folder(
                 }
                 BundleSource::File(source) => {
                     let mut source = fs::File::open(source).io_op(IoOp::Open, source)?;
-                    io::copy(&mut source, &mut file).io_op(IoOp::Write, target)?;
+                    rom_weaver_core::copy_cancelable(&mut source, &mut file, &token).map_err(
+                        |error| match error {
+                            RomWeaverError::Io(error) => {
+                                RomWeaverError::io_path(IoOp::Write, target, error)
+                            }
+                            other => other,
+                        },
+                    )?;
                 }
             }
         }
-        Ok(())
+        token.check()
     })();
-    if result.is_err() {
+    if result.is_ok() {
+        for file in &made_files {
+            rom_weaver_core::complete_in_progress_output(file);
+        }
+    } else {
         for file in &made_files {
             let _ = fs::remove_file(file);
         }
@@ -864,6 +906,8 @@ impl CliApp {
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .unwrap_or_else(|| Path::new("."));
             super::path_access::check_writable_dir(parent)?;
+            // `plan_job` refused an existing output, so a cancelled run may remove this one.
+            rom_weaver_core::register_in_progress_output(&job.output);
             if job.kind == PlaylistOutput::Zip {
                 self.write_playlist_zip(&job)?;
             } else {
@@ -875,6 +919,10 @@ impl CliApp {
                 io::Write::write_all(&mut file, render_m3u(&job.lines).as_bytes())
                     .io_op(IoOp::Write, &job.output)?;
             }
+            // The ZIP writer does not stop on Ctrl-C, so a run cancelled while it wrote ends
+            // here, and the registry removes its output.
+            rom_weaver_core::process_cancellation_token().check()?;
+            rom_weaver_core::complete_in_progress_output(&job.output);
         }
         let playlist = match job.kind {
             PlaylistOutput::Folder => &writes[0],
