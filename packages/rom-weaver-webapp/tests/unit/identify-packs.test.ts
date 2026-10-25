@@ -514,3 +514,38 @@ describe("loadIdentifyTitleIndex", () => {
     await expect(loadIdentifyTitleIndex()).rejects.toThrow(/names unknown packs: not-a-pack/u);
   });
 });
+
+describe("identify pack prefetch", () => {
+  const packRequests = (fetchMock: ReturnType<typeof stubFetch>) =>
+    fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.includes(".pack"));
+
+  it("shares one pack fetch with a later loadIdentifyPackSelection for the same file", async () => {
+    const fetchMock = stubFetch();
+    const { loadIdentifyPackSelection, prefetchIdentifyPacksForFileName } =
+      await import("../../src/platform/browser/identify-packs.ts");
+    prefetchIdentifyPacksForFileName("game.gba");
+    const selection = await loadIdentifyPackSelection({ fileName: "game.gba" });
+    expect(selection.packs.map((pack) => pack.slug)).toEqual(["nintendo-game-boy-advance"]);
+    // One request per pack: the prefetch and the later lookup share it.
+    expect(packRequests(fetchMock)).toHaveLength(selection.packs.length);
+  });
+
+  it("makes no fetch for an unknown extension", async () => {
+    const fetchMock = stubFetch();
+    const { prefetchIdentifyPacksForFileName } = await import("../../src/platform/browser/identify-packs.ts");
+    prefetchIdentifyPacksForFileName("notes.txt");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("prefetches a drop only when exactly one file routes to a pack", async () => {
+    const fetchMock = stubFetch();
+    const { prefetchIdentifyPacksForDrop } = await import("../../src/platform/browser/identify-packs.ts");
+    prefetchIdentifyPacksForDrop(["a.nes", "b.gba"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    prefetchIdentifyPacksForDrop(["a.gba", "notes.txt"]);
+    await vi.waitFor(() => expect(packRequests(fetchMock)).toHaveLength(1));
+  });
+});

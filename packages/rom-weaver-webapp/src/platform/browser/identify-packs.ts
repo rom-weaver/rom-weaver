@@ -818,6 +818,15 @@ const prefetchIdentifyPacksForFileName = (fileName: string): void => {
   loadIdentifyPackSelection({ fileName }).catch(() => undefined);
 };
 
+/**
+ * Prefetch for a whole drop: only a drop with exactly one file that routes to identify slugs
+ * prefetches, because staging uses a single ROM and any other pack would be an unused download.
+ */
+const prefetchIdentifyPacksForDrop = (fileNames: readonly string[]): void => {
+  const routed = fileNames.filter((fileName) => selectIdentifySlugs({ fileName }).length);
+  if (routed.length === 1 && routed[0] !== undefined) prefetchIdentifyPacksForFileName(routed[0]);
+};
+
 /** Back-compat wrapper over {@link loadIdentifyPackSelection} that returns the packs alone. */
 const loadIdentifyPacks = async (
   hints: IdentifyPackHints,
@@ -837,6 +846,7 @@ export {
   resetIdentifyPackCache,
   loadIdentifyTitleIndex,
   mapIdentifyTitleSearchMatches,
+  prefetchIdentifyPacksForDrop,
   prefetchIdentifyPacksForFileName,
   selectIdentifySlugs,
   setIdentifyPackGroupWanted,

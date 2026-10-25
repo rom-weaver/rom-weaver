@@ -197,6 +197,8 @@ const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly
  * non-fatal because the worker-side compile remains the fallback.
  */
 const prefetchBrowserWasmModule = async (): Promise<void> => {
+  // createBrowserRunner throws on a non-isolated page, so the module could never be used there.
+  if (!canUseThreadedBrowserWasm()) return;
   await getCachedBrowserWasmModule(browserWasmUrl);
 };
 

@@ -30,15 +30,26 @@ const scheduleBrowserRuntimePreload = (preload: () => void): (() => void) => {
   return cancel;
 };
 
+const PREFETCH_INTENT_EVENTS = ["dragenter", "pointerdown", "keydown"] as const;
+
 /**
- * Run a network-and-compile-only prefetch (chunk imports, index fetch, wasm fetch) on the next task after
- * hydration. Unlike the full preload it spawns no workers, so it can run well before the 2 s timer and
- * an early drop finds the chunks and wasm module already loaded. It deliberately avoids
- * requestIdleCallback: the page is rarely idle this early, which delayed the start past an early drop.
+ * Run a network-and-compile-only prefetch (chunk imports, index fetch, wasm fetch) once, on the first
+ * sign of user intent. Starting it at page load put a 2.4 MB wasm download on the critical path of
+ * slow-network loads, so nothing runs until the visitor interacts. It spawns no workers. Returns a
+ * cancel function that removes the listeners.
  */
 const scheduleBrowserRuntimePrefetch = (prefetch: () => void): (() => void) => {
-  const timeoutId = window.setTimeout(prefetch, 0);
-  return () => window.clearTimeout(timeoutId);
+  const cancel = () => {
+    for (const eventName of PREFETCH_INTENT_EVENTS) window.removeEventListener(eventName, onIntent, true);
+  };
+  const onIntent = () => {
+    cancel();
+    prefetch();
+  };
+  for (const eventName of PREFETCH_INTENT_EVENTS) {
+    window.addEventListener(eventName, onIntent, { capture: true, passive: true });
+  }
+  return cancel;
 };
 
 export { scheduleBrowserRuntimePrefetch, scheduleBrowserRuntimePreload };

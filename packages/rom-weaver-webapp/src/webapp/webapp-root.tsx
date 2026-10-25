@@ -680,8 +680,9 @@ function WebappRoot({
     if (state.currentView === "docs" || state.currentView === "home") {
       scheduleDialogPreload();
     } else {
-      // Chunk imports and the wasm fetch/compile start on the next task; the worker pool still waits
-      // for the preload below, so an early drop skips the serial chunk chain and the wasm fetch.
+      // Chunk imports and the wasm fetch/compile start on the first user intent, never at page load
+      // (they would compete with first paint on slow networks); the worker pool still waits for the
+      // preload below.
       cancelPrefetch = scheduleBrowserRuntimePrefetch(() => {
         if (cancelled) return;
         void import("../platform/browser/browser-api.ts").catch(() => undefined);

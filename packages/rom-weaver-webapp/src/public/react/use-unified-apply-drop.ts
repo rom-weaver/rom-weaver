@@ -347,15 +347,6 @@ const useUnifiedApplyDrop = (
   }, []);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
-      // Start the extension-routed identify pack fetch now rather than after staging's coalesce
-      // window; staging's own lookup reuses the memoized request.
-      if (files.length) {
-        void import("../../platform/browser/identify-packs.ts")
-          .then(({ prefetchIdentifyPacksForFileName }) => {
-            for (const file of files) prefetchIdentifyPacksForFileName(file.name);
-          })
-          .catch(() => undefined);
-      }
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
@@ -389,6 +380,14 @@ const useUnifiedApplyDrop = (
         onSettled?.();
         return;
       }
+      // Start the extension-routed identify pack fetch now rather than after staging's coalesce
+      // window; staging's own lookup reuses the memoized request. Only a drop that routes exactly
+      // one file prefetches, and never one that was already aborted.
+      void import("../../platform/browser/identify-packs.ts")
+        .then(({ prefetchIdentifyPacksForDrop }) => {
+          if (!dropController.signal.aborted) prefetchIdentifyPacksForDrop(files.map((file) => file.name));
+        })
+        .catch(() => undefined);
       // This drop supersedes whatever the last run produced. Retire it now rather than when routing
       // finally resolves: classification is async, and until it lands the completed run's "Download"
       // button is still enabled and would hand back output built from the PREVIOUS inputs.

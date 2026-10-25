@@ -302,3 +302,24 @@ describe("runner diagnostics and batch plans", () => {
     await expect(runRomWeaverJson(command("extract"))).resolves.toEqual(success({ extracted: true }));
   });
 });
+
+describe("prefetchBrowserWasmModule", () => {
+  // A fresh module instance, so the module-level compile cache from earlier tests cannot hide a fetch.
+  const freshPrefetch = async () => {
+    vi.resetModules();
+    return (await import("../../src/workers/rom-weaver/rom-weaver-runner.ts")).prefetchBrowserWasmModule;
+  };
+
+  it("does not fetch the wasm module on a page that is not cross-origin isolated", async () => {
+    const prefetch = await freshPrefetch();
+    vi.stubGlobal("crossOriginIsolated", false);
+    await prefetch();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("fetches the wasm module once on an isolated page", async () => {
+    const prefetch = await freshPrefetch();
+    await prefetch();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
