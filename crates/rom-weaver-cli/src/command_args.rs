@@ -3532,6 +3532,93 @@ Without :level, a codec follows the --compress-level profile."
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PlaylistCommand {
+    /// Browser inputs MUST map original logical paths to their staged paths explicitly.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub staged_paths: BTreeMap<PathBuf, PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'i',
+            long = "input",
+            value_name = "DISC",
+            required = true,
+            help = "A disc file of the game (.cue, .gdi, .chd, .iso, .pbp, ...). Repeat for each disc"
+        )
+    )]
+    pub input: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short,
+            long,
+            value_name = "PATH",
+            help = "Where to write: a .m3u playlist, a .zip holding the playlist and its discs, or a folder to copy them into. Defaults to `<game>.m3u` beside the first disc"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME",
+            help = "The game's name, for the playlist, its folder, and renamed discs. Defaults to the .zip name, else the first disc's name without its disc number"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub name: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_enum,
+            default_value = "flat",
+            help = "How a .zip or folder output arranges the playlist and discs"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub layout: PlaylistLayout,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Name the discs `<game> (Disc N)` in playlist order, with track files and sheets to match. Needs a .zip or folder output"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rename: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "List the discs in the order given instead of ordering them by disc number"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_sort: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Write each disc as its bare file name, for a playlist saved in the same folder as the discs"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub flat: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveListGamesCommand {}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

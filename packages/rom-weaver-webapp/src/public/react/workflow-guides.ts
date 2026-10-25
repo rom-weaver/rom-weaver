@@ -13,6 +13,7 @@ const WORKFLOW_GUIDES = {
   create: { path: "docs/create-rom-patches", label: "ui.hero.createGuide" },
   extract: { path: "docs/extract-files-browser", label: "ui.hero.extractGuide" },
   identify: { path: "docs/identify-roms-browser", label: "ui.hero.identifyGuide" },
+  playlist: { path: "docs/make-m3u-playlist-browser", label: "ui.hero.playlistGuide" },
   ppfUndo: { path: "docs/undo-ppf-browser", label: "ui.hero.ppfUndoGuide" },
   save: { path: "docs/edit-gen3-saves", label: "ui.hero.saveGuide" },
   test: { path: "docs/test-roms", label: "ui.hero.testGuide" },

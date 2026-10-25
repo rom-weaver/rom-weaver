@@ -60,6 +60,7 @@ const navShelfTitles = [
   "Patching & weaves",
   "ROM checks",
   "Conversion & files",
+  "Disc images & playlists",
   "Saves",
   "Cheats",
   "Setup & offline",

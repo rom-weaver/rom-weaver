@@ -13,6 +13,10 @@ use rom_weaver_core::{Result, RomWeaverError};
 
 pub mod sys;
 
+#[cfg(windows)]
+use sys::archive_entry_copy_pathname_w;
+#[cfg(not(windows))]
+use sys::archive_entry_set_pathname;
 use sys::{
     ARCHIVE_EOF, ARCHIVE_FILTER_BZIP2, ARCHIVE_FILTER_GZIP, ARCHIVE_FILTER_XZ, ARCHIVE_FILTER_ZSTD,
     ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
@@ -34,9 +38,8 @@ use sys::{
     archive_read_support_format_warc, archive_read_support_format_zip,
 };
 use sys::{
-    archive_entry_free, archive_entry_new2, archive_entry_set_filetype,
-    archive_entry_set_pathname_utf8, archive_entry_set_perm, archive_entry_set_size,
-    archive_write_add_filter_none, archive_write_close, archive_write_data,
+    archive_entry_free, archive_entry_new2, archive_entry_set_filetype, archive_entry_set_perm,
+    archive_entry_set_size, archive_write_add_filter_none, archive_write_close, archive_write_data,
     archive_write_finish_entry, archive_write_free, archive_write_header, archive_write_new,
     archive_write_open, archive_write_set_bytes_in_last_block, archive_write_set_filter_option,
     archive_write_set_format_7zip, archive_write_set_format_7zip_progress_callback,

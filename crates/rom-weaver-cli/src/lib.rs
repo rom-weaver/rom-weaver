@@ -213,6 +213,34 @@ unpacking, use `probe`."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            about = "Write an .m3u playlist for a multi-disc game",
+            long_about = "\
+Write an .m3u playlist for a multi-disc game, so an emulator such as RetroArch
+can change discs.
+
+Repeat --input for each disc (.cue, .gdi, .chd, .iso, .pbp, ...). Discs are
+ordered by the number in names such as `Disc 1`, `(Disc 2)`, and `.disc02`;
+--no-sort keeps the order given instead. Each playlist line is a path
+relative to the playlist. Without --output, the playlist is `<game>.m3u`
+beside the first disc, where the game is the disc name without its number.
+
+  rom-weaver playlist -i Game.disc02.cue -i Game.disc01.cue -o Game.m3u
+
+A .zip --output holds the playlist and its discs, with the files each .cue,
+.gdi, .ccd, or .mds needs. A folder --output (ending in `/`, or without an
+extension) gets a copy of them instead. --layout arranges both for a frontend,
+and --rename names the discs `<game> (Disc N)`:
+
+  rom-weaver playlist -i 'FF7 (Disc 1).cue' -i 'FF7 (Disc 2).cue' \\
+    -o roms/psx --layout folder
+
+An existing file is never overwritten."
+        )
+    )]
+    Playlist(PlaylistCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
             about = "List the cheat database's entries for a ROM",
             long_about = "\
 List the cheat database's entries for a ROM.
@@ -1565,6 +1593,24 @@ pub enum FilterKind {
     Patch,
 }
 
+/// Where a `.zip` or folder `playlist` output puts the playlist and discs, matching what each
+/// frontend expects of a multi-disc game.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+pub enum PlaylistLayout {
+    /// `<game>.m3u` beside the discs (RetroArch, Batocera, Recalbox)
+    #[default]
+    Flat,
+    /// A `<game>` folder holding `<game>.m3u` and the discs (MinUI, muOS)
+    Folder,
+    /// A `<game>.m3u` folder holding `<game>.m3u` and the discs (ES-DE, RetroDECK)
+    M3uFolder,
+    /// `<game>.m3u` beside one folder per disc (igir)
+    DiscFolders,
+}
+
 #[path = "command_dispatch.rs"]
 mod command_dispatch;
 
@@ -1598,6 +1644,9 @@ mod identify_builtin;
 
 #[path = "identify_database.rs"]
 mod identify_database;
+
+#[path = "playlist.rs"]
+mod playlist;
 
 #[path = "ingest_command.rs"]
 mod ingest_command;
@@ -1731,7 +1780,7 @@ pub use command_args::{
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
     IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
+    PlanExtractBatchCommand, PlaylistCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
     SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
     SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand, WeaveCreateCommand,
     WeaveCreatePatchSpec, WeaveParseCommand,
