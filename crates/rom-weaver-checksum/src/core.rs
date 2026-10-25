@@ -93,6 +93,22 @@ pub(super) const MIN_CHUNK_SIZE: usize = 256 * 1024;
 pub(super) const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
 pub(super) const TARGET_CHUNKS_PER_WORKER: u64 = 8;
 pub(super) const FANOUT_PARALLEL_THRESHOLD: u64 = 8 * 1024 * 1024;
+/// Smallest input that streaming hashing starts threads for. Native threads are cheap, so they
+/// pay off from about 1 MiB. On threaded WASM each thread instantiates the module in a pool
+/// worker, and inline hashing stays faster until about 8 MiB.
+#[cfg(not(target_family = "wasm"))]
+pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = 1024 * 1024;
+#[cfg(target_family = "wasm")]
+pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = FANOUT_PARALLEL_THRESHOLD;
+
+/// Whether streaming `total_len` bytes through hashers is worth starting threads for.
+///
+/// Every size-aware streaming hasher SHOULD ask this so they share one cut-off; below it,
+/// starting threads costs more than they save.
+pub fn parallel_hashing_pays_off(total_len: u64) -> bool {
+    total_len >= STREAMING_PARALLEL_THRESHOLD
+}
+
 pub(super) const CRC32_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
 pub(super) const CRC32_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
 pub(super) const CRC32_PARALLEL_MAX_THREADS: usize = 4;

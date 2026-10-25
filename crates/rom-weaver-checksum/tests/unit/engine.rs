@@ -23,18 +23,19 @@ use super::{
     CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode, ChecksumPlan,
     ChecksumProgress, ChecksumProgressTracker, ChecksumSourceRef, Crc16State,
     FANOUT_PARALLEL_THRESHOLD, MAX_EAGER_MAP_RANGE_BYTES, MappedRange, NativeChecksumEngine,
-    ResolvedRange, StreamingChecksum, StreamingChecksumTiming, adler32_checksum, adler32_combine,
-    checksum_reader_values_with_progress, collect_parallel_partials_mapped,
-    collect_parallel_partials_stream, combine_adler32_partials, combine_crc16_partials,
-    combine_crc32_partials, combine_crc32c_partials, compute_parallel_adler32,
-    compute_parallel_blake3, compute_parallel_crc16, compute_parallel_crc32,
-    compute_parallel_crc32c, compute_parallel_fanout, compute_sequential,
+    ResolvedRange, STREAMING_PARALLEL_THRESHOLD, StreamingChecksum, StreamingChecksumTiming,
+    adler32_checksum, adler32_combine, checksum_reader_values_with_progress,
+    collect_parallel_partials_mapped, collect_parallel_partials_stream, combine_adler32_partials,
+    combine_crc16_partials, combine_crc32_partials, combine_crc32c_partials,
+    compute_parallel_adler32, compute_parallel_blake3, compute_parallel_crc16,
+    compute_parallel_crc32, compute_parallel_crc32c, compute_parallel_fanout, compute_sequential,
     compute_sequential_stream, crc16_arc_combine, crc32_parallel_chunk_size, crc32c_append,
     execute_plan, gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, parallel_max_threads,
     partition_algorithms, plan_checksum, supported_algorithms,
 };
 use crate::{
-    ALGORITHM_TABLE, BARE_FILENAME_ALGORITHMS, checksum_hex_len, standard_algorithm_for_hex_len,
+    ALGORITHM_TABLE, BARE_FILENAME_ALGORITHMS, checksum_hex_len, parallel_hashing_pays_off,
+    standard_algorithm_for_hex_len,
 };
 
 #[test]
@@ -355,6 +356,14 @@ fn large_multi_algorithm_request_uses_parallel_fanout() {
     let execution = parallel.thread_execution.expect("thread execution");
     assert_eq!(execution.effective_threads, 3);
     assert!(execution.used_parallelism);
+}
+
+#[test]
+fn parallel_hashing_starts_exactly_at_the_streaming_threshold() {
+    assert!(!parallel_hashing_pays_off(0));
+    assert!(!parallel_hashing_pays_off(STREAMING_PARALLEL_THRESHOLD - 1));
+    assert!(parallel_hashing_pays_off(STREAMING_PARALLEL_THRESHOLD));
+    assert!(parallel_hashing_pays_off(u64::MAX));
 }
 
 #[test]

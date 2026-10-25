@@ -27,10 +27,14 @@ impl CliApp {
         let name_hint = request.source.file_name().and_then(|name| name.to_str());
         // Give the variant engine the full shared budget so it can split threads
         // across variants. Report the per-variant algorithm cap, matching the
-        // common single-variant worker count and failure paths.
+        // common single-variant worker count and failure paths. Small files hash
+        // inline whatever the budget, so report them as single-threaded.
         let engine_budget = context.variant_hash_execution().effective_threads;
-        let execution =
-            context.plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1))));
+        let execution = context.plan_threads(if parallel_hashing_pays_off(file_len) {
+            ThreadCapability::parallel(Some(algorithms.len().max(1)))
+        } else {
+            ThreadCapability::single_threaded()
+        });
         trace!(
             source = %request.source.display(),
             file_len,

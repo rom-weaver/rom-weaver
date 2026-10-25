@@ -8,7 +8,7 @@ use std::{
 
 use rom_weaver_checksum::{
     IdentityPrefix, RomIdentity, StreamingChecksum, StreamingVariantChecksums, VariantOutput,
-    VariantRow, finish_deferred_fix_header,
+    VariantRow, finish_deferred_fix_header, parallel_hashing_pays_off,
 };
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
@@ -691,7 +691,7 @@ impl<'a> ExtractChunkWriter<'a> {
             BufWriter::new(create_extract_output_file(output_path, overwrite)?),
             bounded_items_for_threads(execution.effective_threads),
         )?;
-        let checksum = create_extract_checksum(context, true)?;
+        let checksum = create_extract_checksum(context, parallel_hashing_pays_off(total_bytes))?;
         Ok(Self {
             context,
             execution,

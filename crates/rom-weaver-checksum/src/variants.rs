@@ -19,7 +19,7 @@ use crate::rom_headers::{
     GBA_HEADER_MAGIC, KnownRomHeaderMatch, ROM_HEADER_SCAN_BYTES,
     detect_strippable_rom_header_from_prefix, header_has_nsrt_metadata,
 };
-use crate::{StreamingChecksum, StreamingChecksumTiming};
+use crate::{StreamingChecksum, StreamingChecksumTiming, parallel_hashing_pays_off};
 
 /// Largest prefix the `fix-header` variant buffers to keep hashing in one pass.
 /// Larger inputs defer the variant to the caller.
@@ -573,7 +573,13 @@ impl StreamingVariantChecksums {
             consumed: 0,
             header_buf: Vec::new(),
             state: State::Buffering,
-            hash_thread_budget: hash_thread_budget.max(1),
+            // Every hasher this engine starts, including the deferred fix-header re-read,
+            // draws on this budget, so gating it here covers them all.
+            hash_thread_budget: if parallel_hashing_pays_off(total_len) {
+                hash_thread_budget.max(1)
+            } else {
+                1
+            },
             plan_taken: false,
         })
     }
@@ -1559,6 +1565,70 @@ mod tests {
         )
         .expect("a missing deferral must not touch the filesystem");
         assert!(rows.is_empty());
+    }
+
+    /// A copier-headered SNES image, which yields a `raw` and a `remove-header` variant.
+    fn copier_headered_snes(payload_len: usize) -> Vec<u8> {
+        let mut rom = vec![0u8; 512];
+        rom.extend((0..payload_len).map(|index| (index % 251) as u8));
+        rom
+    }
+
+    fn finalize_with_budget(rom: &[u8], hash_thread_budget: usize) -> VariantOutput {
+        let algorithms = ["crc32", "md5", "sha1"].map(String::from);
+        let mut engine = StreamingVariantChecksums::new(
+            &algorithms,
+            rom.len() as u64,
+            Some("game.sfc"),
+            hash_thread_budget,
+        )
+        .expect("engine");
+        for chunk in rom.chunks(1 << 20) {
+            engine.update(chunk).expect("update");
+        }
+        engine.finalize().expect("finalize")
+    }
+
+    fn row_digests(output: &VariantOutput) -> Vec<(String, BTreeMap<String, String>)> {
+        output
+            .rows
+            .iter()
+            .map(|row| (row.id.clone(), row.checksums.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn small_inputs_hash_every_variant_inline_whatever_the_budget() {
+        let rom = copier_headered_snes(64 * 1024);
+        assert!(!parallel_hashing_pays_off(rom.len() as u64));
+
+        let inline = finalize_with_budget(&rom, 1);
+        let budgeted = finalize_with_budget(&rom, 16);
+
+        assert!(!budgeted.raw_timing.threaded);
+        assert_eq!(budgeted.raw_timing.workers, 0);
+        let digests = row_digests(&budgeted);
+        assert_eq!(
+            digests
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+            ["raw", "remove-header"]
+        );
+        assert_eq!(digests, row_digests(&inline));
+    }
+
+    #[test]
+    fn inputs_past_the_threshold_keep_threaded_variant_hashing() {
+        let rom = copier_headered_snes(9 << 20);
+        assert!(parallel_hashing_pays_off(rom.len() as u64));
+
+        let inline = finalize_with_budget(&rom, 1);
+        let budgeted = finalize_with_budget(&rom, 16);
+
+        assert!(budgeted.raw_timing.threaded);
+        assert!(budgeted.raw_timing.workers > 1);
+        assert_eq!(row_digests(&budgeted), row_digests(&inline));
     }
 
     #[test]
