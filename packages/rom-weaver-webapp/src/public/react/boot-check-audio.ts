@@ -8,11 +8,13 @@ type AudioWindow = Window & typeof globalThis & { webkitAudioContext?: AudioCont
 /**
  * A boot check runs only after a user asked for it with a click: the Apply
  * button with the option on, or ticking the option under an Apply result.
- * That click arms one check and, where the browser allows, makes the
- * AudioContext the hidden player needs. Turning the option on in Settings
- * arms nothing, so an existing result is not checked until the next Apply.
+ * That click arms one check for the form it came from and, where the browser
+ * allows, makes the AudioContext the hidden player needs. Hidden workflow
+ * panels stay mounted, so the owner keeps another form from taking the check.
+ * Turning the option on in Settings arms nothing, so an existing result is
+ * not checked until the next Apply.
  */
-let armed = false;
+let armed: { owner: string | undefined } | null = null;
 let pending: AudioContext | null = null;
 
 const closeQuietly = (context: AudioContext) => {
@@ -49,8 +51,8 @@ const createContext = (): AudioContext | null => {
  * resumes only a context created or resumed during the click itself, so
  * callers MUST call this synchronously from the click.
  */
-const prepareBootCheckAudioContext = (): void => {
-  armed = true;
+const prepareBootCheckAudioContext = (owner?: string): void => {
+  armed = { owner };
   // A queued Apply starts later without a click, so keep the context that
   // the click made instead of replacing it with one WebKit leaves suspended.
   if (pending && pending.state !== "closed") {
@@ -61,13 +63,13 @@ const prepareBootCheckAudioContext = (): void => {
 };
 
 /**
- * Take the armed check. Returns null when no click armed one. Otherwise the
- * caller owns the returned context, which can be null when the browser has
- * no Web Audio, and MUST close it or give it back.
+ * Take the armed check. Returns null when no click in this owner's form armed
+ * one. Otherwise the caller owns the returned context, which can be null when
+ * the browser has no Web Audio, and MUST close it or give it back.
  */
-const takeBootCheckAudioContext = (): { context: AudioContext | null } | null => {
-  if (!armed) return null;
-  armed = false;
+const takeBootCheckAudioContext = (owner?: string): { context: AudioContext | null } | null => {
+  if (!armed || armed.owner !== owner) return null;
+  armed = null;
   const context = pending && pending.state !== "closed" ? pending : null;
   pending = null;
   return { context };
@@ -78,8 +80,12 @@ const takeBootCheckAudioContext = (): { context: AudioContext | null } | null =>
  * can run it again. Pass the context only when no player used it; a context
  * a player used is closed here instead.
  */
-const restoreBootCheckAudioContext = (context: AudioContext | null, unused: boolean): void => {
-  armed = true;
+const restoreBootCheckAudioContext = (
+  owner: string | undefined,
+  context: AudioContext | null,
+  unused: boolean,
+): void => {
+  armed = { owner };
   if (!context) return;
   if (!unused || context.state === "closed" || (pending && pending !== context)) {
     closeQuietly(context);
@@ -88,9 +94,13 @@ const restoreBootCheckAudioContext = (context: AudioContext | null, unused: bool
   pending = context;
 };
 
-/** Disarm the next check and close its context: Apply failed, or the option went off. */
-const releaseBootCheckAudioContext = (): void => {
-  armed = false;
+/**
+ * Disarm the owner's check and close its context: Apply failed, or the option
+ * went off. A check that another form armed stays armed.
+ */
+const releaseBootCheckAudioContext = (owner?: string): void => {
+  if (armed && armed.owner !== owner) return;
+  armed = null;
   if (pending) closeQuietly(pending);
   pending = null;
 };

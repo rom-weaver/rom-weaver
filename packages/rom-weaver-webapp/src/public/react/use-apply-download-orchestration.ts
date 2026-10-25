@@ -3,6 +3,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -544,9 +545,12 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
   );
   const postApplyTestBehaviorRef = useLatestRef(usePostApplyTestBehaviorValue(settings.postApplyTestBehavior));
   const verifyBootAfterApplyRef = useLatestRef(useVerifyBootAfterApplyValue(settings.verifyBootAfterApply));
+  // Names this form's boot checks, so a hidden form cannot take them.
+  const bootCheckOwner = useId();
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
+      bootCheckOwner,
       cancelPrimaryAction: () => {
         const { lifecycle, request } = contextRef.current;
         lifecycle.setApplyQueued(false);
@@ -626,7 +630,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           (canStartApply || canQueueApply) &&
           mayHaveEmulatorCore(session.localState.romInputs[0])
         ) {
-          prepareBootCheckAudioContext();
+          prepareBootCheckAudioContext(bootCheckOwner);
         }
         if (patchChangePendingRef.current && !busy) {
           setApplyQueued(true);
@@ -777,7 +781,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         } catch (error) {
           const normalizedError = toError(error);
           // No output will come from this run, so no boot check will use the context.
-          releaseBootCheckAudioContext();
+          releaseBootCheckAudioContext(bootCheckOwner);
           if (abortController.signal.aborted && getErrorCode(normalizedError) === "CANCELLED") {
             resetCompletedOutputState();
             clearActiveApplyProgress();
@@ -803,7 +807,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef, verifyBootAfterApplyRef],
+    [bootCheckOwner, contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef, verifyBootAfterApplyRef],
   );
 };
 

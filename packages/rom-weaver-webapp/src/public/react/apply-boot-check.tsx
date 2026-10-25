@@ -41,14 +41,17 @@ const useBootCheck = (
   enabled: boolean,
   output: ApplyOutput | null | undefined,
   platform: string | undefined,
+  owner: string | undefined,
 ) => {
   // A ref, because a language change MUST NOT boot the output again.
   const localizerRef = useLatestRef(useUiLocalizer());
+  // A cancelled check re-arms only while the option is still on.
+  const enabledRef = useLatestRef(enabled);
   const [state, setState] = useState<BootCheckState | null>(null);
   useEffect(() => {
     if (!enabled) {
       // A click may have armed a check that will now never run.
-      releaseBootCheckAudioContext();
+      releaseBootCheckAudioContext(owner);
       setState(null);
       return undefined;
     }
@@ -59,7 +62,7 @@ const useBootCheck = (
     // Check only what the Test player would start: the FDS core crashes the
     // tab without the BIOS, and no core starts without WebGL 2.
     if (!(core && hasWebgl2()) || requiresUnsuppliedBios({ fileName: output.fileName, platform })) {
-      releaseBootCheckAudioContext();
+      releaseBootCheckAudioContext(owner);
       setState(null);
       return undefined;
     }
@@ -68,7 +71,7 @@ const useBootCheck = (
       setState(finished);
       return undefined;
     }
-    const armed = takeBootCheckAudioContext();
+    const armed = takeBootCheckAudioContext(owner);
     if (!armed) {
       // No click asked for this check, for example after the option was
       // turned on in Settings. The next Apply runs it.
@@ -130,19 +133,27 @@ const useBootCheck = (
         setState(result);
       })
       .finally(() => {
-        if (signal.aborted && !finishedChecks.has(output)) {
-          restoreBootCheckAudioContext(audioContext, !handedToPlayer);
+        if (signal.aborted && !finishedChecks.has(output) && enabledRef.current) {
+          restoreBootCheckAudioContext(owner, audioContext, !handedToPlayer);
           return;
         }
         if (audioContext) closeBootCheckAudioContext(audioContext);
       });
     return () => controller.abort();
-  }, [core, enabled, localizerRef, output, platform]);
+  }, [core, enabled, enabledRef, localizerRef, output, owner, platform]);
   return state;
 };
 
 /** The Apply option. Like Post Apply Test, a change here lasts for this session only. */
-export const VerifyBootField = ({ disabled, setting }: { disabled: boolean; setting: unknown }) => {
+export const VerifyBootField = ({
+  disabled,
+  owner,
+  setting,
+}: {
+  disabled: boolean;
+  owner?: string;
+  setting: unknown;
+}) => {
   const localizer = useUiLocalizer();
   const checked = useVerifyBootAfterApplyValue(setting);
   return (
@@ -156,8 +167,8 @@ export const VerifyBootField = ({ disabled, setting }: { disabled: boolean; sett
           onChange={(event) => {
             const next = event.currentTarget.checked;
             // This MUST run inside the click: see prepareBootCheckAudioContext.
-            if (next) prepareBootCheckAudioContext();
-            else releaseBootCheckAudioContext();
+            if (next) prepareBootCheckAudioContext(owner);
+            else releaseBootCheckAudioContext(owner);
             setVerifyBootAfterApplyOverride(next);
           }}
           type="checkbox"
@@ -207,15 +218,18 @@ export const BootCheckStatus = ({
   core,
   enabled,
   output,
+  owner,
   platform,
 }: {
   core: string | undefined;
   enabled: boolean;
   output?: ApplyOutput | null;
+  /** The Apply form whose clicks arm this check. */
+  owner?: string;
   platform?: string;
 }) => {
   const localizer = useUiLocalizer();
-  const state = useBootCheck(core, enabled, output, platform);
+  const state = useBootCheck(core, enabled, output, platform, owner);
   if (!state) return null;
   const { label, note } = describeResult(state, localizer);
   const Icon = STATUS_ICONS[state.status];

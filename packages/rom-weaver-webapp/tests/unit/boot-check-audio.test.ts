@@ -82,7 +82,7 @@ describe("boot check audio context", () => {
   it("re-arms a cancelled check and keeps a context no player used", () => {
     prepareBootCheckAudioContext();
     const taken = takeBootCheckAudioContext();
-    restoreBootCheckAudioContext(taken?.context ?? null, true);
+    restoreBootCheckAudioContext(undefined, taken?.context ?? null, true);
     expect(takeBootCheckAudioContext()).toEqual({ context: taken?.context });
   });
 
@@ -90,7 +90,7 @@ describe("boot check audio context", () => {
     prepareBootCheckAudioContext();
     const used = FakeAudioContext.created[0];
     takeBootCheckAudioContext();
-    restoreBootCheckAudioContext(used ? asContext(used) : null, false);
+    restoreBootCheckAudioContext(undefined, used ? asContext(used) : null, false);
     expect(used?.state).toBe("closed");
     expect(takeBootCheckAudioContext()).toEqual({ context: null });
   });
@@ -100,6 +100,23 @@ describe("boot check audio context", () => {
     releaseBootCheckAudioContext();
     expect(FakeAudioContext.created[0]?.state).toBe("closed");
     expect(takeBootCheckAudioContext()).toBeNull();
+  });
+
+  it("keeps a check that another form armed", () => {
+    prepareBootCheckAudioContext("apply");
+    const [created] = FakeAudioContext.created;
+    expect(takeBootCheckAudioContext("hidden")).toBeNull();
+    releaseBootCheckAudioContext("hidden");
+    expect(created?.state).toBe("running");
+    expect(takeBootCheckAudioContext("apply")).toEqual({ context: created });
+  });
+
+  it("re-arms a cancelled check for the form that armed it", () => {
+    prepareBootCheckAudioContext("apply");
+    const taken = takeBootCheckAudioContext("apply");
+    restoreBootCheckAudioContext("apply", taken?.context ?? null, true);
+    expect(takeBootCheckAudioContext("hidden")).toBeNull();
+    expect(takeBootCheckAudioContext("apply")).toEqual({ context: taken?.context });
   });
 
   it("still arms a check when the browser has no Web Audio", () => {

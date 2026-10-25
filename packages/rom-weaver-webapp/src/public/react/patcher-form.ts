@@ -62,6 +62,8 @@ type PatcherStackController = StoreController<PatchStackState> & {
 };
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {
+  /** Names the form's boot checks; see takeBootCheckAudioContext. */
+  bootCheckOwner?: string;
   cancelPrimaryAction?: () => void;
   setDisplayFileName: (value: string) => void;
   setUseIdentifiedName: (on: boolean) => void;

@@ -155,11 +155,13 @@ const PostApplyActionField = ({
 
 /** These fields override the read-only host settings for the current Apply session. */
 export const PostApplyBehaviorFields = ({
+  bootCheckOwner,
   disabled,
   downloadSetting,
   testSetting,
   verifyBootSetting,
 }: {
+  bootCheckOwner?: string;
   disabled: boolean;
   downloadSetting: unknown;
   testSetting: unknown;
@@ -186,7 +188,7 @@ export const PostApplyBehaviorFields = ({
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
       />
-      <VerifyBootField disabled={disabled} setting={verifyBootSetting} />
+      <VerifyBootField disabled={disabled} owner={bootCheckOwner} setting={verifyBootSetting} />
     </div>
   );
 };
@@ -353,7 +355,13 @@ export const ApplyOutputAction = ({
         platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
       />
-      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} platform={emulatorPlatform} />
+      <BootCheckStatus
+        core={emulatorCore}
+        enabled={verifyBoot}
+        output={completedOutput}
+        owner={controllers.output.bootCheckOwner}
+        platform={emulatorPlatform}
+      />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
       {weaveTools?.outputVerification ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-output-unverified">

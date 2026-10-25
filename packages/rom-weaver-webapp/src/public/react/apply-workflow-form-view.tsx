@@ -773,6 +773,7 @@ function ApplyWorkflowFormView({
     <>
       {renderOutputHeaderField()}
       <PostApplyBehaviorFields
+        bootCheckOwner={controllers.output.bootCheckOwner}
         disabled={outputDisabled}
         downloadSetting={settings.postApplyDownloadBehavior}
         testSetting={settings.postApplyTestBehavior}
