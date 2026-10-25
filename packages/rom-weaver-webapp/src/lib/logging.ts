@@ -164,14 +164,55 @@ const emitLogRecord = (
   const configuredLevel =
     options && "level" in options ? normalizeLogLevel(options.level, globalLogLevel) : globalLogLevel;
   if (!shouldLog(level, configuredLevel)) return;
-  const record: LogRecord = {
-    details: sanitizeLogDetails(details),
-    level,
-    message,
-    namespace,
-    timestamp: new Date().toISOString(),
-  };
+  const timestamp = new Date().toISOString();
+  if (deferringRecords) {
+    // Errors and warnings reach the console at once, after anything queued before them.
+    if (level !== "error" && level !== "warn") {
+      deferredRecords.push({ details, level, message, namespace, timestamp });
+      return;
+    }
+    drainDeferredLogRecords();
+  }
+  deliverLogRecord({ details, level, message, namespace, timestamp });
+};
+
+type DeferredLogRecord = Pick<LogRecord, "level" | "message" | "namespace" | "timestamp"> & { details?: LogDetails };
+
+const deferredRecords: DeferredLogRecord[] = [];
+let deferringRecords = false;
+let drainingRecords = false;
+
+const deliverLogRecord = (pending: DeferredLogRecord) => {
+  const record: LogRecord = { ...pending, details: sanitizeLogDetails(pending.details) };
   (globalLogSink || getDefaultConsoleSink())(record);
+};
+
+/** Deliver every queued record, oldest first. Records logged while draining join the queue's tail. */
+const drainDeferredLogRecords = () => {
+  if (drainingRecords) return;
+  drainingRecords = true;
+  try {
+    for (let next = deferredRecords.shift(); next; next = deferredRecords.shift()) deliverLogRecord(next);
+  } finally {
+    drainingRecords = false;
+  }
+};
+
+/** Queue info, debug and trace records (level, timestamp and order kept) until `flushDeferredLogs`, so
+ * their sanitize and sink work leaves the boot path. Warnings and errors are never queued. */
+const deferLogRecords = () => {
+  deferringRecords = true;
+};
+
+/** Deliver the queued records and return to immediate delivery. */
+const flushDeferredLogs = () => {
+  drainDeferredLogRecords();
+  deferringRecords = false;
+};
+
+/** Deliver the queued records but keep deferring; used where a later write must follow them. */
+const drainDeferredLogs = () => {
+  if (deferringRecords) drainDeferredLogRecords();
 };
 
 const emitTraceLog = (context: TraceLogContext, message: string, details: LogDetails = {}) => {
@@ -210,4 +251,12 @@ const formatLogRecord = (record: LogRecord): string =>
   `${record.timestamp} ${record.level.toUpperCase()} ${record.namespace}: ${record.message}`;
 
 export type { LogSink };
-export { configureLogger, createLogger, emitTraceLog, getConsoleLogSink };
+export {
+  configureLogger,
+  createLogger,
+  deferLogRecords,
+  drainDeferredLogs,
+  emitTraceLog,
+  flushDeferredLogs,
+  getConsoleLogSink,
+};

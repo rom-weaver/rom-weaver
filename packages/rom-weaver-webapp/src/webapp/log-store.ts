@@ -1,4 +1,11 @@
-import { configureLogger, createLogger, getConsoleLogSink, type LogSink } from "../lib/logging.ts";
+import {
+  configureLogger,
+  createLogger,
+  deferLogRecords,
+  flushDeferredLogs,
+  getConsoleLogSink,
+  type LogSink,
+} from "../lib/logging.ts";
 import type { LogLevel, LogRecord } from "../types/logging.ts";
 import { type ConsoleLogRecord, subscribeConsoleLogRecords } from "./console-log-capture.ts";
 
@@ -11,6 +18,8 @@ import { type ConsoleLogRecord, subscribeConsoleLogRecords } from "./console-log
  */
 
 const MAX_LOG_LINES = 2500;
+// Longest the boot records wait for an idle moment before they are delivered anyway.
+const BOOT_FLUSH_TIMEOUT_MS = 2000;
 
 type LogStoreEntry = LogRecord & { id: number };
 
@@ -189,11 +198,26 @@ const installLogStore = () => {
   });
   subscribeConsoleLogRecords((record) => {
     const entry = toConsoleEntry(record);
-    if (entry) push(entry);
+    if (!entry) return;
+    // The capture already delivered any boot records queued before this line, so they come first.
+    push(entry);
   });
+  // Boot records (info, debug, trace) wait for the first idle moment, then sanitize and reach the
+  // console and the store in one batch, off the path to hydration. Warnings and errors never wait.
+  deferLogRecords();
+  const flushBootRecords = () => {
+    flushDeferredLogs();
+  };
+  if (typeof requestIdleCallback === "function")
+    requestIdleCallback(flushBootRecords, { timeout: BOOT_FLUSH_TIMEOUT_MS });
+  else setTimeout(flushBootRecords, BOOT_FLUSH_TIMEOUT_MS);
   // Flush the latest entries on pagehide when the browser delivers it.
   // An abrupt termination can lose entries since the last completed storage write.
-  if (typeof window !== "undefined") window.addEventListener("pagehide", persistCurrentLog);
+  if (typeof window !== "undefined")
+    window.addEventListener("pagehide", () => {
+      flushBootRecords();
+      persistCurrentLog();
+    });
   logger.trace("Log store sink installed", { maxLines: MAX_LOG_LINES });
 };
 
@@ -204,6 +228,8 @@ const getLogEntries = (): readonly LogStoreEntry[] => {
 
 const subscribeLogEntries = (listener: () => void) => {
   listeners.add(listener);
+  // A reader is showing the live log, so the queued boot records cannot wait for idle any longer.
+  flushDeferredLogs();
   return () => {
     listeners.delete(listener);
   };

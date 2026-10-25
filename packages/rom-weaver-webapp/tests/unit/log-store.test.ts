@@ -85,3 +85,97 @@ describe("log store buffer", () => {
     expect(entries.at(-1)?.message).toBe(`entry ${pushed - 1}`);
   });
 });
+
+/**
+ * Boot records (info, debug, trace) wait for the first idle moment so their
+ * sanitize and sink work leaves the path to hydration; none may be lost.
+ */
+describe("log store boot deferral", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("keeps a boot info record out of the store until idle, then stores it once, in order", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("early one");
+    log.info("early two");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual([]);
+    vi.advanceTimersByTime(2500);
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["early one", "early two"]);
+    log.info("after boot");
+    expect(store.getLogEntries().at(-1)?.message).toBe("after boot");
+    vi.unstubAllGlobals();
+  });
+
+  it("flushes queued boot records on pagehide and puts a warning after them", async () => {
+    vi.resetModules();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("queued");
+    log.warn("immediate");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["queued", "immediate"]);
+    log.info("queued again");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(store.getLogEntries().at(-1)?.message).toBe("queued again");
+    expect(
+      JSON.parse(localStorage.getItem("currentLog") || "[]").map((entry: { message: string }) => entry.message),
+    ).toEqual(["queued", "immediate", "queued again"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("delivers queued boot records as soon as a reader subscribes, then stops deferring", async () => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    const log = logging.createLogger("boot-test");
+    log.info("before the dialog opens");
+    expect(store.getLogEntries()).toEqual([]);
+    const unsubscribe = store.subscribeLogEntries(() => undefined);
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["before the dialog opens"]);
+    log.info("while it is open");
+    expect(store.getLogEntries().at(-1)?.message).toBe("while it is open");
+    unsubscribe();
+    vi.unstubAllGlobals();
+  });
+
+  it("puts a direct console line after the boot records queued before it, in the store and the console report", async () => {
+    vi.resetModules();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    window.ROM_WEAVER_CONSOLE_LOGS?.clear();
+    const log = logging.createLogger("boot-test");
+    log.info("queued first");
+    console.log("direct line");
+    expect(store.getLogEntries().map((entry) => entry.message)).toEqual(["queued first", "direct line"]);
+    const reportLines = (window.ROM_WEAVER_CONSOLE_LOGS?.getReport().logs ?? []).map((record) => record.args.join(" "));
+    expect(reportLines).toHaveLength(2);
+    expect(reportLines[0]).toContain("boot-test: queued first");
+    expect(reportLines[1]).toBe("direct line");
+    vi.unstubAllGlobals();
+  });
+});

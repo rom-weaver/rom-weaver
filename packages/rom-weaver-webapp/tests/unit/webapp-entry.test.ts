@@ -242,6 +242,9 @@ describe("boot", () => {
     const appRoot = document.getElementById("webapp-root");
     expect(appRoot?.hasAttribute("aria-busy")).toBe(false);
     expect(appRoot?.dataset.shellSettled).toBeUndefined();
+    // Boot info records wait for the first idle moment; happy-dom has no idle callback, so deliver them here.
+    const { flushDeferredLogs } = await import("../../src/lib/logging.ts");
+    flushDeferredLogs();
     expect(consoleText()).toContain("Initializing webapp");
     expect(consoleText()).toContain("Browser environment");
   });
