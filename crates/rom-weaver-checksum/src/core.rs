@@ -95,11 +95,13 @@ pub(super) const TARGET_CHUNKS_PER_WORKER: u64 = 8;
 pub(super) const FANOUT_PARALLEL_THRESHOLD: u64 = 8 * 1024 * 1024;
 /// Smallest input that streaming hashing starts threads for. Native threads are cheap, so they
 /// pay off from about 1 MiB. On threaded WASM each thread instantiates the module in a pool
-/// worker, and inline hashing stays faster until about 8 MiB.
+/// worker, and every command also arms its pool slots up front. With the same 16-thread budget in
+/// headless Chromium, 3-algorithm hashing breaks even at about 3 MiB and 5-algorithm hashing at
+/// about 2 MiB; inline hashing wins below that.
 #[cfg(not(target_family = "wasm"))]
 pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = 1024 * 1024;
 #[cfg(target_family = "wasm")]
-pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = FANOUT_PARALLEL_THRESHOLD;
+pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = 3 * 1024 * 1024;
 
 /// Whether streaming `total_len` bytes through hashers is worth starting threads for.
 ///
