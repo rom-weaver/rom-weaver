@@ -1,6 +1,7 @@
 import { type ComponentType, lazy } from "react";
 import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
+import type { PlaylistFormProps } from "./components/playlist-form.tsx";
 import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
 import type { SaveEditorProps } from "./components/save-editor.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
@@ -27,7 +28,10 @@ type WorkflowRouteProps = {
     onSelectTab?: (id: string) => void;
     slug: string;
   };
-  extract: { pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null };
+  extract: {
+    onSelectTab?: (id: string) => void;
+    pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null;
+  };
   home: HomePageProps;
   identify: IdentifyFormProps;
   patcher: ApplyPatchFormProps;
@@ -35,6 +39,7 @@ type WorkflowRouteProps = {
     active?: boolean;
     pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null;
   };
+  playlist: PlaylistFormProps;
   "ppf-undo": PpfUndoFormProps;
   "save-editor": SaveEditorProps;
   trim: TrimPatchFormProps;
@@ -122,6 +127,9 @@ const IdentifyRoute = createWorkflowRoute("identify", () =>
 const TestRoute = createWorkflowRoute("test", () =>
   import("../public/react/emulator-test-view.tsx").then((module) => ({ default: module.EmulatorTestView })),
 );
+const PlaylistRoute = createWorkflowRoute("playlist", () =>
+  import("./components/playlist-form.tsx").then((module) => ({ default: module.PlaylistForm })),
+);
 const PpfUndoRoute = createWorkflowRoute("ppf-undo", () =>
   import("./components/ppf-undo-form.tsx").then((module) => ({ default: module.PpfUndoForm })),
 );
@@ -146,6 +154,7 @@ const WORKFLOW_ROUTES = {
   identify: IdentifyRoute,
   patcher: PatcherRoute,
   test: TestRoute,
+  playlist: PlaylistRoute,
   "ppf-undo": PpfUndoRoute,
   "save-editor": SaveEditorRoute,
   trim: TrimRoute,
@@ -162,6 +171,7 @@ const EmulatorTestRoute = TestRoute.Component;
 const ExtractRouteForm = ExtractRoute.Component;
 const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
+const PlaylistRouteForm = PlaylistRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
 const SaveEditorRouteForm = SaveEditorRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
@@ -190,6 +200,7 @@ export {
   HomePageRoute,
   IdentifyRouteForm,
   preloadDocsRouteHtml,
+  PlaylistRouteForm,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   SaveEditorRouteForm,

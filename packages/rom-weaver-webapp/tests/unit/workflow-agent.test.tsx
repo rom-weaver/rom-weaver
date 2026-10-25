@@ -51,7 +51,7 @@ test("lists all workflows and rejects same-name source replacement during approv
   );
   cleanups.push(unmount);
   const tools = setup(confirm);
-  expect(tools.call("list_workflows")).toHaveLength(11);
+  expect(tools.call("list_workflows")).toHaveLength(12);
   await expect(
     tools.call("request_workflow_action", { revision: tools.state().revision, action: "run" }),
   ).rejects.toThrow("workflow changed");

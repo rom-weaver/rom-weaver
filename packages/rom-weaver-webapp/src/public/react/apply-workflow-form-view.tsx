@@ -36,7 +36,13 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { OutputCard, type OutputCardProps } from "./components/ds/output-card.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
-import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
+import {
+  ARCHIVE_FILE_EXTENSIONS,
+  PATCH_FILE_EXTENSIONS,
+  ROM_FILE_EXTENSIONS,
+  isArchiveFileName,
+  isRomFileName,
+} from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import type {
   NoticeController,
@@ -509,7 +515,7 @@ function ApplyWorkflowFormView({
   patchInputBasis,
   onPatchInputBasisChange,
   dropError = null,
-  pendingDrops = [],
+  pendingDrops: stagedDrops = [],
   romLookupRequest,
   startup = { message: "", status: "ready" },
 }: {
@@ -811,6 +817,23 @@ function ApplyWorkflowFormView({
     onPracticeCheatSampleChange,
     onStartWeave: () => weaveTools?.setWeavePackage("patches"),
   });
+  // While the practice files download, the bench shows them as a pending card -
+  // the same loading state a real drop shows - instead of sitting empty.
+  const practiceName = sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET;
+  const pendingDrops: PendingDrop[] =
+    sampleLoading && !stagedDrops.length
+      ? [
+          {
+            downloading: true,
+            // Shaped like the card the file becomes next - an archive's pending
+            // card or a bare ROM's card - so no drawer appears and then vanishes.
+            extracting: isArchiveFileName(practiceName),
+            id: "practice-sample",
+            kind: isRomFileName(practiceName) ? "rom" : "patch",
+            name: practiceName,
+          },
+        ]
+      : stagedDrops;
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.

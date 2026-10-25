@@ -8,6 +8,7 @@ import {
   Gamepad,
   Hash,
   House,
+  ListMusic,
   PackageOpen,
   RotateCcw,
   Save as SaveIcon,
@@ -96,6 +97,7 @@ import {
   ExtractRouteForm,
   HomePageRoute,
   IdentifyRouteForm,
+  PlaylistRouteForm,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   SaveEditorRouteForm,
@@ -130,6 +132,13 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     id: "weave",
     label: "Weave Patches",
     railLabel: "Weave",
+  },
+  {
+    group: "files",
+    href: "m3u-playlist",
+    icon: <ListMusic aria-hidden="true" />,
+    id: "playlist",
+    label: "M3U playlist",
   },
   {
     group: "patches",
@@ -1200,7 +1209,10 @@ function WebappRoot({
                       updateReady={pageUpdate.ready}
                     />,
                   )}
-                  {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
+                  {workflowPanel(
+                    "extract",
+                    <ExtractRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("extract")} />,
+                  )}
                   {workflowPanel(
                     "compress",
                     <CompressRouteForm
@@ -1233,6 +1245,7 @@ function WebappRoot({
                       pageDrop={pageDropFor("trim")}
                     />,
                   )}
+                  {workflowPanel("playlist", <PlaylistRouteForm pageDrop={pageDropFor("playlist")} />)}
                   {workflowPanel(
                     "ppf-undo",
                     <PpfUndoRouteForm

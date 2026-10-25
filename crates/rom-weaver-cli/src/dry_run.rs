@@ -38,6 +38,7 @@ impl CliApp {
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(self.plan_ppf_undo_dry_run(args)),
             Commands::Setup(args) => Some(self.plan_setup_dry_run(args)),
             Commands::Identify(args) => Some(self.plan_identify_dry_run(args)),
+            Commands::Playlist(args) => Some(self.plan_playlist_dry_run(args)),
             _ => Some(self.read_only_dry_run(Self::command_name(command))),
         }
     }
@@ -112,6 +113,28 @@ impl CliApp {
                     .to_string(),
             ],
         )
+    }
+
+    fn plan_playlist_dry_run(&self, args: &PlaylistCommand) -> AppRunOutcome {
+        let command = "playlist";
+        for input in &args.input {
+            if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, input) {
+                return outcome;
+            }
+        }
+        match super::playlist::plan_job(args) {
+            Ok(job) => self.plan_succeeded(
+                command,
+                OperationFamily::Command,
+                "dry run: would write the playlist; nothing written",
+                job.writes()
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+                Vec::new(),
+            ),
+            Err(error) => self.finish(command, super::playlist::playlist_failure(error)),
+        }
     }
 
     fn plan_ingest_dry_run(&self, args: &IngestCommand) -> AppRunOutcome {

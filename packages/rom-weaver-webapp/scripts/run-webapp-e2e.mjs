@@ -51,6 +51,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "bundle-patches",
   "extract",
   "trim-rom",
+  "m3u-playlist",
   "ppf-undo",
   "save-editor",
   "whats-new",
