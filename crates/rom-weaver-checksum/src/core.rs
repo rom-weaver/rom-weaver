@@ -92,7 +92,15 @@ pub(super) const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
 pub(super) const MIN_CHUNK_SIZE: usize = 256 * 1024;
 pub(super) const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
 pub(super) const TARGET_CHUNKS_PER_WORKER: u64 = 8;
+/// Smallest range that path-based hashing fans one algorithm per thread out for. This goes through
+/// the shared rayon pool, not the streaming workers, so it has its own cut-off. On WASM the pool
+/// costs about 18 ms to start; with the default three algorithms in headless Chromium, fan-out only
+/// breaks even at about 22 MiB (5 algorithms: about 6 MiB). Natively it breaks even at about 4 MiB,
+/// but the 8 MiB gain is under 1 ms for three algorithms, so one value serves both there.
+#[cfg(not(target_family = "wasm"))]
 pub(super) const FANOUT_PARALLEL_THRESHOLD: u64 = 8 * 1024 * 1024;
+#[cfg(target_family = "wasm")]
+pub(super) const FANOUT_PARALLEL_THRESHOLD: u64 = 24 * 1024 * 1024;
 /// Smallest input that streaming hashing starts threads for. Native threads are cheap, so they
 /// pay off from about 1 MiB. On threaded WASM each thread instantiates the module in a pool
 /// worker, and every command also arms its pool slots up front. With the same 16-thread budget in
