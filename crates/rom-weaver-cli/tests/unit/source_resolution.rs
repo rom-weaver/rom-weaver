@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use rom_weaver_core::{NoninteractivePrompter, NoopProgressSink, Selection, SelectionList};
+use rom_weaver_core::{
+    CancellationToken, NoninteractivePrompter, NoopProgressSink, Selection, SelectionList,
+};
 
 use super::*;
 
@@ -208,6 +210,38 @@ fn an_archive_resolves_to_its_single_extracted_payload() {
     assert_eq!(resolved.cleanup_paths.len(), 1);
     CliApp::cleanup_temp_paths(&resolved.cleanup_paths);
     assert!(resolved.cleanup_paths.iter().all(|path| !path.exists()));
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_cancelled_nested_extract_reports_the_cancel() {
+    let dir = scratch_dir("nested-cancel");
+    let rom = dir.join("game.nes");
+    fs::write(&rom, [0x24_u8; 8]).expect("rom");
+    let app = noninteractive_app();
+    let inner = dir.join("inner.zip");
+    make_zip(&app, &inner, &[rom], &app.context(ThreadBudget::Fixed(1)));
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let cancelled = OperationContext::new(
+        ThreadBudget::Fixed(1),
+        dir.clone(),
+        Arc::new(NoopProgressSink),
+        cancel,
+    );
+
+    let error = app
+        .extract_nested_archives(
+            &dir.join("outer.zip"),
+            std::slice::from_ref(&inner),
+            no_filter(),
+            false,
+            false,
+            &cancelled,
+        )
+        .err()
+        .expect("a cancelled nested extract must not finish");
+    assert!(matches!(error, RomWeaverError::Cancelled), "{error:?}");
     fs::remove_dir_all(&dir).ok();
 }
 

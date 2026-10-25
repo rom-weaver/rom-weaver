@@ -68,6 +68,22 @@ fn local_cancellation_and_output_cleanup_have_expected_lifecycles() {
     assert!(complete.exists());
     assert!(!partial.exists());
 
+    // A new directory goes after the outputs inside it, but only once it is empty.
+    let created = temp.path().join("created");
+    let kept = temp.path().join("kept");
+    for dir in [&created, &kept] {
+        register_in_progress_output(dir);
+        fs::create_dir(dir).expect("create output directory");
+        let inner = dir.join("inner.bin");
+        fs::write(&inner, b"inner").expect("write inner output");
+        register_in_progress_output(&inner);
+    }
+    fs::write(kept.join("other.bin"), b"other").expect("write unregistered file");
+    remove_in_progress_outputs();
+    assert!(!created.exists());
+    assert!(kept.join("other.bin").exists());
+    assert!(!kept.join("inner.bin").exists());
+
     let preserved = temp.path().join("preserved.bin");
     fs::write(&preserved, b"preserved").expect("write preserved output");
     register_in_progress_output(&preserved);

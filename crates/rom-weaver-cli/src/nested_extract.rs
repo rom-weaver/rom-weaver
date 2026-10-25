@@ -125,6 +125,8 @@ impl CliApp {
             }
 
             let nested_out_dir = self.next_nested_out_dir(&source);
+            // A new path, so a cancelled run removes it once its files are gone.
+            rom_weaver_core::register_in_progress_output(&nested_out_dir);
             // Auto-extract every branch while descending: nested archives never prompt for a
             // payload selection, so an ambiguous multi-branch container fully unpacks instead of
             // pausing for input. The top-level `--select` still narrows the primary container
@@ -162,6 +164,10 @@ impl CliApp {
             });
             let step_started = std::time::Instant::now();
             let nested_report = handler.extract(&nested_request, context).map_err(|error| {
+                // A cancel stays a cancel, so the exit code and JSON report agree.
+                if matches!(error, RomWeaverError::Cancelled) {
+                    return error;
+                }
                 RomWeaverError::Validation(format!(
                     "nested extract failed for `{}` ({}): {error}",
                     source.display(),

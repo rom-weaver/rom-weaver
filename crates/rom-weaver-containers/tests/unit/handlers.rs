@@ -6211,6 +6211,19 @@ mod tests {
                 .expect("create extract fixture");
             sources.push((format, source));
         }
+        // Past the 4 MiB floor, zip and 7z extract on a decode thread beside the writer,
+        // which must notice the cancel itself.
+        let large = temp_dir.join("large.bin");
+        write_xorshift_fixture(&large, 6 * 1024 * 1024, 0x1357_9BDF);
+        for format in ["zip", "7z"] {
+            let source = temp_dir.join(format!("large.{format}"));
+            registry
+                .find_creatable_by_name(format)
+                .expect("creatable handler")
+                .create(&single_input_create_request(&large, &source, format), &live)
+                .expect("create large extract fixture");
+            sources.push((format, source));
+        }
         let gz = temp_dir.join("data.bin.gz");
         let mut encoder = flate2::write::GzEncoder::new(
             File::create(&gz).expect("create gz fixture"),
@@ -6243,9 +6256,9 @@ mod tests {
         .expect("pbp fixture");
         sources.push(("pbp", pbp));
 
-        for (format, source) in &sources {
+        for (index, (format, source)) in sources.iter().enumerate() {
             for threads in [1, 4] {
-                let out_dir = temp_dir.join(format!("out-{format}-{threads}"));
+                let out_dir = temp_dir.join(format!("out-{index}-{format}-{threads}"));
                 let error = registry
                     .find_by_name(format)
                     .expect("extract handler")
