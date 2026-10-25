@@ -825,8 +825,8 @@ function ApplyWorkflowFormView({
       ? [
           {
             downloading: true,
-            // Shaped like the card the drop path will stage, so the hand-off
-            // reserves no drawer that then vanishes.
+            // Shaped like the card the file becomes next - an archive's pending
+            // card or a bare ROM's card - so no drawer appears and then vanishes.
             extracting: isArchiveFileName(practiceName),
             id: "practice-sample",
             kind: isRomFileName(practiceName) ? "rom" : "patch",
