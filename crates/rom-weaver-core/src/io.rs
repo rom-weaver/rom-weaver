@@ -118,9 +118,11 @@ pub fn ensure_output_available(output_path: &Path, overwrite: bool) -> Result<()
 /// is written in place. Replacing a writable regular file goes through a new hidden
 /// sibling that [`StagedOutput::commit`] renames over it, so a run that fails or is
 /// cancelled leaves the original as it was. Dropping an uncommitted output removes the
-/// sibling. When no sibling can be made (an unwritable directory, a name too long for
-/// the prefix), the output is written in place as before. Native only: the browser
-/// never replaces an existing output.
+/// sibling. The output is written in place as before whenever a rename would lose
+/// something that writing in place keeps (other hard links, owner or group, extended
+/// attributes, room for both copies) or no sibling can be made (an unwritable
+/// directory, a name too long for the prefix). Native only: the browser never replaces
+/// an existing output.
 #[derive(Debug)]
 pub struct StagedOutput {
     target: PathBuf,
@@ -135,9 +137,11 @@ impl StagedOutput {
         };
         // Devices, directories, and files this process cannot write keep failing (or
         // writing) the way they always did; a rename would replace a read-only file.
-        let replaceable = fs::metadata(output).is_ok_and(|metadata| metadata.is_file())
-            && OpenOptions::new().write(true).open(output).is_ok();
-        if cfg!(target_arch = "wasm32") || !replaceable {
+        let metadata = match fs::metadata(output) {
+            Ok(metadata) if metadata.is_file() => metadata,
+            _ => return Ok(in_place()),
+        };
+        if cfg!(target_arch = "wasm32") || OpenOptions::new().write(true).open(output).is_err() {
             return Ok(in_place());
         }
         // Replace the file a symlink points at, as writing through the link did.
@@ -150,6 +154,10 @@ impl StagedOutput {
         } else {
             output.to_path_buf()
         };
+        if let Some(reason) = crate::output_replace::rename_would_lose(&target, &metadata) {
+            tracing::debug!(output = %output.display(), reason, "replacing the output in place");
+            return Ok(in_place());
+        }
         let parent = target.parent().unwrap_or_else(|| Path::new(""));
         let name = target
             .file_name()

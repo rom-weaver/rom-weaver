@@ -12,6 +12,7 @@ mod formatting;
 mod io;
 mod media_topology;
 mod n64;
+mod output_replace;
 mod parallel_heap;
 mod patch_support;
 mod progress;

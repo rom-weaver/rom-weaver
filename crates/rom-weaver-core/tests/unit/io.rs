@@ -1175,6 +1175,53 @@ fn staged_output_keeps_the_replaced_files_permissions() {
 
 #[cfg(unix)]
 #[test]
+fn staged_output_writes_in_place_when_a_rename_would_lose_something() {
+    let root = io_temp_path("staged-identity");
+    fs::create_dir_all(&root).expect("create root");
+
+    // Another hard link would keep the old content after a rename.
+    let linked = root.join("linked.zip");
+    fs::write(&linked, b"old").expect("seed output");
+    fs::hard_link(&linked, root.join("other-link.zip")).expect("hard link");
+    let staged = StagedOutput::new(&linked).expect("stage");
+    assert!(!staged.is_staged());
+    assert_eq!(staged.path(), linked);
+
+    // A plain file in the same directory is still staged.
+    let plain = root.join("plain.zip");
+    fs::write(&plain, b"old").expect("seed output");
+    assert!(StagedOutput::new(&plain).expect("stage").is_staged());
+
+    // A new file would drop a user-set extended attribute.
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        let tagged = root.join("tagged.zip");
+        fs::write(&tagged, b"old").expect("seed output");
+        let path = std::ffi::CString::new(tagged.as_os_str().as_bytes()).expect("c path");
+        let value = b"1";
+        // SAFETY: `path`, the name, and `value` are valid for the lengths passed.
+        let set = unsafe {
+            libc::setxattr(
+                path.as_ptr(),
+                c"user.rom-weaver-test".as_ptr(),
+                value.as_ptr().cast(),
+                value.len(),
+                0,
+            )
+        };
+        // Some filesystems (older tmpfs) take no user attributes; nothing to check there.
+        if set == 0 {
+            assert!(!StagedOutput::new(&tagged).expect("stage").is_staged());
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[cfg(unix)]
+#[test]
 fn staged_output_writes_in_place_when_no_sibling_can_replace_the_file() {
     use std::os::unix::fs::PermissionsExt;
 
