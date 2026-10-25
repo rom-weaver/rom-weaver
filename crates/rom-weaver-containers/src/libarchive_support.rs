@@ -537,7 +537,7 @@ pub(crate) fn write_archive_with_libarchive(
         config,
     );
     if let Err(RomWeaverError::Cancelled) = result {
-        // The cancelled output is deleted, so skip encoding what is still buffered.
+        // A cancelled archive is incomplete either way, so skip encoding what is still buffered.
         archive.abandon();
         return Err(RomWeaverError::Cancelled);
     }

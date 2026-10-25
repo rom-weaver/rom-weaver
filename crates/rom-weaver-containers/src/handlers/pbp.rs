@@ -729,6 +729,7 @@ impl PbpContainerHandler {
         tracks: &[PbpTocTrack],
         overwrite: bool,
     ) -> Result<()> {
+        ensure_extract_output_available(cue_path, overwrite)?;
         let mut writer = BufWriter::new(create_extract_output_file(cue_path, overwrite)?);
         writer.write_all(format!("FILE \"{bin_name}\" BINARY\n").as_bytes())?;
         for track in tracks {
@@ -998,6 +999,8 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 if let Some(parent) = bin_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
+                // Registered, so a cancel during a later disc removes this one too.
+                ensure_extract_output_available(&bin_path, request.overwrite)?;
                 let mut ordered_writer = OrderedChunkWriter::new(
                     BufWriter::new(create_extract_output_file(&bin_path, request.overwrite)?),
                     bounded_items_for_threads(execution.effective_threads),
