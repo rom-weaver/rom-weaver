@@ -290,6 +290,23 @@ describe("BrowserProxyRandomAccessFile reads", () => {
     expect(proxy.reads[1]).toMatchObject({ offset: READ_CACHE_BLOCK_BYTES });
   });
 
+  it("serves repeated reads that run past end of file from the cached block", () => {
+    const size = 24 * 1024;
+    proxy.setBytes("/work/rom.iso", patterned(size));
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/rom.iso");
+
+    for (let call = 0; call < 2; call += 1) {
+      const dst = new Uint8Array(64 * 1024);
+      expect(file.readAt(0, dst)).toBe(size);
+      expect(dst.subarray(0, size)).toEqual(patterned(size));
+    }
+    const tail = new Uint8Array(64);
+    expect(file.readAt(size - 10, tail)).toBe(10);
+    expect(tail[9]).toBe((size - 1) & 0xff);
+    expect(file.readAt(size, tail)).toBe(0);
+    expect(proxy.reads).toHaveLength(1);
+  });
+
   it("reports a short read at end of file", () => {
     proxy.setBytes("/work/rom.iso", patterned(8));
     const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/rom.iso");

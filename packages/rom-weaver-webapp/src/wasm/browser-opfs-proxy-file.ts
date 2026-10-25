@@ -107,9 +107,17 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       this.cacheLen = 0;
       this.cacheVersion = version;
     }
-    if (this.cacheBuf && start >= this.cacheStart && start + dst.byteLength <= this.cacheStart + this.cacheLen) {
-      dst.set(this.cacheBuf.subarray(start - this.cacheStart, start - this.cacheStart + dst.byteLength));
-      return dst.byteLength;
+    // A block shorter than the block size ended at EOF, so a request running past it is clamped to the
+    // cached end instead of missing every time.
+    const cacheEnd = this.cacheStart + this.cacheLen;
+    const reqEnd =
+      this.cacheLen < PROXY_READ_CACHE_BLOCK_BYTES
+        ? Math.min(start + dst.byteLength, cacheEnd)
+        : start + dst.byteLength;
+    if (this.cacheBuf && start >= this.cacheStart && reqEnd <= cacheEnd && start <= reqEnd) {
+      const n = reqEnd - start;
+      dst.set(this.cacheBuf.subarray(start - this.cacheStart, reqEnd - this.cacheStart));
+      return n;
     }
     if (!this.cacheBuf) {
       this.cacheBuf = new Uint8Array(PROXY_READ_CACHE_BLOCK_BYTES);
@@ -124,7 +132,8 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     if (available <= 0) return 0;
     const fromCache = Math.min(available, dst.byteLength);
     dst.set(this.cacheBuf.subarray(start - blockStart, start - blockStart + fromCache));
-    if (fromCache >= dst.byteLength) return fromCache;
+    // A short block means the fill already hit EOF, so there is no tail to fetch.
+    if (fromCache >= dst.byteLength || filled < PROXY_READ_CACHE_BLOCK_BYTES) return fromCache;
     // The request runs past the end of this 1-block cache. Returning the partial count here is a short
     // read mid-file; positional readers that do not retry (e.g. the CHD scoped reader's read_exact_at)
     // then fail with "read error". Fill the remainder directly so readAt always satisfies the full
