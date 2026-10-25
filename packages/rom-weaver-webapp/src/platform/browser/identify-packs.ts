@@ -808,6 +808,16 @@ const loadIdentifyPackForPlatform = async (
   return loadPack(system);
 };
 
+/**
+ * Start fetching the pack an extension-routed file would use, ahead of staging.
+ * Shares {@link loadPack}'s memo, so the staging lookup reuses the same request.
+ * Errors are dropped here; the staging lookup reports them.
+ */
+const prefetchIdentifyPacksForFileName = (fileName: string): void => {
+  if (!selectIdentifySlugs({ fileName }).length) return;
+  loadIdentifyPackSelection({ fileName }).catch(() => undefined);
+};
+
 /** Back-compat wrapper over {@link loadIdentifyPackSelection} that returns the packs alone. */
 const loadIdentifyPacks = async (
   hints: IdentifyPackHints,
@@ -827,6 +837,7 @@ export {
   resetIdentifyPackCache,
   loadIdentifyTitleIndex,
   mapIdentifyTitleSearchMatches,
+  prefetchIdentifyPacksForFileName,
   selectIdentifySlugs,
   setIdentifyPackGroupWanted,
 };

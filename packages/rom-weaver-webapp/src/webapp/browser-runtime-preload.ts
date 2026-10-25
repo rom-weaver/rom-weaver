@@ -30,4 +30,15 @@ const scheduleBrowserRuntimePreload = (preload: () => void): (() => void) => {
   return cancel;
 };
 
-export { scheduleBrowserRuntimePreload };
+/**
+ * Run a network-and-compile-only prefetch (chunk imports, index fetch, wasm fetch) on the next task after
+ * hydration. Unlike the full preload it spawns no workers, so it can run well before the 2 s timer and
+ * an early drop finds the chunks and wasm module already loaded. It deliberately avoids
+ * requestIdleCallback: the page is rarely idle this early, which delayed the start past an early drop.
+ */
+const scheduleBrowserRuntimePrefetch = (prefetch: () => void): (() => void) => {
+  const timeoutId = window.setTimeout(prefetch, 0);
+  return () => window.clearTimeout(timeoutId);
+};
+
+export { scheduleBrowserRuntimePrefetch, scheduleBrowserRuntimePreload };

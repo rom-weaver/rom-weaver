@@ -56,7 +56,7 @@ import {
   planDropRedirect,
   readDropEntries,
 } from "../public/react/drop-destination.ts";
-import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
+import { scheduleBrowserRuntimePrefetch, scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
@@ -676,9 +676,23 @@ function WebappRoot({
     // the visitor clicks through to preloads the same runtime, memoized, so the
     // engine is still warmed exactly once.
     let cancelPreload: () => void = () => undefined;
+    let cancelPrefetch: () => void = () => undefined;
     if (state.currentView === "docs" || state.currentView === "home") {
       scheduleDialogPreload();
     } else {
+      // Chunk imports and the wasm fetch/compile start on the next task; the worker pool still waits
+      // for the preload below, so an early drop skips the serial chunk chain and the wasm fetch.
+      cancelPrefetch = scheduleBrowserRuntimePrefetch(() => {
+        if (cancelled) return;
+        void import("../platform/browser/browser-api.ts").catch(() => undefined);
+        // The identify index and catalog gate every pack request; memoized, so a drop reuses them.
+        void import("../platform/browser/identify-packs.ts")
+          .then(({ loadIdentifyIndexAndCatalog }) => loadIdentifyIndexAndCatalog())
+          .catch(() => undefined);
+        void import("../workers/rom-weaver/rom-weaver-runner.ts")
+          .then(({ prefetchBrowserWasmModule }) => prefetchBrowserWasmModule())
+          .catch(() => undefined);
+      });
       cancelPreload = scheduleBrowserRuntimePreload(() => {
         if (cancelled) return;
         void preloadBrowserRuntime({ threads }).then(scheduleDialogPreload);
@@ -686,6 +700,7 @@ function WebappRoot({
     }
     return () => {
       cancelled = true;
+      cancelPrefetch();
       cancelPreload();
     };
   }, [notFound, state.currentView, threads]);

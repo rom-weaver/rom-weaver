@@ -191,6 +191,15 @@ const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly
   }
 };
 
+/**
+ * Fetch and compile the wasm module on the page thread without spawning workers, so a later
+ * warmup or first command finds the module cached. Safe to call repeatedly; failures are
+ * non-fatal because the worker-side compile remains the fallback.
+ */
+const prefetchBrowserWasmModule = async (): Promise<void> => {
+  await getCachedBrowserWasmModule(browserWasmUrl);
+};
+
 const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
   let proxyCount = 0;
   let totalBytes = 0;
@@ -815,6 +824,7 @@ export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,
   noteRomWeaverIoBatch,
+  prefetchBrowserWasmModule,
   recycleWarmRomWeaverRunner,
   resetRomWeaverRunner,
   resolveMaxConcurrentRunners,

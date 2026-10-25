@@ -347,6 +347,15 @@ const useUnifiedApplyDrop = (
   }, []);
   const onDrop = useCallback(
     (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
+      // Start the extension-routed identify pack fetch now rather than after staging's coalesce
+      // window; staging's own lookup reuses the memoized request.
+      if (files.length) {
+        void import("../../platform/browser/identify-packs.ts")
+          .then(({ prefetchIdentifyPacksForFileName }) => {
+            for (const file of files) prefetchIdentifyPacksForFileName(file.name);
+          })
+          .catch(() => undefined);
+      }
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
