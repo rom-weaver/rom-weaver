@@ -129,13 +129,17 @@ impl CliApp {
             Some(100.0),
             context.single_thread_execution(),
         );
-        report.details = Some(serde_json::json!({
-            "cheats": CheatCommandResult {
-                records: classified,
-                conflicts,
-                patches,
+        report.details = Some(
+            CommandResultDetails {
+                cheats: Some(CheatCommandResult {
+                    records: classified,
+                    conflicts,
+                    patches,
+                }),
+                ..CommandResultDetails::default()
             }
-        }));
+            .into_value(),
+        );
         self.finish("cheat", report)
     }
 }

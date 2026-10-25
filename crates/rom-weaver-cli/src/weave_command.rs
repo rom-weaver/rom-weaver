@@ -141,7 +141,14 @@ impl CliApp {
                 match serde_json::to_value(&result) {
                     Ok(mut value) => {
                         value["weave"] = value["bundle"].clone();
-                        report.details = Some(json!({ "bundle": value, "weave": value }));
+                        report.details = Some(
+                            CommandResultDetails {
+                                bundle: Some(value.clone()),
+                                weave: Some(value),
+                                ..CommandResultDetails::default()
+                            }
+                            .into_value(),
+                        );
                         Self::append_report_warnings(&mut report, result.warnings);
                         let paths = result
                             .rom_source

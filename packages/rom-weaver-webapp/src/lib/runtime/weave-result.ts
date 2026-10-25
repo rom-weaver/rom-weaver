@@ -17,19 +17,15 @@ import type {
   ParsedWeaveSourceRef,
 } from "../../types/weave.ts";
 import type {
-  WeaveCreateResult,
-  BundleCreateResult,
-  BundleParseResult,
   WeaveOutput,
-  WeaveParseResult,
   WeavePatchEntry,
   WeavePatchSource,
   WeaveRom,
   RomWeaverWeave,
 } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import { parsePatchDescriptor } from "./ingest-result.ts";
-import type { WireRecord } from "./run-result-parsing.ts";
-import { asRecord, toNumberValue, toStringValue } from "./strict-wire-values.ts";
+import { asRecord, getCommandResult, toNumberValue, toStringValue } from "./strict-wire-values.ts";
+import type { WireRecord } from "./strict-wire-values.ts";
 
 const toChecksumRecord = (value: unknown): Record<string, string> | undefined => {
   const record = asRecord(value);
@@ -232,10 +228,7 @@ const cheatWarnings = (weaveRecord: unknown): string[] => {
  * result).
  */
 const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undefined => {
-  const fields = asRecord(details);
-  const record = asRecord(fields?.weave ?? fields?.bundle) as
-    | WireRecord<WeaveParseResult & BundleParseResult>
-    | undefined;
+  const record = getCommandResult(details, "weave") ?? getCommandResult(details, "bundle");
   if (!record) return undefined;
   const weave = parseWeave(record.weave ?? record.bundle);
   if (!weave) return undefined;
@@ -263,10 +256,7 @@ const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undef
 
 /** Parse the `weave_create` object from a terminal event's `details`. */
 const parseWeaveCreateResult = (details: unknown): ParsedWeaveCreateResult | undefined => {
-  const fields = asRecord(details);
-  const record = asRecord(fields?.weave_create ?? fields?.bundle_create) as
-    | WireRecord<WeaveCreateResult & BundleCreateResult>
-    | undefined;
+  const record = getCommandResult(details, "weave_create") ?? getCommandResult(details, "bundle_create");
   if (!record) return undefined;
   const weavePath = toStringValue(record.weave_path ?? record.bundle_path);
   const weave = parseWeave(record.weave ?? record.bundle);

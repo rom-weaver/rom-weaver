@@ -3,6 +3,7 @@
  * Stage telemetry reports negotiated budgets; actual worker creation is recorded in thread-spawn traces.
  */
 import { resolveAppleMobileSharedMemoryMaximumPages } from "../lib/runtime/op-memory-estimate.ts";
+import { getCommandResult } from "../lib/runtime/strict-wire-values.ts";
 import type { BrowserFormatMatrixStep, BrowserFormatMatrixSummary } from "./browser-format-matrix.ts";
 import type { GuestRunJsonResult } from "./browser-matrix-guest-io.ts";
 import {
@@ -235,7 +236,7 @@ const asRecord = (value: unknown) =>
 
 /** `ingest` reports what it wrote as `details.ingest.assets[]`, not extract's `emitted_files`. */
 const getIngestedPaths = (event: RomWeaverRunJsonEvent) => {
-  const assets = asRecord(asRecord(event.details).ingest).assets;
+  const assets = getCommandResult(event.details, "ingest")?.assets;
   if (!Array.isArray(assets)) return [];
   return assets.map((asset) => String(asRecord(asset).path ?? "")).filter((path) => path.length > 0);
 };

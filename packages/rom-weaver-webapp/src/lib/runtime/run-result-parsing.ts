@@ -14,11 +14,9 @@ import {
 import { getRomWeaverFailureMessage, withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { markWasmFirstProgress } from "../perf/op-perf-marks.ts";
+import type { WireRecord } from "./strict-wire-values.ts";
 
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
-
-/** Keeps parsed field reads tied to generated Rust keys while leaving runtime values untrusted. */
-type WireRecord<T> = { [K in keyof T]?: unknown };
 
 type SimpleRuntimeProgress = {
   details?: RuntimeValue;
@@ -345,7 +343,7 @@ const ensureRomWeaverSuccess = (result: RomWeaverRunJsonResult, fallbackMessage:
   throw withRomWeaverFailureKind(new Error(getRomWeaverFailureMessage(result, fallbackMessage)), result);
 };
 
-export type { RomWeaverRunJsonResult, WireRecord };
+export type { RomWeaverRunJsonResult };
 export {
   asRecord,
   ensureRomWeaverSuccess,

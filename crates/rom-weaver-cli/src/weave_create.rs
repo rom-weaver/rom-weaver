@@ -110,8 +110,14 @@ impl CliApp {
                     Ok(mut value) => {
                         value["weave"] = value["bundle"].clone();
                         value["weave_path"] = value["bundle_path"].clone();
-                        report.details =
-                            Some(json!({ "bundle_create": value, "weave_create": value }));
+                        report.details = Some(
+                            CommandResultDetails {
+                                bundle_create: Some(value.clone()),
+                                weave_create: Some(value),
+                                ..CommandResultDetails::default()
+                            }
+                            .into_value(),
+                        );
                         Self::append_report_warnings(&mut report, result.warnings);
                         let mut paths = vec![PathBuf::from(result.bundle_path)];
                         paths.extend(result.archive_path.map(PathBuf::from));
