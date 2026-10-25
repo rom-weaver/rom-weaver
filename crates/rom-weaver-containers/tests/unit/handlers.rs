@@ -2397,6 +2397,56 @@ mod tests {
     }
 
     #[test]
+    fn pbp_multi_disc_extract_refuses_an_existing_output_before_writing_any_disc() {
+        let temp_dir = temp_dir_path("pbp-multi-existing");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let pbp_bytes = build_test_pbp_fixture(vec![
+            ("SLUS00001", build_test_pbp_iso(72, 13)),
+            ("SLUS00002", build_test_pbp_iso(80, 31)),
+        ]);
+        let source_path = temp_dir.join("multi.pbp");
+        fs::write(&source_path, pbp_bytes).expect("pbp fixture");
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let context = test_context(&temp_dir, 1);
+
+        // A later disc's image, or a sheet written after its disc's image.
+        for existing in ["multi.disc02.bin", "multi.disc01.cue"] {
+            let out_dir = temp_dir.join(format!("out-{existing}"));
+            fs::create_dir_all(&out_dir).expect("out dir");
+            fs::write(out_dir.join(existing), b"keep").expect("existing output");
+            let error = handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: source_path.clone(),
+                        out_dir: out_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        containing_archive: None,
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: false,
+                        parent: None,
+                    },
+                    &context,
+                )
+                .expect_err("an existing output refuses the extract");
+            assert!(
+                error.to_string().contains("refusing to overwrite"),
+                "{existing}: {error}"
+            );
+            let left = fs::read_dir(&out_dir)
+                .expect("read out dir")
+                .map(|entry| entry.expect("entry").file_name())
+                .collect::<Vec<_>>();
+            assert_eq!(left, vec![std::ffi::OsString::from(existing)], "{existing}");
+            assert_eq!(fs::read(out_dir.join(existing)).expect("kept"), b"keep");
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn pbp_extract_reports_missing_selection() {
         let temp_dir = temp_dir_path("pbp-missing-select");
         fs::create_dir_all(&temp_dir).expect("temp dir");

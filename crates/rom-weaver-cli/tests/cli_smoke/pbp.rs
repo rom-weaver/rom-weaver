@@ -79,6 +79,40 @@ fn extract_multi_disc_pbp_lists_every_disc_with_matching_cue_and_exact_bytes() {
 }
 
 #[test]
+fn extract_multi_disc_pbp_refuses_an_existing_later_disc_before_writing_any() {
+    let fixture = multi_disc_pbp();
+    let out_dir = fixture.temp.child("pbp-existing").path().to_path_buf();
+    fs::create_dir_all(&out_dir).expect("out dir");
+    fs::write(out_dir.join("multi.disc02.bin"), b"keep").expect("existing disc");
+
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            path_str(&fixture.pbp),
+            "--output",
+            path_str(&out_dir),
+            "--jsonl",
+        ],
+        1,
+    );
+    let mut left = fs::read_dir(&out_dir)
+        .expect("read out dir")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect::<Vec<_>>();
+    left.sort();
+    assert_eq!(
+        left,
+        ["multi.disc02.bin"],
+        "an existing later output must refuse before any disc is written"
+    );
+    assert_eq!(
+        fs::read(out_dir.join("multi.disc02.bin")).expect("kept"),
+        b"keep"
+    );
+}
+
+#[test]
 fn checksum_and_identify_report_per_disc_hashes_for_multi_disc_pbp() {
     let fixture = multi_disc_pbp();
     let database = fixture.temp.child("test.pack");
