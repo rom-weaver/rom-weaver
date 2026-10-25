@@ -1129,8 +1129,11 @@ impl CliApp {
             start: None,
             length: None,
         };
-        let thread_execution =
-            Some(context.plan_threads(ThreadCapability::parallel(Some(algorithms.len().max(1)))));
+        let thread_execution = Some(Self::checksum_variant_execution(
+            context,
+            algorithms.len(),
+            fs::metadata(hash_path)?.len(),
+        ));
         let file_name = asset.file_name.clone();
         let hash_started = std::time::SystemTime::now();
         let report = self.run_checksum_variants_with_progress(

@@ -103,8 +103,10 @@ pub(super) const STREAMING_PARALLEL_THRESHOLD: u64 = FANOUT_PARALLEL_THRESHOLD;
 
 /// Whether streaming `total_len` bytes through hashers is worth starting threads for.
 ///
-/// Every size-aware streaming hasher SHOULD ask this so they share one cut-off; below it,
-/// starting threads costs more than they save.
+/// Streaming hashers that know their output size up front SHOULD ask this so they share one
+/// cut-off; below it, starting threads costs more than they save. Variant hashing and the
+/// extract chunk writer ask it. CHD and RVZ disc extracts, whose outputs are disc-sized, still
+/// size their hashers from the operation budget.
 pub fn parallel_hashing_pays_off(total_len: u64) -> bool {
     total_len >= STREAMING_PARALLEL_THRESHOLD
 }

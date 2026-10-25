@@ -308,13 +308,23 @@ impl CliApp {
             mut cleanup_paths,
         } = resolved;
 
-        self.emit_checksum_progress(request.algorithms.len(), 0.0, &thread_execution);
-
-        let mut temp_paths = Vec::new();
         // The checksum command always hashes the full file so its output matches the inline checksum
         // computed during extract (extract has no trim step). A trimmed-boundary checksum is a
         // separate concern handled by the `trim` command, not folded into the primary value here.
         let user_requested_range = request.start.is_some() || request.length.is_some();
+        let variants_enabled = !user_requested_range;
+        // Variant hashing runs small files inline, so every event reports the plan it runs with.
+        let thread_execution = match fs::metadata(&request.source) {
+            Ok(metadata) if variants_enabled => Some(Self::checksum_variant_execution(
+                context,
+                request.algorithms.len(),
+                metadata.len(),
+            )),
+            _ => thread_execution,
+        };
+        self.emit_checksum_progress(request.algorithms.len(), 0.0, &thread_execution);
+
+        let mut temp_paths = Vec::new();
         temp_paths.append(&mut cleanup_paths);
         let checksum_stage = if request.start.is_some() || request.length.is_some() {
             "checksum-range"
@@ -322,7 +332,6 @@ impl CliApp {
             "checksum"
         };
         let checksum_algorithm_count = request.algorithms.len();
-        let variants_enabled = !user_requested_range;
         if chd_raw_sha1.is_some() && extracted_archives != 1 {
             trace!(
                 resolved_source = %resolved_source.display(),
@@ -363,14 +372,7 @@ impl CliApp {
             )
         }
         .unwrap_or_else(|error| {
-            self.checksum_error_report(
-                "checksum",
-                error,
-                Some(
-                    context
-                        .plan_threads(ThreadCapability::parallel(Some(request.algorithms.len()))),
-                ),
-            )
+            self.checksum_error_report("checksum", error, thread_execution.clone())
         });
         if report.status == OperationStatus::Succeeded && extracted_archives > 0 {
             report.label = format!(
