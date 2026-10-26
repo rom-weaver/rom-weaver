@@ -129,21 +129,35 @@ pub(crate) fn can_apply_sparse_in_memory(
             || record_count > streaming.max_records)
 }
 
-/// Patch outputs MUST retain source permissions, adding only owner-write on Unix
-/// or clearing the read-only attribute on Windows when a copy is read-only.
-/// File-to-file copying SHOULD retain the native filesystem copy fast paths.
+/// Existing outputs MUST retain their inode and permissions. New copies use native
+/// fast paths, gaining owner read/write on Unix or clearing Windows READONLY;
+/// wasm skips permission changes.
 pub(crate) fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
+    if output.exists() {
+        let mut input = File::open(input)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(output)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut input, &mut output)?;
+        return Ok(output);
+    }
     rom_weaver_core::copy_file_retrying_interrupted(input, output)?;
-    // Only read-only copies need a permission change: wasm32-wasip1 creates writable
-    // copies and does not support the chmod used by set_permissions.
     #[cfg(not(target_family = "wasm"))]
     {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+
         let mut permissions = fs::metadata(output)?.permissions();
-        if permissions.readonly() {
+        #[cfg(unix)]
+        let needs_permissions = permissions.mode() & 0o600 != 0o600;
+        #[cfg(not(unix))]
+        let needs_permissions = permissions.readonly();
+        if needs_permissions {
             #[cfg(unix)]
             {
-                use std::os::unix::fs::PermissionsExt;
-                permissions.set_mode(permissions.mode() | 0o200);
+                permissions.set_mode(permissions.mode() | 0o600);
             }
             #[cfg(not(unix))]
             {

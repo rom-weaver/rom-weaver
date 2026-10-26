@@ -104,6 +104,85 @@ fn sparse_ppf_fixture(temp: &TestDir, len: u64) -> PatchApplyRequest {
     }
 }
 
+// quality-reason: Unix owner permissions differ from the aggregate read-only flag.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_owner_read_only_input_produces_owner_rw_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 8);
+    fs::set_permissions(&request.input, fs::Permissions::from_mode(0o464)).expect("set input mode");
+
+    PpfPatchHandler::new(&PPF)
+        .apply(
+            &request,
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(0),
+        )
+        .expect("apply from owner read-only input");
+
+    assert_eq!(
+        fs::metadata(&request.output)
+            .expect("output metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o664
+    );
+    assert_eq!(
+        fs::metadata(&request.input)
+            .expect("input metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o464
+    );
+    assert_eq!(fs::read(&request.input).expect("input bytes"), [0; 8]);
+    assert_eq!(
+        fs::read(&request.output).expect("patched bytes"),
+        [0xa5, 0, 0, 0, 0, 0, 0, 0x5a]
+    );
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&request.output)
+        .expect("owner can read and write output");
+}
+
+// quality-reason: Unix metadata checks cover destination mode, ownership, and inode preservation.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_existing_output_preserves_permissions_and_ownership() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 8);
+    fs::set_permissions(&request.input, fs::Permissions::from_mode(0o640)).expect("set input mode");
+    fs::write(&request.output, [0xff; 32]).expect("existing output");
+    fs::set_permissions(&request.output, fs::Permissions::from_mode(0o604))
+        .expect("set output mode");
+    let before = fs::metadata(&request.output).expect("existing output metadata");
+
+    PpfPatchHandler::new(&PPF)
+        .apply(
+            &request,
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(0),
+        )
+        .expect("apply over existing output");
+
+    let after = fs::metadata(&request.output).expect("output metadata");
+    assert_eq!(after.mode(), before.mode(), "existing output mode");
+    assert_eq!(after.uid(), before.uid(), "existing output owner");
+    assert_eq!(after.gid(), before.gid(), "existing output group");
+    assert_eq!(after.ino(), before.ino(), "existing output inode");
+    assert_eq!(after.len(), 8, "existing output truncated to input length");
+    assert_eq!(
+        fs::read(&request.output).expect("patched bytes"),
+        [0xa5, 0, 0, 0, 0, 0, 0, 0x5a]
+    );
+    assert_eq!(fs::read(&request.input).expect("input bytes"), [0; 8]);
+}
+
 // quality-reason: Unix mode bits MUST detect inherited read-only permissions even under root.
 #[cfg(unix)]
 #[test]
