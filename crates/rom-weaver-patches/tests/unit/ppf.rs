@@ -115,8 +115,6 @@ fn sparse_ppf_read_only_input_produces_writable_output() {
         let request = sparse_ppf_fixture(&temp, len);
         fs::set_permissions(&request.input, fs::Permissions::from_mode(0o444))
             .expect("read-only input");
-        let normal = temp.child("normal.bin");
-        fs::write(&normal, []).expect("normal new-file mode");
         PpfPatchHandler::new(&PPF)
             .apply(
                 &request,
@@ -124,18 +122,23 @@ fn sparse_ppf_read_only_input_produces_writable_output() {
                     .with_patch_apply_in_memory_limit(256 * 1024 * 1024),
             )
             .expect("sparse patch MUST accept a read-only input");
+        let input_mode = fs::metadata(&request.input)
+            .expect("input metadata")
+            .permissions()
+            .mode();
+        let output_mode = fs::metadata(&request.output)
+            .expect("output metadata")
+            .permissions()
+            .mode();
         assert_eq!(
-            fs::metadata(&request.output)
-                .expect("output metadata")
-                .permissions()
-                .mode()
-                & 0o777,
-            fs::metadata(normal)
-                .expect("normal metadata")
-                .permissions()
-                .mode()
-                & 0o777,
-            "output MUST have normal new-file permissions",
+            output_mode,
+            input_mode | 0o200,
+            "copy MUST add only the owner-write bit",
+        );
+        assert_eq!(
+            output_mode & 0o022,
+            0,
+            "output MUST NOT be group/other writable",
         );
         let mut output = OpenOptions::new()
             .read(true)
@@ -584,6 +587,60 @@ fn undo_ppf_restores_the_original_rom() {
 
     assert_eq!(mismatched, 0);
     assert_eq!(fs::read(restored_path).expect("restored output"), original);
+}
+
+#[test]
+fn undo_ppf_read_only_input_produces_writable_output() {
+    let temp = TestDir::new();
+    let input = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let output = temp.child("restored.bin");
+    let (original, patched, block, record) = ppf3_blockcheck_overlap_fixture();
+    fs::write(&input, &patched).expect("patched input");
+    fs::write(
+        &patch,
+        build_ppf3_patch("PPF3 undo", 1, true, true, Some(&block), vec![record]),
+    )
+    .expect("patch");
+    let original_permissions = fs::metadata(&input).expect("input metadata").permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_readonly(true);
+    fs::set_permissions(&input, read_only).expect("read-only input");
+    assert!(!output.exists(), "undo MUST create a new output");
+
+    assert_eq!(
+        undo_ppf(&input, &patch, &output).expect("undo read-only input"),
+        0
+    );
+    assert_eq!(fs::read(&output).expect("restored bytes"), original);
+    let permissions = fs::metadata(&output)
+        .expect("output metadata")
+        .permissions();
+    assert!(!permissions.readonly(), "output MUST remain writable");
+    // quality-reason: Unix mode bits MUST catch read-only outputs even under root.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let input_mode = fs::metadata(&input)
+            .expect("input metadata")
+            .permissions()
+            .mode();
+        assert_eq!(permissions.mode(), input_mode | 0o200);
+        assert_eq!(permissions.mode() & 0o022, 0, "group/other write bits");
+    }
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output)
+        .expect("writable output");
+    assert!(
+        fs::metadata(&input)
+            .expect("input metadata")
+            .permissions()
+            .readonly()
+    );
+    assert_eq!(fs::read(&input).expect("unchanged input"), patched);
+    fs::set_permissions(&input, original_permissions).expect("restore input permissions");
 }
 
 #[test]

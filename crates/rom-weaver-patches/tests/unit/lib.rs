@@ -758,14 +758,18 @@ fn sparse_apply_defaults_preserve_untouched_bytes() {
     let temp = TestDir::new();
     let registry = PatchRegistry::new();
     for format in ["PPF", "MOD", "PAT", "APS", "APSGBA"] {
-        let len = if format == "PAT" { 64 } else { 32 } * 1024 * 1024u32;
-        let input = temp.child("source.bin");
-        let output = temp.child("output.bin");
+        let len = if format == "PAT" { 64 } else { 32 } * 1024 * 1024u32 + 65536;
+        let input = temp.child(&format!("{format}-source.bin"));
+        let output = temp.child(&format!("{format}-output.bin"));
         let patch_path = temp.child("update.patch");
         fs::File::create(&input)
             .expect("create input")
             .set_len(u64::from(len))
             .expect("size input");
+        let original_permissions = fs::metadata(&input).expect("input metadata").permissions();
+        let mut read_only = original_permissions.clone();
+        read_only.set_readonly(true);
+        fs::set_permissions(&input, read_only).expect("read-only input");
         let changes = [(0u32, 0xa5u8), (len - 1, 0x5a)];
         let mut patch = Vec::new();
         match format {
@@ -830,13 +834,47 @@ fn sparse_apply_defaults_preserve_untouched_bytes() {
             .expect("handler")
             .apply(
                 &PatchApplyRequest {
-                    input,
+                    input: input.clone(),
                     patches: vec![patch_path],
                     output: output.clone(),
                 },
                 &context,
             )
-            .expect("apply sparse patch");
+            .expect("apply sparse patch from read-only input");
+        let output_permissions = fs::metadata(&output)
+            .expect("output metadata")
+            .permissions();
+        assert!(!output_permissions.readonly(), "{format} output writable");
+        // quality-reason: Unix mode bits MUST catch read-only outputs even under root.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let input_mode = fs::metadata(&input)
+                .expect("input metadata")
+                .permissions()
+                .mode();
+            assert_eq!(
+                output_permissions.mode(),
+                input_mode | 0o200,
+                "{format} adds only owner-write"
+            );
+            assert_eq!(
+                output_permissions.mode() & 0o022,
+                0,
+                "{format} group/other write bits"
+            );
+        }
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&output)
+            .expect("output writable");
+        assert!(
+            fs::metadata(&input)
+                .expect("input metadata")
+                .permissions()
+                .readonly()
+        );
         assert_eq!(
             report.thread_execution.expect("execution").used_parallelism,
             format != "PPF",
@@ -847,5 +885,6 @@ fn sparse_apply_defaults_preserve_untouched_bytes() {
         assert_eq!(actual[0], 0xa5, "{format} first change");
         assert_eq!(actual[actual.len() - 1], 0x5a, "{format} last change");
         assert!(actual[1..actual.len() - 1].iter().all(|byte| *byte == 0));
+        fs::set_permissions(&input, original_permissions).expect("restore input permissions");
     }
 }

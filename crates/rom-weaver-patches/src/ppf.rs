@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
@@ -96,8 +96,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
     {
         fs::create_dir_all(parent)?;
     }
-    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
-    let mut output = OpenOptions::new().write(true).open(output_path)?;
+    let mut output = crate::copy_input_to_output(input_path, output_path)?;
     for record in parsed.records.iter().rev() {
         let undo = record.undo_data.as_ref().expect("validated above");
         output.seek(SeekFrom::Start(record.offset))?;

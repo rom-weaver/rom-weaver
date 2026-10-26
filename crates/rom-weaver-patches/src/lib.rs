@@ -129,18 +129,34 @@ pub(crate) fn can_apply_sparse_in_memory(
             || record_count > streaming.max_records)
 }
 
-/// Patch outputs MUST use normal new-file permissions rather than inherit source permissions.
-/// File-to-file copying SHOULD retain the native kernel copy fast path.
+/// Patch outputs MUST retain source permissions, adding only owner-write on Unix
+/// or clearing the read-only attribute on Windows when a copy is read-only.
+/// File-to-file copying SHOULD retain the native filesystem copy fast paths.
 pub(crate) fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
-    let mut input = File::open(input)?;
-    let mut output = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .read(true)
-        .write(true)
-        .open(output)?;
-    rom_weaver_core::copy_retrying_interrupted(&mut input, &mut output)?;
-    Ok(output)
+    rom_weaver_core::copy_file_retrying_interrupted(input, output)?;
+    // Only read-only copies need a permission change: wasm32-wasip1 creates writable
+    // copies and does not support the chmod used by set_permissions.
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let mut permissions = fs::metadata(output)?.permissions();
+        if permissions.readonly() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                permissions.set_mode(permissions.mode() | 0o200);
+            }
+            #[cfg(not(unix))]
+            {
+                #[expect(
+                    clippy::permissions_set_readonly_false,
+                    reason = "on Windows this only clears the read-only attribute so the output can be patched"
+                )]
+                permissions.set_readonly(false);
+            }
+            fs::set_permissions(output, permissions)?;
+        }
+    }
+    Ok(OpenOptions::new().read(true).write(true).open(output)?)
 }
 
 /// Read a chunk from both paths. `original_bytes` is zero-filled past
