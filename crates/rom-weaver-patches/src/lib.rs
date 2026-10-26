@@ -114,6 +114,8 @@ pub(crate) const APSGBA_SPARSE_STREAMING: SparseStreaming = SparseStreaming {
 
 /// Native warm-cache measurements favor streaming sparse patches above these sizes
 /// for speed and far lower memory use; dense patches stay buffered within the cap.
+/// Browser OPFS streaming of many small record writes measured slower than one
+/// buffered read/write, so the browser keeps the in-memory tier.
 pub(crate) fn can_apply_sparse_in_memory(
     context: &OperationContext,
     a: u64,
@@ -122,7 +124,9 @@ pub(crate) fn can_apply_sparse_in_memory(
     streaming: SparseStreaming,
 ) -> bool {
     can_apply_in_memory_on_apply(context, a, b)
-        && (a < streaming.min_bytes || record_count > streaming.max_records)
+        && (cfg!(target_family = "wasm")
+            || a < streaming.min_bytes
+            || record_count > streaming.max_records)
 }
 
 /// Patch outputs MUST use normal new-file permissions rather than inherit source permissions.
