@@ -831,6 +831,44 @@ mod reader_regressions {
     }
 
     #[test]
+    fn cso_decode_extract_tasks_reuse_shared_layout() {
+        let source = crate::test_support::TempPath::new(std::env::temp_dir().join(format!(
+            "rom-weaver-cso-shared-layout-{}.cso",
+            std::process::id()
+        )));
+        let handler = CsoContainerHandler::new(&crate::formats::CSO);
+        let data = v1_payload(2048 * 4 + 100);
+        for alignment in [0, 5] {
+            for corrupt_header in [true, false] {
+                let mut bytes = v1_image(&data, 2048, alignment);
+                fs::write(&source, &bytes).expect("write valid image");
+                let layout = handler.open_reader(&source).expect("valid layout").layout;
+                let metadata = if corrupt_header {
+                    &mut bytes[..24]
+                } else {
+                    &mut bytes[24..24 + layout.index.len() * 4]
+                };
+                // Tasks MUST use the saved layout after the on-disk metadata becomes invalid.
+                metadata.fill(0);
+                fs::write(&source, &bytes).expect("invalidate metadata only");
+                assert!(handler.open_reader(&source).is_err());
+                for (index, offset) in [1000, 4000, 7000].into_iter().enumerate() {
+                    let task = CsoExtractTask {
+                        index,
+                        offset,
+                        len: 1000,
+                    };
+                    let chunk = handler
+                        .decode_extract_task(&source, &layout, &task)
+                        .expect("task must not reread the header or index");
+                    assert_eq!(chunk.index, index);
+                    assert_eq!(chunk.data, data[offset as usize..offset as usize + 1000]);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn cso_v1_rejects_corrupt_deflate_and_unknown_versions() {
         let data = v1_payload(2048);
         let mut bytes = v1_image(&data, 2048, 0);
