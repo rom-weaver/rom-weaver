@@ -729,7 +729,6 @@ impl PbpContainerHandler {
         tracks: &[PbpTocTrack],
         overwrite: bool,
     ) -> Result<()> {
-        ensure_extract_output_available(cue_path, overwrite)?;
         let mut writer = BufWriter::new(create_extract_output_file(cue_path, overwrite)?);
         writer.write_all(format!("FILE \"{bin_name}\" BINARY\n").as_bytes())?;
         for track in tracks {
@@ -946,6 +945,23 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 "requested selections resolved to no extractable pbp outputs".into(),
             ));
         }
+        // Check every output before writing any, so an existing file for a later disc
+        // refuses the run instead of stopping it after earlier discs were written. New
+        // outputs are registered, so a cancel during a later disc removes this one too.
+        for (disc_index, write_cue, write_bin) in &extract_plan {
+            let output = &outputs[*disc_index];
+            for (write, name) in [
+                (*write_bin, &output.bin_name),
+                (*write_cue, &output.cue_name),
+            ] {
+                if write {
+                    ensure_extract_output_available(
+                        &request.out_dir.join(name),
+                        request.overwrite,
+                    )?;
+                }
+            }
+        }
         let total_extract_bytes =
             extract_plan
                 .iter()
@@ -999,8 +1015,6 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                 if let Some(parent) = bin_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                // Registered, so a cancel during a later disc removes this one too.
-                ensure_extract_output_available(&bin_path, request.overwrite)?;
                 let mut ordered_writer = OrderedChunkWriter::new(
                     BufWriter::new(create_extract_output_file(&bin_path, request.overwrite)?),
                     bounded_items_for_threads(execution.effective_threads),
