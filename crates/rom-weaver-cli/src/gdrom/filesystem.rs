@@ -127,6 +127,17 @@ impl<R: Read + Seek> GdRomFs<R> {
             .read_logical_range(start_sector, u64::from(entry.size))
     }
 
+    /// Read a file in logical-sector chunks, excluding its final sector padding.
+    pub fn read_file_chunks<F>(&mut self, entry: &FileEntry, emit: &mut F) -> Result<()>
+    where
+        F: FnMut(&[u8]) -> Result<()> + ?Sized,
+    {
+        let start_sector = self.track_relative_sector(entry.extent_lba)?;
+        tracing::debug!(path = %entry.path, size = entry.size, "streaming GD-ROM file");
+        self.sectors
+            .read_logical_chunks(start_sector, u64::from(entry.size), emit)
+    }
+
     /// Convert an absolute recorded LBA to a track-relative logical sector,
     /// erroring if it falls before the track start.
     fn track_relative_sector(&self, extent_lba: u32) -> Result<u64> {

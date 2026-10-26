@@ -2,7 +2,7 @@
 //!
 //! Plans ISO9660 from file sizes (reading patched sizes from VCDIFF headers),
 //! then streams raw `MODE1/2352` output one file at a time. Peak memory scales
-//! with the largest file rather than the disc.
+//! with the largest patched file rather than untouched padding or the disc.
 //!
 //! Reassembling the full disc (the low-density tracks + sheet, then optional
 //! CHD) is the caller's job.
@@ -138,7 +138,7 @@ where
     write_track(
         &plan,
         &boot_area,
-        |file| {
+        |file, emit| {
             let key = file.path.to_ascii_uppercase();
             if let Some(delta_entry) = delta_by_key.get(&key) {
                 let delta = extract_entry(dcp, delta_entry)?;
@@ -146,16 +146,17 @@ where
                     RomWeaverError::Validation(format!("internal: lost delta source `{key}`"))
                 })?;
                 let source_bytes = source.read_file(source_entry)?;
-                return rom_weaver_patches::xdelta::apply_patch_bytes(&source_bytes, &delta)
+                let patched = rom_weaver_patches::xdelta::apply_patch_bytes(&source_bytes, &delta)
                     .map_err(|err| {
                         RomWeaverError::Validation(format!(
                             "failed to apply `.dcp` delta for `{}`: {err}",
                             file.path
                         ))
-                    });
+                    })?;
+                return emit(&patched);
             }
             if let Some(verbatim_entry) = verbatim_by_key.get(&key) {
-                return extract_entry(dcp, verbatim_entry);
+                return emit(&extract_entry(dcp, verbatim_entry)?);
             }
             let source_entry = source_by_key.get(&key).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
@@ -163,7 +164,7 @@ where
                     file.path
                 ))
             })?;
-            source.read_file(source_entry)
+            source.read_file_chunks(source_entry, emit)
         },
         sink,
     )?;

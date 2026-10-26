@@ -301,3 +301,112 @@ fn plan_iso_rejects_bias_when_a_two_sector_file_end_overflows() {
 
     assert!(error.to_string().contains("volume end"), "{error}");
 }
+
+#[test]
+fn write_track_chunks_match_cooked_iso_and_sector_encoding() {
+    use super::iso_writer::write_track;
+
+    let mut files = sample_files();
+    files.push(file("AAA_EMPTY.DAT", Vec::new()));
+    files.push(file("EXACT.DAT", vec![0x31; SECTOR * 2]));
+    let entries: Vec<_> = files
+        .iter()
+        .map(|file| IsoEntry {
+            path: file.path.clone(),
+            size: file.data.len() as u32,
+        })
+        .collect();
+    let bias = GD_HIGH_DENSITY_START_LBA;
+    let plan = plan_iso(&entries, bias, IsoTimestamp::default()).unwrap();
+    let cooked = build_iso(&files, bias, IsoTimestamp::default()).unwrap();
+    let expected: Vec<_> = cooked
+        .chunks_exact(SECTOR)
+        .enumerate()
+        .flat_map(|(index, bytes)| {
+            encode_mode1_sector(bias + index as u32, bytes.try_into().unwrap())
+        })
+        .collect();
+    for chunk_size in [1, 137, SECTOR, SECTOR * 5] {
+        let mut raw = Vec::new();
+        write_track(
+            &plan,
+            &cooked[..16 * SECTOR],
+            |planned, emit| {
+                let source = files.iter().find(|file| file.path == planned.path).unwrap();
+                for bytes in source.data.chunks(chunk_size) {
+                    emit(bytes)?;
+                }
+                Ok(())
+            },
+            &mut raw,
+        )
+        .unwrap();
+        assert_eq!(raw, expected, "chunk size {chunk_size}");
+        let mut fs = GdRomFs::open(Cursor::new(raw), bias).unwrap();
+        for source in &files {
+            let entry = fs.file(&source.path).unwrap().clone();
+            let mut bytes = Vec::new();
+            fs.read_file_chunks(&entry, &mut |chunk| {
+                assert!(chunk.len() <= SECTOR);
+                bytes.extend_from_slice(chunk);
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(bytes, source.data);
+        }
+    }
+}
+
+#[test]
+fn write_track_rejects_short_and_long_streams_and_propagates_errors() {
+    use super::iso_writer::write_track;
+    use rom_weaver_core::RomWeaverError;
+
+    let plan = plan_iso(
+        &[IsoEntry {
+            path: "FILE.BIN".into(),
+            size: 3,
+        }],
+        0,
+        IsoTimestamp::default(),
+    )
+    .unwrap();
+    for bytes in [b"ab".as_slice(), b"abcd".as_slice()] {
+        let error = write_track(
+            &plan,
+            &[0; 16 * SECTOR],
+            |_, emit| emit(bytes),
+            &mut Vec::new(),
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("but layout planned 3"),
+            "{error}"
+        );
+    }
+    let error = write_track(
+        &plan,
+        &[0; 16 * SECTOR],
+        |_, _| Err(RomWeaverError::Validation("source failed".into())),
+        &mut Vec::new(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("source failed"), "{error}");
+}
+
+#[test]
+fn read_file_chunks_rejects_overruns_before_emitting() {
+    let image = build_iso(&sample_files(), 0, IsoTimestamp::default()).unwrap();
+    let mut fs = GdRomFs::open(Cursor::new(image), 0).unwrap();
+    let mut entry = fs.file("COSCAP.BIN").unwrap().clone();
+    entry.size = u32::MAX;
+    let mut emitted = false;
+    let error = fs
+        .read_file_chunks(&entry, &mut |_| {
+            emitted = true;
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(!emitted);
+    assert!(error.to_string().contains("overruns track"), "{error}");
+}
