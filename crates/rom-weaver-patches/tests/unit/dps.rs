@@ -1314,3 +1314,42 @@ fn apply_accepts_a_zero_length_copy_record_on_both_thread_paths() {
         assert_eq!(fs::read(&output_path).expect("output"), b"XY", "{threads}");
     }
 }
+
+#[test]
+fn split_parallel_writes_preserve_source_ranges_and_overlapping_literals() {
+    let temp = TestDir::new();
+    let len = crate::shared::threading::PARALLEL_WRITE_CHUNK_BYTES + 19;
+    let source: Vec<u8> = (0..len + 11).map(|i| (i % 251) as u8).collect();
+    let source_path = temp.child("split-source.bin");
+    let output_path = temp.child("split-output.bin");
+    fs::write(&source_path, &source).expect("source");
+    let records = [
+        ParsedDpsRecord::CopyFromSource {
+            output_offset: 0,
+            source_offset: 11,
+            length: len as u32,
+        },
+        ParsedDpsRecord::EmbeddedData {
+            output_offset: 1,
+            data: vec![0x5a; len - 1],
+        },
+    ];
+    let context = test_context_with_threads(&temp, 4);
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(Some(4)))
+        .expect("pool");
+    let mut output = File::create(&output_path).expect("output");
+    super::apply_dps_writes_parallel(
+        &records,
+        &source_path,
+        source.len(),
+        len,
+        &pool,
+        &context,
+        &mut output,
+    )
+    .expect("split writes");
+    let mut expected = vec![0x5a; len];
+    expected[0] = source[11];
+    assert_eq!(fs::read(output_path).expect("output"), expected);
+}

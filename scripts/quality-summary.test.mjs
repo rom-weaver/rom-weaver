@@ -85,7 +85,7 @@ test("mutation summary distinguishes an empty diff from measured outcomes", () =
         caught: 0,
         surviving: 0,
         timeouts: 0,
-        buildFailures: 0,
+        unviable: 0,
         baselineFailures: 0,
         noSelectedMutants: true,
       },

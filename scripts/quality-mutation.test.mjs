@@ -8,7 +8,7 @@ const outcome = (summary) => ({
   summary,
   log_path: "logs/parser.log",
 });
-test("mutation report keeps caught, survivors, build failures and timeouts separate", () => {
+test("mutation report keeps caught, survivors, unviable and timeouts separate", () => {
   const report = mutationSummary({
     cargo_mutants_version: "27.1.0",
     outcomes: [
@@ -22,9 +22,52 @@ test("mutation report keeps caught, survivors, build failures and timeouts separ
   assert.equal(report.caught, 1);
   assert.equal(report.surviving, 1);
   assert.equal(report.timeouts, 1);
-  assert.equal(report.buildFailures, 1);
+  assert.equal(report.unviable, 1);
   assert.equal(report.baselineFailures, 1);
+  assert.deepEqual(
+    report.survivors.map((survivor) => survivor.outcome),
+    ["MissedMutant", "Timeout"],
+  );
   assert.equal(report.survivors[0].mutant.line, 42);
+});
+test("unviable mutants do not fail an otherwise caught run", (context) => {
+  const scratch = path.resolve(".agent/quality-mutation-tests");
+  fs.mkdirSync(scratch, { recursive: true });
+  const output = fs.mkdtempSync(path.join(scratch, "run-"));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  const runner = () => {
+    fs.mkdirSync(path.join(output, "mutants.out"), { recursive: true });
+    fs.writeFileSync(
+      path.join(output, "mutants.out/outcomes.json"),
+      JSON.stringify({
+        outcomes: [
+          { scenario: "Baseline", summary: "Success" },
+          outcome("CaughtMutant"),
+          outcome("Unviable"),
+        ],
+      }),
+    );
+    return { status: 0 };
+  };
+  assert.equal(runMutation(["broad"], runner, output), 0);
+});
+test("a diff run whose selected mutants are all unviable fails", (context) => {
+  const scratch = path.resolve(".agent/quality-mutation-tests");
+  fs.mkdirSync(scratch, { recursive: true });
+  const output = fs.mkdtempSync(path.join(scratch, "run-"));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  const runner = (command, args) => {
+    if (command === "git") return { status: 0, stdout: args[0] === "merge-base" ? "abc\n" : "" };
+    fs.mkdirSync(path.join(output, "mutants.out"), { recursive: true });
+    fs.writeFileSync(
+      path.join(output, "mutants.out/outcomes.json"),
+      JSON.stringify({
+        outcomes: [{ scenario: "Baseline", summary: "Success" }, outcome("Unviable")],
+      }),
+    );
+    return { status: 0 };
+  };
+  assert.equal(runMutation(["diff", "main"], runner, output), 1);
 });
 test("unknown/absent outcomes cannot silently count as caught", () => {
   assert.throws(() => mutationSummary({}), /Missing/);
@@ -107,7 +150,7 @@ test("successful diff runs with no selected mutants report no mutation evidence"
     caught: 0,
     surviving: 0,
     timeouts: 0,
-    buildFailures: 0,
+    unviable: 0,
     baselineFailures: 0,
     equivalent: 0,
     explicitlyExcluded: [

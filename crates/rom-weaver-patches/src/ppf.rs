@@ -18,8 +18,7 @@ use crate::shared::checked::read_u16_le;
 use crate::shared::checked::read_u32_le;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
-    PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
-    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+    parallel_chunked_capability, parallel_per_record_capability, scan_create_chunks,
 };
 
 const PPF_HEADER_MIN_SIZE: usize = 56;
@@ -200,19 +199,10 @@ impl PatchHandler for PpfPatchHandler {
                 .read(true)
                 .write(true)
                 .open(&request.output)?;
-            let (execution, prepared) = run_with_optional_pool(
-                context,
-                thread_capability,
-                true,
-                |pool| prepare_ppf_writes_parallel(&parsed.records, pool, context).map(Some),
-                || {
-                    apply_records(&mut output, &parsed.records)?;
-                    Ok(None)
-                },
-            )?;
-            if let Some(prepared) = prepared {
-                apply_prepared_writes(&mut output, &prepared)?;
-            }
+            let mut execution = context.plan_threads(thread_capability);
+            trace!(records = parsed.records.len(), "ppf apply borrowed records");
+            apply_records(&mut output, &parsed.records, context)?;
+            execution.force_serial();
             output.flush()?;
             execution
         };
@@ -343,7 +333,10 @@ impl PatchHandler for PpfPatchHandler {
     }
 
     fn capabilities(&self) -> PatchCapabilities {
-        crate::threaded_create_capabilities()
+        PatchCapabilities {
+            threaded_output: false,
+            ..crate::threaded_create_capabilities()
+        }
     }
 }
 
@@ -1701,26 +1694,13 @@ fn apply_records_in_memory(records: &[PpfRecord], output: &mut [u8]) -> Result<(
     Ok(())
 }
 
-fn apply_records(file: &mut File, records: &[PpfRecord]) -> Result<()> {
+fn apply_records(file: &mut File, records: &[PpfRecord], context: &OperationContext) -> Result<()> {
     for record in records {
+        context.cancel().check()?;
         file.seek(SeekFrom::Start(record.offset))?;
         file.write_all(&record.data)?;
     }
     Ok(())
-}
-
-fn prepare_ppf_writes_parallel(
-    records: &[PpfRecord],
-    pool: &SharedThreadPool,
-    context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
-    pool_map(pool, records, |record| {
-        context.cancel().check()?;
-        Ok(PreparedWrite {
-            offset: record.offset,
-            data: record.data.clone(),
-        })
-    })
 }
 
 #[cfg(test)]

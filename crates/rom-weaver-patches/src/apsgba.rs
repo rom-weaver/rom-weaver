@@ -18,8 +18,8 @@ use tracing::{debug, trace};
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::threading::{
-    PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
-    parallel_per_record_capability, pool_map, run_with_optional_pool,
+    PreparedWrite, apply_batched_writes, chunk_count_for_len_checked,
+    parallel_per_record_capability, run_with_optional_pool,
 };
 
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
@@ -140,17 +140,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 context,
                 thread_capability,
                 true,
-                |pool| {
-                    prepare_apsgba_writes_parallel(
-                        &patch,
-                        &request.input,
-                        actual_input_size,
-                        validate_checksums,
-                        pool,
-                        context,
-                    )
-                    .map(Some)
-                },
+                |pool| Ok(Some(pool.clone())),
                 || {
                     let mut source = File::open(&request.input)?;
                     apply_apsgba_patch_in_place(
@@ -162,8 +152,16 @@ impl PatchHandler for ApsGbaPatchHandler {
                     Ok(None)
                 },
             )?;
-            if let Some(prepared) = prepared {
-                apply_prepared_writes(&mut output, &prepared)?;
+            if let Some(pool) = prepared {
+                apply_apsgba_writes_parallel(
+                    &patch,
+                    &request.input,
+                    actual_input_size,
+                    validate_checksums,
+                    &pool,
+                    context,
+                    &mut output,
+                )?;
             }
             output.flush()?;
             execution
@@ -604,24 +602,31 @@ fn apply_apsgba_patch_in_place(
     Ok(())
 }
 
-fn prepare_apsgba_writes_parallel(
+fn apply_apsgba_writes_parallel(
     patch: &ParsedApsGbaPatch,
     source_path: &Path,
     source_len: u64,
     validate_checksums: bool,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
+    output: &mut File,
+) -> Result<()> {
     let output_len = usize::try_from(patch.target_size).expect("u32 fits usize");
     let source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool_map(pool, &patch.records, |record| {
-        context.cancel().check()?;
-        prepare_apsgba_write(record, &source, source_len, output_len, validate_checksums)
-    })
+    apply_batched_writes(
+        output,
+        &patch.records,
+        Some(pool),
+        |_| APS_GBA_BLOCK_SIZE,
+        |record, _range| {
+            context.cancel().check()?;
+            prepare_apsgba_write(record, &source, source_len, output_len, validate_checksums)
+        },
+    )
 }
 
 fn prepare_apsgba_write(
