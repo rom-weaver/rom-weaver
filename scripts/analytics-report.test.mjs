@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, createVerify } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   bingReport,
@@ -7,6 +10,7 @@ import {
   dateRange,
   githubReport,
   parseArgs,
+  searchConsoleReport,
   serviceAccountAssertion,
 } from "./analytics-report.mjs";
 
@@ -93,4 +97,33 @@ test("bing report unwraps the response envelope", async () => {
     fetchImpl: async () => Response.json({ d: [{ Clicks: 1 }] }),
   });
   assert.deepEqual(result.traffic, [{ Clicks: 1 }]);
+});
+
+test("search console report asks for every day of the window but caps query and page rows", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const dir = mkdtempSync(join(tmpdir(), "analytics-report-"));
+  const keyFile = join(dir, "key.json");
+  writeFileSync(
+    keyFile,
+    JSON.stringify({
+      client_email: "reader@example.invalid",
+      private_key: privateKey.export({ type: "pkcs8", format: "pem" }),
+    }),
+  );
+  const limits = {};
+  try {
+    await searchConsoleReport({
+      env: { GSC_SERVICE_ACCOUNT_FILE: keyFile, GSC_SITE: "sc-domain:example.invalid" },
+      days: 90,
+      fetchImpl: async (url, options) => {
+        if (url.includes("oauth2")) return Response.json({ access_token: "access" });
+        const { dimensions, rowLimit } = JSON.parse(options.body);
+        limits[dimensions[0]] = rowLimit;
+        return Response.json({ rows: [] });
+      },
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  assert.deepEqual(limits, { date: 91, query: 25, page: 25 });
 });

@@ -3,6 +3,9 @@
 // Read-only traffic reports. Prints JSON for one source:
 //   node scripts/analytics-report.mjs <gsc|bing|cloudflare|github> [--days N]
 //
+// `--days N` covers N days ago through today (UTC, today still partial) and applies to
+// gsc and cloudflare only; bing and github return their fixed history windows.
+//
 // Credentials come from the environment only:
 //   gsc         GSC_SERVICE_ACCOUNT_FILE (service-account key JSON path), GSC_SITE
 //               (`sc-domain:example.com` or a URL-prefix property)
@@ -73,7 +76,7 @@ export async function searchConsoleReport({ env, days, fetchImpl = globalThis.fe
     }),
   });
   const { start, end } = dateRange(days, now);
-  const query = (dimensions) =>
+  const query = (dimensions, rowLimit = 25) =>
     getJson(
       fetchImpl,
       "Search Console",
@@ -81,10 +84,10 @@ export async function searchConsoleReport({ env, days, fetchImpl = globalThis.fe
       {
         method: "POST",
         headers: { Authorization: `Bearer ${grant.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ startDate: start, endDate: end, dimensions, rowLimit: 25 }),
+        body: JSON.stringify({ startDate: start, endDate: end, dimensions, rowLimit }),
       },
     );
-  const [byDate, byQuery, byPage] = await Promise.all([query(["date"]), query(["query"]), query(["page"])]);
+  const [byDate, byQuery, byPage] = await Promise.all([query(["date"], days + 1), query(["query"]), query(["page"])]);
   return { start, end, byDate: byDate.rows ?? [], byQuery: byQuery.rows ?? [], byPage: byPage.rows ?? [] };
 }
 
