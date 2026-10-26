@@ -1,6 +1,10 @@
-# How ROM patching works
+# How ROM patching works: checksums and order
 
-A patch describes changes to a particular starting file. The file version, checksum, and patch order determine whether those changes produce the intended result. The [online ROM patcher](https://rom-weaver.com/apply-patches) checks them before it writes a file.
+A ROM patch only works on the exact file it was made for. The file version, checksum, and patch order decide whether the patched game comes out right.
+
+The [online ROM patcher](https://rom-weaver.com/apply-patches) checks them before it writes a file.
+
+<a id="how-rom-patching-works"></a>
 
 <!-- START doctoc -->
 ## Table of contents
