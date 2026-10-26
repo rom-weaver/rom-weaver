@@ -285,6 +285,43 @@ fn checksum_reports_streamed_containers_as_single_threaded_in_every_event() {
 }
 
 #[test]
+fn checksum_reports_a_failed_streamed_container_as_single_threaded() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.bin").path(), vec![0x5a; 256 * 1024]).expect("payload fixture");
+    let compressed = temp.child("game.bin.gz");
+    write_gzip_fixture(temp.child("game.bin").path(), compressed.path());
+    let gzip = fs::read(compressed.path()).expect("read gzip fixture");
+    fs::write(compressed.path(), &gzip[..gzip.len() / 2]).expect("truncate gzip fixture");
+
+    let events = run_json_events(
+        &[
+            "checksum",
+            "--input",
+            compressed.path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--threads",
+            "4",
+            "--jsonl",
+        ],
+        1,
+    );
+
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "failed", "terminal: {terminal}");
+    let prepare = events
+        .iter()
+        .find(|event| event["status"] == "running" && event["stage"] == "prepare")
+        .expect("prepare event");
+    for event in [prepare, terminal] {
+        assert_eq!(event["effective_threads"], 1, "event: {event}");
+        assert_eq!(event["used_parallelism"], false, "event: {event}");
+    }
+}
+
+#[test]
 fn checksum_range_reports_the_plan_it_runs_in_every_event() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), vec![0xa5; 64 * 1024]).expect("fixture");

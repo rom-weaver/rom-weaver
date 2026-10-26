@@ -139,7 +139,7 @@ impl CliApp {
         self.compute_resolved_checksum(resolved, request, chd_raw_sha1, &context, thread_execution)
     }
 
-    fn checksum_error_report(
+    pub(super) fn checksum_error_report(
         &self,
         stage: &str,
         error: RomWeaverError,
@@ -253,17 +253,12 @@ impl CliApp {
             && let Some(stream_format) =
                 self.select_streamed_checksum_auto_extract_format(source, checksum_options)
         {
-            return ChecksumFastPath::Finished(
-                self.run_checksum_stream_auto_extract(
-                    source,
-                    stream_format,
-                    checksum_options.algo,
-                    context,
-                )
-                .unwrap_or_else(|error| {
-                    self.checksum_error_report("checksum", error, thread_execution.clone())
-                }),
-            );
+            return ChecksumFastPath::Finished(self.run_checksum_stream_auto_extract(
+                source,
+                stream_format,
+                checksum_options.algo,
+                context,
+            ));
         }
         ChecksumFastPath::Continue { chd_raw_sha1 }
     }
