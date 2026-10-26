@@ -38,7 +38,6 @@ pub use manpages::generated_man_pages;
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Subcommand, ValueEnum};
-use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::rom_headers::{
     A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
     INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, NGP_COPYRIGHT_MAGIC,
@@ -53,6 +52,7 @@ use rom_weaver_checksum::{
     n64_byte_order_from_row_id, parallel_hashing_pays_off, supported_algorithms,
     unsupported_checksum_algorithm, unsupported_checksum_algorithm_message,
 };
+use rom_weaver_checksum::{checksum_reader_execution, checksum_reader_values_with_progress};
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, ensure_split_wbfs_inputs_complete,
     extract_only_create_validation_message, is_ambiguous_disc_image_extension,

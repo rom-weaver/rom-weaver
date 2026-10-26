@@ -150,7 +150,6 @@ impl CliApp {
         source: &Path,
         options: &ChecksumStreamOptions,
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
     ) -> Result<Option<OperationReport>> {
         let ChecksumStreamOptions {
             algo,
@@ -207,8 +206,7 @@ impl CliApp {
             },
             algo,
             context,
-            thread_execution,
-        )?;
+        );
         Ok(Some(report))
     }
 
@@ -218,8 +216,7 @@ impl CliApp {
         candidate: TarStreamCandidate,
         algo: &[String],
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
-    ) -> Result<OperationReport> {
+    ) -> OperationReport {
         let TarStreamCandidate {
             tar_format,
             candidate_name,
@@ -233,6 +230,7 @@ impl CliApp {
             algorithm_count = algo.len(),
             "running streamed tar checksum auto-extract fast path"
         );
+        let thread_execution = Some(checksum_reader_execution(context));
         self.emit_running(
             OperationLabel {
                 command: "checksum",
@@ -251,6 +249,7 @@ impl CliApp {
         let source_label = format!(
             "checksum source streamed from {tar_format} container entry `{candidate_name}`"
         );
+        // A failure keeps the inline plan the `prepare` event reported, not the requested one.
         with_regular_archive_file_entry_reader(
             source,
             tar_format,
@@ -267,6 +266,7 @@ impl CliApp {
                 )
             },
         )
+        .unwrap_or_else(|error| self.checksum_error_report("checksum", error, thread_execution))
     }
 
     pub(super) fn select_tar_stream_checksum_candidate(
@@ -378,14 +378,14 @@ impl CliApp {
         stream_format: &str,
         algo: &[String],
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
-    ) -> Result<OperationReport> {
+    ) -> OperationReport {
         trace!(
             source = %source.display(),
             stream_format,
             algorithm_count = algo.len(),
             "running streamed checksum auto-extract fast path"
         );
+        let thread_execution = Some(checksum_reader_execution(context));
         self.emit_running(
             OperationLabel {
                 command: "checksum",
@@ -401,7 +401,6 @@ impl CliApp {
             thread_execution.clone(),
         );
 
-        let filter = Self::libarchive_read_filter_for_stream_format(stream_format)?;
         let source_label = format!("checksum source streamed from {stream_format} container");
         let output_name = Self::inferred_stream_extract_output_path(source, stream_format)
             .and_then(|path| {
@@ -409,16 +408,21 @@ impl CliApp {
                     .map(|name| name.to_string_lossy().into_owned())
             })
             .unwrap_or_else(|| "Extracted file".to_string());
-        with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
-            self.checksum_stream_reader(
-                stream_reader,
-                algo,
-                context,
-                &thread_execution,
-                &source_label,
-                &output_name,
-            )
-        })
+        // A failure keeps the inline plan the `prepare` event reported, not the requested one.
+        Self::libarchive_read_filter_for_stream_format(stream_format)
+            .and_then(|filter| {
+                with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
+                    self.checksum_stream_reader(
+                        stream_reader,
+                        algo,
+                        context,
+                        &thread_execution,
+                        &source_label,
+                        &output_name,
+                    )
+                })
+            })
+            .unwrap_or_else(|error| self.checksum_error_report("checksum", error, thread_execution))
     }
 
     fn checksum_stream_reader<R: Read + ?Sized>(

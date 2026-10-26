@@ -24,7 +24,7 @@ use self::core::*;
 pub use self::core::{
     ALGORITHM_TABLE, BARE_FILENAME_ALGORITHMS, ChecksumAlgorithmInfo, ChecksumProgress,
     ChecksumValues, NativeChecksumEngine, STANDARD_ALGORITHMS, StreamingChecksum,
-    StreamingChecksumTiming, checksum_file_values, checksum_hex_len,
+    StreamingChecksumTiming, checksum_file_values, checksum_hex_len, checksum_reader_execution,
     checksum_reader_values_with_progress, crc16_ccitt_bytes, crc32_bytes, md5_bytes, md5_file,
     parallel_hashing_pays_off, standard_algorithm_for_hex_len,
 };
