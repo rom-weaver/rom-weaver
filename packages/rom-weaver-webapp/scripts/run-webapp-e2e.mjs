@@ -1669,7 +1669,7 @@ const main = async () => {
         runCompressExtractRoundtrip(createContext, previewBaseUrl),
       );
       await scenario("Trim NDS exact extent", (createContext) =>
-        runTrimJourney(createContext, previewBaseUrl, configureUncompressedOutput),
+        runTrimJourney(createContext, previewBaseUrl, configureUncompressedOutput, browserName),
       );
       await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
       await scenario("raw apply/download", (createContext) =>

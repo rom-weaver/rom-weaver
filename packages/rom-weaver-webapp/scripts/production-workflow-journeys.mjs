@@ -344,7 +344,7 @@ export const runCompressExtractRoundtrip = async (createContext, baseUrl) => {
   }
 };
 
-export const runTrimJourney = async (createContext, baseUrl, configureUncompressedOutput) => {
+export const runTrimJourney = async (createContext, baseUrl, configureUncompressedOutput, browserName) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   await enableBetaTools(context);
   const page = await context.newPage();
@@ -362,7 +362,9 @@ export const runTrimJourney = async (createContext, baseUrl, configureUncompress
         .getByRole("button", { name: "Trim ROM", exact: true })
         .click();
     });
-    requireEqual(output.name, "game (trimmed).nds");
+    // Playwright WebKit replaces spaces in suggested download filenames.
+    const expectedName = browserName === "webkit" ? "game_(trimmed).nds" : "game (trimmed).nds";
+    requireEqual(output.name, expectedName);
     assertJourneyBytes(output.bytes, input.subarray(0, 0x3000), "Trim NDS declared extent");
     process.stdout.write(`PASS Trim NDS (${input.length} -> ${output.bytes.length} exact bytes)\n`);
   } finally {
