@@ -1343,6 +1343,134 @@ fn hdiff13_apply_rejects_an_output_shorter_than_the_covers_produce() {
 }
 
 #[test]
+fn hdiff13_streaming_rejects_output_beyond_the_declared_size() {
+    struct BoundedWriter {
+        written: usize,
+        limit: usize,
+    }
+
+    impl std::io::Write for BoundedWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            assert!(
+                bytes.len() <= self.limit - self.written,
+                "HDIFF13 wrote beyond new_data_size"
+            );
+            self.written += bytes.len();
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut covers = vec![0, 0, 4];
+    for _ in 1..1000 {
+        covers.extend_from_slice(&[0x84, 0, 4]);
+    }
+    for (cover_count, cover, new_diff) in [
+        (1000, covers.as_slice(), b"".as_slice()),
+        (1, [0, 5, 0].as_slice(), b"12345".as_slice()),
+        (1, [0, 2, 4].as_slice(), b"12".as_slice()),
+    ] {
+        let (patch, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count,
+            cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff,
+        }));
+        let chunks =
+            super::read_hdiff13_chunks_from_patch_bytes(&patch, &header, false).expect("chunks");
+        let mut output = BoundedWriter {
+            written: 0,
+            limit: 4,
+        };
+        let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
+
+        let error = super::apply_hdiff13_with_chunks(&old, &header, chunks, &mut output)
+            .expect_err("output size mismatch");
+
+        assert!(output.written <= output.limit);
+        let message = error.to_string();
+        assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+        assert!(message.contains("expected=4"), "{message}");
+        assert_eq!(output.written, if cover_count == 1000 { 4 } else { 0 });
+    }
+}
+
+#[test]
+fn hdiff13_rejects_output_position_overflow_with_the_size_mismatch_code() {
+    for (first_cover, gap, length) in [
+        (false, u64::MAX, 0),
+        (false, 1, u64::MAX),
+        (true, u64::MAX, 0),
+    ] {
+        let mut cover = if first_cover {
+            vec![0, 0, 4, 0x84]
+        } else {
+            vec![0]
+        };
+        write_var_u64(&mut cover, gap);
+        write_var_u64(&mut cover, length);
+        let (patch, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count: if first_cover { 2 } else { 1 },
+            cover: &cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: &[],
+        }));
+
+        let error = apply_hdiff13(b"abcd", &patch, &header).expect_err("output position overflow");
+        let message = error.to_string();
+        assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+        assert!(message.contains("expected=4"), "{message}");
+    }
+}
+
+#[test]
+fn hdiff13_validate_rejects_repeated_covers_beyond_the_declared_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.hdiff");
+    let mut covers = vec![0, 0, 4];
+    for _ in 1..1000 {
+        covers.extend_from_slice(&[0x84, 0, 4]);
+    }
+    fs::write(&input_path, b"abcd").expect("input");
+    fs::write(
+        &patch_path,
+        build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count: 1000,
+            cover: &covers,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: &[],
+        }),
+    )
+    .expect("patch");
+
+    let error = HdiffPatchHandler::new(&HDIFFPATCH)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("output size mismatch");
+    let message = error.to_string();
+    assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+    assert!(message.contains("expected=4"), "{message}");
+}
+
+#[test]
 fn hdiff13_chunks_read_in_parallel_match_the_serial_read() {
     let source = b"parallel chunk fixture bytes";
     let (bytes, header) = parsed_hdiff13(build_identity_hdiff13_patch_with_cover_and_rle(source));

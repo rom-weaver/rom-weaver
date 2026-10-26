@@ -1037,6 +1037,13 @@ fn apply_hdiff13_with_chunks(
             "HDiffPatch declared new_data_size {new_data_size} exceeds allocatable memory"
         )));
     }
+    let output_size_mismatch = || {
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
+                .with_message("HDiffPatch output size mismatch")
+                .with_field("expected", new_data_size),
+        )
+    };
     let mut position = 0usize;
     let mut buffer = vec![0u8; HDIFF13_OUTPUT_BUFFER_SIZE.min(old_data_size)];
     trace!(
@@ -1081,9 +1088,14 @@ fn apply_hdiff13_with_chunks(
         let copy_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover copy")?;
         let cover_length = read_var_u64(cover_raw.as_slice(), &mut cover_index, "cover length")?;
 
-        let new_pos = last_new_end.checked_add(copy_length).ok_or_else(|| {
-            RomWeaverError::Validation("HDiffPatch cover new position overflowed".into())
-        })?;
+        let new_pos = last_new_end
+            .checked_add(copy_length)
+            .filter(|&position| position <= header.new_data_size)
+            .ok_or_else(output_size_mismatch)?;
+        let new_end = new_pos
+            .checked_add(cover_length)
+            .filter(|&position| position <= header.new_data_size)
+            .ok_or_else(output_size_mismatch)?;
 
         let new_pos_usize = usize::try_from(new_pos).map_err(|_| {
             RomWeaverError::Validation("HDiffPatch new position overflowed usize".into())
@@ -1111,7 +1123,9 @@ fn apply_hdiff13_with_chunks(
                 &mut rle_state,
             )?;
             output.write_all(gap)?;
-            position += fill_len;
+            position = position
+                .checked_add(fill_len)
+                .ok_or_else(output_size_mismatch)?;
         }
 
         let old_start = usize::try_from(old_pos).map_err(|_| {
@@ -1133,6 +1147,9 @@ fn apply_hdiff13_with_chunks(
             ));
         }
 
+        let next_position = position
+            .checked_add(cover_len_usize)
+            .ok_or_else(output_size_mismatch)?;
         let mut old_position = old_start;
         while old_position < old_end {
             let len = buffer.len().min(old_end - old_position);
@@ -1148,15 +1165,13 @@ fn apply_hdiff13_with_chunks(
             )?;
             output.write_all(target)?;
             old_position += len;
-            position += len;
         }
+        position = next_position;
 
         last_old_end = old_pos
             .checked_add(cover_length)
             .ok_or_else(|| RomWeaverError::Validation("HDiffPatch old end overflowed".into()))?;
-        last_new_end = new_pos
-            .checked_add(cover_length)
-            .ok_or_else(|| RomWeaverError::Validation("HDiffPatch new end overflowed".into()))?;
+        last_new_end = new_end;
     }
 
     if position < new_data_size {
@@ -1176,7 +1191,9 @@ fn apply_hdiff13_with_chunks(
             &mut rle_state,
         )?;
         output.write_all(tail)?;
-        position += fill_len;
+        position = position
+            .checked_add(fill_len)
+            .ok_or_else(output_size_mismatch)?;
     }
 
     if position != new_data_size {
