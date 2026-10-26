@@ -42,8 +42,35 @@ export function mutationSummary(report) {
         path: "crates/rom-weaver-patches/src/test_support.rs",
         reason: "Assertion and fixture helpers are not shipped behavior",
       },
+      {
+        mutant: "CancellationToken::or_cancelled -> Result<T> with Ok(Default::default())",
+        reason: "Cannot compile: the generic T has no Default bound",
+      },
+      {
+        mutant: "ArtifactPack::parse -> Result<Self> with Ok(Default::default())",
+        reason: "Cannot compile: ArtifactPack has no Default impl",
+      },
+      {
+        mutant: "parse_hashes -> Result<Vec<Hash>> with Ok(vec![Default::default()])",
+        reason: "Cannot compile: Hash has no Default impl",
+      },
+      {
+        mutant:
+          "parse_components -> Result<(Vec<PackComponent>, Vec<u32>)> with Ok((vec![Default::default()], ..))",
+        reason: "Cannot compile: PackComponent has no Default impl",
+      },
+      {
+        mutant: "parse_games -> Result<Vec<PackGame>> with Ok(vec![Default::default()])",
+        reason: "Cannot compile: PackGame has no Default impl",
+      },
+      {
+        mutant:
+          "StreamingVariantChecksums::new_with_precomputed_raw -> Result<Self> with Ok(Default::default())",
+        reason: "Cannot compile: StreamingVariantChecksums has no Default impl",
+      },
     ],
-    exclusions: ".config/mutants.toml (scope and test-helper exclusion; no equivalent claims)",
+    exclusions:
+      ".config/mutants.toml (scope, test-helper, and uncompilable-mutant exclusions; no equivalent claims)",
     survivors,
   };
 }
