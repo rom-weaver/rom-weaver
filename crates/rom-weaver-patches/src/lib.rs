@@ -28,7 +28,7 @@ mod ups;
 mod varint;
 
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{BufWriter, Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
@@ -92,6 +92,85 @@ pub(crate) fn can_apply_in_memory_on_apply(context: &OperationContext, a: u64, b
         .patch_apply_in_memory_limit()
         .unwrap_or_else(in_memory_apply_limit_bytes);
     a <= limit && b <= limit
+}
+
+pub(crate) struct SparseStreaming {
+    min_bytes: u64,
+    max_records: usize,
+}
+
+pub(crate) const SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    min_bytes: 32 * 1024 * 1024,
+    max_records: 4096,
+};
+pub(crate) const PAT_SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    min_bytes: 64 * 1024 * 1024,
+    ..SPARSE_STREAMING
+};
+pub(crate) const APSGBA_SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    max_records: 256,
+    ..SPARSE_STREAMING
+};
+
+/// Native warm-cache measurements favor streaming sparse patches above these sizes
+/// for speed and far lower memory use; dense patches stay buffered within the cap.
+/// Browser OPFS streaming of many small record writes measured slower than one
+/// buffered read/write, so the browser keeps the in-memory tier.
+pub(crate) fn can_apply_sparse_in_memory(
+    context: &OperationContext,
+    a: u64,
+    b: u64,
+    record_count: usize,
+    streaming: SparseStreaming,
+) -> bool {
+    can_apply_in_memory_on_apply(context, a, b)
+        && (cfg!(target_family = "wasm")
+            || a < streaming.min_bytes
+            || record_count > streaming.max_records)
+}
+
+/// Existing outputs MUST retain their inode and permissions. New copies use native
+/// fast paths, gaining owner read/write on Unix or clearing Windows READONLY;
+/// wasm skips permission changes.
+pub(crate) fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
+    if output.exists() {
+        let mut input = File::open(input)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(output)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut input, &mut output)?;
+        return Ok(output);
+    }
+    rom_weaver_core::copy_file_retrying_interrupted(input, output)?;
+    #[cfg(not(target_family = "wasm"))]
+    {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(output)?.permissions();
+        #[cfg(unix)]
+        let needs_permissions = permissions.mode() & 0o600 != 0o600;
+        #[cfg(not(unix))]
+        let needs_permissions = permissions.readonly();
+        if needs_permissions {
+            #[cfg(unix)]
+            {
+                permissions.set_mode(permissions.mode() | 0o600);
+            }
+            #[cfg(not(unix))]
+            {
+                #[expect(
+                    clippy::permissions_set_readonly_false,
+                    reason = "on Windows this only clears the read-only attribute so the output can be patched"
+                )]
+                permissions.set_readonly(false);
+            }
+            fs::set_permissions(output, permissions)?;
+        }
+    }
+    Ok(OpenOptions::new().read(true).write(true).open(output)?)
 }
 
 /// Read a chunk from both paths. `original_bytes` is zero-filled past

@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
@@ -96,8 +96,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
     {
         fs::create_dir_all(parent)?;
     }
-    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
-    let mut output = OpenOptions::new().write(true).open(output_path)?;
+    let mut output = crate::copy_input_to_output(input_path, output_path)?;
     for record in parsed.records.iter().rev() {
         let undo = record.undo_data.as_ref().expect("validated above");
         output.seek(SeekFrom::Start(record.offset))?;
@@ -180,7 +179,13 @@ impl PatchHandler for PpfPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
         let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
-        let in_memory = crate::can_apply_in_memory_on_apply(context, input_len, ppf_output_len);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            input_len,
+            ppf_output_len,
+            parsed.records.len(),
+            crate::SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             in_memory, ppf_output_len, "ppf apply path chosen"
@@ -194,11 +199,7 @@ impl PatchHandler for PpfPatchHandler {
             execution.force_serial();
             execution
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             let mut execution = context.plan_threads(thread_capability);
             trace!(records = parsed.records.len(), "ppf apply borrowed records");
             apply_records(&mut output, &parsed.records, context)?;

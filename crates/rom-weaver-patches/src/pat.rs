@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
@@ -61,7 +61,13 @@ impl PatPatchHandler {
         validate_pat_record_offsets(&grouped_records, output_len)?;
         let thread_capability = parallel_per_record_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let in_memory = crate::can_apply_in_memory_on_apply(context, output_len, output_len);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            output_len,
+            output_len,
+            grouped_records.len(),
+            crate::PAT_SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             records = parsed.records.len(),
@@ -101,7 +107,7 @@ impl PatPatchHandler {
             execution.force_serial();
             (execution, writes)
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             let input_bytes =
                 read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
             let (execution, mut writes) = if planned_execution.used_parallelism {
@@ -127,10 +133,6 @@ impl PatPatchHandler {
                 (planned_execution, writes)
             };
             writes.sort_by_key(|write| write.offset);
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
             for write in &writes {
                 output.seek(SeekFrom::Start(write.offset))?;
                 output.write_all(&[write.byte])?;

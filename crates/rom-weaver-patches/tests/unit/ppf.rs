@@ -73,6 +73,252 @@ struct V3Record {
     undo: Vec<u8>,
 }
 
+fn sparse_ppf_fixture(temp: &TestDir, len: u64) -> PatchApplyRequest {
+    let input = temp.child("source.bin");
+    let patch = temp.child("update.ppf");
+    fs::File::create(&input)
+        .expect("create input")
+        .set_len(len)
+        .expect("size input");
+    fs::write(
+        &patch,
+        build_ppf1_patch(
+            "Sparse PPF",
+            vec![
+                V1V2Record {
+                    offset: 0,
+                    data: vec![0xa5],
+                },
+                V1V2Record {
+                    offset: (len - 1) as u32,
+                    data: vec![0x5a],
+                },
+            ],
+        ),
+    )
+    .expect("write patch");
+    PatchApplyRequest {
+        input,
+        patches: vec![patch],
+        output: temp.child("output.bin"),
+    }
+}
+
+// quality-reason: Unix owner permissions differ from the aggregate read-only flag.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_owner_read_only_input_produces_owner_rw_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 8);
+    fs::set_permissions(&request.input, fs::Permissions::from_mode(0o464)).expect("set input mode");
+
+    PpfPatchHandler::new(&PPF)
+        .apply(
+            &request,
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(0),
+        )
+        .expect("apply from owner read-only input");
+
+    assert_eq!(
+        fs::metadata(&request.output)
+            .expect("output metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o664
+    );
+    assert_eq!(
+        fs::metadata(&request.input)
+            .expect("input metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o464
+    );
+    assert_eq!(fs::read(&request.input).expect("input bytes"), [0; 8]);
+    assert_eq!(
+        fs::read(&request.output).expect("patched bytes"),
+        [0xa5, 0, 0, 0, 0, 0, 0, 0x5a]
+    );
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&request.output)
+        .expect("owner can read and write output");
+}
+
+// quality-reason: Unix metadata checks cover destination mode, ownership, and inode preservation.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_existing_output_preserves_permissions_and_ownership() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 8);
+    fs::set_permissions(&request.input, fs::Permissions::from_mode(0o640)).expect("set input mode");
+    fs::write(&request.output, [0xff; 32]).expect("existing output");
+    fs::set_permissions(&request.output, fs::Permissions::from_mode(0o604))
+        .expect("set output mode");
+    let before = fs::metadata(&request.output).expect("existing output metadata");
+
+    PpfPatchHandler::new(&PPF)
+        .apply(
+            &request,
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(0),
+        )
+        .expect("apply over existing output");
+
+    let after = fs::metadata(&request.output).expect("output metadata");
+    assert_eq!(after.mode(), before.mode(), "existing output mode");
+    assert_eq!(after.uid(), before.uid(), "existing output owner");
+    assert_eq!(after.gid(), before.gid(), "existing output group");
+    assert_eq!(after.ino(), before.ino(), "existing output inode");
+    assert_eq!(after.len(), 8, "existing output truncated to input length");
+    assert_eq!(
+        fs::read(&request.output).expect("patched bytes"),
+        [0xa5, 0, 0, 0, 0, 0, 0, 0x5a]
+    );
+    assert_eq!(fs::read(&request.input).expect("input bytes"), [0; 8]);
+}
+
+// quality-reason: Unix mode bits MUST detect inherited read-only permissions even under root.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_read_only_input_produces_writable_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for len in [32 * 1024 * 1024 + 1, 256 * 1024 * 1024 + 1] {
+        let temp = TestDir::new();
+        let request = sparse_ppf_fixture(&temp, len);
+        fs::set_permissions(&request.input, fs::Permissions::from_mode(0o444))
+            .expect("read-only input");
+        PpfPatchHandler::new(&PPF)
+            .apply(
+                &request,
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_apply_in_memory_limit(256 * 1024 * 1024),
+            )
+            .expect("sparse patch MUST accept a read-only input");
+        let input_mode = fs::metadata(&request.input)
+            .expect("input metadata")
+            .permissions()
+            .mode();
+        let output_mode = fs::metadata(&request.output)
+            .expect("output metadata")
+            .permissions()
+            .mode();
+        assert_eq!(
+            output_mode,
+            input_mode | 0o200,
+            "copy MUST add only the owner-write bit",
+        );
+        assert_eq!(
+            output_mode & 0o022,
+            0,
+            "output MUST NOT be group/other writable",
+        );
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&request.output)
+            .expect("output MUST remain writable");
+        assert_eq!(output.metadata().expect("output length").len(), len);
+        let mut offset = 0;
+        let mut buffer = [0; 64 * 1024];
+        loop {
+            let count = output.read(&mut buffer).expect("read output");
+            if count == 0 {
+                break;
+            }
+            for (index, byte) in buffer[..count].iter().enumerate() {
+                let position = offset + index as u64;
+                let expected = if position == 0 {
+                    0xa5
+                } else if position == len - 1 {
+                    0x5a
+                } else {
+                    0
+                };
+                assert_eq!(*byte, expected, "output byte at {position}");
+            }
+            offset += count as u64;
+        }
+        assert_eq!(
+            fs::metadata(&request.input)
+                .expect("input metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o444
+        );
+    }
+}
+
+#[test]
+fn sparse_ppf_handler_selects_streaming_below_memory_cap() {
+    use std::sync::{Arc, Mutex};
+    use tracing::{
+        Event, Metadata, Subscriber,
+        field::{Field, Visit},
+        span::{Attributes, Id, Record},
+    };
+
+    #[derive(Clone)]
+    struct ApplyPaths(Arc<Mutex<Vec<bool>>>);
+
+    impl Visit for ApplyPaths {
+        fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
+        fn record_bool(&mut self, field: &Field, value: bool) {
+            if field.name() == "in_memory" {
+                self.0.lock().expect("apply paths").push(value);
+            }
+        }
+    }
+
+    impl Subscriber for ApplyPaths {
+        fn max_level_hint(&self) -> Option<tracing::level_filters::LevelFilter> {
+            Some(tracing::level_filters::LevelFilter::TRACE)
+        }
+        fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _span: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+        fn record(&self, _span: &Id, _values: &Record<'_>) {}
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+        fn event(&self, event: &Event<'_>) {
+            if event.metadata().target() == "rom_weaver_patches::ppf"
+                && event.metadata().fields().field("ppf_output_len").is_some()
+            {
+                event.record(&mut self.clone());
+            }
+        }
+        fn enter(&self, _span: &Id) {}
+        fn exit(&self, _span: &Id) {}
+    }
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 32 * 1024 * 1024);
+    let paths = ApplyPaths(Arc::new(Mutex::new(Vec::new())));
+    tracing::subscriber::with_default(paths.clone(), || {
+        PpfPatchHandler::new(&PPF)
+            .apply(
+                &request,
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_apply_in_memory_limit(256 * 1024 * 1024),
+            )
+            .expect("apply sparse PPF");
+    });
+    assert_eq!(
+        *paths.0.lock().expect("apply paths"),
+        [false],
+        "PPF handler MUST select streaming at 32 MiB despite a 256 MiB cap"
+    );
+}
+
 #[test]
 fn parse_and_apply_round_trip_for_ppf1() {
     let temp = TestDir::new();
@@ -420,6 +666,60 @@ fn undo_ppf_restores_the_original_rom() {
 
     assert_eq!(mismatched, 0);
     assert_eq!(fs::read(restored_path).expect("restored output"), original);
+}
+
+#[test]
+fn undo_ppf_read_only_input_produces_writable_output() {
+    let temp = TestDir::new();
+    let input = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let output = temp.child("restored.bin");
+    let (original, patched, block, record) = ppf3_blockcheck_overlap_fixture();
+    fs::write(&input, &patched).expect("patched input");
+    fs::write(
+        &patch,
+        build_ppf3_patch("PPF3 undo", 1, true, true, Some(&block), vec![record]),
+    )
+    .expect("patch");
+    let original_permissions = fs::metadata(&input).expect("input metadata").permissions();
+    let mut read_only = original_permissions.clone();
+    read_only.set_readonly(true);
+    fs::set_permissions(&input, read_only).expect("read-only input");
+    assert!(!output.exists(), "undo MUST create a new output");
+
+    assert_eq!(
+        undo_ppf(&input, &patch, &output).expect("undo read-only input"),
+        0
+    );
+    assert_eq!(fs::read(&output).expect("restored bytes"), original);
+    let permissions = fs::metadata(&output)
+        .expect("output metadata")
+        .permissions();
+    assert!(!permissions.readonly(), "output MUST remain writable");
+    // quality-reason: Unix mode bits MUST catch read-only outputs even under root.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let input_mode = fs::metadata(&input)
+            .expect("input metadata")
+            .permissions()
+            .mode();
+        assert_eq!(permissions.mode(), input_mode | 0o200);
+        assert_eq!(permissions.mode() & 0o022, 0, "group/other write bits");
+    }
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output)
+        .expect("writable output");
+    assert!(
+        fs::metadata(&input)
+            .expect("input metadata")
+            .permissions()
+            .readonly()
+    );
+    assert_eq!(fs::read(&input).expect("unchanged input"), patched);
+    fs::set_permissions(&input, original_permissions).expect("restore input permissions");
 }
 
 #[test]

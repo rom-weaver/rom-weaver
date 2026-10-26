@@ -109,7 +109,13 @@ impl PatchHandler for PmsrPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
-        let in_memory = crate::can_apply_in_memory_on_apply(context, source_len, output_len);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            source_len,
+            output_len,
+            patch.records.len(),
+            crate::SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             records = patch.records.len(),
@@ -128,11 +134,7 @@ impl PatchHandler for PmsrPatchHandler {
             execution.force_serial();
             execution
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
-            let output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
+            let output = crate::copy_input_to_output(&request.input, &request.output)?;
             output.set_len(output_len)?;
             drop(output);
 
