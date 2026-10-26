@@ -2380,6 +2380,8 @@ fn streamed_apply_keeps_existing_output_when_a_cover_is_malformed() {
     );
 }
 
+// quality-reason: StagedOutput only detects hard links on Unix; elsewhere it replaces by rename (see rom-weaver-core output_replace.rs and its matching cfg(unix) test).
+#[cfg(unix)]
 #[test]
 fn streamed_apply_preserves_hard_links_when_output_aliases_the_source() {
     let temp = TestDir::new();
