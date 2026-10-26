@@ -906,6 +906,35 @@ test("guided Apply scrolls its first card clear of the dock on a phone", async (
   await page.viewport(1280, 900);
 });
 
+test("guided Apply scrolls its first card back on screen when More opens the rest on a phone", async () => {
+  // The hanging card grows down from its row, so without a fresh reveal Less
+  // and Continue would end up below the dock.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  const folded = guide.getBoundingClientRect().height;
+
+  guide.querySelector(".sample-tutorial-more").click();
+  await expect.poll(() => guide.getBoundingClientRect().height).toBeGreaterThan(folded);
+  await expect
+    .poll(() => guide.getBoundingClientRect().bottom, { timeout: 3000 })
+    .toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(guide.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  await page.viewport(1280, 900);
+});
+
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
   const hardwareConcurrency = Object.getOwnPropertyDescriptor(Navigator.prototype, "hardwareConcurrency");
   Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 2 });

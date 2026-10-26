@@ -30,9 +30,9 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a practice ROM** › **Start a practice run** under the empty drop zone.
 
-The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
+The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in (on a phone, choose **More** on the guide card to see them): drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
-For this tutorial, choose **Continue** without adding anything. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead, then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
+For this tutorial, choose **Continue** without adding anything. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead (under **More** on a phone), then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
 
 ## Step 2: look at what you added
 

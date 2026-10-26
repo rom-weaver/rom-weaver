@@ -1099,15 +1099,16 @@ const SampleTutorial = ({
     };
     // The row grows as its drawers expand, so re-reveal once each size change
     // has stopped - otherwise the card ends up sitting over the row it explains.
-    // On a phone the pinned card's own height sets the room the row gets, so a
-    // card that grows with its new copy re-reveals too. Gated on those heights:
-    // mobile browser chrome collapsing as the user scrolls must not scroll the
-    // page out from under them.
+    // On a phone the card's own height matters too: a pinned card sets the room
+    // the row gets, and an anchored one grows down past the screen edge, so a
+    // card that grows with its new copy or its More details re-reveals. Gated on
+    // those heights: mobile browser chrome collapsing as the user scrolls must
+    // not scroll the page out from under them.
     const onResize = () => {
       place(false, pendingShift());
       const height = targetEl.getBoundingClientRect().height;
       const card = dialog.getBoundingClientRect().height;
-      const cardMoved = !anchorCard() && card !== cardHeight;
+      const cardMoved = !desktop.matches && card !== cardHeight;
       cardHeight = card;
       if (height === rowHeight && !cardMoved) return;
       rowHeight = height;
@@ -1324,8 +1325,10 @@ const SampleTutorial = ({
           {/* Sits between the buttons rather than on a line of its own, so it
               costs the card no height; phones drop it for the ✕ alone. */}
           {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
-          {/* Phones only, in the slot the end hint leaves free. */}
-          {foldable ? (
+          {/* Phones only, in the slot the end hint leaves free. It steps aside
+              while Continue shows its loading label, which needs the whole row
+              on a narrow phone. */}
+          {foldable && !busy ? (
             <button
               aria-controls={bodyId}
               aria-expanded={detailsOpen}
