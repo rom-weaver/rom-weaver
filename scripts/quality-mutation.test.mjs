@@ -8,7 +8,7 @@ const outcome = (summary) => ({
   summary,
   log_path: "logs/parser.log",
 });
-test("mutation report keeps caught, survivors, build failures and timeouts separate", () => {
+test("mutation report keeps caught, survivors, unviable and timeouts separate", () => {
   const report = mutationSummary({
     cargo_mutants_version: "27.1.0",
     outcomes: [
@@ -22,9 +22,34 @@ test("mutation report keeps caught, survivors, build failures and timeouts separ
   assert.equal(report.caught, 1);
   assert.equal(report.surviving, 1);
   assert.equal(report.timeouts, 1);
-  assert.equal(report.buildFailures, 1);
+  assert.equal(report.unviable, 1);
   assert.equal(report.baselineFailures, 1);
+  assert.deepEqual(
+    report.survivors.map((survivor) => survivor.outcome),
+    ["MissedMutant", "Timeout"],
+  );
   assert.equal(report.survivors[0].mutant.line, 42);
+});
+test("unviable mutants do not fail an otherwise caught run", (context) => {
+  const scratch = path.resolve(".agent/quality-mutation-tests");
+  fs.mkdirSync(scratch, { recursive: true });
+  const output = fs.mkdtempSync(path.join(scratch, "run-"));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  const runner = () => {
+    fs.mkdirSync(path.join(output, "mutants.out"), { recursive: true });
+    fs.writeFileSync(
+      path.join(output, "mutants.out/outcomes.json"),
+      JSON.stringify({
+        outcomes: [
+          { scenario: "Baseline", summary: "Success" },
+          outcome("CaughtMutant"),
+          outcome("Unviable"),
+        ],
+      }),
+    );
+    return { status: 0 };
+  };
+  assert.equal(runMutation(["broad"], runner, output), 0);
 });
 test("unknown/absent outcomes cannot silently count as caught", () => {
   assert.throws(() => mutationSummary({}), /Missing/);
@@ -107,7 +132,7 @@ test("successful diff runs with no selected mutants report no mutation evidence"
     caught: 0,
     surviving: 0,
     timeouts: 0,
-    buildFailures: 0,
+    unviable: 0,
     baselineFailures: 0,
     equivalent: 0,
     explicitlyExcluded: [
@@ -115,35 +140,8 @@ test("successful diff runs with no selected mutants report no mutation evidence"
         path: "crates/rom-weaver-patches/src/test_support.rs",
         reason: "Assertion and fixture helpers are not shipped behavior",
       },
-      {
-        mutant: "CancellationToken::or_cancelled -> Result<T> with Ok(Default::default())",
-        reason: "Cannot compile: the generic T has no Default bound",
-      },
-      {
-        mutant: "ArtifactPack::parse -> Result<Self> with Ok(Default::default())",
-        reason: "Cannot compile: ArtifactPack has no Default impl",
-      },
-      {
-        mutant: "parse_hashes -> Result<Vec<Hash>> with Ok(vec![Default::default()])",
-        reason: "Cannot compile: Hash has no Default impl",
-      },
-      {
-        mutant:
-          "parse_components -> Result<(Vec<PackComponent>, Vec<u32>)> with Ok((vec![Default::default()], ..))",
-        reason: "Cannot compile: PackComponent has no Default impl",
-      },
-      {
-        mutant: "parse_games -> Result<Vec<PackGame>> with Ok(vec![Default::default()])",
-        reason: "Cannot compile: PackGame has no Default impl",
-      },
-      {
-        mutant:
-          "StreamingVariantChecksums::new_with_precomputed_raw -> Result<Self> with Ok(Default::default())",
-        reason: "Cannot compile: StreamingVariantChecksums has no Default impl",
-      },
     ],
-    exclusions:
-      ".config/mutants.toml (scope, test-helper, and uncompilable-mutant exclusions; no equivalent claims)",
+    exclusions: ".config/mutants.toml (scope and test-helper exclusion; no equivalent claims)",
     survivors: [],
     noSelectedMutants: true,
   });

@@ -7,13 +7,15 @@ import { runMain } from "./run-main.mjs";
 
 export function mutationSummary(report) {
   if (!Array.isArray(report.outcomes)) throw new Error("Missing mutation outcomes");
-  const counts = { caught: 0, surviving: 0, timeouts: 0, buildFailures: 0, baselineFailures: 0 };
+  const counts = { caught: 0, surviving: 0, timeouts: 0, unviable: 0, baselineFailures: 0 };
   const survivors = [];
+  // Unviable mutants never compiled (cargo-mutants mutates by syntax, e.g. `Default::default()`
+  // for a type without `Default`), so they are neither catches nor findings.
   const categories = {
     CaughtMutant: "caught",
     MissedMutant: "surviving",
     Timeout: "timeouts",
-    Unviable: "buildFailures",
+    Unviable: "unviable",
   };
   for (const outcome of report.outcomes) {
     if (outcome.scenario === "Baseline") {
@@ -24,7 +26,7 @@ export function mutationSummary(report) {
       throw new Error(`Unknown mutation outcome: ${outcome.summary}`);
     }
     counts[categories[outcome.summary]]++;
-    if (outcome.summary !== "CaughtMutant") {
+    if (outcome.summary !== "CaughtMutant" && outcome.summary !== "Unviable") {
       survivors.push({
         outcome: outcome.summary,
         mutant: outcome.scenario.Mutant,
@@ -42,35 +44,8 @@ export function mutationSummary(report) {
         path: "crates/rom-weaver-patches/src/test_support.rs",
         reason: "Assertion and fixture helpers are not shipped behavior",
       },
-      {
-        mutant: "CancellationToken::or_cancelled -> Result<T> with Ok(Default::default())",
-        reason: "Cannot compile: the generic T has no Default bound",
-      },
-      {
-        mutant: "ArtifactPack::parse -> Result<Self> with Ok(Default::default())",
-        reason: "Cannot compile: ArtifactPack has no Default impl",
-      },
-      {
-        mutant: "parse_hashes -> Result<Vec<Hash>> with Ok(vec![Default::default()])",
-        reason: "Cannot compile: Hash has no Default impl",
-      },
-      {
-        mutant:
-          "parse_components -> Result<(Vec<PackComponent>, Vec<u32>)> with Ok((vec![Default::default()], ..))",
-        reason: "Cannot compile: PackComponent has no Default impl",
-      },
-      {
-        mutant: "parse_games -> Result<Vec<PackGame>> with Ok(vec![Default::default()])",
-        reason: "Cannot compile: PackGame has no Default impl",
-      },
-      {
-        mutant:
-          "StreamingVariantChecksums::new_with_precomputed_raw -> Result<Self> with Ok(Default::default())",
-        reason: "Cannot compile: StreamingVariantChecksums has no Default impl",
-      },
     ],
-    exclusions:
-      ".config/mutants.toml (scope, test-helper, and uncompilable-mutant exclusions; no equivalent claims)",
+    exclusions: ".config/mutants.toml (scope and test-helper exclusion; no equivalent claims)",
     survivors,
   };
 }
@@ -177,8 +152,7 @@ export function runMutation(
     const summary = mutationSummary(JSON.parse(fs.readFileSync(report, "utf8")));
     fs.writeFileSync(path.join(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
     console.log(JSON.stringify(summary, null, 2));
-    if (summary.baselineFailures || summary.buildFailures || summary.timeouts || summary.surviving)
-      return 1;
+    if (summary.baselineFailures || summary.timeouts || summary.surviving) return 1;
     if (result.status !== 0) return result.status;
     if (summary.caught === 0) {
       console.log("No selected mutants; this run provides no mutation evidence.");
