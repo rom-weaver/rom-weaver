@@ -67,6 +67,10 @@ impl ciso::read::Read for CsoSourceReader {
 
 struct CsoReader<R> {
     source: R,
+    layout: Arc<CsoLayout>,
+}
+
+struct CsoLayout {
     logical_bytes: u64,
     block_size: usize,
     alignment: u8,
@@ -212,17 +216,19 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
         }
         Ok(Self {
             source,
-            logical_bytes: header.uncompressed_size,
-            block_size,
-            alignment: header.alignment,
-            version: header.version,
-            source_size,
-            index,
+            layout: Arc::new(CsoLayout {
+                logical_bytes: header.uncompressed_size,
+                block_size,
+                alignment: header.alignment,
+                version: header.version,
+                source_size,
+                index,
+            }),
         })
     }
 
     fn file_size(&self) -> u64 {
-        self.logical_bytes
+        self.layout.logical_bytes
     }
 
     fn read_deflate_block(
@@ -233,7 +239,9 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
     ) -> io::Result<Vec<u8>> {
         let stored_len = usize::try_from(end - start)
             .ok()
-            .filter(|len| *len != 0 && *len <= self.block_size + self.block_size / 255 + 64)
+            .filter(|len| {
+                *len != 0 && *len <= self.layout.block_size + self.layout.block_size / 255 + 64
+            })
             .ok_or_else(|| Self::invalid("invalid CSO deflate block length"))?;
         let mut stored = vec![0; stored_len];
         self.source.read(start, &mut stored)?;
@@ -243,7 +251,7 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
             .is_err()
         {
             // Hand back the stored bytes only when the block is exactly its logical length.
-            if !is_deflate_version(self.version) && stored_len == block_len {
+            if !is_deflate_version(self.layout.version) && stored_len == block_len {
                 trace!(
                     block_len,
                     "cso v2 final block is not deflate, reading it raw"
@@ -260,7 +268,7 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
     /// with a 4-byte length; maxcso stores the bare LZ4 block, possibly followed by padding.
     fn read_lz4_block(&mut self, start: u64, end: u64, block_len: usize) -> io::Result<Vec<u8>> {
         let span = end - start;
-        let max_stored = self.block_size + self.block_size / 255 + 16;
+        let max_stored = self.layout.block_size + self.layout.block_size / 255 + 16;
         if span >= 4 {
             let mut length = [0; 4];
             self.source.read(start, &mut length)?;
@@ -270,13 +278,14 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
                 let mut stored = vec![0; stored_len];
                 self.source.read(start + 4, &mut stored)?;
                 let decoded = if length & 0x8000_0000 != 0 {
-                    (stored_len == block_len || stored_len == self.block_size).then_some(stored)
+                    (stored_len == block_len || stored_len == self.layout.block_size)
+                        .then_some(stored)
                 } else {
-                    let mut decoded = vec![0; self.block_size];
+                    let mut decoded = vec![0; self.layout.block_size];
                     lz4_flex::block::decompress_into(&stored, &mut decoded)
                         .ok()
                         .filter(|decoded_len| {
-                            *decoded_len == block_len || *decoded_len == self.block_size
+                            *decoded_len == block_len || *decoded_len == self.layout.block_size
                         })
                         .map(|_| decoded)
                 };
@@ -289,15 +298,15 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
         }
         // maxcso stores a block raw once its aligned compressed length reaches `block_size`,
         // so a bare LZ4 span is always shorter than that.
-        if span == 0 || span >= self.block_size as u64 {
+        if span == 0 || span >= self.layout.block_size as u64 {
             return Err(Self::invalid("invalid CSO LZ4 block length"));
         }
         let mut stored = vec![0; span as usize];
         self.source.read(start, &mut stored)?;
         // maxcso zero-pads the last block to `block_size` before compressing, so the LZ4 data
         // normally encodes a full block; other writers may encode only the logical bytes.
-        let mut decoded = decode_lz4_prefix(&stored, self.block_size);
-        if decoded.is_none() && block_len != self.block_size {
+        let mut decoded = decode_lz4_prefix(&stored, self.layout.block_size);
+        if decoded.is_none() && block_len != self.layout.block_size {
             decoded = decode_lz4_prefix(&stored, block_len);
         }
         let mut decoded =
@@ -310,32 +319,36 @@ impl<R: ciso::read::Read<ReadError = io::Error>> CsoReader<R> {
     fn read_offset(&mut self, mut pos: u64, mut output: &mut [u8]) -> io::Result<()> {
         if pos
             .checked_add(output.len() as u64)
-            .is_none_or(|end| end > self.logical_bytes)
+            .is_none_or(|end| end > self.layout.logical_bytes)
         {
             return Err(Self::invalid("CSO read exceeds logical size"));
         }
         while !output.is_empty() {
-            let block = (pos / self.block_size as u64) as usize;
-            let within = (pos % self.block_size as u64) as usize;
-            let entry = self.index[block];
-            let start = u64::from(entry & 0x7fff_ffff) << self.alignment;
-            let mut end = u64::from(self.index[block + 1] & 0x7fff_ffff) << self.alignment;
+            let block = (pos / self.layout.block_size as u64) as usize;
+            let within = (pos % self.layout.block_size as u64) as usize;
+            let entry = self.layout.index[block];
+            let start = u64::from(entry & 0x7fff_ffff) << self.layout.alignment;
+            let mut end =
+                u64::from(self.layout.index[block + 1] & 0x7fff_ffff) << self.layout.alignment;
             // The ciso writer rounds the final sentinel down to its alignment boundary.
-            if block + 2 == self.index.len() && self.source_size - end < (1_u64 << self.alignment) {
-                end = self.source_size;
+            if block + 2 == self.layout.index.len()
+                && self.layout.source_size - end < (1_u64 << self.layout.alignment)
+            {
+                end = self.layout.source_size;
             }
-            let block_len = (self.logical_bytes - block as u64 * self.block_size as u64)
-                .min(self.block_size as u64) as usize;
+            let block_len = (self.layout.logical_bytes
+                - block as u64 * self.layout.block_size as u64)
+                .min(self.layout.block_size as u64) as usize;
             let count = output.len().min(block_len - within);
             let span = end - start;
-            let v2_lz4 = !is_deflate_version(self.version) && entry & 0x8000_0000 != 0;
-            let raw = if is_deflate_version(self.version) {
+            let v2_lz4 = !is_deflate_version(self.layout.version) && entry & 0x8000_0000 != 0;
+            let raw = if is_deflate_version(self.layout.version) {
                 // In v0/v1 the high index bit marks a block stored without compression.
                 entry & 0x8000_0000 != 0
             } else {
                 // maxcso v2 stores a block raw when its compressed length (padding included)
                 // reaches the header block size, even for a shorter final block.
-                !v2_lz4 && span >= self.block_size as u64
+                !v2_lz4 && span >= self.layout.block_size as u64
             };
             if raw {
                 if span < block_len as u64 {
@@ -485,9 +498,13 @@ impl CsoContainerHandler {
     fn decode_extract_task(
         &self,
         source: &Path,
+        layout: &Arc<CsoLayout>,
         task: &CsoExtractTask,
     ) -> Result<CsoDecodedExtractChunk> {
-        let mut reader = self.open_reader(source)?;
+        let mut reader = CsoReader {
+            source: self.open_source(source)?,
+            layout: Arc::clone(layout),
+        };
         self.decode_extract_task_from_reader(source, &mut reader, task)
     }
 
@@ -584,8 +601,12 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         request.ensure_single_output_selected(&output_name)?;
 
         let output_path = request.out_dir.join(&output_name);
-        let reader = self.open_reader(&request.source)?;
-        let logical_bytes = reader.file_size();
+        let layout = self.open_reader(&request.source)?.layout;
+        let logical_bytes = layout.logical_bytes;
+        debug!(
+            index_entries = layout.index.len(),
+            "cso extract shared index ready"
+        );
         let tasks = self.build_extract_tasks(logical_bytes);
         let extract_capability = ThreadCapability::parallel(Some(tasks.len().max(1)));
         let execution = context.plan_threads(extract_capability);
@@ -615,23 +636,22 @@ impl ContainerHandlerOperations for CsoContainerHandler {
             request.overwrite,
         )?;
         let source = request.source.clone();
-        // Each worker opens its own reader and decodes its assigned range. It reads
-        // only the compressed blocks in that range; the OPFS proxy supports this
-        // path for spawned WASM threads.
+        // Workers MUST share the validated layout and open independent source handles.
+        // The OPFS proxy supports per-task reads for spawned WASM threads.
         let decode_result = if execution.used_parallelism {
             decode_tasks_ordered(
                 &tasks,
                 execution.effective_threads,
                 Self::extract_pipeline_messages(),
                 |task: &CsoExtractTask| task.len,
-                |task| self.decode_extract_task(&source, &task),
+                |task| self.decode_extract_task(&source, &layout, &task),
                 |chunk: CsoDecodedExtractChunk, task_len| {
                     extract_writer.write(chunk.index, chunk.data, task_len)
                 },
             )
         } else {
             tasks.iter().try_for_each(|task| {
-                let chunk = self.decode_extract_task(&source, task)?;
+                let chunk = self.decode_extract_task(&source, &layout, task)?;
                 extract_writer.write(chunk.index, chunk.data, task.len)
             })
         };
@@ -757,6 +777,55 @@ mod reader_regressions {
                     .read_offset(1000, &mut window)
                     .expect("cross-block read");
                 assert_eq!(window, data[1000..4000]);
+            }
+        }
+    }
+
+    #[test]
+    fn cso_shared_layout_readers_only_read_their_payload_ranges() {
+        struct PayloadReader {
+            bytes: std::io::Cursor<Vec<u8>>,
+            data_start: u64,
+        }
+
+        impl ciso::read::Read for PayloadReader {
+            type ReadError = io::Error;
+
+            fn size(&mut self) -> io::Result<u64> {
+                panic!("shared layout readers must not revalidate source size");
+            }
+
+            fn read(&mut self, pos: u64, buf: &mut [u8]) -> io::Result<()> {
+                assert!(
+                    pos >= self.data_start,
+                    "header and index must not be reread"
+                );
+                self.bytes.set_position(pos);
+                self.bytes.read_exact(buf)
+            }
+        }
+
+        for alignment in [0, 5] {
+            let data = v1_payload(2048 * 4 + 100);
+            let bytes = v1_image(&data, 2048, alignment);
+            let layout = CsoReader::new(std::io::Cursor::new(bytes.clone()))
+                .expect("valid layout")
+                .layout;
+            let data_start = u64::from(layout.index[0] & 0x7fff_ffff) << alignment;
+            for offset in [1000, 4000, 7000] {
+                let mut reader = CsoReader {
+                    source: PayloadReader {
+                        bytes: std::io::Cursor::new(bytes.clone()),
+                        data_start,
+                    },
+                    layout: Arc::clone(&layout),
+                };
+                let mut output = [0; 1000];
+                reader
+                    .read_offset(offset as u64, &mut output)
+                    .expect("payload read");
+                assert_eq!(output, data[offset..offset + output.len()]);
+                assert!(Arc::ptr_eq(&layout, &reader.layout));
             }
         }
     }
