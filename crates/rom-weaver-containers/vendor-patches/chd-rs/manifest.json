@@ -179,6 +179,18 @@
       "tests": [
         "cargo test -p rom-weaver-containers chd"
       ]
+    },
+    {
+      "file": "0014-shared-reader-metadata.patch",
+      "stage": "integration",
+      "reason": "Share the validated header and hunk map (including the parent) across decode workers through Arc-backed ChdReaderMetadata, so each worker reopens a file without reparsing or copying the map.",
+      "upstream": {
+        "status": "project-specific",
+        "url": "https://github.com/SnowflakePowered/chd-rs"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers chd"
+      ]
     }
   ]
 }
