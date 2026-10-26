@@ -340,6 +340,11 @@ msgstr "About"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.aboutField"
+msgstr "About {label}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "About rom-weaver, its license, and privacy"
 
@@ -550,11 +555,6 @@ msgstr "Apply & download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.applyBlocked"
-msgstr "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Apply & download"
 
@@ -577,6 +577,11 @@ msgstr "Apply cheat codes"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsThesis"
 msgstr "Apply cheat codes to ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Apply is blocked by a failed patch check. Fix the patch or ROM, or tick “Apply anyway” where it is offered."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -945,6 +950,16 @@ msgstr "Channel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideChd"
+msgstr "CHD to ISO guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractChdGuide"
+msgstr "CHD to ISO guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.compressed"
 msgstr "chd, rvz, and z3ds are decompressed to raw formats before patching."
 
@@ -1197,11 +1212,6 @@ msgstr "Choose Patches & cheats in step 3 to build from ordered changes. Modifie
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseRomTest"
 msgstr "Choose ROM and test"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.emulator.importReplaces"
-msgstr "Importing replaces the stored save for {label}, last changed {date}. Export it first to keep it."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1745,6 +1755,11 @@ msgstr "Diagnostics"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.differsFromPatch"
+msgstr "Differs from the {check} built into the patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDisabled"
 msgstr "Disabled"
 
@@ -1777,11 +1792,6 @@ msgstr "Dismiss"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Docs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.differsFromPatch"
-msgstr "Differs from the {check} built into the patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1977,6 +1987,11 @@ msgstr "DVD codecs"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.description"
 msgstr "Each backup can hold both a save state and an in-game save. Matching to the same ROM is automatic."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.weaveExport.cheatSteps"
+msgstr "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2512,6 +2527,11 @@ msgstr "Import save"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.importWarnings"
 msgstr "Import warnings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.importReplaces"
+msgstr "Importing replaces the stored save for {label}, last changed {date}. Export it first to keep it."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4450,6 +4470,16 @@ msgstr "RVZ codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideRvz"
+msgstr "RVZ to ISO guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractRvzGuide"
+msgstr "RVZ to ISO guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.save"
 msgstr "Save"
 
@@ -4667,11 +4697,6 @@ msgstr "Show {count} more {count, plural, one {variant} other {variants}}"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Show {label} details"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.settings.aboutField"
-msgstr "About {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5337,11 +5362,6 @@ msgstr "This value is too long."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "This visit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.weaveExport.cheatSteps"
-msgstr "Each enabled cheat becomes a separate patch. Recipients can switch cheats on or off."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

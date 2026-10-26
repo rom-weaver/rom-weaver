@@ -20,4 +20,10 @@ const WORKFLOW_GUIDES = {
   trim: { path: "docs/trim-roms-browser", label: "ui.hero.trimGuide" },
 } as const satisfies Record<string, WorkflowGuide>;
 
-export { WORKFLOW_GUIDES };
+/** Format-specific how-tos linked beside the Extract guide, for the search queries they answer. */
+const EXTRACT_FORMAT_GUIDES = [
+  { path: "docs/extract-chd", label: "ui.hero.extractChdGuide" },
+  { path: "docs/convert-rvz-to-iso", label: "ui.hero.extractRvzGuide" },
+] as const satisfies readonly WorkflowGuide[];
+
+export { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES };

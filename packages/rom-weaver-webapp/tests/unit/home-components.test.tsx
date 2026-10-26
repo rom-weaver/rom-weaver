@@ -54,6 +54,8 @@ describe("HomePage", () => {
     expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Compress");
     expect(disc?.querySelector("a[href='/tools/extract']")?.textContent).toBe("Extract files");
     expect(disc?.textContent).toContain("ISO or BIN/CUE");
+    expect(disc?.querySelector("a[href='/tools/docs/extract-chd']")?.textContent).toBe("CHD to ISO guide");
+    expect(disc?.querySelector("a[href='/tools/docs/convert-rvz-to-iso']")?.textContent).toBe("RVZ to ISO guide");
     const offline = container.querySelector("a[href='/tools/docs/browser-settings#prepare-for-offline-use']");
     expect(offline?.textContent).toBe("Prepare for offline use");
     expect(offline?.parentElement?.textContent).toContain("separate downloads");

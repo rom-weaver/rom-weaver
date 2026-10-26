@@ -72,6 +72,7 @@
 .rw-app .home-practice a,
 .rw-app .home-blurb a,
 .rw-app .home-trust-list a,
+.rw-app .home-route-body a,
 .rw-app .home-faq-more {
   color: var(--ink-2);
   text-decoration: underline;

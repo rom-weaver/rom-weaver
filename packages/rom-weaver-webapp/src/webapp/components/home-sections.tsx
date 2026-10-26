@@ -28,6 +28,8 @@ const CHECKSUM_ALGORITHMS = ROM_WEAVER_CHECKSUM_ALGORITHMS.map((algorithm) => al
 type HomeRoute = {
   body: MessageId;
   secondary?: { go: MessageId; slug: string };
+  /** How-to pages linked as plain text links under the body. */
+  guides?: readonly { label: MessageId; slug: string }[];
   file: string;
   go: MessageId;
   slug: string;
@@ -51,6 +53,10 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     go: "ui.home.goCompress",
     slug: "compress",
     secondary: { go: "ui.home.goExtract", slug: "extract" },
+    guides: [
+      { label: "ui.home.guideChd", slug: "docs/extract-chd" },
+      { label: "ui.home.guideRvz", slug: "docs/convert-rvz-to-iso" },
+    ],
     swatch: "source",
     title: "ui.home.routeDisc",
   },
@@ -132,7 +138,16 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
               </code>
             </p>
             <h3>{localizer.message(item.title)}</h3>
-            <p className="home-route-body">{localizer.message(item.body)}</p>
+            <p className="home-route-body">
+              {localizer.message(item.body)}
+              {/* Inline in the body: the card grid gives each area one element. */}
+              {item.guides?.map((guide, index) => (
+                <span key={guide.slug}>
+                  {index > 0 ? " · " : " "}
+                  <a href={route(guide.slug)}>{localizer.message(guide.label)}</a>
+                </span>
+              ))}
+            </p>
             {item.secondary ? (
               <div className="home-route-actions">
                 <a className="btn ghost slim home-route-go" href={route(item.slug)}>

@@ -340,6 +340,11 @@ msgstr "Acerca de"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.aboutField"
+msgstr "Acerca de {label}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "Acerca de rom-weaver, su licencia y su privacidad"
 
@@ -550,11 +555,6 @@ msgstr "Aplicar y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.applyBlocked"
-msgstr "Aplicar está bloqueado por una comprobación de parche fallida. Corrige el parche o la ROM, o marca «Aplicar de todos modos» donde aparezca."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.applyDownload"
 msgstr "Aplicar y descargar"
 
@@ -577,6 +577,11 @@ msgstr "Aplicar códigos de trucos"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyCheatsThesis"
 msgstr "Aplica códigos de trucos a ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.output.applyBlocked"
+msgstr "Aplicar está bloqueado por una comprobación de parche fallida. Corrige el parche o la ROM, o marca «Aplicar de todos modos» donde aparezca."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -945,6 +950,16 @@ msgstr "Canal"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideChd"
+msgstr "Guía de CHD a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractChdGuide"
+msgstr "Guía de CHD a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.compressed"
 msgstr "chd, rvz y z3ds se descomprimen a formatos sin procesar antes de aplicar parches."
 
@@ -1197,11 +1212,6 @@ msgstr "Elige Parches y trucos en el paso 0x03 para combinar cambios ordenados. 
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.chooseRomTest"
 msgstr "Elegir ROM y probar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.saves.emulator.importReplaces"
-msgstr "Importar reemplaza la partida guardada de {label}, modificada por última vez el {date}. Expórtala antes para conservarla."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1745,6 +1755,11 @@ msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.differsFromPatch"
+msgstr "Difiere de la comprobación {check} incluida en el parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerDisabled"
 msgstr "Desactivada"
 
@@ -1777,11 +1792,6 @@ msgstr "Descartar"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Documentación"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.differsFromPatch"
-msgstr "Difiere de la comprobación {check} incluida en el parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1977,6 +1987,11 @@ msgstr "Códecs DVD"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.description"
 msgstr "Cada copia puede contener un estado guardado y SRAM. La asociación con la misma ROM es automática."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.weaveExport.cheatSteps"
+msgstr "Cada truco activado se convierte en un parche independiente. Los destinatarios pueden activar o desactivar cada truco."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2512,6 +2527,11 @@ msgstr "Importar partida"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.importWarnings"
 msgstr "Advertencias de importación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.saves.emulator.importReplaces"
+msgstr "Importar reemplaza la partida guardada de {label}, modificada por última vez el {date}. Expórtala antes para conservarla."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4450,6 +4470,16 @@ msgstr "Códec RVZ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.guideRvz"
+msgstr "Guía de RVZ a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractRvzGuide"
+msgstr "Guía de RVZ a ISO"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.save"
 msgstr "Guardar"
 
@@ -4667,11 +4697,6 @@ msgstr "Mostrar {count} {count, plural, one {variante más} other {variantes má
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Mostrar detalles de {label}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.settings.aboutField"
-msgstr "Acerca de {label}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5337,11 +5362,6 @@ msgstr "Este valor es demasiado largo."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.weaveExport.cheatSteps"
-msgstr "Cada truco activado se convierte en un parche independiente. Los destinatarios pueden activar o desactivar cada truco."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

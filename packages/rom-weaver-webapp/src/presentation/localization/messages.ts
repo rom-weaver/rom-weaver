@@ -1006,6 +1006,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.routeDiscBody",
     message: "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE.",
   }),
+  "ui.home.guideChd": msg({ id: "ui.home.guideChd", message: "CHD to ISO guide" }),
+  "ui.home.guideRvz": msg({ id: "ui.home.guideRvz", message: "RVZ to ISO guide" }),
   "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
   "ui.home.routeEditedBody": msg({
     id: "ui.home.routeEditedBody",
@@ -1564,6 +1566,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
   "ui.hero.compressGuide": msg({ id: "ui.hero.compressGuide", message: "Read the Compress guide" }),
+  "ui.hero.extractChdGuide": msg({ id: "ui.hero.extractChdGuide", message: "CHD to ISO guide" }),
+  "ui.hero.extractRvzGuide": msg({ id: "ui.hero.extractRvzGuide", message: "RVZ to ISO guide" }),
   "ui.hero.extractGuide": msg({ id: "ui.hero.extractGuide", message: "Read the Extract guide" }),
   "ui.hero.identifyGuide": msg({ id: "ui.hero.identifyGuide", message: "Read the Identify guide" }),
   "ui.hero.playlistGuide": msg({ id: "ui.hero.playlistGuide", message: "Read the M3U playlist guide" }),
