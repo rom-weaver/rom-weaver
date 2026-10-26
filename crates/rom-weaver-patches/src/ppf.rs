@@ -333,7 +333,10 @@ impl PatchHandler for PpfPatchHandler {
     }
 
     fn capabilities(&self) -> PatchCapabilities {
-        crate::threaded_create_capabilities()
+        PatchCapabilities {
+            threaded_output: false,
+            ..crate::threaded_create_capabilities()
+        }
     }
 }
 

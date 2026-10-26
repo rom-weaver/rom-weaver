@@ -115,7 +115,7 @@ fn parse_and_apply_round_trip_for_ppf1() {
         )
         .expect("apply");
 
-    assert!(handler.capabilities().threaded_output);
+    assert!(!handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
     assert_eq!(execution.effective_threads, 1);
@@ -2064,6 +2064,7 @@ fn streaming_apply_writes_borrowed_records_in_order() {
     super::apply_records_in_memory(&records, &mut in_memory).expect("in-memory apply");
     assert_eq!(streamed, in_memory);
 
+    fs::write(&output_path, b"........").expect("reset output");
     let context = test_context_with_threads(&temp, 2);
     context.cancel().cancel();
     let mut output = OpenOptions::new()
@@ -2073,7 +2074,7 @@ fn streaming_apply_writes_borrowed_records_in_order() {
     assert!(super::apply_records(&mut output, &records, &context).is_err());
     assert_eq!(
         fs::read(&output_path).expect("cancelled output"),
-        b".AB..YZ."
+        b"........"
     );
 }
 
