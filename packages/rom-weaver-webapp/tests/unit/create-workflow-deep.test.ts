@@ -183,6 +183,7 @@ describe("runCreateWorkflow worker path", () => {
     expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(
       expect.objectContaining({ fileName: "modified.bps" }),
       "modified.bps",
+      { materializeBlob: false, preferExternalFilePath: true },
     );
     expect(mocks.archiveOutput).toHaveBeenCalledWith(
       expect.objectContaining({

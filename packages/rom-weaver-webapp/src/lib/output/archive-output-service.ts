@@ -19,7 +19,7 @@ import type {
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import { type ArchiveCompressionFormat, isArchiveCompressionFormat } from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
-import { getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
+import { getPatchFileBytes, getPatchFileCleanup, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
@@ -246,7 +246,6 @@ const createArchivePatchFileOutput = async (
 
 const createSingleFileArchiveOutput = async ({
   compression,
-  deps,
   entryFile,
   entryNameDetailKey,
   fallbackEntryName,
@@ -256,10 +255,6 @@ const createSingleFileArchiveOutput = async ({
   unsupportedRuntimeMessage,
 }: {
   compression: ArchiveCreateCompression;
-  deps: {
-    getPatchFileBytes: typeof getPatchFileBytes;
-    hasArchiveFileName: typeof hasArchiveFileName;
-  };
   entryFile: PatchFileInstance;
   entryNameDetailKey: string;
   fallbackEntryName: string;
@@ -270,7 +265,7 @@ const createSingleFileArchiveOutput = async ({
 }): Promise<PublicOutput> => {
   const requestedFileName = getOutputName(options);
   const entryName =
-    requestedFileName && !deps.hasArchiveFileName(requestedFileName, compression)
+    requestedFileName && !hasArchiveFileName(requestedFileName, compression)
       ? requestedFileName
       : entryFile.fileName || fallbackEntryName;
   entryFile.fileName = entryName;
@@ -283,18 +278,12 @@ const createSingleFileArchiveOutput = async ({
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const outputName =
-    requestedFileName && deps.hasArchiveFileName(requestedFileName, compression)
+    requestedFileName && hasArchiveFileName(requestedFileName, compression)
       ? requestedFileName
       : OutputCompressionManager.getCompressedFileName({ fileName: entryName }, compression, compressionSettings);
-  return createArchiveOutput({
+  const output = await createArchiveOutput({
     compression,
-    entries: [
-      {
-        data: deps.getPatchFileBytes(entryFile),
-        fileName: entryName,
-        filename: entryName,
-      },
-    ],
+    entries: [createArchiveEntryInputFromPatchFile(entryFile, entryName).entry],
     options,
     outputName,
     runtime,
@@ -305,6 +294,9 @@ const createSingleFileArchiveOutput = async ({
       })),
     unsupportedRuntimeMessage,
   });
+  // The archive now holds the entry, so release its intermediate like the ROM-specific path does.
+  await Promise.resolve(getPatchFileCleanup(entryFile)?.()).catch(() => undefined);
+  return output;
 };
 
 export type { ArchiveCompressionOverrides, ArchiveOutputEntry };

@@ -1,4 +1,4 @@
-import { attachPatchFileSourceRef, getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { attachPatchFileSourceRef } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
@@ -14,7 +14,7 @@ import {
 } from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { toPublicOutput } from "../apply/patch-apply-service.ts";
-import { createSingleFileArchiveOutput, hasArchiveFileName } from "../output/archive-output-service.ts";
+import { createSingleFileArchiveOutput } from "../output/archive-output-service.ts";
 import { createSingleFileRomSpecificOutput } from "../output/output-build-service.ts";
 import { getCompressionIntermediateFileName } from "../output/output-files.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
@@ -122,7 +122,6 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     if (isArchiveCompressionFormat(compression)) {
       return createSingleFileArchiveOutput({
         compression,
-        deps: { getPatchFileBytes, hasArchiveFileName },
         entryFile: trimmedFile,
         entryNameDetailKey: "trimEntryName",
         fallbackEntryName: trimmedFile.fileName || "trimmed.bin",
@@ -215,14 +214,10 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
       },
     };
   }
-  // ROM-specific (disc) compression stages the trimmed output from its VFS path (see
-  // createRuntimeSourceFromPatchFile), so keep it lazy and never materialize the (often multi-GiB)
-  // trim output on the main thread. Archive compression reads the bytes synchronously and needs them.
-  const trimmedFile = await createPatchFileFromPublicOutput(
-    result.output,
-    result.output.fileName || rawTrimFileName,
-    isRomSpecificCompressionFormat(compression) ? { materializeBlob: false, preferExternalFilePath: true } : undefined,
-  );
+  const trimmedFile = await createPatchFileFromPublicOutput(result.output, result.output.fileName || rawTrimFileName, {
+    materializeBlob: false,
+    preferExternalFilePath: true,
+  });
   if (
     isRomSpecificCompressionFormat(compression) &&
     result.output.path &&
