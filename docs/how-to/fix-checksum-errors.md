@@ -1,10 +1,10 @@
-# Source ROM checksum mismatch: causes and fixes
+# How to fix a source ROM checksum mismatch
 
-A source ROM checksum mismatch means your ROM differs from the file the patch expects. Find the cause, then fix the input. An override skips the check; it does not repair the ROM.
+A source ROM checksum mismatch means your ROM is not the file the patch expects: usually the wrong region or revision, a header, or an already patched copy.
+
+Find the cause, then fix the input. An override skips the check; it does not repair the ROM.
 
 <a id="fix-a-rom-checksum-mismatch-in-the-browser"></a>
-
-<a id="how-to-fix-a-source-rom-checksum-mismatch"></a>
 
 <!-- START doctoc -->
 ## Table of contents
