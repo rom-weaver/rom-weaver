@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     cmp::Ordering,
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
@@ -15,14 +16,16 @@ use rom_weaver_core::{
     OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
     ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
-    ThreadCapability, bounded_items_for_threads,
+    ThreadCapability,
 };
 use suffix_array::SuffixArray;
 use tracing::{debug, trace};
 
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
 use crate::shared::labels::{byuu_metadata_report, byuu_parse_report};
-use crate::shared::threading::run_with_optional_pool;
+use crate::shared::threading::{
+    PARALLEL_WRITE_CHUNK_BYTES, parallel_write_batch_bytes, run_with_optional_pool,
+};
 #[cfg(test)]
 use crate::varint::push_varint;
 
@@ -32,7 +35,7 @@ const COPY_BUFFER_SIZE: usize = 32 * 1024;
 /// Heap buffer for the serial streaming apply source-copy loop. Its size keeps
 /// WASM writes above the OPFS write-coalescing threshold.
 const APPLY_STREAM_BUFFER_SIZE: usize = 4 * 1024 * 1024;
-const BPS_PARALLEL_WRITE_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
+const BPS_PARALLEL_WRITE_CHUNK_SIZE: u64 = PARALLEL_WRITE_CHUNK_BYTES as u64;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
@@ -325,9 +328,9 @@ struct BpsWritePlan<'a> {
     kind: BpsWritePlanKind<'a>,
 }
 
-struct PreparedBpsWrite {
+struct PreparedBpsWrite<'a> {
     output_offset: u64,
-    data: Vec<u8>,
+    data: Cow<'a, [u8]>,
 }
 
 struct PreparedBpsWrites<'a> {
@@ -1905,8 +1908,7 @@ fn apply_parallel_bps_writes(
     context: &OperationContext,
     progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {
-    let batch_byte_limit =
-        bounded_items_for_threads(prepared.pool.size()) as u64 * BPS_PARALLEL_WRITE_CHUNK_SIZE;
+    let batch_byte_limit = parallel_write_batch_bytes(prepared.pool.size()) as u64;
     let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
     let mut current_pos = 0u64;
     let mut batch_start = 0;
@@ -1924,7 +1926,7 @@ fn apply_parallel_bps_writes(
                 .map(|plan| {
                     context.cancel().check()?;
                     let data = match &plan.kind {
-                        BpsWritePlanKind::Literal(data) => data.to_vec(),
+                        BpsWritePlanKind::Literal(data) => Cow::Borrowed(*data),
                         BpsWritePlanKind::SourceRange { source_offset, len } => {
                             let range_len = usize::try_from(*len).map_err(|_| {
                                 RomWeaverError::Validation(
@@ -1950,7 +1952,7 @@ fn apply_parallel_bps_writes(
                                     )?;
                                 }
                             }
-                            bytes
+                            Cow::Owned(bytes)
                         }
                     };
                     Ok(PreparedBpsWrite {
@@ -1976,7 +1978,7 @@ fn read_parallel_bps_source_range(
 
 fn apply_prepared_bps_writes(
     writer: &mut (impl Write + Seek),
-    writes: &[PreparedBpsWrite],
+    writes: &[PreparedBpsWrite<'_>],
     current_pos: &mut u64,
     progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {

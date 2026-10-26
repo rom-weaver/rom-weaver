@@ -1612,11 +1612,11 @@ fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
         &[
             PreparedBpsWrite {
                 output_offset: 0,
-                data: Vec::new(),
+                data: Vec::new().into(),
             },
             PreparedBpsWrite {
                 output_offset: 4,
-                data: b"WXYZ".to_vec(),
+                data: std::borrow::Cow::Borrowed(b"WXYZ"),
             },
         ],
         &mut current_pos,
@@ -2275,4 +2275,64 @@ fn create_rejects_inputs_larger_than_the_in_memory_encoder_limit() {
             .contains("BPS create requires copy-aware in-memory encoding"),
         "unexpected error: {error}"
     );
+}
+
+#[test]
+fn streaming_apply_uses_four_mebibyte_reads_for_source_reads_and_copies() {
+    use std::io::{self, Cursor, Read, Seek, SeekFrom};
+
+    struct ObservedSource {
+        bytes: Cursor<Vec<u8>>,
+        reads: Vec<usize>,
+    }
+
+    impl Read for ObservedSource {
+        fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+            self.reads.push(output.len());
+            self.bytes.read(output)
+        }
+    }
+
+    impl Seek for ObservedSource {
+        fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+            self.bytes.seek(position)
+        }
+    }
+
+    const EXPECTED_BUFFER_BYTES: usize = 4_194_304;
+    assert_eq!(super::APPLY_STREAM_BUFFER_SIZE, EXPECTED_BUFFER_BYTES);
+    let temp = TestDir::new();
+    let source_bytes: Vec<u8> = (0..EXPECTED_BUFFER_BYTES + 1)
+        .map(|index| (index % 251) as u8)
+        .collect();
+    let mut expected = source_bytes.clone();
+    expected.extend_from_slice(&source_bytes[..8]);
+    let patch = parse_bps_bytes(&build_bps_patch(
+        &source_bytes,
+        &expected,
+        vec![
+            TestAction::SourceRead(source_bytes.len() as u64),
+            TestAction::SourceCopy {
+                length: 8,
+                relative_offset: 0,
+            },
+        ],
+    ))
+    .expect("patch");
+    let mut source = ObservedSource {
+        bytes: Cursor::new(source_bytes),
+        reads: Vec::new(),
+    };
+    let output_path = temp.child("streamed.bin");
+    let mut output = fs::File::create(&output_path).expect("output");
+    apply_patch_actions(
+        &patch,
+        &mut source,
+        &mut output,
+        &test_context_with_threads(&temp, 1),
+        "BPS",
+    )
+    .expect("streaming apply");
+    assert_eq!(source.reads, [EXPECTED_BUFFER_BYTES, 1, 8]);
+    assert_eq!(fs::read(output_path).expect("output"), expected);
 }

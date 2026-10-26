@@ -17,7 +17,8 @@ use tracing::debug;
 use crate::checksum_validation_suffix;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::threading::{
-    chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
+    PreparedWrite, apply_batched_writes, chunk_count_for_len, parallel_chunked_capability,
+    parallel_per_record_capability,
 };
 use crate::shared::{hex_encode, utc_today};
 
@@ -427,11 +428,6 @@ struct PrimitiveWritePlan {
     len: usize,
 }
 
-struct PreparedSolidWrite {
-    start: usize,
-    data: Vec<u8>,
-}
-
 #[derive(Debug)]
 struct CreatedExpansion {
     address: u64,
@@ -766,29 +762,13 @@ fn apply_parsed_patch_to_file(
     output_path: &Path,
     context: &OperationContext,
 ) -> Result<()> {
-    let writes = plans
-        .iter()
-        .map(|plan| {
-            let primitive = parsed.primitives.get(plan.primitive_index).ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "SOLID primitive plan referenced an out-of-range primitive".into(),
-                )
-            })?;
-            let mut data = vec![0u8; plan.len];
-            primitive.write_into(&mut data);
-            Ok(PreparedSolidWrite {
-                start: plan.start,
-                data,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
     apply_solid_writes_and_resize_to_file(
         parsed,
         source_path,
         output_path,
         required_output_len,
-        writes,
+        &plans,
+        None,
         context,
     )
 }
@@ -801,32 +781,13 @@ fn apply_parsed_patch_parallel_to_file(
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<()> {
-    let writes = pool.install(|| {
-        plans
-            .par_iter()
-            .map(|plan| {
-                context.cancel().check()?;
-                let primitive = parsed.primitives.get(plan.primitive_index).ok_or_else(|| {
-                    RomWeaverError::Validation(
-                        "SOLID primitive plan referenced an out-of-range primitive".into(),
-                    )
-                })?;
-                let mut data = vec![0u8; plan.len];
-                primitive.write_into(&mut data);
-                Ok(PreparedSolidWrite {
-                    start: plan.start,
-                    data,
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-    })?;
-
     apply_solid_writes_and_resize_to_file(
         parsed,
         source_path,
         output_path,
         required_output_len,
-        writes,
+        &plans,
+        Some(pool),
         context,
     )
 }
@@ -836,7 +797,8 @@ fn apply_solid_writes_and_resize_to_file(
     source_path: &Path,
     output_path: &Path,
     required_output_len: usize,
-    writes: Vec<PreparedSolidWrite>,
+    plans: &[PrimitiveWritePlan],
+    pool: Option<&SharedThreadPool>,
     context: &OperationContext,
 ) -> Result<()> {
     if let Some(parent) = output_path.parent() {
@@ -852,16 +814,28 @@ fn apply_solid_writes_and_resize_to_file(
     if output.metadata()?.len() < required_output_len_u64 {
         output.set_len(required_output_len_u64)?;
     }
-
-    for write in writes {
-        let start = u64::try_from(write.start)
-            .map_err(|_| RomWeaverError::Validation("SOLID write start exceeded u64".into()))?;
-        output.seek(SeekFrom::Start(start))?;
-        output.write_all(&write.data)?;
-    }
+    apply_batched_writes(
+        &mut output,
+        plans,
+        pool,
+        |plan| plan.len,
+        |plan, _range| {
+            context.cancel().check()?;
+            let primitive = parsed.primitives.get(plan.primitive_index).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "SOLID primitive plan referenced an out-of-range primitive".into(),
+                )
+            })?;
+            let mut data = vec![0u8; plan.len];
+            primitive.write_into(&mut data);
+            Ok(PreparedWrite {
+                offset: plan.start as u64,
+                data,
+            })
+        },
+    )?;
     output.flush()?;
     drop(output);
-
     apply_resize_action_to_file(parsed, output_path, context)
 }
 

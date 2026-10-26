@@ -14,11 +14,11 @@ use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
-    SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    SharedBlockCacheReader, ThreadCapability,
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;
-use crate::shared::threading::{PreparedWrite, apply_prepared_writes, pool_map};
+use crate::shared::threading::{PreparedWrite, apply_batched_writes};
 
 const BSDIFF40_HEADER_BYTES: usize = 32;
 const BSDIFF40_MAGIC: &[u8] = b"BSDIFF40";
@@ -79,35 +79,38 @@ impl BdfPatchHandler {
             .open(&request.output)?;
         output.set_len(plan.output_len)?;
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let (execution, writes) = if planned_execution.used_parallelism {
+        let (execution, pool) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let source = ParallelBsdiffSource::Disk(Arc::new(SharedBlockCacheReader::open(
-                &request.input,
-                DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-                DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-            )?));
-            let writes = prepare_bsdiff_writes_parallel(
-                &plan.writes,
-                &source,
-                source_len,
-                &plan.delta_payload,
-                &plan.extra_payload,
-                &pool,
-                context,
-            )?;
-            (execution, writes)
+            (execution, Some(pool))
         } else {
-            let writes = prepare_bsdiff_writes_sequential(
-                &plan.writes,
-                &request.input,
-                source_len,
-                &plan.delta_payload,
-                &plan.extra_payload,
-                context,
-            )?;
-            (planned_execution, writes)
+            (planned_execution, None)
         };
-        apply_prepared_writes(&mut output, &writes)?;
+        let source = ParallelBsdiffSource::Disk(Arc::new(SharedBlockCacheReader::open(
+            &request.input,
+            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+        )?));
+        apply_batched_writes(
+            &mut output,
+            &plan.writes,
+            pool.as_ref(),
+            |plan| match plan.kind {
+                BsdiffWritePlanKind::Add { len, .. } | BsdiffWritePlanKind::Copy { len, .. } => {
+                    len as usize
+                }
+            },
+            |write, range| {
+                context.cancel().check()?;
+                prepare_bsdiff_write(
+                    write,
+                    &source,
+                    source_len,
+                    &plan.delta_payload,
+                    &plan.extra_payload,
+                    range,
+                )
+            },
+        )?;
         output.flush()?;
         let written = fs::metadata(&request.output)?.len();
 
@@ -555,108 +558,47 @@ fn bsdiff_payload_range<'a>(
     })
 }
 
-fn prepare_bsdiff_writes_parallel(
-    plans: &[BsdiffWritePlan],
+fn prepare_bsdiff_write(
+    plan: &BsdiffWritePlan,
     source: &ParallelBsdiffSource,
     source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
-    pool: &SharedThreadPool,
-    context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
-    pool_map(pool, plans, |plan| {
-        context.cancel().check()?;
-        let data = match &plan.kind {
-            BsdiffWritePlanKind::Add {
-                source_offset,
-                delta_offset,
-                len,
-            } => {
-                let mut data =
-                    bsdiff_payload_range(delta_payload, *delta_offset, *len, "delta")?.to_vec();
-                add_source_overlap_shared(source, source_len, *source_offset, data.as_mut_slice())?;
-                data
-            }
-            BsdiffWritePlanKind::Copy { extra_offset, len } => {
-                bsdiff_payload_range(extra_payload, *extra_offset, *len, "extra")?.to_vec()
-            }
-        };
-        Ok(PreparedWrite {
-            offset: plan.output_offset,
-            data,
-        })
-    })
-}
-
-fn prepare_bsdiff_writes_sequential(
-    plans: &[BsdiffWritePlan],
-    source_path: &Path,
-    source_len: usize,
-    delta_payload: &[u8],
-    extra_payload: &[u8],
-    context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
-    let mut source = BlockCacheReader::open(
-        source_path,
-        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?;
-    plans
-        .iter()
-        .map(|plan| {
-            context.cancel().check()?;
-            prepare_bsdiff_write(plan, &mut source, source_len, delta_payload, extra_payload)
-        })
-        .collect()
-}
-
-fn prepare_bsdiff_write(
-    plan: &BsdiffWritePlan,
-    source: &mut BlockCacheReader,
-    source_len: usize,
-    delta_payload: &[u8],
-    extra_payload: &[u8],
+    range: std::ops::Range<usize>,
 ) -> Result<PreparedWrite> {
+    let start = range.start as u64;
+    let range_len = range.len() as u64;
     let data = match &plan.kind {
         BsdiffWritePlanKind::Add {
             source_offset,
             delta_offset,
             len,
         } => {
+            bsdiff_payload_range(delta_payload, *delta_offset, *len, "delta")?;
             let mut data =
-                bsdiff_payload_range(delta_payload, *delta_offset, *len, "delta")?.to_vec();
-            add_source_overlap(source, source_len, *source_offset, data.as_mut_slice())?;
+                bsdiff_payload_range(delta_payload, delta_offset + start, range_len, "delta")?
+                    .to_vec();
+            add_source_overlap_shared(
+                source,
+                source_len,
+                source_offset + i128::from(start),
+                &mut data,
+            )?;
             data
         }
         BsdiffWritePlanKind::Copy { extra_offset, len } => {
-            bsdiff_payload_range(extra_payload, *extra_offset, *len, "extra")?.to_vec()
+            bsdiff_payload_range(extra_payload, *extra_offset, *len, "extra")?;
+            bsdiff_payload_range(extra_payload, extra_offset + start, range_len, "extra")?.to_vec()
         }
     };
     Ok(PreparedWrite {
-        offset: plan.output_offset,
+        offset: plan.output_offset + start,
         data,
     })
 }
 
 fn add_source_overlap_shared(
     source: &ParallelBsdiffSource,
-    source_len: usize,
-    source_offset: i128,
-    data: &mut [u8],
-) -> Result<()> {
-    let Some((read_offset, data_offset, len)) =
-        source_overlap(source_len, source_offset, data.len())?
-    else {
-        return Ok(());
-    };
-    let mut source_slice = vec![0u8; len];
-    source.read_exact_at(read_offset, source_slice.as_mut_slice())?;
-    add_source_slice(data, data_offset, source_slice.as_slice());
-    Ok(())
-}
-
-fn add_source_overlap(
-    source: &mut BlockCacheReader,
     source_len: usize,
     source_offset: i128,
     data: &mut [u8],

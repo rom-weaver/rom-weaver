@@ -1045,3 +1045,51 @@ fn apply_label_reports_skipped_validation_unless_source_and_target_are_checked()
         assert_eq!(fs::read(output_path).expect("output"), target);
     }
 }
+
+#[test]
+fn split_parallel_change_zero_fills_past_the_source() {
+    let temp = TestDir::new();
+    let source = vec![1; 64];
+    let target = vec![2; crate::shared::threading::PARALLEL_WRITE_CHUNK_BYTES + 71];
+    let patch = create_ups_patch_bytes(&source, &target).expect("patch");
+    let parsed = parse_ups_bytes(&patch.bytes).expect("parse");
+    let source_path = temp.child("split-source.bin");
+    let output_path = temp.child("split-output.bin");
+    fs::write(&source_path, &source).expect("source");
+    let context = test_context_with_threads(&temp, 4);
+    let (_, pool) = context
+        .build_pool(rom_weaver_core::ThreadCapability::parallel(Some(4)))
+        .expect("pool");
+    let mut output = fs::File::create(&output_path).expect("output");
+    super::apply_ups_writes_parallel(
+        &parsed,
+        &source_path,
+        source.len() as u64,
+        target.len() as u64,
+        &pool,
+        &context,
+        &mut output,
+    )
+    .expect("split change");
+    assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn prepared_ranges_at_source_eof_and_empty_ranges_need_no_source_bytes() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    fs::write(&source_path, b"abc").expect("source");
+    let source = std::sync::Arc::new(
+        rom_weaver_core::SharedBlockCacheReader::open(&source_path, 16, 1).expect("source reader"),
+    );
+    let change = super::UpsChange {
+        offset: 1,
+        xor_bytes: vec![1, 2, 3, 4],
+    };
+    let at_eof = super::prepare_ups_write(&change, 3, 5, &source, 2..4).expect("at source eof");
+    assert_eq!(at_eof.offset, 3);
+    assert_eq!(at_eof.data, [3, 4]);
+    let empty = super::prepare_ups_write(&change, 3, 5, &source, 1..1).expect("empty piece");
+    assert_eq!(empty.offset, 2);
+    assert!(empty.data.is_empty());
+}
