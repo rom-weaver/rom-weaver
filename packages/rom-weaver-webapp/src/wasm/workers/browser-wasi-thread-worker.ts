@@ -150,13 +150,7 @@ async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
   const sharedControl = control as Int32Array<SharedArrayBuffer>;
   const poolStream = createStreamPublisher(payload, null);
   if (payload.prewarmRuntime !== false) {
-    await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine).catch((error: unknown) => {
-      // The guest may already be blocked spawning onto this slot, and its thread cannot read our
-      // error reply until the spawn returns, so fail the slot directly.
-      Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 1);
-      signalThreadState(sharedControl, THREAD_SLOT_STATE_FAILED);
-      throw error;
-    });
+    await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
   }
   self.postMessage({
     commandId: payload.commandId,
