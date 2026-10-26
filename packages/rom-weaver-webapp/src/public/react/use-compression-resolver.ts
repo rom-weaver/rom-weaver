@@ -150,6 +150,9 @@ const useCompressionResolver = ({
     const recommendedFormat = romInputs[0]?.info?.romType?.recommendedFormat;
     // Native `chd` auto-inference verdict for the source's bytes (Rust ingest), read by the panel mode.
     const chdCreateMode = romInputs[0]?.info?.romType?.chdCreateMode;
+    // A staged disc track carries its sheet, which makes the uncompressed output several files.
+    const cueText = romInputs[0]?.cueText;
+    const gdiText = romInputs[0]?.gdiText;
     const baseSource = effectiveInputs[0];
     if (!selectedInputFileName) return baseSource;
     if (baseSource && typeof baseSource === "object") {
@@ -158,12 +161,14 @@ const useCompressionResolver = ({
       const baseSize = romInputs[0]?.size ?? getBinarySourceSize(baseSource);
       return {
         ...(baseSource as unknown as Record<string, unknown>),
-        ...(chdMode || discFormat || recommendedFormat || chdCreateMode
+        ...(chdMode || discFormat || recommendedFormat || chdCreateMode || cueText || gdiText
           ? {
               metadata: {
                 ...(chdCreateMode ? { chdCreateMode } : {}),
                 ...(chdMode ? { mode: chdMode } : {}),
+                ...(cueText ? { cueText } : {}),
                 ...(discFormat ? { format: discFormat } : {}),
+                ...(gdiText ? { gdiText } : {}),
                 ...(recommendedFormat ? { recommendedFormat } : {}),
               },
             }

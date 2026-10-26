@@ -179,6 +179,28 @@ test("apply output options preserve configured compression order and labels", ()
   ]);
 });
 
+test("apply output options label uncompressed output by its extracted contents, not the input container", () => {
+  const labels = (source) =>
+    Object.fromEntries(
+      createApplyOutputOptions(["none", "zip", "chd"], source).map(({ label, value }) => [value, label]),
+    );
+  expect(labels({ fileName: "game.chd", metadata: { mode: "cd" } })).toEqual({
+    chd: ".chd",
+    none: ".zip (uncompressed)",
+    zip: ".zip",
+  });
+  expect(labels({ fileName: "game.chd", metadata: { format: "GD-ROM" } }).none).toBe(".zip (uncompressed)");
+  expect(labels({ fileName: "game.cue" }).none).toBe(".zip (uncompressed)");
+  expect(labels({ fileName: "game.bin", metadata: { cueText: 'FILE "game.bin" BINARY' } }).none).toBe(
+    ".zip (uncompressed)",
+  );
+  expect(labels({ fileName: "game.bin", metadata: { gdiText: "1" } }).none).toBe(".zip (uncompressed)");
+  expect(labels({ fileName: "game.chd" }).none).toBe("None");
+  expect(labels({ fileName: "game.chd", metadata: { mode: "dvd" } }).none).toBe(".iso");
+  expect(labels({ fileName: "game.rvz" }).none).toBe(".iso");
+  expect(labels({ fileName: "game.bin" }).none).toBe(".bin");
+});
+
 test("apply output options label unknown uncompressed output as none", () => {
   expect(createApplyOutputOptions(["none", "zip", "7z"])).toEqual([
     { label: "None", value: "none" },

@@ -5,9 +5,11 @@ import {
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { getSelectableCreatePatchFormats } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
+import { chdModeFromMetadata } from "../../lib/input/rom-specific-file-utils.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { sanitizeFileNamePart, sanitizeTypedOutputName } from "../../lib/path-utils.ts";
 import type { ApplySettings } from "../../types/settings.ts";
+import type { SourceMetadata } from "../../types/workflow-source.ts";
 
 type OutputOption = {
   value: string;
@@ -37,8 +39,10 @@ type CreatePatchFormatOptions = {
 };
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
+const DISC_SHEET_FILE_NAME_REGEX = /\.(?:cue|gdi)$/i;
 const FILE_NAME_SEPARATOR_REGEX = /[/\\]+/;
 const NONE_COMPRESSION_LABEL = "None";
+const UNCOMPRESSED_DISC_LABEL = ".zip (uncompressed)";
 
 const getFileNameWithoutExtension = (fileName: string) =>
   getBaseFileName(fileName).replace(EXTENSION_REGEX, "") || getBaseFileName(fileName);
@@ -133,15 +137,39 @@ const getGeneratedOutputName = (
   );
 };
 
+const getExtensionLabel = (fileName: string) => {
+  const extension = getBaseFileName(fileName).match(EXTENSION_REGEX)?.[1]?.toLowerCase();
+  return extension ? `.${extension}` : "";
+};
+
+// An uncompressed disc (a cue/gdi sheet plus its tracks) is several files, so the run saves it in one stored
+// ZIP. A CD-mode CHD extracts to such a disc; a CHD whose mode is not known yet gets no extension, not a guess.
+const getUncompressedOutputLabel = (source?: GeneratedOutputSource) => {
+  const rawFileName = getGeneratedOutputSourceFileName(source, "");
+  if (!rawFileName) return "";
+  const metadata =
+    source && typeof source === "object" && "metadata" in source
+      ? (source.metadata as SourceMetadata | undefined)
+      : undefined;
+  if (metadata?.cueText || metadata?.gdiText || DISC_SHEET_FILE_NAME_REGEX.test(rawFileName))
+    return UNCOMPRESSED_DISC_LABEL;
+  const classifiedInput = classifyPatcherInput(source);
+  if (classifiedInput.kind !== "compression" || classifiedInput.compressionFormat !== "chd")
+    return getExtensionLabel(rawFileName);
+  const chdMode = chdModeFromMetadata(metadata);
+  if (chdMode === "cd") return UNCOMPRESSED_DISC_LABEL;
+  return chdMode ? getExtensionLabel(rawFileName) : "";
+};
+
 const getOutputOptionExtensionLabel = (option: string, source?: GeneratedOutputSource) => {
-  if (option === "none" && !getGeneratedOutputSourceFileName(source, "")) return "";
+  if (option === "none") return getUncompressedOutputLabel(source);
   try {
-    const fileName = OutputCompressionManager.getCompressedFileName(
-      source as Parameters<typeof OutputCompressionManager.getCompressedFileName>[0],
-      option,
+    return getExtensionLabel(
+      OutputCompressionManager.getCompressedFileName(
+        source as Parameters<typeof OutputCompressionManager.getCompressedFileName>[0],
+        option,
+      ),
     );
-    const extension = getBaseFileName(fileName).match(EXTENSION_REGEX)?.[1]?.toLowerCase();
-    return extension ? `.${extension}` : "";
   } catch {
     return "";
   }
