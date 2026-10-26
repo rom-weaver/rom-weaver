@@ -54,9 +54,10 @@ export interface ThreadWorkerPoolCommandMessage extends ThreadWorkerCommandMessa
   controlBuffer: SharedArrayBuffer;
   mode: "pool-command";
   /**
-   * Top-level pool shells can prewarm before their asynchronous command-ready barrier resolves.
-   * Nested spawners are synchronous and must enter the thread-start barrier first; their real
-   * thread run resolves the same mounts after publishing STARTING.
+   * Top-level pool shells prime the runtime mounts when the command is posted, which happens in
+   * the guest's first spawn, so a priming failure fails the slot directly. Nested spawners are
+   * synchronous and must enter the thread-start barrier first; their real thread run resolves
+   * the same mounts after publishing STARTING.
    */
   prewarmRuntime?: boolean;
 }
