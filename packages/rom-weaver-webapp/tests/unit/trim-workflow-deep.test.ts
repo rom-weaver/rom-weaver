@@ -141,7 +141,10 @@ describe("runTrimWorkflow compressed outputs", () => {
       { options: { output: { compression: "zip", outputName: "trimmed.zip" } }, source: source as never },
       runtime as never,
     );
-    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.bin", undefined);
+    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.bin", {
+      materializeBlob: false,
+      preferExternalFilePath: true,
+    });
     expect(mocks.archiveOutput).toHaveBeenCalledWith(
       expect.objectContaining({
         compression: "zip",

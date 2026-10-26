@@ -246,7 +246,6 @@ const createArchivePatchFileOutput = async (
 
 const createSingleFileArchiveOutput = async ({
   compression,
-  deps,
   entryFile,
   entryNameDetailKey,
   fallbackEntryName,
@@ -256,10 +255,6 @@ const createSingleFileArchiveOutput = async ({
   unsupportedRuntimeMessage,
 }: {
   compression: ArchiveCreateCompression;
-  deps: {
-    getPatchFileBytes: typeof getPatchFileBytes;
-    hasArchiveFileName: typeof hasArchiveFileName;
-  };
   entryFile: PatchFileInstance;
   entryNameDetailKey: string;
   fallbackEntryName: string;
@@ -270,7 +265,7 @@ const createSingleFileArchiveOutput = async ({
 }): Promise<PublicOutput> => {
   const requestedFileName = getOutputName(options);
   const entryName =
-    requestedFileName && !deps.hasArchiveFileName(requestedFileName, compression)
+    requestedFileName && !hasArchiveFileName(requestedFileName, compression)
       ? requestedFileName
       : entryFile.fileName || fallbackEntryName;
   entryFile.fileName = entryName;
@@ -283,18 +278,12 @@ const createSingleFileArchiveOutput = async ({
     zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const outputName =
-    requestedFileName && deps.hasArchiveFileName(requestedFileName, compression)
+    requestedFileName && hasArchiveFileName(requestedFileName, compression)
       ? requestedFileName
       : OutputCompressionManager.getCompressedFileName({ fileName: entryName }, compression, compressionSettings);
   return createArchiveOutput({
     compression,
-    entries: [
-      {
-        data: deps.getPatchFileBytes(entryFile),
-        fileName: entryName,
-        filename: entryName,
-      },
-    ],
+    entries: [createArchiveEntryInputFromPatchFile(entryFile, entryName).entry],
     options,
     outputName,
     runtime,

@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
+import { createArchiveOutput } from "../../src/lib/output/archive-output-service.ts";
+import { runTrimWorkflow } from "../../src/lib/trim/workflow.ts";
 import { TrimWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { warmupBrowserRuntimeExtraction } from "../../src/platform/browser/browser-runtime-warmup.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { readRuntimeOutputBytes } from "../../src/storage/vfs/runtime-output.ts";
 
 const ndsCrc16 = (bytes) => {
   let crc = 0xffff;
@@ -70,6 +73,45 @@ const createZipFile = async (entryName, bytes, outputName) => {
     await output.cleanup?.().catch(() => undefined);
   }
 };
+
+test.each(["zip", "7z"])("trim %s output matches byte-backed archive creation", async (compression) => {
+  const source = new File([buildTestNdsRom()], "game.nds");
+  const options = {
+    output: { container: { profile: "fast" }, outputName: `trimmed.${compression}`, compression },
+    workers: { threads: 4 },
+  };
+  const raw = await runTrimWorkflow(
+    { source, options: { output: { compression: "none", outputName: "trimmed.nds" }, workers: { threads: 4 } } },
+    browserRuntime,
+  );
+  try {
+    const data = await readRuntimeOutputBytes(raw.output);
+    expect(data).toEqual(buildTestNdsRom().subarray(0, 0x3000));
+    const byteBacked = await createArchiveOutput({
+      compression,
+      entries: [{ data, fileName: "trimmed.nds", filename: "trimmed.nds" }],
+      options,
+      outputName: options.output.outputName,
+      runtime: browserRuntime,
+    });
+    try {
+      const trimmed = await runTrimWorkflow({ source, options }, browserRuntime);
+      try {
+        const baseHash = await crypto.subtle.digest("SHA-256", await readRuntimeOutputBytes(byteBacked));
+        const candidateHash = await crypto.subtle.digest("SHA-256", await readRuntimeOutputBytes(trimmed.output));
+        expect(new Uint8Array(candidateHash)).toEqual(new Uint8Array(baseHash));
+        expect(trimmed.output.fileName).toBe(options.output.outputName);
+        expect(trimmed.sizeSummary.rawSize).toBe(data.byteLength);
+      } finally {
+        await trimmed.output.cleanup?.();
+      }
+    } finally {
+      await byteBacked.cleanup?.();
+    }
+  } finally {
+    await raw.output.cleanup?.();
+  }
+});
 
 test("browser runtime warmup leaves sibling OPFS entries untouched", async () => {
   const root = await navigator.storage.getDirectory();

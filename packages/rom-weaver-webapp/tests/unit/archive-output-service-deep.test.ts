@@ -149,10 +149,6 @@ describe("archive output service boundaries", () => {
     const file = makeFile("source.ips");
     const result = await createSingleFileArchiveOutput({
       compression: "zip",
-      deps: {
-        getPatchFileBytes: (value) => new Uint8Array(value.fileSize),
-        hasArchiveFileName,
-      },
       entryFile: file,
       entryNameDetailKey: "entryName",
       fallbackEntryName: "patch.bin",
@@ -166,7 +162,10 @@ describe("archive output service boundaries", () => {
     });
     expect(result).toEqual({ fileName: "renamed.zip", size: 4 });
     expect(file.fileName).toBe("source.ips");
-    expect(create.mock.calls[0]?.[0]).toMatchObject({ options: { outputName: "renamed.zip" } });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      entries: [{ data: new Uint8Array([1, 2, 3]), fileName: "source.ips" }],
+      options: { outputName: "renamed.zip" },
+    });
   });
 
   it("creates lazy files for VFS outputs and materializes direct Blob outputs", async () => {

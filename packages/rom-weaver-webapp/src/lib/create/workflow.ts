@@ -1,4 +1,4 @@
-import { getDefaultCreatePatchOutputFileName, getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { getDefaultCreatePatchOutputFileName } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
@@ -86,7 +86,6 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
     }
     return createSingleFileArchiveOutput({
       compression,
-      deps: { getPatchFileBytes, hasArchiveFileName },
       entryFile: patchFile,
       entryNameDetailKey: "patchEntryName",
       fallbackEntryName: patchFile.fileName || `patch.${format}`,
