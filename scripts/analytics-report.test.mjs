@@ -9,6 +9,7 @@ import {
   cloudflareReport,
   dateRange,
   githubReport,
+  lookupSecret,
   parseArgs,
   searchConsoleReport,
   serviceAccountAssertion,
@@ -40,10 +41,46 @@ test("signs a read-only service-account assertion that verifies against the publ
   assert.ok(createVerify("RSA-SHA256").update(`${head}.${body}`).verify(publicKey, signature, "base64url"));
 });
 
-test("reports name the missing environment variables", async () => {
-  await assert.rejects(bingReport({ env: {} }), /BING_API_KEY, BING_SITE_URL/);
-  await assert.rejects(cloudflareReport({ env: {}, days: 7 }), /CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID/);
-  await assert.rejects(githubReport({ env: {} }), /GITHUB_TOKEN, GITHUB_REPOSITORY/);
+const noSecrets = () => undefined;
+
+test("reports name each missing setting and its pass entry", async () => {
+  await assert.rejects(bingReport({ env: {}, lookup: noSecrets }), /BING_API_KEY \(or pass entry bing-api-key\)/);
+  await assert.rejects(
+    cloudflareReport({ env: {}, days: 7, lookup: noSecrets }),
+    /CLOUDFLARE_API_TOKEN \(or pass entry cloudflare-token\), CLOUDFLARE_ZONE_ID \(or pass entry cloudflare-zone-id\)/,
+  );
+  await assert.rejects(githubReport({ env: {}, lookup: noSecrets }), /GITHUB_TOKEN \(or a logged-in gh\)/);
+  await assert.rejects(searchConsoleReport({ env: {}, days: 7, lookup: noSecrets }), /gsc-service-account/);
+});
+
+test("falls back to pass entries under the default or a custom prefix", async () => {
+  assert.equal(lookupSecret({ pass: "x" }, { ANALYTICS_PASS_PREFIX: "definitely/not/a/real/prefix" }), undefined);
+  const requested = [];
+  const lookup = (setting) => {
+    requested.push(setting.pass);
+    return `secret-${setting.pass}`;
+  };
+  let auth;
+  await cloudflareReport({
+    env: {},
+    days: 7,
+    lookup,
+    fetchImpl: async (url, options) => {
+      auth = options.headers.Authorization;
+      return Response.json({ data: { viewer: { zones: [] } } });
+    },
+  });
+  assert.deepEqual(requested, ["cloudflare-token", "cloudflare-zone-id"]);
+  assert.equal(auth, "Bearer secret-cloudflare-token");
+});
+
+test("environment variables take precedence over the secret lookup", async () => {
+  const result = await bingReport({
+    env: { BING_API_KEY: "env-key", BING_SITE_URL: "https://example.invalid/" },
+    lookup: () => assert.fail("lookup must not run"),
+    fetchImpl: async () => Response.json({ d: [] }),
+  });
+  assert.deepEqual(result.traffic, []);
 });
 
 test("cloudflare report sends a bearer token and returns daily groups", async () => {

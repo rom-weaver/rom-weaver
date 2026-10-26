@@ -6,13 +6,17 @@
 // `--days N` covers N days ago through today (UTC, today still partial) and applies to
 // gsc and cloudflare only; bing and github return their fixed history windows.
 //
-// Credentials come from the environment only:
-//   gsc         GSC_SERVICE_ACCOUNT_FILE (service-account key JSON path), GSC_SITE
-//               (`sc-domain:example.com` or a URL-prefix property)
-//   bing        BING_API_KEY, BING_SITE_URL
-//   cloudflare  CLOUDFLARE_API_TOKEN (Zone Analytics: Read), CLOUDFLARE_ZONE_ID
+// Each setting comes from its environment variable first. Secrets then fall back to the
+// `pass` entry `<prefix>/<entry>` (prefix `rom-weaver`, or ANALYTICS_PASS_PREFIX), and
+// GITHUB_TOKEN to `gh auth token`. Site settings default to this project's public values.
+//   gsc         GSC_SERVICE_ACCOUNT_FILE (key JSON path) or pass entry `gsc-service-account`
+//               (the key JSON); GSC_SITE (`sc-domain:example.com` or a URL-prefix property)
+//   bing        BING_API_KEY (`bing-api-key`), BING_SITE_URL
+//   cloudflare  CLOUDFLARE_API_TOKEN (`cloudflare-token`, Zone Analytics: Read),
+//               CLOUDFLARE_ZONE_ID (`cloudflare-zone-id`)
 //   github      GITHUB_TOKEN (repo access), GITHUB_REPOSITORY (`owner/name`)
 
+import { execFileSync } from "node:child_process";
 import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import process from "node:process";
@@ -21,10 +25,32 @@ import { pathToFileURL } from "node:url";
 const SOURCES = ["gsc", "bing", "cloudflare", "github"];
 const DEFAULT_DAYS = 28;
 
-function requireEnv(env, ...names) {
-  const missing = names.filter((name) => !env[name]);
-  if (missing.length > 0) throw new Error(`Missing environment variable(s): ${missing.join(", ")}`);
-  return names.map((name) => env[name]);
+const DEFAULT_PASS_PREFIX = "rom-weaver";
+
+// Reads a secret from `pass` (or `gh auth token`); undefined when unavailable or locked.
+export function lookupSecret({ pass, gh }, env) {
+  const [command, args] = gh
+    ? ["gh", ["auth", "token"]]
+    : ["pass", ["show", `${env.ANALYTICS_PASS_PREFIX ?? DEFAULT_PASS_PREFIX}/${pass}`]];
+  try {
+    return execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).replace(/\r?\n$/, "");
+  } catch {
+    return undefined;
+  }
+}
+
+// Each setting is `{ name, pass?, gh?, fallback? }`: the environment variable wins, then the
+// secret lookup, then the public default.
+function resolveSettings(env, lookup, ...settings) {
+  const values = settings.map((setting) => env[setting.name] || lookup(setting, env) || setting.fallback);
+  const missing = settings.filter((_, index) => !values[index]).map(describeSetting);
+  if (missing.length > 0) throw new Error(`Missing setting(s): ${missing.join(", ")}`);
+  return values;
+}
+
+function describeSetting({ name, pass, gh }) {
+  if (pass) return `${name} (or pass entry ${pass})`;
+  return gh ? `${name} (or a logged-in gh)` : name;
 }
 
 export function parseArgs(argv) {
@@ -64,9 +90,13 @@ async function getJson(fetchImpl, label, url, init) {
   return body;
 }
 
-export async function searchConsoleReport({ env, days, fetchImpl = globalThis.fetch, now }) {
-  const [keyFile, site] = requireEnv(env, "GSC_SERVICE_ACCOUNT_FILE", "GSC_SITE");
-  const key = JSON.parse(readFileSync(keyFile, "utf8"));
+export async function searchConsoleReport({ env, days, fetchImpl = globalThis.fetch, now, lookup = lookupSecret }) {
+  const [site] = resolveSettings(env, lookup, { name: "GSC_SITE", fallback: "sc-domain:rom-weaver.com" });
+  const keyJson = env.GSC_SERVICE_ACCOUNT_FILE
+    ? readFileSync(env.GSC_SERVICE_ACCOUNT_FILE, "utf8")
+    : lookup({ pass: "gsc-service-account" }, env);
+  if (!keyJson) throw new Error("Missing setting(s): GSC_SERVICE_ACCOUNT_FILE (or pass entry gsc-service-account)");
+  const key = JSON.parse(keyJson);
   const grant = await getJson(fetchImpl, "Google token endpoint", "https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -91,8 +121,13 @@ export async function searchConsoleReport({ env, days, fetchImpl = globalThis.fe
   return { start, end, byDate: byDate.rows ?? [], byQuery: byQuery.rows ?? [], byPage: byPage.rows ?? [] };
 }
 
-export async function bingReport({ env, fetchImpl = globalThis.fetch }) {
-  const [apiKey, siteUrl] = requireEnv(env, "BING_API_KEY", "BING_SITE_URL");
+export async function bingReport({ env, fetchImpl = globalThis.fetch, lookup = lookupSecret }) {
+  const [apiKey, siteUrl] = resolveSettings(
+    env,
+    lookup,
+    { name: "BING_API_KEY", pass: "bing-api-key" },
+    { name: "BING_SITE_URL", fallback: "https://rom-weaver.com/" },
+  );
   const call = (method) =>
     getJson(
       fetchImpl,
@@ -107,8 +142,13 @@ export async function bingReport({ env, fetchImpl = globalThis.fetch }) {
   return { traffic, queries, pages };
 }
 
-export async function cloudflareReport({ env, days, fetchImpl = globalThis.fetch, now }) {
-  const [token, zoneId] = requireEnv(env, "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID");
+export async function cloudflareReport({ env, days, fetchImpl = globalThis.fetch, now, lookup = lookupSecret }) {
+  const [token, zoneId] = resolveSettings(
+    env,
+    lookup,
+    { name: "CLOUDFLARE_API_TOKEN", pass: "cloudflare-token" },
+    { name: "CLOUDFLARE_ZONE_ID", pass: "cloudflare-zone-id" },
+  );
   const { start, end } = dateRange(days, now);
   const body = await getJson(fetchImpl, "Cloudflare GraphQL", "https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
@@ -130,8 +170,13 @@ export async function cloudflareReport({ env, days, fetchImpl = globalThis.fetch
   return { start, end, days: body.data?.viewer?.zones?.[0]?.httpRequests1dGroups ?? [] };
 }
 
-export async function githubReport({ env, fetchImpl = globalThis.fetch }) {
-  const [token, repository] = requireEnv(env, "GITHUB_TOKEN", "GITHUB_REPOSITORY");
+export async function githubReport({ env, fetchImpl = globalThis.fetch, lookup = lookupSecret }) {
+  const [token, repository] = resolveSettings(
+    env,
+    lookup,
+    { name: "GITHUB_TOKEN", gh: true },
+    { name: "GITHUB_REPOSITORY", fallback: "rom-weaver/rom-weaver" },
+  );
   const call = (path) =>
     getJson(fetchImpl, `GitHub ${path}`, `https://api.github.com/repos/${repository}/${path}`, {
       headers: {
