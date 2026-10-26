@@ -1354,10 +1354,10 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 @keyframes sample-tutorial-ring-in {
   from {
-    opacity: 0;
-    scale: 1.035;
     border-color: transparent;
     box-shadow: 0 0 0 2px transparent;
+    opacity: 0;
+    scale: 1.035;
   }
 }
 @keyframes sample-tutorial-dialog-in {

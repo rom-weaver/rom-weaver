@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.3/schema.json",
   "root": true,
   "assist": {
     "actions": {
@@ -43,6 +43,12 @@
       "enabled": false,
     },
   },
+  "markdown": {
+    // quality-reason: oxfmt owns Markdown formatting, as it does JS/TS/JSON.
+    "formatter": {
+      "enabled": false,
+    },
+  },
   "linter": {
     "domains": {
       "react": "recommended",
@@ -65,9 +71,6 @@
       "correctness": {
         "useExhaustiveDependencies": "error",
       },
-      "nursery": {
-        "noDuplicateSelectors": "error",
-      },
       "style": {
         "noCommonJs": "error",
         // This rule reports unrelated icon selectors that all end in svg.
@@ -87,6 +90,7 @@
       "suspicious": {
         "noAlert": "error",
         "noArrayIndexKey": "error",
+        "noDuplicateSelectors": "error",
         "noDuplicateTestHooks": "error",
         "noEmptyBlockStatements": "error",
         "noExplicitAny": "error",
@@ -164,6 +168,10 @@
       "includes": ["tests/**"],
       "linter": {
         "rules": {
+          "correctness": {
+            // quality-reason: Each test creates its harness once, outside React rendering.
+            "noComponentHookFactories": "off",
+          },
           "suspicious": {
             "noMisplacedAssertion": "off",
           },

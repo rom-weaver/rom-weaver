@@ -84,6 +84,7 @@ const createWorkflowRoute = <View extends WebappView>(
     );
     return pending;
   };
+  // biome-ignore lint/correctness/noComponentHookFactories: quality-reason: Routes are created once at module initialization, preserving component identity.
   const Component = (props: WorkflowRouteProps[View]) => {
     rendered ??= preloaded ?? LazyComponent;
     const Resolved = rendered;
