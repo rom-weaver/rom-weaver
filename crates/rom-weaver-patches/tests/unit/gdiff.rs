@@ -616,3 +616,82 @@ fn parallel_create_writes_a_bare_terminator_for_an_empty_input() {
     assert_eq!((command_count, output_bytes), (0, 0));
     assert_eq!(output, vec![0xD1, 0xFF, 0xD1, 0xFF, 4, 0]);
 }
+
+#[test]
+fn parallel_apply_splits_large_copy_commands_without_changing_offsets() {
+    let temp = TestDir::new();
+    let len = crate::shared::threading::parallel_write_batch_bytes(2) + 19;
+    let source: Vec<u8> = (0..len + 7).map(|i| (i % 251) as u8).collect();
+    let source_path = temp.child("large-source.bin");
+    let patch_path = temp.child("large.gdiff");
+    let output = temp.child("large-output.bin");
+    fs::write(&source_path, &source).expect("source");
+    fs::write(
+        &patch_path,
+        build_test_gdiff_patch(vec![
+            TestGdiffCommand::Data(b"prefix".to_vec()),
+            TestGdiffCommand::Copy {
+                offset: 7,
+                len: len as u64,
+            },
+        ]),
+    )
+    .expect("patch");
+    GdiffPatchHandler::new(&GDIFF)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("split apply");
+    let mut expected = b"prefix".to_vec();
+    expected.extend_from_slice(&source[7..]);
+    assert_eq!(fs::read(output).expect("output"), expected);
+}
+
+#[test]
+fn parallel_create_matches_streaming_encoding_for_a_large_input_and_short_tail() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(parallel_chunked_capability(32 * 1024 * 1024, 65535))
+        .expect("pool");
+    let chunks =
+        crate::shared::threading::parallel_write_batch_bytes(pool.size()) / (65535 + 3) + 2;
+    let target: Vec<u8> = (0..chunks * 65535 + 17).map(|i| (i % 251) as u8).collect();
+    let target_path = temp.child("batch-target.bin");
+    fs::write(&target_path, target).expect("target");
+    let mut serial = Vec::new();
+    let serial_summary =
+        super::create_gdiff_patch_streaming(&target_path, &mut serial).expect("serial create");
+    let mut parallel = Vec::new();
+    let parallel_summary =
+        create_gdiff_patch_parallel(&target_path, &pool, &mut parallel).expect("parallel create");
+    assert_eq!(parallel_summary, serial_summary);
+    assert_eq!(parallel, serial);
+}
+
+#[test]
+fn split_data_command_reads_from_the_payload_offset_plus_the_piece_offset() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("data.gdiff");
+    fs::write(&patch_path, b"headerABCDEFGtail").expect("patch");
+    let command = super::GdiffApplyCommand {
+        output_offset: 20,
+        kind: super::GdiffApplyCommandKind::Data {
+            patch_data_offset: 6,
+            len: 7,
+        },
+    };
+    let first = super::prepare_gdiff_apply_command(&command, &patch_path, &patch_path, 0, 0..3)
+        .expect("first piece");
+    let second = super::prepare_gdiff_apply_command(&command, &patch_path, &patch_path, 0, 3..7)
+        .expect("second piece");
+    assert_eq!(first.offset, 20);
+    assert_eq!(first.data, b"ABC");
+    assert_eq!(second.offset, 23);
+    assert_eq!(second.data, b"DEFG");
+}

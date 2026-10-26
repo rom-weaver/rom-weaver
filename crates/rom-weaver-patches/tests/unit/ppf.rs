@@ -1,5 +1,6 @@
 use std::{
     fs::{self, OpenOptions},
+    io::{Read, Seek, SeekFrom},
     path::Path,
 };
 
@@ -114,12 +115,11 @@ fn parse_and_apply_round_trip_for_ppf1() {
         )
         .expect("apply");
 
-    assert!(handler.capabilities().threaded_output);
+    assert!(!handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
-    // The test context sets the in-memory limit to 0, which PPF now honours, so
-    // this is the streaming path: one thread per non-overlapping record.
-    assert_eq!(execution.effective_threads, 2);
+    assert_eq!(execution.effective_threads, 1);
+    assert!(!execution.used_parallelism);
 
     assert_eq!(fs::read(&output_path).expect("output"), b"abXYZfg!!!!");
 
@@ -2023,7 +2023,7 @@ fn in_memory_apply_rejects_a_record_past_the_output_end() {
 }
 
 #[test]
-fn streaming_and_parallel_apply_paths_produce_the_same_writes() {
+fn streaming_apply_writes_borrowed_records_in_order() {
     let temp = TestDir::new();
     let output_path = temp.child("streamed.bin");
     fs::write(&output_path, b"........").expect("fixture");
@@ -2046,21 +2046,36 @@ fn streaming_and_parallel_apply_paths_produce_the_same_writes() {
         .write(true)
         .open(&output_path)
         .expect("open output");
-    super::apply_records(&mut output, &records).expect("streaming apply");
-    drop(output);
-    assert_eq!(fs::read(&output_path).expect("output"), b".AB..YZ.");
-
     let context = test_context_with_threads(&temp, 2);
-    let (_, pool) = context
-        .build_pool(ThreadCapability::parallel(Some(2)))
-        .expect("pool");
-    let prepared =
-        super::prepare_ppf_writes_parallel(&records, &pool, &context).expect("parallel prepare");
-    assert_eq!(prepared.len(), 2);
-    assert_eq!(prepared[0].offset, 1);
-    assert_eq!(prepared[0].data, b"AB");
-    assert_eq!(prepared[1].offset, 5);
-    assert_eq!(prepared[1].data, b"YZ");
+    super::apply_records(&mut output, &records, &context).expect("streaming apply");
+    assert_eq!(output.stream_position().expect("final write position"), 7);
+    assert_eq!(output.metadata().expect("output metadata").len(), 8);
+    let mut payload = [0; 2];
+    output.seek(SeekFrom::Start(1)).expect("first offset");
+    output.read_exact(&mut payload).expect("first payload");
+    assert_eq!(&payload, b"AB");
+    output.seek(SeekFrom::Start(5)).expect("second offset");
+    output.read_exact(&mut payload).expect("second payload");
+    assert_eq!(&payload, b"YZ");
+    drop(output);
+    let streamed = fs::read(&output_path).expect("output");
+    assert_eq!(streamed, b".AB..YZ.");
+    let mut in_memory = *b"........";
+    super::apply_records_in_memory(&records, &mut in_memory).expect("in-memory apply");
+    assert_eq!(streamed, in_memory);
+
+    fs::write(&output_path, b"........").expect("reset output");
+    let context = test_context_with_threads(&temp, 2);
+    context.cancel().cancel();
+    let mut output = OpenOptions::new()
+        .write(true)
+        .open(&output_path)
+        .expect("output");
+    assert!(super::apply_records(&mut output, &records, &context).is_err());
+    assert_eq!(
+        fs::read(&output_path).expect("cancelled output"),
+        b"........"
+    );
 }
 
 #[test]
