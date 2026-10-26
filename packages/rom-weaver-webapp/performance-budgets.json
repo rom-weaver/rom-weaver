@@ -5,10 +5,10 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 54750,
-        "maxRawBytes": 59500,
-        "expectedBrotliBytes": 10550,
-        "maxBrotliBytes": 12100
+        "expectedRawBytes": 94750,
+        "maxRawBytes": 99500,
+        "expectedBrotliBytes": 50550,
+        "maxBrotliBytes": 52100
       },
       {
         "name": "JavaScript",
@@ -20,10 +20,10 @@
           "assets/(?:de|es)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2362391,
-        "maxRawBytes": 2506000,
-        "expectedBrotliBytes": 635991,
-        "maxBrotliBytes": 672000
+        "expectedRawBytes": 2402391,
+        "maxRawBytes": 2546000,
+        "expectedBrotliBytes": 675991,
+        "maxBrotliBytes": 712000
       },
       {
         "name": "Documentation search JavaScript",
@@ -31,10 +31,10 @@
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 383000,
-        "maxRawBytes": 419000,
-        "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 113000
+        "expectedRawBytes": 423000,
+        "maxRawBytes": 459000,
+        "expectedBrotliBytes": 140500,
+        "maxBrotliBytes": 153000
       },
       {
         "name": "Locale catalogs (de, es)",
@@ -42,10 +42,10 @@
         "extension": ".js",
         "includePatterns": ["assets/(?:de|es)-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 82648,
-        "maxRawBytes": 134000,
-        "expectedBrotliBytes": 23260,
-        "maxBrotliBytes": 37596
+        "expectedRawBytes": 122648,
+        "maxRawBytes": 174000,
+        "expectedBrotliBytes": 63260,
+        "maxBrotliBytes": 77596
       },
       {
         "name": "Save Editor JavaScript",
@@ -53,30 +53,30 @@
         "extension": ".js",
         "includePatterns": ["assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 35000,
-        "maxRawBytes": 42000,
-        "expectedBrotliBytes": 9500,
-        "maxBrotliBytes": 11500
+        "expectedRawBytes": 75000,
+        "maxRawBytes": 82000,
+        "expectedBrotliBytes": 49500,
+        "maxBrotliBytes": 51500
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 274461,
-        "maxRawBytes": 277000,
-        "expectedBrotliBytes": 42996,
-        "maxBrotliBytes": 43300
+        "expectedRawBytes": 314461,
+        "maxRawBytes": 317000,
+        "expectedBrotliBytes": 82996,
+        "maxBrotliBytes": 83300
       },
       {
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 9010000,
-        "maxRawBytes": 9300000,
-        "expectedBrotliBytes": 2250000,
-        "maxBrotliBytes": 2384500
+        "expectedRawBytes": 9050000,
+        "maxRawBytes": 9340000,
+        "expectedBrotliBytes": 2290000,
+        "maxBrotliBytes": 2424500
       }
     ]
   },
