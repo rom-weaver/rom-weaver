@@ -68,12 +68,12 @@
     opacity: 1;
   }
   45% {
-    opacity: 1;
     box-shadow: 0 0 12px color-mix(in srgb, var(--shuttle) 90%, transparent);
+    opacity: 1;
   }
   100% {
-    opacity: 0;
     box-shadow: 0 0 0 transparent;
+    opacity: 0;
   }
 }
 .rw-app .meter.live .fill {
