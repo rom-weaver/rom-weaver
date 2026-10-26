@@ -65,13 +65,41 @@ const enableBetaTools = (context) =>
     localStorage.setItem("rom-weaver-settings", JSON.stringify({ version: 5, common: { betaToolsEnabled: true } }));
   });
 
+// Recent console lines per page, dumped when a download never starts so CI-only flakes show which
+// app branch swallowed the click.
+const consoleTails = new WeakMap();
+const captureConsoleTail = (page) => {
+  const lines = [];
+  consoleTails.set(page, lines);
+  page.on("console", (message) => {
+    lines.push(`[${message.type()}] ${message.text()}`);
+    if (lines.length > 200) lines.shift();
+  });
+};
+
+// Raises the persisted app log level so trace records reach the console after the next navigation.
+const enableTraceLogging = (page) =>
+  page.evaluate(() => {
+    const key = "rom-weaver-settings";
+    const stored = JSON.parse(localStorage.getItem(key) || "{}");
+    localStorage.setItem(key, JSON.stringify({ ...stored, common: { ...stored.common, logLevel: "trace" } }));
+  });
+
 const downloadedBytes = async (page, action) => {
   let download;
   try {
     [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), action()]);
   } catch (cause) {
     const visibleState = (await page.locator("body").innerText()).slice(-8000);
-    throw new Error(`Download did not start. Visible state:\n${visibleState}`, { cause });
+    const buttons = await page
+      .locator("button[id^='rom-weaver-button'], button[id^='patch-builder-button']")
+      .evaluateAll((elements) => elements.map((element) => element.outerHTML.slice(0, 400)))
+      .catch((error) => [`(button state unavailable: ${error.message})`]);
+    const consoleTail = (consoleTails.get(page) || []).slice(-80);
+    throw new Error(
+      `Download did not start. Visible state:\n${visibleState}\n\nAction buttons:\n${buttons.join("\n")}\n\nConsole tail:\n${consoleTail.join("\n")}`,
+      { cause },
+    );
   }
   let downloadPath;
   try {
@@ -214,6 +242,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
   page.setDefaultTimeout(60_000);
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.message));
+  captureConsoleTail(page);
   const { original, modified } = makeJourneyInputs();
   try {
     const picker = await openWorkflow(page, baseUrl, "create-rom-patch", "patch-builder-input-file-unified");
@@ -234,6 +263,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
       zlib.crc32(modified),
       "BPS target CRC32 differs from modified",
     );
+    await enableTraceLogging(page);
     const applyPicker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
     await applyPicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-apply");
