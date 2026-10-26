@@ -14,13 +14,15 @@ use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, ThreadCapability, ThreadExecution, UnsupportedOp,
-    ValidationCodeError,
+    RomWeaverError, SharedBlockCacheReader, StagedOutput, ThreadCapability, ThreadExecution,
+    UnsupportedOp, ValidationCodeError,
 };
 
 use tracing::{debug, trace};
 
 use crate::shared::threading::run_with_optional_pool;
+
+const HDIFF13_OUTPUT_BUFFER_SIZE: usize = 1024 * 1024;
 
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
     ValidationCodeError::new(code)
@@ -98,20 +100,41 @@ impl PatchHandler for HdiffPatchHandler {
             patch = %patch_path.display(),
             "hdiffpatch apply start"
         );
-        let (output_bytes, execution) =
-            render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
-
-        let mut output = crate::create_buffered_output(&request.output)?;
-        output.write_all(&output_bytes)?;
-        output.flush()?;
+        let replacement = StagedOutput::new(&request.output)?;
+        let target_path = replacement.path();
+        let staged_path = fs::symlink_metadata(target_path).is_ok().then(|| {
+            context
+                .temp_paths()
+                .next_path("hdiffpatch-output", Some("bin"))
+        });
+        let output_path = staged_path.as_deref().unwrap_or(target_path);
+        let rendered: Result<_> = (|| {
+            let rendered = render_hdiff_patch(&request.input, patch_path, context, || {
+                crate::create_buffered_output(output_path)
+            })?;
+            if staged_path.is_some() {
+                trace!("hdiffpatch copying completed output over an existing file");
+                let mut source = BufReader::new(File::open(output_path)?);
+                let mut output = crate::create_buffered_output(target_path)?;
+                std::io::copy(&mut source, &mut output)?;
+                output.flush()?;
+            }
+            Ok(rendered)
+        })();
+        if let Some(path) = staged_path {
+            let _ = fs::remove_file(path);
+        } else if rendered.is_err() {
+            let _ = fs::remove_file(target_path);
+        }
+        let (output_len, execution) = rendered?;
+        replacement.commit()?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
             "apply",
             format!(
                 "applied {} patch; output {} byte(s)",
-                self.descriptor.name,
-                output_bytes.len()
+                self.descriptor.name, output_len
             ),
             Some(execution),
         ))
@@ -123,16 +146,15 @@ impl PatchHandler for HdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let (output_bytes, execution) =
-            render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
+        let (output_len, execution) =
+            render_hdiff_patch(&request.input, patch_path, context, || Ok(std::io::sink()))?;
 
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
             format!(
                 "validated {} patch; output would be {} byte(s)",
-                self.descriptor.name,
-                output_bytes.len()
+                self.descriptor.name, output_len
             ),
             Some(execution),
         ))
@@ -165,11 +187,12 @@ impl PatchHandler for HdiffPatchHandler {
     }
 }
 
-fn render_hdiff_patch_to_memory(
+fn render_hdiff_patch<W: Write>(
     input_path: &Path,
     patch_path: &Path,
     context: &OperationContext,
-) -> Result<(Vec<u8>, ThreadExecution)> {
+    create_output: impl Fn() -> Result<W>,
+) -> Result<(usize, ThreadExecution)> {
     let variant = parse_hdiff_patch_file(patch_path)?;
     let patch_len = fs::metadata(patch_path)?.len();
     let patch_reader = Arc::new(SharedBlockCacheReader::open(
@@ -199,7 +222,7 @@ fn render_hdiff_patch_to_memory(
             );
 
             let thread_capability = hdiff13_apply_thread_capability(&header);
-            let (execution, output) = run_with_optional_pool(
+            let (execution, chunks) = run_with_optional_pool(
                 context,
                 thread_capability,
                 true,
@@ -209,8 +232,7 @@ fn render_hdiff_patch_to_memory(
                     // disabled after a single-thread pool fallback.
                     let chunk_parallel = pool.size() > 1;
                     pool.install(|| {
-                        apply_hdiff13_with_chunk_parallelism_from_reader(
-                            &old_data,
+                        read_hdiff13_chunks_from_patch_reader(
                             &patch_reader,
                             patch_len,
                             &header,
@@ -218,17 +240,12 @@ fn render_hdiff_patch_to_memory(
                         )
                     })
                 },
-                || {
-                    apply_hdiff13_with_chunk_parallelism_from_reader(
-                        &old_data,
-                        &patch_reader,
-                        patch_len,
-                        &header,
-                        false,
-                    )
-                },
+                || read_hdiff13_chunks_from_patch_reader(&patch_reader, patch_len, &header, false),
             )?;
-            Ok((output, execution))
+            let mut output = create_output()?;
+            let output_len = apply_hdiff13_with_chunks(&old_data, &header, chunks, &mut output)?;
+            output.flush()?;
+            Ok((output_len, execution))
         }
         ParsedPatchVariant::SingleStream20(header) => {
             if old_len != header.old_data_size {
@@ -286,7 +303,10 @@ fn render_hdiff_patch_to_memory(
                     "HDIFFSF20 payload had no independent step-level parallel work".to_string(),
                 );
             }
-            Ok((apply.output, execution))
+            let mut output = create_output()?;
+            output.write_all(&apply.output)?;
+            output.flush()?;
+            Ok((apply.output.len(), execution))
         }
         ParsedPatchVariant::Directory19(_) => Err(RomWeaverError::Unsupported(
             UnsupportedOp::HdiffDirectoryPatch,
@@ -511,37 +531,21 @@ impl HdiffOldData {
         }
     }
 
-    fn read_range(&self, start: usize, len: usize) -> Result<Vec<u8>> {
+    fn read_into(&self, start: usize, output: &mut [u8]) -> Result<()> {
+        let end = start.checked_add(output.len()).ok_or_else(|| {
+            RomWeaverError::Validation("HDiffPatch source range overflowed".into())
+        })?;
+        if end > self.len() {
+            return Err(RomWeaverError::Validation(
+                "HDiffPatch source range exceeded bounds".into(),
+            ));
+        }
         match self {
             #[cfg(test)]
-            Self::Bytes(bytes) => {
-                let end = start.checked_add(len).ok_or_else(|| {
-                    RomWeaverError::Validation("HDiffPatch source range overflowed".into())
-                })?;
-                if end > bytes.len() {
-                    return Err(RomWeaverError::Validation(
-                        "HDiffPatch source range exceeded bounds".into(),
-                    ));
-                }
-                Ok(bytes[start..end].to_vec())
-            }
-            Self::Cached {
-                len: total_len,
-                reader,
-            } => {
-                let end = start.checked_add(len).ok_or_else(|| {
-                    RomWeaverError::Validation("HDiffPatch source range overflowed".into())
-                })?;
-                if end > *total_len {
-                    return Err(RomWeaverError::Validation(
-                        "HDiffPatch source range exceeded bounds".into(),
-                    ));
-                }
-                let mut range = vec![0u8; len];
-                reader.read_exact_at(start as u64, range.as_mut_slice())?;
-                Ok(range)
-            }
+            Self::Bytes(bytes) => output.copy_from_slice(&bytes[start..end]),
+            Self::Cached { reader, .. } => reader.read_exact_at(start as u64, output)?,
         }
+        Ok(())
     }
 }
 
@@ -757,19 +761,9 @@ fn apply_hdiff13_with_chunk_parallelism(
     parallel_chunks: bool,
 ) -> Result<Vec<u8>> {
     let chunks = read_hdiff13_chunks_from_patch_bytes(patch_bytes, header, parallel_chunks)?;
-    apply_hdiff13_with_chunks(old_data, header, chunks)
-}
-
-fn apply_hdiff13_with_chunk_parallelism_from_reader(
-    old_data: &HdiffOldData,
-    patch_reader: &Arc<SharedBlockCacheReader>,
-    patch_len: u64,
-    header: &ParsedHdiff13,
-    parallel_chunks: bool,
-) -> Result<Vec<u8>> {
-    let chunks =
-        read_hdiff13_chunks_from_patch_reader(patch_reader, patch_len, header, parallel_chunks)?;
-    apply_hdiff13_with_chunks(old_data, header, chunks)
+    let mut output = Vec::new();
+    apply_hdiff13_with_chunks(old_data, header, chunks, &mut output)?;
+    Ok(output)
 }
 
 #[derive(Debug)]
@@ -1013,12 +1007,13 @@ fn apply_hdiff13_with_chunks(
     old_data: &HdiffOldData,
     header: &ParsedHdiff13,
     chunks: Hdiff13Chunks,
-) -> Result<Vec<u8>> {
+    output: &mut impl Write,
+) -> Result<usize> {
     let Hdiff13Chunks {
         cover_raw,
         rle_ctrl_raw,
         rle_code_raw,
-        new_diff_raw,
+        mut new_diff_raw,
     } = chunks;
 
     let expected_old_data_size = usize::try_from(header.old_data_size).map_err(|_| {
@@ -1037,16 +1032,18 @@ fn apply_hdiff13_with_chunks(
     let new_data_size = usize::try_from(header.new_data_size).map_err(|_| {
         RomWeaverError::Validation("HDiffPatch new_data_size overflowed usize".into())
     })?;
-    // `new_data_size` is an attacker-controlled varint; `try_reserve` turns an
-    // oversized declared size into a validation error instead of an allocation
-    // abort. The buffer still grows incrementally, so a valid (memory-fitting)
-    // patch produces byte-identical output.
-    let mut output = Vec::new();
-    output.try_reserve(new_data_size).map_err(|_| {
-        RomWeaverError::Validation(format!(
+    if new_data_size > isize::MAX as usize {
+        return Err(RomWeaverError::Validation(format!(
             "HDiffPatch declared new_data_size {new_data_size} exceeds allocatable memory"
-        ))
-    })?;
+        )));
+    }
+    let mut position = 0usize;
+    let mut buffer = vec![0u8; HDIFF13_OUTPUT_BUFFER_SIZE.min(old_data_size)];
+    trace!(
+        new_data_size,
+        buffer_size = buffer.len(),
+        "hdiffpatch streaming ordered HDIFF13 output"
+    );
 
     let mut cover_index = 0usize;
     let mut rle_ctrl_index = 0usize;
@@ -1091,30 +1088,30 @@ fn apply_hdiff13_with_chunks(
         let new_pos_usize = usize::try_from(new_pos).map_err(|_| {
             RomWeaverError::Validation("HDiffPatch new position overflowed usize".into())
         })?;
-        if output.len() > new_pos_usize {
+        if position > new_pos_usize {
             return Err(RomWeaverError::Validation(
                 "HDiffPatch cover new position moved backward".into(),
             ));
         }
 
-        if output.len() < new_pos_usize {
-            let fill_len = new_pos_usize - output.len();
-            append_from_new_diff(
-                &mut output,
-                new_diff_raw.as_slice(),
+        if position < new_pos_usize {
+            let fill_len = new_pos_usize - position;
+            let gap = take_new_diff(
+                new_diff_raw.as_mut_slice(),
                 &mut new_diff_index,
                 fill_len,
                 "new_data_diff gap",
             )?;
-            let begin = output.len() - fill_len;
             apply_hdiff_rle(
-                &mut output[begin..],
+                gap,
                 rle_ctrl_raw.as_slice(),
                 &mut rle_ctrl_index,
                 rle_code_raw.as_slice(),
                 &mut rle_code_index,
                 &mut rle_state,
             )?;
+            output.write_all(gap)?;
+            position += fill_len;
         }
 
         let old_start = usize::try_from(old_pos).map_err(|_| {
@@ -1136,17 +1133,23 @@ fn apply_hdiff13_with_chunks(
             ));
         }
 
-        let old_range = old_data.read_range(old_start, cover_len_usize)?;
-        output.extend_from_slice(old_range.as_slice());
-        let begin = output.len() - cover_len_usize;
-        apply_hdiff_rle(
-            &mut output[begin..],
-            rle_ctrl_raw.as_slice(),
-            &mut rle_ctrl_index,
-            rle_code_raw.as_slice(),
-            &mut rle_code_index,
-            &mut rle_state,
-        )?;
+        let mut old_position = old_start;
+        while old_position < old_end {
+            let len = buffer.len().min(old_end - old_position);
+            let target = &mut buffer[..len];
+            old_data.read_into(old_position, target)?;
+            apply_hdiff_rle(
+                target,
+                rle_ctrl_raw.as_slice(),
+                &mut rle_ctrl_index,
+                rle_code_raw.as_slice(),
+                &mut rle_code_index,
+                &mut rle_state,
+            )?;
+            output.write_all(target)?;
+            old_position += len;
+            position += len;
+        }
 
         last_old_end = old_pos
             .checked_add(cover_length)
@@ -1156,36 +1159,36 @@ fn apply_hdiff13_with_chunks(
             .ok_or_else(|| RomWeaverError::Validation("HDiffPatch new end overflowed".into()))?;
     }
 
-    if output.len() < new_data_size {
-        let fill_len = new_data_size - output.len();
-        append_from_new_diff(
-            &mut output,
-            new_diff_raw.as_slice(),
+    if position < new_data_size {
+        let fill_len = new_data_size - position;
+        let tail = take_new_diff(
+            new_diff_raw.as_mut_slice(),
             &mut new_diff_index,
             fill_len,
             "new_data_diff tail",
         )?;
-        let begin = output.len() - fill_len;
         apply_hdiff_rle(
-            &mut output[begin..],
+            tail,
             rle_ctrl_raw.as_slice(),
             &mut rle_ctrl_index,
             rle_code_raw.as_slice(),
             &mut rle_code_index,
             &mut rle_state,
         )?;
+        output.write_all(tail)?;
+        position += fill_len;
     }
 
-    if output.len() != new_data_size {
+    if position != new_data_size {
         return Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
                 .with_message("HDiffPatch output size mismatch")
                 .with_field("expected", new_data_size)
-                .with_field("actual", output.len()),
+                .with_field("actual", position),
         ));
     }
 
-    Ok(output)
+    Ok(position)
 }
 
 fn hdiff13_apply_thread_capability(header: &ParsedHdiff13) -> ThreadCapability {
@@ -1313,23 +1316,30 @@ fn apply_hdiffsf20_with_diff(
         ))
     })?;
     output.resize(new_data_size, 0);
-    let used_parallelism = if enable_parallel_steps && parsed.steps.len() > 1 {
-        let rendered = parsed
-            .steps
-            .par_iter()
-            .map(|step| render_hdiffsf20_step(old_data, diff, step))
-            .collect::<Result<Vec<_>>>()?;
-        for (step, step_bytes) in parsed.steps.iter().zip(rendered.iter()) {
-            write_hdiffsf20_step_bytes(output.as_mut_slice(), step, step_bytes)?;
-        }
-        true
+    let mut targets = Vec::with_capacity(parsed.steps.len());
+    let mut remaining = output.as_mut_slice();
+    let mut position = 0usize;
+    for step in &parsed.steps {
+        let (_, target) = remaining.split_at_mut(step.output_start - position);
+        let (target, tail) = target.split_at_mut(step.output_len);
+        targets.push((step, target));
+        remaining = tail;
+        position = step.output_start + step.output_len;
+    }
+    let used_parallelism = enable_parallel_steps && targets.len() > 1;
+    trace!(
+        steps = targets.len(),
+        used_parallelism, "hdiffpatch rendering HDIFFSF20 steps directly into output slices"
+    );
+    if used_parallelism {
+        targets
+            .into_par_iter()
+            .try_for_each(|(step, target)| render_hdiffsf20_step(old_data, diff, step, target))?;
     } else {
-        for step in &parsed.steps {
-            let step_bytes = render_hdiffsf20_step(old_data, diff, step)?;
-            write_hdiffsf20_step_bytes(output.as_mut_slice(), step, step_bytes.as_slice())?;
+        for (step, target) in targets {
+            render_hdiffsf20_step(old_data, diff, step, target)?;
         }
-        false
-    };
+    }
 
     if parsed.produced_len < new_data_size {
         output[parsed.produced_len..new_data_size].copy_from_slice(&diff[parsed.tail_range]);
@@ -1519,14 +1529,20 @@ fn render_hdiffsf20_step(
     old_data: &HdiffOldData,
     diff: &[u8],
     step: &Sf20StepPlan,
-) -> Result<Vec<u8>> {
+    output: &mut [u8],
+) -> Result<()> {
     if step.rle_range.end > diff.len() || step.gap_range.end > diff.len() {
         return Err(RomWeaverError::Validation(
             "HDIFFSF20 step referenced bytes past payload".into(),
         ));
     }
 
-    let mut output = Vec::with_capacity(step.output_len);
+    if output.len() != step.output_len {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 rendered step length mismatch".into(),
+        ));
+    }
+    let mut position = 0usize;
     let mut gap_index = 0usize;
     let gap_bytes = &diff[step.gap_range.clone()];
     let rle_bytes = &diff[step.rle_range.clone()];
@@ -1539,8 +1555,13 @@ fn render_hdiffsf20_step(
                     "HDIFFSF20 step gap bytes ended unexpectedly".into(),
                 ));
             }
-            output.extend_from_slice(&gap_bytes[gap_index..gap_index + cover.gap_len]);
+            let end = position + cover.gap_len;
+            let target = output.get_mut(position..end).ok_or_else(|| {
+                RomWeaverError::Validation("HDIFFSF20 step output exceeded target size".into())
+            })?;
+            target.copy_from_slice(&gap_bytes[gap_index..gap_index + cover.gap_len]);
             gap_index += cover.gap_len;
+            position = end;
         }
 
         let old_end = cover
@@ -1552,10 +1573,13 @@ fn render_hdiffsf20_step(
                 "HDIFFSF20 cover exceeded source bounds".into(),
             ));
         }
-        let old_range = old_data.read_range(cover.old_start, cover.cover_len)?;
-        output.extend_from_slice(old_range.as_slice());
-        let begin = output.len() - cover.cover_len;
-        rle_decoder.add(&mut output[begin..])?;
+        let end = position + cover.cover_len;
+        let target = output.get_mut(position..end).ok_or_else(|| {
+            RomWeaverError::Validation("HDIFFSF20 step output exceeded target size".into())
+        })?;
+        old_data.read_into(cover.old_start, target)?;
+        rle_decoder.add(target)?;
+        position = end;
     }
 
     if gap_index != gap_bytes.len() {
@@ -1563,37 +1587,12 @@ fn render_hdiffsf20_step(
             "HDIFFSF20 step left unused gap bytes".into(),
         ));
     }
-    if output.len() != step.output_len {
+    if position != step.output_len {
         return Err(RomWeaverError::Validation(
             "HDIFFSF20 rendered step size mismatch".into(),
         ));
     }
 
-    Ok(output)
-}
-
-fn write_hdiffsf20_step_bytes(
-    output: &mut [u8],
-    step: &Sf20StepPlan,
-    step_bytes: &[u8],
-) -> Result<()> {
-    if step_bytes.len() != step.output_len {
-        return Err(RomWeaverError::Validation(
-            "HDIFFSF20 rendered step length mismatch".into(),
-        ));
-    }
-    let step_end = step
-        .output_start
-        .checked_add(step.output_len)
-        .ok_or_else(|| {
-            RomWeaverError::Validation("HDIFFSF20 step output range overflowed".into())
-        })?;
-    if step_end > output.len() {
-        return Err(RomWeaverError::Validation(
-            "HDIFFSF20 step output exceeded target size".into(),
-        ));
-    }
-    output[step.output_start..step_end].copy_from_slice(step_bytes);
     Ok(())
 }
 
@@ -2099,13 +2098,12 @@ fn read_rle_varint(bytes: &[u8], index: &mut usize, label: &'static str) -> Resu
         .map_err(|_| RomWeaverError::Validation("HDIFFSF20 rle varint overflowed usize".into()))
 }
 
-fn append_from_new_diff(
-    output: &mut Vec<u8>,
-    source: &[u8],
+fn take_new_diff<'a>(
+    source: &'a mut [u8],
     source_index: &mut usize,
     len: usize,
     label: &'static str,
-) -> Result<()> {
+) -> Result<&'a mut [u8]> {
     if source.len().saturating_sub(*source_index) < len {
         return Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFF_NEW_DIFF_UNEXPECTED_EOF")
@@ -2115,9 +2113,9 @@ fn append_from_new_diff(
                 .with_field("source_len", source.len()),
         ));
     }
-    output.extend_from_slice(&source[*source_index..*source_index + len]);
+    let start = *source_index;
     *source_index += len;
-    Ok(())
+    Ok(&mut source[start..*source_index])
 }
 
 #[cfg(test)]
