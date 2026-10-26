@@ -178,4 +178,32 @@ describe("log store boot deferral", () => {
     expect(reportLines[1]).toBe("direct line");
     vi.unstubAllGlobals();
   });
+
+  it("lists queued boot records in a console report read before the idle flush, and clears them with the rest", async () => {
+    vi.resetModules();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const logging = await import("../../src/lib/logging.ts");
+    const store = await import("../../src/webapp/log-store.ts");
+    logging.configureLogger({ level: "info" });
+    store.installLogStore();
+    window.ROM_WEAVER_CONSOLE_LOGS?.clear();
+    const log = logging.createLogger("boot-test");
+    log.info("queued before the report");
+    expect(window.ROM_WEAVER_CONSOLE_LOGS?.size()).toBe(1);
+    const report = window.ROM_WEAVER_CONSOLE_LOGS?.getReport();
+    expect(report?.logs.map((record) => record.args.join(" "))).toEqual([
+      expect.stringContaining("boot-test: queued before the report"),
+    ]);
+    expect(report?.runtime.logCount).toBe(1);
+
+    log.info("queued before the clear");
+    window.ROM_WEAVER_CONSOLE_LOGS?.clear();
+    console.log("after the clear");
+    expect(window.ROM_WEAVER_CONSOLE_LOGS?.getReport().logs.map((record) => record.args.join(" "))).toEqual([
+      "after the clear",
+    ]);
+    vi.unstubAllGlobals();
+  });
 });
