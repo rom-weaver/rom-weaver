@@ -3,6 +3,7 @@ use super::*;
 enum ChdReadBackend {
     Rust {
         metadata_by_tag_and_index: BTreeMap<(u32, u32), Vec<u8>>,
+        reader_metadata: crate::chd_rs::map::ChdReaderMetadata,
     },
 }
 
@@ -48,6 +49,7 @@ impl ChdReadSession {
             media_kind,
             backend: ChdReadBackend::Rust {
                 metadata_by_tag_and_index,
+                reader_metadata: chd.reader_metadata(),
             },
         })
     }
@@ -133,6 +135,7 @@ impl ChdReadSession {
         match &self.backend {
             ChdReadBackend::Rust {
                 metadata_by_tag_and_index,
+                ..
             } => Ok(metadata_by_tag_and_index.get(&(tag, index)).cloned()),
         }
     }
@@ -180,6 +183,31 @@ impl ChdReadSession {
         Self::validate_v5_map_allocation(&mut reader, source, file_len)?;
         crate::chd_rs::Chd::open(reader, parent)
             .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
+    }
+
+    fn open_rust_chd_with_metadata(
+        source: &Path,
+        parent_source: Option<&Path>,
+        reader_metadata: &crate::chd_rs::map::ChdReaderMetadata,
+    ) -> std::result::Result<crate::chd_rs::Chd<BufReader<File>>, String> {
+        let parent = match (&reader_metadata.parent, parent_source) {
+            (Some(metadata), Some(path)) => {
+                let file = File::open(path).map_err(|error| {
+                    format!("failed to open parent chd `{}`: {error}", path.display())
+                })?;
+                Some(Box::new(
+                    metadata.open(BufReader::new(file), None).map_err(|error| {
+                        format!("failed to reopen parent chd `{}`: {error}", path.display())
+                    })?,
+                ))
+            }
+            _ => None,
+        };
+        let file = File::open(source)
+            .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
+        reader_metadata
+            .open(BufReader::new(file), parent)
+            .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))
     }
 
     pub(super) fn validate_v5_map_allocation<R: Read + Seek>(
@@ -333,15 +361,8 @@ impl ChdReadSession {
         match &self.backend {
             // The decoders report errors as text, so the cancel is restored here.
             ChdReadBackend::Rust { .. } => cancel.or_cancelled(
-                Self::stream_with_rust(
-                    &self.source,
-                    self.parent_source.as_deref(),
-                    self.header.logical_bytes,
-                    thread_count,
-                    on_progress,
-                    &mut on_bytes,
-                )
-                .map_err(RomWeaverError::Validation),
+                self.stream_with_rust(thread_count, on_progress, &mut on_bytes)
+                    .map_err(RomWeaverError::Validation),
             ),
         }
     }
@@ -389,9 +410,7 @@ impl ChdReadSession {
     }
 
     fn stream_with_rust<F>(
-        source: &Path,
-        parent_source: Option<&Path>,
-        logical_bytes: u64,
+        &self,
         thread_count: usize,
         on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         on_bytes: &mut F,
@@ -400,18 +419,19 @@ impl ChdReadSession {
         F: FnMut(&[u8]) -> Result<()>,
     {
         if thread_count > 1 {
-            return Self::stream_with_rust_parallel_ordered(
-                source,
-                parent_source,
-                logical_bytes,
-                thread_count,
-                on_progress,
-                on_bytes,
-            );
+            return self.stream_with_rust_parallel_ordered(thread_count, on_progress, on_bytes);
         }
 
-        let mut chd = Self::open_rust_chd(source, parent_source)
-            .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
+        let source = self.source.as_path();
+        let logical_bytes = self.header.logical_bytes;
+        let ChdReadBackend::Rust {
+            reader_metadata, ..
+        } = &self.backend;
+        let mut chd = Self::open_rust_chd_with_metadata(
+            source,
+            self.parent_source.as_deref(),
+            reader_metadata,
+        )?;
         debug!(
             hunk_count = chd.header().hunk_count(),
             logical_bytes, "chd single-thread decode start"
@@ -445,9 +465,7 @@ impl ChdReadSession {
     }
 
     fn stream_with_rust_parallel_ordered<F>(
-        source: &Path,
-        parent_source: Option<&Path>,
-        logical_bytes: u64,
+        &self,
         thread_count: usize,
         on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         on_bytes: &mut F,
@@ -455,11 +473,12 @@ impl ChdReadSession {
     where
         F: FnMut(&[u8]) -> Result<()>,
     {
-        let chd = Self::open_rust_chd(source, parent_source)
-            .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
-        let hunk_count = chd.header().hunk_count();
-        let hunk_bytes = chd.header().hunk_size() as u64;
-        drop(chd);
+        let hunk_count = self.header.hunk_count;
+        let hunk_bytes = u64::from(self.header.hunk_bytes);
+        let logical_bytes = self.header.logical_bytes;
+        let ChdReadBackend::Rust {
+            reader_metadata, ..
+        } = &self.backend;
 
         let hunk_count_usize = usize::try_from(hunk_count)
             .map_err(|_| "CHD hunk count exceeded addressable memory".to_string())?;
@@ -468,14 +487,7 @@ impl ChdReadSession {
         }
         let effective_threads = thread_count.max(1).min(hunk_count_usize);
         if effective_threads <= 1 {
-            return Self::stream_with_rust(
-                source,
-                parent_source,
-                logical_bytes,
-                1,
-                on_progress,
-                on_bytes,
-            );
+            return self.stream_with_rust(1, on_progress, on_bytes);
         }
 
         debug!(
@@ -487,13 +499,12 @@ impl ChdReadSession {
             "chd parallel decode start"
         );
 
-        let source = source.to_path_buf();
-        let parent_source = parent_source.map(Path::to_path_buf);
+        let source = &self.source;
+        let parent_source = &self.parent_source;
 
         // WASM workers use the OPFS proxy to open and read their own readers.
         // Native and browser use the same scoped-reader path.
         {
-            let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let hunk_bytes_usize = usize::try_from(hunk_bytes)
                 .ok()
                 .filter(|bytes| *bytes > 0)
@@ -514,30 +525,37 @@ impl ChdReadSession {
             Self::pregrow_decode_heap(batch_hunks, hunk_bytes_usize, effective_threads);
             let mut remaining = logical_bytes;
 
-            for batch in hunk_indices.chunks(batch_hunks) {
+            for batch_start in (0..hunk_count_usize).step_by(batch_hunks) {
                 if remaining == 0 {
                     break;
                 }
-                let chunk_size = batch.len().div_ceil(effective_threads).max(1);
+                let batch_end = batch_start
+                    .saturating_add(batch_hunks)
+                    .min(hunk_count_usize);
+                let chunk_size = (batch_end - batch_start).div_ceil(effective_threads).max(1);
                 let source_path = source.as_path();
                 let parent_source_path = parent_source.as_deref();
                 let chunk_results = std::thread::scope(|scope| {
-                    let handles = batch
-                        .chunks(chunk_size)
-                        .map(|chunk| {
+                    let handles = (batch_start..batch_end)
+                        .step_by(chunk_size)
+                        .map(|chunk_start| {
+                            let chunk_end = chunk_start.saturating_add(chunk_size).min(batch_end);
                             scope.spawn(move || {
-                                let mut chd = Self::open_rust_chd(source_path, parent_source_path)
-                                    .map_err(|error| {
-                                        format!(
-                                            "failed to decode `{}`: {error}",
-                                            source_path.display()
-                                        )
-                                    })?;
+                                let mut chd = Self::open_rust_chd_with_metadata(
+                                    source_path,
+                                    parent_source_path,
+                                    reader_metadata,
+                                )?;
+                                trace!(
+                                    chunk_start,
+                                    chunk_end, "chd worker reader opened with shared map"
+                                );
                                 let mut hunk_buffer = chd.get_hunksized_buffer();
                                 let mut compressed_buffer = Vec::new();
-                                let mut decoded = Vec::with_capacity(chunk.len());
+                                let mut decoded = Vec::with_capacity(chunk_end - chunk_start);
 
-                                for &hunk_index in chunk {
+                                for hunk_index in chunk_start..chunk_end {
+                                    let hunk_index = hunk_index as u32;
                                     let offset = u64::from(hunk_index).saturating_mul(hunk_bytes);
                                     if offset >= logical_bytes {
                                         continue;
@@ -599,6 +617,71 @@ impl ChdReadSession {
             }
 
             Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod shared_map_tests {
+    use super::*;
+    use crate::chd_rs::header::CodecType;
+    use crate::chd_rs::write::{ChdWriteOptions, ChdWriter};
+    use std::io::Write;
+
+    #[test]
+    fn chd_parallel_shared_maps_preserve_batch_order_and_partial_hunks_with_parent() {
+        let dir = crate::test_support::TempPath::new(
+            std::env::temp_dir().join(format!("rw-chd-shared-map-batches-{}", std::process::id())),
+        );
+        fs::create_dir_all(&dir).unwrap();
+        let parent_path = dir.join("parent.chd");
+        let child_path = dir.join("child.chd");
+        let logical_bytes = 64 * 1024 * 1024 + 8192 + 123;
+        let options = ChdWriteOptions::new(4096, 512)
+            .compression(&[CodecType::ZstdV5])
+            .logical_bytes(logical_bytes);
+        let mut writer =
+            ChdWriter::new(File::create(&parent_path).unwrap(), options.clone()).unwrap();
+        let mut remaining = logical_bytes;
+        let mut hunk = [0u8; 4096];
+        for index in 0..logical_bytes.div_ceil(4096) {
+            hunk.fill((index % 251) as u8);
+            let len = remaining.min(4096) as usize;
+            writer.write_all(&hunk[..len]).unwrap();
+            remaining -= len as u64;
+        }
+        writer.finish().unwrap();
+        let mut parent = ChdReadSession::open_rust_chd(&parent_path, None).unwrap();
+        let mut writer =
+            ChdWriter::with_parent(File::create(&child_path).unwrap(), options, &mut parent)
+                .unwrap();
+        let mut remaining = logical_bytes;
+        for index in 0..logical_bytes.div_ceil(4096) {
+            hunk.fill((index % 251) as u8);
+            let len = remaining.min(4096) as usize;
+            writer.write_all(&hunk[..len]).unwrap();
+            remaining -= len as u64;
+        }
+        writer.finish().unwrap();
+        for (source, parent) in [
+            (&parent_path, None),
+            (&child_path, Some(parent_path.as_path())),
+        ] {
+            for threads in [4, 8] {
+                let mut offset = 0u64;
+                ChdReadSession::open(source, parent)
+                    .unwrap()
+                    .stream_with_rust_parallel_ordered(threads, None, &mut |bytes: &[u8]| {
+                        assert!(
+                            bytes.iter().enumerate().all(|(index, &byte)| byte
+                                == (((offset + index as u64) / 4096) % 251) as u8)
+                        );
+                        offset += bytes.len() as u64;
+                        Ok(())
+                    })
+                    .unwrap();
+                assert_eq!(offset, logical_bytes);
+            }
         }
     }
 }
