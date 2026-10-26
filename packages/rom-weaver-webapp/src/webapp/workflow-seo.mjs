@@ -37,7 +37,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     description:
       "Patch ROMs in your browser, including files inside ZIP, 7z, and RAR archives. Apply patches in order and bake supported cheat codes. No uploads or account required.",
     slug: "",
-    title: `Online ROM patcher: patch ROMs in your browser | ${SITE_NAME}`,
+    title: `Patch ROMs in your browser | ${SITE_NAME}`,
   }),
   identify: Object.freeze({
     description:
