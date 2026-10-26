@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
 import { ApplyDropAfter } from "../../src/public/react/apply-drop-after.tsx";
@@ -526,14 +526,14 @@ describe("apply workflow view - empty bench", () => {
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
-    await vi.waitFor(() =>
+    await waitFor(() => {
       expect(within(dialog).getByRole("status").textContent).toBe(
         "Couldn't load the practice files. Check your connection and try again.",
-      ),
-    );
+      );
+      expect(within(dialog).getByRole("button", { name: "Continue" }).getAttribute("aria-busy")).toBeNull();
+    });
     expect(document.querySelector(".sample-tutorial-dialog")).toBe(dialog);
     expect(dialog.dataset.step).toBe("1");
-    expect(within(dialog).getByRole("button", { name: "Continue" }).getAttribute("aria-busy")).toBeNull();
     expect(onUnifiedDrop).not.toHaveBeenCalled();
   });
 
