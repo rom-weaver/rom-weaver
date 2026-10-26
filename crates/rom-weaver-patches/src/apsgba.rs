@@ -104,8 +104,13 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
         let target_size_u64 = u64::from(patch.target_size);
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let in_memory =
-            crate::can_apply_in_memory_on_apply(context, actual_input_size, target_size_u64);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            actual_input_size,
+            target_size_u64,
+            patch.records.len(),
+            crate::APSGBA_SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             records = patch.records.len(),

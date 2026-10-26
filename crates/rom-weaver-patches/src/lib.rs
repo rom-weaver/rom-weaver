@@ -94,6 +94,37 @@ pub(crate) fn can_apply_in_memory_on_apply(context: &OperationContext, a: u64, b
     a <= limit && b <= limit
 }
 
+pub(crate) struct SparseStreaming {
+    min_bytes: u64,
+    max_records: usize,
+}
+
+pub(crate) const SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    min_bytes: 32 * 1024 * 1024,
+    max_records: 4096,
+};
+pub(crate) const PAT_SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    min_bytes: 64 * 1024 * 1024,
+    ..SPARSE_STREAMING
+};
+pub(crate) const APSGBA_SPARSE_STREAMING: SparseStreaming = SparseStreaming {
+    max_records: 256,
+    ..SPARSE_STREAMING
+};
+
+/// Native warm-cache measurements favor streaming sparse patches above these sizes
+/// for speed and far lower memory use; dense patches stay buffered within the cap.
+pub(crate) fn can_apply_sparse_in_memory(
+    context: &OperationContext,
+    a: u64,
+    b: u64,
+    record_count: usize,
+    streaming: SparseStreaming,
+) -> bool {
+    can_apply_in_memory_on_apply(context, a, b)
+        && (a < streaming.min_bytes || record_count > streaming.max_records)
+}
+
 /// Read a chunk from both paths. `original_bytes` is zero-filled past
 /// `original_len`. Callers MUST ensure `end <= modified_len`.
 pub(crate) fn read_original_modified_chunk(

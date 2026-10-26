@@ -61,7 +61,13 @@ impl PatPatchHandler {
         validate_pat_record_offsets(&grouped_records, output_len)?;
         let thread_capability = parallel_per_record_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let in_memory = crate::can_apply_in_memory_on_apply(context, output_len, output_len);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            output_len,
+            output_len,
+            grouped_records.len(),
+            crate::PAT_SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             records = parsed.records.len(),

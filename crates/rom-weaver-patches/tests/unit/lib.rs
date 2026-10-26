@@ -683,3 +683,169 @@ fn pds_is_reported_as_explicitly_unsupported_by_name_and_by_path() {
     assert!(explicitly_unsupported_patch_reason_for_path(Path::new("update.ips")).is_none());
     assert!(explicitly_unsupported_patch_reason_for_path(Path::new("..")).is_none());
 }
+
+#[test]
+fn sparse_apply_default_selection_boundaries() {
+    use crate::test_support::{TestDir, test_context_with_threads};
+
+    let temp = TestDir::new();
+    let context =
+        test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(256 * 1024 * 1024);
+    let in_memory = |size, records| {
+        super::can_apply_sparse_in_memory(&context, size, size, records, super::SPARSE_STREAMING)
+    };
+    let min_bytes = 32 * 1024 * 1024;
+
+    assert!(in_memory(min_bytes - 1, 4096));
+    assert!(!in_memory(min_bytes, 4095));
+    assert!(!in_memory(min_bytes, 4096));
+    assert!(in_memory(min_bytes, 4097));
+}
+
+#[test]
+fn sparse_apply_pat_selection_boundaries() {
+    use crate::test_support::{TestDir, test_context_with_threads};
+
+    let temp = TestDir::new();
+    let context =
+        test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(256 * 1024 * 1024);
+    let in_memory = |size, records| {
+        super::can_apply_sparse_in_memory(
+            &context,
+            size,
+            size,
+            records,
+            super::PAT_SPARSE_STREAMING,
+        )
+    };
+    let min_bytes = 64 * 1024 * 1024;
+
+    assert!(in_memory(min_bytes - 1, 4096));
+    assert!(!in_memory(min_bytes, 4095));
+    assert!(!in_memory(min_bytes, 4096));
+    assert!(in_memory(min_bytes, 4097));
+}
+
+#[test]
+fn sparse_apply_apsgba_selection_boundaries() {
+    use crate::test_support::{TestDir, test_context_with_threads};
+
+    let temp = TestDir::new();
+    let context =
+        test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(256 * 1024 * 1024);
+    let in_memory = |size, records| {
+        super::can_apply_sparse_in_memory(
+            &context,
+            size,
+            size,
+            records,
+            super::APSGBA_SPARSE_STREAMING,
+        )
+    };
+    let min_bytes = 32 * 1024 * 1024;
+
+    assert!(in_memory(min_bytes - 1, 256));
+    assert!(!in_memory(min_bytes, 255));
+    assert!(!in_memory(min_bytes, 256));
+    assert!(in_memory(min_bytes, 257));
+}
+
+#[test]
+fn sparse_apply_defaults_preserve_untouched_bytes() {
+    use crate::test_support::{TestDir, test_context_with_threads};
+    use rom_weaver_core::{PatchApplyRequest, PatchChecksumValidation};
+
+    let temp = TestDir::new();
+    let registry = PatchRegistry::new();
+    for format in ["PPF", "MOD", "PAT", "APS", "APSGBA"] {
+        let len = if format == "PAT" { 64 } else { 32 } * 1024 * 1024u32;
+        let input = temp.child("source.bin");
+        let output = temp.child("output.bin");
+        let patch_path = temp.child("update.patch");
+        fs::File::create(&input)
+            .expect("create input")
+            .set_len(u64::from(len))
+            .expect("size input");
+        let changes = [(0u32, 0xa5u8), (len - 1, 0x5a)];
+        let mut patch = Vec::new();
+        match format {
+            "PPF" => {
+                patch.extend_from_slice(b"PPF30\x02");
+                patch.resize(60, 0);
+                for (offset, byte) in changes {
+                    patch.extend_from_slice(&u64::from(offset).to_le_bytes());
+                    patch.extend_from_slice(&[1, byte]);
+                }
+            }
+            "MOD" => {
+                patch.extend_from_slice(b"PMSR");
+                patch.extend_from_slice(&2u32.to_be_bytes());
+                for (offset, byte) in changes {
+                    patch.extend_from_slice(&offset.to_be_bytes());
+                    patch.extend_from_slice(&1u32.to_be_bytes());
+                    patch.push(byte);
+                }
+            }
+            "PAT" => {
+                for (offset, byte) in changes {
+                    patch.extend_from_slice(format!("{offset:08X} 00 {byte:02X}\n").as_bytes());
+                }
+            }
+            "APS" => {
+                patch.extend_from_slice(b"APS10");
+                patch.resize(57, 0);
+                patch.extend_from_slice(&len.to_le_bytes());
+                for (offset, byte) in changes {
+                    patch.extend_from_slice(&offset.to_le_bytes());
+                    patch.extend_from_slice(&[1, byte]);
+                }
+            }
+            "APSGBA" => {
+                patch.extend_from_slice(b"APS1");
+                patch.extend_from_slice(&len.to_le_bytes());
+                patch.extend_from_slice(&len.to_le_bytes());
+                let source = vec![0; 65536];
+                let source_crc = rom_weaver_checksum::crc16_ccitt_bytes(&source);
+                for (offset, byte) in changes {
+                    let start = offset / 65536 * 65536;
+                    let mut data = source.clone();
+                    data[(offset - start) as usize] = byte;
+                    let target_crc = rom_weaver_checksum::crc16_ccitt_bytes(&data);
+                    patch.extend_from_slice(&start.to_le_bytes());
+                    patch.extend_from_slice(&source_crc.to_le_bytes());
+                    patch.extend_from_slice(&target_crc.to_le_bytes());
+                    patch.extend_from_slice(&data);
+                }
+            }
+            _ => unreachable!(),
+        }
+        fs::write(&patch_path, patch).expect("write patch");
+        let mut context =
+            test_context_with_threads(&temp, 8).with_patch_apply_in_memory_limit(256 * 1024 * 1024);
+        if format == "MOD" {
+            context = context.with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+        }
+        let report = registry
+            .find_by_name(format)
+            .expect("handler")
+            .apply(
+                &PatchApplyRequest {
+                    input,
+                    patches: vec![patch_path],
+                    output: output.clone(),
+                },
+                &context,
+            )
+            .expect("apply sparse patch");
+        assert_eq!(
+            report.thread_execution.expect("execution").used_parallelism,
+            format != "PPF",
+            "{format} apply path"
+        );
+        let actual = fs::read(&output).expect("read output");
+        assert_eq!(actual.len(), len as usize, "{format} output length");
+        assert_eq!(actual[0], 0xa5, "{format} first change");
+        assert_eq!(actual[actual.len() - 1], 0x5a, "{format} last change");
+        assert!(actual[1..actual.len() - 1].iter().all(|byte| *byte == 0));
+    }
+}

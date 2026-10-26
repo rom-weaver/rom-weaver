@@ -180,7 +180,13 @@ impl PatchHandler for PpfPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
         let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
-        let in_memory = crate::can_apply_in_memory_on_apply(context, input_len, ppf_output_len);
+        let in_memory = crate::can_apply_sparse_in_memory(
+            context,
+            input_len,
+            ppf_output_len,
+            parsed.records.len(),
+            crate::SPARSE_STREAMING,
+        );
         trace!(
             format = self.descriptor.name,
             in_memory, ppf_output_len, "ppf apply path chosen"
