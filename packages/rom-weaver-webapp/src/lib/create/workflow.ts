@@ -161,7 +161,10 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
       () => ({ codeCount: codes.length, patchType: format, worker: true }),
     );
     if (compression === "none") return result;
-    const patchFile = await createPatchFileFromPublicOutput(result.output, basePatchFileName);
+    const patchFile = await createPatchFileFromPublicOutput(result.output, basePatchFileName, {
+      materializeBlob: false,
+      preferExternalFilePath: true,
+    });
     const output = await createCompressedPatchOutput(patchFile);
     const compressionTimeMs = roundElapsedMs(output?.timing);
     return {
