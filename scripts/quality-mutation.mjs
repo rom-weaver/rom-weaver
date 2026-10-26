@@ -154,6 +154,13 @@ export function runMutation(
     console.log(JSON.stringify(summary, null, 2));
     if (summary.baselineFailures || summary.timeouts || summary.surviving) return 1;
     if (result.status !== 0) return result.status;
+    // Every selected mutant failing to build points at the scratch build, not the code.
+    if (summary.caught === 0 && summary.unviable) {
+      console.log(
+        `All ${summary.unviable} selected mutants were unviable; check the scratch build before trusting this run.`,
+      );
+      return 1;
+    }
     if (summary.caught === 0) {
       console.log("No selected mutants; this run provides no mutation evidence.");
       return mode === "diff" ? 0 : 1;
