@@ -47,6 +47,8 @@ type UnifiedDropZoneProps = {
   heading?: boolean;
   /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
   guide?: WorkflowGuide;
+  /** More how-to pages linked after `guide` in the same help row. */
+  extraGuides?: readonly WorkflowGuide[];
   /** Onboarding control (the per-page sample link) that leads the empty-state help row. */
   onboarding?: ReactNode;
   /** Step number/title; the inputs step is 0x01 in every workflow. */
@@ -86,6 +88,7 @@ const UnifiedDropZone = ({
   addLabel,
   afterDropZone,
   beforeDropZone,
+  extraGuides,
   guide,
   headerExtra,
   heading = true,
@@ -176,6 +179,9 @@ const UnifiedDropZone = ({
             <div className="hero-help-links">
               {onboarding}
               {guide ? <HeroGuideLink guide={guide} /> : null}
+              {extraGuides?.map((extra) => (
+                <HeroGuideLink guide={extra} key={extra.path} />
+              ))}
             </div>
           ) : null}
           {supportedFormats ? (

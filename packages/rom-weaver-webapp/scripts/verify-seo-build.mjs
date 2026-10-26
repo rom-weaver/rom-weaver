@@ -364,6 +364,8 @@ assertIncludes(homeHtml, 'class="btn ghost slim home-route-go" href="/apply-patc
 assertIncludes(homeHtml, 'id="home-file-input"', "home drop zone picker");
 assertIncludes(homeHtml, 'href="/create-rom-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/features"', "home feature reference link");
+assertIncludes(homeHtml, 'href="/docs/extract-chd"', "home CHD to ISO guide link");
+assertIncludes(homeHtml, 'href="/docs/convert-rvz-to-iso"', "home RVZ to ISO guide link");
 // Home is the only current Project destination on the landing page.
 const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
   (match) => match[1],
@@ -403,6 +405,8 @@ assertIncludes(
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(extractHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.extract.slug}"`, "extract canonical");
 assertIncludes(extractHtml, WORKFLOW_SEO_ROUTES.extract.description, "extract description");
+assertIncludes(extractHtml, 'href="docs/extract-chd"', "extract CHD to ISO guide link");
+assertIncludes(extractHtml, 'href="docs/convert-rvz-to-iso"', "extract RVZ to ISO guide link");
 assertIncludes(read("extract/index.html"), WORKFLOW_SEO_ROUTES.extract.description, "static-host extract description");
 assertIncludes(
   identifyHtml,
