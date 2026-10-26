@@ -20,6 +20,21 @@ pub(super) fn compute_checksum_values(
     compute_checksum_values_with_progress(request, context, &mut noop_progress)
 }
 
+/// The execution `compute_checksum_values_with_progress` reports for `request`, without hashing.
+pub(super) fn planned_checksum_execution(
+    request: &ChecksumRequest,
+    context: &OperationContext,
+) -> Result<ThreadExecution> {
+    let algorithms = resolve_algorithms(&request.algorithms)?;
+    let range = ResolvedRange::from_request(&request.source, request.start, request.length)?;
+    let capability = if algorithms.is_empty() {
+        ThreadCapability::single_threaded()
+    } else {
+        plan_checksum(&algorithms, &range).capability
+    };
+    Ok(context.plan_threads(capability))
+}
+
 pub(super) fn compute_checksum_values_with_progress<F>(
     request: &ChecksumRequest,
     context: &OperationContext,

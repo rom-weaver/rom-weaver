@@ -150,7 +150,6 @@ impl CliApp {
         source: &Path,
         options: &ChecksumStreamOptions,
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
     ) -> Result<Option<OperationReport>> {
         let ChecksumStreamOptions {
             algo,
@@ -207,7 +206,6 @@ impl CliApp {
             },
             algo,
             context,
-            thread_execution,
         )?;
         Ok(Some(report))
     }
@@ -218,7 +216,6 @@ impl CliApp {
         candidate: TarStreamCandidate,
         algo: &[String],
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
     ) -> Result<OperationReport> {
         let TarStreamCandidate {
             tar_format,
@@ -233,6 +230,7 @@ impl CliApp {
             algorithm_count = algo.len(),
             "running streamed tar checksum auto-extract fast path"
         );
+        let thread_execution = Some(checksum_reader_execution(context));
         self.emit_running(
             OperationLabel {
                 command: "checksum",
@@ -378,7 +376,6 @@ impl CliApp {
         stream_format: &str,
         algo: &[String],
         context: &OperationContext,
-        thread_execution: Option<ThreadExecution>,
     ) -> Result<OperationReport> {
         trace!(
             source = %source.display(),
@@ -386,6 +383,7 @@ impl CliApp {
             algorithm_count = algo.len(),
             "running streamed checksum auto-extract fast path"
         );
+        let thread_execution = Some(checksum_reader_execution(context));
         self.emit_running(
             OperationLabel {
                 command: "checksum",

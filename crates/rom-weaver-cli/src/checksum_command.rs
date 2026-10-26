@@ -236,12 +236,7 @@ impl CliApp {
         };
 
         if allow_streaming_fast_paths {
-            match self.try_run_checksum_tar_stream_auto_extract(
-                source,
-                checksum_options,
-                context,
-                thread_execution.clone(),
-            ) {
+            match self.try_run_checksum_tar_stream_auto_extract(source, checksum_options, context) {
                 Ok(Some(report)) => return ChecksumFastPath::Finished(report),
                 Ok(None) => {}
                 Err(error) => {
@@ -264,7 +259,6 @@ impl CliApp {
                     stream_format,
                     checksum_options.algo,
                     context,
-                    thread_execution.clone(),
                 )
                 .unwrap_or_else(|error| {
                     self.checksum_error_report("checksum", error, thread_execution.clone())
@@ -313,15 +307,16 @@ impl CliApp {
         // separate concern handled by the `trim` command, not folded into the primary value here.
         let user_requested_range = request.start.is_some() || request.length.is_some();
         let variants_enabled = !user_requested_range;
-        // Variant hashing runs small files inline, so every event reports the plan it runs with.
-        let thread_execution = match fs::metadata(&request.source) {
-            Ok(metadata) if variants_enabled => Some(Self::checksum_variant_execution(
-                context,
-                request.algorithms.len(),
-                metadata.len(),
-            )),
-            _ => thread_execution,
+        // Every event reports the plan the hash runs with: variant hashing runs small files inline,
+        // and a range runs the plan the engine picks for its length.
+        let planned_execution = if variants_enabled {
+            fs::metadata(&request.source).ok().map(|metadata| {
+                Self::checksum_variant_execution(context, request.algorithms.len(), metadata.len())
+            })
+        } else {
+            self.checksum.planned_execution(&request, context).ok()
         };
+        let thread_execution = planned_execution.or(thread_execution);
         self.emit_checksum_progress(request.algorithms.len(), 0.0, &thread_execution);
 
         let mut temp_paths = Vec::new();

@@ -228,6 +228,90 @@ fn checksum_reports_small_files_as_single_threaded_in_every_event() {
     }
 }
 
+/// Asserts that the running `prepare` and `checksum` events and the terminal report all show the
+/// single inline thread the hash ran with.
+fn assert_checksum_events_single_threaded(events: &[Value]) {
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["status"], "succeeded", "terminal: {terminal}");
+    let running = events
+        .iter()
+        .filter(|event| {
+            event["status"] == "running"
+                && (event["stage"] == "prepare" || event["stage"] == "checksum")
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        running.iter().any(|event| event["stage"] == "checksum"),
+        "expected checksum progress events"
+    );
+    for event in running.into_iter().chain([terminal]) {
+        assert_eq!(event["effective_threads"], 1, "event: {event}");
+        assert_eq!(event["used_parallelism"], false, "event: {event}");
+    }
+}
+
+#[test]
+fn checksum_reports_streamed_containers_as_single_threaded_in_every_event() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.bin").path(), vec![0x5a; 8 * 1024]).expect("payload fixture");
+    let compressed = temp.child("game.bin.gz");
+    write_gzip_fixture(temp.child("game.bin").path(), compressed.path());
+
+    let events = run_json_events(
+        &[
+            "checksum",
+            "--input",
+            compressed.path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--threads",
+            "4",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let label = events.last().expect("terminal event")["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    assert!(
+        label.contains("checksum source streamed from gz container"),
+        "{label}"
+    );
+    assert_checksum_events_single_threaded(&events);
+}
+
+#[test]
+fn checksum_range_reports_the_plan_it_runs_in_every_event() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), vec![0xa5; 64 * 1024]).expect("fixture");
+
+    let events = run_json_events(
+        &[
+            "checksum",
+            "--input",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--start",
+            "0",
+            "--length",
+            "32768",
+            "--threads",
+            "4",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    assert_checksum_events_single_threaded(&events);
+}
+
 #[test]
 fn checksum_supports_sha256_blake3_and_crc32c() {
     let temp = setup_temp_dir();
