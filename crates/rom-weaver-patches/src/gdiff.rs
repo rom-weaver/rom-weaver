@@ -15,7 +15,8 @@ use rom_weaver_core::{
 };
 
 use crate::shared::threading::{
-    parallel_chunked_capability, parallel_per_record_capability, run_with_optional_pool,
+    PreparedWrite, apply_batched_writes, parallel_chunked_capability,
+    parallel_per_record_capability, run_with_optional_pool,
 };
 
 const GDIFF_MAGIC: [u8; 4] = [0xD1, 0xFF, 0xD1, 0xFF];
@@ -94,16 +95,28 @@ impl PatchHandler for GdiffPatchHandler {
             thread_capability,
             true,
             |pool| {
-                let tasks = build_gdiff_apply_tasks(&commands);
-                let prepared = pool.install(|| {
-                    tasks
-                        .par_iter()
-                        .map(|task| {
-                            prepare_gdiff_apply_task(task, patch_path, &request.input, source_len)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                apply_gdiff_prepared_chunks(&prepared, &request.output, context)
+                let mut output = crate::create_buffered_output(&request.output)?;
+                apply_batched_writes(
+                    &mut output,
+                    &commands,
+                    Some(pool),
+                    |command| match command.kind {
+                        GdiffApplyCommandKind::Data { len, .. }
+                        | GdiffApplyCommandKind::Copy { len, .. } => len as usize,
+                    },
+                    |command, range| {
+                        context.cancel().check()?;
+                        prepare_gdiff_apply_command(
+                            command,
+                            patch_path,
+                            &request.input,
+                            source_len,
+                            range,
+                        )
+                    },
+                )?;
+                output.flush()?;
+                Ok(())
             },
             || {
                 apply_gdiff_plan_sequential(
@@ -225,16 +238,6 @@ struct GdiffApplyCommand {
     kind: GdiffApplyCommandKind,
 }
 
-#[derive(Clone)]
-struct GdiffApplyTask {
-    command: GdiffApplyCommand,
-}
-
-struct GdiffPreparedChunk {
-    command: GdiffApplyCommand,
-    bytes: Vec<u8>,
-}
-
 #[derive(Default)]
 struct GdiffSummary {
     command_count: usize,
@@ -332,14 +335,6 @@ fn parse_gdiff_apply_plan(patch_path: &Path) -> Result<(GdiffSummary, Vec<GdiffA
     Ok((summary, commands))
 }
 
-fn build_gdiff_apply_tasks(commands: &[GdiffApplyCommand]) -> Vec<GdiffApplyTask> {
-    commands
-        .iter()
-        .copied()
-        .map(|command| GdiffApplyTask { command })
-        .collect()
-}
-
 fn apply_gdiff_plan_sequential(
     commands: &[GdiffApplyCommand],
     patch_path: &Path,
@@ -381,58 +376,44 @@ fn apply_gdiff_plan_sequential(
     Ok(())
 }
 
-fn prepare_gdiff_apply_task(
-    task: &GdiffApplyTask,
+fn prepare_gdiff_apply_command(
+    command: &GdiffApplyCommand,
     patch_path: &Path,
     source_path: &Path,
     source_len: u64,
-) -> Result<GdiffPreparedChunk> {
-    let mut bytes = Vec::new();
+    range: std::ops::Range<usize>,
+) -> Result<PreparedWrite> {
+    let mut bytes = Vec::with_capacity(range.len());
     let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
     {
         let mut output = BufWriter::new(&mut bytes);
-        match task.command.kind {
+        match command.kind {
             GdiffApplyCommandKind::Data {
-                patch_data_offset,
-                len,
+                patch_data_offset, ..
             } => {
                 let mut patch = BufReader::new(File::open(patch_path)?);
-                patch.seek(SeekFrom::Start(patch_data_offset))?;
-                copy_patch_data(&mut patch, &mut output, len, &mut scratch)?;
+                patch.seek(SeekFrom::Start(patch_data_offset + range.start as u64))?;
+                copy_patch_data(&mut patch, &mut output, range.len() as u64, &mut scratch)?;
             }
             GdiffApplyCommandKind::Copy { source_offset, len } => {
+                ensure_copy_range(source_len, source_offset, len)?;
                 let mut source = File::open(source_path)?;
                 copy_from_source(
                     &mut source,
                     &mut output,
                     source_len,
-                    source_offset,
-                    len,
+                    source_offset + range.start as u64,
+                    range.len() as u64,
                     &mut scratch,
                 )?;
             }
         }
         output.flush()?;
     }
-    Ok(GdiffPreparedChunk {
-        command: task.command,
-        bytes,
+    Ok(PreparedWrite {
+        offset: command.output_offset + range.start as u64,
+        data: bytes,
     })
-}
-
-fn apply_gdiff_prepared_chunks(
-    chunks: &[GdiffPreparedChunk],
-    output_path: &Path,
-    context: &OperationContext,
-) -> Result<()> {
-    let mut output = crate::create_buffered_output(output_path)?;
-    for chunk in chunks {
-        context.cancel().check()?;
-        output.seek(SeekFrom::Start(chunk.command.output_offset))?;
-        output.write_all(&chunk.bytes)?;
-    }
-    output.flush()?;
-    Ok(())
 }
 
 fn read_gdiff_header(reader: &mut dyn Read) -> Result<()> {

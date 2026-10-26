@@ -46,15 +46,15 @@
 @keyframes chip-in {
   from {
     opacity: 0;
-    translate: 0 5px;
     scale: 0.9;
+    translate: 0 5px;
   }
 }
 @keyframes pending-card-in {
   from {
     opacity: 0;
-    translate: 0 -6px;
     scale: 0.985;
+    translate: 0 -6px;
   }
 }
 /* The instant "identifying…" source weave: shown the moment an archive lands, then its footprint

@@ -317,7 +317,7 @@ pub(crate) fn create_buffered_output(path: &Path) -> Result<BufWriter<File>> {
 
 /// Capabilities for a fully-featured patch format that parses, applies, and creates, with the
 /// create-side diff and the output stage both parallelized. This is the common case shared by
-/// most create-capable handlers (IPS/UPS/PPF/APS/DLDI/DPS/GDIFF/PAT/PMSR/RUP/SOLID/BDF).
+/// most create-capable handlers (IPS/UPS/APS/DLDI/DPS/GDIFF/PAT/PMSR/RUP/SOLID/BDF).
 pub(crate) fn threaded_create_capabilities() -> PatchCapabilities {
     PatchCapabilities {
         parse: true,

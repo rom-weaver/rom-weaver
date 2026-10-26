@@ -342,7 +342,7 @@ export const ROM_WEAVER_PATCH_FORMATS = [
       "create": true,
       "parse": true,
       "threadedDiff": true,
-      "threadedOutput": true,
+      "threadedOutput": false,
       "threadedScan": false
     },
     "extensions": [

@@ -274,6 +274,18 @@
       "tests": [
         "cargo test -p rom-weaver-containers --lib nod::util::compress::tests::"
       ]
+    },
+    {
+      "file": "0022-preloader-cache-no-floor.patch",
+      "stage": "integration",
+      "reason": "Size the threaded group cache to read-ahead + threads + 16 without the 64-group floor; traces show sequential readers never reload a group, so the floor only pinned unused 2 MiB groups.",
+      "upstream": {
+        "status": "local"
+      },
+      "tests": [
+        "cargo test -p rom-weaver-containers nod",
+        "cargo test -p rom-weaver-cli --test cli_smoke rvz"
+      ]
     }
   ],
   "materialized": true,

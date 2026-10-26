@@ -742,3 +742,88 @@ fn apply_in_parallel_skips_source_addition_when_a_record_starts_past_the_source(
     );
     assert_eq!(fs::read(output_path).expect("output"), delta);
 }
+
+#[test]
+fn split_delta_records_preserve_negative_source_offsets() {
+    let temp = TestDir::new();
+    let len = crate::shared::threading::PARALLEL_WRITE_CHUNK_BYTES + 19;
+    let delta = vec![3; len];
+    let source = b"source";
+    let patch = build_bsdiff_patch(&[(0, 0, -7), (len as i64, 0, 0)], &delta, &[], len as i64);
+    let source_path = temp.child("negative-source.bin");
+    let patch_path = temp.child("negative.bdf");
+    fs::write(&source_path, source).expect("source");
+    fs::write(&patch_path, patch).expect("patch");
+    let mut expected = delta;
+    for (output, &byte) in expected[7..].iter_mut().zip(source) {
+        *output = output.wrapping_add(byte);
+    }
+    for threads in [1, 4] {
+        let output = temp.child(&format!("output-{threads}.bin"));
+        BdfPatchHandler::new(&BDF_BSDIFF40)
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect("split apply");
+        assert_eq!(fs::read(output).expect("output"), expected);
+    }
+}
+
+#[test]
+fn split_add_records_use_the_source_offset_plus_the_piece_offset() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let source_bytes = [11, 23, 37, 41, 53, 67, 79, 83, 97, 101, 113, 127, 139, 149];
+    fs::write(&source_path, source_bytes).expect("source");
+    let source = super::ParallelBsdiffSource::Disk(std::sync::Arc::new(
+        rom_weaver_core::SharedBlockCacheReader::open(&source_path, 16, 1).expect("source reader"),
+    ));
+    let plan = super::BsdiffWritePlan {
+        output_offset: 11,
+        kind: super::BsdiffWritePlanKind::Add {
+            source_offset: 4,
+            delta_offset: 2,
+            len: 7,
+        },
+    };
+    let delta = [201, 202, 1, 2, 3, 4, 5, 6, 7, 203];
+    let first = super::prepare_bsdiff_write(&plan, &source, source_bytes.len(), &delta, &[], 0..3)
+        .expect("first piece");
+    let second = super::prepare_bsdiff_write(&plan, &source, source_bytes.len(), &delta, &[], 3..7)
+        .expect("second piece");
+    assert_eq!(first.offset, 11);
+    assert_eq!(first.data, [54, 69, 82]);
+    assert_eq!(second.offset, 14);
+    assert_eq!(second.data, [87, 102, 107, 120]);
+}
+
+#[test]
+fn split_extra_payload_uses_the_record_offset_plus_the_piece_offset() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    fs::write(&source_path, b"").expect("source");
+    let source = super::ParallelBsdiffSource::Disk(std::sync::Arc::new(
+        rom_weaver_core::SharedBlockCacheReader::open(&source_path, 16, 1).expect("source reader"),
+    ));
+    let plan = super::BsdiffWritePlan {
+        output_offset: 11,
+        kind: super::BsdiffWritePlanKind::Copy {
+            extra_offset: 2,
+            len: 7,
+        },
+    };
+    let payload = b"xxABCDEFGtail";
+    let first =
+        super::prepare_bsdiff_write(&plan, &source, 0, &[], payload, 0..3).expect("first piece");
+    let second =
+        super::prepare_bsdiff_write(&plan, &source, 0, &[], payload, 3..7).expect("second piece");
+    assert_eq!(first.offset, 11);
+    assert_eq!(first.data, b"ABC");
+    assert_eq!(second.offset, 14);
+    assert_eq!(second.data, b"DEFG");
+}

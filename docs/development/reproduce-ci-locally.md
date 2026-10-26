@@ -206,7 +206,7 @@ mise run quality-mutation broad 0/64
 mise run quality-mutation list
 ```
 
-Inspect `.agent/quality-mutation/summary.json` and `mutants.out` for surviving locations, build failures and timeouts. A timeout or failure to compile is not a test catch. Investigate an apparent equivalent survivor before proposing a narrow documented exclusion. Do not relax limits merely to make a run green.
+Inspect `.agent/quality-mutation/summary.json` and `mutants.out` for surviving locations and timeouts. A timeout is not a test catch. Unviable mutants (ones that fail to compile, such as `Default::default()` for a type without `Default`) are counted under `unviable` but neither catch nor fail the run; a broken baseline build still fails it. Investigate an apparent equivalent survivor before proposing a narrow documented exclusion. Do not relax limits merely to make a run green.
 
 Run the independent property checks:
 

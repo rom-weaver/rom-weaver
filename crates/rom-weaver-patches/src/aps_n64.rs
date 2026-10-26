@@ -18,8 +18,8 @@ use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_p
 use crate::shared::labeled_parser::LabeledFileParser;
 use crate::shared::runs::{AdjacentRun, merge_adjacent_runs};
 use crate::shared::threading::{
-    PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
-    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+    PreparedWrite, apply_batched_writes, chunk_count_for_len_checked,
+    parallel_per_record_capability, run_with_optional_pool, scan_create_chunks,
 };
 
 const APS_N64_MAGIC: &[u8; 5] = b"APS10";
@@ -147,17 +147,20 @@ impl PatchHandler for ApsN64PatchHandler {
                 context,
                 thread_capability,
                 true,
-                |pool| {
-                    prepare_aps_writes_parallel(&patch.records, patch.output_size, pool, context)
-                        .map(Some)
-                },
+                |pool| Ok(Some(pool.clone())),
                 || {
                     apply_aps_records(&mut output, patch.output_size, &patch.records)?;
                     Ok(None)
                 },
             )?;
-            if let Some(prepared) = prepared {
-                apply_prepared_writes(&mut output, &prepared)?;
+            if let Some(pool) = prepared {
+                apply_aps_writes_parallel(
+                    &patch.records,
+                    patch.output_size,
+                    &pool,
+                    context,
+                    &mut output,
+                )?;
             }
             output.flush()?;
             execution
@@ -640,16 +643,26 @@ fn apply_aps_records(file: &mut File, output_size: u64, records: &[ApsRecord]) -
     Ok(())
 }
 
-fn prepare_aps_writes_parallel(
+fn apply_aps_writes_parallel(
     records: &[ApsRecord],
     output_size: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
-    pool_map(pool, records, |record| {
-        context.cancel().check()?;
-        prepare_aps_write(record, output_size)
-    })
+    output: &mut File,
+) -> Result<()> {
+    apply_batched_writes(
+        output,
+        records,
+        Some(pool),
+        |record| match record {
+            ApsRecord::Simple { data, .. } => data.len(),
+            ApsRecord::Rle { length, .. } => usize::from(*length),
+        },
+        |record, _range| {
+            context.cancel().check()?;
+            prepare_aps_write(record, output_size)
+        },
+    )
 }
 
 fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedWrite> {

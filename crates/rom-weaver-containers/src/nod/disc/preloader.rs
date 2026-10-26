@@ -156,10 +156,11 @@ impl Default for PreloaderCache {
 
 impl PreloaderCache {
     /// Size the cache to fit the read-ahead window plus some reuse room, so prefetched groups
-    /// aren't evicted before they're used. Keeps at least the old fixed capacity of 64.
+    /// aren't evicted before they're used. Sequential readers load each 2 MiB group once, so a
+    /// larger floor only pins groups that are never read again.
     #[cfg(feature = "threading")]
     fn for_read_ahead(read_ahead: usize, num_threads: usize) -> Self {
-        let capacity = (read_ahead + num_threads + 16).max(64);
+        let capacity = read_ahead + num_threads + 16;
         Self {
             inflight: Default::default(),
             lru_cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),

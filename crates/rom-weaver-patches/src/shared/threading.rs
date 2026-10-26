@@ -4,13 +4,14 @@
 //! keep their format-specific wording.
 
 use std::{
-    fs::File,
     io::{Seek, SeekFrom, Write},
+    ops::Range,
 };
 
 use rayon::prelude::*;
 use rom_weaver_core::{
     OperationContext, Result, RomWeaverError, SharedThreadPool, ThreadCapability, ThreadExecution,
+    bounded_items_for_threads,
 };
 
 /// Parallel capability sized to one unit of work per parsed record (change,
@@ -83,7 +84,10 @@ pub(crate) struct PreparedWrite {
 
 /// Seeks and writes each prepared write into `output`, skipping empty
 /// payloads.
-pub(crate) fn apply_prepared_writes(output: &mut File, writes: &[PreparedWrite]) -> Result<()> {
+pub(crate) fn apply_prepared_writes(
+    output: &mut (impl Write + Seek),
+    writes: &[PreparedWrite],
+) -> Result<()> {
     for write in writes {
         if write.data.is_empty() {
             continue;
@@ -104,6 +108,58 @@ pub(crate) fn pool_map<I: Sync, T: Send>(
     pool.install(|| items.par_iter().map(&map).collect::<Result<Vec<_>>>())
 }
 
+pub(crate) const PARALLEL_WRITE_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+
+pub(crate) fn parallel_write_batch_bytes(threads: usize) -> usize {
+    bounded_items_for_threads(threads).saturating_mul(PARALLEL_WRITE_CHUNK_BYTES)
+}
+
+/// Splits oversized records so even a single dense change fits the prepared-byte budget.
+/// Callers MUST validate the complete record before preparing any subrange.
+pub(crate) fn apply_batched_writes<I: Sync>(
+    output: &mut (impl Write + Seek),
+    items: &[I],
+    pool: Option<&SharedThreadPool>,
+    write_len: impl Fn(&I) -> usize,
+    prepare: impl Fn(&I, Range<usize>) -> Result<PreparedWrite> + Sync + Send,
+) -> Result<()> {
+    let byte_limit = parallel_write_batch_bytes(pool.map_or(1, SharedThreadPool::size));
+    let mut batch = Vec::new();
+    let mut batch_bytes = 0;
+    let mut flush = |batch: &[(&I, Range<usize>)]| -> Result<()> {
+        tracing::trace!(
+            items = batch.len(),
+            byte_limit,
+            "patch prepared write batch"
+        );
+        let map = |(item, range): &(&I, Range<usize>)| prepare(item, range.clone());
+        let writes = if let Some(pool) = pool {
+            pool_map(pool, batch, map)?
+        } else {
+            batch.iter().map(map).collect::<Result<Vec<_>>>()?
+        };
+        apply_prepared_writes(output, &writes)
+    };
+    for item in items {
+        let len = write_len(item);
+        for start in (0..len.max(1)).step_by(PARALLEL_WRITE_CHUNK_BYTES) {
+            let end = start.saturating_add(PARALLEL_WRITE_CHUNK_BYTES).min(len);
+            let bytes = end - start;
+            if !batch.is_empty() && batch_bytes + bytes > byte_limit {
+                flush(&batch)?;
+                batch.clear();
+                batch_bytes = 0;
+            }
+            batch.push((item, start..end));
+            batch_bytes += bytes;
+        }
+    }
+    if !batch.is_empty() {
+        flush(&batch)?;
+    }
+    Ok(())
+}
+
 /// Scans the create input in `chunk_count` chunks on `pool`, producing one `T`
 /// per chunk. `scan_chunk_by_index` opens the files itself per chunk in
 /// parallel and fails fast on the first error. Cancellation checks and
@@ -120,3 +176,7 @@ pub(crate) fn scan_create_chunks<T: Send>(
             .collect::<Result<Vec<_>>>()
     })
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/threading.rs"]
+mod tests;

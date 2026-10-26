@@ -18,8 +18,8 @@ use crate::checksum_validation_suffix;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::{
-    PreparedWrite, apply_prepared_writes, chunk_count_for_len, parallel_chunked_capability,
-    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+    PreparedWrite, apply_batched_writes, chunk_count_for_len, parallel_chunked_capability,
+    parallel_per_record_capability, run_with_optional_pool, scan_create_chunks,
 };
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -176,17 +176,7 @@ impl PatchHandler for DpsPatchHandler {
             context,
             thread_capability,
             true,
-            |pool| {
-                prepare_dps_writes_parallel(
-                    &parsed.records,
-                    &request.input,
-                    source_len,
-                    output_len,
-                    pool,
-                    context,
-                )
-                .map(Some)
-            },
+            |pool| Ok(Some(pool.clone())),
             || {
                 let mut source = File::open(&request.input)?;
                 apply_dps_records_in_place(
@@ -199,8 +189,16 @@ impl PatchHandler for DpsPatchHandler {
                 Ok(None)
             },
         )?;
-        if let Some(prepared) = prepared {
-            apply_prepared_writes(&mut output, &prepared)?;
+        if let Some(pool) = prepared {
+            apply_dps_writes_parallel(
+                &parsed.records,
+                &request.input,
+                source_len,
+                output_len,
+                &pool,
+                context,
+                &mut output,
+            )?;
         }
         output.flush()?;
 
@@ -1122,23 +1120,33 @@ fn apply_dps_records_in_place(
     Ok(())
 }
 
-fn prepare_dps_writes_parallel(
+fn apply_dps_writes_parallel(
     records: &[ParsedDpsRecord],
     source_path: &Path,
     source_len: usize,
     output_len: usize,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
+    output: &mut File,
+) -> Result<()> {
     let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool_map(pool, records, |record| {
-        context.cancel().check()?;
-        prepare_dps_write(record, source_len, output_len, &shared_source)
-    })
+    apply_batched_writes(
+        output,
+        records,
+        Some(pool),
+        |record| match record {
+            ParsedDpsRecord::CopyFromSource { length, .. } => *length as usize,
+            ParsedDpsRecord::EmbeddedData { data, .. } => data.len(),
+        },
+        |record, range| {
+            context.cancel().check()?;
+            prepare_dps_write(record, source_len, output_len, &shared_source, range)
+        },
+    )
 }
 
 fn prepare_dps_write(
@@ -1146,6 +1154,7 @@ fn prepare_dps_write(
     source_len: usize,
     output_len: usize,
     source: &Arc<SharedBlockCacheReader>,
+    range: std::ops::Range<usize>,
 ) -> Result<PreparedWrite> {
     match record {
         ParsedDpsRecord::CopyFromSource {
@@ -1158,12 +1167,12 @@ fn prepare_dps_write(
             let (output_start, output_end) =
                 checked_range(*output_offset, *length, output_len, "DPS output write")?;
             debug_assert_eq!(source_end - source_start, output_end - output_start);
-            let mut bytes = vec![0u8; source_end - source_start];
+            let mut bytes = vec![0u8; range.len()];
             if !bytes.is_empty() {
-                source.read_exact_at(source_start as u64, &mut bytes)?;
+                source.read_exact_at((source_start + range.start) as u64, &mut bytes)?;
             }
             Ok(PreparedWrite {
-                offset: output_start as u64,
+                offset: (output_start + range.start) as u64,
                 data: bytes,
             })
         }
@@ -1176,11 +1185,11 @@ fn prepare_dps_write(
                     "DPS embedded record length exceeded 32-bit range".into(),
                 )
             })?;
-            let (output_start, output_end) =
+            let (output_start, _) =
                 checked_range(*output_offset, data_len, output_len, "DPS output write")?;
             Ok(PreparedWrite {
-                offset: output_start as u64,
-                data: data[..output_end - output_start].to_vec(),
+                offset: (output_start + range.start) as u64,
+                data: data[range].to_vec(),
             })
         }
     }
