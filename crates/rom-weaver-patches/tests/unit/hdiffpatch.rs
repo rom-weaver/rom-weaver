@@ -819,11 +819,11 @@ fn rle_varints_decode_multi_byte_lengths() {
 }
 
 #[test]
-fn append_from_new_diff_reports_a_source_that_ends_early() {
-    let mut output = Vec::new();
+fn take_new_diff_reports_a_source_that_ends_early() {
+    let mut source = *b"ab";
     let mut index = 0usize;
-    let error = super::append_from_new_diff(&mut output, b"ab", &mut index, 4, "probe")
-        .expect_err("source ends early");
+    let error =
+        super::take_new_diff(&mut source, &mut index, 4, "probe").expect_err("source ends early");
     let message = error.to_string();
     assert!(
         message.contains("HDIFF_NEW_DIFF_UNEXPECTED_EOF"),
@@ -894,15 +894,17 @@ fn file_parser_rejects_non_utf8_headers() {
 fn in_memory_old_data_reports_ranges_past_its_end() {
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
     assert_eq!(old.len(), 4);
-    assert_eq!(old.read_range(1, 2).expect("range"), b"bc");
+    let mut output = [0u8; 2];
+    old.read_into(1, &mut output).expect("range");
+    assert_eq!(&output, b"bc");
     assert!(
-        old.read_range(3, 4)
+        old.read_into(3, &mut [0u8; 4])
             .expect_err("past end")
             .to_string()
             .contains("HDiffPatch source range exceeded bounds")
     );
     assert!(
-        old.read_range(usize::MAX, 2)
+        old.read_into(usize::MAX, &mut [0u8; 2])
             .expect_err("overflow")
             .to_string()
             .contains("HDiffPatch source range overflowed")
@@ -917,15 +919,17 @@ fn cached_old_data_reports_ranges_past_its_end() {
 
     let old = super::HdiffOldData::from_path(&old_path).expect("old data");
     assert_eq!(old.len(), 4);
-    assert_eq!(old.read_range(1, 2).expect("range"), b"bc");
+    let mut output = [0u8; 2];
+    old.read_into(1, &mut output).expect("range");
+    assert_eq!(&output, b"bc");
     assert!(
-        old.read_range(3, 4)
+        old.read_into(3, &mut [0u8; 4])
             .expect_err("past end")
             .to_string()
             .contains("HDiffPatch source range exceeded bounds")
     );
     assert!(
-        old.read_range(usize::MAX, 2)
+        old.read_into(usize::MAX, &mut [0u8; 2])
             .expect_err("overflow")
             .to_string()
             .contains("HDiffPatch source range overflowed")
@@ -1225,6 +1229,31 @@ fn hdiff13_apply_rejects_an_output_size_that_cannot_be_allocated() {
 }
 
 #[test]
+fn hdiff13_apply_checks_missing_diff_at_the_maximum_allocatable_output_size() {
+    let (bytes, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+        new_data_size: isize::MAX as u64,
+        old_data_size: 0,
+        cover_count: 0,
+        cover: &[],
+        rle_ctrl: &[],
+        rle_code: &[],
+        new_diff: &[],
+    }));
+
+    let error = apply_hdiff13(&[], &bytes, &header).expect_err("missing new data diff");
+    let message = error.to_string();
+    assert!(
+        message.contains("HDIFF_NEW_DIFF_UNEXPECTED_EOF"),
+        "{message}"
+    );
+    assert!(message.contains("label=new_data_diff tail"), "{message}");
+    assert!(
+        message.contains(&format!("len={}", isize::MAX)),
+        "{message}"
+    );
+}
+
+#[test]
 fn hdiff13_apply_rejects_a_cover_that_moves_before_the_start_of_the_source() {
     let mut cover = vec![0x81u8];
     write_var_u64(&mut cover, 0);
@@ -1311,6 +1340,134 @@ fn hdiff13_apply_rejects_an_output_shorter_than_the_covers_produce() {
     let message = error.to_string();
     assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
     assert!(message.contains("expected=2"), "{message}");
+}
+
+#[test]
+fn hdiff13_streaming_rejects_output_beyond_the_declared_size() {
+    struct BoundedWriter {
+        written: usize,
+        limit: usize,
+    }
+
+    impl std::io::Write for BoundedWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            assert!(
+                bytes.len() <= self.limit - self.written,
+                "HDIFF13 wrote beyond new_data_size"
+            );
+            self.written += bytes.len();
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut covers = vec![0, 0, 4];
+    for _ in 1..1000 {
+        covers.extend_from_slice(&[0x84, 0, 4]);
+    }
+    for (cover_count, cover, new_diff) in [
+        (1000, covers.as_slice(), b"".as_slice()),
+        (1, [0, 5, 0].as_slice(), b"12345".as_slice()),
+        (1, [0, 2, 4].as_slice(), b"12".as_slice()),
+    ] {
+        let (patch, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count,
+            cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff,
+        }));
+        let chunks =
+            super::read_hdiff13_chunks_from_patch_bytes(&patch, &header, false).expect("chunks");
+        let mut output = BoundedWriter {
+            written: 0,
+            limit: 4,
+        };
+        let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
+
+        let error = super::apply_hdiff13_with_chunks(&old, &header, chunks, &mut output)
+            .expect_err("output size mismatch");
+
+        assert!(output.written <= output.limit);
+        let message = error.to_string();
+        assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+        assert!(message.contains("expected=4"), "{message}");
+        assert_eq!(output.written, if cover_count == 1000 { 4 } else { 0 });
+    }
+}
+
+#[test]
+fn hdiff13_rejects_output_position_overflow_with_the_size_mismatch_code() {
+    for (first_cover, gap, length) in [
+        (false, u64::MAX, 0),
+        (false, 1, u64::MAX),
+        (true, u64::MAX, 0),
+    ] {
+        let mut cover = if first_cover {
+            vec![0, 0, 4, 0x84]
+        } else {
+            vec![0]
+        };
+        write_var_u64(&mut cover, gap);
+        write_var_u64(&mut cover, length);
+        let (patch, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count: if first_cover { 2 } else { 1 },
+            cover: &cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: &[],
+        }));
+
+        let error = apply_hdiff13(b"abcd", &patch, &header).expect_err("output position overflow");
+        let message = error.to_string();
+        assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+        assert!(message.contains("expected=4"), "{message}");
+    }
+}
+
+#[test]
+fn hdiff13_validate_rejects_repeated_covers_beyond_the_declared_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.hdiff");
+    let mut covers = vec![0, 0, 4];
+    for _ in 1..1000 {
+        covers.extend_from_slice(&[0x84, 0, 4]);
+    }
+    fs::write(&input_path, b"abcd").expect("input");
+    fs::write(
+        &patch_path,
+        build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 4,
+            old_data_size: 4,
+            cover_count: 1000,
+            cover: &covers,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: &[],
+        }),
+    )
+    .expect("patch");
+
+    let error = HdiffPatchHandler::new(&HDIFFPATCH)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("output size mismatch");
+    let message = error.to_string();
+    assert!(message.contains("HDIFF_OUTPUT_SIZE_MISMATCH"), "{message}");
+    assert!(message.contains("expected=4"), "{message}");
 }
 
 #[test]
@@ -1662,7 +1819,8 @@ fn sf20_step_rendering_rejects_ranges_past_the_payload() {
     };
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
 
-    let error = super::render_hdiffsf20_step(&old, b"ab", &step).expect_err("past payload");
+    let error = super::render_hdiffsf20_step(&old, b"ab", &step, &mut vec![0; step.output_len])
+        .expect_err("past payload");
     assert!(
         error
             .to_string()
@@ -1685,7 +1843,8 @@ fn sf20_step_rendering_rejects_a_gap_buffer_that_ends_early() {
     };
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
 
-    let error = super::render_hdiffsf20_step(&old, &[0x02], &step).expect_err("short gap buffer");
+    let error = super::render_hdiffsf20_step(&old, &[0x02], &step, &mut vec![0; step.output_len])
+        .expect_err("short gap buffer");
     assert!(
         error
             .to_string()
@@ -1708,7 +1867,8 @@ fn sf20_step_rendering_rejects_a_cover_past_the_source() {
     };
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
 
-    let error = super::render_hdiffsf20_step(&old, b"", &step).expect_err("cover past source");
+    let error = super::render_hdiffsf20_step(&old, b"", &step, &mut vec![0; step.output_len])
+        .expect_err("cover past source");
     assert!(
         error
             .to_string()
@@ -1731,8 +1891,13 @@ fn sf20_step_rendering_rejects_leftover_gap_bytes() {
     };
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
 
-    let error = super::render_hdiffsf20_step(&old, &[0x02, b'X', b'Y'], &step)
-        .expect_err("leftover gap bytes");
+    let error = super::render_hdiffsf20_step(
+        &old,
+        &[0x02, b'X', b'Y'],
+        &step,
+        &mut vec![0; step.output_len],
+    )
+    .expect_err("leftover gap bytes");
     assert!(
         error
             .to_string()
@@ -1755,8 +1920,8 @@ fn sf20_step_rendering_rejects_a_step_shorter_than_its_declared_length() {
     };
     let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
 
-    let error =
-        super::render_hdiffsf20_step(&old, &[0x02], &step).expect_err("rendered size mismatch");
+    let error = super::render_hdiffsf20_step(&old, &[0x02], &step, &mut vec![0; step.output_len])
+        .expect_err("rendered size mismatch");
     assert!(
         error
             .to_string()
@@ -1769,30 +1934,36 @@ fn sf20_step_writes_reject_length_and_range_mismatches() {
     let step = super::Sf20StepPlan {
         output_start: 0,
         output_len: 2,
-        rle_range: 0..0,
-        gap_range: 0..0,
-        covers: Vec::new(),
+        rle_range: 0..1,
+        gap_range: 1..1,
+        covers: vec![super::Sf20CoverPlan {
+            old_start: 0,
+            cover_len: 2,
+            gap_len: 0,
+        }],
     };
+    let old = super::HdiffOldData::Bytes(b"abcd".to_vec());
     let mut output = [0u8; 4];
 
     assert!(
-        super::write_hdiffsf20_step_bytes(&mut output, &step, b"abc")
+        super::render_hdiffsf20_step(&old, &[2], &step, &mut output[..3])
             .expect_err("length mismatch")
             .to_string()
             .contains("HDIFFSF20 rendered step length mismatch")
     );
-    super::write_hdiffsf20_step_bytes(&mut output, &step, b"ab").expect("step write");
+    super::render_hdiffsf20_step(&old, &[2], &step, &mut output[..2]).expect("step write");
     assert_eq!(&output, b"ab\0\0");
 
     let past_end = super::Sf20StepPlan {
-        output_start: 3,
-        output_len: 2,
-        rle_range: 0..0,
-        gap_range: 0..0,
-        covers: Vec::new(),
+        covers: vec![super::Sf20CoverPlan {
+            old_start: 0,
+            cover_len: 3,
+            gap_len: 0,
+        }],
+        ..step
     };
     assert!(
-        super::write_hdiffsf20_step_bytes(&mut output, &past_end, b"ab")
+        super::render_hdiffsf20_step(&old, &[3], &past_end, &mut output[..2])
             .expect_err("past target end")
             .to_string()
             .contains("HDIFFSF20 step output exceeded target size")
@@ -1943,4 +2114,297 @@ fn hdiff13_rle_leaves_the_target_untouched_without_control_bytes() {
     )
     .expect("rle");
     assert_eq!(target, [1, 2, 3, 4]);
+}
+
+#[test]
+fn hdiff13_streams_exact_buffer_sized_covers_without_empty_writes() {
+    struct ChunkWriter<'a> {
+        expected: &'a [u8],
+        position: usize,
+    }
+
+    impl std::io::Write for ChunkWriter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            assert!(!bytes.is_empty(), "unexpected empty output write");
+            let remaining = self.expected.len() - self.position;
+            assert_eq!(bytes.len(), remaining.min(1_048_576), "output chunk size");
+            let end = self.position + bytes.len();
+            assert_eq!(bytes, &self.expected[self.position..end], "output bytes");
+            self.position = end;
+            Ok(bytes.len())
+        }
+
+        fn write_all(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+            self.write(bytes).map(|_| ())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    for source_len in [1_048_576, 2_097_152] {
+        let mut source = vec![0x12; source_len];
+        source[..1_048_576].fill(0xfe);
+        let mut cover = vec![0];
+        write_var_u64(&mut cover, 0);
+        write_var_u64(&mut cover, source_len as u64);
+        let (patch, header) = parsed_hdiff13(build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: source_len as u64,
+            old_data_size: source_len as u64,
+            cover_count: 1,
+            cover: &cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: &[],
+        }));
+        let chunks =
+            super::read_hdiff13_chunks_from_patch_bytes(&patch, &header, false).expect("chunks");
+        let mut output = ChunkWriter {
+            expected: &source,
+            position: 0,
+        };
+        let old = super::HdiffOldData::Bytes(source.clone());
+
+        let written = super::apply_hdiff13_with_chunks(&old, &header, chunks, &mut output)
+            .expect("stream exact buffer boundaries");
+
+        assert_eq!(written, source_len);
+        assert_eq!(output.position, source_len);
+    }
+}
+
+#[test]
+fn hdiff13_streams_rle_across_gaps_cover_buffers_and_tail() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("stream.hdiff");
+    let output_path = temp.child("output.bin");
+    let source = vec![0xfe; 2 * 1024 * 1024 + 19];
+    let mut cover = vec![0];
+    write_var_u64(&mut cover, 3);
+    write_var_u64(&mut cover, source.len() as u64);
+    let new_len = source.len() + 7;
+    let set_len = 1024 * 1024 + 4;
+    let mut rle_code = vec![1];
+    rle_code.extend(vec![2; new_len - set_len]);
+    let patch = build_hdiff13_parts(&Hdiff13Parts {
+        new_data_size: new_len as u64,
+        old_data_size: source.len() as u64,
+        cover_count: 1,
+        cover: &cover,
+        rle_ctrl: &[0xa0, 0xc0, 0x80, 0x03, 0xe0, 0xc0, 0x80, 0x15],
+        rle_code: &rle_code,
+        new_diff: b"XYZtail",
+    });
+    fs::write(&input_path, &source).expect("source");
+    fs::write(&patch_path, patch).expect("patch");
+    let mut expected = b"XYZ".to_vec();
+    expected.extend_from_slice(&source);
+    expected.extend_from_slice(b"tail");
+    for (index, byte) in expected.iter_mut().enumerate() {
+        *byte = byte.wrapping_add(if index < set_len { 1 } else { 2 });
+    }
+
+    let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+    for threads in [1, 4] {
+        let context = test_context_with_threads(&temp, threads);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &context,
+            )
+            .expect("stream apply");
+        assert_eq!(fs::read(&output_path).expect("output"), expected);
+        assert!(report.label.contains(&format!("output {new_len} byte(s)")));
+        let report = handler
+            .validate(
+                &PatchValidateRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                },
+                &context,
+            )
+            .expect("validate");
+        assert!(
+            report
+                .label
+                .contains(&format!("output would be {new_len} byte(s)"))
+        );
+    }
+}
+
+#[test]
+fn hdiff13_streaming_propagates_output_write_errors() {
+    let patch = build_uncompressed_hdiff13_patch(b"old", b"new bytes").expect("patch");
+    let (patch, header) = parsed_hdiff13(patch);
+    let chunks =
+        super::read_hdiff13_chunks_from_patch_bytes(&patch, &header, false).expect("chunks");
+    let old = super::HdiffOldData::Bytes(b"old".to_vec());
+    let mut target = [0u8; 2];
+    let mut output = std::io::Cursor::new(target.as_mut_slice());
+    let error = super::apply_hdiff13_with_chunks(&old, &header, chunks, &mut output)
+        .expect_err("short output");
+    assert!(
+        error.to_string().contains("failed to write whole buffer"),
+        "{error}"
+    );
+}
+
+#[test]
+fn sf20_parallel_steps_preserve_gaps_value_rle_empty_steps_and_tail() {
+    let first = sf20_step_payload(&sf20_cover(0, 2, 2), &[0, 2, 1, 255], b"XY");
+    let empty = sf20_step_payload(&sf20_cover(0, 0, 0), &[], &[]);
+    let last = sf20_step_payload(&sf20_cover(0, 1, 4), &[4], b"Z");
+    let payload = [first, empty, last, b"T".to_vec()].concat();
+    let (bytes, header) = parsed_hdiffsf20(build_hdiffsf20_header(10, 6, 3, &payload));
+    let old = super::HdiffOldData::Bytes(b"abcdef".to_vec());
+    for parallel in [false, true] {
+        let applied = super::apply_hdiffsf20_with_step_parallelism(&old, &bytes, &header, parallel)
+            .expect("apply");
+        assert_eq!(applied.output, b"XYbaZcdefT");
+        assert_eq!(applied.used_parallelism, parallel);
+    }
+}
+
+#[test]
+fn streamed_apply_and_validate_match_upstream_hdiff13_codec_fixtures() {
+    let temp = TestDir::new();
+    let source_path = fixture_path("source.bin");
+    let expected = fs::read(fixture_path("target.bin")).expect("target fixture");
+    let output = temp.child("output.bin");
+    let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+    for fixture in [
+        "upstream-hdiff13-zstd.hdiff",
+        "upstream-hdiff13-zlib.hdiff",
+        "upstream-hdiff13-bz2.hdiff",
+        "upstream-hdiff13-lzma.hdiff",
+        "upstream-hdiff13-lzma2.hdiff",
+    ] {
+        for threads in [1, 4] {
+            let context = test_context_with_threads(&temp, threads);
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: source_path.clone(),
+                        patches: vec![fixture_path(fixture)],
+                        output: output.clone(),
+                    },
+                    &context,
+                )
+                .unwrap_or_else(|error| panic!("{fixture}: {error}"));
+            assert_eq!(fs::read(&output).expect("output"), expected, "{fixture}");
+            handler
+                .validate(
+                    &PatchValidateRequest {
+                        input: source_path.clone(),
+                        patches: vec![fixture_path(fixture)],
+                    },
+                    &context,
+                )
+                .unwrap_or_else(|error| panic!("{fixture} validate: {error}"));
+        }
+    }
+}
+
+#[test]
+fn streamed_apply_can_replace_its_source_file() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("update.hdiff");
+    let source = vec![0x5a; 2 * 1024 * 1024 + 1];
+    fs::write(&input, &source).expect("source");
+    fs::write(
+        &patch,
+        build_identity_hdiff13_patch_with_cover_and_rle(&source),
+    )
+    .expect("patch");
+    HdiffPatchHandler::new(&HDIFFPATCH)
+        .apply(
+            &PatchApplyRequest {
+                input: input.clone(),
+                patches: vec![patch],
+                output: input.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("in-place apply");
+    assert_eq!(fs::read(input).expect("output"), source);
+}
+
+#[test]
+fn streamed_apply_keeps_existing_output_when_a_cover_is_malformed() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let patch = temp.child("update.hdiff");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"abcd").expect("source");
+    fs::write(&output, b"keep existing output").expect("existing output");
+    let cover = [0, 2, 8];
+    fs::write(
+        &patch,
+        build_hdiff13_parts(&Hdiff13Parts {
+            new_data_size: 10,
+            old_data_size: 4,
+            cover_count: 1,
+            cover: &cover,
+            rle_ctrl: &[],
+            rle_code: &[],
+            new_diff: b"XY",
+        }),
+    )
+    .expect("patch");
+    let error = HdiffPatchHandler::new(&HDIFFPATCH)
+        .apply(
+            &PatchApplyRequest {
+                input,
+                patches: vec![patch],
+                output: output.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect_err("source bounds");
+    assert!(
+        error
+            .to_string()
+            .contains("HDIFF_COVER_EXCEEDED_OLD_BOUNDS"),
+        "{error}"
+    );
+    assert_eq!(
+        fs::read(output).expect("existing output"),
+        b"keep existing output"
+    );
+}
+
+// quality-reason: StagedOutput only detects hard links on Unix; elsewhere it replaces by rename (see rom-weaver-core output_replace.rs and its matching cfg(unix) test).
+#[cfg(unix)]
+#[test]
+fn streamed_apply_preserves_hard_links_when_output_aliases_the_source() {
+    let temp = TestDir::new();
+    let input = temp.child("source.bin");
+    let output = temp.child("alias.bin");
+    let patch = temp.child("update.hdiff");
+    fs::write(&input, b"abcd").expect("source");
+    fs::hard_link(&input, &output).expect("output hard link");
+    fs::write(
+        &patch,
+        build_hdiff13_single_cover_with_rle(4, 4, 4, &[0x83], &[1]),
+    )
+    .expect("patch");
+    HdiffPatchHandler::new(&HDIFFPATCH)
+        .apply(
+            &PatchApplyRequest {
+                input: input.clone(),
+                patches: vec![patch],
+                output: output.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply through hard link");
+    assert_eq!(fs::read(input).expect("source alias"), b"bcde");
+    assert_eq!(fs::read(output).expect("output"), b"bcde");
 }
