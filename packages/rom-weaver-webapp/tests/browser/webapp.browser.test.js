@@ -926,6 +926,8 @@ test("guided Apply scrolls its first card back on screen when More opens the res
   await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
   const folded = guide.getBoundingClientRect().height;
 
+  // Scrolling first retires the row's re-reveals; More still earns one.
+  window.dispatchEvent(new WheelEvent("wheel"));
   guide.querySelector(".sample-tutorial-more").click();
   await expect.poll(() => guide.getBoundingClientRect().height).toBeGreaterThan(folded);
   await expect

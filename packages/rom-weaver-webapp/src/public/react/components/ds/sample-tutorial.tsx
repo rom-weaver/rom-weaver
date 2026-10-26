@@ -1091,6 +1091,14 @@ const SampleTutorial = ({
       revealTo = null;
       window.clearTimeout(settle);
     };
+    // More asks for a taller card, so it re-arms a reveal even after earlier
+    // scrolling, or the key that pressed it, retired the rest: the grown card
+    // must not hang off the bottom of the screen.
+    const onDetailsToggle = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest(".sample-tutorial-more")) {
+        revealsLeft = Math.max(revealsLeft, 1);
+      }
+    };
     // The reveal has landed: settle the pair against the viewport it reached.
     const onScrollEnd = () => {
       if (revealTo === null) return;
@@ -1129,6 +1137,7 @@ const SampleTutorial = ({
     window.addEventListener("touchmove", yieldToUser, { passive: true });
     window.addEventListener("keydown", yieldToUser);
     window.addEventListener("scrollend", onScrollEnd);
+    dialog.addEventListener("click", onDetailsToggle);
     desktop.addEventListener("change", track);
     return () => {
       window.clearTimeout(settle);
@@ -1139,6 +1148,7 @@ const SampleTutorial = ({
       window.removeEventListener("touchmove", yieldToUser);
       window.removeEventListener("keydown", yieldToUser);
       window.removeEventListener("scrollend", onScrollEnd);
+      dialog.removeEventListener("click", onDetailsToggle);
       desktop.removeEventListener("change", track);
       // The card is deliberately left where it is: clearing it here would make
       // the next step's placement measure from the CSS-pinned bar and glide

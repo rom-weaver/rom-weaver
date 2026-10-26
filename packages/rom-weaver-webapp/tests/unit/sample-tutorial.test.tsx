@@ -859,6 +859,39 @@ describe("sample tutorial step card", () => {
     expect(screen.queryByRole("link", { name: "Download first-weave.zip" })).toBeNull();
   });
 
+  it("hides More while Continue shows its loading label", () => {
+    const workbench = (busy: boolean) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            {
+              ...(STEPS[0] as SampleTutorialStep),
+              busy,
+              locked: true,
+              onContinue: vi.fn(),
+              tryIt: "Open the first drawer.",
+            },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>
+    );
+    const { rerender } = render(workbench(false));
+    expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
+
+    rerender(workbench(true));
+    expect(screen.getByRole("button", { name: "Loading practice files…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
+
+    rerender(workbench(false));
+    expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
+  });
+
   it("stays on a locked step whose Continue work failed", async () => {
     const workbench = ({ error = "", locked = true } = {}) => (
       <div className="rw-app">
