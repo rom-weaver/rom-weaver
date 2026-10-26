@@ -7,13 +7,15 @@ import { runMain } from "./run-main.mjs";
 
 export function mutationSummary(report) {
   if (!Array.isArray(report.outcomes)) throw new Error("Missing mutation outcomes");
-  const counts = { caught: 0, surviving: 0, timeouts: 0, buildFailures: 0, baselineFailures: 0 };
+  const counts = { caught: 0, surviving: 0, timeouts: 0, unviable: 0, baselineFailures: 0 };
   const survivors = [];
+  // Unviable mutants never compiled (cargo-mutants mutates by syntax, e.g. `Default::default()`
+  // for a type without `Default`), so they are neither catches nor findings.
   const categories = {
     CaughtMutant: "caught",
     MissedMutant: "surviving",
     Timeout: "timeouts",
-    Unviable: "buildFailures",
+    Unviable: "unviable",
   };
   for (const outcome of report.outcomes) {
     if (outcome.scenario === "Baseline") {
@@ -24,7 +26,7 @@ export function mutationSummary(report) {
       throw new Error(`Unknown mutation outcome: ${outcome.summary}`);
     }
     counts[categories[outcome.summary]]++;
-    if (outcome.summary !== "CaughtMutant") {
+    if (outcome.summary !== "CaughtMutant" && outcome.summary !== "Unviable") {
       survivors.push({
         outcome: outcome.summary,
         mutant: outcome.scenario.Mutant,
@@ -150,9 +152,15 @@ export function runMutation(
     const summary = mutationSummary(JSON.parse(fs.readFileSync(report, "utf8")));
     fs.writeFileSync(path.join(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
     console.log(JSON.stringify(summary, null, 2));
-    if (summary.baselineFailures || summary.buildFailures || summary.timeouts || summary.surviving)
-      return 1;
+    if (summary.baselineFailures || summary.timeouts || summary.surviving) return 1;
     if (result.status !== 0) return result.status;
+    // Every selected mutant failing to build points at the scratch build, not the code.
+    if (summary.caught === 0 && summary.unviable) {
+      console.log(
+        `All ${summary.unviable} selected mutants were unviable; check the scratch build before trusting this run.`,
+      );
+      return 1;
+    }
     if (summary.caught === 0) {
       console.log("No selected mutants; this run provides no mutation evidence.");
       return mode === "diff" ? 0 : 1;

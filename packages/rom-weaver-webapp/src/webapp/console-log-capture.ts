@@ -189,12 +189,16 @@ const getReportRuntime = (): ConsoleLogReport["runtime"] => ({
   },
 });
 
-const getReport = (): ConsoleLogReport => ({
-  app: getReportApp(),
-  logs: records.slice(),
-  page: getReportPage(),
-  runtime: getReportRuntime(),
-});
+const getReport = (): ConsoleLogReport => {
+  // A report read before the idle flush still lists the queued boot records.
+  drainDeferredLogs();
+  return {
+    app: getReportApp(),
+    logs: records.slice(),
+    page: getReportPage(),
+    runtime: getReportRuntime(),
+  };
+};
 
 const getReportMetadata = (): ConsoleLogReportMetadata => {
   const { logs: _logs, ...metadata } = getReport();
@@ -269,12 +273,17 @@ installGlobalErrorHooks();
 if (typeof window !== "undefined") {
   window.ROM_WEAVER_CONSOLE_LOGS = {
     clear: () => {
+      // Deliver queued boot records first so they are cleared too instead of arriving after the clear.
+      drainDeferredLogs();
       records.length = 0;
     },
     copy: copyConsoleLogs,
     formatJsonLines: formatConsoleLogsJsonLines,
     getReport,
-    size: () => records.length,
+    size: () => {
+      drainDeferredLogs();
+      return records.length;
+    },
   };
 }
 

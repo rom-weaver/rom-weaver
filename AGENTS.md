@@ -55,8 +55,9 @@ Commands and details:
   findings as well as errors. New skips/suppressions need an adjacent
   `quality-reason:` with a concrete reason.
 - Core/checksum/patch/container algorithm changes: relevant edge/property tests
-  and `mise run quality-mutation diff <base-ref>`. Survivors, timeouts, and
-  build failures are distinct findings; never relabel them automatically.
+  and `mise run quality-mutation diff <base-ref>`. Survivors and timeouts
+  are distinct findings; never relabel them automatically. Unviable mutants
+  (ones that never compile) are counted, not findings, unless all are unviable.
 - Parser changes: `mise run quality-fuzz smoke`; native extraction changes also
   run `mise run quality-reference` after building the CLI.
 - Bug fixes: `quality-regression-proof` where practical; report the exact

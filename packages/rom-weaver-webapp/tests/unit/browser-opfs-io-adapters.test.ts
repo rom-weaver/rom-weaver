@@ -374,10 +374,13 @@ describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
     sliceCalls = [];
     readBlocks(firsts[0] as InstanceType<typeof FreshFile>, [0]);
     expect(sliceCalls).toHaveLength(0);
-    // The headroom is spent, so the next adapter holds no block and every read goes to the Blob.
+    // The headroom is spent, so the next adapter takes the blocks of the adapter read least recently.
     const starved = new FreshFile(fakeBlob(32 * MIB));
     readBlocks(starved, [0, 0]);
-    expect(sliceCalls).toHaveLength(2);
+    expect(sliceCalls).toHaveLength(1);
+    sliceCalls = [];
+    readBlocks(full, [1]);
+    expect(sliceCalls).toHaveLength(1);
 
     full.close();
     for (const file of firsts) file.close();
@@ -387,5 +390,27 @@ describe("BrowserVirtualRandomAccessFile Blob read cache", () => {
     readBlocks(afterRelease, [0, 1, 0]);
     expect(sliceCalls).toHaveLength(2);
     afterRelease.close();
+  });
+
+  it("keeps caching each input of a run that reads many inputs in turn", async () => {
+    vi.resetModules();
+    const { BrowserVirtualRandomAccessFile: FreshFile } = await import("../../src/wasm/browser-opfs-io-adapters.ts");
+    // Like CHD create over a multi-track CUE: each track is read front to back in 8 KiB reads, then left open.
+    const readFront = (file: InstanceType<typeof FreshFile>, bytes: number) => {
+      for (let offset = 0; offset < bytes; offset += 8 * 1024) file.readAt(offset, new Uint8Array(8 * 1024));
+    };
+    const tracks = Array.from({ length: 12 }, () => new FreshFile(fakeBlob(16 * MIB)));
+    readFront(tracks[0] as InstanceType<typeof FreshFile>, 16 * MIB);
+    for (const track of tracks.slice(1, -1)) readFront(track, 4 * MIB);
+
+    sliceCalls = [];
+    readFront(tracks.at(-1) as InstanceType<typeof FreshFile>, 4 * MIB);
+    expect(sliceCalls).toHaveLength((4 * MIB) / CACHE_BLOCK_BYTES);
+
+    // The first track was read least recently, so it gave up its blocks.
+    sliceCalls = [];
+    readFront(tracks[0] as InstanceType<typeof FreshFile>, 8 * 1024);
+    expect(sliceCalls).toHaveLength(1);
+    for (const track of tracks) track.close();
   });
 });

@@ -3,8 +3,8 @@ use crate::chd_rs::compression::CompressionCodec;
 use crate::chd_rs::error::{Error, Result};
 use crate::chd_rs::header::Header;
 use crate::chd_rs::map::{
-    CompressedEntryProof, CompressionTypeLegacy, CompressionTypeV5, Map, MapEntry,
-    UncompressedEntryProof,
+    ChdReaderMetadata, CompressedEntryProof, CompressionTypeLegacy, CompressionTypeV5, Map,
+    MapEntry, UncompressedEntryProof,
 };
 
 use crate::chd_rs::metadata::MetadataRefs;
@@ -13,13 +13,14 @@ use crc::Crc;
 use num_traits::ToPrimitive;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
 
 /// A CHD (MAME Compressed Hunks of Data) file.
 pub struct Chd<F: Read + Seek> {
     pub(crate) file: F,
     pub(crate) header: Header,
     parent: Option<Box<Chd<F>>>,
-    map: Map,
+    map: Arc<Map>,
     // codecs contain Box<dyn CompressionCodec> which are all UnwindSafe.
     codecs: AssertUnwindSafe<Codecs>,
 }
@@ -44,7 +45,22 @@ impl<F: Read + Seek> Chd<F> {
         // No point in checking writable because traits are read only.
         // In the future if we want to support a Write feature, will need to ensure writable.
 
-        if let Some(p) = parent.as_ref() {
+        Self::validate_parent(&header, parent.as_deref())?;
+
+        let map = Arc::new(Map::try_read_map(&header, &mut file)?);
+        let codecs = AssertUnwindSafe(header.create_compression_codecs()?);
+
+        Ok(Chd {
+            file,
+            header,
+            parent,
+            map,
+            codecs,
+        })
+    }
+
+    fn validate_parent(header: &Header, parent: Option<&Chd<F>>) -> Result<()> {
+        if let Some(p) = parent {
             if !header.has_parent() {
                 return Err(Error::InvalidParameter);
             }
@@ -57,16 +73,18 @@ impl<F: Read + Seek> Chd<F> {
             }
         }
 
-        let map = Map::try_read_map(&header, &mut file)?;
-        let codecs = AssertUnwindSafe(header.create_compression_codecs()?);
+        Ok(())
+    }
 
-        Ok(Chd {
-            file,
-            header,
-            parent,
-            map,
-            codecs,
-        })
+    pub(crate) fn reader_metadata(&self) -> ChdReaderMetadata {
+        ChdReaderMetadata {
+            header: self.header.clone(),
+            map: Arc::clone(&self.map),
+            parent: self
+                .parent
+                .as_ref()
+                .map(|parent| Box::new(parent.reader_metadata())),
+        }
     }
 
     /// Returns a reference to the CHD header for this CHD file.
@@ -124,6 +142,24 @@ impl<F: Read + Seek> Chd<F> {
     /// Returns a mutable reference to the inner parent stream if present.
     pub fn inner_parent(&mut self) -> Option<&mut F> {
         self.parent.as_deref_mut().map(|f| f.inner())
+    }
+}
+
+impl ChdReaderMetadata {
+    /// The reader MUST refer to the same file used to parse this header and map.
+    pub(crate) fn open<F: Read + Seek>(
+        &self,
+        file: F,
+        parent: Option<Box<Chd<F>>>,
+    ) -> Result<Chd<F>> {
+        Chd::validate_parent(&self.header, parent.as_deref())?;
+        Ok(Chd {
+            file,
+            header: self.header.clone(),
+            parent,
+            map: Arc::clone(&self.map),
+            codecs: AssertUnwindSafe(self.header.create_compression_codecs()?),
+        })
     }
 }
 
@@ -431,5 +467,83 @@ impl Codecs {
                 _ => None,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod shared_reader_tests {
+    use super::*;
+    use crate::chd_rs::header::CodecType;
+    use crate::chd_rs::read::ChdReader;
+    use crate::chd_rs::write::{ChdWriteOptions, ChdWriter};
+    use std::io::Write;
+
+    #[test]
+    fn chd_shared_metadata_keeps_maps_and_independent_read_positions() {
+        for compressed in [false, true] {
+            let mut options = ChdWriteOptions::new(4096, 512);
+            if compressed {
+                options = options.compression(&[CodecType::ZLibV5]);
+            }
+            let data: Vec<_> = (0..4096 * 3 + 123).map(|i| (i % 251) as u8).collect();
+            let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options).unwrap();
+            writer.write_all(&data).unwrap();
+            let file = writer.finish().unwrap().into_inner();
+            let original = Chd::open(Cursor::new(&file), None).unwrap();
+            let metadata = original.reader_metadata();
+            let first = metadata.open(Cursor::new(&file), None).unwrap();
+            let second = metadata.open(Cursor::new(&file), None).unwrap();
+            assert!(Arc::ptr_eq(&original.map, &first.map));
+            assert!(Arc::ptr_eq(&first.map, &second.map));
+            drop(original);
+            drop(metadata);
+            let mut first = ChdReader::new(first);
+            let mut second = ChdReader::new(second);
+            let mut tail = Vec::new();
+            first.seek(SeekFrom::Start(4096 + 17)).unwrap();
+            first.read_to_end(&mut tail).unwrap();
+            assert_eq!(tail, data[4096 + 17..]);
+            let mut all = Vec::new();
+            second.read_to_end(&mut all).unwrap();
+            assert_eq!(all, data);
+        }
+    }
+
+    #[test]
+    fn chd_shared_parent_map_decodes_unaligned_parent_references() {
+        let options = ChdWriteOptions::new(4096, 512).compression(&[CodecType::ZLibV5]);
+        let data: Vec<_> = (0..4096 * 3)
+            .map(|i| ((i * 17 + i / 251) % 256) as u8)
+            .collect();
+        let mut writer = ChdWriter::new(Cursor::new(Vec::new()), options.clone()).unwrap();
+        writer.write_all(&data).unwrap();
+        let parent_file = writer.finish().unwrap().into_inner();
+        let mut parent = Chd::open(Cursor::new(&parent_file), None).unwrap();
+        let mut writer =
+            ChdWriter::with_parent(Cursor::new(Vec::new()), options, &mut parent).unwrap();
+        let child_data = &data[512..4096 * 2 + 512];
+        writer.write_all(child_data).unwrap();
+        let child_file = writer.finish().unwrap().into_inner();
+        let child = Chd::open(Cursor::new(&child_file), Some(Box::new(parent))).unwrap();
+        let metadata = child.reader_metadata();
+        let parent = metadata
+            .parent
+            .as_ref()
+            .unwrap()
+            .open(Cursor::new(&parent_file), None)
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            &child.parent.as_ref().unwrap().map,
+            &parent.map
+        ));
+        let reopened = metadata
+            .open(Cursor::new(&child_file), Some(Box::new(parent)))
+            .unwrap();
+        assert!(Arc::ptr_eq(&child.map, &reopened.map));
+        drop(child);
+        drop(metadata);
+        let mut decoded = Vec::new();
+        ChdReader::new(reopened).read_to_end(&mut decoded).unwrap();
+        assert_eq!(decoded, child_data);
     }
 }

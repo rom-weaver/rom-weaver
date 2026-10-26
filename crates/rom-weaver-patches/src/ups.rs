@@ -12,8 +12,8 @@ use crate::shared::checked::{checked_add, checked_add_usize};
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
 use crate::shared::labels::byuu_parse_report;
 use crate::shared::threading::{
-    PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
-    parallel_per_record_capability, pool_map, run_with_optional_pool,
+    PreparedWrite, apply_batched_writes, parallel_chunked_capability,
+    parallel_per_record_capability, run_with_optional_pool,
 };
 use crate::varint::push_varint;
 use crc32fast::Hasher;
@@ -106,17 +106,7 @@ impl PatchHandler for UpsPatchHandler {
                 context,
                 thread_capability,
                 true,
-                |pool| {
-                    prepare_ups_writes_parallel(
-                        &patch,
-                        &request.input,
-                        input_len,
-                        working_size,
-                        pool,
-                        context,
-                    )
-                    .map(Some)
-                },
+                |pool| Ok(Some(pool.clone())),
                 || {
                     apply_changes_from_input(
                         &patch,
@@ -128,8 +118,16 @@ impl PatchHandler for UpsPatchHandler {
                     Ok(None)
                 },
             )?;
-            if let Some(prepared) = prepared {
-                apply_prepared_writes(&mut output, &prepared)?;
+            if let Some(pool) = prepared {
+                apply_ups_writes_parallel(
+                    &patch,
+                    &request.input,
+                    input_len,
+                    working_size,
+                    &pool,
+                    context,
+                    &mut output,
+                )?;
             }
             output.set_len(output_size)?;
             output.flush()?;
@@ -525,23 +523,30 @@ fn apply_changes_from_input(
     Ok(())
 }
 
-fn prepare_ups_writes_parallel(
+fn apply_ups_writes_parallel(
     patch: &ParsedUpsPatch,
     source_path: &Path,
     source_len: u64,
     output_len: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedWrite>> {
+    output: &mut File,
+) -> Result<()> {
     let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool_map(pool, &patch.changes, |change| {
-        context.cancel().check()?;
-        prepare_ups_write(change, source_len, output_len, &shared_source)
-    })
+    apply_batched_writes(
+        output,
+        &patch.changes,
+        Some(pool),
+        |change| change.xor_bytes.len(),
+        |change, range| {
+            context.cancel().check()?;
+            prepare_ups_write(change, source_len, output_len, &shared_source, range)
+        },
+    )
 }
 
 fn prepare_ups_write(
@@ -549,6 +554,7 @@ fn prepare_ups_write(
     source_len: u64,
     output_len: u64,
     source: &Arc<SharedBlockCacheReader>,
+    range: std::ops::Range<usize>,
 ) -> Result<PreparedWrite> {
     let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
         RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
@@ -560,26 +566,20 @@ fn prepare_ups_write(
         ));
     }
 
-    // Single buffer: start zeroed, read source bytes into the readable prefix, then XOR the
-    // change in place. Bytes past `readable` stay zero, so `0 ^ xor` matches the previous
-    // two-buffer formulation byte-for-byte while skipping one allocation + zero-fill.
-    let mut data = vec![0u8; change.xor_bytes.len()];
-    if change.offset < source_len {
-        let readable = usize::try_from((source_len - change.offset).min(change_len))
+    let offset = checked_add(change.offset, range.start as u64, "UPS output offset")?;
+    let mut data = vec![0u8; range.len()];
+    if offset < source_len {
+        let readable = usize::try_from((source_len - offset).min(data.len() as u64))
             .map_err(|_| RomWeaverError::Validation("UPS source range exceeded usize".into()))?;
         if readable > 0 {
-            source.read_exact_at(change.offset, &mut data[..readable])?;
+            source.read_exact_at(offset, &mut data[..readable])?;
         }
     }
-
-    for (byte, xor) in data.iter_mut().zip(change.xor_bytes.iter()) {
+    for (byte, xor) in data.iter_mut().zip(&change.xor_bytes[range]) {
         *byte ^= *xor;
     }
 
-    Ok(PreparedWrite {
-        offset: change.offset,
-        data,
-    })
+    Ok(PreparedWrite { offset, data })
 }
 
 fn create_ups_patch(

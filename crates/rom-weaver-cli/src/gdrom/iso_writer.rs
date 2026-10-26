@@ -398,13 +398,12 @@ pub fn build_iso(files: &[IsoFile], start_lba: u32, timestamp: IsoTimestamp) -> 
 /// Stream a planned ISO9660 layout to `sink` as a raw `MODE1/2352` track,
 /// re-encoding every cooked sector on the fly. `boot_area` (the IP.BIN system
 /// area, [`super::filesystem::BOOT_AREA_SIZE`] bytes) overlays the first sectors;
-/// `fetch` is called once per file, in write order, to supply its bytes. Memory
-/// stays bounded by the header plus one file at a time - the cooked image and
-/// raw track are never fully materialized.
+/// `fetch` is called once per file, in write order, and supplies chunks to its
+/// callback. Only the header and one cooked sector are buffered by the writer.
 pub fn write_track<W, F>(plan: &IsoPlan, boot_area: &[u8], mut fetch: F, sink: &mut W) -> Result<()>
 where
     W: std::io::Write,
-    F: FnMut(&PlannedFile) -> Result<Vec<u8>>,
+    F: FnMut(&PlannedFile, &mut dyn FnMut(&[u8]) -> Result<()>) -> Result<()>,
 {
     let boot_bytes = SYSTEM_AREA_SECTORS as usize * SECTOR;
     if boot_area.len() < boot_bytes {
@@ -441,23 +440,12 @@ where
     // sectors (always at least one, so a zero-byte file still occupies its
     // reserved sector and the stream stays aligned with the recorded extents).
     for file in &plan.files {
-        let data = fetch(file)?;
-        let supplied_size = checked_file_size(&file.path, data.len())?;
-        if supplied_size != file.size {
-            return Err(RomWeaverError::Validation(format!(
-                "file `{}` supplied {} bytes but layout planned {}",
-                file.path,
-                data.len(),
-                file.size
-            )));
-        }
-        let planned_sectors = sectors_for(data.len());
-        let mut offset = 0usize;
-        for i in 0..planned_sectors {
-            cooked.fill(0);
-            let take = (data.len() - offset).min(SECTOR);
-            cooked[..take].copy_from_slice(&data[offset..offset + take]);
-            let relative_lba = file.lba.checked_add(i).ok_or_else(|| {
+        let mut supplied_size = 0u64;
+        let mut filled = 0usize;
+        let mut sector_index = 0u32;
+        cooked.fill(0);
+        let mut emit_sector = |cooked: &[u8; SECTOR]| -> Result<()> {
+            let relative_lba = file.lba.checked_add(sector_index).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
                     "ISO9660 file `{}` relative sector overflowed",
                     file.path
@@ -466,9 +454,40 @@ where
             emit(
                 sink,
                 biased_lba(relative_lba, plan.start_lba, "streamed file sector")?,
-                &cooked,
+                cooked,
             )?;
-            offset += take;
+            sector_index += 1;
+            Ok(())
+        };
+        fetch(file, &mut |mut bytes| {
+            supplied_size += bytes.len() as u64;
+            if supplied_size > u64::from(file.size) {
+                return Err(RomWeaverError::Validation(format!(
+                    "file `{}` supplied {supplied_size} bytes but layout planned {}",
+                    file.path, file.size
+                )));
+            }
+            while !bytes.is_empty() {
+                let take = bytes.len().min(SECTOR - filled);
+                cooked[filled..filled + take].copy_from_slice(&bytes[..take]);
+                filled += take;
+                bytes = &bytes[take..];
+                if filled == SECTOR {
+                    emit_sector(&cooked)?;
+                    cooked.fill(0);
+                    filled = 0;
+                }
+            }
+            Ok(())
+        })?;
+        if supplied_size != u64::from(file.size) {
+            return Err(RomWeaverError::Validation(format!(
+                "file `{}` supplied {supplied_size} bytes but layout planned {}",
+                file.path, file.size
+            )));
+        }
+        if filled > 0 || file.size == 0 {
+            emit_sector(&cooked)?;
         }
     }
     tracing::debug!(

@@ -9,24 +9,50 @@ const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
 // worker hold at most one full adapter's worth each, which is what a single open input held before
 // inputs stayed open. Past the budget an adapter reuses its least-recently-used block instead of
 // allocating. An adapter's first block may use headroom up to twice the budget, so many small inputs
-// still cache; past that hard limit an adapter holds no block and reads the Blob directly. close(),
+// still cache; past that hard limit the adapter read least recently gives up its blocks, so a run that
+// reads many inputs in turn (the tracks of a multi-track CUE) keeps caching the current one. close(),
 // which restoreVirtualFiles calls at run end, releases everything.
 const VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES =
   VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES * VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT;
 const VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES = VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES * 2;
 let virtualBlobCacheRetainedBytes = 0;
+let virtualBlobCacheTick = 0;
+// Caches holding budget bytes, mapped to the tick of their last read.
+const virtualBlobCacheLastRead = new Map<LruReadCache, number>();
 
 const virtualBlobCacheBudget: ReadCacheBudget = {
-  release(bytes) {
+  release(cache, bytes) {
     virtualBlobCacheRetainedBytes = Math.max(0, virtualBlobCacheRetainedBytes - bytes);
+    virtualBlobCacheLastRead.delete(cache);
   },
-  reserve(bytes, first) {
+  reserve(cache, bytes, first) {
     const limit = first ? VIRTUAL_BLOB_READ_CACHE_HARD_LIMIT_BYTES : VIRTUAL_BLOB_READ_CACHE_TOTAL_BUDGET_BYTES;
+    while (first && virtualBlobCacheRetainedBytes + bytes > limit) {
+      const stalest = stalestVirtualBlobCache(cache);
+      if (!stalest) break;
+      stalest.clear();
+    }
     if (virtualBlobCacheRetainedBytes + bytes > limit) return false;
     virtualBlobCacheRetainedBytes += bytes;
+    virtualBlobCacheLastRead.set(cache, ++virtualBlobCacheTick);
     return true;
   },
+  touch(cache) {
+    if (virtualBlobCacheLastRead.has(cache)) virtualBlobCacheLastRead.set(cache, ++virtualBlobCacheTick);
+  },
 };
+
+function stalestVirtualBlobCache(except: LruReadCache): LruReadCache | null {
+  let stalest: LruReadCache | null = null;
+  let stalestTick = Number.POSITIVE_INFINITY;
+  for (const [cache, tick] of virtualBlobCacheLastRead) {
+    if (cache !== except && tick < stalestTick) {
+      stalest = cache;
+      stalestTick = tick;
+    }
+  }
+  return stalest;
+}
 
 type FileReaderSyncLike = {
   readAsArrayBuffer(blob: Blob): ArrayBuffer;
@@ -56,9 +82,10 @@ type ReadCacheStatKeys = {
 };
 
 type ReadCacheBudget = {
-  release: (bytes: number) => void;
+  release: (cache: LruReadCache, bytes: number) => void;
   // `first` marks a cache's first block, which may use the budget's headroom.
-  reserve: (bytes: number, first: boolean) => boolean;
+  reserve: (cache: LruReadCache, bytes: number, first: boolean) => boolean;
+  touch: (cache: LruReadCache) => void;
 };
 
 type ReadCacheOptions = {
@@ -107,6 +134,7 @@ class LruReadCache {
   }
 
   read(offset: number, dst: Uint8Array): number | null {
+    this.budget?.touch(this);
     const cached = this.findBlock(offset);
     if (cached) {
       const bytesRead = this.copyBlock(cached, offset, dst);
@@ -117,7 +145,7 @@ class LruReadCache {
 
     const blockStart = Math.floor(offset / this.blockBytes) * this.blockBytes;
     const block = this.acquireBlock();
-    // No block under the hard limit: the caller reads the backing store directly.
+    // No block, even after evicting other caches: the caller reads the backing store directly.
     if (!block) return null;
     this.stats[this.statKeys.misses] += 1;
     const bytesRead = this.fill(blockStart, block.bytes);
@@ -141,7 +169,7 @@ class LruReadCache {
 
   acquireBlock(): ReadCacheBlock | null {
     const canGrow = this.blocks.length < this.blockCount;
-    const reserved = canGrow && (this.budget?.reserve(this.blockBytes, this.blocks.length === 0) ?? false);
+    const reserved = canGrow && (this.budget?.reserve(this, this.blockBytes, this.blocks.length === 0) ?? false);
     if (reserved) this.reservedBytes += this.blockBytes;
     if (reserved || (canGrow && !this.budget)) {
       const block = {
@@ -175,7 +203,7 @@ class LruReadCache {
   }
 
   clear(): void {
-    this.budget?.release(this.reservedBytes);
+    this.budget?.release(this, this.reservedBytes);
     this.reservedBytes = 0;
     this.blocks.length = 0;
   }

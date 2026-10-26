@@ -1,6 +1,6 @@
 use super::{
-    compute_checksum_values, compute_checksum_values_with_progress, hex_encode, render_label,
-    resolve_algorithms, tuned_chunk_size,
+    compute_checksum_values, compute_checksum_values_with_progress, hex_encode,
+    planned_checksum_execution, render_label, resolve_algorithms, tuned_chunk_size,
 };
 use std::{
     collections::BTreeMap,
@@ -568,6 +568,16 @@ impl NativeChecksumEngine {
         self.run_checksum_with_progress(request, context, stage, on_progress)
     }
 
+    /// Thread plan `checksum_report_with_progress` runs `request` with, so progress events can
+    /// report it before hashing starts.
+    pub fn planned_execution(
+        &self,
+        request: &ChecksumRequest,
+        context: &OperationContext,
+    ) -> Result<ThreadExecution> {
+        planned_checksum_execution(request, context)
+    }
+
     pub(super) fn run_checksum(
         &self,
         request: &ChecksumRequest,
@@ -632,6 +642,12 @@ pub fn checksum_file_values(
     Ok(compute_checksum_values(&request, context)?.values)
 }
 
+/// Thread plan `checksum_reader_values_with_progress` hashes with: a reader is consumed in order,
+/// so it always hashes inline.
+pub fn checksum_reader_execution(context: &OperationContext) -> ThreadExecution {
+    context.plan_threads(ThreadCapability::single_threaded())
+}
+
 pub fn checksum_reader_values_with_progress<R, F>(
     reader: &mut R,
     algorithms: &[String],
@@ -643,7 +659,7 @@ where
     F: FnMut(ChecksumProgress),
 {
     let algorithms = resolve_algorithms(algorithms)?;
-    let execution = context.plan_threads(ThreadCapability::single_threaded());
+    let execution = checksum_reader_execution(context);
     let chunk_size =
         tuned_chunk_size(MAX_EAGER_MAP_RANGE_BYTES, execution.effective_threads).max(1);
     let mut buffer = vec![0u8; chunk_size];

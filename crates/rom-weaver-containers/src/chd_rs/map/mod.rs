@@ -315,6 +315,12 @@ impl<'a> Iterator for MapEntries<'a> {
     }
 }
 
+pub(crate) struct ChdReaderMetadata {
+    pub(super) header: Header,
+    pub(super) map: std::sync::Arc<Map>,
+    pub(crate) parent: Option<Box<ChdReaderMetadata>>,
+}
+
 impl Map {
     /// Create the map of an uncompressed V5 CHD from the offset of each hunk, in units of hunks.
     /// An offset of 0 indicates a hunk of zeroes that is not stored in the file.

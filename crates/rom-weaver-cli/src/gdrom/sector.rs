@@ -172,6 +172,27 @@ impl<R: Read + Seek> TrackSectors<R> {
     /// Read `len` bytes of logical (cooked) data beginning at logical sector
     /// `start_sector`. Reads whole sectors and truncates to `len`.
     pub fn read_logical_range(&mut self, start_sector: u64, len: u64) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.read_logical_chunks(start_sector, len, &mut |bytes| {
+            if out.is_empty() {
+                out.reserve_exact(usize::try_from(len).unwrap_or(0));
+            }
+            out.extend_from_slice(bytes);
+            Ok(())
+        })?;
+        Ok(out)
+    }
+
+    /// Read a logical range in sector-sized chunks without buffering the extent.
+    pub fn read_logical_chunks<F>(
+        &mut self,
+        start_sector: u64,
+        len: u64,
+        emit: &mut F,
+    ) -> Result<()>
+    where
+        F: FnMut(&[u8]) -> Result<()> + ?Sized,
+    {
         // Validate the request against the track length up front. `len` and
         // `start_sector` derive from untrusted on-disc fields (extent LBAs and
         // sizes), so reject an overrun before reserving anything - otherwise a
@@ -190,16 +211,16 @@ impl<R: Read + Seek> TrackSectors<R> {
                 "logical range of {len} bytes from sector {start_sector} overruns track ({available_bytes} bytes available)"
             )));
         }
-        let capacity = usize::try_from(len).unwrap_or(0);
-        let mut out = Vec::with_capacity(capacity);
+        let mut remaining = len;
         let mut sector = start_sector;
         let mut buf = [0u8; LOGICAL_SECTOR_SIZE];
-        while (out.len() as u64) < len {
+        while remaining > 0 {
             self.read_logical(sector, &mut buf)?;
-            let take = std::cmp::min(LOGICAL_SECTOR_SIZE as u64, len - out.len() as u64) as usize;
-            out.extend_from_slice(&buf[..take]);
+            let take = remaining.min(LOGICAL_SECTOR_SIZE as u64) as usize;
+            emit(&buf[..take])?;
+            remaining -= take as u64;
             sector += 1;
         }
-        Ok(out)
+        Ok(())
     }
 }

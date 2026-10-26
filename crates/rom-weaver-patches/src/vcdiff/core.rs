@@ -1196,8 +1196,22 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
         ));
     }
 
-    let source_len = source.len() as u64;
+    let target_size = usize::try_from(patch.target_size()?).map_err(|_| {
+        RomWeaverError::Validation(
+            "patch target is too large to fit in memory on this platform".into(),
+        )
+    })?;
     let mut output: Vec<u8> = Vec::new();
+    output.try_reserve_exact(target_size).map_err(|err| {
+        RomWeaverError::Validation(format!(
+            "cannot reserve {target_size} bytes for patch target: {err}"
+        ))
+    })?;
+    tracing::debug!(
+        target_size,
+        windows = patch.windows.len(),
+        "applying in-memory VCDIFF patch"
+    );
     for window in &patch.windows {
         if window.output_offset != output.len() as u64 {
             return Err(RomWeaverError::Validation(format!(
@@ -1206,28 +1220,29 @@ pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
                 window.output_offset
             )));
         }
-        let segment = match window.source_kind {
-            None => Vec::new(),
-            Some(WindowSourceKind::Source) => read_source_segment(
-                &mut std::io::Cursor::new(source),
-                window.source_segment_position,
-                window.source_segment_size,
-                source_len,
-                "source",
-            )?,
-            Some(WindowSourceKind::Target) => read_source_segment(
-                &mut std::io::Cursor::new(&output),
-                window.source_segment_position,
-                window.source_segment_size,
-                output.len() as u64,
-                "target",
-            )?,
+        let (available, kind_label) = match window.source_kind {
+            None => (&[][..], "source"),
+            Some(WindowSourceKind::Source) => (source, "source"),
+            Some(WindowSourceKind::Target) => (output.as_slice(), "target"),
         };
+        let end = checked_add(
+            window.source_segment_position,
+            window.source_segment_size,
+            "source segment range",
+        )?;
+        if end > available.len() as u64 {
+            return Err(RomWeaverError::Validation(format!(
+                "{kind_label} segment [{}..{end}) exceeds available length {}",
+                window.source_segment_position,
+                available.len()
+            )));
+        }
+        let segment = &available[window.source_segment_position as usize..end as usize];
         let target = decode_window_with_native_engine(
             &mut std::io::Cursor::new(patch_bytes),
             window,
             patch.secondary_compressor_id,
-            &segment,
+            segment,
             true,
         )?;
         output.extend_from_slice(&target);
