@@ -83,7 +83,7 @@ rayon = "1.11.0"
 bitreader = "0.3.6"
 bitstream-io = "4.10"
 byteorder = "1.5"
-num-derive = "0.4"
+num-derive = "0.5"
 num-traits = "0.2"
 text_io = "0.1"
 arrayvec ={ version = "0.7.2", default-features = false, features = ["std"] }
