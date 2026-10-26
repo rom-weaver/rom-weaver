@@ -810,6 +810,11 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .simple-hero .hero-help-links {
     flex-wrap: nowrap;
   }
+  /* Three guides overflow the clipped panel in longer locales (German at
+     360-412px), so this row wraps instead. */
+  .rw-app .simple-hero .hero-help-links.has-extra-guides {
+    flex-wrap: wrap;
+  }
 }
 @media (max-width: 720px) and (max-height: 800px) {
   .rw-app .simple-hero .drop.hero > .hero-lead {
