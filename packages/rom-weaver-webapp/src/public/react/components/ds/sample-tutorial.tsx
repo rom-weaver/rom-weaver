@@ -1,6 +1,7 @@
 import {
   Archive,
   BookOpen,
+  ChevronDown,
   ChevronUp,
   Download,
   EllipsisVertical,
@@ -102,6 +103,8 @@ type SampleTutorialStep = {
       practice files, say. The guide moves on by itself once the step unlocks. */
   onContinue?: () => void;
   openDrawers?: boolean;
+  /** Opens the row's first menu on desktop. Phones leave it shut: the open
+      menu would cover the row the step describes. */
   openMenu?: boolean;
   /** `below` keeps the card under the row however tall the row is, for a row
       whose own controls - a drop zone's Add files button - the card must not
@@ -733,6 +736,10 @@ const SampleTutorial = ({
   // While moving, the card is parked invisible: it has left its old anchor and
   // the new one is not placed yet, so anything drawn there would be a flash.
   const [moving, setMoving] = useState(false);
+  // A phone card keeps a step's Try it and folds the explanation behind More,
+  // so the row it describes keeps most of the screen. The reader's choice
+  // carries over to the steps after it.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const motionRef = useRef<Animation | null>(null);
   const arrivingRef = useRef(false);
   const step = steps[stepIndex];
@@ -870,7 +877,7 @@ const SampleTutorial = ({
           drawer.click();
         }
       }
-      if (stepOpenMenu) {
+      if (stepOpenMenu && window.matchMedia(GUIDE_ANCHOR_QUERY).matches) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
@@ -1150,6 +1157,8 @@ const SampleTutorial = ({
   const stepTryIt = step.view
     ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
     : step.tryIt;
+  // Without a Try it the body is the step's only instruction, so it never folds.
+  const foldable = live && !!stepTryIt;
   const currentLabel = localizer.message("ui.tutorial.view.current");
   const layer = (
     <div className="sample-tutorial-layer">
@@ -1163,6 +1172,7 @@ const SampleTutorial = ({
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
+        data-folded={foldable && !detailsOpen ? "true" : undefined}
         data-loading={live ? undefined : "true"}
         data-moving={moving ? "true" : undefined}
         data-placement={live ? (step.placement ?? "bottom") : "bottom"}
@@ -1207,7 +1217,9 @@ const SampleTutorial = ({
                 ) : null}
               </div>
               <h2 id={titleId}>{live ? step.title : localizer.message("ui.tutorial.loadingTitle")}</h2>
-              <p id={bodyId}>{live ? stepBody : loadingBody}</p>
+              <p className="sample-tutorial-body" id={bodyId}>
+                {live ? stepBody : loadingBody}
+              </p>
               {live && step.view ? (
                 <div className="sample-tutorial-compare">
                   {/* Named by their content: the summary is visible text, so a
@@ -1312,6 +1324,19 @@ const SampleTutorial = ({
           {/* Sits between the buttons rather than on a line of its own, so it
               costs the card no height; phones drop it for the ✕ alone. */}
           {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
+          {/* Phones only, in the slot the end hint leaves free. */}
+          {foldable ? (
+            <button
+              aria-controls={bodyId}
+              aria-expanded={detailsOpen}
+              className="sample-tutorial-more"
+              onClick={() => setDetailsOpen((open) => !open)}
+              type="button"
+            >
+              {localizer.message(detailsOpen ? "ui.tutorial.less" : "ui.tutorial.more")}
+              <ChevronDown aria-hidden="true" />
+            </button>
+          ) : null}
           {live ? (
             <button
               aria-busy={busy || undefined}

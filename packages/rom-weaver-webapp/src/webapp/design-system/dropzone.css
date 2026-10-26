@@ -1282,6 +1282,42 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   color: var(--ink-3);
   text-align: center;
 }
+/* Phones only: wider cards have room for the whole explanation. */
+.rw-app .sample-tutorial-more {
+  display: none;
+  gap: var(--sp-xs);
+  align-items: center;
+  min-height: 30px;
+  padding: 0 var(--sp-s);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--thread-text);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-s);
+}
+@media (hover: hover) {
+  .rw-app .sample-tutorial-more:hover {
+    background: var(--well);
+    border-color: var(--seam-strong);
+  }
+}
+.rw-app .sample-tutorial-more:active {
+  background: var(--well);
+  border-color: var(--seam-strong);
+}
+.rw-app .sample-tutorial-more:focus-visible {
+  border-color: var(--thread);
+}
+.rw-app .sample-tutorial-more svg {
+  width: 14px;
+  height: 14px;
+}
+.rw-app .sample-tutorial-more[aria-expanded="true"] svg {
+  rotate: 180deg;
+}
 .rw-app .sample-tutorial-progress {
   height: 7px;
   margin-block-start: var(--sp-m);
@@ -1413,13 +1449,21 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
      only what the step needs: the kicker already numbers the step, the
      highlighted row shows its own controls, and the ✕ says how to leave. The
      view comparison keeps its buttons and hides their summaries. The body
-     names the current view and what the other one adds. */
+     names the current view and what the other one adds. A step with a Try it
+     folds its body and practice-file extras behind More, so the card leaves
+     the row most of the screen. */
   .rw-app .sample-tutorial-beacon,
   .rw-app .sample-tutorial-action-label,
   .rw-app .sample-tutorial-action-list,
   .rw-app .sample-tutorial-actions .sample-tutorial-end-hint,
-  .rw-app .sample-tutorial-compare button > span {
+  .rw-app .sample-tutorial-compare button > span,
+  .rw-app
+    .sample-tutorial-dialog[data-folded="true"]
+    :is(.sample-tutorial-body, .sample-tutorial-input-demo, .sample-tutorial-practice) {
     display: none;
+  }
+  .rw-app .sample-tutorial-more {
+    display: inline-flex;
   }
   .rw-app .sample-tutorial-copy-area {
     grid-column: 1;

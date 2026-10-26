@@ -2700,6 +2700,11 @@ msgstr "Ältere Variante"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.less"
+msgstr "Weniger"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.sourceLibretro"
 msgstr "Libretro-Datenbank"
 
@@ -2907,6 +2912,11 @@ msgstr "Modifiziert ist das Ergebnis, das der Patch erzeugen soll. Sind die beid
 #: src/presentation/localization/messages.ts
 msgid "ui.create.sourceMode.rom"
 msgstr "Geänderte ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.more"
+msgstr "Mehr"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

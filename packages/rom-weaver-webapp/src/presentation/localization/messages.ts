@@ -1101,6 +1101,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.endHint": msg({ id: "ui.tutorial.endHint", message: "Esc or ✕ leaves the guide." }),
   "ui.tutorial.exit": msg({ id: "ui.tutorial.exit", message: "Leave the guide" }),
   "ui.tutorial.instructions": msg({ id: "ui.tutorial.instructions", message: "Practice run steps" }),
+  "ui.tutorial.less": msg({ id: "ui.tutorial.less", message: "Less" }),
+  "ui.tutorial.more": msg({ id: "ui.tutorial.more", message: "More" }),
   "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading practice files…" }),
   "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading practice files" }),
   "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading practice files" }),

@@ -2700,6 +2700,11 @@ msgstr "Legacy variant"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.less"
+msgstr "Less"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.sourceLibretro"
 msgstr "Libretro database"
 
@@ -2907,6 +2912,11 @@ msgstr "Modified is the result you want the patch to produce. If the two files l
 #: src/presentation/localization/messages.ts
 msgid "ui.create.sourceMode.rom"
 msgstr "Modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.more"
+msgstr "More"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

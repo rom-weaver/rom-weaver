@@ -2700,6 +2700,11 @@ msgstr "Variante antigua"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.less"
+msgstr "Menos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.sourceLibretro"
 msgstr "Base de datos de Libretro"
 
@@ -2907,6 +2912,11 @@ msgstr "Modificado es el resultado que quieres que produzca el parche. Si los do
 #: src/presentation/localization/messages.ts
 msgid "ui.create.sourceMode.rom"
 msgstr "ROM modificada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.more"
+msgstr "Más"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

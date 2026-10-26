@@ -278,6 +278,29 @@ describe("sample tutorial", () => {
     expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("leaves the row's menu shut on a phone, where it would cover the row", async () => {
+    // No query the guide asks about matches below the desktop anchor width.
+    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          addEventListener: vi.fn(),
+          matches: false,
+          media: query,
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    try {
+      renderGuidedWorkbench();
+
+      const first = document.querySelector("#tutorial-first") as HTMLElement;
+      await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
+      expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+      expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
   it("keeps one live region across steps so the change is announced", async () => {
     renderGuidedWorkbench();
 
@@ -603,6 +626,46 @@ describe("sample tutorial step card", () => {
     );
     const tryIt = document.querySelector(".sample-tutorial-try");
     expect(tryIt?.textContent).toBe("Try itOpen the first drawer.");
+  });
+
+  it("folds the explanation behind More and keeps the reader's choice on later steps", async () => {
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            { ...(STEPS[0] as SampleTutorialStep), tryIt: "Open the first drawer." },
+            { ...(STEPS[1] as SampleTutorialStep), tryIt: "Open the second drawer." },
+          ]}
+        />
+      </div>,
+    );
+
+    const guide = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const more = screen.getByRole("button", { name: "More" });
+    expect(guide.dataset.folded).toBe("true");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(more.getAttribute("aria-controls")).toBe(document.querySelector(".sample-tutorial-body")?.id);
+
+    fireEvent.click(more);
+    expect(guide.dataset.folded).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(guide.dataset.step).toBe("2"));
+    expect(guide.dataset.folded).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Less" })).toBeTruthy();
+  });
+
+  it("never folds a step whose body is its only instruction", () => {
+    renderGuidedWorkbench();
+
+    expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-folded")).toBe(false);
+    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
   });
 
   it("describes the current view and follows the Detailed setting while the step is open", async () => {
