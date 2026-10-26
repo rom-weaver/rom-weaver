@@ -3154,3 +3154,75 @@ fn move_or_copy_file_reports_a_destination_it_cannot_write() {
     );
     assert!(from.exists(), "the source must survive a failed move");
 }
+
+#[test]
+fn apply_patch_bytes_copies_borrowed_source_and_prior_target_segments() {
+    let patch = build_patch(TestPatch {
+        windows: vec![
+            TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(3),
+                source_segment_position: Some(2),
+                target_window_size: 3,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![19, 3],
+                addr: vec![0],
+            },
+            TestWindow {
+                win_indicator: WIN_TARGET,
+                source_segment_size: Some(2),
+                source_segment_position: Some(1),
+                target_window_size: 2,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![19, 2],
+                addr: vec![0],
+            },
+        ],
+        ..Default::default()
+    });
+    assert_eq!(apply_patch_bytes(b"abcdef", &patch).unwrap(), b"cdede");
+}
+
+#[test]
+fn apply_patch_bytes_rejects_invalid_borrowed_segment_ranges() {
+    for kind in [WIN_SOURCE, WIN_TARGET] {
+        for (position, size) in [(2, 2), (4, 0), (u64::MAX, 1)] {
+            let patch = build_patch(TestPatch {
+                windows: vec![TestWindow {
+                    win_indicator: kind,
+                    source_segment_size: Some(size),
+                    source_segment_position: Some(position),
+                    target_window_size: 1,
+                    checksum: None,
+                    data: b"x".to_vec(),
+                    inst: vec![2],
+                    addr: Vec::new(),
+                }],
+                ..Default::default()
+            });
+            let error = apply_patch_bytes(b"abc", &patch).unwrap_err();
+            assert!(error.to_string().contains("segment"), "{error}");
+        }
+    }
+}
+
+#[test]
+fn apply_patch_bytes_rejects_unallocatable_target_size() {
+    let patch = build_patch(TestPatch {
+        windows: vec![TestWindow {
+            win_indicator: 0,
+            source_segment_size: None,
+            source_segment_position: None,
+            target_window_size: u64::MAX,
+            checksum: None,
+            data: Vec::new(),
+            inst: Vec::new(),
+            addr: Vec::new(),
+        }],
+        ..Default::default()
+    });
+    let error = apply_patch_bytes(b"", &patch).unwrap_err();
+    assert!(error.to_string().contains("patch target"), "{error}");
+}
