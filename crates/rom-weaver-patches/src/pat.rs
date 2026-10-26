@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
@@ -107,7 +107,7 @@ impl PatPatchHandler {
             execution.force_serial();
             (execution, writes)
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             let input_bytes =
                 read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
             let (execution, mut writes) = if planned_execution.used_parallelism {
@@ -133,10 +133,6 @@ impl PatPatchHandler {
                 (planned_execution, writes)
             };
             writes.sort_by_key(|write| write.offset);
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
             for write in &writes {
                 output.seek(SeekFrom::Start(write.offset))?;
                 output.write_all(&[write.byte])?;

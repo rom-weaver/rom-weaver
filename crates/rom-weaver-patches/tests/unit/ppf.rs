@@ -73,6 +73,170 @@ struct V3Record {
     undo: Vec<u8>,
 }
 
+fn sparse_ppf_fixture(temp: &TestDir, len: u64) -> PatchApplyRequest {
+    let input = temp.child("source.bin");
+    let patch = temp.child("update.ppf");
+    fs::File::create(&input)
+        .expect("create input")
+        .set_len(len)
+        .expect("size input");
+    fs::write(
+        &patch,
+        build_ppf1_patch(
+            "Sparse PPF",
+            vec![
+                V1V2Record {
+                    offset: 0,
+                    data: vec![0xa5],
+                },
+                V1V2Record {
+                    offset: (len - 1) as u32,
+                    data: vec![0x5a],
+                },
+            ],
+        ),
+    )
+    .expect("write patch");
+    PatchApplyRequest {
+        input,
+        patches: vec![patch],
+        output: temp.child("output.bin"),
+    }
+}
+
+// quality-reason: Unix mode bits MUST detect inherited read-only permissions even under root.
+#[cfg(unix)]
+#[test]
+fn sparse_ppf_read_only_input_produces_writable_output() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for len in [32 * 1024 * 1024 + 1, 256 * 1024 * 1024 + 1] {
+        let temp = TestDir::new();
+        let request = sparse_ppf_fixture(&temp, len);
+        fs::set_permissions(&request.input, fs::Permissions::from_mode(0o444))
+            .expect("read-only input");
+        let normal = temp.child("normal.bin");
+        fs::write(&normal, []).expect("normal new-file mode");
+        PpfPatchHandler::new(&PPF)
+            .apply(
+                &request,
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_apply_in_memory_limit(256 * 1024 * 1024),
+            )
+            .expect("sparse patch MUST accept a read-only input");
+        assert_eq!(
+            fs::metadata(&request.output)
+                .expect("output metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            fs::metadata(normal)
+                .expect("normal metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            "output MUST have normal new-file permissions",
+        );
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&request.output)
+            .expect("output MUST remain writable");
+        assert_eq!(output.metadata().expect("output length").len(), len);
+        let mut offset = 0;
+        let mut buffer = [0; 64 * 1024];
+        loop {
+            let count = output.read(&mut buffer).expect("read output");
+            if count == 0 {
+                break;
+            }
+            for (index, byte) in buffer[..count].iter().enumerate() {
+                let position = offset + index as u64;
+                let expected = if position == 0 {
+                    0xa5
+                } else if position == len - 1 {
+                    0x5a
+                } else {
+                    0
+                };
+                assert_eq!(*byte, expected, "output byte at {position}");
+            }
+            offset += count as u64;
+        }
+        assert_eq!(
+            fs::metadata(&request.input)
+                .expect("input metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o444
+        );
+    }
+}
+
+#[test]
+fn sparse_ppf_handler_selects_streaming_below_memory_cap() {
+    use std::sync::{Arc, Mutex};
+    use tracing::{
+        Event, Metadata, Subscriber,
+        field::{Field, Visit},
+        span::{Attributes, Id, Record},
+    };
+
+    #[derive(Clone)]
+    struct ApplyPaths(Arc<Mutex<Vec<bool>>>);
+
+    impl Visit for ApplyPaths {
+        fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
+        fn record_bool(&mut self, field: &Field, value: bool) {
+            if field.name() == "in_memory" {
+                self.0.lock().expect("apply paths").push(value);
+            }
+        }
+    }
+
+    impl Subscriber for ApplyPaths {
+        fn max_level_hint(&self) -> Option<tracing::level_filters::LevelFilter> {
+            Some(tracing::level_filters::LevelFilter::TRACE)
+        }
+        fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _span: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+        fn record(&self, _span: &Id, _values: &Record<'_>) {}
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+        fn event(&self, event: &Event<'_>) {
+            if event.metadata().target() == "rom_weaver_patches::ppf"
+                && event.metadata().fields().field("ppf_output_len").is_some()
+            {
+                event.record(&mut self.clone());
+            }
+        }
+        fn enter(&self, _span: &Id) {}
+        fn exit(&self, _span: &Id) {}
+    }
+
+    let temp = TestDir::new();
+    let request = sparse_ppf_fixture(&temp, 32 * 1024 * 1024);
+    let paths = ApplyPaths(Arc::new(Mutex::new(Vec::new())));
+    tracing::subscriber::with_default(paths.clone(), || {
+        PpfPatchHandler::new(&PPF)
+            .apply(
+                &request,
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_apply_in_memory_limit(256 * 1024 * 1024),
+            )
+            .expect("apply sparse PPF");
+    });
+    assert_eq!(
+        *paths.0.lock().expect("apply paths"),
+        [false],
+        "PPF handler MUST select streaming at 32 MiB despite a 256 MiB cap"
+    );
+}
+
 #[test]
 fn parse_and_apply_round_trip_for_ppf1() {
     let temp = TestDir::new();

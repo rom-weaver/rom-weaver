@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
@@ -143,11 +143,7 @@ impl PatchHandler for ApsN64PatchHandler {
             execution.force_serial();
             execution
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             output.set_len(patch.output_size)?;
             let (execution, prepared) = run_with_optional_pool(
                 context,

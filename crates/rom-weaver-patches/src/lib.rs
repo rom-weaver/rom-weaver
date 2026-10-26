@@ -28,7 +28,7 @@ mod ups;
 mod varint;
 
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{BufWriter, Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
@@ -123,6 +123,20 @@ pub(crate) fn can_apply_sparse_in_memory(
 ) -> bool {
     can_apply_in_memory_on_apply(context, a, b)
         && (a < streaming.min_bytes || record_count > streaming.max_records)
+}
+
+/// Patch outputs MUST use normal new-file permissions rather than inherit source permissions.
+/// File-to-file copying SHOULD retain the native kernel copy fast path.
+pub(crate) fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
+    let mut input = File::open(input)?;
+    let mut output = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(output)?;
+    rom_weaver_core::copy_retrying_interrupted(&mut input, &mut output)?;
+    Ok(output)
 }
 
 /// Read a chunk from both paths. `original_bytes` is zero-filled past

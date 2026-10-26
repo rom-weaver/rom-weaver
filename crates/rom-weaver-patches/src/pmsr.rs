@@ -134,11 +134,7 @@ impl PatchHandler for PmsrPatchHandler {
             execution.force_serial();
             execution
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
-            let output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
+            let output = crate::copy_input_to_output(&request.input, &request.output)?;
             output.set_len(output_len)?;
             drop(output);
 

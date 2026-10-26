@@ -200,11 +200,7 @@ impl PatchHandler for PpfPatchHandler {
             execution.force_serial();
             execution
         } else {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             let mut execution = context.plan_threads(thread_capability);
             trace!(records = parsed.records.len(), "ppf apply borrowed records");
             apply_records(&mut output, &parsed.records, context)?;
