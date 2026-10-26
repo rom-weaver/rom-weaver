@@ -171,13 +171,18 @@ const readRuntimeOutputBlob = async (
   output: Pick<PublicOutput, "mediaType" | "path" | "size" | "vfs">,
 ): Promise<Blob> => {
   const nativeFile = await output.vfs.getFile?.(output.path);
-  if (nativeFile && typeof Response === "function" && typeof nativeFile.stream === "function") {
-    // getBlob callers own the returned Blob after output disposal. Stream the OPFS snapshot into
-    // browser-managed Blob storage so no full-size Uint8Array is allocated on the JS heap and removing
-    // the output path cannot invalidate the returned value.
+  if (nativeFile) {
+    // getBlob callers own the returned Blob after output disposal, so removing the output path MUST NOT
+    // invalidate it. Copy the OPFS snapshot into browser-managed Blob storage one chunk at a time: WebKit
+    // buffers a whole `new Response(stream).blob()` about four times over, which crashes an iOS tab on a disc.
     const mediaType = output.mediaType || nativeFile.type || "application/octet-stream";
     const size = Math.max(0, Math.floor(output.size || 0));
-    return new Response(nativeFile.slice(0, size).stream(), { headers: { "content-type": mediaType } }).blob();
+    const parts: Blob[] = [];
+    for (let offset = 0; offset < size; offset += OUTPUT_CHUNK_SIZE) {
+      const chunk = nativeFile.slice(offset, Math.min(size, offset + OUTPUT_CHUNK_SIZE));
+      parts.push(new Blob([await chunk.arrayBuffer()]));
+    }
+    return new Blob(parts, { type: mediaType });
   }
   const bytes = await readRuntimeOutputBytes(output);
   // Compatibility fallback for VFS implementations that cannot expose a native disk-backed snapshot.

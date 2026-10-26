@@ -29,6 +29,7 @@ import {
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { createEmulatorGameUrl, revokeEmulatorGameUrl } from "./emulator-game-urls.ts";
 import { join } from "./components/ds/cx.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
@@ -308,11 +309,11 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       setGameUrlState(null);
       return undefined;
     }
-    const url = URL.createObjectURL(currentBlob);
+    const url = createEmulatorGameUrl(currentBlob);
     setGameUrlState({ revision: savePreviewRevision, url });
     return () => {
       setGameUrlState(null);
-      URL.revokeObjectURL(url);
+      revokeEmulatorGameUrl(url);
     };
   }, [currentBlob, savePreviewRevision]);
   const gameUrl = gameUrlState?.revision === savePreviewRevision ? gameUrlState.url : null;

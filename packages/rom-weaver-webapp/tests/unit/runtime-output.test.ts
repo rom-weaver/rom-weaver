@@ -124,6 +124,30 @@ describe("runtime output paths", () => {
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it("copies a native VFS file snapshot one bounded chunk at a time", async () => {
+    const { vfs } = createVfs();
+    const chunkSize = 8 * 1024 * 1024;
+    const bytes = new Uint8Array(chunkSize * 2 + 3).map((_, index) => index % 251);
+    const source = new Blob([bytes]);
+    // WebKit buffers a whole streamed Blob several times over, so a disc-sized stream crashes an iOS tab.
+    const nativeFile = {
+      size: source.size,
+      slice: vi.fn((start?: number, end?: number) => source.slice(start, end)),
+      stream: vi.fn(() => source.stream()),
+      type: "",
+    };
+    vfs.getFile = vi.fn(async () => nativeFile as unknown as File);
+
+    const blob = await readRuntimeOutputBlob({ path: "/work/disc.chd", size: bytes.byteLength, vfs });
+
+    expect(nativeFile.stream).not.toHaveBeenCalled();
+    for (const [start = 0, end = bytes.byteLength] of nativeFile.slice.mock.calls) {
+      expect(end - start).toBeLessThanOrEqual(chunkSize);
+    }
+    // toEqual on two 16 MiB arrays exhausts the test worker's heap.
+    expect(Buffer.from(await blob.arrayBuffer()).equals(bytes)).toBe(true);
+  });
+
   it("removes a randomized output path and runs caller cleanup when construction fails", async () => {
     const { files, vfs } = createVfs();
     const cleanup = vi.fn();
