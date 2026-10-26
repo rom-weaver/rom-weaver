@@ -1,6 +1,8 @@
-# Convert CHD to ISO, BIN/CUE, or GDI online
+# CHD to ISO converter online: extract ISO, BIN/CUE, or GDI
 
-Decompress CHD locally in your browser with this CHD to ISO converter, without uploading the disc. DVDs produce ISO, CDs BIN/CUE, and Dreamcast GD-ROMs GDI with tracks.
+Convert CHD to ISO free in your browser, without uploading the disc. DVD CHDs produce ISO, CD CHDs BIN/CUE, and Dreamcast GD-ROM CHDs GDI with tracks.
+
+<a id="convert-chd-to-iso-bincue-or-gdi-online"></a>
 
 <a id="extract-chd-to-iso-bincue-or-gdi-online"></a>
 
@@ -9,6 +11,7 @@ Decompress CHD locally in your browser with this CHD to ISO converter, without u
 
 - [Extract the disc](#extract-the-disc)
 - [Download the disc files](#download-the-disc-files)
+- [Why BIN/CUE instead of ISO?](#why-bincue-instead-of-iso)
 - [Check the result and storage](#check-the-result-and-storage)
 
 <!-- END doctoc -->
@@ -30,6 +33,10 @@ Extract accepts one archive or disc image. Cancel from the progress bar; select 
 4. Save and unpack the ZIP before opening the disc in your emulator.
 
 Keep the CUE or GDI sheet and tracks together with their original filenames. Use the output in **Files**. Not every CHD converts to ISO; renaming BIN to ISO does not convert its sectors.
+
+## Why BIN/CUE instead of ISO?
+
+The CHD's source disc decides the output. A CD CHD extracts to BIN/CUE because its tracks can include audio and raw sectors that an ISO cannot hold; a DVD CHD extracts to ISO. Open the `.cue` file in your emulator, with its BIN tracks beside it.
 
 ## Check the result and storage
 
