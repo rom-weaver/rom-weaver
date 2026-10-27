@@ -21,6 +21,8 @@ const downloadPage = () => {
   const download = Promise.withResolvers();
   const listeners = new Map();
   const page = {
+    // downloadedBytes records the download names the app requests through page.evaluate.
+    evaluate: async () => undefined,
     locator: () => ({ innerText: async () => "Apply & download", evaluateAll: async () => [] }),
     on: (event, listener) => listeners.set(event, listener),
     waitForEvent: () => download.promise,
