@@ -36,6 +36,11 @@ describe("getBinarySourceSize", () => {
 });
 
 describe("prepareMultipleDirectInputAssets", () => {
+  it("leaves raw NFS sources to normal staging when extraction is disabled", async () => {
+    const sources = [makeFile("raw-nfs", "hif_000000.nfs"), makeFile("key", "htk.bin")];
+    await expect(prepareMultipleDirectInputAssets(sources, NO_CONTAINER_OPTIONS)).resolves.toBeNull();
+  });
+
   it("returns null when no source is a CUE sheet", async () => {
     const sources: SourceRef[] = [makeFile("bytes", "rom.bin")];
     await expect(prepareMultipleDirectInputAssets(sources, undefined)).resolves.toBeNull();
@@ -299,6 +304,17 @@ describe("prepareInputAssets", () => {
     expect(assets[0]?.kind).toBe("rom");
     expect(assets[0]?.fileName).toBe("game.bin");
     expect(assets[0]?.preparation?.wasDecompressed).toBe(false);
+  });
+
+  it("preserves raw NFS bytes when container extraction is disabled", async () => {
+    const source = makeFile("raw-nfs", "hif_000000.nfs");
+    const assets = await prepareInputAssets(source, NO_CONTAINER_OPTIONS, 0, runtime);
+    expect(assets, "disabled extraction must retain the raw NFS asset").toHaveLength(1);
+    expect(assets[0]?.fileName).toBe(source.name);
+    expect(assets[0]?.patchable).toBe(true);
+    const asset = assets[0];
+    if (!asset) throw new Error("Raw NFS asset was lost");
+    expect(await getPatchFileBlob(asset.file)?.text()).toBe("raw-nfs");
   });
 
   // The path-backed CUE reaches a synchronous byte read before sidecar resolution, which the browser source cannot provide.

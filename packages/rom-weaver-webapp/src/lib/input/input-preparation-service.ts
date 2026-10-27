@@ -452,7 +452,7 @@ const prepareInputAssets = async (
     fileSize: file.fileSize,
   });
   const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || undefined;
-  if (isNfsPartName(file.fileName)) {
+  if (isNfsPartName(file.fileName) && options?.input?.containerInputsEnabled !== false) {
     return resolveArchiveInputAssets(file, options, sourceIndex, runtime, selectedEntryName);
   }
   if (isCueEntryFileName(file.fileName)) {
@@ -512,7 +512,10 @@ const prepareMultipleDirectInputAssets = async (
   options: ApplyWorkflowOptions | undefined,
   runtime: InputPreparationRuntime = { name: "browser", sidecars: {} },
 ): Promise<InputAsset[] | null> => {
-  if (sources.every((source): source is File => source instanceof File)) {
+  if (
+    options?.input?.containerInputsEnabled !== false &&
+    sources.every((source): source is File => source instanceof File)
+  ) {
     const nfsFiles = groupNfsFiles(sources);
     if (nfsFiles && nfsFiles.length === sources.length) {
       const [source, ...companions] = nfsFiles;

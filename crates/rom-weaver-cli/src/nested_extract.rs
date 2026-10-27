@@ -115,7 +115,8 @@ impl CliApp {
                 split_bin: false,
             };
             if let Err(error) = handler.probe_details(&probe_request, context) {
-                if handler.descriptor().name == "nfs"
+                if (!kind_filter.patch || kind_filter.rom)
+                    && handler.descriptor().name == "nfs"
                     && handler.probe(&source) == rom_weaver_core::ProbeConfidence::Signature
                 {
                     return Err(error);
@@ -472,6 +473,41 @@ mod nfs_probe_tests {
             };
             assert!(error.to_string().contains(expected), "{error}");
         }
+    }
+
+    #[test]
+    fn patch_only_nested_nfs_does_not_require_a_key() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("hif_000000.nfs");
+        let mut bytes = vec![0u8; 0x20200];
+        bytes[..4].copy_from_slice(b"EGGS");
+        bytes[4..8].copy_from_slice(&1u32.to_be_bytes());
+        bytes[16..20].copy_from_slice(&1u32.to_be_bytes());
+        bytes[24..28].copy_from_slice(&4u32.to_be_bytes());
+        bytes[0x1fc..0x200].copy_from_slice(b"SGGE");
+        fs::write(&source, bytes).expect("NFS fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        let outcome = app
+            .extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                &[source],
+                ArchiveEntryKindFilter {
+                    rom: false,
+                    patch: true,
+                },
+                true,
+                false,
+                &context,
+            )
+            .expect("patch-only extraction skips NFS probe errors");
+        assert_eq!(outcome.count, 0);
     }
 
     #[test]
