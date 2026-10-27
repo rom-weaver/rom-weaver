@@ -94,7 +94,9 @@ describe("HomePage", () => {
     const formatHeadings = Array.from(container.querySelectorAll(".home-format-group h3"), (item) => item.textContent);
     expect(formatHeadings).toEqual(["20 patch formats", "25 archive and disc formats", "8 checksum types"]);
     expect(container.querySelector(".home-format-group p")?.textContent).toContain(".bps");
-    expect(container.querySelectorAll(".home-faq details")).toHaveLength(4);
+    expect(container.querySelectorAll(".home-faq details")).toHaveLength(8);
+    expect(container.querySelector(".home-about h2")?.textContent).toBe("What is rom-weaver?");
+    expect(container.querySelector(".home-about")?.textContent).toContain("ROM patcher");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("Patches apply in the order shown");
     expect(Array.from(container.querySelectorAll(".home-trust-list h3"), (item) => item.textContent)).toEqual([
       "Works offline",

@@ -58,6 +58,7 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
   },
   "noShrinkFormats": [
     "ebp",
+    "pmsr",
     "ppf"
   ],
   "sourceRestrictedFormats": [
