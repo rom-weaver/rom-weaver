@@ -42,7 +42,7 @@ describe("generated format metadata parity", () => {
   });
 
   it("declares which create formats cannot shrink a target or need a specific source", () => {
-    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats).toEqual(["ebp", "ppf"]);
+    expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.noShrinkFormats).toEqual(["ebp", "pmsr", "ppf"]);
     expect(ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.sourceRestrictedFormats).toEqual(["pmsr"]);
   });
 
