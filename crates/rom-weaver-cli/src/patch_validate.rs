@@ -971,6 +971,7 @@ impl CliApp {
                             passed: false,
                             unreadable: false,
                             message,
+                            unsupported: false,
                         });
                     }
                 }
@@ -986,6 +987,7 @@ impl CliApp {
                         passed: false,
                         unreadable: false,
                         message: report.label.clone(),
+                        unsupported: false,
                     });
                 }
             }
@@ -1187,8 +1189,8 @@ impl CliApp {
                 let parse_failure =
                     patch_structure_failure(job.handler.as_ref(), &job.resolved, context)?;
                 let unreadable = parse_failure.is_some();
-                let (passed, message) = if let Some(message) = parse_failure {
-                    (false, message)
+                let (passed, message, unsupported) = if let Some(message) = parse_failure {
+                    (false, message, false)
                 } else {
                     let outcome = match &job.declared {
                         Some((input_check, output_check)) if context.strict_patch_checksums() => {
@@ -1203,10 +1205,14 @@ impl CliApp {
                         _ => job.handler.validate(&request, context),
                     };
                     match outcome {
-                        Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
+                        Ok(report) => (
+                            report.status == OperationStatus::Succeeded,
+                            report.label,
+                            false,
+                        ),
                         Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
-                        Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
-                        Err(error) => (false, error.to_string()),
+                        Err(RomWeaverError::Unsupported(op)) => (false, op.to_string(), true),
+                        Err(error) => (false, error.to_string(), false),
                     }
                 };
                 let verdict = PerPatchVerdict {
@@ -1216,6 +1222,7 @@ impl CliApp {
                     passed,
                     unreadable,
                     message,
+                    unsupported,
                 };
                 trace!(
                     index = verdict.index,
@@ -2300,6 +2307,7 @@ fn apply_plan_preflight_verdicts(
             entry.input_verdict = PatchInputVerdict::Failed;
             entry.unreadable = preflight.unreadable.then_some(true);
             entry.message = preflight.message;
+            entry.unsupported = preflight.unsupported;
         }
     }
 }
@@ -2456,6 +2464,8 @@ struct PerPatchVerdict {
     passed: bool,
     unreadable: bool,
     message: String,
+    /// The handler refused the patch as unsupported rather than judging it against the ROM.
+    unsupported: bool,
 }
 
 #[cfg(test)]

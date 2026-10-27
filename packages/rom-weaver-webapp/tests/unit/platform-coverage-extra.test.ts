@@ -305,6 +305,17 @@ describe("runner failure messages", () => {
     expect(withRomWeaverFailureKind(error, { events: [{ status: "failed", error_kind: "validation" }] })).toBe(error);
     expect((error as Error & { kind?: string }).kind).toBe("validation");
   });
+
+  it("uses the terminal label of an unsupported operation instead of the generic fallback", () => {
+    const result = runResult({
+      events: [
+        { status: "unsupported", label: "interactive BSP menus are not supported; use a patcher with menu choices" },
+      ],
+    });
+    expect(getRomWeaverFailureMessage(result, "Patch apply failed")).toBe(
+      "interactive BSP menus are not supported; use a patcher with menu choices",
+    );
+  });
 });
 
 describe("thread-start protocol", () => {

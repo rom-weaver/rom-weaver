@@ -368,6 +368,8 @@ pub enum UnsupportedOp {
     RupNamedFileEntries,
     /// HDiffPatch directory (HDIFF19) patches cannot be applied by patch-apply.
     HdiffDirectoryPatch,
+    /// The BSP patch asks the user to pick from an interactive menu, which apply cannot answer.
+    BspInteractiveMenu,
     /// The rust CHD encoder only supports `avhuff` for `chav` frame inputs.
     ChdAvhuffRequiresChavFrames,
     /// The rust CHD create path only supports `store` mode for this input.
@@ -459,6 +461,10 @@ impl fmt::Display for UnsupportedOp {
             Self::HdiffDirectoryPatch => write!(
                 f,
                 "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)"
+            ),
+            Self::BspInteractiveMenu => write!(
+                f,
+                "interactive BSP menus are not supported; use a BSP patcher that supports menu choices"
             ),
             Self::ChdAvhuffRequiresChavFrames => write!(
                 f,

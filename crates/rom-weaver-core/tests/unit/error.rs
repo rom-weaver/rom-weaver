@@ -417,6 +417,10 @@ fn unsupported_op_renders_every_variant() {
             "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)",
         ),
         (
+            UnsupportedOp::BspInteractiveMenu,
+            "interactive BSP menus are not supported; use a BSP patcher that supports menu choices",
+        ),
+        (
             UnsupportedOp::ChdAvhuffRequiresChavFrames,
             "rust chd compressed create supports `avhuff` only for `chav` frame inputs",
         ),

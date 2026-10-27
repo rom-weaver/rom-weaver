@@ -67,6 +67,8 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 
 PPF, EBP, and MOD cannot encode a target smaller than the Original. Browser Create hides them for such a target, and CLI `patch create` and `patch create --plan` reject or omit them.
 
+BSP scripts with nonempty menus fail during apply or validation in the browser and CLI. Interactive choices are unsupported; no branch is selected automatically. Scripts without menus and empty menus remain supported.
+
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 
 ## Container and compression formats
