@@ -204,6 +204,16 @@ describe("prepareInputAssets", () => {
     expect(shouldIdentifySource(file)).toBe(false);
   });
 
+  it("keeps the skipped identification policy on a lazy file-handle ROM", async () => {
+    const blob = makeFile("rom-bytes", "game.bin");
+    const handle = { getFile: async () => blob, kind: "file", name: "game.bin" };
+    skipSourceIdentification(handle);
+
+    const file = await prepareInput(handle as never, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+
+    expect(shouldIdentifySource(file)).toBe(false);
+  });
+
   it.each(["rom", "patch"] as const)(
     "uses the retained OPFS path for a %s with an unreadable File snapshot",
     async (role) => {
