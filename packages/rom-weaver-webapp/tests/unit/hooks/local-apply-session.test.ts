@@ -240,10 +240,15 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     const barrier = new Promise<void>((resolve) => {
       finishStage = resolve;
     });
+    // Like the real controller, sidecars are only discovered by the first setInput pass.
+    let discovered = false;
     const stageInput = vi.fn<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>(
       async (snapshot, handlers) => {
         await barrier;
-        handlers.onImplicitPatches?.([...snapshot.patches, sidecar]);
+        if (!discovered) {
+          discovered = true;
+          handlers.onImplicitPatches?.([...snapshot.patches, sidecar]);
+        }
         return [{ fileName: "rom.bin", order: 0 }];
       },
     );

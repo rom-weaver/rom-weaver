@@ -639,7 +639,10 @@ const useInputStaging = (context: InputStagingContext) => {
             progress: null,
           });
         },
-        onImplicitPatches: (patches, infos = []) => {
+        onImplicitPatches: (discoveredPatches, discoveredInfos = []) => {
+          let patches = discoveredPatches;
+          let infos: Array<StagedInputInfo | null | undefined> = discoveredInfos;
+          let keepStagedInfo = false;
           if (inputStageGenerationRef.current !== generation) {
             emitSessionTrace("stageInput implicit patches ignored", {
               currentGeneration: inputStageGenerationRef.current,
@@ -656,10 +659,20 @@ const useInputStaging = (context: InputStagingContext) => {
             currentKeys.length !== stagedPatchKeys.length ||
             currentKeys.some((key, index) => key !== stagedPatchKeys[index])
           ) {
-            // Sidecar discovery MUST use the latest patch list so it cannot undo a reorder or removal.
-            emitSessionTrace("input staging restarted for changed patch list", { generation });
-            syncRomInput(currentSnapshot);
-            return;
+            // Sidecars are only discovered by the first pass, so after a mid-staging reorder or removal
+            // the user's list MUST win and newly discovered sidecars MUST be appended after it.
+            const sidecars = patches.filter((patch) => !snapshot.patches.includes(patch));
+            if (!sidecars.length) return;
+            patches = [...currentSnapshot.patches, ...sidecars];
+            infos = [
+              ...currentSnapshot.patches.map(() => undefined),
+              ...sidecars.map((sidecar) => discoveredInfos[discoveredPatches.indexOf(sidecar)]),
+            ];
+            keepStagedInfo = true;
+            emitSessionTrace("stageInput implicit patches appended to changed patch list", {
+              generation,
+              sidecarCount: sidecars.length,
+            });
           }
           emitSessionTrace("stageInput implicit patches", {
             generation,
@@ -667,12 +680,18 @@ const useInputStaging = (context: InputStagingContext) => {
             patches: patches.map((patch, index) => getBinarySourceFileName(patch, `Patch ${index + 1}`)),
           });
           updatePatches(patches);
-          setPatchInfoByKey(
+          setPatchInfoByKey((current) =>
             Object.fromEntries(
-              patches.map((patch, index) => [
-                getPatchKey(patch, patches),
-                infos[index] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) },
-              ]),
+              patches.map((patch, index) => {
+                const key = getPatchKey(patch, patches);
+                return [
+                  key,
+                  infos[index] ||
+                    (keepStagedInfo ? current[key] : undefined) || {
+                      fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`),
+                    },
+                ];
+              }),
             ),
           );
         },
