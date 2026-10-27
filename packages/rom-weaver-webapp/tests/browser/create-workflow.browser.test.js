@@ -390,3 +390,21 @@ test("create workflow limits over-268.44 MB inputs to xdelta and ppf", async () 
     await workflow.dispose();
   }
 });
+
+test("create workflow runs normally after a cancel that lands before the run starts", async () => {
+  const workflow = new CreateWorkflow({ settings: { format: "bps", workers: { threads: 1 } } });
+  try {
+    await workflow.setOriginal(new File([makeOriginalBytes()], "original.bin"));
+    await workflow.setModified(new File([makeModifiedBytes()], "modified.bin"));
+    workflow.abort();
+    await expect(workflow.run()).rejects.toMatchObject({ code: "CANCELLED" });
+    const created = await workflow.run();
+    try {
+      expect(created.type).toBe("bps");
+    } finally {
+      await created.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});

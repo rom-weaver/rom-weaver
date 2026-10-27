@@ -208,3 +208,15 @@ describe("CreateWorkflowController mutation queueing", () => {
     expect(order).toEqual(["first-start", "first-end", "second-start"]);
   });
 });
+
+describe("CreateWorkflowController early cancel (#1443)", () => {
+  it("does not leave later operations cancelled when abort lands before an operation starts", async () => {
+    const controller = new CreateWorkflowController<unknown, unknown>({} as never, {});
+    controller.abort();
+    // The aborted attempt is rejected as cancelled...
+    await expect(controller.setOutputName("first.bps")).rejects.toThrow(/cancel/i);
+    // ...but the abort is consumed, so the next operation runs normally.
+    await expect(controller.setOutputName("second.bps")).resolves.toBeUndefined();
+    expect(controller.getSnapshot().outputName).toBe("second.bps");
+  });
+});
