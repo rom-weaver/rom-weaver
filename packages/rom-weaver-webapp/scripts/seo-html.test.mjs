@@ -63,7 +63,7 @@ test("sitemap lastmod values are ISO dates or absent, and never on a Markdown UR
   const sitemap = createSitemapSource();
   for (const [, location, lastmod] of sitemap.matchAll(/<loc>(.*?)<\/loc>(?:<lastmod>(.*?)<\/lastmod>)?/g)) {
     assert.ok(!location.endsWith(".md"), location);
-    if (lastmod) assert.match(lastmod, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, location);
+    if (lastmod) assert.match(lastmod, /^\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?$/, location);
   }
 });
 
@@ -107,6 +107,13 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   }
   // The landing change is newer than the shared sources, so only the apex follows it.
   assert.ok(lastmodOf("") > lastmodOf("compress"));
+});
+
+test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {
+  const notices = (sitemap) =>
+    sitemap.match(/<loc>https:\/\/rom-weaver.com\/docs\/notices<\/loc><lastmod>([^<]+)<\/lastmod>/)?.[1];
+  assert.equal(notices(createSitemapSource({ generatedLastmod: "2026-01-02" })), "2026-01-02");
+  assert.doesNotMatch(createSitemapSource({ generatedLastmod: null }), /docs\/notices<\/loc><lastmod>/);
 });
 
 test("the sitemap includes the public compression workflow", () => {
