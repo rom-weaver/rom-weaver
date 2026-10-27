@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Check, Copy, Download, Server, Terminal } from "lucide-react";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
-import { HomeFaq, HomeFormats, HomeRoutes, HomeTrust } from "./home-sections.tsx";
+import { HomeAbout, HomeFaq, HomeFormats, HomeRoutes, HomeTrust } from "./home-sections.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 
@@ -203,6 +203,7 @@ const HomePage = ({ baseUrl, onFiles }: HomePageProps): React.ReactElement => {
         <HomeLoom />
       </div>
 
+      <HomeAbout />
       <HomeRoutes featuresHref={`${route("docs")}/features`} route={route} />
       <HomeFormats docsHref={`${route("docs")}/supported-formats`} />
       <HomeTrust
