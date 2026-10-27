@@ -261,6 +261,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   async dispose(): Promise<void> {
     if (this.disposed) return;
+    this.disposed = true;
     this.abort();
     // See settleMutations: releasing while an aborted operation is still going
     // strands whatever it stages next.
@@ -270,7 +271,6 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     this.originalSession = undefined;
     this.modifiedSession = undefined;
     this.clearListeners();
-    this.disposed = true;
   }
 
   private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {

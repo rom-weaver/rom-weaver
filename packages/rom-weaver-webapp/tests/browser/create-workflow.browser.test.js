@@ -118,6 +118,36 @@ test("create workflow can create and reapply BPS after cancelling BDF without re
   }
 });
 
+test("create workflow disposal rejects queued creation while cancelling an active run", async () => {
+  const workflow = new CreateWorkflow({ settings: { format: "bps", workers: { threads: 1 } } });
+  let queuedOutcome = Promise.resolve("not queued");
+  let disposal = Promise.resolve();
+  const disposeDuringCreate = (progress) => {
+    if (progress.stage !== "create") return;
+    workflow.off("progress", disposeDuringCreate);
+    queuedOutcome = workflow.run().then(
+      async (result) => {
+        await result.output.dispose();
+        return "created";
+      },
+      (error) => error.code,
+    );
+    disposal = workflow.dispose();
+  };
+  try {
+    await workflow.setOriginal(new File([makeOriginalBytes()], "original.bin"));
+    await workflow.setModified(new File([makeModifiedBytes()], "modified.bin"));
+    workflow.on("progress", disposeDuringCreate);
+    await expect(workflow.run()).rejects.toMatchObject({ code: "CANCELLED" });
+    await disposal;
+    expect(await queuedOutcome).toBe("WORKFLOW_DISPOSED");
+    await expect(workflow.run()).rejects.toMatchObject({ code: "WORKFLOW_DISPOSED" });
+  } finally {
+    workflow.off("progress", disposeDuringCreate);
+    await workflow.dispose();
+  }
+});
+
 test("create workflow extracts archived original and modified inputs before patch create", async () => {
   const { logs, workflow } = createTraceWorkflow({
     compression: "none",
