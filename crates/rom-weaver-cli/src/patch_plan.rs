@@ -227,16 +227,11 @@ impl PlanPatchInput {
         candidates
     }
 
-    fn base_input_candidates(&self, allow_reverse: bool) -> Vec<&PlanState> {
-        let mut candidates = Vec::new();
-        if !self.declared_input.is_empty()
+    fn declared_base_input(&self) -> Option<&PlanState> {
+        (!self.declared_input.is_empty()
             && (self.declared_basis == Some(PatchInputBasis::Base)
-                || self.declared_input_infers_base)
-        {
-            candidates.push(&self.declared_input);
-        }
-        candidates.extend(self.embedded_base_input_candidates(allow_reverse));
-        candidates
+                || self.declared_input_infers_base))
+            .then_some(&self.declared_input)
     }
 
     fn embedded_base_input_candidates(&self, allow_reverse: bool) -> Vec<&PlanState> {
@@ -493,6 +488,42 @@ fn compare_candidates(candidates: &[&PlanState], state: &PlanState) -> EvidenceM
     best
 }
 
+/// Compare a declared base check and the embedded endpoint inputs with one
+/// base representation. The embedded endpoints are alternatives (a reversible
+/// patch accepts either its source or its target), so they conflict only when
+/// every endpoint conflicts; the declared check is a separate constraint that
+/// still conflicts on its own.
+fn compare_base_evidence(
+    declared: Option<&PlanState>,
+    embedded: &[&PlanState],
+    state: &PlanState,
+) -> EvidenceMatch {
+    let mut embedded_result = EvidenceMatch::Disjoint;
+    let mut all_conflict = !embedded.is_empty();
+    for candidate in embedded {
+        match compare_states(candidate, state) {
+            EvidenceMatch::Match => {
+                embedded_result = EvidenceMatch::Match;
+                all_conflict = false;
+                break;
+            }
+            EvidenceMatch::Conflict => {}
+            EvidenceMatch::Disjoint => all_conflict = false,
+        }
+    }
+    if all_conflict {
+        embedded_result = EvidenceMatch::Conflict;
+    }
+    let Some(declared) = declared else {
+        return embedded_result;
+    };
+    match (compare_states(declared, state), embedded_result) {
+        (EvidenceMatch::Match, _) | (_, EvidenceMatch::Match) => EvidenceMatch::Match,
+        (EvidenceMatch::Conflict, _) | (_, EvidenceMatch::Conflict) => EvidenceMatch::Conflict,
+        _ => EvidenceMatch::Disjoint,
+    }
+}
+
 /// Select an embedded execution only when exactly one endpoint matches.
 fn matching_execution(patch: &PlanPatchInput, state: &PlanState) -> Option<PatchEndpointSelection> {
     let mut matches = patch.embedded.iter().filter_map(|variant| {
@@ -540,6 +571,7 @@ fn match_embedded_base(
     let candidates = patch.embedded_base_input_candidates(allow_reverse_handler_match);
     match_base_candidates(
         patch,
+        None,
         &candidates,
         base_variants,
         allow_reverse_handler_match,
@@ -551,6 +583,7 @@ fn match_embedded_base(
 /// sibling's size) is a base conflict only when no other view is compatible.
 fn match_base_candidates(
     patch: &PlanPatchInput,
+    declared: Option<&PlanState>,
     candidates: &[&PlanState],
     base_variants: &[BaseVariant],
     allow_reverse_handler_match: bool,
@@ -558,7 +591,7 @@ fn match_base_candidates(
     let mut conflicted = false;
     let mut compatible = false;
     for variant in base_variants {
-        match compare_candidates(candidates, &variant.state) {
+        match compare_base_evidence(declared, candidates, &variant.state) {
             EvidenceMatch::Match => {
                 let execution = if patch.base_executions.is_empty() {
                     matching_base_execution(patch, &variant.state, allow_reverse_handler_match)
@@ -641,9 +674,10 @@ fn match_base(
             | PatchInputVerdict::Unknown => {}
         }
     }
-    let candidates = patch.base_input_candidates(allow_reverse_handler_match);
+    let candidates = patch.embedded_base_input_candidates(allow_reverse_handler_match);
     match_base_candidates(
         patch,
+        patch.declared_base_input(),
         &candidates,
         base_variants,
         allow_reverse_handler_match,
@@ -1098,6 +1132,43 @@ mod tests {
 
         assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Passed);
         assert_eq!(plan.per_patch[0].execution, None);
+    }
+
+    #[test]
+    fn reverse_endpoint_size_conflict_does_not_fail_a_sized_base_for_the_forward_endpoint() {
+        let endpoint = |direction, input: (&str, u64), output: (&str, u64)| PlanEndpointVariant {
+            input: state(&[("crc32", input.0)], Some(input.1)),
+            output: state(&[("crc32", output.0)], Some(output.1)),
+            execution: Some(PatchEndpointSelection {
+                variant: 0,
+                direction,
+            }),
+        };
+        let mut ups = patch("size-change.ups");
+        ups.declared_basis = Some(PatchInputBasis::Base);
+        ups.embedded = vec![
+            endpoint(
+                rom_weaver_core::PatchApplyDirection::Forward,
+                (BASE_CRC, 4),
+                (OUT_CRC, 6),
+            ),
+            endpoint(
+                rom_weaver_core::PatchApplyDirection::Reverse,
+                (OUT_CRC, 6),
+                (BASE_CRC, 4),
+            ),
+        ];
+        // A sized base with no checksum is compatible with the forward
+        // endpoint; the reverse endpoint's size must not turn that into a
+        // conflict.
+        let sized_only = base(&[("raw", &[], Some(4))]);
+
+        let plan = resolve_verification_plan(&sized_only, &[ups.clone()]);
+        assert_ne!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
+
+        let wrong = base(&[("raw", &[("crc32", OTHER_CRC)], Some(4))]);
+        let plan = resolve_verification_plan(&wrong, &[ups]);
+        assert_eq!(plan.per_patch[0].input_verdict, PatchInputVerdict::Failed);
     }
 
     #[test]

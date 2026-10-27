@@ -3,7 +3,9 @@
 
 use crate::checksum_validation_suffix;
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
-use rom_weaver_core::{FormatDescriptor, OperationReport, ThreadExecution};
+use rom_weaver_core::{
+    FormatDescriptor, OperationReport, PatchApplyDirection, PatchEndpointSelection, ThreadExecution,
+};
 use serde_json::json;
 
 /// The byuu (BPS/UPS) embedded expectations as one normalized endpoint
@@ -18,6 +20,31 @@ fn byuu_endpoint_variant(
         PatchEndpointSide::sized(source_size).with_checksum("crc32", format!("{source_crc32:08x}")),
         PatchEndpointSide::sized(target_size).with_checksum("crc32", format!("{target_crc32:08x}")),
     )
+}
+
+fn byuu_endpoint_variants(
+    format: &str,
+    source_size: u64,
+    target_size: u64,
+    source_crc32: u32,
+    target_crc32: u32,
+) -> Vec<PatchEndpointVariant> {
+    let forward = byuu_endpoint_variant(source_size, target_size, source_crc32, target_crc32);
+    if format != "UPS" {
+        return vec![forward];
+    }
+    vec![
+        forward.with_execution(PatchEndpointSelection {
+            variant: 0,
+            direction: PatchApplyDirection::Forward,
+        }),
+        byuu_endpoint_variant(target_size, source_size, target_crc32, source_crc32).with_execution(
+            PatchEndpointSelection {
+                variant: 0,
+                direction: PatchApplyDirection::Reverse,
+            },
+        ),
+    ]
 }
 
 /// Build the create success report shared by record-based patch formats:
@@ -83,12 +110,13 @@ pub(crate) fn byuu_parse_report(
     attach_patch_endpoints(
         &mut report,
         descriptor.name,
-        vec![byuu_endpoint_variant(
+        byuu_endpoint_variants(
+            descriptor.name,
             source_size,
             target_size,
             source_crc32,
             target_crc32,
-        )],
+        ),
     );
     report
 }
@@ -126,12 +154,13 @@ pub(crate) fn byuu_metadata_report(
     attach_patch_endpoints(
         &mut report,
         descriptor.name,
-        vec![byuu_endpoint_variant(
+        byuu_endpoint_variants(
+            descriptor.name,
             source_size,
             target_size,
             source_crc32,
             target_crc32,
-        )],
+        ),
     );
     report
 }

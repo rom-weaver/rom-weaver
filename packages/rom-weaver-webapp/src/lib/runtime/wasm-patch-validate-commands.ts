@@ -120,9 +120,10 @@ const buildPatchValidateCommand = (args: {
 
 /**
  * Some validates fan worker threads across the source: bps block-check CRCs,
- * xdelta's per-window decode, or a caller-requested source-checksum verification.
+ * xdelta's per-window decode, UPS endpoint hashing, or a caller-requested
+ * source-checksum verification.
  * Those MUST keep the runner's worker pool - without it the engine spawns from an
- * empty pool and panics (os error 6). The rest (PPF/IPS/UPS structural + block
+ * empty pool and panics (os error 6). The rest (PPF/IPS structural + block
  * checks) read a few hundred bytes single-threaded, so the pool spin-up is pure
  * setup/teardown and is skipped. The apply path keeps its own input-size gate
  * since it always reads+writes the source.
@@ -131,7 +132,9 @@ const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, h
   const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
-  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums;
+  // UPS plan validation hashes the source in parallel even when the UI sends no checksum requirement.
+  const hasUpsPatch = input.patchFiles.some((patch) => String(patch.patchFormat ?? "").toLowerCase() === "ups");
+  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums || hasUpsPatch;
   const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
   const effectiveThreadArg = noWorkerPool ? null : threadArg;
   return {
@@ -152,9 +155,14 @@ const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, h
  * The caller's options arrive untyped and in both camelCase and snake_case, so
  * every field is normalized once here rather than at each use.
  */
-const readPatchValidateOptions = (options: RuntimePatchValidateWorkerInput["options"]) => {
+const readPatchValidateOptions = ({ options, patchFiles }: RuntimePatchValidateWorkerInput) => {
   const record = asRecord(options);
-  const requirements = getPatchValidationRequirements(options);
+  const embeddedRequirements = getPatchValidationRequirements(options);
+  const format = String(embeddedRequirements?.format ?? patchFiles[0]?.patchFormat ?? "")
+    .trim()
+    .toLowerCase();
+  // UPS MUST select either endpoint in the engine; its source metadata describes only forward input.
+  const requirements = format === "ups" ? null : embeddedRequirements;
   const readArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
   const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
   return {
@@ -201,7 +209,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     validateWithChecksums,
     validateWithMinSize,
     validateWithSize,
-  } = readPatchValidateOptions(input.options);
+  } = readPatchValidateOptions(input);
   const {
     disableDefaultThreadArgInjection,
     effectiveThreadArg,

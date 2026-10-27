@@ -251,6 +251,7 @@ const applyPlanValidationResult = <TSource>(
     unreadable: planVerdict.unreadable === true || (status === "invalid" && planVerdict.unsupported === true),
   });
   prepared.entry.stage.state.chainVerdict = {
+    ...(planVerdict.execution ? { direction: planVerdict.execution.direction } : {}),
     basis: planVerdict.basis,
     basisSource: planVerdict.basis_source,
     matched:

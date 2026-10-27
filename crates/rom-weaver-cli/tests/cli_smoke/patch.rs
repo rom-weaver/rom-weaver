@@ -13598,6 +13598,104 @@ fn patch_validate_sequential_reports_truncated_ips_parser_error_not_wrong_rom() 
     }
 }
 
+fn ups_size_change_fixture() -> (
+    TempDir,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("change.ups");
+    fs::write(original.path(), [0u8, 1, 2, 3]).expect("fixture");
+    fs::write(modified.path(), [0u8, 1, 9, 3, 4, 5]).expect("fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ups",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let (o, m, p) = (
+        original.path().to_path_buf(),
+        modified.path().to_path_buf(),
+        patch.path().to_path_buf(),
+    );
+    (temp, o, m, p)
+}
+
+#[test]
+fn patch_apply_ups_size_change_accepts_declared_base_basis_forward_and_reverse() {
+    let (temp, original, modified, patch) = ups_size_change_fixture();
+    for (input, expected) in [(&original, &modified), (&modified, &original)] {
+        let output = temp.child("out.bin");
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.to_str().expect("path"),
+                "--patch",
+                patch.to_str().expect("path"),
+                "--patch-basis",
+                "base",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--force",
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            fs::read(expected).expect("expected")
+        );
+    }
+}
+
+#[test]
+fn patch_apply_ups_size_change_rejects_wrong_base_with_base_basis() {
+    let (temp, _original, _modified, patch) = ups_size_change_fixture();
+    let wrong = temp.child("wrong.bin");
+    fs::write(wrong.path(), [7u8, 7, 7, 7]).expect("fixture");
+    let output = temp.child("out.bin");
+    let events = run_json_events(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            wrong.path().to_str().expect("path"),
+            "--patch",
+            patch.to_str().expect("path"),
+            "--patch-basis",
+            "base",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert!(
+        events.iter().any(|e| e["label"].as_str().is_some_and(|l| l
+            .contains("input checks do not match")
+            || l.contains("UPS input validation"))),
+        "{events:?}"
+    );
+    assert!(!output.path().exists());
+}
+
 const INTERACTIVE_BSP_MENU_HEX: &str = "60000000006a00400000005400000000001c000000184106000000001842060000000000000000000000000000000000000000000000000000000000000000005000000052000000ffffffff0000000041004200";
 
 #[test]
