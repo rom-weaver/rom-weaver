@@ -2111,6 +2111,9 @@ impl CliApp {
         if args.no_extract || Self::is_dcp_patch(patch) {
             return Vec::new();
         }
+        if !self.archive_lists_dcp_entry(patch, context) {
+            return Vec::new();
+        }
         let mut temp_paths = Vec::new();
         let resolved = self.resolve_patches(
             std::slice::from_ref(patch),
@@ -2148,6 +2151,27 @@ impl CliApp {
             }
         }
         temp_paths
+    }
+
+    /// Cheap central-directory scan: only an archive naming a `.dcp` entry is worth the full
+    /// extraction probe, so other archives are extracted (and prompted for) once by the main path.
+    fn archive_lists_dcp_entry(&self, patch: &Path, context: &OperationContext) -> bool {
+        let Some(handler) = self.containers.probe(patch) else {
+            return false;
+        };
+        handler
+            .list_entries(
+                &ContainerProbeRequest {
+                    source: patch.to_path_buf(),
+                    split_bin: false,
+                },
+                context,
+            )
+            .is_ok_and(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| Self::is_dcp_patch(Path::new(entry)))
+            })
     }
 
     fn is_dcp_patch(path: &Path) -> bool {

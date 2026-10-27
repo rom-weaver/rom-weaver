@@ -2089,3 +2089,56 @@ fn patch_apply_zipped_multi_entry_dcp_resolves_to_dcp_not_inner_entries() {
         "the DCP's inner entries must not be treated as candidates: {stdout}"
     );
 }
+
+#[test]
+fn patch_apply_zipped_non_dcp_patch_is_extracted_once_with_emit_weave() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("in.bin").path(), b"AAAAAAAAAAAAAAAA").expect("input");
+    fs::write(temp.child("p.ips").path(), b"PATCH\x00\x00\x02\x00\x01ZEOF").expect("ips");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("p.ips").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("t.zip").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("in.bin").path().to_str().unwrap(),
+            "--patch",
+            temp.child("t.zip").path().to_str().unwrap(),
+            "--output",
+            temp.child("out.bin").path().to_str().unwrap(),
+            "--no-compress",
+            "--emit-weave",
+            temp.child("r.json").path().to_str().unwrap(),
+            "--jsonl",
+        ],
+        0,
+    );
+    let extractions = parse_json_lines(&stdout)
+        .iter()
+        .filter(|event| {
+            event["label"]
+                .as_str()
+                .is_some_and(|label| label.starts_with("extracting patch apply patch source"))
+        })
+        .count();
+    assert_eq!(
+        extractions, 1,
+        "a zipped non-DCP patch must be extracted once, not probed then re-extracted"
+    );
+    assert_eq!(
+        fs::read(temp.child("out.bin").path()).unwrap(),
+        b"AAZAAAAAAAAAAAAA"
+    );
+}
