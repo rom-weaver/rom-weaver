@@ -354,6 +354,9 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     if (this.closed) return wasiShim.wasi.ERRNO_SUCCESS;
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
+    // Close MUST publish adapter-buffered writes before Rust signals completion to other threads.
+    // The inode can retain its adapter after the descriptor closes, including in the idle pool.
+    if (!this.inode.readonly) this.inode.file.flush();
     this.closed = true;
     this.writeBuffer = null;
     this.writeBufferLength = 0;

@@ -1,9 +1,12 @@
+import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   browserProxyAdapterBufferBytes,
   BrowserProxyRandomAccessFile,
 } from "../../src/wasm/browser-opfs-proxy-file.ts";
+import { IdleFilePool } from "../../src/wasm/browser-opfs-idle-file-pool.ts";
+import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
 import type { OpfsProxyClient } from "../../src/wasm/browser-opfs-proxy-client.ts";
 import { OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
 
@@ -119,6 +122,54 @@ let proxy: FakeProxy;
 
 beforeEach(() => {
   proxy = makeProxy();
+});
+
+describe("WASI close with proxy write buffering", () => {
+  it.each([false, true])("publishes writes before returning with idle pooling=%s", (pooled) => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const pool = new IdleFilePool();
+    const inode = new WasiRandomAccessFileInode(file, {
+      closeOnLastFdClose: pooled,
+      idlePool: pooled ? pool : undefined,
+    });
+    const first = inode.path_open(0, 0n, 0).fd_obj;
+    const second = inode.path_open(0, 0n, 0).fd_obj;
+    if (!(first && second)) throw new Error("fixture descriptors must open");
+    try {
+      expect(first.fd_write(new Uint8Array([1, 2]))).toEqual({ nwritten: 2, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(first.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2]));
+      expect(second.fd_pwrite(new Uint8Array([3, 4]), 2n)).toEqual({ nwritten: 2, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(second.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2, 3, 4]));
+      expect(proxy.closed).toEqual([]);
+      if (pooled) expect(pool.size).toBe(1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("surfaces proxy errors at close and retains pending bytes for retry", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const inode = new WasiRandomAccessFileInode(file);
+    const fd = inode.path_open(0, 0n, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    try {
+      fd.fd_write(new Uint8Array([1, 2, 3]));
+      proxy.setWriteResult(() => {
+        throw new OpfsProxyError("write failed", 29);
+      });
+      expect(() => fd.fd_close()).toThrow("write failed");
+      expect(inode.openRefCount).toBe(1);
+      proxy.setWriteResult(null);
+      expect(fd.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2, 3]));
+      expect(inode.openRefCount).toBe(0);
+    } finally {
+      proxy.setWriteResult(null);
+      file.close();
+    }
+  });
 });
 
 describe("BrowserProxyRandomAccessFile handle lifecycle", () => {
