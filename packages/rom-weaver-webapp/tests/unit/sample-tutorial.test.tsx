@@ -263,6 +263,36 @@ describe("sample tutorial", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("shows the card without its row when the next step's row never connects", async () => {
+    // The reader emptied the bench mid-run: ghost rows replace the row the
+    // next step names, so the card must not wait for it forever.
+    const onClose = vi.fn();
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={onClose}
+          ready
+          steps={[
+            STEPS[0] as SampleTutorialStep,
+            { body: "Review the removed section.", target: "#tutorial-removed", title: "Removed section" },
+          ]}
+        />
+      </div>,
+    );
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const first = document.querySelector("#tutorial-first") as HTMLElement;
+    await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
+    await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Removed section" })).toBeTruthy());
+    await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("keeps the same target mounted when its parent rerenders equivalent steps", async () => {
     const workbench = (steps: readonly SampleTutorialStep[]) => (
       <div className="rw-app">

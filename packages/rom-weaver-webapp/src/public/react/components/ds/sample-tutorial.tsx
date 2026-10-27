@@ -215,6 +215,8 @@ const GUIDE_ENTER_EASE = "cubic-bezier(.2, .85, .3, 1)";
 const GUIDE_ENTER_RISE = 10;
 /** Drawers expand over .3s, so the row keeps growing after a step opens. */
 const GUIDE_SETTLE_MS = 360;
+/** How long a step waits for its row to connect before showing its card without one. */
+const GUIDE_TARGET_WAIT_MS = 600;
 /** Caps the re-reveal so later layout shifts never yank the page around. */
 const GUIDE_REVEALS = 3;
 /** Above this share of the viewport a row is anchored from its top edge. */
@@ -952,8 +954,15 @@ const SampleTutorial = ({
     };
     if (!(targetEl && dialog && ring)) {
       unanchor();
-      if (!stepTarget) arrive();
-      return;
+      if (!stepTarget) {
+        arrive();
+        return;
+      }
+      // A row that never connects - the reader emptied the bench mid-run, and
+      // ghost rows stand in for it - MUST NOT leave the card parked invisible
+      // with every button ignoring presses: it shows on its own bar instead.
+      const wait = window.setTimeout(arrive, GUIDE_TARGET_WAIT_MS);
+      return () => window.clearTimeout(wait);
     }
     // A control lifted above the row keeps the card below it, never over it.
     const liftedAbove = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
