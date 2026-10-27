@@ -2859,6 +2859,89 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
 }
 
 #[test]
+fn patch_create_candidates_exclude_pmsr_for_shrinking_valid_source() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("update.pmsr");
+    let applied = temp.child("applied.bin");
+    let original_size = 41_943_040;
+    let mut bytes = vec![0_u8; original_size];
+    bytes[original_size - 4..].copy_from_slice(&[0xac, 0xd5, 0xd4, 0xef]);
+    assert_eq!(crc32fast::hash(&bytes), 0xa7f5_cd7e);
+    fs::write(original.path(), &bytes).expect("valid synthetic PMSR source");
+    bytes[123] = 1;
+    bytes.push(0);
+    let home = temp.path().to_str().expect("home path");
+    let run = |args: &[&str]| {
+        parse_single_json_line(&command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ],
+            0,
+        ))
+    };
+
+    for modified_size in [original_size - 1, original_size + 1, original_size] {
+        fs::write(modified.path(), &bytes[..modified_size]).expect("modified fixture");
+        let plan = run(&[
+            "patch",
+            "create",
+            "--plan",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--jsonl",
+        ]);
+        let formats = plan["details"]["patch_create_format_candidates"]["formats"]
+            .as_array()
+            .expect("candidate formats");
+        assert_eq!(
+            formats.iter().any(|format| format == "pmsr"),
+            modified_size >= original_size,
+            "PMSR candidates must respect target size: {modified_size}: {plan}"
+        );
+    }
+
+    let created = run(&[
+        "patch",
+        "create",
+        "--original",
+        original.path().to_str().expect("path"),
+        "--modified",
+        modified.path().to_str().expect("path"),
+        "--format",
+        "pmsr",
+        "--output",
+        patch.path().to_str().expect("path"),
+        "--jsonl",
+    ]);
+    assert_eq!(created["status"], "succeeded");
+    let result = run(&[
+        "patch",
+        "apply",
+        "--input",
+        original.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+        "--output",
+        applied.path().to_str().expect("path"),
+        "--no-compress",
+        "--jsonl",
+    ]);
+    assert_eq!(result["status"], "succeeded");
+    assert_eq!(
+        fs::read(applied.path()).expect("applied bytes"),
+        bytes[..original_size]
+    );
+}
+
+#[test]
 fn patch_create_candidates_drop_formats_that_cannot_shrink_the_output() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -2950,7 +3033,7 @@ fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
     fs::write(original.path(), b"hello old world, longer").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    for format in ["ebp", "ppf"] {
+    for format in ["ebp", "pmsr", "mod", "ppf"] {
         let patch = temp.child(format!("new.{format}"));
         let output = command_stdout(
             &[

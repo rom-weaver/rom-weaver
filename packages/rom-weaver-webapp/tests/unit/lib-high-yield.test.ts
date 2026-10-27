@@ -278,6 +278,20 @@ describe("create patch format policy", () => {
       getSelectableCreatePatchFormats({ candidateFormats: ["bps", "pmsr"], modifiedSize: 100, originalSize: 100 }),
     ).toContain("pmsr");
   });
+
+  it("excludes resolved PMSR candidates for shrinking targets, including after swapping inputs", () => {
+    const candidates = {
+      candidateFormats: ["bps", "mod"],
+      originalSize: 41_943_040,
+      modifiedSize: 41_943_039,
+    };
+    expect(getSelectableCreatePatchFormats(candidates)).toEqual(["bps"]);
+    expect(getCreatePatchFormatsForSizes(candidates.originalSize, candidates.modifiedSize)).not.toContain("pmsr");
+    expect(getPreferredCreatePatchFormat({ ...candidates, requestedFormat: "pmsr" })).toBe("bps");
+    for (const modifiedSize of [41_943_040, 41_943_041]) {
+      expect(getSelectableCreatePatchFormats({ ...candidates, modifiedSize })).toContain("pmsr");
+    }
+  });
 });
 
 describe("workflow source preparation", () => {
