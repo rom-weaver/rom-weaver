@@ -621,20 +621,27 @@ impl CliApp {
                 && context.strict_patch_checksums()
                 && verdict.input_verdict == PatchInputVerdict::Failed
             {
+                // A structurally unreadable patch says nothing about the ROM, so
+                // surface its parser error instead of blaming the ROM.
+                let message = if verdict.unreadable == Some(true) {
+                    verdict.message.clone()
+                } else {
+                    format!(
+                        "patch {} was set to apply to the original ROM but does not match it: {}",
+                        index + 1,
+                        verdict.message
+                    )
+                };
                 return Err(Box::new(
-                        OperationReport::failed(
-                            OperationFamily::Patch,
-                            verdict.format.clone(),
-                            "validate",
-                            format!(
-                                "patch {} was set to apply to the original ROM but does not match it: {}",
-                                index + 1,
-                                verdict.message
-                            ),
-                            None,
-                        )
-                        .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
-                    ));
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        verdict.format.clone(),
+                        "validate",
+                        message,
+                        None,
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
+                ));
             }
         }
         Ok(per_patch)

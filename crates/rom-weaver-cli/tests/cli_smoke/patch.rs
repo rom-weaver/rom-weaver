@@ -13319,3 +13319,45 @@ fn patch_validate_keeps_ignorable_ips_trailing_bytes_readable() {
     );
     assert_eq!(fs::read(output.path()).expect("output"), b"HEllo old world");
 }
+
+#[test]
+fn patch_validate_sequential_reports_truncated_ips_parser_error_not_wrong_rom() {
+    let temp = setup_temp_dir();
+    let original = temp.child("rom.bin");
+    let modified = temp.child("modified.bin");
+    let good = temp.child("good.bps");
+    let truncated = temp.child("truncated.ips");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    create_bps(original.path(), modified.path(), good.path());
+    // PATCH, one record (offset 0, size 4) whose data stops after 2 bytes.
+    fs::write(truncated.path(), b"PATCH\x00\x00\x00\x00\x04HE".as_slice()).expect("fixture");
+    for format_flag in ["--jsonl", "--json", ""] {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            good.path().to_str().expect("path"),
+            "--patch",
+            truncated.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "base",
+        ];
+        if !format_flag.is_empty() {
+            args.push(format_flag);
+        }
+        let output = command_output_with_env(&args, &[], 1);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            text.contains("IPS patch ended unexpectedly"),
+            "{format_flag}: {text}"
+        );
+        assert!(!text.contains("does not match"), "{format_flag}: {text}");
+    }
+}
