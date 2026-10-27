@@ -1,6 +1,6 @@
 # How to apply a BPS, IPS, UPS, or xdelta patch to a ROM
 
-Apply a BPS, IPS, UPS, or xdelta patch to your own ROM with the [online ROM patcher](https://rom-weaver.com/apply-patches). Check the source, choose an output, and download the patched file. No uploads or account.
+Apply an IPS, BPS, UPS, or xdelta patch to your ROM with the free [online ROM patcher](https://rom-weaver.com/apply-patches), then download the patched game. No uploads or account.
 
 <a id="how-to-apply-bps-ips-ups-and-xdelta-patches"></a>
 
@@ -11,6 +11,7 @@ Apply a BPS, IPS, UPS, or xdelta patch to your own ROM with the [online ROM patc
 <!-- START doctoc -->
 ## Table of contents
 
+- [Patch a ROM in four steps](#patch-a-rom-in-four-steps)
 - [What do you need?](#what-do-you-need)
 - [Add the files](#add-the-files)
 - [Apply a BPS patch](#apply-a-bps-patch)
@@ -32,11 +33,37 @@ Apply a BPS, IPS, UPS, or xdelta patch to your own ROM with the [online ROM patc
 
 <!-- END doctoc -->
 
+## Patch a ROM in four steps
+
+1. Open the [online ROM patcher](https://rom-weaver.com/apply-patches).
+2. Drop your clean ROM and the IPS, BPS, UPS, or xdelta patch into **0x01 Inputs**.
+3. Wait for checksumming, then open **Checks**. If the source does not match, [fix the checksum mismatch](fix-checksum-errors.md) first.
+4. Select **APPLY & DOWNLOAD** and save the patched ROM. Your original stays untouched.
+
+A `.bps`, `.ips`, or `.ups` file is a patch, not a game: an emulator cannot run it until you apply it to the ROM it was made for.
+
 ## What do you need?
 
-Keep a clean ROM, the patch, and the author's notes. Match region, revision, checksum algorithm and digest, header state, and patch order. ZIP/7z/RAR files are containers; changing a patch's extension cannot fix a ROM mismatch. See [patch formats](../explanation/patch-formats.md) or the [tool comparison](../explanation/comparisons.md#applying-a-patch).
+You need the patch and your own copy of the exact game release it was made for. The files have different roles:
+
+- **Original ROM:** the starting game file named by the patch author. Add it to Apply alongside the patch. Keep a clean copy.
+- **Patch:** a file such as `.bps`, `.ips`, `.ups`, or `.xdelta` that describes changes to the original ROM.
+- **Archive:** a ZIP, 7z, or RAR that can contain a ROM, a patch, or both. Its extension identifies the archive, not the patch format.
+- **Output ROM:** the new game file created by applying the patch. You download it and play it in an emulator or on supported hardware.
+
+Keep the patch author's notes open and check:
+
+- the region, such as USA, Japan, or Europe;
+- the revision, such as Rev 0 or Rev 1;
+- the checksum and its algorithm;
+- whether the ROM has a header;
+- the order, when there is more than one patch.
+
+Compare the checksum, not the filename; [how patching works](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains why. Changing a patch's format does not fix a ROM mismatch. See [patch formats](../explanation/patch-formats.md) or the [tool comparison](../explanation/comparisons.md#applying-a-patch).
 
 Without the source file, use **Identify by checksum or game name** below the empty drop zone or in **0x02 ROM**. Search a checksum, or choose a game, system, region, and revision. The card shows locally indexed checksums and size. This search appears only when a weave or patch has not already named the expected source.
+
+Keep one clean original somewhere safe. rom-weaver writes a separate result, but a known-good copy makes updates and troubleshooting easier.
 
 ## Add the files
 
@@ -52,12 +79,9 @@ New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew file
 
 ## Apply a BPS patch
 
-1. Open [Apply](https://rom-weaver.com/apply-patches) and add your clean ROM and `.bps` file to **0x01 Inputs**.
-2. Wait for checksumming, then open **Checks**. BPS stores the expected source CRC32; resolve any [mismatch](fix-checksum-errors.md) before continuing.
-3. In **Apply**, choose the output name and format, then select **APPLY & DOWNLOAD**.
-4. Save the new ROM and [test it](test-roms-in-browser.md#test-an-apply-result). Your Original stays untouched.
+Apply a BPS patch online with the clean ROM its author names. BPS records the source ROM's CRC32, so **Checks** shows a match or a mismatch before you apply; if it fails, follow [Fix a source ROM checksum mismatch](fix-checksum-errors.md). Choose a plain output file unless your emulator or the patch author needs a compressed format, then [test the result](test-roms-in-browser.md#test-an-apply-result).
 
-A `.bps` file is a patch, not a playable ROM. For multiple patches, check [order and inputs](#apply-multiple-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
+For multiple patches, check [order and inputs](#apply-multiple-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
 
 ## Apply an IPS or IPS32 patch
 
