@@ -434,6 +434,13 @@ const scheduleMobileIdleRunnerEviction = () => {
 };
 
 const FATAL_OPFS_PROXY_MESSAGE_REGEX = /^OPFS proxy (?:request timed out|is poisoned|died mid-request)$/;
+// Thread teardown wraps worker failures (`wasi thread N failed before completion: ...`) and
+// throwWithThreadFailure joins them to the primary error with "; ", so test each segment unwrapped.
+const THREAD_FAILURE_PREFIX_REGEX = /^wasi thread \d+ failed before completion: /;
+const isFatalOpfsProxyMessage = (message: string): boolean =>
+  message
+    .split("; ")
+    .some((part) => FATAL_OPFS_PROXY_MESSAGE_REGEX.test(part.replace(THREAD_FAILURE_PREFIX_REGEX, "")));
 
 // Classification MUST use messages because structured cloning drops custom Error names on resolved results.
 const isRunnerUnrecoverableError = (error: unknown): boolean => {
@@ -441,7 +448,7 @@ const isRunnerUnrecoverableError = (error: unknown): boolean => {
   return (
     OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message) ||
     (error.name === "RangeError" && /memory/i.test(error.message)) ||
-    FATAL_OPFS_PROXY_MESSAGE_REGEX.test(error.message)
+    isFatalOpfsProxyMessage(error.message)
   );
 };
 

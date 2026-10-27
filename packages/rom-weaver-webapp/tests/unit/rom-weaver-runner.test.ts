@@ -238,6 +238,32 @@ describe("runRomWeaverJson", () => {
     },
   );
 
+  it.each([
+    "wasi thread 3 failed before completion: OPFS proxy is poisoned",
+    "wasm trap: unreachable; wasi thread 3 failed before completion: OPFS proxy request timed out",
+    "OPFS proxy died mid-request; wasi thread 2 failed before completion: OPFS proxy is poisoned",
+  ])("discards a runner after a thread-wrapped poisoned failure: %s", async (message) => {
+    const failed = { events: [], exitCode: 1, ok: false, error: new Error(message) };
+    state.run.mockResolvedValueOnce(failed);
+    await expect(runRomWeaverJson(command("compress"))).resolves.toBe(failed);
+    expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(2);
+  });
+
+  it.each([
+    "wasi thread 3 failed before completion: network failed",
+    "wasi thread 3 failed before completion: OPFS proxy is poisoned by someone",
+    "note: OPFS proxy is poisoned",
+  ])("reuses runners for unrelated thread-wrapped failures: %s", async (message) => {
+    const failed = { events: [], exitCode: 1, ok: false, error: new Error(message) };
+    state.run.mockResolvedValueOnce(failed);
+    await expect(runRomWeaverJson(command("compress"))).resolves.toBe(failed);
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(1);
+    expect(state.clients[0]?.terminate).not.toHaveBeenCalled();
+  });
+
   it("discards a runner after a resolved out-of-memory failure", async () => {
     const failed = { events: [], exitCode: 1, ok: false, error: new Error("Out of memory") };
     state.run.mockResolvedValueOnce(failed);
