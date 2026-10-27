@@ -92,13 +92,8 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
     "text/markdown; charset=utf-8",
     `${markdownPath} content type`,
   );
-  // Exactly one canonical: a placeholder rule's Link plus an exception's would be two.
-  const canonicalLinks = markdownResponseHeaders.Link ?? [];
-  if (canonicalLinks.length !== 1 || canonicalLinks[0] !== `<${SITE_ORIGIN}${routePath}>; rel="canonical"`) {
-    throw new Error(
-      `${markdownPath} canonical header must be ${SITE_ORIGIN}${routePath}; found ${canonicalLinks.join(", ")}`,
-    );
-  }
+  // noindex with a canonical Link to the HTML page could be read as noindex for that page.
+  if (markdownResponseHeaders.Link) throw new Error(`${markdownPath} must not carry a canonical Link`);
 }
 // Every Markdown copy and JSON schema stays fetchable but out of search results; only
 // production indexes. robots.txt must not block them or a crawler never sees the noindex.

@@ -68,9 +68,10 @@ export const writeCloudflareHeadersAsset = (channel) => {
       // Exact rules, not `:page` placeholders: a placeholder also matches missing
       // Markdown URLs and would serve their HTML 404 page as text/markdown.
       const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
+      // No canonical Link here: noindex plus a canonical pointing at the HTML page risks the
+      // noindex being applied to, or cancelled for, the page that must stay indexed.
       const markdownHeaders = MARKDOWN_ROUTES.map(
-        ({ path: routePath, markdownPath }) =>
-          `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`,
+        ({ markdownPath }) => `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n`,
       ).join("\n");
       // The Markdown copies and JSON schemas stay fetchable for LLMs and tools but out of
       // search results. Never block them in robots.txt: a crawler that cannot fetch a URL
