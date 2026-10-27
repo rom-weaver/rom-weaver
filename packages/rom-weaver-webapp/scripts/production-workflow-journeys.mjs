@@ -203,10 +203,11 @@ const waitForSettledInputs = async (page) => {
   }
 };
 
-// The reflow above can still land between a user's press and release. Hold the button, push its
-// card down with a spacer right above it (scroll anchoring off, and visible content above the spacer
-// stays put, so the button really moves), require that the release point now lies over another
-// element, and release there. The button must still run.
+// The reflow above can still land between a user's press and release, and on WebKit CI the page
+// also scrolled back 40-50 px as the document shrank and regrew. Hold the button, push its card down
+// with a spacer right above it (scroll anchoring off, and visible content above the spacer stays
+// put, so the button really moves), scroll the page up 40 px without user input, require that the
+// release point now lies over another element, and release there. The button must still run.
 const pressAcrossLayoutShift = async (page, selector) => {
   const button = page.locator(selector);
   await button.scrollIntoViewIfNeeded();
@@ -218,12 +219,16 @@ const pressAcrossLayoutShift = async (page, selector) => {
   try {
     const releaseTarget = await page.evaluate(
       async ({ selector: target, x, y }) => {
-        for (const element of [document.documentElement, document.body]) element.style.overflowAnchor = "none";
+        for (const element of [document.documentElement, document.body]) {
+          element.style.overflowAnchor = "none";
+          element.style.scrollBehavior = "auto";
+        }
         const spacer = document.createElement("div");
         spacer.id = "journey-layout-shift";
         spacer.style.height = "64px";
         const button = document.querySelector(target);
         (button.closest(".card") || button).before(spacer);
+        window.scrollBy(0, -40);
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const hit = document.elementFromPoint(x, y);
         return hit?.closest(target) ? "" : `${hit?.tagName.toLowerCase()}.${hit?.className}`;
@@ -235,7 +240,10 @@ const pressAcrossLayoutShift = async (page, selector) => {
     await page.mouse.up();
     await page.evaluate(() => {
       document.getElementById("journey-layout-shift")?.remove();
-      for (const element of [document.documentElement, document.body]) element.style.overflowAnchor = "";
+      for (const element of [document.documentElement, document.body]) {
+        element.style.overflowAnchor = "";
+        element.style.scrollBehavior = "";
+      }
     });
   }
 };

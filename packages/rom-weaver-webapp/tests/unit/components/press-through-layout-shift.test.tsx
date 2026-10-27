@@ -115,11 +115,12 @@ describe("run button press through a layout shift", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it("forgets a press whose release never came once another press or a context menu starts", () => {
+  it("drops the press on another press, a context menu, or a wheel scroll", () => {
     const { button, moveButton, neighbour, onClick, outer } = setup();
     for (const interrupt of [
       () => fireEvent.pointerDown(neighbour, PRESS),
       () => fireEvent.contextMenu(button, PRESS),
+      () => fireEvent.wheel(neighbour, { deltaY: 60 }),
     ]) {
       moveButton(100);
       fireEvent.pointerDown(button, PRESS);
