@@ -900,6 +900,11 @@ msgstr "¿Puedo soltar un ZIP o 7z sin extraerlo?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.faqCreateQuestion"
+msgstr "¿Puedo crear mi propio parche de ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.delivery.unsupported"
 msgstr "No se puede integrar en la ROM"
 
@@ -1192,11 +1197,6 @@ msgstr "Elige los códigos que se integrarán en la ROM en su lugar de la lista.
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.suggestion.byteUnits"
 msgstr "Elige unidades decimales o binarias para los tamaños de archivo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.tryIt"
-msgstr "Busca un nombre de juego o una suma de verificación, o pulsa Continuar para usar los archivos de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2455,6 +2455,11 @@ msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.faqDiscQuestion"
+msgstr "¿Cómo convierto una imagen de disco a CHD o RVZ?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.inputHandling"
 msgstr "Gestión de entradas"
 
@@ -2507,11 +2512,6 @@ msgstr "datos de identificación"
 #: src/presentation/localization/messages.ts
 msgid "ui.docs.toolIdentify"
 msgstr "Identificar ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.title"
-msgstr "O identifica tu ROM inicial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2630,8 +2630,23 @@ msgstr "Inventario"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.faqFormatsAnswer"
+msgstr "IPS, BPS, UPS, xdelta, PPF y muchos más, incluidos parches dentro de archivos ZIP, 7z o RAR. La lista de formatos compatibles de arriba muestra todos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.supportedTypesList"
 msgstr "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF y más."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.faqFreeQuestion"
+msgstr "¿Es gratis rom-weaver?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.aboutAudience"
+msgstr "Está pensado para quienes juegan traducciones, correcciones y romhacks, y para quienes guardan una colección de volcados que quieren comprobar, convertir u ordenar. El mismo motor impulsa también una herramienta de línea de comandos para tareas por lotes. Puede que veas el nombre escrito como Rom Weaver o RomWeaver."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3405,6 +3420,11 @@ msgstr "Abre Comprobaciones para ver CRC32, MD5 y SHA-1."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.faqDiscAnswer"
+msgstr "Abre Comprimir, añade la imagen ISO, BIN/CUE o GDI y elige CHD. Las ISO de GameCube y Wii pueden convertirse en RVZ. Extraer devuelve los archivos CHD y RVZ a imágenes de disco."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.emulator.openTest"
 msgstr "Abrir en la pestaña Prueba"
 
@@ -3467,6 +3487,11 @@ msgstr "Opciones"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.homeDrop"
 msgstr "o suelta ROMs y parches aquí"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.identify.title"
+msgstr "O identifica tu ROM inicial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4465,6 +4490,11 @@ msgstr "Inicio de rom-weaver"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.aboutBody"
+msgstr "rom-weaver es un parcheador de ROM gratuito y de código abierto, además de un conjunto de herramientas para ROM, que funciona en tu navegador. Aplica parches BPS, IPS, UPS y xdelta, crea un parche a partir de un original y una ROM editada, comprime imágenes de disco a CHD o RVZ, extrae archivos, identifica un volcado por su suma de verificación y añade códigos de trucos compatibles, sin instalar nada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexión. Si tienes conexión, puede descargar contenido más reciente."
 
@@ -4577,6 +4607,11 @@ msgstr "Automatiza lotes: comprime, verifica y aplica parches desde la línea de
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.search"
 msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Busca un nombre de juego o una suma de verificación, o pulsa Continuar para usar los archivos de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5800,6 +5835,11 @@ msgstr "¿Qué archivo tienes?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.aboutTitle"
+msgstr "¿Qué es rom-weaver?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.console.logsDescription"
 msgstr "Lo que hizo rom-weaver en esta pestaña."
 
@@ -5827,6 +5867,11 @@ msgstr "Si se desactiva, los nombres de salida se derivan del nombre del archivo
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.routeMixedTitle"
 msgstr "¿Adónde van estos archivos?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.faqFormatsQuestion"
+msgstr "¿Qué formatos de parche puedo aplicar?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5887,6 +5932,16 @@ msgstr "escribe"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.delivery.rom"
 msgstr "Integrado en la salida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.faqCreateAnswer"
+msgstr "Sí. Añade la ROM original y tu ROM editada, elige un formato como BPS, IPS, UPS o xdelta y descarga un parche que puedes compartir sin compartir el juego."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.faqFreeAnswer"
+msgstr "Sí. Es gratis y de código abierto bajo AGPL-3.0, y no necesita cuenta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

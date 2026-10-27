@@ -104,7 +104,7 @@ The webapp builds with a relative base (`base: "./"` in `vite.config.mjs`), so i
 
 One value is **not** relative: each weave schema's `$id` points at its public GitHub raw-content URL. The constants in `crates/rom-weaver-cli/src/weave_schema.rs` mirror those URLs, and unit tests assert that they match. Custom `$schema` values are preserved verbatim. A v1-to-v2 upgrade replaces the official v1 URL with the official v2 URL. Treat each new weave version as a new schema file. Never change an existing schema's identity.
 
-Cloudflare Pages reads the generated `dist/_headers` file. It applies the COOP/COEP headers on the first response, blocks indexing outside production, caches content-hashed assets, and keeps the service worker revalidating. The service worker in `packages/rom-weaver-webapp/src/webapp/rom-weaver-service-worker.ts` remains the fallback for hosts that cannot set response headers and chooses the compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
+Cloudflare Pages reads the generated `dist/_headers` file. It applies the COOP/COEP headers on the first response, blocks indexing outside production (in production, only the `.md` and `.schema.json` files send `X-Robots-Tag: noindex`, so they stay fetchable for LLMs but out of search results), caches content-hashed assets, and keeps the service worker revalidating. The service worker in `packages/rom-weaver-webapp/src/webapp/rom-weaver-service-worker.ts` remains the fallback for hosts that cannot set response headers and chooses the compatible COEP mode at runtime. Preserve and test both paths on Safari and iOS.
 
 ## Normal release flow
 

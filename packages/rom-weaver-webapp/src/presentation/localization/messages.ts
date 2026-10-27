@@ -946,6 +946,17 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.workflowsEyebrow": msg({ id: "ui.home.workflowsEyebrow", message: "Pick a workflow" }),
   "ui.home.writes": msg({ id: "ui.home.writes", message: "writes" }),
+  "ui.home.aboutAudience": msg({
+    id: "ui.home.aboutAudience",
+    message:
+      "It is made for people who play translations, fixes, and romhacks, and for anyone who keeps a library of dumps to check, convert, or tidy. The same engine also powers a command-line tool for batch jobs. You may also see the name written as Rom Weaver or RomWeaver.",
+  }),
+  "ui.home.aboutBody": msg({
+    id: "ui.home.aboutBody",
+    message:
+      "rom-weaver is a free, open-source ROM patcher and ROM toolkit that runs in your browser. Apply BPS, IPS, UPS, and xdelta patches, make a patch from an original and an edited ROM, compress disc images to CHD or RVZ, extract archives, identify a dump by its checksum, and add supported cheat codes, with nothing to install.",
+  }),
+  "ui.home.aboutTitle": msg({ id: "ui.home.aboutTitle", message: "What is rom-weaver?" }),
   "ui.home.checksumTypes": msg({ id: "ui.home.checksumTypes", message: "{count} checksum types" }),
   "ui.home.containerFormats": msg({ id: "ui.home.containerFormats", message: "{count} archive and disc formats" }),
   "ui.home.factNoTelemetry": msg({ id: "ui.home.factNoTelemetry", message: "No account, no telemetry" }),
@@ -959,6 +970,32 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.faqArchiveQuestion",
     message: "Can I drop a ZIP or 7z without extracting it?",
   }),
+  "ui.home.faqCreateAnswer": msg({
+    id: "ui.home.faqCreateAnswer",
+    message:
+      "Yes. Add the original ROM and your edited ROM, pick a format such as BPS, IPS, UPS, or xdelta, and download a patch you can share without sharing the game.",
+  }),
+  "ui.home.faqCreateQuestion": msg({ id: "ui.home.faqCreateQuestion", message: "Can I make my own ROM patch?" }),
+  "ui.home.faqDiscAnswer": msg({
+    id: "ui.home.faqDiscAnswer",
+    message:
+      "Open Compress, add the ISO, BIN/CUE, or GDI image, and choose CHD. GameCube and Wii ISOs can become RVZ. Extract turns CHD and RVZ files back into disc images.",
+  }),
+  "ui.home.faqDiscQuestion": msg({
+    id: "ui.home.faqDiscQuestion",
+    message: "How do I convert a disc image to CHD or RVZ?",
+  }),
+  "ui.home.faqFormatsAnswer": msg({
+    id: "ui.home.faqFormatsAnswer",
+    message:
+      "IPS, BPS, UPS, xdelta, PPF, and many more, including patches inside ZIP, 7z, or RAR archives. The supported formats list above shows every one.",
+  }),
+  "ui.home.faqFormatsQuestion": msg({ id: "ui.home.faqFormatsQuestion", message: "Which patch formats can I apply?" }),
+  "ui.home.faqFreeAnswer": msg({
+    id: "ui.home.faqFreeAnswer",
+    message: "Yes. It is free and open source under AGPL-3.0, and it needs no account.",
+  }),
+  "ui.home.faqFreeQuestion": msg({ id: "ui.home.faqFreeQuestion", message: "Is rom-weaver free?" }),
   "ui.home.faqGamesAnswer": msg({
     id: "ui.home.faqGamesAnswer",
     message: "No. Bring your own files. Practice runs use a tiny homebrew NES ROM made for them.",

@@ -110,6 +110,19 @@ const HOME_ROUTES: readonly HomeRoute[] = [
   },
 ];
 
+const HomeAbout = (): React.ReactElement => {
+  const localizer = useUiLocalizer();
+  return (
+    <section aria-labelledby="home-about-title" className="home-wrap home-section home-about">
+      <div className="home-section-head">
+        <h2 id="home-about-title">{localizer.message("ui.home.aboutTitle")}</h2>
+        <p className="home-blurb">{localizer.message("ui.home.aboutBody")}</p>
+        <p className="home-blurb">{localizer.message("ui.home.aboutAudience")}</p>
+      </div>
+    </section>
+  );
+};
+
 type HomeRoutesProps = {
   featuresHref: string;
   route: (slug: string) => string;
@@ -238,6 +251,10 @@ const HomeTrust = ({ selfHostingHref, offlineHref }: HomeTrustProps): React.Reac
 };
 
 const FAQ: readonly { answer: MessageId; question: MessageId }[] = [
+  { answer: "ui.home.faqFormatsAnswer", question: "ui.home.faqFormatsQuestion" },
+  { answer: "ui.home.faqCreateAnswer", question: "ui.home.faqCreateQuestion" },
+  { answer: "ui.home.faqDiscAnswer", question: "ui.home.faqDiscQuestion" },
+  { answer: "ui.home.faqFreeAnswer", question: "ui.home.faqFreeQuestion" },
   { answer: "ui.home.faqUploadAnswer", question: "ui.home.faqUploadQuestion" },
   { answer: "ui.home.faqGamesAnswer", question: "ui.home.faqGamesQuestion" },
   { answer: "ui.home.faqArchiveAnswer", question: "ui.home.faqArchiveQuestion" },
@@ -270,4 +287,4 @@ const HomeFaq = ({ faqHref }: HomeFaqProps): React.ReactElement => {
   );
 };
 
-export { HomeFaq, HomeFormats, HomeRoutes, HomeTrust };
+export { HomeAbout, HomeFaq, HomeFormats, HomeRoutes, HomeTrust };

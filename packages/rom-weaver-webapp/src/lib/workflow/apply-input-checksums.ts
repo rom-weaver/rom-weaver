@@ -2,6 +2,7 @@ import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
+import { shouldIdentifySource } from "../input/input-identification-policy.ts";
 import { getPreparedAssetFileName } from "./apply-source-staging.ts";
 import type { InputSession, StagedSource } from "./apply-workflow-state.ts";
 import {
@@ -72,6 +73,7 @@ const finalizeApplyInputChecksums = async <TSource>(
       const checksumResult = await calculateStandardInputChecksumsForFile({
         emitProgress: adapters.emitProgress,
         file: asset.file,
+        identify: shouldIdentifySource(asset.file),
         logLevel: adapters.settings.logging?.level,
         onLog: adapters.settings.logging?.sink,
         progressId: session.synthetic

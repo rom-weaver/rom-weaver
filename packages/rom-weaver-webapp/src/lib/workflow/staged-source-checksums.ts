@@ -33,6 +33,8 @@ type StandardChecksumProgressEvent = {
 type StandardChecksumOptions = {
   emitProgress: (event: StandardChecksumProgressEvent) => void;
   file: PatchFileInstance;
+  /** Look the ROM up in the local identify data. Defaults to true, as `ingest` does. */
+  identify?: boolean;
   logLevel?: LogLevel;
   onLog?: IngestRunInput["onLog"];
   progressId?: string;
@@ -188,8 +190,6 @@ const calculateInputChecksumsForFile = async ({
   workflow,
 }: StandardChecksumOptions & {
   algorithms: readonly string[];
-  /** Look the ROM up in the local identify data. Defaults to true, as `ingest` does. */
-  identify?: boolean;
   signal?: AbortSignal;
 }): Promise<{
   checksums: Record<string, string>;
