@@ -68,11 +68,16 @@ export class OpfsProxyError extends Error {
 
 /**
  * Decide from shared proxy state, not message text: thread teardown wraps or replaces worker
- * failures, so a poisoned proxy surfaces as the bare, classifiable error with the run's failure as cause.
+ * failures, so a poisoned proxy surfaces as the bare, classifiable error with the run's failure as cause
+ * (omitted when the run recorded none, e.g. a guest that handled EIO and exited non-zero).
  */
 export function resolveProxyPoisonFailure(error: unknown, client: Pick<OpfsProxyClient, "isPoisoned">): unknown {
   if (!client.isPoisoned()) return error;
-  return new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO, { cause: error });
+  return new OpfsProxyError(
+    "OPFS proxy is poisoned",
+    OPFS_PROXY_STATUS_EIO,
+    error === undefined ? undefined : { cause: error },
+  );
 }
 
 export interface OpfsProxyOpenOptions {
