@@ -3,7 +3,7 @@ import {
   CREATE_IPS_SIZE_LIMIT_BYTES,
   CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
 } from "../../src/lib/create/patch-format-limits.ts";
-import { CreateWorkflow } from "../../src/platform/browser/browser-api.ts";
+import { ApplyWorkflow, CreateWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 
 const makeOriginalBytes = () => new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
@@ -74,6 +74,49 @@ const createTraceWorkflow = (output, threads = 1) => {
   });
   return { logs, workflow };
 };
+
+test("create workflow can create and reapply BPS after cancelling BDF without restaging", async () => {
+  const original = new File([makeOriginalBytes()], "original.bin");
+  const modified = new File([makeModifiedBytes()], "modified.bin");
+  const workflow = new CreateWorkflow({ settings: { format: "bdf", workers: { threads: 1 } } });
+  const cancelCreate = (progress) => {
+    if (progress.stage === "create") workflow.abort();
+  };
+  try {
+    await workflow.setOriginal(original);
+    await workflow.setModified(modified);
+    workflow.on("progress", cancelCreate);
+    await expect(workflow.run()).rejects.toMatchObject({ code: "CANCELLED" });
+    workflow.off("progress", cancelCreate);
+
+    expect(workflow.getOriginal()?.status).toBe("ready");
+    expect(workflow.getModified()?.status).toBe("ready");
+    await workflow.setPatchType("bps");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const created = await workflow.run();
+      const apply = new ApplyWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+      try {
+        expect(created.type).toBe("bps");
+        const patch = new File([await created.output.getBlob()], created.output.fileName);
+        await apply.setInput(original);
+        await apply.addPatch(patch);
+        const applied = await apply.run();
+        try {
+          const blob = await applied.output.getBlob();
+          expect(new Uint8Array(await blob.arrayBuffer())).toEqual(makeModifiedBytes());
+        } finally {
+          await applied.output.dispose();
+        }
+      } finally {
+        await apply.dispose();
+        await created.output.dispose();
+      }
+    }
+  } finally {
+    workflow.off("progress", cancelCreate);
+    await workflow.dispose();
+  }
+});
 
 test("create workflow extracts archived original and modified inputs before patch create", async () => {
   const { logs, workflow } = createTraceWorkflow({

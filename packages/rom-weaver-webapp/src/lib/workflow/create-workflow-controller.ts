@@ -274,7 +274,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   }
 
   private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    return this.runQueuedMutation(operation, callback);
+    return this.runQueuedMutation(operation, callback, { rearmAbort: true });
   }
 
   protected computeSnapshot(): CreateWorkflowSnapshot {
