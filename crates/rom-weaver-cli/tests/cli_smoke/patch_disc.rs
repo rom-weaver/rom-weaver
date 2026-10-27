@@ -1903,6 +1903,32 @@ fn patch_apply_dcp_checksum_guards_rejected_before_output() {
         );
     }
 
+    // An empty per-patch check means "none", so it must not count as a guard.
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child("empty-checks/disc.gdi").path().to_str().unwrap(),
+            "--patch-input-check",
+            "",
+            "--patch-output-check",
+            ",",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(temp.child("bare/track03.bin").path()).expect("bare output"),
+        fs::read(temp.child("empty-checks/track03.bin").path()).expect("empty-check output"),
+        "blank per-patch checks must not change the DCP output"
+    );
+
     for patch in ["game.dcp", "translation.zip"] {
         for mode in ["human", "--json", "--jsonl"] {
             for (flag, track) in [
