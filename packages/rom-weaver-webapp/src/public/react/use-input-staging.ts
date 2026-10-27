@@ -545,6 +545,7 @@ const useInputStaging = (context: InputStagingContext) => {
       const { setInputStaging, setPatchInfoByKey, setRomInputs } = session;
       const { stageInput } = stage;
       const { generation, progressGeneration } = inputStageMachine.nextRunGeneration();
+      const stagedPatchKeys = snapshot.patches.map((patch) => getPatchKey(patch, snapshot.patches));
       // An archive Rust identifies as patch-only (`is_rom === false`) is moved to the patch bucket once;
       // the move supersedes this run, so a per-run guard is enough to fire a single reclassify.
       const reclassifiedInputKeys = new Set<string>();
@@ -648,6 +649,18 @@ const useInputStaging = (context: InputStagingContext) => {
             return;
           }
           if (!patches.length) return;
+          const currentSnapshot = contextRef.current.stage.getCurrentSnapshot?.() ?? snapshot;
+          const getCurrentKey = contextRef.current.rows.getPatchKey;
+          const currentKeys = currentSnapshot.patches.map((patch) => getCurrentKey(patch, currentSnapshot.patches));
+          if (
+            currentKeys.length !== stagedPatchKeys.length ||
+            currentKeys.some((key, index) => key !== stagedPatchKeys[index])
+          ) {
+            // Sidecar discovery MUST use the latest patch list so it cannot undo a reorder or removal.
+            emitSessionTrace("input staging restarted for changed patch list", { generation });
+            syncRomInput(currentSnapshot);
+            return;
+          }
           emitSessionTrace("stageInput implicit patches", {
             generation,
             patchCount: patches.length,

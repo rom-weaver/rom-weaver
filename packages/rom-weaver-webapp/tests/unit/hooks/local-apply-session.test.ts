@@ -233,6 +233,33 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     expect(validatePatches).toHaveBeenCalled();
   });
 
+  it.each(["reorder", "remove"])("keeps a patch %s when input ingestion discovers sidecars", async (action) => {
+    const patches = [source("a.ips"), source("b.ips")];
+    const sidecar = source("sidecar.ips");
+    let finishStage = () => undefined;
+    const barrier = new Promise<void>((resolve) => {
+      finishStage = resolve;
+    });
+    const stageInput = vi.fn<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>(
+      async (snapshot, handlers) => {
+        await barrier;
+        handlers.onImplicitPatches?.([...snapshot.patches, sidecar]);
+        return [{ fileName: "rom.bin", order: 0 }];
+      },
+    );
+    const { result } = renderSession({ patches: undefined, defaultPatches: patches, stageInput });
+    await waitFor(() => expect(stageInput).toHaveBeenCalledTimes(1));
+    act(() => {
+      if (action === "reorder") result.current.localStackController.reorder(1, 0);
+      else result.current.localStackController.removeItem(0);
+    });
+    await act(async () => finishStage());
+    const names = action === "reorder" ? ["b.ips", "a.ips", "sidecar.ips"] : ["b.ips", "sidecar.ips"];
+    await waitFor(() =>
+      expect(result.current.localStackController.getState().items.map((item) => item.fileName)).toEqual(names),
+    );
+  });
+
   it("finishes pending patch staging after the patch order changes", async () => {
     const patches = [source("a.ips"), source("b.ips")];
     let finishStage: (infos: Array<{ fileName: string }>) => void = () => undefined;
