@@ -1,7 +1,13 @@
 import { Gamepad } from "lucide-react";
 import { useState } from "react";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
-import { addEntry, getApplyEntry, prepareEntry, setCurrentGame } from "./emulator-session-store.ts";
+import {
+  addEntry,
+  getApplyEntry,
+  prepareEntry,
+  releaseLargeEntries,
+  setCurrentGame,
+} from "./emulator-session-store.ts";
 import { prepareEmulatorAudioContext, requestEmulatorStartFromUserAction } from "./emulator-audio-context.ts";
 import { createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
@@ -63,6 +69,7 @@ export const EmulatorJsAction = ({
         return;
       }
       prepareEmulatorAudioContext();
+      releaseLargeEntries();
       const blob = await output.getBlob?.();
       if (!blob) throw new Error(localizer.message("ui.apply.emulator.unavailableOutput"));
       const loaded = await loadEmulatorRom(blob, output.fileName);

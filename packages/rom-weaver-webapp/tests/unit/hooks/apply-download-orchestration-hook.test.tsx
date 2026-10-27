@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { addEntry, disposeEntry, getEmulatorSessionState } from "../../../src/public/react/emulator-session-store.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { useApplyDownloadOrchestration } from "../../../src/public/react/use-apply-download-orchestration.ts";
 import type { ApplyWorkflowResult } from "../../../src/types/workflow-runtime-types.ts";
@@ -108,7 +109,10 @@ const makeContext = (overrides: Record<string, unknown> = {}) => {
 };
 
 describe("useApplyDownloadOrchestration hook", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    while (getEmulatorSessionState().entries.length) disposeEntry(getEmulatorSessionState().entries[0].id);
+    vi.restoreAllMocks();
+  });
 
   it("queues an apply when another session change blocks the run", async () => {
     const { context, lifecycle, workflow } = makeContext({
@@ -164,5 +168,70 @@ describe("useApplyDownloadOrchestration hook", () => {
     expect(workflow.onApplyComplete).toHaveBeenCalledWith(outputResult);
     expect(session.setPatchProgressByKey).toHaveBeenCalled();
     expect(session.setProgress).toHaveBeenCalled();
+  });
+
+  it("releases a paused disc-sized Test game before the Apply run starts", async () => {
+    addEntry({
+      blob: new Blob(["disc"]),
+      fileName: "disc.chd",
+      id: "disc",
+      sizeBytes: 464 * 1024 * 1024,
+      source: "local",
+    });
+    const { context, result: outputResult, workflow } = makeContext();
+    let gamesDuringRun: number | undefined;
+    workflow.applyPatches.mockImplementation(async () => {
+      gamesDuringRun = getEmulatorSessionState().entries.length;
+      return outputResult;
+    });
+    const { result } = renderHook(() => useApplyDownloadOrchestration(context), { wrapper });
+
+    await act(async () => result.current.runPrimaryAction());
+
+    // The hidden Test view only pauses its game, which keeps the disc and the core's heap in the page.
+    expect(workflow.applyPatches).toHaveBeenCalledOnce();
+    expect(gamesDuringRun).toBe(0);
+  });
+
+  it("releases a paused disc-sized Test game when the click queues the Apply behind input preparation", async () => {
+    addEntry({
+      blob: new Blob(["disc"]),
+      fileName: "disc.chd",
+      id: "disc",
+      sizeBytes: 464 * 1024 * 1024,
+      source: "local",
+    });
+    const { context, lifecycle, workflow } = makeContext({
+      request: { ...makeContext().context.request, canQueueApply: true, canStartApply: false },
+    });
+    const { result } = renderHook(() => useApplyDownloadOrchestration(context), { wrapper });
+
+    await act(async () => result.current.runPrimaryAction());
+
+    // Preparation keeps working on the inputs until the queued run starts.
+    expect(lifecycle.setApplyQueued).toHaveBeenCalledWith(true);
+    expect(workflow.applyPatches).not.toHaveBeenCalled();
+    expect(getEmulatorSessionState().entries).toEqual([]);
+  });
+
+  it("keeps a paused disc-sized Test game when the click downloads a finished output", async () => {
+    addEntry({
+      blob: new Blob(["disc"]),
+      fileName: "disc.chd",
+      id: "disc",
+      sizeBytes: 464 * 1024 * 1024,
+      source: "local",
+    });
+    const base = makeContext().context;
+    const { context, workflow } = makeContext({
+      refs: { ...base.refs, pendingDownloadResultRef: { current: makeResult() } },
+      request: { ...base.request, hasPendingDownload: true },
+    });
+    const { result } = renderHook(() => useApplyDownloadOrchestration(context), { wrapper });
+
+    await act(async () => result.current.runPrimaryAction());
+
+    expect(workflow.downloadOutput).toHaveBeenCalledOnce();
+    expect(getEmulatorSessionState().entries.map((entry) => entry.id)).toEqual(["disc"]);
   });
 });

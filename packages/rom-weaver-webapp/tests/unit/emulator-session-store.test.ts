@@ -12,6 +12,7 @@ import {
   disposeEntry,
   getEmulatorSessionState,
   prepareEntry,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
   setCurrentGame,
   type EmulatorSessionEntry,
@@ -73,6 +74,28 @@ describe("emulator session store", () => {
     disposeEntry("game");
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
+  });
+
+  it("releases a disc-sized game and keeps a cartridge-sized one", () => {
+    const dispose = vi.fn(async () => undefined);
+    addEntry(
+      entry({
+        artifact: { dispose, getBlob: async () => new Blob(["disc"]) },
+        id: "disc",
+        sizeBytes: 464 * 1024 * 1024,
+      }),
+    );
+
+    releaseLargeEntries();
+
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
+    addEntry(entry({ sizeBytes: 4 * 1024 * 1024 }));
+    releaseLargeEntries();
+    expect(getEmulatorSessionState()).toEqual({
+      currentGameId: "game",
+      entries: [entry({ sizeBytes: 4 * 1024 * 1024 })],
+    });
   });
 
   it("resolves and caches the retained artifact's blob", async () => {

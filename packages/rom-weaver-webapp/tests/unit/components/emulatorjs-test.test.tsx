@@ -766,6 +766,26 @@ describe("EmulatorTestView", () => {
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
   });
 
+  it("unloads a disc-sized game before it reads the replacement", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    let gamesDuringLoad: number | undefined;
+    loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => {
+      gamesDuringLoad = getEmulatorSessionState().entries.length;
+      return { blob, checksum: "b".repeat(40), fileName };
+    });
+    addEntry(entry({ core: "psx", fileName: "disc.chd", sizeBytes: 464 * 1024 * 1024 }));
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Choose another ROM/), {
+      target: { files: [new File(["rom"], "next.nes")] },
+    });
+
+    // The paused disc and the next ROM's read can exceed an iOS tab's memory limit together.
+    expect(await screen.findByTitle("EmulatorJS test for next.nes")).toBeTruthy();
+    expect(gamesDuringLoad).toBe(0);
+  });
+
   it("ignores a replacement that finishes after Stop is pressed", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);

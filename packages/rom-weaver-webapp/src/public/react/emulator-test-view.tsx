@@ -24,6 +24,7 @@ import {
   addEntry,
   disposeEntry,
   prepareEntry,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
   useEmulatorSession,
   type EmulatorSessionEntry,
@@ -404,6 +405,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         }),
       );
       try {
+        releaseLargeEntries();
         const loaded = await loadEmulatorRom(file, file.name, {
           onProgress: (progress) => {
             if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;

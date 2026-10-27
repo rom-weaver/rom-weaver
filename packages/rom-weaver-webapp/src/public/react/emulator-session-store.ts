@@ -76,6 +76,26 @@ const prepareEntry = async (id: string): Promise<Blob | null> => {
   return accepted ? blob : null;
 };
 
+// A game this large is a disc; smaller ones cost little to keep.
+const LARGE_GAME_BYTES = 128 * 1024 * 1024;
+
+/**
+ * Release a disc-sized game before the page reads another disc or runs a patch. A hidden Test view only pauses its
+ * game, which keeps the disc's file-system copy and the core's heap in the page. Together with the next disc or the
+ * patch run's memory, that can exceed an iOS tab's memory limit.
+ */
+const releaseLargeEntries = () => {
+  store.setState((state) => {
+    const large = state.entries.filter((entry) => entry.sizeBytes > LARGE_GAME_BYTES);
+    if (!large.length) return {};
+    for (const entry of large) disposeEntryResources(entry);
+    return {
+      currentGameId: large.some((entry) => entry.id === state.currentGameId) ? null : state.currentGameId,
+      entries: state.entries.filter((entry) => !large.includes(entry)),
+    };
+  });
+};
+
 const getApplyEntry = (fileName?: string) =>
   store.getState().entries.find((entry) => entry.source === "apply" && (!fileName || entry.fileName === fileName));
 
@@ -126,6 +146,7 @@ export {
   getApplyEntry,
   getEmulatorSessionState,
   prepareEntry,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
   setCurrentGame,
   useEmulatorSession,
