@@ -1,3 +1,4 @@
+import { SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { MARKDOWN_ROUTES } from "./markdown-routes.js";
 
 const wantsMarkdown = (accept) => {
@@ -34,9 +35,17 @@ export const onRequest = async ({ request, env, next }) => {
     response = await next();
   }
   const headers = new Headers(response.headers);
+  // The `.md` rule's noindex belongs to the /<page>.md URL. This response is the page URL
+  // itself, so drop it; the non-production `noindex, nofollow` from the `/*` rule stays.
+  if (markdown && headers.get("X-Robots-Tag") === "noindex") headers.delete("X-Robots-Tag");
   // _headers stays under Pages' 100-rule cap by leaving these page Links to the middleware.
   if (!markdown && response.ok && route.alternateLink) {
     headers.append("Link", `<${route.markdownPath}>; rel="alternate"; type="text/markdown"`);
+  }
+  // A query string never names a different page (`?guide=weave` opens a guide on the
+  // same document), so say so in the header too, for crawlers that read it before the HTML.
+  if (!markdown && response.ok && url.search) {
+    headers.append("Link", `<${SITE_ORIGIN}${route.path}>; rel="canonical"`);
   }
   const vary = new Set(
     (headers.get("Vary") ?? "")

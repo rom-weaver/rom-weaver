@@ -4,7 +4,14 @@ import { onRequest } from "../functions/_middleware.js";
 
 async function negotiate(
   accept,
-  { method = "GET", path = "/", assetStatus = 200, assetType = "text/markdown; charset=utf-8", htmlStatus = 200 } = {},
+  {
+    method = "GET",
+    path = "/",
+    assetStatus = 200,
+    assetType = "text/markdown; charset=utf-8",
+    assetRobots = "noindex",
+    htmlStatus = 200,
+  } = {},
 ) {
   const calls = [];
   const request = new Request(`https://rom-weaver.com${path}`, { method, headers: { Accept: accept } });
@@ -16,7 +23,11 @@ async function negotiate(
           calls.push(asset.url);
           return new Response(method === "HEAD" ? null : "# Markdown", {
             status: assetStatus,
-            headers: { "Content-Type": assetType, "Cross-Origin-Embedder-Policy": "require-corp" },
+            headers: {
+              "Content-Type": assetType,
+              "Cross-Origin-Embedder-Policy": "require-corp",
+              "X-Robots-Tag": assetRobots,
+            },
           });
         },
       },
@@ -103,4 +114,25 @@ test("unsuccessful HTML responses are never cached", async () => {
 test("query variants stay uncached so deployment URL purges cover cached pages", async () => {
   const { response } = await negotiate("text/markdown", { path: "/?bundle=example" });
   assert.equal(response.headers.get("Cache-Control"), "no-store");
+});
+
+test("query variants of a page name the clean URL as canonical", async () => {
+  const { response } = await negotiate("text/html", { path: "/weave-patches?guide=weave" });
+  assert.deepEqual(response.headers.get("Link").split(", "), [
+    '</weave-patches.md>; rel="alternate"; type="text/markdown"',
+    '<https://rom-weaver.com/weave-patches>; rel="canonical"',
+  ]);
+  const { response: home } = await negotiate("text/html", { path: "/?bundle=example" });
+  assert.equal(home.headers.get("Link"), '<https://rom-weaver.com/>; rel="canonical"');
+  for (const options of [{ path: "/weave-patches" }, { path: "/weave-patches?guide=weave", htmlStatus: 404 }]) {
+    const { response: clean } = await negotiate("text/html", options);
+    assert.ok(!(clean.headers.get("Link") ?? "").includes("canonical"), JSON.stringify(options));
+  }
+});
+
+test("Markdown negotiated at a page URL does not inherit the .md file's noindex", async () => {
+  const { response } = await negotiate("text/markdown", { path: "/docs/get-started" });
+  assert.equal(response.headers.get("X-Robots-Tag"), null);
+  const { response: staging } = await negotiate("text/markdown", { assetRobots: "noindex, nofollow" });
+  assert.equal(staging.headers.get("X-Robots-Tag"), "noindex, nofollow");
 });
