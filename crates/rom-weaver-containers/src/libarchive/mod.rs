@@ -18,14 +18,15 @@ use sys::archive_entry_copy_pathname_w;
 #[cfg(not(windows))]
 use sys::archive_entry_set_pathname;
 use sys::{
-    ARCHIVE_EOF, ARCHIVE_FILTER_BZIP2, ARCHIVE_FILTER_GZIP, ARCHIVE_FILTER_XZ, ARCHIVE_FILTER_ZSTD,
-    ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
-    ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN, archive, archive_entry,
-    archive_entry_filetype, archive_entry_pathname, archive_entry_pathname_utf8,
-    archive_entry_size, archive_entry_size_is_set, archive_errno, archive_error_string,
-    archive_filter_code, archive_format, archive_read_close, archive_read_data, archive_read_free,
-    archive_read_new, archive_read_next_header, archive_read_support_filter_bzip2,
-    archive_read_support_filter_compress, archive_read_support_filter_gzip,
+    ARCHIVE_EOF, ARCHIVE_FILTER_BZIP2, ARCHIVE_FILTER_GZIP, ARCHIVE_FILTER_LZ4, ARCHIVE_FILTER_XZ,
+    ARCHIVE_FILTER_ZSTD, ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR,
+    ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
+    archive, archive_entry, archive_entry_filetype, archive_entry_pathname,
+    archive_entry_pathname_utf8, archive_entry_size, archive_entry_size_is_set, archive_errno,
+    archive_error_string, archive_filter_code, archive_format, archive_read_close,
+    archive_read_data, archive_read_free, archive_read_new, archive_read_next_header,
+    archive_read_support_filter_bzip2, archive_read_support_filter_compress,
+    archive_read_support_filter_gzip, archive_read_support_filter_lz4,
     archive_read_support_filter_lzip, archive_read_support_filter_lzma,
     archive_read_support_filter_rpm, archive_read_support_filter_uu,
     archive_read_support_filter_xz, archive_read_support_filter_zstd,

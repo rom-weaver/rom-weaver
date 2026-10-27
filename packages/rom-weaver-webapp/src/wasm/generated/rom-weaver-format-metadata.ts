@@ -739,6 +739,7 @@ export const ROM_WEAVER_FILE_FILTERS = {
     ".bz2",
     ".xz",
     ".zst",
+    ".lz4",
     ".cso",
     ".ciso",
     ".pbp",
@@ -1175,6 +1176,28 @@ export const ROM_WEAVER_CONTAINER_FORMATS = [
     ],
     "magic": [],
     "name": "zst"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "create": false,
+      "createThreads": {
+        "maxThreads": 1,
+        "parallel": false
+      },
+      "extract": true,
+      "extractThreads": {
+        "maxThreads": 1,
+        "parallel": false
+      },
+      "probeDetails": true
+    },
+    "defaultOutput": null,
+    "extensions": [
+      ".lz4"
+    ],
+    "magic": [],
+    "name": "lz4"
   },
   {
     "aliases": [

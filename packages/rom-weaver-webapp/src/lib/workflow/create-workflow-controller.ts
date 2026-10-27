@@ -259,8 +259,18 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     });
   }
 
+  /**
+   * A cancel that arrives while no operation is active or queued has nothing to stop; storing it
+   * would reject the next unrelated operation. Disposal still aborts unconditionally.
+   */
+  override abort(reason?: unknown): void {
+    if (!(this.disposed || this.isBusy())) return;
+    super.abort(reason);
+  }
+
   async dispose(): Promise<void> {
     if (this.disposed) return;
+    this.disposed = true;
     this.abort();
     // See settleMutations: releasing while an aborted operation is still going
     // strands whatever it stages next.
@@ -270,11 +280,10 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     this.originalSession = undefined;
     this.modifiedSession = undefined;
     this.clearListeners();
-    this.disposed = true;
   }
 
   private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    return this.runQueuedMutation(operation, callback);
+    return this.runQueuedMutation(operation, callback, { rearmAbort: true });
   }
 
   protected computeSnapshot(): CreateWorkflowSnapshot {

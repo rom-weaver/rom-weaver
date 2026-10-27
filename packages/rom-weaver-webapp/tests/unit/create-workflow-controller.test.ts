@@ -208,3 +208,29 @@ describe("CreateWorkflowController mutation queueing", () => {
     expect(order).toEqual(["first-start", "first-end", "second-start"]);
   });
 });
+
+describe("CreateWorkflowController cancel while idle (#1443)", () => {
+  it("ignores an abort that lands while no operation is active or queued", async () => {
+    const controller = new CreateWorkflowController<unknown, unknown>({} as never, {});
+    // Same shape as the form: an operation finished, then a stale cancel arrives while idle.
+    await controller.setOutputName("done.bps");
+    controller.abort();
+    await expect(controller.setOutputName("next.bps")).resolves.toBeUndefined();
+    expect(controller.getSnapshot().outputName).toBe("next.bps");
+  });
+
+  it("still cancels an operation that is active when the abort arrives", async () => {
+    const controller = new CreateWorkflowController<unknown, unknown>({} as never, {});
+    const slow = controller.setOutputName("slow.bps");
+    controller.abort();
+    await slow;
+    await expect(controller.setOutputName("after.bps")).resolves.toBeUndefined();
+  });
+
+  it("keeps an idle abort terminal after dispose", async () => {
+    const controller = new CreateWorkflowController<unknown, unknown>({} as never, {});
+    await controller.dispose();
+    controller.abort();
+    await expect(controller.setOutputName("x.bps")).rejects.toMatchObject({ code: "WORKFLOW_DISPOSED" });
+  });
+});

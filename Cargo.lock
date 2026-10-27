@@ -1777,6 +1777,7 @@ dependencies = [
  "flate2",
  "indicatif",
  "libc",
+ "lz4_flex 0.14.0",
  "miniz_oxide",
  "owo-colors",
  "quick-xml",
