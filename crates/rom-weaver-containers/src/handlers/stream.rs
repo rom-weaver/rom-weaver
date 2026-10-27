@@ -7,6 +7,7 @@ pub(crate) enum StreamCompression {
     Bzip2,
     Xz,
     Zstd,
+    Lz4,
 }
 
 pub(crate) struct StreamContainerHandler {
@@ -31,11 +32,13 @@ impl StreamContainerHandler {
             StreamCompression::Bzip2 => LibarchiveReadFilter::Bzip2,
             StreamCompression::Xz => LibarchiveReadFilter::Xz,
             StreamCompression::Zstd => LibarchiveReadFilter::Zstd,
+            StreamCompression::Lz4 => LibarchiveReadFilter::Lz4,
         }
     }
 
     fn extract_thread_capability(&self) -> ThreadCapability {
         match self.compression {
+            StreamCompression::Lz4 => ThreadCapability::single_threaded(),
             StreamCompression::Gzip
             | StreamCompression::Bzip2
             | StreamCompression::Xz
@@ -149,6 +152,7 @@ impl StreamContainerHandler {
             StreamCompression::Bzip2 => file_starts_with(source, &BZIP2_SIGNATURE),
             StreamCompression::Xz => file_starts_with(source, &XZ_SIGNATURE),
             StreamCompression::Zstd => file_starts_with(source, &ZSTD_SIGNATURE),
+            StreamCompression::Lz4 => file_starts_with(source, &LZ4_SIGNATURE),
         }
     }
 }
