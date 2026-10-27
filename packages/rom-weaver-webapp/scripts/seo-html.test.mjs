@@ -11,7 +11,6 @@ import {
   readWorkflowEntryFromPathname,
   WORKFLOW_SEO_ROUTES,
 } from "../src/webapp/workflow-seo.mjs";
-import { readLatestReleaseDate } from "./version.mjs";
 import {
   createRobotsSource,
   createSitemapSource,
@@ -110,13 +109,11 @@ test("workflow pages take their lastmod from the newest commit of their text sou
   assert.ok(lastmodOf("") > lastmodOf("compress"));
 });
 
-test("generated Notices page is dated with the release day, not git history", () => {
+test("the Notices entry takes the injected generated-page date, and none when it is unknown", () => {
   const notices = (sitemap) =>
     sitemap.match(/<loc>https:\/\/rom-weaver.com\/docs\/notices<\/loc><lastmod>([^<]+)<\/lastmod>/)?.[1];
-  assert.equal(notices(createSitemapSource({ releaseDate: "2026-01-02" })), "2026-01-02");
-  assert.equal(notices(createSitemapSource()), readLatestReleaseDate());
-  assert.match(readLatestReleaseDate(), /^\d{4}-\d{2}-\d{2}$/);
-  assert.doesNotMatch(createSitemapSource({ releaseDate: null }), /docs\/notices<\/loc><lastmod>/);
+  assert.equal(notices(createSitemapSource({ generatedLastmod: "2026-01-02" })), "2026-01-02");
+  assert.doesNotMatch(createSitemapSource({ generatedLastmod: null }), /docs\/notices<\/loc><lastmod>/);
 });
 
 test("the sitemap includes the public compression workflow", () => {

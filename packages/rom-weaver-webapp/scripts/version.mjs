@@ -255,9 +255,9 @@ const parseEntryGroups = (body) => {
   return groups.filter((group) => group.entries.length || group.sections?.length);
 };
 
-// The newest release heading that carries a date, as `YYYY-MM-DD`; undefined when none does.
-const readLatestReleaseDate = (sourcePath = changelogPath) =>
-  readChangelogSections(sourcePath).find((section) => section.date)?.date;
+// A release's date as `YYYY-MM-DD`, from its changelog heading; undefined when it has none.
+const readReleaseDate = (version, sourcePath = changelogPath) =>
+  readChangelogSections(sourcePath).find((section) => section.version === version)?.date;
 
 // The requested version's section plus the ones below it, so a client several
 // releases behind can render everything it missed.
@@ -339,4 +339,4 @@ const getBuildInfo = () => {
   };
 };
 
-export { getBuildInfo, getChangelog, getVersionBranch, readLatestReleaseDate, readReleaseNotes, resolveGitBranch };
+export { getBuildInfo, getChangelog, getVersionBranch, readReleaseDate, readReleaseNotes, resolveGitBranch };
