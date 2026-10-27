@@ -13179,3 +13179,44 @@ fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
 fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
     assert!(!apply_auto_header_with_filename_crc32(false));
 }
+
+const INTERACTIVE_BSP_MENU_HEX: &str = "60000000006a00400000005400000000001c000000184106000000001842060000000000000000000000000000000000000000000000000000000000000000005000000052000000ffffffff0000000041004200";
+
+#[test]
+fn patch_validate_plan_flags_interactive_bsp_menu_as_unsupported_not_a_rom_mismatch() {
+    let temp = setup_temp_dir();
+    let input = temp.child("menu-input.bin");
+    let patch = temp.child("interactive-menu.bsp");
+    fs::write(input.path(), [0u8]).expect("input");
+    let bytes: Vec<u8> = (0..INTERACTIVE_BSP_MENU_HEX.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&INTERACTIVE_BSP_MENU_HEX[index..index + 2], 16).expect("hex")
+        })
+        .collect();
+    fs::write(patch.path(), bytes).expect("patch");
+
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--plan",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let verdict = &json["details"]["patch_validation"]["per_patch"][0];
+    assert_eq!(verdict["input_verdict"], "failed");
+    assert_eq!(verdict["unsupported"], true, "verdict: {verdict}");
+    assert!(
+        verdict["message"]
+            .as_str()
+            .expect("message")
+            .contains("interactive BSP menus are not supported")
+    );
+}

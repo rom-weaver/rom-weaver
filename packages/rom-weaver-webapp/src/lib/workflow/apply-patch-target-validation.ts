@@ -105,11 +105,12 @@ const applyPatchVerdict = <TSource>(
   target: InputAsset,
   validationKey: string,
   startedAt: number,
-  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred" },
+  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred"; unreadable?: boolean },
 ) => {
   stage.state.patchValidation = {
     message: verdict.message,
     status: verdict.status,
+    ...(verdict.unreadable ? { unreadable: true } : {}),
     targetInputId: target.id,
     validationKey,
   };
@@ -246,6 +247,8 @@ const applyPlanValidationResult = <TSource>(
           ? "Patch cannot be applied to this ROM"
           : "Input state is only provable while applying"),
     status,
+    // An unsupported patch (e.g. an interactive BSP menu) fails on every ROM: block Apply, no override.
+    unreadable: status === "invalid" && planVerdict.unsupported === true,
   });
   prepared.entry.stage.state.chainVerdict = {
     basis: planVerdict.basis,

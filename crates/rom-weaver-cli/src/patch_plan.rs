@@ -99,6 +99,11 @@ pub struct PatchPlanVerdict {
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub execution: Option<PatchEndpointSelection>,
     pub message: String,
+    /// The failed verdict is a limit of the patch itself (an unsupported feature such as an
+    /// interactive BSP menu), not a mismatch with the ROM, so no other ROM can fix it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "typescript-types", ts(type = "boolean", optional))]
+    pub unsupported: bool,
     /// Set when this patch's input matches a patch it does not directly
     /// follow - the order diagnosis behind `suggested_order`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -757,6 +762,7 @@ pub(crate) fn resolve_verification_plan(
                 input_verdict,
                 execution: base_execution,
                 message,
+                unsupported: false,
                 expected_predecessor: None,
             }
         } else {
@@ -867,6 +873,7 @@ pub(crate) fn resolve_verification_plan(
                 input_verdict,
                 execution,
                 message,
+                unsupported: false,
                 expected_predecessor,
             }
         };

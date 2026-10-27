@@ -94,6 +94,45 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     expect(stage.state.patchValidation?.status).toBe("invalid");
   });
 
+  const planResult = (unsupported?: boolean) => ({
+    message: "mixed",
+    plan: {
+      per_patch: [
+        {
+          basis: "base",
+          basis_source: "default",
+          format: "BSP",
+          index: 0,
+          input_verdict: "failed",
+          matched: { kind: "none" },
+          message: "interactive BSP menus are not supported; use a BSP patcher that supports menu choices",
+          patch: "hack.bsp",
+          ...(unsupported ? { unsupported } : {}),
+        },
+      ],
+    },
+    status: "mixed",
+  });
+
+  it("marks an unsupported plan verdict (interactive BSP menu) unreadable so no ROM override is offered", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue(planResult(true));
+    await validateApplyPatchTarget(stage, createTarget(), preflight, createAdapters(validatePatch));
+    expect(stage.state.patchValidation).toMatchObject({
+      message: expect.stringContaining("interactive BSP menus are not supported"),
+      status: "invalid",
+      unreadable: true,
+    });
+  });
+
+  it("keeps a genuine failed plan verdict a ROM mismatch, not unreadable", async () => {
+    const stage = createStage();
+    const validatePatch = vi.fn().mockResolvedValue(planResult());
+    await validateApplyPatchTarget(stage, createTarget(), preflight, createAdapters(validatePatch));
+    expect(stage.state.patchValidation?.status).toBe("invalid");
+    expect(stage.state.patchValidation?.unreadable).toBeUndefined();
+  });
+
   it("re-validates a cached 'unknown' verdict instead of short-circuiting on it", async () => {
     const stage = createStage();
     const target = createTarget();

@@ -9,12 +9,15 @@ use std::{
 
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, RomWeaverError,
-    SharedBlockCacheReader, SharedThreadPool,
+    SharedBlockCacheReader, SharedThreadPool, UnsupportedOp,
 };
 use sha1::{Digest, Sha1};
 use tracing::debug;
 
 type VmResult<T> = std::result::Result<T, String>;
+
+const INTERACTIVE_MENU_UNSUPPORTED: &str =
+    "interactive BSP menus are not supported; use a BSP patcher that supports menu choices";
 const FILE_IO_CHUNK_BYTES: usize = 1024 * 1024;
 
 /// Fixed component of the per-run instruction budget. BSP scripts are a
@@ -1083,7 +1086,7 @@ impl<'pool> BspVm<'pool> {
                 }
 
                 debug!("rejecting interactive BSP menu without a choice provider");
-                Err("interactive BSP menus are not supported; use a BSP patcher that supports menu choices".to_string())
+                Err(INTERACTIVE_MENU_UNSUPPORTED.to_string())
             }
             0x6C..=0x6F => {
                 let start = args[0];
@@ -1656,6 +1659,15 @@ impl<'pool> BspVm<'pool> {
     }
 }
 
+/// An interactive menu is a limit of this patcher, not a fault of the ROM, so it is `Unsupported`
+/// and callers must not offer a different ROM or a checksum override as the fix.
+fn vm_execution_error(message: &str) -> RomWeaverError {
+    if message == INTERACTIVE_MENU_UNSUPPORTED {
+        return RomWeaverError::Unsupported(UnsupportedOp::BspInteractiveMenu);
+    }
+    RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
+}
+
 #[cfg(test)]
 pub(crate) fn apply_bsp_patch_file_native(
     patch_bytes: &[u8],
@@ -1671,9 +1683,7 @@ pub(crate) fn apply_bsp_patch_file_native(
             "BSP patch script exited with failure status {}",
             code as i64
         ))),
-        Err(message) => Err(RomWeaverError::Validation(format!(
-            "BSP patch execution failed: {message}"
-        ))),
+        Err(message) => Err(vm_execution_error(&message)),
     }
 }
 
@@ -1691,9 +1701,7 @@ pub(crate) fn apply_bsp_patch_file_native_from_path(
             "BSP patch script exited with failure status {}",
             code as i64
         ))),
-        Err(message) => Err(RomWeaverError::Validation(format!(
-            "BSP patch execution failed: {message}"
-        ))),
+        Err(message) => Err(vm_execution_error(&message)),
     }
 }
 

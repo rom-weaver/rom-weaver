@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use rom_weaver_core::{
     CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest, PatchValidateRequest,
-    ThreadBudget,
+    RomWeaverErrorKind, ThreadBudget,
 };
 use rom_weaver_patches::PatchRegistry;
 
@@ -69,6 +69,7 @@ fn interactive_bsp_menu_is_rejected_without_output() {
             &temp.context(threads),
         );
         let error = result.expect_err("interactive BSP menus must not silently select a branch");
+        assert_eq!(error.kind(), RomWeaverErrorKind::Unsupported);
         assert!(
             error
                 .to_string()
@@ -102,6 +103,7 @@ fn validate_rejects_interactive_bsp_menu_without_changing_input() {
             &temp.context(1),
         )
         .expect_err("interactive BSP menus must fail validation");
+    assert_eq!(error.kind(), RomWeaverErrorKind::Unsupported);
     assert!(
         error
             .to_string()

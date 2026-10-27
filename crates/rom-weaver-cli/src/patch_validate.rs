@@ -962,6 +962,7 @@ impl CliApp {
                             format: Some(format),
                             passed: false,
                             message,
+                            unsupported: false,
                         });
                     }
                 }
@@ -976,6 +977,7 @@ impl CliApp {
                         format: report.format.clone(),
                         passed: false,
                         message: report.label.clone(),
+                        unsupported: false,
                     });
                 }
             }
@@ -1185,11 +1187,15 @@ impl CliApp {
                     }
                     _ => job.handler.validate(&request, context),
                 };
-                let (passed, message) = match outcome {
-                    Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
+                let (passed, message, unsupported) = match outcome {
+                    Ok(report) => (
+                        report.status == OperationStatus::Succeeded,
+                        report.label,
+                        false,
+                    ),
                     Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
-                    Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
-                    Err(error) => (false, error.to_string()),
+                    Err(RomWeaverError::Unsupported(op)) => (false, op.to_string(), true),
+                    Err(error) => (false, error.to_string(), false),
                 };
                 let verdict = PerPatchVerdict {
                     index: job.index,
@@ -1197,6 +1203,7 @@ impl CliApp {
                     format: Some(job.format.clone()),
                     passed,
                     message,
+                    unsupported,
                 };
                 trace!(
                     index = verdict.index,
@@ -2220,6 +2227,7 @@ fn apply_plan_preflight_verdicts(
             // intermediate - so its honest `chain_deferred` verdict stands.
             entry.input_verdict = PatchInputVerdict::Failed;
             entry.message = preflight.message;
+            entry.unsupported = preflight.unsupported;
         }
     }
 }
@@ -2375,6 +2383,8 @@ struct PerPatchVerdict {
     format: Option<String>,
     passed: bool,
     message: String,
+    /// The handler refused the patch as unsupported rather than judging it against the ROM.
+    unsupported: bool,
 }
 
 #[cfg(test)]
