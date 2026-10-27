@@ -30,6 +30,7 @@ import {
   SampleTutorial,
   type SampleTutorialStep,
   useGuidedSampleStart,
+  VIEW_TOGGLE_HEAD_SELECTOR,
 } from "./components/ds/sample-tutorial.tsx";
 import { skipSourceIdentification } from "../../lib/input/input-identification-policy.ts";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -95,17 +96,25 @@ type ApplyTutorialInputs = {
 };
 
 /**
+ * Identify on the ROM card the view step before it frames. Its Try it starts at
+ * the Simple/Detailed switch, so the switch is lifted again, but the comparison
+ * stays on the view step: repeated here, it would fold both steps to the same
+ * phone card.
+ */
+const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep => ({
+  body: localizer.message("ui.apply.tutorial.identify.body"),
+  lift: VIEW_TOGGLE_HEAD_SELECTOR,
+  openDrawers: true,
+  target: "#rom-weaver-row-file-rom",
+  title: localizer.message("ui.apply.tutorial.identify.title"),
+  tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
+});
+
+/**
  * The guided Apply run. It starts on the empty drop zone and waits there: the
  * reader adds files by any of the real routes, or presses Continue to use the
  * practice files - so nothing appears on the bench they did not ask for.
  */
-const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep =>
-  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
-    body: localizer.message("ui.apply.tutorial.identify.body"),
-    title: localizer.message("ui.apply.tutorial.identify.title"),
-    tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
-  });
-
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
   inputs: ApplyTutorialInputs,

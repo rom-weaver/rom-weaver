@@ -937,6 +937,43 @@ test("guided Apply scrolls its first card back on screen when More opens the res
   await page.viewport(1280, 900);
 });
 
+test("guided Apply opens no drawers on a phone and gives Identify a card of its own", async () => {
+  // A phone card folds to its Try it, so the ROM and Identify steps on the same
+  // row must not fold to the same line; and an opened drawer - the optional
+  // weave job on the last step - would stretch its row past the screen.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+  await expect.poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')).toBeTruthy();
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  await expect.poll(() => guide.dataset.moving).toBeUndefined();
+  const tryIts = [];
+  for (const step of ["2", "3", "4", "5"]) {
+    guide.querySelector(".sample-tutorial-next").click();
+    await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
+    // Continue ignores presses until the card has landed.
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
+    await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
+    tryIts.push(guide.querySelector(".sample-tutorial-try")?.textContent);
+    expect(guide.querySelector(".sample-tutorial-compare") !== null).toBe(step === "2");
+    // The ROM's Checks opens by itself when the practice weave supplies them.
+    const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
+      (head) =>
+        head.getAttribute("aria-expanded") === "true" &&
+        !(head.closest("#rom-weaver-row-file-rom") && head.textContent.startsWith("Checks")),
+    );
+    expect(opened.map((head) => head.textContent)).toEqual([]);
+  }
+  expect(new Set(tryIts).size).toBe(4);
+  expect(document.querySelector("#rom-weaver-weave-job .cks-head")?.getAttribute("aria-expanded")).toBe("false");
+  await page.viewport(1280, 900);
+});
+
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
   const hardwareConcurrency = Object.getOwnPropertyDescriptor(Navigator.prototype, "hardwareConcurrency");
   Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 2 });

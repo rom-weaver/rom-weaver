@@ -278,7 +278,7 @@ describe("sample tutorial", () => {
     expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("leaves the row's menu shut on a phone, where it would cover the row", async () => {
+  it("leaves the row's drawers and menu shut on a phone, where they would stretch or cover the row", async () => {
     // No query the guide asks about matches below the desktop anchor width.
     const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation(
       (query) =>
@@ -294,7 +294,7 @@ describe("sample tutorial", () => {
 
       const first = document.querySelector("#tutorial-first") as HTMLElement;
       await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
-      expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("false");
       expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("false");
     } finally {
       matchMedia.mockRestore();

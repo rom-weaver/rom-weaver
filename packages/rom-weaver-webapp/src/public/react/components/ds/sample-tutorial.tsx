@@ -102,6 +102,9 @@ type SampleTutorialStep = {
   /** What Continue does on a locked step instead of waiting - loading the
       practice files, say. The guide moves on by itself once the step unlocks. */
   onContinue?: () => void;
+  /** Opens the row's closed drawers on desktop. Phones leave them shut: an
+      opened drawer - the optional weave job, say - stretches the row past the
+      screen, so the step's Try it names the one to open instead. */
   openDrawers?: boolean;
   /** Opens the row's first menu on desktop. Phones leave it shut: the open
       menu would cover the row the step describes. */
@@ -871,13 +874,14 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
-      if (stepOpenDrawers) {
+      const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY).matches;
+      if (stepOpenDrawers && desktop) {
         for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
           openedDrawers.push(drawer);
           drawer.click();
         }
       }
-      if (stepOpenMenu && window.matchMedia(GUIDE_ANCHOR_QUERY).matches) {
+      if (stepOpenMenu && desktop) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
@@ -1384,4 +1388,11 @@ const SampleTutorial = ({
   return createPortal(layer, portalTarget);
 };
 
-export { getViewTutorialStep, SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };
+export {
+  getViewTutorialStep,
+  SampleTutorial,
+  SampleTutorialStart,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+  VIEW_TOGGLE_HEAD_SELECTOR,
+};
