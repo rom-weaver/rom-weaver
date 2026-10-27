@@ -1922,12 +1922,12 @@ jobs:
           # `git log -- <doc>` (readDocLastmod); a shallow clone cannot answer
           # that for docs older than its depth. So prod takes full history
           # without file contents (no ~97 MB pack); other channels keep the
-          # changelog's depth. '0' is quoted because a bare 0 is falsy in
-          # expressions. Tags must still come along: the version string drops
-          # its `+hash` suffix only when `git tag --points-at HEAD` sees the
-          # release tag.
+          # changelog's depth and a normal clone. '0' is quoted because a
+          # bare 0 is falsy in expressions. Tags must still come along: the
+          # version string drops its `+hash` suffix only when
+          # `git tag --points-at HEAD` sees the release tag.
           fetch-depth: ${{ matrix.target.channel == 'prod' && '0' || '60' }}
-          filter: blob:none
+          filter: ${{ matrix.target.channel == 'prod' && 'blob:none' || '' }}
           fetch-tags: true
 
       - name: Check publication freshness
