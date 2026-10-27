@@ -138,8 +138,8 @@ const readWorkflowLastmod = (route, root, repo) => {
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
 
-// Generated pages (Notices) are untracked, so git has no date for them; they are rebuilt for each
-// release, which makes the latest release day their date.
+// Generated pages (Notices) are untracked, so git has no date for them. They take the latest
+// release day, which says when this release shipped, not when the page's text last changed.
 export const createSitemapSource = ({
   root = rootDir,
   repo = repoRoot,
