@@ -109,6 +109,40 @@ const createTraceWorkflow = () => {
   return { logs, workflow };
 };
 
+test("apply workflow preserves a loose GDI and exact patched track bytes in raw output", async () => {
+  const workflow = new ApplyWorkflow({
+    settings: { output: { compression: "none" }, workers: { threads: 1 } },
+  });
+  const trackBytes = new Uint8Array(8 * 2352);
+  for (let index = 0; index < trackBytes.length; index++) trackBytes[index] = index % 251;
+  const gdiText = "1\n1 45000 4 2352 track01.bin 0\n";
+  try {
+    await workflow.setInput([new File([gdiText], "disc.gdi"), new File([trackBytes], "track01.bin")]);
+    await workflow.addPatch(await loadFixtureFile(RAW_PATCH));
+    const result = await workflow.run();
+    try {
+      const blob = await result.output.getBlob();
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const entries = readZipCentralDirectoryEntries(bytes);
+      expect(entries).toHaveLength(2);
+      const sheet = entries.find((entry) => entry.fileName.endsWith(".gdi"));
+      const track = entries.find((entry) => entry.fileName.endsWith(".bin"));
+      expect(sheet).toBeTruthy();
+      expect(track).toBeTruthy();
+      expect(sheet.method).toBe(0);
+      expect(track.method).toBe(0);
+      const sheetText = new TextDecoder().decode(readZipStoredEntryData(bytes, sheet));
+      expect(sheetText).toContain(track.fileName);
+      trackBytes[1] = 0x58;
+      expect(readZipStoredEntryData(bytes, track)).toEqual(trackBytes);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
 test("apply workflow resolves RVZ inputs to extracted names during staging", async () => {
   const workflow = new ApplyWorkflow();
   const progressEvents = [];
