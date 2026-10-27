@@ -242,8 +242,13 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
       teardownFailure ??= { error };
     }
     if (teardownFailure) runSucceeded = false;
-    if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)
-      await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    try {
+      if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)
+        await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    } catch (error) {
+      trace(`[browser-opfs-thread] invalidate mounts failed tid=${tidLabel} ${formatErrorForTrace(error)}`);
+      teardownFailure ??= { error };
+    }
     trace(`[browser-opfs-thread] cleanup done tid=${tidLabel}`);
   }
   if (teardownFailure) throw teardownFailure.error;

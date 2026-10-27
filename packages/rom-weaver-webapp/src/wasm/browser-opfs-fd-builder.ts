@@ -125,8 +125,13 @@ export async function buildBrowserOpfsWasiFds({
     trace?.(`[browser-opfs] build fds failed ${formatErrorForTrace(error)}`);
     try {
       closeSyncFiles(runCloseables);
-    } finally {
+    } catch (cleanupError) {
+      trace?.(`[browser-opfs] build fds close cleanup failed ${formatErrorForTrace(cleanupError)}`);
+    }
+    try {
       await Promise.resolve(cleanupBrowserOpfsMounts(mounts));
+    } catch (cleanupError) {
+      trace?.(`[browser-opfs] build fds mount cleanup failed ${formatErrorForTrace(cleanupError)}`);
     }
     throw error;
   }

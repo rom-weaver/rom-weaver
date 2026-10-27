@@ -127,6 +127,14 @@ afterEach(() => {
 });
 
 describe("OpfsProxyClient shared-state readers", () => {
+  it.each([29, 51])("keeps poisoned close failures recyclable with sticky errno %s", (errno) => {
+    const other = new OpfsProxyClient(channel);
+    other.recordWriteError(new OpfsProxyError("OPFS proxy request timed out", errno));
+    Atomics.store(channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+    expect(() => client.throwIfWriteFailed()).toThrow(/^OPFS proxy (request timed out|is poisoned|died mid-request)$/);
+    expect(() => other.throwIfWriteFailed()).toThrow("OPFS proxy is poisoned");
+  });
+
   it("keeps the first close error across clients until the next run", () => {
     const other = new OpfsProxyClient(channel);
     expect(() => client.throwIfWriteFailed()).not.toThrow();

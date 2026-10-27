@@ -36,6 +36,37 @@ beforeEach(() => {
 });
 
 describe("browser OPFS mount cache", () => {
+  it.each(["dispose", "paths", "mounts"])(
+    "drains every mount after a %s failure and reports the first error",
+    async (operation) => {
+      const cache = createBrowserOpfsMountCache();
+      const handles = ["first", "second", "third"].map((name) => makeDirectory(name));
+      const mounts = await Promise.all(handles.map((handle) => cache.acquire(options(`/${handle.name}`, handle))));
+      const [first, second] = mounts;
+      if (!(first && second)) throw new Error("fixture mounts were not acquired");
+      const primary = new Error("first mount close failed");
+      disposeMock(first).mockImplementationOnce(() => {
+        throw primary;
+      });
+      disposeMock(second).mockRejectedValueOnce(new Error("second mount close failed"));
+      const operations = {
+        dispose: () => cache.dispose(),
+        paths: () => cache.invalidateMountPaths(["/first", "/second", "/third"]),
+        mounts: () => cache.invalidateMounts(mounts),
+      };
+      const result = operations[operation]();
+      await expect(result).rejects.toBe(primary);
+      for (const mount of mounts) expect(disposeMock(mount)).toHaveBeenCalledOnce();
+      if (operation === "dispose") {
+        await cache.dispose();
+      } else {
+        for (const handle of handles) await cache.acquire(options(`/${handle.name}`, handle));
+        expect(state.create).toHaveBeenCalledTimes(6);
+      }
+      for (const mount of mounts) expect(disposeMock(mount)).toHaveBeenCalledOnce();
+    },
+  );
+
   it("reuses a matching mount and replaces it when options change", async () => {
     const cache = createBrowserOpfsMountCache();
     const firstHandle = makeDirectory("first");

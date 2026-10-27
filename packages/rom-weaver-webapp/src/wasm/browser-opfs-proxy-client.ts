@@ -102,6 +102,7 @@ export class OpfsProxyClient {
   throwIfWriteFailed(): void {
     const errno = Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX);
     if (errno === 0) return;
+    if (this.isPoisoned()) throw new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO);
     const detail =
       errno === 51 ? "No space left on device; free storage and retry" : "Storage I/O failed; retry the operation";
     throw new OpfsProxyError(`failed to publish OPFS file writes on close: ${detail} (errno=${errno})`, errno);

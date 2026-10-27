@@ -182,6 +182,33 @@ describe("browser OPFS WASI thread runtime", () => {
     expect(state.wasmEnv).toHaveBeenCalledWith(expect.any(WebAssembly.Memory));
   });
 
+  it.each(["primary", "close", "invalidate"])(
+    "preserves the first %s failure when invalidation throws",
+    async (failure) => {
+      const primary = new Error("guest execution failed");
+      const closeError = new Error("close write failed");
+      const invalidateError = new Error("invalidation failed");
+      if (failure === "primary") vi.mocked(WebAssembly.instantiate).mockRejectedValueOnce(primary);
+      if (failure !== "invalidate")
+        state.closeSyncFiles.mockImplementationOnce(() => {
+          throw closeError;
+        });
+      state.cache.invalidateMounts.mockRejectedValueOnce(invalidateError);
+      const runtime = {
+        invalidateMountCacheAfterRun: true,
+        mountHandles: { "/work": { kind: "directory" } },
+        opfsProxyTransfer: { port: true },
+        runtimeMounts: ["/work"],
+      };
+      const expected = { primary, close: closeError, invalidate: invalidateError }[failure];
+      await expect(
+        __runRomWeaverBrowserWasiThread({ runtime, wasmMemory: makeSharedMemory(), wasmModule } as never),
+      ).rejects.toBe(expected);
+      expect(state.cleanupMounts).toHaveBeenCalledOnce();
+      expect(state.cache.invalidateMounts).toHaveBeenCalledOnce();
+    },
+  );
+
   it("rejects teardown write failures after cleaning and invalidating mounts", async () => {
     state.closeSyncFiles.mockImplementationOnce(() => {
       throw new Error("proxy write failed at teardown");

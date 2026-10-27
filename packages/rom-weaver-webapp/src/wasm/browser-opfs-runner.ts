@@ -341,9 +341,15 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
 
   const runner = {
     async dispose() {
-      await mountCache.dispose();
-      await threadWorkerPool?.dispose();
-      await opfsProxy.stop();
+      let failure: { error: unknown } | undefined;
+      for (const dispose of [() => mountCache.dispose(), () => threadWorkerPool?.dispose(), () => opfsProxy.stop()]) {
+        try {
+          await dispose();
+        } catch (error) {
+          failure ??= { error };
+        }
+      }
+      if (failure) throw failure.error;
     },
 
     async run(
@@ -366,12 +372,17 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)} wasmBytes=${wasmByteLength ?? "?"} wasmSha=${wasmSha || "?"}`,
       );
-      await invalidateMountCacheBeforeRun({
-        enabled: !!runOptions.invalidateMountCacheBeforeRun,
-        mountCache,
-        runtimeMounts,
-        trace,
-      });
+      try {
+        await invalidateMountCacheBeforeRun({
+          enabled: !!runOptions.invalidateMountCacheBeforeRun,
+          mountCache,
+          runtimeMounts,
+          trace,
+        });
+      } catch (error) {
+        trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
+        return { command, error, exitCode: 1, ok: false, request, stderr: "", stdout: "" };
+      }
       const env = createRunEnv({
         requestedThreadCount: parseRequestedThreadCount(request),
         runEnv: runOptions.env,

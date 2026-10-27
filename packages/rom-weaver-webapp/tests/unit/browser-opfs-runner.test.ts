@@ -32,6 +32,10 @@ const harness = vi.hoisted(() => {
     proxyClient: null as OpfsProxyClient | null,
     guestStderr: "",
     guestStdout: "",
+    mountCache: null as ReturnType<
+      typeof import("../../src/wasm/browser-opfs-mounts.ts").createBrowserOpfsMountCache
+    > | null,
+    poolError: null as Error | null,
     poolDisposed: 0,
     proxyRegistered: [] as string[],
     proxyStopped: 0,
@@ -53,6 +57,10 @@ vi.mock("../../src/wasm/browser-opfs-mounts.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/wasm/browser-opfs-mounts.ts")>();
   return {
     ...actual,
+    createBrowserOpfsMountCache: () => {
+      harness.mountCache = actual.createBrowserOpfsMountCache();
+      return harness.mountCache;
+    },
     buildBrowserOpfsWasiFds: vi.fn(async (args: FdBuildArgs) => {
       harness.buildFdsCalls.push(args);
       if (harness.buildFdsError) throw harness.buildFdsError;
@@ -128,6 +136,7 @@ vi.mock("../../src/wasm/browser-wasi-thread-pool.ts", async (importOriginal) => 
     createBrowserWasiThreadWorkerPool: vi.fn(() => ({
       dispose: async () => {
         harness.poolDisposed += 1;
+        if (harness.poolError) throw harness.poolError;
       },
     })),
     throwWithThreadFailure: vi.fn(async (error: unknown) => {
@@ -183,6 +192,7 @@ function resetHarness() {
   vi.spyOn(harness.proxyClient, "handleStats").mockReturnValue({ live: 1, opened: 4, peak: 2 });
   harness.guestStderr = "";
   harness.guestStdout = "";
+  harness.poolError = null;
   harness.poolDisposed = 0;
   harness.proxyRegistered.length = 0;
   harness.proxyStopped = 0;
@@ -292,6 +302,20 @@ describe("createRomWeaverBrowserOpfs runner shape", () => {
   it("refuses a threaded module without cross-origin isolation", async () => {
     vi.spyOn(WebAssembly.Module, "imports").mockReturnValue(THREADED_IMPORTS);
     await expect(createRunner()).rejects.toThrow(/threaded wasm requires SharedArrayBuffer/);
+  });
+
+  it.each(["mount", "pool"])("stops the pool and proxy after %s disposal fails", async (failure) => {
+    vi.stubGlobal("crossOriginIsolated", true);
+    vi.spyOn(WebAssembly.Module, "imports").mockReturnValue(THREADED_IMPORTS);
+    const runner = await createRunner();
+    const primary = new Error(`${failure} disposal failed`);
+    const mountCache = harness.mountCache;
+    if (!mountCache) throw new Error("fixture mount cache was not created");
+    if (failure === "mount") vi.spyOn(mountCache, "dispose").mockRejectedValueOnce(primary);
+    harness.poolError = failure === "pool" ? primary : new Error("secondary pool failure");
+    await expect(runner.dispose()).rejects.toBe(primary);
+    expect(harness.poolDisposed).toBe(1);
+    expect(harness.proxyStopped).toBe(1);
   });
 
   it("disposes the mount cache, thread pool and proxy runtime", async () => {
@@ -457,6 +481,19 @@ describe("createRomWeaverBrowserOpfs run", () => {
 
     expect(result.ok).toBe(true);
     expect(traceLines.some((line) => line.includes("run scratch cleanup failed"))).toBe(true);
+  });
+
+  it("reports pre-run invalidation failures as ok:false", async () => {
+    const runner = await createRunner();
+    const primary = new Error("cached mount close failed");
+    const mountCache = harness.mountCache;
+    if (!mountCache) throw new Error("fixture mount cache was not created");
+    vi.spyOn(mountCache, "invalidateMountPaths").mockRejectedValueOnce(primary);
+    const result = await runner.run(compressCommand(), { invalidateMountCacheBeforeRun: true });
+    expect(result).toMatchObject({ ok: false, exitCode: 1, error: primary, stdout: "", stderr: "" });
+    expect(harness.buildFdsCalls).toHaveLength(0);
+    expect(WebAssembly.instantiate).not.toHaveBeenCalled();
+    await runner.dispose();
   });
 
   it("invalidates the mount cache before the run only when asked", async () => {
