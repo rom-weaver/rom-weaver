@@ -55,6 +55,14 @@ test("public workflow descriptions advertise standard cheat capabilities", () =>
   }
 });
 
+test("sitemap lastmod values are ISO dates or absent, and never on a Markdown URL", () => {
+  const sitemap = createSitemapSource();
+  for (const [, location, lastmod] of sitemap.matchAll(/<loc>(.*?)<\/loc>(?:<lastmod>(.*?)<\/lastmod>)?/g)) {
+    assert.ok(!location.endsWith(".md"), location);
+    if (lastmod) assert.match(lastmod, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, location);
+  }
+});
+
 test("the sitemap includes the public compression workflow", () => {
   const sitemap = createSitemapSource();
   assert.ok(sitemap.includes("<loc>https://rom-weaver.com/compress</loc>"));

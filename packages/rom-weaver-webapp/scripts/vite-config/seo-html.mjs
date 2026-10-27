@@ -1,3 +1,4 @@
+import path from "node:path";
 import { readDocLastmod } from "../docs-discovery.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
@@ -8,7 +9,7 @@ import {
   WORKFLOW_SEO_ROUTES,
   WORKFLOW_ENTRY_ROUTES,
 } from "../../src/webapp/workflow-seo.mjs";
-import { repoRoot } from "./paths.mjs";
+import { repoRoot, rootDir } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
   `User-agent: *\nContent-Signal: ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}\n` +
@@ -118,10 +119,30 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
+// A workflow page's indexable text is its title and description in workflow-seo.mjs, plus the
+// landing copy for the apex. The newest commit of those files is the honest date; a dirty or
+// shallow checkout yields none, and the entry then omits <lastmod> rather than guess.
+const WORKFLOW_LASTMOD_SOURCES = {
+  "": [
+    "src/webapp/components/home-page.tsx",
+    "src/webapp/components/home-sections.tsx",
+    "src/presentation/localization/messages.ts",
+  ],
+};
+const readWorkflowLastmod = (route) => {
+  const dates = ["src/webapp/workflow-seo.mjs", ...(WORKFLOW_LASTMOD_SOURCES[route.slug] ?? [])].map((file) =>
+    readDocLastmod(path.join(rootDir, file), repoRoot),
+  );
+  return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
+};
+
 export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
-  .map((route) => `  <url><loc>https://rom-weaver.com/${route.slug}</loc></url>`)
+  .map((route) => {
+    const lastmod = readWorkflowLastmod(route);
+    return `  <url><loc>https://rom-weaver.com/${route.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
+  })
   .join("\n")}
 ${DOC_SOURCES.map((source) => {
   const lastmod = readDocLastmod(docSourcePath(source), repoRoot);
