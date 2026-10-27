@@ -22,7 +22,7 @@ Extract files, convert an archive, or create a ZIP or 7z from the terminal. To p
 rom-weaver extract --input patches.7z --output extracted-patches
 ```
 
-Gzip, Bzip2, XZ, and Zstandard inputs each contain one compressed stream. rom-weaver writes the decoded file inside the output directory. If that file is an archive, nested extraction continues unless you pass `--no-nested-extract`.
+Gzip, Bzip2, XZ, Zstandard, and LZ4 inputs each contain one compressed stream. rom-weaver writes the decoded file inside the output directory. If that file is an archive, nested extraction continues unless you pass `--no-nested-extract`.
 
 ## Convert one archive format to another
 
@@ -74,7 +74,7 @@ rom-weaver compress --input my-release --output my-release.zip
 
 ZIP accepts `store`, `deflate`, or `zstd`; 7z uses LZMA2. Pass `--codec` to choose, or leave it out for the default.
 
-Those two are the only general-purpose archive formats rom-weaver can create. ZIPX, RAR, TAR and its variants, Gzip, Bzip2, XZ, and Zstandard can be opened but not written, so converting *into* one of them is not possible - extract and use a different container.
+Those two are the only general-purpose archive formats rom-weaver can create. ZIPX, RAR, TAR and its variants, Gzip, Bzip2, XZ, Zstandard, and LZ4 can be opened but not written, so converting *into* one of them is not possible - extract and use a different container.
 
 ## Compress a ROM or disc image instead
 

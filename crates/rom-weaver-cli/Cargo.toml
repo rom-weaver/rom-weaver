@@ -85,6 +85,7 @@ tracing-subscriber = { version = "0.3.20", default-features = false, features = 
 assert_cmd.workspace = true
 assert_fs.workspace = true
 flate2.workspace = true
+lz4_flex = "0.14.0"
 
 [[bin]]
 name = "rom-weaver"

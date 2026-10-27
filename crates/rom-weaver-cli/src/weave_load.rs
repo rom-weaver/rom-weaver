@@ -11,7 +11,7 @@ use super::*;
 pub(crate) const WEAVE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Container-registry format names that are single-payload stream codecs.
-const STREAM_CODEC_FORMAT_NAMES: [&str; 4] = ["gz", "bz2", "xz", "zst"];
+const STREAM_CODEC_FORMAT_NAMES: [&str; 5] = ["gz", "bz2", "xz", "zst", "lz4"];
 
 pub(crate) fn is_stream_codec_format_name(name: &str) -> bool {
     STREAM_CODEC_FORMAT_NAMES

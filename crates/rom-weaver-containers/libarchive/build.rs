@@ -57,6 +57,7 @@ const WASM_BINDGEN_READ_FUNCTIONS: &[&str] = &[
     "archive_read_support_filter_compress",
     "archive_read_support_filter_gzip",
     "archive_read_support_filter_lzip",
+    "archive_read_support_filter_lz4",
     "archive_read_support_filter_lzma",
     "archive_read_support_filter_rpm",
     "archive_read_support_filter_uu",
