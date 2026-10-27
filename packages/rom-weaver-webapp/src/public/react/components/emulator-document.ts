@@ -286,15 +286,20 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
           request("request-load-sram");
         };
         window.__romWeaverVisibilityPaused = false;
+        window.__romWeaverHiddenSaveWritten = false;
         window.addEventListener("message", (event) => {
           if (event.source !== window.parent || !event.data || event.data.source !== source || event.data.gameId !== gameId) return;
           const emulator = window.EJS_emulator;
           if (!emulator) return;
           if (event.data.kind === "visibility-pause") {
             // A hidden disc-sized game can be unloaded before it returns, and EmulatorJS writes the in-game
-            // save only every few minutes, so write it now.
+            // save only every few minutes, so write it now. Only once per hide: every browser-tab switch while
+            // the view stays hidden repeats the pause, and a later write would overwrite a save changed meanwhile.
             const manager = emulator.gameManager;
-            if (emulator.started && manager && typeof manager.saveSaveFiles === "function") manager.saveSaveFiles();
+            if (!window.__romWeaverHiddenSaveWritten && emulator.started && manager && typeof manager.saveSaveFiles === "function") {
+              manager.saveSaveFiles();
+              window.__romWeaverHiddenSaveWritten = true;
+            }
             if (!emulator.paused && typeof emulator.pause === "function") {
               emulator.pause();
               window.__romWeaverVisibilityPaused = true;
@@ -302,6 +307,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
             return;
           }
           if (event.data.kind === "visibility-resume") {
+            window.__romWeaverHiddenSaveWritten = false;
             if (window.__romWeaverVisibilityPaused && typeof emulator.play === "function") emulator.play();
             window.__romWeaverVisibilityPaused = false;
             return;

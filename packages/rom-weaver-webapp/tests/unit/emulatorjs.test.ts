@@ -320,7 +320,7 @@ describe("createEmulatorDocument", () => {
     expect(calls).toEqual(["write", "load", "restart", "sram-loaded"]);
   });
 
-  it("writes the in-game save when the hidden Test view pauses a started game", () => {
+  it("writes the in-game save once each time the Test view hides a started game", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.gba", "gba");
     const source = document.indexOf('const source = "rom-weaver-emulator"');
     const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
@@ -334,6 +334,10 @@ describe("createEmulatorDocument", () => {
         emulator.paused = true;
       },
       paused: false,
+      play: () => {
+        calls.push("play");
+        emulator.paused = false;
+      },
       started: true,
     };
     const window = {
@@ -344,14 +348,21 @@ describe("createEmulatorDocument", () => {
       parent,
     };
     const pause = { gameId: "game.gba", kind: "visibility-pause", source: "rom-weaver-emulator" };
+    const resume = { ...pause, kind: "visibility-resume" };
 
     runInNewContext(script, { window });
     onMessage?.({ source: parent, data: pause });
+    // Every browser-tab switch while the Test view stays hidden repeats the pause. Writing the in-memory save again
+    // would overwrite one the visitor changed in the Save editor meanwhile.
+    onMessage?.({ source: parent, data: pause });
+    onMessage?.({ source: parent, data: resume });
+    onMessage?.({ source: parent, data: pause });
     emulator.started = false;
+    onMessage?.({ source: parent, data: resume });
     onMessage?.({ source: parent, data: pause });
 
     // A hidden disc-sized game can be unloaded, and EmulatorJS writes its save only every five minutes by default.
-    expect(calls).toEqual(["save", "pause"]);
+    expect(calls).toEqual(["save", "pause", "play", "save", "pause", "play", "pause"]);
   });
 
   it("neutralizes the EmulatorJS version check before the loader runs", () => {
