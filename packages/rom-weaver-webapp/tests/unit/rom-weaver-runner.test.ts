@@ -1,3 +1,14 @@
+import {
+  attachOpfsProxyChannel,
+  createOpfsProxyChannel,
+  OPFS_PROXY_GLOBAL_POISONED_INDEX,
+} from "../../src/wasm/browser-opfs-proxy-channel.ts";
+import {
+  OpfsProxyClient,
+  OpfsProxyError,
+  resolveProxyPoisonFailure,
+} from "../../src/wasm/browser-opfs-proxy-client.ts";
+import { annotateThreadWorkerError } from "../../src/wasm/browser-wasi-thread-errors.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -237,6 +248,40 @@ describe("runRomWeaverJson", () => {
       expect(state.clients).toHaveLength(2);
     },
   );
+
+  it("discards a runner after a thread-annotated failure on a poisoned proxy", async () => {
+    const channel = createOpfsProxyChannel(1);
+    const runnerClient = new OpfsProxyClient(channel);
+    // A thread worker attaches the same SharedArrayBuffers and marks the proxy dead.
+    const threadChannel = attachOpfsProxyChannel(channel.transfer);
+    Atomics.store(threadChannel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+    const threadFailure = annotateThreadWorkerError(
+      new OpfsProxyError("OPFS proxy is poisoned", 29),
+      { index: 1, tid: 3 },
+      "worker.js",
+    );
+    const wrapped = new Error(`wasi thread 3 failed before completion: ${threadFailure.message}`);
+    const fallback = new Error("wasi thread 3 failed in browser worker 1");
+    for (const failure of [wrapped, fallback]) {
+      const error = structuredClone(resolveProxyPoisonFailure(failure, runnerClient) as Error);
+      state.run.mockResolvedValueOnce({ events: [], exitCode: 1, ok: false, error });
+      await runRomWeaverJson(command("compress"));
+    }
+    expect(state.clients).toHaveLength(2);
+    expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+  });
+
+  it("reuses the runner after a thread failure when the proxy is healthy", async () => {
+    const healthyClient = new OpfsProxyClient(createOpfsProxyChannel(1));
+    const error = structuredClone(
+      resolveProxyPoisonFailure(new Error("wasi thread 3 failed in browser worker 1"), healthyClient) as Error,
+    );
+    state.run.mockResolvedValueOnce({ events: [], exitCode: 1, ok: false, error });
+    await runRomWeaverJson(command("compress"));
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(1);
+    expect(state.clients[0]?.terminate).not.toHaveBeenCalled();
+  });
 
   it("discards a runner after a resolved out-of-memory failure", async () => {
     const failed = { events: [], exitCode: 1, ok: false, error: new Error("Out of memory") };
