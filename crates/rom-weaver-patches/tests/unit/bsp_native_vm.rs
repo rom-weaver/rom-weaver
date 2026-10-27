@@ -824,18 +824,22 @@ fn utf8_decode_rejects_a_string_longer_than_the_message_buffer_ceiling() {
 }
 
 #[test]
-fn menu_opcode_selects_the_first_entry_and_reports_an_empty_table() {
+fn menu_opcode_rejects_interaction_and_reports_an_empty_table() {
     let mut patch = Vec::new();
     patch.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
     patch.extend_from_slice(&12u32.to_le_bytes());
     patch.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
     patch.extend_from_slice(b"Hi\0");
     run_vm(&patch, &[0u8; 4], |vm| {
-        assert_continue(step(vm, 0x6A, &[0, 0]));
-        assert_eq!(vm.get_variable(0), 0xFFFF_FFFF);
+        for opcode in [0x6A, 0x6B] {
+            assert_continue(step(vm, opcode, &[0, 0]));
+            assert_eq!(vm.get_variable(0), 0xFFFF_FFFF);
 
-        assert_continue(step(vm, 0x6A, &[1, 4]));
-        assert_eq!(vm.get_variable(1), 0);
+            assert_eq!(
+                step_error(vm, opcode, &[1, 4]),
+                "interactive BSP menus are not supported; use a BSP patcher that supports menu choices"
+            );
+        }
     });
 }
 

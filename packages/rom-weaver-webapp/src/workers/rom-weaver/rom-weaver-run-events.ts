@@ -11,6 +11,7 @@ type RomWeaverRuntimeProgressErrorKind = RomWeaverProgressEvent["error_kind"];
 
 const RUNNING_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "running";
 const FAILED_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "failed";
+const UNSUPPORTED_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "unsupported";
 const TERMINAL_PROGRESS_STATUSES: ReadonlySet<RomWeaverRuntimeProgressStatus> = new Set<RomWeaverRuntimeProgressStatus>(
   ["succeeded", FAILED_PROGRESS_STATUS],
 );
@@ -37,8 +38,11 @@ const getRomWeaverRunEventEffectiveThreads = (event: RomWeaverRunJsonEvent): Rom
 const getRomWeaverRunEventErrorKind = (event: RomWeaverRunJsonEvent): RomWeaverRuntimeProgressErrorKind =>
   event.error_kind;
 
-const isRomWeaverFailedRunEvent = (event: RomWeaverRunJsonEvent): boolean =>
-  getRomWeaverRunEventStatus(event) === FAILED_PROGRESS_STATUS;
+// An unsupported operation ends with its own terminal status but, like a failure, carries the reason as its label.
+const isRomWeaverFailedRunEvent = (event: RomWeaverRunJsonEvent): boolean => {
+  const status = getRomWeaverRunEventStatus(event);
+  return status === FAILED_PROGRESS_STATUS || status === UNSUPPORTED_PROGRESS_STATUS;
+};
 
 const isRomWeaverLiveRunEvent = (event: RomWeaverRunJsonEvent): boolean =>
   getRomWeaverRunEventStatus(event) === RUNNING_PROGRESS_STATUS;

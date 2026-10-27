@@ -247,7 +247,8 @@ const applyPlanValidationResult = <TSource>(
           ? "Patch cannot be applied to this ROM"
           : "Input state is only provable while applying"),
     status,
-    unreadable: planVerdict.unreadable,
+    // An unsupported patch (e.g. an interactive BSP menu) fails on every ROM: block Apply, no override.
+    unreadable: planVerdict.unreadable === true || (status === "invalid" && planVerdict.unsupported === true),
   });
   prepared.entry.stage.state.chainVerdict = {
     ...(planVerdict.execution ? { direction: planVerdict.execution.direction } : {}),

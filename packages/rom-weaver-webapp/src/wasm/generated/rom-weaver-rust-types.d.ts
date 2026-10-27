@@ -347,6 +347,11 @@ export type PatchPlanVerdict = { index: number, patch: string, format?: string, 
  */
 execution?: PatchEndpointSelection, message: string,
 /**
+ * The failed verdict is a limit of the patch itself (an unsupported feature such as an
+ * interactive BSP menu), not a mismatch with the ROM, so no other ROM can fix it.
+ */
+unsupported?: boolean,
+/**
  * Set when this patch's input matches a patch it does not directly
  * follow - the order diagnosis behind `suggested_order`.
  */

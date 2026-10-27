@@ -1,6 +1,79 @@
 use super::shared::*;
 
 #[test]
+fn noninteractive_tui_suggests_valid_commands() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let patch = temp.child("change.ips");
+    let output = temp.child("patched.bin");
+    let weave = temp.child("recipe.json");
+    fs::write(input.path(), b"abcde").expect("input fixture");
+    fs::write(patch.path(), b"PATCH\x00\x00\x00\x00\x01ZEOF").expect("patch fixture");
+    let command = || {
+        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+        command.current_dir(temp.path()).env("HOME", temp.path());
+        for key in [
+            "XDG_CACHE_HOME",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_STATE_HOME",
+        ] {
+            command.env(key, temp.child(key).path());
+        }
+        command.env("NO_COLOR", "1");
+        command
+    };
+    let expected = "--tui needs an interactive terminal; use `weave create` or `patch apply --emit-weave` for scripted runs";
+    for mode in [None, Some("--json"), Some("--jsonl")] {
+        let mut run = command();
+        run.args([
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("input path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--no-compress",
+            "--tui",
+        ])
+        .write_stdin("");
+        if let Some(mode) = mode {
+            run.arg(mode);
+        }
+        let result = run.assert().code(2).get_output().clone();
+        let diagnostic = if let Some(mode) = mode {
+            let value: Value = serde_json::from_slice(&result.stdout).expect("structured error");
+            let error = if mode == "--json" {
+                &value["error"]
+            } else {
+                &value["details"]["error"]
+            };
+            assert_eq!(error["code"], "cli.interactive_required");
+            assert_eq!(error["exit_code"], 2);
+            error["message"].as_str().expect("error message").to_owned()
+        } else {
+            assert!(result.stdout.is_empty());
+            String::from_utf8(result.stderr).expect("human error")
+        };
+        assert!(
+            diagnostic.contains(expected),
+            "noninteractive TUI must suggest canonical patch apply command: {diagnostic}"
+        );
+        for suggestion in diagnostic.split('`').skip(1).step_by(2) {
+            let mut help = command();
+            help.args(suggestion.split_whitespace());
+            if suggestion.ends_with("--emit-weave") {
+                help.arg(weave.path());
+            }
+            help.arg("--help").assert().success();
+        }
+        assert!(!output.path().exists());
+        assert!(!weave.path().exists());
+    }
+}
+#[test]
 fn patch_apply_help_explains_explicit_bin_output_exception() {
     let temp = setup_temp_dir();
     let home = temp.path().to_str().expect("isolated home");
