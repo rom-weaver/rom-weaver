@@ -26,7 +26,6 @@ import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { type FileProgressProps, Notice } from "./components/ds/feedback.tsx";
-import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
@@ -1193,8 +1192,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       : null,
   );
 
-  const trimSourceActuallyEmpty = !(source || trimPreparationPending);
-  const trimSourceEmpty = useFlatTransitionFlag(trimSourceActuallyEmpty);
+  const trimSourceEmpty = !(source || trimPreparationPending);
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: trimQueued });
 
@@ -1327,7 +1325,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       supported: TRIM_SUPPORTED_FILES,
     },
     output: createOutputModel(),
-    sourceEmpty: trimSourceActuallyEmpty,
+    sourceEmpty: trimSourceEmpty,
     sourceStep: {
       id: "trim-builder-row-source",
       info: (

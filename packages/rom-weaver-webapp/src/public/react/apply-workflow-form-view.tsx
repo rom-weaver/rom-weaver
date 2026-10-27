@@ -22,7 +22,6 @@ import {
   RomSearch,
   type RomExpectation,
 } from "./components/ds/rom-expectation-card.tsx";
-import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import {
@@ -842,9 +841,6 @@ function ApplyWorkflowFormView({
           },
         ]
       : stagedDrops;
-  // Start the hero morph at the gesture, not after a large input finishes enough
-  // staging to publish its first row. This is presentation-only; Rust ingestion
-  // continues on its existing schedule behind the transition.
   const [dropStarted, setDropStarted] = useState(false);
   const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
   const sampleTutorialReady =
@@ -858,13 +854,9 @@ function ApplyWorkflowFormView({
   useEffect(() => {
     if (dropStarted && workflowHasContent) setDropStarted(false);
   }, [dropStarted, workflowHasContent]);
-  // The empty bench fills (or clears) inside a flat crossfade - the 0x01 hero
-  // shrinking into the add-row otherwise snaps. A drop-start signal makes that
-  // crossfade begin before input staging publishes its first row.
   // A checksum match fills the bench the way a patches-only weave does: 0x02
   // already knows which ROM it wants, so the whole run is laid out around it.
-  const workflowActuallyEmpty = !(workflowHasContent || dropStarted || manualRomLookup);
-  const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
+  const workflowEmpty = !(workflowHasContent || dropStarted || manualRomLookup);
   usePendingCardMorph(pendingDrops.length, romInputs.length + patches.length);
   // "Needs input" directives forward to the unified picker.
   const openUnifiedPicker = () => document.getElementById(unifiedInputId)?.click();

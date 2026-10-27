@@ -2773,6 +2773,89 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
 }
 
 #[test]
+fn patch_create_candidates_exclude_pmsr_for_shrinking_valid_source() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("update.pmsr");
+    let applied = temp.child("applied.bin");
+    let original_size = 41_943_040;
+    let mut bytes = vec![0_u8; original_size];
+    bytes[original_size - 4..].copy_from_slice(&[0xac, 0xd5, 0xd4, 0xef]);
+    assert_eq!(crc32fast::hash(&bytes), 0xa7f5_cd7e);
+    fs::write(original.path(), &bytes).expect("valid synthetic PMSR source");
+    bytes[123] = 1;
+    bytes.push(0);
+    let home = temp.path().to_str().expect("home path");
+    let run = |args: &[&str]| {
+        parse_single_json_line(&command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_STATE_HOME", home),
+            ],
+            0,
+        ))
+    };
+
+    for modified_size in [original_size - 1, original_size + 1, original_size] {
+        fs::write(modified.path(), &bytes[..modified_size]).expect("modified fixture");
+        let plan = run(&[
+            "patch",
+            "create",
+            "--plan",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--jsonl",
+        ]);
+        let formats = plan["details"]["patch_create_format_candidates"]["formats"]
+            .as_array()
+            .expect("candidate formats");
+        assert_eq!(
+            formats.iter().any(|format| format == "pmsr"),
+            modified_size >= original_size,
+            "PMSR candidates must respect target size: {modified_size}: {plan}"
+        );
+    }
+
+    let created = run(&[
+        "patch",
+        "create",
+        "--original",
+        original.path().to_str().expect("path"),
+        "--modified",
+        modified.path().to_str().expect("path"),
+        "--format",
+        "pmsr",
+        "--output",
+        patch.path().to_str().expect("path"),
+        "--jsonl",
+    ]);
+    assert_eq!(created["status"], "succeeded");
+    let result = run(&[
+        "patch",
+        "apply",
+        "--input",
+        original.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+        "--output",
+        applied.path().to_str().expect("path"),
+        "--no-compress",
+        "--jsonl",
+    ]);
+    assert_eq!(result["status"], "succeeded");
+    assert_eq!(
+        fs::read(applied.path()).expect("applied bytes"),
+        bytes[..original_size]
+    );
+}
+
+#[test]
 fn patch_create_candidates_drop_formats_that_cannot_shrink_the_output() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -2864,7 +2947,7 @@ fn patch_create_rejects_formats_that_cannot_shrink_before_writing_output() {
     fs::write(original.path(), b"hello old world, longer").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
 
-    for format in ["ebp", "ppf"] {
+    for format in ["ebp", "pmsr", "mod", "ppf"] {
         let patch = temp.child(format!("new.{format}"));
         let output = command_stdout(
             &[
@@ -13178,6 +13261,188 @@ fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
 #[test]
 fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
     assert!(!apply_auto_header_with_filename_crc32(false));
+}
+
+#[test]
+fn patch_validate_classifies_structurally_unreadable_patches() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let target = temp.child("target.bin");
+    let good = temp.child("good.bps");
+    let malformed = temp.child("malformed.ips");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(target.path(), b"hello new world").expect("fixture");
+    create_bps_patch(input.path(), target.path(), good.path());
+    for bytes in [b"PATCHbad".as_slice(), b"PATCH\0".as_slice()] {
+        fs::write(malformed.path(), bytes).expect("fixture");
+        for mode in ["--plan", "--independent"] {
+            let event = run_single_json_event(
+                &[
+                    "patch",
+                    "validate",
+                    "--input",
+                    input.path().to_str().expect("path"),
+                    "--patch",
+                    malformed.path().to_str().expect("path"),
+                    mode,
+                    "--jsonl",
+                ],
+                if mode == "--plan" { 0 } else { 1 },
+            );
+            let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+            assert_eq!(
+                verdict["unreadable"], true,
+                "malformed patch must be unreadable: {event}"
+            );
+            assert!(!verdict["message"].as_str().expect("message").is_empty());
+        }
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                "--patch",
+                malformed.path().to_str().expect("path"),
+                "--patch-basis",
+                "previous",
+                "--patch-input-check",
+                "size=15",
+                "--patch-input-check",
+                "size=999",
+                "--plan",
+                "--jsonl",
+            ],
+            0,
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][1];
+        assert_eq!(
+            verdict["unreadable"], true,
+            "malformed patch must be unreadable: {event}"
+        );
+        assert_eq!(verdict["input_verdict"], "failed", "{event}");
+    }
+    fs::write(input.path(), b"hello BAD world").expect("wrong ROM");
+    for mode in ["--plan", "--independent"] {
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                mode,
+                "--jsonl",
+            ],
+            if mode == "--plan" { 0 } else { 1 },
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+        assert_ne!(verdict["unreadable"], true, "{event}");
+        assert_eq!(
+            verdict[if mode == "--plan" {
+                "input_verdict"
+            } else {
+                "status"
+            }],
+            "failed",
+            "{event}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_keeps_ignorable_ips_trailing_bytes_readable() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("trailing.ips");
+    let output = temp.child("out.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    // PATCH, one record (offset 0, size 2, "HE"), EOF, one extra trailing byte.
+    fs::write(
+        patch.path(),
+        b"PATCH\x00\x00\x00\x00\x02HEEOF\x00".as_slice(),
+    )
+    .expect("fixture");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--plan",
+            "--jsonl",
+        ],
+        0,
+    );
+    let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+    assert_ne!(
+        verdict["unreadable"], true,
+        "ignorable trailing bytes must not hide Apply anyway: {event}"
+    );
+    run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"HEllo old world");
+}
+
+#[test]
+fn patch_validate_sequential_reports_truncated_ips_parser_error_not_wrong_rom() {
+    let temp = setup_temp_dir();
+    let original = temp.child("rom.bin");
+    let modified = temp.child("modified.bin");
+    let good = temp.child("good.bps");
+    let truncated = temp.child("truncated.ips");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    create_bps(original.path(), modified.path(), good.path());
+    // PATCH, one record (offset 0, size 4) whose data stops after 2 bytes.
+    fs::write(truncated.path(), b"PATCH\x00\x00\x00\x00\x04HE".as_slice()).expect("fixture");
+    for format_flag in ["--jsonl", "--json", ""] {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            good.path().to_str().expect("path"),
+            "--patch",
+            truncated.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "base",
+        ];
+        if !format_flag.is_empty() {
+            args.push(format_flag);
+        }
+        let output = command_output_with_env(&args, &[], 1);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            text.contains("IPS patch ended unexpectedly"),
+            "{format_flag}: {text}"
+        );
+        assert!(!text.contains("does not match"), "{format_flag}: {text}");
+    }
 }
 
 fn ups_size_change_fixture() -> (

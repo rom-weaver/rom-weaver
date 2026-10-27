@@ -35,6 +35,7 @@ import {
   getInputPreparationMetrics,
   type InputAsset,
   makeCueAsset,
+  makeGdiAsset,
   makeInputCandidateGroup,
   makeInputId,
   makeMissingReferenceWarnings,
@@ -510,7 +511,7 @@ const prepareMultipleDirectInputAssets = async (
   const fileNames = sources.map(
     (source, index) => getNamedSourceFileName(source, { fallback: fallbackFileName(index) }) || fallbackFileName(index),
   );
-  if (!fileNames.some((fileName) => isCueEntryFileName(fileName))) return null;
+  if (!fileNames.some((fileName) => isCueEntryFileName(fileName) || isGdiEntryFileName(fileName))) return null;
   // Only the sheets are read as text below; the tracks stay lazy.
   const files = await Promise.all(
     sources.map((source, index) =>
@@ -519,23 +520,29 @@ const prepareMultipleDirectInputAssets = async (
         : createLazyPatchFile(source, fallbackFileName(index)),
     ),
   );
-  if (!files.some((file) => isCueEntryFileName(file.fileName))) return null;
-
   const assets: InputAsset[] = [];
   const used = new Set<PatchFileInstance>();
-  for (let cueIndex = 0; cueIndex < files.length; cueIndex++) {
-    const cueFile = files[cueIndex];
-    if (!(cueFile && isCueEntryFileName(cueFile.fileName))) continue;
-    const cueText = decodeUtf8(getPatchFileBytes(cueFile));
-    const references = parseCueFileReferences(cueText);
-    const groupId = makeInputId(cueIndex, cueFile.fileName, normalizeArchiveEntryName, "-group");
+  const sheets = [
+    ...files.filter((file) => isCueEntryFileName(file.fileName)),
+    ...files.filter((file) => isGdiEntryFileName(file.fileName)),
+  ];
+  for (const sheetFile of sheets) {
+    if (used.has(sheetFile)) continue;
+    const sheetIndex = files.indexOf(sheetFile);
+    const isCue = isCueEntryFileName(sheetFile.fileName);
+    const sheetText = decodeUtf8(getPatchFileBytes(sheetFile));
+    const cueText = isCue ? sheetText : undefined;
+    const references = isCue
+      ? parseCueFileReferences(sheetText)
+      : parseGdiFileReferences(sheetText).map((fileName) => ({ fileName, patchable: true }));
+    const groupId = makeInputId(sheetIndex, sheetFile.fileName, normalizeArchiveEntryName, "-group");
     // A redump GD-ROM dump ships a `.gdi` alongside the `.cue` for the same
     // disc. Find a sibling `.gdi` that references the same tracks so it rides on
     // the disc (its own GDI section) instead of becoming a separate ROM.
     const cueBinNames = new Set(references.map((reference) => getBaseFileName(reference.fileName).toLowerCase()));
     let gdiFile: PatchFileInstance | undefined;
-    let gdiText: string | undefined;
-    for (const file of files) {
+    let gdiText: string | undefined = isCue ? undefined : sheetText;
+    for (const file of isCue ? files : []) {
       if (!file || used.has(file) || !isGdiEntryFileName(file.fileName)) continue;
       const text = decodeUtf8(getPatchFileBytes(file));
       const gdiRefs = parseGdiFileReferences(text).map((name) => getBaseFileName(name).toLowerCase());
@@ -558,7 +565,7 @@ const prepareMultipleDirectInputAssets = async (
       used.add(trackFile);
       trackAssets.push(
         makeTrackAsset(
-          makeInputId(cueIndex, trackFile.fileName, normalizeArchiveEntryName),
+          makeInputId(sheetIndex, trackFile.fileName, normalizeArchiveEntryName),
           trackFile.fileName,
           trackFile,
           groupId,
@@ -567,13 +574,16 @@ const prepareMultipleDirectInputAssets = async (
         ),
       );
     }
+    const sheetAsset = isCue
+      ? makeCueAsset(`${groupId}-cue`, sheetFile.fileName, sheetFile, groupId, sheetText)
+      : makeGdiAsset(`${groupId}-gdi`, sheetFile.fileName, sheetFile, groupId, sheetText);
     reportCueInputCandidates({
       candidates: [
-        makeCueSelectionCandidate(cueFile.fileName, groupId, cueFile.fileSize),
+        makeAssetSelectionCandidate(sheetAsset),
         ...trackAssets.map(makeAssetSelectionCandidate),
-        ...missingReferences.map((fileName) => makeMissingTrackSelectionCandidate(cueIndex, fileName, groupId, true)),
+        ...missingReferences.map((fileName) => makeMissingTrackSelectionCandidate(sheetIndex, fileName, groupId, true)),
       ],
-      cueFileName: cueFile.fileName,
+      cueFileName: sheetFile.fileName,
       groupId,
       missingReferences,
       options,
@@ -581,12 +591,12 @@ const prepareMultipleDirectInputAssets = async (
       trackFileNames: trackAssets.map((asset) => asset.fileName),
     });
     if (missingReferences.length)
-      throw new Error(`CUE file references missing file(s): ${missingReferences.join(", ")}`);
-    used.add(cueFile);
-    assets.push(makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText), ...trackAssets);
+      throw new Error(`${isCue ? "CUE" : "GDI"} file references missing file(s): ${missingReferences.join(", ")}`);
+    used.add(sheetFile);
+    assets.push(sheetAsset, ...trackAssets);
     if (gdiFile) {
       used.add(gdiFile);
-      assets.push(makeCueAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText ?? ""));
+      assets.push(makeGdiAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText ?? ""));
     }
   }
   files.forEach((file, index) => {

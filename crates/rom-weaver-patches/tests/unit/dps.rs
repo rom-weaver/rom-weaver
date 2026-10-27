@@ -347,6 +347,41 @@ fn apply_warns_and_stops_on_malformed_records_when_ignore_requested() {
 }
 
 #[test]
+fn parse_follows_the_lenient_mode_when_ignore_requested() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("truncated.dps");
+    let mut patch = encode_dps_patch(
+        &[DpsRecord::EmbeddedData {
+            output_offset: 0,
+            data: b"XY".to_vec(),
+        }],
+        DpsHeaderMetadata {
+            patch_name: "truncated.dps",
+            patch_author: "test",
+            patch_version_text: "1",
+            patch_flag: 0,
+        },
+        2,
+    )
+    .expect("patch");
+    patch.push(DPS_RECORD_EMBEDDED_DATA);
+    patch.extend_from_slice(&6u32.to_le_bytes());
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect_err("strict parse rejects a truncated record");
+    handler
+        .parse(
+            &patch_path,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("ignore parse accepts a truncated record");
+}
+
+#[test]
 fn create_merges_embedded_data_that_crosses_thread_chunk_boundary() {
     let temp = TestDir::new();
     let source_path = temp.child("source-boundary.bin");

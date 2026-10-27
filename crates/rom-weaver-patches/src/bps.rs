@@ -64,8 +64,11 @@ impl PatchHandler for BpsPatchHandler {
         ProbeConfidence::Extension
     }
 
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = parse_bps_file(patch_path)?;
+    fn parse(&self, patch_path: &Path, context: &OperationContext) -> Result<OperationReport> {
+        let patch = parse_bps_file_with_checksum_validation(
+            patch_path,
+            context.validate_patch_integrity(),
+        )?;
         Ok(byuu_parse_report(
             self.descriptor,
             patch.actions.len(),
@@ -354,10 +357,6 @@ enum BpsSuffixIndexMode {
     LowMemory,
 }
 
-fn parse_bps_file(path: &Path) -> Result<ParsedBpsPatch> {
-    parse_bps_file_with_checksum_validation(path, true)
-}
-
 /// A BPS patch's embedded requirements, read without decoding the action stream.
 #[derive(Debug)]
 struct BpsMetadata {
@@ -369,7 +368,7 @@ struct BpsMetadata {
 }
 
 /// Read the header sizes and footer checksums, then verify the patch CRC32.
-/// Metadata and action structure remain unchecked; use [`parse_bps_file`] for
+/// Metadata and action structure remain unchecked; use [`parse_bps_file_with_checksum_validation`] for
 /// full structural validation.
 fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
     let file_len = fs::metadata(path)?.len();

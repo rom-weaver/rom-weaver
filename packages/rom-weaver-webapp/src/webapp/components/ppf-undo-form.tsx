@@ -4,7 +4,6 @@ import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
-import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-transition.ts";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
@@ -110,7 +109,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
   const outputRef = useRef<PublicOutput | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const handledDropRef = useRef(0);
-  const workflowEmpty = useFlatTransitionFlag(!(rom || patch));
+  const workflowEmpty = !(rom || patch);
 
   useEffect(() => {
     outputRef.current = output;

@@ -112,8 +112,15 @@ impl PatchHandler for DpsPatchHandler {
         ProbeConfidence::Extension
     }
 
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let parsed = parse_dps_file(patch_path, DpsParseMode::Strict)?;
+    fn parse(&self, patch_path: &Path, context: &OperationContext) -> Result<OperationReport> {
+        // Match validate/apply: the lenient record mode applies whenever patch integrity
+        // checks are not enforced.
+        let parse_mode = if context.patch_check_scopes().patch_integrity {
+            DpsParseMode::Strict
+        } else {
+            DpsParseMode::WarnAndStopOnMalformedRecord
+        };
+        let parsed = parse_dps_file(patch_path, parse_mode)?;
 
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,

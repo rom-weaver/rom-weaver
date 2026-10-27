@@ -1,6 +1,7 @@
 import { CircleX, Info, TriangleAlert, X } from "lucide-react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
+import { usePressThroughLayoutShift } from "../../../../presentation/react/use-press-through-layout-shift.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { prefersReducedMotion } from "./flat-transition.ts";
@@ -261,6 +262,7 @@ const RunButton = ({
 }) => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   useRevealFinishedDownload(buttonRef, download);
+  const pressThroughLayoutShift = usePressThroughLayoutShift();
   return (
     <button
       aria-label={ariaLabel}
@@ -268,6 +270,7 @@ const RunButton = ({
       disabled={disabled}
       id={id}
       onClick={onClick}
+      onPointerDown={pressThroughLayoutShift}
       ref={buttonRef}
       type={type}
     >

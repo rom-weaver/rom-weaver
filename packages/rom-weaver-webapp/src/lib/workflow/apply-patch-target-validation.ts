@@ -105,13 +105,14 @@ const applyPatchVerdict = <TSource>(
   target: InputAsset,
   validationKey: string,
   startedAt: number,
-  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred" },
+  verdict: { message: string; status: "valid" | "invalid" | "unknown" | "deferred"; unreadable?: boolean },
 ) => {
   stage.state.patchValidation = {
     message: verdict.message,
     status: verdict.status,
     targetInputId: target.id,
     validationKey,
+    ...(verdict.unreadable ? { unreadable: true } : {}),
   };
   stage.state.checksumTimeMs = Date.now() - startedAt;
 };
@@ -246,6 +247,7 @@ const applyPlanValidationResult = <TSource>(
           ? "Patch cannot be applied to this ROM"
           : "Input state is only provable while applying"),
     status,
+    unreadable: planVerdict.unreadable,
   });
   prepared.entry.stage.state.chainVerdict = {
     ...(planVerdict.execution ? { direction: planVerdict.execution.direction } : {}),
@@ -274,6 +276,7 @@ const applyPerPatchValidationResult = <TSource>(
       verdict.message ||
       (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be applied to this ROM"),
     status: verdict.status === "passed" ? "valid" : "invalid",
+    unreadable: verdict.unreadable,
   });
 };
 

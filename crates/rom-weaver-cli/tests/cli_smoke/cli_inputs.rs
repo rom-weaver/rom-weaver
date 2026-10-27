@@ -1,6 +1,43 @@
 use super::shared::*;
 
 #[test]
+fn patch_apply_help_explains_explicit_bin_output_exception() {
+    let temp = setup_temp_dir();
+    let home = temp.path().to_str().expect("isolated home");
+    for args in [
+        ["patch", "apply", "--help"].as_slice(),
+        ["patch", "weave", "--help"].as_slice(),
+        ["weave", "--input", "game.bin", "--help"].as_slice(),
+    ] {
+        let output = command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_DATA_HOME", home),
+                ("XDG_STATE_HOME", home),
+                ("NO_COLOR", "1"),
+            ],
+            0,
+        );
+        let help = String::from_utf8(output).expect("UTF-8 help");
+        let help = help.split_whitespace().collect::<Vec<_>>().join(" ");
+        for expected in [
+            "except for ambiguous disc-image extensions such as .bin",
+            "For explicit raw .bin output, pass --no-compress (or --raw)",
+            "--compress-format <name> to choose a container",
+            "collision-safe sibling named <stem>-patched.<ext>",
+        ] {
+            assert!(
+                help.contains(expected),
+                "patch apply help must explain the explicit .bin exception: {args:?} missing {expected:?}\n{help}"
+            );
+        }
+    }
+}
+
+#[test]
 fn scalar_commands_accept_a_file_before_or_after_options() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");

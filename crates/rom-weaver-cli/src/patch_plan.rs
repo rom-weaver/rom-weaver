@@ -92,6 +92,9 @@ pub struct PatchPlanVerdict {
     pub basis_source: PatchBasisSource,
     pub matched: PatchInputMatch,
     pub input_verdict: PatchInputVerdict,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub unreadable: Option<bool>,
     /// Exact reversible endpoint selected from embedded patch metadata. Apply
     /// uses it when a base-authored mid-chain patch cannot infer direction
     /// from the running intermediate.
@@ -789,6 +792,7 @@ pub(crate) fn resolve_verification_plan(
                 basis_source,
                 matched,
                 input_verdict,
+                unreadable: None,
                 execution: base_execution,
                 message,
                 expected_predecessor: None,
@@ -899,6 +903,7 @@ pub(crate) fn resolve_verification_plan(
                 basis_source,
                 matched,
                 input_verdict,
+                unreadable: None,
                 execution,
                 message,
                 expected_predecessor,
