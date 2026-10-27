@@ -30,6 +30,25 @@ beforeEach(() => {
 });
 
 describe("useUnifiedApplyDrop", () => {
+  it("keeps directly dropped NFS parts and the key together beside another ROM", async () => {
+    mockedList.mockResolvedValue([]);
+    const controller = makeController();
+    const selectFile = vi.fn(async (_request: import("../../../src/types/selection.ts").CandidateSelectionRequest) => ({
+      id: "dropped-rom-0",
+    }));
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const source = file("hif_000000.nfs");
+    const part = file("hif_000001.nfs");
+    const key = file("htk.bin");
+    act(() => result.current.onDrop([key, part, source, file("other.nes")]));
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+    expect(controller.provideRomInputFiles).toHaveBeenCalledWith([source, key, part]);
+    expect(mockedList).not.toHaveBeenCalled();
+    expect(
+      selectFile.mock.calls[0]?.[0].candidates.map((candidate: { fileName: string }) => candidate.fileName),
+    ).toEqual(["hif_000000.nfs", "other.nes"]);
+  });
+
   it("routes an archive whose contents are a ROM to the ROM bucket", async () => {
     mockedList.mockResolvedValue(["disc.cue", "game.bin"]);
     const controller = makeController();

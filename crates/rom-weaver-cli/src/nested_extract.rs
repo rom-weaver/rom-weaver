@@ -8,6 +8,10 @@ pub(super) struct NestedExtractOutcome {
     /// `emitted_files` detail objects (with checksums when requested) for every file produced by the
     /// nested levels, in extraction order.
     pub(super) emitted_details: Vec<Value>,
+    /// Failure message of the first recognized NFS head that could not be decoded (for example a
+    /// missing or wrong `htk.bin`). The raw files stay as plain outputs; only a caller that needs the
+    /// decoded disc (Apply/ingest) turns this into an error.
+    pub(super) unreadable_nfs: Option<RomWeaverError>,
 }
 
 impl CliApp {
@@ -49,6 +53,7 @@ impl CliApp {
         let mut nested_count = 0usize;
         let mut descended: HashSet<String> = HashSet::new();
         let mut emitted_details: Vec<Value> = Vec::new();
+        let mut unreadable_nfs: Option<RomWeaverError> = None;
         let mut processed = HashSet::new();
         processed.insert(root_source.clone());
 
@@ -115,6 +120,18 @@ impl CliApp {
                 split_bin: false,
             };
             if let Err(error) = handler.probe_details(&probe_request, context) {
+                if (!kind_filter.patch || kind_filter.rom)
+                    && handler.descriptor().name == "nfs"
+                    && handler.probe(&source) == rom_weaver_core::ProbeConfidence::Signature
+                {
+                    debug!(
+                        source = %source.display(),
+                        error = %error,
+                        "recognized NFS head failed to decode; keeping raw files and deferring the error"
+                    );
+                    unreadable_nfs.get_or_insert(error);
+                    continue;
+                }
                 trace!(
                     source = %source.display(),
                     format = handler.descriptor().name,
@@ -239,6 +256,7 @@ impl CliApp {
             count: nested_count,
             descended,
             emitted_details,
+            unreadable_nfs,
         })
     }
 
@@ -419,5 +437,115 @@ impl CliApp {
         } else {
             base
         }
+    }
+}
+
+#[cfg(test)]
+mod nfs_probe_tests {
+    use super::*;
+    use rom_weaver_core::{NoninteractivePrompter, NoopProgressSink};
+
+    #[test]
+    fn nested_nfs_reports_missing_and_incorrect_keys() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("hif_000000.nfs");
+        let mut bytes = vec![0u8; 0x20200];
+        bytes[..4].copy_from_slice(b"EGGS");
+        bytes[4..8].copy_from_slice(&1u32.to_be_bytes());
+        bytes[16..20].copy_from_slice(&1u32.to_be_bytes());
+        bytes[24..28].copy_from_slice(&4u32.to_be_bytes());
+        bytes[0x1fc..0x200].copy_from_slice(b"SGGE");
+        fs::write(&source, bytes).expect("NFS fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        for (key, expected) in [
+            (None, "Failed to locate"),
+            (Some([0u8; 16]), "Invalid disc header"),
+        ] {
+            if let Some(key) = key {
+                fs::write(directory.path().join("htk.bin"), key).expect("key fixture");
+            }
+            let result = app.extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                std::slice::from_ref(&source),
+                ArchiveEntryKindFilter::default(),
+                true,
+                false,
+                &context,
+            );
+            let outcome = result.expect("a keyless NFS must not fail the nested scan");
+            assert_eq!(outcome.count, 0);
+            let message = outcome
+                .unreadable_nfs
+                .expect("recognized NFS probe failure must be reported to the caller");
+            assert!(message.to_string().contains(expected), "{message}");
+        }
+    }
+
+    #[test]
+    fn patch_only_nested_nfs_does_not_require_a_key() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("hif_000000.nfs");
+        let mut bytes = vec![0u8; 0x20200];
+        bytes[..4].copy_from_slice(b"EGGS");
+        bytes[4..8].copy_from_slice(&1u32.to_be_bytes());
+        bytes[16..20].copy_from_slice(&1u32.to_be_bytes());
+        bytes[24..28].copy_from_slice(&4u32.to_be_bytes());
+        bytes[0x1fc..0x200].copy_from_slice(b"SGGE");
+        fs::write(&source, bytes).expect("NFS fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        let outcome = app
+            .extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                &[source],
+                ArchiveEntryKindFilter {
+                    rom: false,
+                    patch: true,
+                },
+                true,
+                false,
+                &context,
+            )
+            .expect("patch-only extraction skips NFS probe errors");
+        assert_eq!(outcome.count, 0);
+    }
+
+    #[test]
+    fn nested_nfs_extension_only_payload_stays_opaque() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("unrelated.nfs");
+        fs::write(&source, b"plain extension-only payload").expect("fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        let outcome = app
+            .extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                &[source],
+                ArchiveEntryKindFilter::default(),
+                true,
+                false,
+                &context,
+            )
+            .expect("extension-only candidates are skipped");
+        assert_eq!(outcome.count, 0);
     }
 }

@@ -12,6 +12,10 @@ pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub ignore_common_files: bool,
     pub overwrite: bool,
     pub no_nested_extract: bool,
+    pub discard_consumed_nfs_companions: bool,
+    /// Fail with the NFS decode error when a recognized NFS dump could not be decoded and nothing
+    /// else was extracted. `extract` leaves this off and keeps the raw files.
+    pub require_decodable_nfs: bool,
     pub context: &'a OperationContext,
 }
 
@@ -341,6 +345,8 @@ impl CliApp {
             ignore_common_files: run.ignore_common_files,
             overwrite: run.overwrite,
             no_nested_extract: run.no_nested_extract,
+            discard_consumed_nfs_companions: false,
+            require_decodable_nfs: false,
             context: run.context,
         }) {
             Ok((leaves, nested_count)) => {
@@ -407,6 +413,8 @@ impl CliApp {
             ignore_common_files,
             overwrite,
             no_nested_extract,
+            discard_consumed_nfs_companions,
+            require_decodable_nfs,
             context,
         } = inputs;
         // Container handlers report their COMPLETE output set in `report.details["emitted_files"]`, so
@@ -436,6 +444,7 @@ impl CliApp {
         let mut all_emitted_details = primary_details;
         // Canonical paths (normalized) of every container we descended into; these are the
         // intermediate archives, so they are excluded from the final leaf output set.
+        let mut unreadable_nfs = None;
         let mut descended: HashSet<String> = HashSet::new();
         let mut nested_count = 0usize;
         if !no_nested_extract {
@@ -461,7 +470,17 @@ impl CliApp {
             descended = outcome.descended;
             nested_count = outcome.count;
             all_emitted_details.extend(outcome.emitted_details);
+            unreadable_nfs = outcome.unreadable_nfs;
         }
+        let consumed_nfs_members = if discard_consumed_nfs_companions {
+            let paths = all_emitted_details
+                .iter()
+                .filter_map(|value| value.get("path").and_then(Value::as_str).map(str::to_owned))
+                .collect::<Vec<_>>();
+            Self::consumed_nfs_members(&paths, &descended)
+        } else {
+            HashSet::new()
+        };
         // Report only the bottom/leaf outputs: any emitted file we did not further descend into. For a
         // non-nested extract `descended` is empty, so every primary output is a leaf.
         let leaves = all_emitted_details
@@ -472,15 +491,31 @@ impl CliApp {
                     .and_then(|map| map.get("path"))
                     .and_then(Value::as_str)
                 {
-                    Some(path) => !descended.contains(path),
+                    Some(path) => !descended.contains(path) && !consumed_nfs_members.contains(path),
                     None => true,
                 }
             })
             .collect::<Vec<_>>();
+        if let Some(error) = unreadable_nfs {
+            if require_decodable_nfs && leaves.iter().all(Self::is_nfs_dump_leaf) {
+                debug!(error = %error, "NFS dump is the only payload and could not be decoded");
+                return Err(error);
+            }
+            trace!(
+                error = %error,
+                "keeping raw NFS files because the extract does not need the decoded disc"
+            );
+        }
         // Fold disc structure (sheet text + per-track grouping) into the leaves so the host renders a
         // multi-track disc as one card without re-parsing the cue/gdi itself.
         let leaves = Self::attach_disc_group_details(leaves);
         Ok((leaves, nested_count))
+    }
+
+    fn is_nfs_dump_leaf(leaf: &Value) -> bool {
+        leaf.get("path")
+            .and_then(Value::as_str)
+            .is_some_and(Self::is_nfs_dump_member)
     }
 
     /// Ensure a `--probe` extract carries the decoded payload's platform identity and,

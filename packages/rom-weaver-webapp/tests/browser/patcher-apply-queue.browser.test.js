@@ -372,3 +372,75 @@ for (const clickTiming of ["before mismatch", "during mismatch"]) {
     });
   }
 }
+
+for (const queueBeforeFailure of [true, false]) {
+  test(`input staging rejection clears Apply queue (${queueBeforeFailure ? "queued" : "clicked after failure"})`, async () => {
+    const input = new File([new Uint8Array([0, 1, 2, 3])], "broken.bin");
+    const replacement = new File([new Uint8Array([4, 5, 6, 7])], "replacement.bin");
+    let rejectStaging;
+    const staging = new Promise((_resolve, reject) => {
+      rejectStaging = reject;
+    });
+    const applyPatches = vi.fn(async () => createMockApplyResult());
+    const stageInput = vi.fn(async (snapshot) => {
+      if (snapshot.inputs[0] === input) return staging;
+      return [{ fileName: replacement.name, size: replacement.size }];
+    });
+    let latestUiController;
+    let makeReady;
+    const Harness = () => {
+      const [ready, setReady] = useState(false);
+      makeReady = () => setReady(true);
+      const { localNoticeController, localOutputController, localStackController, localUiController } =
+        useLocalApplyPatchFormSession({
+          applyPatches,
+          applyReady: ready,
+          defaultInputs: [input],
+          downloadOutput: () => undefined,
+          stageInput,
+        });
+      latestUiController = localUiController;
+      return createElement(ApplyWorkflowFormView, {
+        controllers: {
+          notice: localNoticeController,
+          output: localOutputController,
+          patchStack: localStackController,
+          ui: localUiController,
+        },
+      });
+    };
+    const clickApply = () => {
+      const button = document.getElementById("rom-weaver-button-apply");
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+      expect(button.disabled).toBe(false);
+      button.click();
+    };
+    mount(createElement(Harness));
+    await waitForStagingProgress("rom");
+    if (queueBeforeFailure) {
+      clickApply();
+      await expect
+        .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+        .toContain("Waiting for other actions");
+    }
+    rejectStaging(new Error("Cannot prepare broken.bin. Replace the input and try again."));
+    await expect.poll(() => document.body.textContent).toContain("Cannot prepare broken.bin");
+    await expect.poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "").toBe("");
+    await expect.poll(() => document.querySelector('[id^="rom-weaver-progress-rom"]')).toBeNull();
+    clickApply();
+    await expect.poll(() => document.body.textContent).toContain("Cannot prepare broken.bin");
+    expect(document.getElementById("rom-weaver-progress-apply")).toBeNull();
+    expect(applyPatches).not.toHaveBeenCalled();
+    latestUiController.clearRomInput();
+    await expect.poll(() => document.body.textContent || "").not.toContain("Cannot prepare broken.bin");
+    latestUiController.provideRomInputFile(replacement);
+    await expect.poll(() => stageInput.mock.calls.length).toBe(2);
+    await expect.poll(() => document.querySelector('[id^="rom-weaver-progress-rom"]')).toBeNull();
+    makeReady();
+    await expect.poll(() => document.getElementById("rom-weaver-button-apply")?.disabled).toBe(false);
+    expect(applyPatches).not.toHaveBeenCalled();
+    clickApply();
+    await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+    expect(applyPatches.mock.calls[0][0].inputs).toEqual([replacement]);
+  });
+}

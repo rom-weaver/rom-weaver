@@ -1050,6 +1050,8 @@ impl CliApp {
                 ignore_common_files: !no_ignore,
                 overwrite: true,
                 no_nested_extract,
+                discard_consumed_nfs_companions: true,
+                require_decodable_nfs: true,
                 context,
             },
         )?;

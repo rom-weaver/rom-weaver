@@ -64,12 +64,26 @@ impl CliApp {
         (payload_matches, container_fallback_matches)
     }
 
-    /// Group disc media/sheet entries that share a base name (a `.cue`/`.gdi` sheet plus its
-    /// `(Track N)` tracks) into one selection group; every other entry stays a singleton.
-    /// Order-preserving so the prompt reflects the listing order.
+    /// Multi-file discs MUST stay together when selected: cue/gdi sheets retain their tracks,
+    /// and NFS heads retain their parts and key. Other entries remain separate candidates.
     fn group_disc_selection_entries(entries: &[String]) -> Vec<DiscSelectionGroup> {
+        let nfs_groups = Self::nfs_selection_groups(entries);
         let mut groups: Vec<DiscSelectionGroup> = Vec::new();
         for entry in entries {
+            if let Some(group) = nfs_groups
+                .iter()
+                .find(|group| group.members.contains(entry))
+            {
+                if group.label == *entry {
+                    groups.push(DiscSelectionGroup {
+                        label: group.label.clone(),
+                        key: group.key.clone(),
+                        members: group.members.clone(),
+                        size: None,
+                    });
+                }
+                continue;
+            }
             match Self::disc_base_key(entry) {
                 Some(key) => {
                     let lower = entry.to_ascii_lowercase();
@@ -124,6 +138,99 @@ impl CliApp {
         Some(key.to_ascii_lowercase())
     }
 
+    fn nfs_selection_groups(entries: &[String]) -> Vec<DiscSelectionGroup> {
+        entries
+            .iter()
+            .filter(|name| path_basename(name) == "hif_000000.nfs")
+            .map(|head| {
+                let directory = head.rsplit_once('/').map_or("", |(parent, _)| parent);
+                let sibling_key = if directory.is_empty() {
+                    "htk.bin".to_string()
+                } else {
+                    format!("{directory}/htk.bin")
+                };
+                let parent_key = directory.rsplit_once('/').map_or_else(
+                    || "code/htk.bin".to_string(),
+                    |(parent, _)| format!("{parent}/code/htk.bin"),
+                );
+                let members = entries
+                    .iter()
+                    .filter(|name| {
+                        let (parent, base) = name.rsplit_once('/').unwrap_or(("", name.as_str()));
+                        let is_part = base
+                            .strip_prefix("hif_")
+                            .and_then(|part| part.strip_suffix(".nfs"))
+                            .is_some_and(|digits| {
+                                digits.len() == 6
+                                    && digits.bytes().all(|digit| digit.is_ascii_digit())
+                            });
+                        (parent == directory && is_part)
+                            || **name == sibling_key
+                            || (!directory.is_empty() && **name == parent_key)
+                    })
+                    .cloned()
+                    .collect();
+                DiscSelectionGroup {
+                    label: head.clone(),
+                    key: head.clone(),
+                    members,
+                    size: None,
+                }
+            })
+            .collect()
+    }
+
+    pub(super) fn consumed_nfs_members(
+        entries: &[String],
+        descended: &HashSet<String>,
+    ) -> HashSet<String> {
+        let consumed = Self::nfs_selection_groups(entries)
+            .into_iter()
+            .filter(|group| descended.contains(&group.label))
+            .flat_map(|group| group.members)
+            .collect::<HashSet<_>>();
+        trace!(
+            entries = entries.len(),
+            descended = descended.len(),
+            consumed = consumed.len(),
+            "resolved NFS members consumed by a successful descent"
+        );
+        consumed
+    }
+
+    /// Whether `path` is an NFS part (`hif_NNNNNN.nfs`) or its `htk.bin` key.
+    pub(super) fn is_nfs_dump_member(path: &str) -> bool {
+        let base = path_basename(path);
+        base == "htk.bin"
+            || base
+                .strip_prefix("hif_")
+                .and_then(|part| part.strip_suffix(".nfs"))
+                .is_some_and(|digits| {
+                    digits.len() == 6 && digits.bytes().all(|digit| digit.is_ascii_digit())
+                })
+    }
+
+    fn expand_nfs_selections(entries: &[String], selections: &[String]) -> Vec<String> {
+        let mut expanded = selections.to_vec();
+        let mut matcher = SelectionMatcher::new(selections);
+        for group in Self::nfs_selection_groups(entries) {
+            if !matcher.matches(&group.label) {
+                continue;
+            }
+            for member in group.members {
+                if !expanded.contains(&member) {
+                    trace!(
+                        head = %group.label,
+                        member = %member,
+                        "expanding NFS selection to include disc member"
+                    );
+                    expanded.push(member);
+                }
+            }
+        }
+        expanded
+    }
+
     pub(super) fn extract_with_selection_fallback(
         &self,
         handler: &dyn ContainerHandler,
@@ -141,9 +248,30 @@ impl CliApp {
             source_label,
             allow_multi_select,
         } = extract;
+        let expanded_selections = if selections.iter().any(|name| name.ends_with(".nfs")) {
+            trace!(
+                source = %source.display(),
+                selections = selections.len(),
+                "listing archive entries to expand NFS selections"
+            );
+            let entries = handler.list_entries(
+                &ContainerProbeRequest {
+                    source: source.to_path_buf(),
+                    split_bin,
+                },
+                context,
+            )?;
+            let entries = entries
+                .iter()
+                .map(|name| normalize_archive_name(name))
+                .collect::<Vec<_>>();
+            Self::expand_nfs_selections(&entries, selections)
+        } else {
+            selections.to_vec()
+        };
         let request = ContainerExtractRequest {
             source: source.to_path_buf(),
-            selections: selections.to_vec(),
+            selections: expanded_selections,
             kind_filter,
             out_dir: out_dir.to_path_buf(),
             split_bin,
@@ -288,8 +416,8 @@ impl CliApp {
 
     /// Collapse a container's listed entries into the logical ROMs it carries, applying the
     /// `kind_filter`/common-file ignore rules. A CD/GD-ROM disc (a `.cue`/`.gdi` sheet plus its
-    /// track media) becomes one group whose `members` are every file to extract; each loose ROM is
-    /// its own single-member group. Detect sheets from the FULL entry list (a sheet that the kind
+    /// track media) becomes one group whose `members` are every file to extract; NFS groups MUST
+    /// also retain their parts and key. Detect sheets from the FULL entry list (a sheet that the kind
     /// filter drops from the payload must still anchor its disc) and keep listing order so prompts
     /// match the listing.
     fn build_logical_payload_groups(
@@ -312,6 +440,18 @@ impl CliApp {
             if seen.insert(name.clone()) {
                 candidate_names.push(name);
             }
+        }
+        let all_names = entries
+            .iter()
+            .map(|entry| normalize_archive_name(&entry.path))
+            .collect::<Vec<_>>();
+        let mut nfs_groups = Self::nfs_selection_groups(&all_names);
+        nfs_groups.retain(|group| candidate_names.contains(&group.label));
+        candidate_names.retain(|name| !nfs_groups.iter().any(|group| group.members.contains(name)));
+        for entry in entries {
+            size_by_name
+                .entry(normalize_archive_name(&entry.path))
+                .or_insert(entry.size);
         }
         // Disc sheets from the full listing - a sheet anchors its disc even when the kind filter
         // excludes it (e.g. a `--filter rom` run drops the non-payload `.cue`).
@@ -388,6 +528,16 @@ impl CliApp {
             }
             Self::group_disc_selection_entries(&grouping_names)
         };
+
+        if !nfs_groups.is_empty() {
+            groups.append(&mut nfs_groups);
+            groups.sort_by_key(|group| {
+                all_names
+                    .iter()
+                    .position(|name| group.members.contains(name))
+                    .unwrap_or(usize::MAX)
+            });
+        }
 
         // Attach a summed size for each logical ROM so the prompt can show disc totals.
         for group in &mut groups {
@@ -649,6 +799,88 @@ impl CliApp {
 #[cfg(test)]
 mod disc_grouping_tests {
     use super::CliApp;
+
+    #[test]
+    fn nfs_companions_are_consumed_only_after_successful_descent() {
+        let entries = [
+            "a/content/hif_000000.nfs",
+            "a/content/hif_000001.nfs",
+            "a/code/htk.bin",
+            "b/content/hif_000000.nfs",
+            "b/content/htk.bin",
+        ]
+        .map(String::from);
+        assert!(CliApp::consumed_nfs_members(&entries, &super::HashSet::new()).is_empty());
+        let descended = super::HashSet::from([entries[0].clone()]);
+        let consumed = CliApp::consumed_nfs_members(&entries, &descended);
+        assert_eq!(consumed, entries[..3].iter().cloned().collect());
+    }
+
+    #[test]
+    fn nfs_fallback_prompt_groups_parts_with_the_key() {
+        let entries = [
+            "extra.nes",
+            "content/hif_000001.nfs",
+            "code/htk.bin",
+            "content/hif_000000.nfs",
+        ]
+        .map(String::from);
+        let groups = CliApp::group_disc_selection_entries(&entries);
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].label, "extra.nes");
+        assert_eq!(groups[1].label, "content/hif_000000.nfs");
+        assert_eq!(groups[1].members, entries[1..]);
+    }
+
+    #[test]
+    fn nfs_explicit_selection_expands_only_the_selected_dump() {
+        let names = [
+            "a/content/hif_000000.nfs",
+            "a/content/hif_000001.nfs",
+            "a/code/htk.bin",
+            "b/content/hif_000000.nfs",
+            "b/content/htk.bin",
+        ]
+        .map(String::from);
+        let expanded = CliApp::expand_nfs_selections(&names, &[names[0].clone()]);
+        assert_eq!(expanded, names[..3]);
+        assert!(super::ArchiveEntryKindFilter::new(true, false).matches_payload_name(&names[2]));
+    }
+
+    #[test]
+    fn nfs_logical_payload_keeps_parts_and_both_key_locations() {
+        let names = [
+            "game/content/hif_000000.nfs",
+            "game/content/hif_000001.nfs",
+            "game/content/htk.bin",
+            "game/code/htk.bin",
+            "other/content/hif_000000.nfs",
+            "other/content/htk.bin",
+            "game/content/hif_bad.nfs",
+            "extra.nes",
+        ];
+        let entries = names
+            .iter()
+            .map(|name| super::ContainerListEntry {
+                path: (*name).into(),
+                size: Some(10),
+            })
+            .collect::<Vec<_>>();
+        let groups = CliApp::build_logical_payload_groups(
+            &entries,
+            super::ArchiveEntryKindFilter::new(true, false),
+            true,
+        );
+        let group = groups
+            .iter()
+            .find(|group| group.label == names[0])
+            .expect("NFS payload");
+        assert_eq!(group.members, names[..4]);
+        assert_eq!(group.size, Some(40));
+        assert!(!groups.iter().any(|group| group.label == names[1]
+            || group.label == names[2]
+            || group.label == names[3]));
+    }
 
     #[test]
     fn disc_base_key_strips_directory_extension_and_track_suffix() {
