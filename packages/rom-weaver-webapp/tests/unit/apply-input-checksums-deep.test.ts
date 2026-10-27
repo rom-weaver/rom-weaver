@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import { finalizeApplyInputChecksums } from "../../src/lib/workflow/apply-input-checksums.ts";
 
 const file = (fileName: string, extras: Record<string, unknown> = {}) =>
@@ -131,6 +132,25 @@ describe("apply input checksum finalization", () => {
       identification: { matches: [], status: "unavailable" },
       romType: calculated.romType,
     });
+  });
+
+  it.each([
+    { expected: false, label: "skips identification for a source marked to skip it", skip: true },
+    { expected: true, label: "keeps identification enabled for a normal source", skip: false },
+  ])("$label when checksumming without precomputed metadata", async ({ expected, skip }) => {
+    const inputFile = file("fallback.sfc");
+    if (skip) skipSourceIdentification(inputFile);
+    const fallback = asset("fallback", inputFile);
+    const ingest = vi.fn(async (_input: Record<string, unknown>) => ({
+      result: { assets: [{ checksums: { crc32: "AA", md5: "BB", sha1: "CC" }, isRom: true }], isRom: true },
+    }));
+    const selected = { parentCompressions: [], preparedInputAssets: [fallback], state: state("source") };
+    const session = { stages: [selected], synthetic: false, view: selected };
+
+    await finalizeApplyInputChecksums(session as never, adapters({ ingest: { run: ingest } }, selected) as never);
+
+    expect(ingest).toHaveBeenCalledOnce();
+    expect(ingest.mock.calls[0]?.[0]).toMatchObject({ identify: expected });
   });
 
   it("checks every stage in a synthetic session and synchronizes its view", async () => {
