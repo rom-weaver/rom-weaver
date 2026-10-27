@@ -58,7 +58,10 @@ rom-weaver-weave.json that already names the ROM, the patches, and the
 output.
 
 When --output names the selected ROM leaf's extension, rom-weaver writes a
-plain ROM. A registered container extension such as .zip compresses the result.
+plain ROM, except for ambiguous disc-image extensions such as .bin.
+For explicit raw .bin output, pass --no-compress (or --raw).
+Alternatively, pass --compress-format <name> to choose a container.
+A registered container extension such as .zip compresses the result.
 Pass --no-compress (or --raw) to force a plain ROM, or use --compress-format,
 --compress-codec, and --compress-level (also accepted as --format, --codec,
 and --level) to force compression. Without --output, an ordinary file apply
