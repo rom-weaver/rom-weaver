@@ -130,7 +130,9 @@ const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, h
   const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
-  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums;
+  // UPS validation hashes the source (both endpoints, N64 byte-order variants) in parallel even when the UI sends no checksum requirement.
+  const hasUpsPatch = input.patchFiles.some((patch) => String(patch.patchFormat ?? "").toLowerCase() === "ups");
+  const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums || hasUpsPatch;
   const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
   const effectiveThreadArg = noWorkerPool ? null : threadArg;
   return {

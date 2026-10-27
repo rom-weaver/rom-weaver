@@ -834,6 +834,20 @@ describe("invokeRomWeaverPatchValidateWorker", () => {
     },
   );
 
+  it.each([
+    ["ups", undefined],
+    ["ips", 0],
+  ])("keeps the worker pool for %s validation only when it hashes the source", async (patchFormat, defaultThreads) => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ valid: true }));
+    await invokeRomWeaverPatchValidateWorker({
+      options: { plan: true },
+      patchFiles: [{ patchFileName: `p.${patchFormat}`, patchFilePath: `/p.${patchFormat}`, patchFormat }],
+      romFileName: "rom.bin",
+      romFilePath: "/rom.bin",
+    });
+    expect((lastCall()[1] as { defaultThreads?: number }).defaultThreads).toBe(defaultThreads);
+  });
+
   const validateInput = () => ({
     patchFiles: [
       { patchFileName: "a.ips", patchFilePath: "/a.ips", patchFormat: "ips" },
