@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readDocLastmod } from "../docs-discovery.mjs";
+import { readLatestReleaseDate } from "../version.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import {
@@ -137,7 +138,13 @@ const readWorkflowLastmod = (route, root, repo) => {
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
 
-export const createSitemapSource = ({ root = rootDir, repo = repoRoot } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
+// Generated pages (Notices) are untracked, so git has no date for them; they are rebuilt for each
+// release, which makes the latest release day their date.
+export const createSitemapSource = ({
+  root = rootDir,
+  repo = repoRoot,
+  releaseDate = readLatestReleaseDate(),
+} = {}) => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
   .map((route) => {
@@ -146,7 +153,7 @@ ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES
   })
   .join("\n")}
 ${DOC_SOURCES.map((source) => {
-  const lastmod = readDocLastmod(docSourcePath(source), repo);
+  const lastmod = source.file.startsWith("wasm/") ? releaseDate : readDocLastmod(docSourcePath(source), repo);
   return `  <url><loc>https://rom-weaver.com/${source.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
 }).join("\n")}
 </urlset>
