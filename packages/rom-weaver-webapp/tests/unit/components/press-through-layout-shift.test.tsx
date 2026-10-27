@@ -49,14 +49,32 @@ const setup = ({ ariaDisabled = false } = {}) => {
   return { button, moveButton, neighbour, onClick, outer };
 };
 
+const scrollYDescriptor = Object.getOwnPropertyDescriptor(globalThis, "scrollY");
+const setScrollY = (value: number) =>
+  Object.defineProperty(globalThis, "scrollY", { configurable: true, get: () => value });
+
 afterEach(() => {
   vi.useRealTimers();
+  if (scrollYDescriptor) Object.defineProperty(globalThis, "scrollY", scrollYDescriptor);
+  else Reflect.deleteProperty(globalThis, "scrollY");
 });
 
 describe("run button press through a layout shift", () => {
   it("clicks the button when it moved during the press and the release stayed on the pressed spot", () => {
     const { button, moveButton, neighbour, onClick, outer } = setup();
     fireEvent.pointerDown(button, PRESS);
+    moveButton(153);
+    fireEvent.pointerUp(neighbour, PRESS);
+    fireEvent.click(outer);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("follows the button on screen when the page also scrolled during the press", () => {
+    const { button, moveButton, neighbour, onClick, outer } = setup();
+    setScrollY(500);
+    fireEvent.pointerDown(button, PRESS);
+    // The document shrank and regrew: the page scrolled back 50 px and the button moved down.
+    setScrollY(450);
     moveButton(153);
     fireEvent.pointerUp(neighbour, PRESS);
     fireEvent.click(outer);

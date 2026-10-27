@@ -217,7 +217,7 @@ const pressAcrossLayoutShift = async (page, selector) => {
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();
   try {
-    const releaseTarget = await page.evaluate(
+    const shift = await page.evaluate(
       async ({ selector: target, x, y }) => {
         for (const element of [document.documentElement, document.body]) {
           element.style.overflowAnchor = "none";
@@ -228,14 +228,19 @@ const pressAcrossLayoutShift = async (page, selector) => {
         spacer.style.height = "64px";
         const button = document.querySelector(target);
         (button.closest(".card") || button).before(spacer);
+        const scrolledFrom = window.scrollY;
         window.scrollBy(0, -40);
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const hit = document.elementFromPoint(x, y);
-        return hit?.closest(target) ? "" : `${hit?.tagName.toLowerCase()}.${hit?.className}`;
+        return {
+          releaseTarget: hit?.closest(target) ? "" : `${hit?.tagName.toLowerCase()}.${hit?.className}`,
+          scrolled: Math.round(window.scrollY - scrolledFrom),
+        };
       },
       { selector, ...point },
     );
-    requireJourney(releaseTarget, `${selector} did not move off the release point`);
+    requireJourney(shift.releaseTarget, `${selector} did not move off the release point`);
+    requireEqual(shift.scrolled, -40, `${selector}: the page did not scroll during the press`);
   } finally {
     await page.mouse.up();
     await page.evaluate(() => {
