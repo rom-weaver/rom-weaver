@@ -109,6 +109,7 @@ beforeEach(() => {
   installWorkerSelf();
   state.buildFds.mockResolvedValue({ fds: [], mounts: [{ mountPath: "/work" }] });
   state.cleanupMounts.mockResolvedValue(undefined);
+  state.closeSyncFiles.mockReset();
   state.spawner.mockReturnValue({ spawn: vi.fn(), waitForWorkers: vi.fn(async () => undefined) });
   vi.spyOn(WebAssembly, "instantiate").mockResolvedValue({
     exports: { wasi_thread_start: vi.fn() },
@@ -179,6 +180,22 @@ describe("browser OPFS WASI thread runtime", () => {
     expect(state.traceRandom).toHaveBeenCalled();
     expect(state.census).toHaveBeenCalledWith(runtime.opfsProxyTransfer);
     expect(state.wasmEnv).toHaveBeenCalledWith(expect.any(WebAssembly.Memory));
+  });
+
+  it("rejects teardown write failures after cleaning and invalidating mounts", async () => {
+    state.closeSyncFiles.mockImplementationOnce(() => {
+      throw new Error("proxy write failed at teardown");
+    });
+    const runtime = {
+      mountHandles: { "/work": { kind: "directory" } },
+      opfsProxyTransfer: { port: true },
+      runtimeMounts: ["/work"],
+    };
+    await expect(
+      __runRomWeaverBrowserWasiThread({ runtime, tid: 3, wasmMemory: makeSharedMemory(), wasmModule } as never),
+    ).rejects.toThrow("proxy write failed at teardown");
+    expect(state.cleanupMounts).toHaveBeenCalledWith([{ mountPath: "/work" }]);
+    expect(state.cache.invalidateMounts).toHaveBeenCalledWith([{ mountPath: "/work" }]);
   });
 
   it("marks a failed start and invalidates the mount cache when instantiation fails", async () => {

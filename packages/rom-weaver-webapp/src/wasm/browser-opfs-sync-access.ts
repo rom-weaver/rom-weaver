@@ -75,14 +75,16 @@ export async function openSyncAccessHandle({
 }
 
 export function closeSyncFiles(files: Iterable<unknown>) {
+  let failure: unknown;
   for (const file of files) {
+    if (typeof (file as { close?: unknown } | null)?.close !== "function") continue;
     try {
-      // Untyped collection: entries without a callable close() throw and are ignored below.
       (file as { close(): unknown }).close();
-    } catch {
-      // ignore best-effort close failures
+    } catch (error) {
+      failure ??= error;
     }
   }
+  if (failure !== undefined) throw failure;
 }
 
 export function writableSyncAccessMode(

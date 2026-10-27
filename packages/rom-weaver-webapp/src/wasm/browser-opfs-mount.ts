@@ -171,9 +171,13 @@ export class BrowserOpfsMount {
   }
 
   dispose() {
-    this.finishRun();
-    closeSyncFiles(this.ownedFiles);
-    this.ownedFiles = [];
+    try {
+      this.finishRun();
+    } finally {
+      const files = this.ownedFiles;
+      this.ownedFiles = [];
+      closeSyncFiles(files);
+    }
   }
 }
 
@@ -247,7 +251,5 @@ async function buildOpfsInodeMap({
 }
 
 export function cleanupBrowserOpfsMounts(mounts: BrowserOpfsMount[]) {
-  for (const mount of mounts) {
-    mount.finishRun();
-  }
+  closeSyncFiles(mounts.map((mount) => ({ close: () => mount.finishRun() })));
 }

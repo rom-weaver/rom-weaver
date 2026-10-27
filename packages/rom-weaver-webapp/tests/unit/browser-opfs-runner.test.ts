@@ -2,12 +2,17 @@ import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FileSystemDirectoryHandleLike } from "../../src/wasm/browser-opfs-runtime-types.ts";
+import { createOpfsProxyChannel, attachOpfsProxyChannel } from "../../src/wasm/browser-opfs-proxy-channel.ts";
+import { OpfsProxyClient, OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
+import { BrowserProxyRandomAccessFile } from "../../src/wasm/browser-opfs-proxy-file.ts";
+import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
 
 type FdBuildArgs = {
   cwdMountPath: string;
   knownInputPaths: string[];
   mountHandles: Record<string, unknown>;
   runtimeMounts: string[];
+  runCloseables: unknown[];
   stderrLineHandler?: (line: string) => void;
   stdin: string;
   stdoutLineHandler?: (line: string) => void;
@@ -21,6 +26,10 @@ const harness = vi.hoisted(() => {
   const state = {
     buildFdsCalls: [] as FdBuildArgs[],
     buildFdsError: null as Error | null,
+    closeables: [] as { close(): void }[],
+    fds: [] as wasiShim.Fd[],
+    onStart: null as (() => void) | null,
+    proxyClient: null as OpfsProxyClient | null,
     guestStderr: "",
     guestStdout: "",
     poolDisposed: 0,
@@ -47,11 +56,12 @@ vi.mock("../../src/wasm/browser-opfs-mounts.ts", async (importOriginal) => {
     buildBrowserOpfsWasiFds: vi.fn(async (args: FdBuildArgs) => {
       harness.buildFdsCalls.push(args);
       if (harness.buildFdsError) throw harness.buildFdsError;
+      args.runCloseables.push(...harness.closeables);
       const encoder = new TextEncoder();
       const stdoutChunks: Uint8Array[] = [];
       const stderrChunks: Uint8Array[] = [];
       return {
-        fds: [],
+        fds: harness.fds,
         mounts: [],
         stderrChunks,
         stderrCollector: {
@@ -80,7 +90,7 @@ vi.mock("../../src/wasm/browser-opfs-mounts.ts", async (importOriginal) => {
 
 vi.mock("../../src/wasm/browser-opfs-proxy-runtime.ts", () => ({
   startOpfsProxyRuntime: vi.fn(async () => ({
-    client: { handleStats: () => ({ live: 1, opened: 4, peak: 2 }) },
+    client: harness.proxyClient,
     registerBlobSource: (path: string) => harness.proxyRegistered.push(path),
     setTrace: vi.fn(),
     stop: async () => {
@@ -166,6 +176,11 @@ function makeRootHandle(): FileSystemDirectoryHandleLike & { resolve: (handle: u
 function resetHarness() {
   harness.buildFdsCalls.length = 0;
   harness.buildFdsError = null;
+  harness.closeables = [];
+  harness.fds = [];
+  harness.onStart = null;
+  harness.proxyClient = new OpfsProxyClient(createOpfsProxyChannel(1));
+  vi.spyOn(harness.proxyClient, "handleStats").mockReturnValue({ live: 1, opened: 4, peak: 2 });
   harness.guestStderr = "";
   harness.guestStdout = "";
   harness.poolDisposed = 0;
@@ -203,6 +218,7 @@ beforeEach(async () => {
     return {
       exports: {
         _start: () => {
+          harness.onStart?.();
           if (harness.startError) throw harness.startError;
           if (harness.startExitCode !== 0) throw new wasiShim.WASIProcExit(harness.startExitCode);
         },
@@ -291,6 +307,65 @@ describe("createRomWeaverBrowserOpfs runner shape", () => {
 });
 
 describe("createRomWeaverBrowserOpfs run", () => {
+  it.each([false, true])(
+    "fails after an ignored close-time publish error from another client=%s",
+    async (otherClient) => {
+      const channel = createOpfsProxyChannel(1);
+      harness.proxyClient = new OpfsProxyClient(channel);
+      const writerClient = otherClient
+        ? new OpfsProxyClient(attachOpfsProxyChannel(channel.transfer))
+        : harness.proxyClient;
+      vi.spyOn(writerClient, "open").mockReturnValue(1);
+      vi.spyOn(writerClient, "close").mockImplementation(() => undefined);
+      const write = vi.spyOn(writerClient, "write").mockImplementation(() => {
+        throw new OpfsProxyError("proxy timeout publishing /work/out.bin", wasiShim.wasi.ERRNO_IO);
+      });
+      const file = new BrowserProxyRandomAccessFile(writerClient, "/work/out.bin", { writable: true });
+      const inode = new WasiRandomAccessFileInode(file);
+      const fd = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+      if (!fd) throw new Error("fixture descriptor must open");
+      harness.fds = [fd];
+      let closeErrno: unknown;
+      harness.onStart = () => {
+        fd.fd_write(new Uint8Array([1, 2, 3]));
+        const imports = instantiatedImports?.wasi_snapshot_preview1 as { fd_close(fd: number): number };
+        closeErrno = imports.fd_close(0);
+      };
+      const runner = await createRunner();
+      try {
+        const result = await runner.run(compressCommand());
+        expect(closeErrno).toBe(wasiShim.wasi.ERRNO_IO);
+        expect(result.ok).toBe(false);
+        expect(result.exitCode).toBe(1);
+        expect((result.error as Error).message).toMatch(/publish.*writes.*errno=29/);
+        harness.onStart = null;
+        harness.fds = [];
+        expect((await runner.run(compressCommand())).ok).toBe(true);
+      } finally {
+        write.mockImplementation((_id, _offset, bytes) => bytes.length);
+        file.close();
+        await runner.dispose();
+      }
+    },
+  );
+
+  it("returns teardown write failures as a failed result and still cleans scratch", async () => {
+    harness.closeables = [
+      {
+        close() {
+          throw new OpfsProxyError("quota exceeded at teardown", 51);
+        },
+      },
+    ];
+    const runner = await createRunner();
+    const result = await runner.run(compressCommand());
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect((result.error as Error).message).toBe("quota exceeded at teardown");
+    expect(harness.runScratchCleanups).toHaveLength(1);
+    await runner.dispose();
+  });
+
   it("leaves the rayon globals unset on a non-threaded run", async () => {
     const runner = await createRunner();
     await runner.run(compressCommand());

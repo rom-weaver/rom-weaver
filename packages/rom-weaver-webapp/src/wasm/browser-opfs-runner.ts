@@ -362,6 +362,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       const trace = createLineTrace(runOptions?.onTraceNonJsonLine);
       // Surface the (once-per-runner) proxy worker's traces through this run's trace channel.
       opfsProxy.setTrace(trace);
+      opfsProxy.client.resetWriteError();
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)} wasmBytes=${wasmByteLength ?? "?"} wasmSha=${wasmSha || "?"}`,
       );
@@ -485,6 +486,13 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         stderrCollector.flush();
         return { stderr: decodeChunks(stderrChunks), stdout: decodeChunks(stdoutChunks) };
       };
+      let failure: { error: unknown } | undefined;
+      const recordFailure = (error: unknown) => {
+        failure ??= { error };
+        exitCode = 1;
+        runSucceeded = false;
+        trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
+      };
 
       try {
         trace("[browser-opfs] instantiate start");
@@ -521,22 +529,36 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         traceRandomAccessFileIoStats(trace, fds, "[perf] random access file io");
         // Outputs are already OPFS-backed; the flush above commits the remaining buffered writes.
         runSucceeded = true;
-        return { command, exitCode, ok: exitCode === 0, request, ...flushStreams() };
       } catch (error) {
-        trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
-        return { command, error, exitCode: 1, ok: false, request, ...flushStreams() };
+        recordFailure(error);
       } finally {
         traceRunResourceStats(trace, opfsProxy.client.handleStats(), threadWorkersAtRunStart, sharedMemory);
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
         // pool workers release their OPFS handles before the mount handles are closed.
         await drainThreadSpawnerOnce();
-        closeSyncFiles(closeables);
-        // Preserve the existing microtask boundary before listing scratch paths.
-        // oxlint-disable-next-line typescript/await-thenable
-        await cleanupBrowserOpfsMounts(mounts);
+        try {
+          closeSyncFiles(closeables);
+        } catch (error) {
+          recordFailure(error);
+        }
+        try {
+          await Promise.resolve(cleanupBrowserOpfsMounts(mounts));
+        } catch (error) {
+          recordFailure(error);
+        }
+        try {
+          // Worker Drops MUST remain observable even after their descriptors and adapters close.
+          opfsProxy.client.throwIfWriteFailed();
+        } catch (error) {
+          recordFailure(error);
+        }
         for (const file of proxyBlobInputs) opfsProxy.unregisterBlobSource(file.path);
-        if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
+        try {
+          if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
+        } catch (error) {
+          recordFailure(error);
+        }
         try {
           await cleanupBrowserOpfsRunScratch({ runId: opfsRunId, trace, workGuestPath });
         } catch (error) {
@@ -555,6 +577,14 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           stagingMs: runOptions.stagingMs,
         });
       }
+      return {
+        command,
+        ...failure,
+        exitCode: exitCode ?? 1,
+        ok: runSucceeded && exitCode === 0,
+        request,
+        ...flushStreams(),
+      };
     },
 
     async runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(

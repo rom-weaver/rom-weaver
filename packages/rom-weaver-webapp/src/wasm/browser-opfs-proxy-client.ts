@@ -9,6 +9,7 @@ import {
   OPFS_PROXY_GLOBAL_PEAK_HANDLES_INDEX,
   OPFS_PROXY_GLOBAL_POISONED_INDEX,
   OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX,
+  OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX,
   type OpfsProxyChannel,
   type OpfsProxyChannelSlot,
   opfsProxyVersionIndex,
@@ -86,6 +87,24 @@ export class OpfsProxyClient {
   /** True once the proxy has marked itself dead; every further op fails fast with EIO. */
   isPoisoned(): boolean {
     return Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX) !== 0;
+  }
+
+  recordWriteError(error: unknown): void {
+    const errno = error instanceof OpfsProxyError ? error.errno : OPFS_PROXY_STATUS_EIO;
+    Atomics.compareExchange(this.channel.global, OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX, 0, errno);
+    this.trace?.(`[browser-opfs] failed to publish file writes: ${String(error)}`);
+  }
+
+  resetWriteError(): void {
+    Atomics.store(this.channel.global, OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX, 0);
+  }
+
+  throwIfWriteFailed(): void {
+    const errno = Atomics.load(this.channel.global, OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX);
+    if (errno === 0) return;
+    const detail =
+      errno === 51 ? "No space left on device; free storage and retry" : "Storage I/O failed; retry the operation";
+    throw new OpfsProxyError(`failed to publish OPFS file writes on close: ${detail} (errno=${errno})`, errno);
   }
 
   /**
