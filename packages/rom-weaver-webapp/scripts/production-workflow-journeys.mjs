@@ -68,12 +68,18 @@ const enableBetaTools = (context) =>
 // Recent console lines per page, dumped when a download never starts so CI-only flakes show which
 // app branch swallowed the click.
 const consoleTails = new WeakMap();
-const captureConsoleTail = (page) => {
+export const captureConsoleTail = (page) => {
   const lines = [];
-  consoleTails.set(page, lines);
+  const primaryActions = [];
+  consoleTails.set(page, { lines, primaryActions });
   page.on("console", (message) => {
-    lines.push(`[${message.type()}] ${message.text()}`);
+    const line = `[${message.type()}] ${message.text()}`;
+    lines.push(line);
     if (lines.length > 200) lines.shift();
+    if (message.text().includes("apply primary action")) {
+      primaryActions.push(line);
+      if (primaryActions.length > 80) primaryActions.shift();
+    }
   });
 };
 
@@ -85,19 +91,32 @@ const enableTraceLogging = (page) =>
     localStorage.setItem(key, JSON.stringify({ ...stored, common: { ...stored.common, logLevel: "trace" } }));
   });
 
-const downloadedBytes = async (page, action) => {
+export const downloadedBytes = async (page, action) => {
   let download;
+  let actionState = "pending";
+  const triggerAction = async () => {
+    try {
+      await action();
+      actionState = "completed";
+    } catch (error) {
+      actionState = "failed";
+      throw error;
+    }
+  };
   try {
-    [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), action()]);
+    [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), triggerAction()]);
   } catch (cause) {
+    const actionStateAtFailure = actionState;
     const visibleState = (await page.locator("body").innerText()).slice(-8000);
     const buttons = await page
       .locator("button[id^='rom-weaver-button'], button[id^='patch-builder-button']")
       .evaluateAll((elements) => elements.map((element) => element.outerHTML.slice(0, 400)))
       .catch((error) => [`(button state unavailable: ${error.message})`]);
-    const consoleTail = (consoleTails.get(page) || []).slice(-80);
+    const history = consoleTails.get(page);
+    const consoleTail = (history?.lines || []).slice(-80);
+    const primaryActions = history?.primaryActions || [];
     throw new Error(
-      `Download did not start. Visible state:\n${visibleState}\n\nAction buttons:\n${buttons.join("\n")}\n\nConsole tail:\n${consoleTail.join("\n")}`,
+      `Download did not start. Trigger action: ${actionStateAtFailure}. Visible state:\n${visibleState}\n\nAction buttons:\n${buttons.join("\n")}\n\nApply action history:\n${primaryActions.join("\n")}\n\nConsole tail:\n${consoleTail.join("\n")}`,
       { cause },
     );
   }
