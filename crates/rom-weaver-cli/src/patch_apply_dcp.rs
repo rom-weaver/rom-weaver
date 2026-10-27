@@ -57,6 +57,22 @@ impl CliApp {
                 "a .dcp patch must be applied on its own (no patch chaining)".to_string(),
             );
         }
+        // Per-patch checks are comma-separated and a blank value means "none".
+        let has_declared_check = |checks: &[String]| {
+            checks
+                .iter()
+                .any(|check| check.split(',').any(|token| !token.trim().is_empty()))
+        };
+        if !args.expect_in.is_empty()
+            || !args.expect_out.is_empty()
+            || has_declared_check(&args.patch_input_check)
+            || has_declared_check(&args.patch_output_check)
+        {
+            return fail(
+                "validate",
+                "a .dcp patch cannot be combined with --expect-in, --expect-out, --patch-input-check, or --patch-output-check; checksum guards are unsupported for rebuilt GD-ROM filesystems".to_string(),
+            );
+        }
         if args.patch_header.contains(&PatchApplyHeaderMode::Strip)
             || args.output_header.is_some()
             || args.repair_checksum
