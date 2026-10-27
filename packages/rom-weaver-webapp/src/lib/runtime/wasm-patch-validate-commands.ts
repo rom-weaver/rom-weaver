@@ -119,9 +119,10 @@ const buildPatchValidateCommand = (args: {
 
 /**
  * Some validates fan worker threads across the source: bps block-check CRCs,
- * xdelta's per-window decode, or a caller-requested source-checksum verification.
+ * xdelta's per-window decode, UPS endpoint hashing, or a caller-requested
+ * source-checksum verification.
  * Those MUST keep the runner's worker pool - without it the engine spawns from an
- * empty pool and panics (os error 6). The rest (PPF/IPS/UPS structural + block
+ * empty pool and panics (os error 6). The rest (PPF/IPS structural + block
  * checks) read a few hundred bytes single-threaded, so the pool spin-up is pure
  * setup/teardown and is skipped. The apply path keeps its own input-size gate
  * since it always reads+writes the source.
@@ -130,7 +131,7 @@ const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, h
   const requestedThreadArg = toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, singleThreadNoPool, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles, input.inputSize);
-  // UPS validation hashes the source (both endpoints, N64 byte-order variants) in parallel even when the UI sends no checksum requirement.
+  // UPS plan validation hashes the source in parallel even when the UI sends no checksum requirement.
   const hasUpsPatch = input.patchFiles.some((patch) => String(patch.patchFormat ?? "").toLowerCase() === "ups");
   const validateUsesThreadPool = hasBpsPatch || hasXdeltaPatch || hasSourceChecksums || hasUpsPatch;
   const noWorkerPool = singleThreadNoPool || !validateUsesThreadPool;
