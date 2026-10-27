@@ -1,3 +1,4 @@
+import { SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { MARKDOWN_ROUTES } from "./markdown-routes.js";
 
 const wantsMarkdown = (accept) => {
@@ -37,6 +38,11 @@ export const onRequest = async ({ request, env, next }) => {
   // _headers stays under Pages' 100-rule cap by leaving these page Links to the middleware.
   if (!markdown && response.ok && route.alternateLink) {
     headers.append("Link", `<${route.markdownPath}>; rel="alternate"; type="text/markdown"`);
+  }
+  // A query string never names a different page (`?guide=weave` opens a guide on the
+  // same document), so say so in the header too, for crawlers that read it before the HTML.
+  if (!markdown && response.ok && url.search) {
+    headers.append("Link", `<${SITE_ORIGIN}${route.path}>; rel="canonical"`);
   }
   const vary = new Set(
     (headers.get("Vary") ?? "")

@@ -75,3 +75,8 @@
 /bundle-patches/ /weave-patches 301
 /bundle-patches.html /weave-patches 301
 /bundle-patches/index.html /weave-patches 301
+
+# Every page is served at both `/page` and `/page/` (the directory index), and the
+# slash form answers 200 with the same document. One URL per page: send the slash
+# form to the bare path. Last, so the legacy rules above keep their own destinations.
+/*/ /:splat 301

@@ -104,3 +104,17 @@ test("query variants stay uncached so deployment URL purges cover cached pages",
   const { response } = await negotiate("text/markdown", { path: "/?bundle=example" });
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
+
+test("query variants of a page name the clean URL as canonical", async () => {
+  const { response } = await negotiate("text/html", { path: "/weave-patches?guide=weave" });
+  assert.deepEqual(response.headers.get("Link").split(", "), [
+    '</weave-patches.md>; rel="alternate"; type="text/markdown"',
+    '<https://rom-weaver.com/weave-patches>; rel="canonical"',
+  ]);
+  const { response: home } = await negotiate("text/html", { path: "/?bundle=example" });
+  assert.equal(home.headers.get("Link"), '<https://rom-weaver.com/>; rel="canonical"');
+  for (const options of [{ path: "/weave-patches" }, { path: "/weave-patches?guide=weave", htmlStatus: 404 }]) {
+    const { response: clean } = await negotiate("text/html", options);
+    assert.ok(!(clean.headers.get("Link") ?? "").includes("canonical"), JSON.stringify(options));
+  }
+});

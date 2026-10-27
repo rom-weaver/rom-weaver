@@ -100,6 +100,30 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
     );
   }
 }
+// Every Markdown copy and JSON schema stays fetchable but out of search results; only
+// production indexes. robots.txt must not block them or a crawler never sees the noindex.
+for (const publicPath of [
+  ...MARKDOWN_ROUTES.map(({ markdownPath }) => markdownPath),
+  "/auth.md",
+  "/rom-weaver-bundle-v2.schema.json",
+  "/rom-weaver-weave-v2.schema.json",
+]) {
+  const robotsTag = matchPagesHeaders(parsePagesHeaders(headers), publicPath)["X-Robots-Tag"];
+  if (production && robotsTag !== "noindex") throw new Error(`${publicPath} must send X-Robots-Tag: noindex`);
+  if (!production && robotsTag !== "noindex, nofollow") throw new Error(`${publicPath} must stay noindex off prod`);
+}
+if (production) {
+  for (const htmlPath of ["/", "/apply-patches", "/docs/get-started"]) {
+    if (matchPagesHeaders(parsePagesHeaders(headers), htmlPath)["X-Robots-Tag"]) {
+      throw new Error(`${htmlPath} must stay indexable`);
+    }
+  }
+  assertExcludes(robots, ".md", "robots.txt");
+  assertExcludes(robots, ".json", "robots.txt");
+  assertExcludes(read("sitemap.xml"), ".md<", "sitemap Markdown URLs");
+  assertExcludes(read("sitemap.xml"), ".json<", "sitemap JSON URLs");
+}
+assertIncludes(redirects, "\n/*/ /:splat 301\n", "trailing-slash redirect");
 const authMarkdownHeaders = matchPagesHeaders(parsePagesHeaders(headers), "/auth.md");
 assertIncludes(authMarkdownHeaders["Content-Type"] ?? "", "text/markdown; charset=utf-8", "/auth.md content type");
 if (authMarkdownHeaders.Link) throw new Error("/auth.md must not carry a canonical Link");
@@ -704,7 +728,8 @@ if (production) {
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);
   }
-  if (headers.includes("X-Robots-Tag")) throw new Error("production headers must not block indexing");
+  // Only the Markdown and schema rules carry noindex; the `/*` block that covers pages must not.
+  if (headers.split("\n\n")[0].includes("X-Robots-Tag")) throw new Error("production headers must not block indexing");
 } else {
   const expectedAccent = {
     beta: "woad",

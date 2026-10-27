@@ -72,9 +72,15 @@ export const writeCloudflareHeadersAsset = (channel) => {
         ({ path: routePath, markdownPath }) =>
           `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`,
       ).join("\n");
+      // The Markdown copies and JSON schemas stay fetchable for LLMs and tools but out of
+      // search results. Never block them in robots.txt: a crawler that cannot fetch a URL
+      // cannot see its noindex. Two wildcard rules keep _headers under the 100-rule cap;
+      // other channels already send noindex on every response from the `/*` rule.
+      const noindexHeaders =
+        channel === "prod" ? "\n/*.md\n  X-Robots-Tag: noindex\n\n/*.schema.json\n  X-Robots-Tag: noindex\n" : "";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homeDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homeDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}${noindexHeaders}`,
       );
     },
     configResolved(config) {
