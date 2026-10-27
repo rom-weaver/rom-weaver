@@ -1,7 +1,8 @@
 use std::fs;
 
 use rom_weaver_core::{
-    PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence,
 };
 
 use super::{ApsGbaPatchHandler, create_apsgba_patch_bytes, parse_apsgba_bytes};
@@ -729,4 +730,171 @@ fn apply_in_memory_zero_fills_output_past_the_end_of_the_source() {
         )
         .expect("in-memory apply");
     assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn past_eof_growth_matches_across_apply_paths() {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    for source_len in [0, block, block + 17] {
+        let source = build_source_bytes(source_len);
+        let mut target = source.clone();
+        target.resize(3 * block + 31, 0);
+        if source_len > 0 {
+            target[source_len - 1] ^= 0x37;
+        }
+        target[source_len] = 0x26;
+        target[2 * block + 7] = 0x59;
+        target[3 * block + 30] = 0xa7;
+        let patch = create_apsgba_patch_bytes(&source, &target).expect("patch");
+        assert_past_eof_paths(&source, &target, &patch.bytes, None);
+    }
+}
+
+#[test]
+fn past_eof_shrink_matches_across_apply_paths() {
+    let block = super::APS_GBA_BLOCK_SIZE;
+    let source = build_source_bytes(3 * block + 31);
+    for target_len in [0, block, block + 17] {
+        let mut target = source[..target_len].to_vec();
+        if let Some(byte) = target.first_mut() {
+            *byte ^= 0x57;
+        }
+        let patch = create_apsgba_patch_bytes(&source, &target).expect("patch");
+        assert_past_eof_paths(&source, &target, &patch.bytes, None);
+    }
+}
+
+#[test]
+fn past_eof_records_match_across_apply_paths() {
+    let source = build_source_bytes(73);
+    for offset in [73, 74, u32::MAX] {
+        let patch = past_eof_record_patch(&source, offset);
+        assert_past_eof_paths(&source, &source, &patch, None);
+    }
+}
+
+#[test]
+fn past_eof_source_checksum_errors_match_across_apply_paths() {
+    let source = build_source_bytes(73);
+    let mut patch = past_eof_record_patch(&source, 74);
+    patch[super::APS_GBA_HEADER_SIZE + 4] ^= 1;
+    assert_past_eof_paths(
+        &source,
+        &source,
+        &patch,
+        Some(
+            "validation failed: Source checksum invalid at offset 74; expected: fffe, Actual: ffff",
+        ),
+    );
+}
+
+#[test]
+fn past_eof_target_checksum_errors_match_across_apply_paths() {
+    let source = build_source_bytes(73);
+    let mut patch = past_eof_record_patch(&source, 74);
+    patch[super::APS_GBA_HEADER_SIZE + 6] ^= 1;
+    assert_past_eof_paths(
+        &source,
+        &source,
+        &patch,
+        Some(
+            "validation failed: Target checksum invalid at offset 74; expected: fffe, Actual: ffff",
+        ),
+    );
+}
+
+fn past_eof_record_patch(source: &[u8], offset: u32) -> Vec<u8> {
+    let mut patch = b"APS1".to_vec();
+    patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    patch.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    patch.extend_from_slice(&offset.to_le_bytes());
+    // Empty endpoint CRCs MUST match the creator's initial CRC16 value, 0xffff.
+    patch.extend_from_slice(&0xffff_u16.to_le_bytes());
+    patch.extend_from_slice(&0xffff_u16.to_le_bytes());
+    patch.extend_from_slice(&vec![0x5a; super::APS_GBA_BLOCK_SIZE]);
+    patch.extend_from_slice(&0_u32.to_le_bytes());
+    let unchanged_crc = super::crc16_bytes(source).to_le_bytes();
+    patch.extend_from_slice(&unchanged_crc);
+    patch.extend_from_slice(&unchanged_crc);
+    patch.extend_from_slice(&vec![0; super::APS_GBA_BLOCK_SIZE]);
+    patch
+}
+
+fn assert_past_eof_paths(source: &[u8], target: &[u8], patch: &[u8], error: Option<&str>) {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    fs::write(&source_path, source).expect("source");
+    fs::write(&patch_path, patch).expect("patch");
+    let parsed = parse_apsgba_bytes(patch).expect("parse");
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    for (limit, threads, checksums) in [
+        (0, 1, PatchChecksumValidation::Strict),
+        (0, 4, PatchChecksumValidation::Strict),
+        (1 << 24, 4, PatchChecksumValidation::Strict),
+        (0, 1, PatchChecksumValidation::Ignore),
+        (0, 4, PatchChecksumValidation::Ignore),
+        (1 << 24, 4, PatchChecksumValidation::Ignore),
+    ] {
+        let context = test_context_with_threads(&temp, threads)
+            .with_patch_apply_in_memory_limit(limit)
+            .with_patch_checksum_validation(checksums);
+        let error = error.filter(|_| checksums == PatchChecksumValidation::Strict);
+        assert_eq!(
+            crate::can_apply_sparse_in_memory(
+                &context,
+                source.len() as u64,
+                target.len() as u64,
+                parsed.records.len(),
+                crate::APSGBA_SPARSE_STREAMING,
+            ),
+            limit != 0,
+        );
+        let output = temp.child(&format!("output-{limit}-{threads}.gba"));
+        let result = handler.apply(
+            &PatchApplyRequest {
+                input: source_path.clone(),
+                patches: vec![patch_path.clone()],
+                output: output.clone(),
+            },
+            &context,
+        );
+        if let Some(expected) = error {
+            let actual = result.expect_err("invalid checksum must fail");
+            assert!(matches!(
+                actual,
+                rom_weaver_core::RomWeaverError::Validation(_)
+            ));
+            assert_eq!(
+                actual.to_string(),
+                expected,
+                "limit {limit}, threads {threads}"
+            );
+        } else {
+            let report = result.unwrap_or_else(|err| {
+                panic!("past-EOF apply must succeed: limit {limit}, threads {threads}: {err}")
+            });
+            let execution = report.thread_execution.expect("thread execution");
+            assert_eq!(
+                execution.used_parallelism,
+                limit == 0 && threads > 1 && parsed.records.len() > 1,
+            );
+            assert_eq!(fs::read(output).expect("output"), target);
+        }
+        let validation = handler.validate(
+            &PatchValidateRequest {
+                input: source_path.clone(),
+                patches: vec![patch_path.clone()],
+            },
+            &context,
+        );
+        if let Some(expected) = error {
+            assert_eq!(
+                validation.expect_err("invalid checksum").to_string(),
+                expected
+            );
+        } else {
+            validation.expect("past-EOF validate must succeed");
+        }
+    }
 }
