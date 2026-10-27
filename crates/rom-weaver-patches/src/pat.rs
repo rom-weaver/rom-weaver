@@ -150,8 +150,9 @@ impl PatPatchHandler {
         };
         let skipped_suffix = if skipped > 0 {
             format!(
-                "; warning={} skipped {skipped} record(s) due to unexpected input byte",
-                self.descriptor.name
+                "; warning={} skipped {skipped} record(s) from {} due to unexpected input byte",
+                self.descriptor.name,
+                patch_path.display()
             )
         } else {
             String::new()
@@ -208,8 +209,9 @@ impl PatchHandler for PatPatchHandler {
         let (forward, reverse, skipped) = summarize_pat_writes(&writes)?;
         let skipped_suffix = if skipped > 0 {
             format!(
-                "; warning={} would skip {skipped} record(s) due to unexpected input byte",
-                self.descriptor.name
+                "; warning={} would skip {skipped} record(s) from {} due to unexpected input byte",
+                self.descriptor.name,
+                patch_path.display()
             )
         } else {
             String::new()

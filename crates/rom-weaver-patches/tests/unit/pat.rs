@@ -373,7 +373,7 @@ fn validate_reports_forward_reverse_and_skipped_records() {
         .validate(
             &PatchValidateRequest {
                 input: source,
-                patches: vec![patch],
+                patches: vec![patch.clone()],
             },
             &test_context_with_threads(&temp, 1),
         )
@@ -381,7 +381,10 @@ fn validate_reports_forward_reverse_and_skipped_records() {
 
     assert_eq!(
         report.label,
-        "validated PAT patch source with 3 record(s): 1 forward / 1 reverse; warning=PAT would skip 1 record(s) due to unexpected input byte"
+        format!(
+            "validated PAT patch source with 3 record(s): 1 forward / 1 reverse; warning=PAT would skip 1 record(s) from {} due to unexpected input byte",
+            patch.display()
+        )
     );
 }
 
