@@ -115,6 +115,22 @@ describe("run button press through a layout shift", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("forgets a press whose release never came once another press or a context menu starts", () => {
+    const { button, moveButton, neighbour, onClick, outer } = setup();
+    for (const interrupt of [
+      () => fireEvent.pointerDown(neighbour, PRESS),
+      () => fireEvent.contextMenu(button, PRESS),
+    ]) {
+      moveButton(100);
+      fireEvent.pointerDown(button, PRESS);
+      interrupt();
+      moveButton(153);
+      fireEvent.pointerUp(neighbour, PRESS);
+      fireEvent.click(outer);
+    }
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("leaves an aria-disabled button inert", () => {
     const { button, moveButton, neighbour, onClick, outer } = setup({ ariaDisabled: true });
     fireEvent.pointerDown(button, PRESS);

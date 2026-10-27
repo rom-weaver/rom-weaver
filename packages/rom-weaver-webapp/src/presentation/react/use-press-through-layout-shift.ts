@@ -38,10 +38,14 @@ const usePressThroughLayoutShift = () => {
       cancel: (cancel: PointerEvent) => void;
       click: (click: MouseEvent) => void;
       release: (release: PointerEvent) => void;
+      supersede: () => void;
     } = {
       cancel: (cancel) => {
         if (cancel.pointerId === pointerId) stop();
       },
+      // A release can go missing (a context menu takes it, the window loses focus); the next press
+      // anywhere must not be read as this press's release.
+      supersede: () => stop(),
       click: (click) => {
         stop();
         if (click.target instanceof Node && button.contains(click.target)) return;
@@ -65,12 +69,17 @@ const usePressThroughLayoutShift = () => {
     const stop = () => {
       document.removeEventListener("pointerup", listeners.release, true);
       document.removeEventListener("pointercancel", listeners.cancel, true);
+      document.removeEventListener("pointerdown", listeners.supersede, true);
+      document.removeEventListener("contextmenu", listeners.supersede, true);
       document.removeEventListener("click", listeners.click, true);
       clearTimeout(clickWindow);
       stopRef.current = null;
     };
+    // Added while this pointerdown is already past `document`, so they only see later events.
     document.addEventListener("pointerup", listeners.release, true);
     document.addEventListener("pointercancel", listeners.cancel, true);
+    document.addEventListener("pointerdown", listeners.supersede, true);
+    document.addEventListener("contextmenu", listeners.supersede, true);
     stopRef.current = stop;
   };
 };
