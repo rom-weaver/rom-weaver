@@ -187,6 +187,10 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     this.client.truncate(this.ensureOpen(), Number(size));
   }
 
+  publishWrites(): void {
+    this.flushWriteBuffer();
+  }
+
   flush(): void {
     if (this.handleId === null || this.closed) return;
     this.flushWriteBuffer();

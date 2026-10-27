@@ -125,6 +125,34 @@ beforeEach(() => {
 });
 
 describe("WASI close with proxy write buffering", () => {
+  it.each([false, true])("publishes buffered writes without proxy fsync with idle pooling=%s", (pooled) => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const pool = new IdleFilePool();
+    const inode = new WasiRandomAccessFileInode(file, {
+      closeOnLastFdClose: pooled,
+      idlePool: pooled ? pool : undefined,
+    });
+    const writer = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    const reader = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_READ, 0).fd_obj;
+    if (!(writer && reader)) throw new Error("fixture descriptors must open");
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    try {
+      expect(writer.fd_write(bytes)).toEqual({ nwritten: bytes.length, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(proxy.writes).toEqual([]);
+      expect(writer.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(bytes);
+      expect(proxy.flushed).toEqual([]);
+      const callsAfterWrite = [...proxy.calls];
+      expect(reader.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.calls).toEqual(callsAfterWrite);
+      expect(proxy.flushed).toEqual([]);
+      expect(proxy.closed).toEqual([]);
+      if (pooled) expect(pool.size).toBe(1);
+    } finally {
+      file.close();
+    }
+  });
+
   it.each([false, true])("publishes writes before returning with idle pooling=%s", (pooled) => {
     const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
     const pool = new IdleFilePool();
@@ -144,6 +172,26 @@ describe("WASI close with proxy write buffering", () => {
       expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2, 3, 4]));
       expect(proxy.closed).toEqual([]);
       if (pooled) expect(pool.size).toBe(1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("still requests durable storage on explicit fd_sync", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const inode = new WasiRandomAccessFileInode(file);
+    const fd = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    const bytes = new Uint8Array([1, 2, 3]);
+    try {
+      expect(fd.fd_write(bytes)).toEqual({ nwritten: bytes.length, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(proxy.writes).toEqual([]);
+      expect(fd.fd_sync()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(bytes);
+      expect(proxy.calls.slice(-2)).toEqual(["write", "flush"]);
+      expect(proxy.flushed).toEqual([1]);
+      expect(fd.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.flushed).toEqual([1]);
     } finally {
       file.close();
     }

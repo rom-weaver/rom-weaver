@@ -16,6 +16,8 @@ export interface RandomAccessFileLike {
   close?: () => void;
   flush: () => void;
   openNow?: () => void;
+  /** Buffered adapters MUST publish writes to other handles without requesting durable storage. */
+  publishWrites?: () => void;
   readAt: (offset: number | bigint, dst: Uint8Array) => number;
   reopen?: () => void;
   scratchName?: string | null;
@@ -356,7 +358,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
     // Close MUST publish adapter-buffered writes before Rust signals completion to other threads.
     // The inode can retain its adapter after the descriptor closes, including in the idle pool.
-    if (!this.inode.readonly) this.inode.file.flush();
+    if (!this.inode.readonly) this.inode.file.publishWrites?.();
     this.closed = true;
     this.writeBuffer = null;
     this.writeBufferLength = 0;
