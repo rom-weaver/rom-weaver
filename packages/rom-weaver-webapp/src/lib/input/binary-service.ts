@@ -6,6 +6,7 @@ import {
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
 import { createCleanupOnce as createStorageCleanupOnce } from "../../storage/shared/disposal.ts";
+import { readBrowserOpfsPrefix } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
@@ -254,6 +255,16 @@ const createPatchFileSourceAccess = ({
   getFilePath: () => (filePath ? filePath : null),
 });
 
+const readPathSourcePrefix = async (filePath: string, length: number, source?: SourceRef): Promise<Uint8Array> => {
+  const directSource = source === undefined ? undefined : getNamedSource(source);
+  if (isVfsFileRef(directSource)) {
+    const bytes = new Uint8Array(length);
+    const bytesRead = await directSource.vfs.read(directSource.path, bytes, { fileOffset: 0, length });
+    return bytes.subarray(0, bytesRead);
+  }
+  return readBrowserOpfsPrefix(filePath, length);
+};
+
 const createSourceAccessFromSource = (source: SourceRef, fallbackFileName?: string): PatchFileSourceAccess => {
   const fileName =
     getNamedSourceFileName(source, { fallback: fallbackFileName || "source.bin" }) || fallbackFileName || "source.bin";
@@ -442,6 +453,7 @@ export {
   createOutputFile,
   createPatchFile,
   createSourceAccessFromSource,
+  readPathSourcePrefix,
   decodeUtf8,
   getDefaultCreatePatchOutputFileName,
   getPatchFileBlob,

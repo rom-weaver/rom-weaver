@@ -25,6 +25,7 @@ import {
   createSourceAccessFromSource,
   decodeUtf8,
   getPatchFileBytes,
+  readPathSourcePrefix,
 } from "./binary-service.ts";
 import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
@@ -247,10 +248,15 @@ const createInputPreparationPatchFile = async (
     source: summarizePreparationSource(source, fallbackFileName),
   });
   const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
-  const sourceFileName = sourceAccess.fileName || fallbackFileName;
+  let sourceFileName = sourceAccess.fileName || fallbackFileName;
   const sourcePath =
     getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
   if (sourcePath) {
+    if (!ROM_SPECIFIC_DECOMPRESSION_EXTENSIONS.has(getFileExtension(sourceFileName))) {
+      const header = await readPathSourcePrefix(sourcePath, MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH, source);
+      const magicExtension = getRomSpecificMagicExtension(header);
+      if (magicExtension) sourceFileName = replaceFileExtension(sourceFileName, magicExtension);
+    }
     emitInputPreparationTrace(options, "create patch file lazy external source", {
       fileName: sourceFileName,
       role,
@@ -261,7 +267,8 @@ const createInputPreparationPatchFile = async (
       filePath: sourcePath,
       size: sourceAccess.size ?? undefined,
     });
-    attachPatchFileSourceRef(file, sourceAccess.getExternalSource());
+    const externalSource = sourceAccess.getExternalSource();
+    if (externalSource) attachPatchFileSourceRef(file, { ...externalSource, fileName: sourceFileName });
     inheritIngestPatchRequirements(source, file);
     return file;
   }

@@ -15,6 +15,9 @@ import { getProgressStagedInputInfo } from "../../src/public/react/apply-session
 import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 import type { SourceRef } from "../../src/types/source.ts";
 
+const { readPrefix } = vi.hoisted(() => ({ readPrefix: vi.fn(async () => new Uint8Array()) }));
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ readBrowserOpfsPrefix: readPrefix }));
+
 const makeFile = (contents: string, fileName: string, type = "application/octet-stream") =>
   new File([contents], fileName, { type });
 
@@ -216,6 +219,54 @@ describe("prepareInputAssets", () => {
       expect(() => createPublicSourceValidator({ environmentLabel: "browser" })(exported)).not.toThrow();
     },
   );
+
+  it.each([
+    ["chd", "MComprHD"],
+    ["rvz", "RVZ\u0001"],
+  ])("detects retained misnamed %s magic with Blob parity", async (extension, magic) => {
+    const expected = await prepareInput(makeFile(magic, "disc.bin"), "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    const source = makeFile(magic, "disc.bin");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/disc.bin" });
+    const readSnapshot = vi.spyOn(source, "slice").mockImplementation(() => {
+      throw new DOMException("The object can not be found here.", "NotFoundError");
+    });
+    readPrefix.mockResolvedValueOnce(new TextEncoder().encode(magic));
+    const actual = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(actual.fileName).toBe(`disc.${extension}`);
+    expect(actual.fileName).toBe(expected.fileName);
+    expect(actual.filePath).toBe("/work/retained/disc.bin");
+    expect(getPatchFileExternalSource(actual)?.source).toBe(source);
+    expect(getPatchFileExternalSource(actual)?.fileName).toBe(expected.fileName);
+    expect(readPrefix).toHaveBeenLastCalledWith("/work/retained/disc.bin", expect.any(Number));
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("reads retained VFS container magic through its own backend", async () => {
+    const bytes = new TextEncoder().encode("MComprHD");
+    const read = vi.fn(async (_path: string, buffer: Uint8Array) => {
+      buffer.set(bytes);
+      return bytes.length;
+    });
+    const source = { path: "/custom/disc.bin", fileName: "disc.bin", vfs: { read } } as unknown as SourceRef;
+    const calls = readPrefix.mock.calls.length;
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(file.fileName).toBe("disc.chd");
+    expect(file.filePath).toBe("/custom/disc.bin");
+    expect(read).toHaveBeenCalledWith("/custom/disc.bin", expect.any(Uint8Array), {
+      fileOffset: 0,
+      length: expect.any(Number),
+    });
+    expect(readPrefix.mock.calls.length).toBe(calls);
+  });
+
+  it("preserves a retained known codec extension without probing mismatched magic", async () => {
+    const source = makeFile("RVZ\u0001", "disc.chd");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/disc.chd" });
+    const calls = readPrefix.mock.calls.length;
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(file.fileName).toBe("disc.chd");
+    expect(readPrefix.mock.calls.length).toBe(calls);
+  });
 
   it("resolves a bare (non-container) ROM file into a single rom asset", async () => {
     const source = makeFile("rom-bytes", "game.bin");
