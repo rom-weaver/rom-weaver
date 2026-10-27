@@ -1801,7 +1801,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 60
+          # Same blobless full-history clone as `deploy`, so both preview
+          # paths build identical version strings.
+          fetch-depth: 0
+          filter: blob:none
           fetch-tags: true
 
       - name: Restore built wasm module
@@ -1918,16 +1921,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Only prod writes sitemap.xml, whose per-doc <lastmod> comes from
-          # `git log -- <doc>` (readDocLastmod); a shallow clone cannot answer
-          # that for docs older than its depth. So prod takes full history
-          # without file contents (no ~97 MB pack); other channels keep the
-          # changelog's depth and a normal clone. '0' is quoted because a
-          # bare 0 is falsy in expressions. Tags must still come along: the
-          # version string drops its `+hash` suffix only when
-          # `git tag --points-at HEAD` sees the release tag.
-          fetch-depth: ${{ matrix.target.channel == 'prod' && '0' || '60' }}
-          filter: ${{ matrix.target.channel == 'prod' && 'blob:none' || '' }}
+          # Full history without file contents (no ~97 MB pack), so
+          # `git log -- <doc>` (readDocLastmod) dates every doc and the
+          # version string always finds the last tag, on every channel. Tags
+          # must still come along: the version string drops its `+hash`
+          # suffix only when `git tag --points-at HEAD` sees the release tag.
+          fetch-depth: 0
+          filter: blob:none
           fetch-tags: true
 
       - name: Check publication freshness
