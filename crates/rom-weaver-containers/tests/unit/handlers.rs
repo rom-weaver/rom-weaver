@@ -633,8 +633,8 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "pbp", "chd", "gc-ciso", "gcz", "wia", "tgc", "nfs", "wbfs",
-                "rvz", "z3ds", "xiso"
+                "xz", "zst", "lz4", "cso", "pbp", "chd", "gc-ciso", "gcz", "wia", "tgc", "nfs",
+                "wbfs", "rvz", "z3ds", "xiso"
             ]
         );
     }

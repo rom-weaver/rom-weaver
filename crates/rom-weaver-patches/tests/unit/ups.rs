@@ -1125,3 +1125,37 @@ fn apply_read_only_input_0464() {
         0o464,
     );
 }
+
+#[test]
+fn parse_honors_patch_integrity_policy_without_skipping_structure() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("policy.ups");
+    let handler = UpsPatchHandler::new(&UPS);
+    let strict = test_context_with_threads(&temp, 1);
+    let ignore = test_context_with_threads(&temp, 1)
+        .with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+    let mut patch = create_ups_patch_bytes(b"source", b"target")
+        .expect("patch")
+        .bytes;
+    fs::write(&patch_path, &patch).expect("valid fixture");
+    handler
+        .parse(&patch_path, &strict)
+        .expect("strict valid parse");
+    *patch.last_mut().expect("patch CRC byte") ^= 1;
+    fs::write(&patch_path, &patch).expect("corrupt CRC fixture");
+    let error = handler
+        .parse(&patch_path, &strict)
+        .expect_err("strict CRC check");
+    assert!(
+        error.to_string().contains("Patch checksum invalid"),
+        "{error}"
+    );
+    handler
+        .parse(&patch_path, &ignore)
+        .expect("explicit Ignore must accept only a corrupted patch CRC");
+    fs::write(&patch_path, b"UPS1").expect("truncated fixture");
+    let error = handler
+        .parse(&patch_path, &ignore)
+        .expect_err("Ignore must still reject malformed structure");
+    assert!(error.to_string().contains("too small"), "{error}");
+}

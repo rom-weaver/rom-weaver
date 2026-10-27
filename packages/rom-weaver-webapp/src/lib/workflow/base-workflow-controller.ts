@@ -217,7 +217,20 @@ abstract class BaseWorkflowController<
     });
   }
 
-  protected assertCanStartOperation(): void {
+  /**
+   * Throws when the workflow cannot start an operation. A cancel that landed before the operation began
+   * is consumed here (rejecting this attempt) so it does not keep cancelling every later operation.
+   */
+  protected assertCanStartOperation(opts: { rearmAbort?: boolean } = {}): void {
+    try {
+      this.throwIfCannotStart();
+    } catch (error) {
+      if (opts.rearmAbort) this.rearmAbortController(this.abortController.signal);
+      throw error;
+    }
+  }
+
+  private throwIfCannotStart(): void {
     if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
     throwIfAborted(this.abortController.signal);
     throwIfAborted(this.constructorSignal);
@@ -225,7 +238,7 @@ abstract class BaseWorkflowController<
 
   /** Reject concurrent operations (trim's semantics: one mutation at a time). */
   protected async runExclusiveMutation<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    this.assertCanStartOperation();
+    this.assertCanStartOperation({ rearmAbort: true });
     if (this.activeMutation) {
       throw new RomWeaverError("WORKFLOW_BUSY", "Workflow is already running another operation", {
         details: { activeOperation: this.activeMutation, operation },
@@ -250,7 +263,7 @@ abstract class BaseWorkflowController<
     opts: { rearmAbort?: boolean; wrapErrors?: boolean } = {},
   ): Promise<TValue> {
     const execute = async () => {
-      this.assertCanStartOperation();
+      this.assertCanStartOperation({ rearmAbort: opts.rearmAbort });
       const operationSignal = this.abortController.signal;
       this.activeMutation = operation;
       try {

@@ -41,9 +41,40 @@ describe("prepareMultipleDirectInputAssets", () => {
     await expect(prepareMultipleDirectInputAssets(sources, NO_CONTAINER_OPTIONS)).resolves.toBeNull();
   });
 
-  it("returns null when no source is a CUE sheet", async () => {
+  it("returns null when no source is a disc sheet", async () => {
     const sources: SourceRef[] = [makeFile("bytes", "rom.bin")];
     await expect(prepareMultipleDirectInputAssets(sources, undefined)).resolves.toBeNull();
+  });
+
+  it("groups a loose GDI and its Blob-backed tracks without reading track bytes", async () => {
+    const gdi = makeFile(GDI_TEXT, "game.gdi");
+    const track = makeFile("track-bytes", "track01.bin");
+    const arrayBuffer = vi.spyOn(track, "arrayBuffer");
+    const slice = vi.spyOn(track, "slice");
+
+    const assets = await prepareMultipleDirectInputAssets([track, gdi], undefined);
+
+    expect(assets?.map((asset) => asset.kind)).toEqual(["gdi", "track"]);
+    const sheetAsset = assets?.[0];
+    const trackAsset = assets?.[1];
+    expect(trackAsset?.groupId).toBe(sheetAsset?.groupId);
+    expect(sheetAsset?.patchable).toBe(false);
+    expect(trackAsset?.patchable).toBe(true);
+    expect(trackAsset?.file.metadata?.gdiText).toBe(GDI_TEXT);
+    expect(trackAsset?.member).toBe("track01.bin");
+    expect(trackAsset && getPatchFileBlob(trackAsset.file)).toBe(track);
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(slice).not.toHaveBeenCalled();
+  });
+
+  it("reports the missing GDI track without treating unrelated files as companions", async () => {
+    const onCandidatesFound = vi.fn();
+    const sources = [makeFile(GDI_TEXT, "game.gdi"), makeFile("bytes", "other.bin")];
+
+    await expect(prepareMultipleDirectInputAssets(sources, { onCandidatesFound })).rejects.toThrow(
+      "GDI file references missing file(s): track01.bin",
+    );
+    expect(onCandidatesFound.mock.calls[0]?.[0].warnings).toEqual(["game.gdi references missing file(s): track01.bin"]);
   });
 
   it("groups a CUE and its referenced track into cue + track assets", async () => {
@@ -90,9 +121,8 @@ describe("prepareMultipleDirectInputAssets", () => {
     expect(assets?.some((asset) => asset.kind === "rom")).toBe(false);
     const gdiAsset = assets?.find((asset) => asset.fileName === "game.gdi");
     expect(gdiAsset).toBeDefined();
-    // The direct-drop path tags this sibling GDI as cue through makeCueAsset.
-    // The archive path uses makeGdiAsset, so the same descriptor receives a different kind there.
-    expect(gdiAsset?.kind).toBe("cue");
+    expect(gdiAsset?.kind).toBe("gdi");
+    expect(gdiAsset?.file.metadata?.gdiText).toBe(GDI_TEXT);
   });
 
   it("leaves an unrelated file as a standalone ROM asset alongside the CUE group", async () => {

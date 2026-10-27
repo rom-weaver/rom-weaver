@@ -121,6 +121,7 @@ pub const CONTAINER_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".bz2",
     ".xz",
     ".zst",
+    ".lz4",
     ".cso",
     ".ciso",
     ".pbp",

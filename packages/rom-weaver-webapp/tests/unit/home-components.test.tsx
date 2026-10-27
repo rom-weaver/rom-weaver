@@ -92,7 +92,7 @@ describe("HomePage", () => {
     expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
     expect(container.querySelector("a[href='/tools/docs/faq']")).not.toBeNull();
     const formatHeadings = Array.from(container.querySelectorAll(".home-format-group h3"), (item) => item.textContent);
-    expect(formatHeadings).toEqual(["20 patch formats", "24 archive and disc formats", "8 checksum types"]);
+    expect(formatHeadings).toEqual(["20 patch formats", "25 archive and disc formats", "8 checksum types"]);
     expect(container.querySelector(".home-format-group p")?.textContent).toContain(".bps");
     expect(container.querySelectorAll(".home-faq details")).toHaveLength(8);
     expect(container.querySelector(".home-about h2")?.textContent).toBe("What is rom-weaver?");

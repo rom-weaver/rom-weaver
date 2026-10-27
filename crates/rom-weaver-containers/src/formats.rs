@@ -90,6 +90,12 @@ pub(crate) const ZST: FormatDescriptor = FormatDescriptor {
     aliases: &["zstd", "zstandard"],
     extensions: &[".zst"],
 };
+pub(crate) const LZ4: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "lz4",
+    aliases: &[],
+    extensions: &[".lz4"],
+};
 pub(crate) const CSO: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "cso",
@@ -345,7 +351,7 @@ enum ContainerHandlerKind {
 
 impl ContainerHandlerKind {
     /// Single-payload codec containers that probe reports directly instead of
-    /// decompressing to the inner payload. Stream codecs (gz/bz2/xz/zst) are
+    /// decompressing to the inner payload. Stream codecs (gz/bz2/xz/zst/lz4) are
     /// also single-payload codecs, but remain excluded so probe still drills
     /// into their inner payloads; generic archives are excluded for the same
     /// reason.
@@ -538,6 +544,15 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
         capabilities: EXTRACT_ONLY_PARALLEL,
         default_output: None,
         handler: ContainerHandlerKind::Stream(StreamCompression::Zstd),
+    },
+    ContainerFormatRegistration {
+        descriptor: &LZ4,
+        capabilities: RegisteredContainerCapabilities {
+            extract_threads: SINGLE_THREADED,
+            ..EXTRACT_ONLY_PARALLEL
+        },
+        default_output: None,
+        handler: ContainerHandlerKind::Stream(StreamCompression::Lz4),
     },
     ContainerFormatRegistration {
         descriptor: &CSO,

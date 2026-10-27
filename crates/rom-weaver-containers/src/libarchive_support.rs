@@ -631,6 +631,7 @@ fn libarchive_read_filter_name(filter: LibarchiveReadFilter) -> &'static str {
         LibarchiveReadFilter::Bzip2 => "bzip2",
         LibarchiveReadFilter::Xz => "xz",
         LibarchiveReadFilter::Zstd => "zstd",
+        LibarchiveReadFilter::Lz4 => "lz4",
     }
 }
 
@@ -2885,9 +2886,10 @@ mod tests {
                 LibarchiveReadFilter::Bzip2,
                 LibarchiveReadFilter::Xz,
                 LibarchiveReadFilter::Zstd,
+                LibarchiveReadFilter::Lz4,
             ]
             .map(libarchive_read_filter_name),
-            ["gzip", "bzip2", "xz", "zstd"]
+            ["gzip", "bzip2", "xz", "zstd", "lz4"]
         );
     }
 

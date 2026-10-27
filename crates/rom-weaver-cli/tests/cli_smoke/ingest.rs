@@ -37,6 +37,73 @@ fn ingest_terminal(args: &[&str]) -> Value {
     run_single_json_event(args, 0)
 }
 
+#[test]
+fn ingest_lz4_payload_completes_create_and_apply() {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir_all(home.path()).unwrap();
+    let envs = [
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+    ]
+    .map(|key| (key, home.path().to_str().unwrap()));
+    let run = |args: &[&str]| command_stdout_with_env(args, &envs, 0);
+    let original: Vec<u8> = (0..4096).map(|i| (i * 31 + (i >> 4)) as u8).collect();
+    let mut modified = original.clone();
+    modified[7] ^= 0x5a;
+    let mut frame = vec![0x04, 0x22, 0x4d, 0x18, 0x60, 0x40, 0x82];
+    frame.extend_from_slice(&(0x8000_0000 | original.len() as u32).to_le_bytes());
+    frame.extend_from_slice(&original);
+    frame.extend_from_slice(&[0; 4]);
+    let source = temp.child("original.bin.lz4");
+    fs::write(source.path(), frame).unwrap();
+    let output = temp.child("ingested");
+    let terminal = parse_single_json_line(&run(&[
+        "ingest",
+        "--input",
+        source.path().to_str().unwrap(),
+        "--output",
+        output.path().to_str().unwrap(),
+        "--json",
+    ]));
+    let assets = terminal["details"]["ingest"]["assets"].as_array().unwrap();
+    assert_eq!(assets.len(), 1, "LZ4 ingest must produce one ROM payload");
+    assert_eq!(assets[0]["file_name"], "original.bin");
+    let extracted = assets[0]["path"].as_str().unwrap();
+    assert_eq!(fs::read(extracted).unwrap(), original);
+    let modified_path = temp.child("modified.bin");
+    fs::write(modified_path.path(), &modified).unwrap();
+    let patch = temp.child("change.bps");
+    run(&[
+        "patch",
+        "create",
+        "--original",
+        extracted,
+        "--modified",
+        modified_path.path().to_str().unwrap(),
+        "--format",
+        "bps",
+        "--output",
+        patch.path().to_str().unwrap(),
+    ]);
+    let applied = temp.child("applied.bin");
+    run(&[
+        "patch",
+        "apply",
+        "--input",
+        extracted,
+        "--patch",
+        patch.path().to_str().unwrap(),
+        "--output",
+        applied.path().to_str().unwrap(),
+        "--no-compress",
+    ]);
+    assert_eq!(fs::read(applied.path()).unwrap(), modified);
+}
+
 /// Ingest a two-track CD CHD against a per-track (Redump-shaped) pack: every
 /// track resolves to the disc's title, through its own single-blob lookup or
 /// the disc-group fingerprint built from the streamed track checksums. A first

@@ -86,9 +86,9 @@ const normalizeCandidateCreatePatchFormats = (formats?: readonly string[] | null
 };
 
 /**
- * Formats to offer in the picker. Resolved candidates (from the Rust plan) win; without them the
- * size list is used minus source-restricted formats. A shrinking target also drops formats that
- * cannot encode it, since candidates are shared between Original/Modified orderings.
+ * Planned candidates MUST respect prepared ROM sizes: archive plans measure compressed inputs.
+ * Without candidates, source-restricted formats stay hidden. Shrinking restrictions also apply
+ * because candidates are shared between Original/Modified orderings.
  */
 const getSelectableCreatePatchFormats = ({
   candidateFormats,
@@ -100,12 +100,11 @@ const getSelectableCreatePatchFormats = ({
   originalSize?: number | null;
 }): readonly string[] => {
   const candidates = normalizeCandidateCreatePatchFormats(candidateFormats);
+  const sizeFormats = getCreatePatchFormatsForSizes(originalSize, modifiedSize);
   const formats = candidates.length
-    ? candidates
-    : getCreatePatchFormatsForSizeBucket(originalSize, modifiedSize).filter(
-        (format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format),
-      );
-  return withoutNoShrinkFormats(formats, originalSize, modifiedSize);
+    ? candidates.filter((format) => sizeFormats.includes(format))
+    : sizeFormats.filter((format) => !SOURCE_RESTRICTED_CREATE_PATCH_FORMATS.includes(format));
+  return formats;
 };
 
 const getPreferredCreatePatchFormat = ({

@@ -87,6 +87,7 @@ assert_cmd.workspace = true
 assert_fs.workspace = true
 cbc.workspace = true
 flate2.workspace = true
+lz4_flex = "0.14.0"
 
 [[bin]]
 name = "rom-weaver"

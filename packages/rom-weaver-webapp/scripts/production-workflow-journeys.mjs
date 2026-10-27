@@ -68,12 +68,18 @@ const enableBetaTools = (context) =>
 // Recent console lines per page, dumped when a download never starts so CI-only flakes show which
 // app branch swallowed the click.
 const consoleTails = new WeakMap();
-const captureConsoleTail = (page) => {
+export const captureConsoleTail = (page) => {
   const lines = [];
-  consoleTails.set(page, lines);
+  const primaryActions = [];
+  consoleTails.set(page, { lines, primaryActions });
   page.on("console", (message) => {
-    lines.push(`[${message.type()}] ${message.text()}`);
+    const line = `[${message.type()}] ${message.text()}`;
+    lines.push(line);
     if (lines.length > 200) lines.shift();
+    if (message.text().includes("apply primary action")) {
+      primaryActions.push(line);
+      if (primaryActions.length > 80) primaryActions.shift();
+    }
   });
 };
 
@@ -85,19 +91,64 @@ const enableTraceLogging = (page) =>
     localStorage.setItem(key, JSON.stringify({ ...stored, common: { ...stored.common, logLevel: "trace" } }));
   });
 
-const downloadedBytes = async (page, action) => {
+// The app saves outputs through an <a download> click, and browsers rewrite characters they will not
+// save: Chromium turns ":" into "_", and Linux WebKit also turns spaces into "_" where Chromium and
+// macOS WebKit keep them. `requestedName` is the name the app asked for; `name` stays the saved name,
+// which journeys re-upload as a user would.
+const savedNameForm = (name) => name.replace(/[\s\\/:*?"<>|]/g, "_");
+
+const recordRequestedDownloadNames = (page) =>
+  page.evaluate(() => {
+    if (window.__romWeaverRequestedDownloads) return;
+    window.__romWeaverRequestedDownloads = [];
+    document.addEventListener(
+      "click",
+      (event) => {
+        const anchor = event.target;
+        if (anchor instanceof HTMLAnchorElement && anchor.hasAttribute("download"))
+          window.__romWeaverRequestedDownloads.push(anchor.download);
+      },
+      true,
+    );
+  });
+
+const requestedDownloadName = async (page, saved) => {
+  const requested = await page.evaluate(() => window.__romWeaverRequestedDownloads?.splice(0) || []);
+  const name = requested.find((candidate) => savedNameForm(candidate) === savedNameForm(saved));
+  requireJourney(
+    name || requested.length === 0,
+    `Download ${saved} matches no name the app requested (${requested.join(", ")})`,
+  );
+  return name ?? saved;
+};
+
+export const downloadedBytes = async (page, action) => {
   let download;
+  let actionState = "pending";
+  await recordRequestedDownloadNames(page);
+  const triggerAction = async () => {
+    try {
+      await action();
+      actionState = "completed";
+    } catch (error) {
+      actionState = "failed";
+      throw error;
+    }
+  };
   try {
-    [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), action()]);
+    [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }), triggerAction()]);
   } catch (cause) {
+    const actionStateAtFailure = actionState;
     const visibleState = (await page.locator("body").innerText()).slice(-8000);
     const buttons = await page
       .locator("button[id^='rom-weaver-button'], button[id^='patch-builder-button']")
       .evaluateAll((elements) => elements.map((element) => element.outerHTML.slice(0, 400)))
       .catch((error) => [`(button state unavailable: ${error.message})`]);
-    const consoleTail = (consoleTails.get(page) || []).slice(-80);
+    const history = consoleTails.get(page);
+    const consoleTail = (history?.lines || []).slice(-80);
+    const primaryActions = history?.primaryActions || [];
     throw new Error(
-      `Download did not start. Visible state:\n${visibleState}\n\nAction buttons:\n${buttons.join("\n")}\n\nConsole tail:\n${consoleTail.join("\n")}`,
+      `Download did not start. Trigger action: ${actionStateAtFailure}. Visible state:\n${visibleState}\n\nAction buttons:\n${buttons.join("\n")}\n\nApply action history:\n${primaryActions.join("\n")}\n\nConsole tail:\n${consoleTail.join("\n")}`,
       { cause },
     );
   }
@@ -108,7 +159,11 @@ const downloadedBytes = async (page, action) => {
     throw new Error(`Download ${download.suggestedFilename()} failed: ${String(await download.failure())}`, { cause });
   }
   requireJourney(downloadPath, `Download ${download.suggestedFilename()} has no saved path`);
-  return { bytes: fs.readFileSync(downloadPath), name: download.suggestedFilename() };
+  return {
+    bytes: fs.readFileSync(downloadPath),
+    name: download.suggestedFilename(),
+    requestedName: await requestedDownloadName(page, download.suggestedFilename()),
+  };
 };
 
 const waitForEnabled = async (page, id) => {
@@ -120,6 +175,81 @@ const waitForEnabled = async (page, id) => {
   } catch (cause) {
     const visibleState = (await page.locator("body").innerText()).slice(-8000);
     throw new Error(`${id} never became enabled. Visible state:\n${visibleState}`, { cause });
+  }
+};
+
+// Action buttons enable while staged cards still checksum and verify, and each result reflows the
+// cards above the button. On WebKit a click whose press and release straddle a reflow lands on a
+// shared ancestor, so the button never activates. Wait until no card shows a stage bar and every
+// patch card has its verdict. Patch verification needs the ROM's checksums, so a verdict also means
+// the ROM finished staging. Without patch cards, every source card must report ready.
+const waitForSettledInputs = async (page) => {
+  try {
+    await page.waitForFunction(() => {
+      const cards = Array.from(document.querySelectorAll("main .card.file")).filter(
+        (card) => card.getClientRects().length > 0,
+      );
+      const patches = cards.filter((card) => card.classList.contains("patch"));
+      const hasVerdict = (card) => ["ok", "bad", "warn"].some((verdict) => card.classList.contains(verdict));
+      return (
+        cards.length > 0 &&
+        !cards.some((card) => card.classList.contains("has-stage-bar")) &&
+        (patches.length > 0 ? patches : cards).every(hasVerdict)
+      );
+    });
+  } catch (cause) {
+    const visibleState = (await page.locator("body").innerText()).slice(-8000);
+    throw new Error(`Staged inputs never settled. Visible state:\n${visibleState}`, { cause });
+  }
+};
+
+// The reflow above can still land between a user's press and release, and on WebKit CI the page
+// also scrolled back 40-50 px as the document shrank and regrew. Hold the button, push its card down
+// with a spacer right above it (scroll anchoring off, and visible content above the spacer stays
+// put, so the button really moves), scroll the page up 40 px without user input, require that the
+// release point now lies over another element, and release there. The button must still run.
+const pressAcrossLayoutShift = async (page, selector) => {
+  const button = page.locator(selector);
+  await button.scrollIntoViewIfNeeded();
+  const box = await button.boundingBox();
+  requireJourney(box, `${selector} has no pointer target`);
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  try {
+    const shift = await page.evaluate(
+      async ({ selector: target, x, y }) => {
+        for (const element of [document.documentElement, document.body]) {
+          element.style.overflowAnchor = "none";
+          element.style.scrollBehavior = "auto";
+        }
+        const spacer = document.createElement("div");
+        spacer.id = "journey-layout-shift";
+        spacer.style.height = "64px";
+        const button = document.querySelector(target);
+        (button.closest(".card") || button).before(spacer);
+        const scrolledFrom = window.scrollY;
+        window.scrollBy(0, -40);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const hit = document.elementFromPoint(x, y);
+        return {
+          releaseTarget: hit?.closest(target) ? "" : `${hit?.tagName.toLowerCase()}.${hit?.className}`,
+          scrolled: Math.round(window.scrollY - scrolledFrom),
+        };
+      },
+      { selector, ...point },
+    );
+    requireJourney(shift.releaseTarget, `${selector} did not move off the release point`);
+    requireEqual(shift.scrolled, -40, `${selector}: the page did not scroll during the press`);
+  } finally {
+    await page.mouse.up();
+    await page.evaluate(() => {
+      document.getElementById("journey-layout-shift")?.remove();
+      for (const element of [document.documentElement, document.body]) {
+        element.style.overflowAnchor = "";
+        element.style.scrollBehavior = "";
+      }
+    });
   }
 };
 
@@ -186,6 +316,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     const picker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
     await picker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-apply");
+    await waitForSettledInputs(page);
     const rebuilt = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rebuilt.bytes, expected, `${label} -> Apply exact combined result`);
   };
@@ -209,6 +340,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     "Create should select Patches & cheats for patch uploads",
   );
   await requireCollapsedOutputJobs(page, ["rom-weaver-apply-job", "rom-weaver-weave-job"], "Create combined outputs");
+  await waitForSettledInputs(page);
   const createOutput = page.locator("#rom-weaver-combined-patch-output");
   await createOutput.locator("#rom-weaver-combined-patch-format").selectOption("bps");
   const created = await downloadedBytes(page, () =>
@@ -223,6 +355,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     const picker = await openWorkflow(page, baseUrl, route, pickerId);
     await picker.setInputFiles(stackFiles());
     await requireCollapsedOutputJobs(page, ["rom-weaver-combined-patch-job", otherJob], route);
+    await waitForSettledInputs(page);
     const combinedJob = page.locator("#rom-weaver-combined-patch-job");
     await combinedJob.locator(":scope > .weave-job > button[aria-expanded]").click();
     await combinedJob.locator("#rom-weaver-combined-patch-format").selectOption("bps");
@@ -234,6 +367,104 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
   process.stdout.write(
     "PASS Create auto-mode and Apply/Weave optional combined BPS exports -> exact byte roundtrips\n",
   );
+};
+
+const applyDuringPopulation = async (page, picker, files) => {
+  await page.evaluate(() => {
+    const startViewTransition = document.startViewTransition?.bind(document);
+    const transitions = [];
+    const releases = [];
+    let released = false;
+    let clicks = 0;
+    let presses = 0;
+    const recordPress = (event) => {
+      if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
+        presses++;
+    };
+    // A release that a reflow moved off Apply reaches it as the button's own forwarded click, which
+    // is untrusted, so count every click that lands on Apply.
+    const recordClick = (event) => {
+      if (event.target instanceof Element && event.target.closest("#rom-weaver-button-apply")) clicks++;
+    };
+    document.addEventListener("click", recordClick, true);
+    document.addEventListener("pointerdown", recordPress, true);
+    if (typeof startViewTransition === "function") {
+      document.startViewTransition = (options) => {
+        const update = typeof options === "function" ? options : options.update;
+        const held = new Promise((resolve) => {
+          if (released) resolve();
+          else releases.push(resolve);
+        });
+        const deferredUpdate = async () => {
+          await update?.();
+          await held;
+        };
+        const transition = startViewTransition(
+          typeof options === "function" ? deferredUpdate : { ...options, update: deferredUpdate },
+        );
+        transitions.push(transition);
+        return transition;
+      };
+    }
+    window.__romWeaverPopulationGesture = {
+      getClicks: () => clicks,
+      getPresses: () => presses,
+      settle: async () => {
+        released = true;
+        for (const resolve of releases) resolve();
+        await Promise.allSettled(transitions.map((transition) => transition.ready));
+        for (const animation of document.getAnimations()) {
+          if (animation.effect?.pseudoElement?.startsWith("::view-transition")) animation.pause();
+        }
+      },
+      restore: () => {
+        released = true;
+        for (const resolve of releases) resolve();
+        for (const transition of transitions) transition.skipTransition();
+        document.startViewTransition = startViewTransition;
+        document.removeEventListener("click", recordClick, true);
+        document.removeEventListener("pointerdown", recordPress, true);
+      },
+    };
+  });
+  let pressed = false;
+  try {
+    await Promise.all([
+      page.waitForEvent("console", { predicate: (message) => message.text().includes("patch validation settled") }),
+      picker.setInputFiles(files),
+    ]);
+    await waitForEnabled(page, "rom-weaver-button-apply");
+    const button = page.locator("#rom-weaver-button-apply");
+    await button.click({ trial: true });
+    await button.scrollIntoViewIfNeeded();
+    const box = await button.boundingBox();
+    requireJourney(box, "Apply has no pointer target after input staging");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    return await downloadedBytes(page, async () => {
+      await page.mouse.down();
+      pressed = true;
+      requireEqual(
+        await page.evaluate(() => window.__romWeaverPopulationGesture.getPresses()),
+        1,
+        "Input staging moved Apply before the trusted pointer press",
+      );
+      // Pending snapshots MUST settle before pointer release to expose gesture retargeting.
+      await page.evaluate(() => window.__romWeaverPopulationGesture.settle());
+      await page.mouse.up();
+      pressed = false;
+      requireEqual(
+        await page.evaluate(() => window.__romWeaverPopulationGesture.getClicks()),
+        1,
+        "Population snapshot swallowed the Apply click",
+      );
+    });
+  } finally {
+    if (pressed) await page.mouse.up();
+    await page.evaluate(() => {
+      window.__romWeaverPopulationGesture.restore();
+      delete window.__romWeaverPopulationGesture;
+    });
+  }
 };
 
 export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureUncompressedOutput) => {
@@ -249,6 +480,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await configureUncompressedOutput(page);
     await picker.setInputFiles([inputFile("original.bin", original), inputFile("modified.bin", modified)]);
     await waitForEnabled(page, "patch-builder-button-create");
+    await waitForSettledInputs(page);
     await page.locator("#patch-builder-select-patch-type").selectOption("bps");
     const patch = await downloadedBytes(page, () => page.locator("#patch-builder-button-create").click());
     requireJourney(patch.name.endsWith(".bps"), `Create: expected BPS, received ${patch.name}`);
@@ -265,13 +497,16 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     );
     await enableTraceLogging(page);
     const applyPicker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
-    await applyPicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
-    await waitForEnabled(page, "rom-weaver-button-apply");
-    const output = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
+    const output = await applyDuringPopulation(page, applyPicker, [
+      inputFile("original.bin", original),
+      inputFile(patch.name, patch.bytes),
+    ]);
     assertJourneyBytes(output.bytes, modified, "Create -> Apply BPS roundtrip");
+    process.stdout.write("PASS trusted Apply click during input population -> exact patched bytes\n");
     const weavePicker = await openWorkflow(page, baseUrl, "weave-patches", "rom-weaver-input-file-unified-weave");
     await weavePicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-export-weave");
+    await waitForSettledInputs(page);
     await page.getByRole("button", { name: "Options", exact: true }).click();
     await page.locator("#rom-weaver-weave-export-weave-rom").check();
     await page.locator("#rom-weaver-button-export-weave").click();
@@ -283,12 +518,13 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await recipePicker.setInputFiles(inputFile(recipe.name, recipe.bytes));
     await page.locator("#rom-weaver-list-patch-stack .file").waitFor({ state: "visible" });
     await waitForEnabled(page, "rom-weaver-button-apply");
-    const rewoven = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
+    await waitForSettledInputs(page);
+    const rewoven = await downloadedBytes(page, () => pressAcrossLayoutShift(page, "#rom-weaver-button-apply"));
     assertJourneyBytes(rewoven.bytes, modified, "Weave export -> Apply exact roundtrip");
     await runCombinedPatchRoundtrips(page, baseUrl, configureUncompressedOutput);
     requireJourney(failures.length === 0, `Create/Apply uncaught page errors: ${failures.join("; ")}`);
     process.stdout.write(`PASS Create -> Apply BPS roundtrip (${original.length} -> ${output.bytes.length} bytes)\n`);
-    process.stdout.write("PASS Weave export with ROM -> Apply exact roundtrip\n");
+    process.stdout.write("PASS Weave export with ROM -> Apply exact roundtrip (Apply pressed across a layout shift)\n");
   } finally {
     await context.close();
   }
@@ -392,7 +628,7 @@ export const runTrimJourney = async (createContext, baseUrl, configureUncompress
         .getByRole("button", { name: "Trim ROM", exact: true })
         .click();
     });
-    requireEqual(output.name, "game (trimmed).nds");
+    requireEqual(output.requestedName, "game (trimmed).nds");
     assertJourneyBytes(output.bytes, input.subarray(0, 0x3000), "Trim NDS declared extent");
     process.stdout.write(`PASS Trim NDS (${input.length} -> ${output.bytes.length} exact bytes)\n`);
   } finally {

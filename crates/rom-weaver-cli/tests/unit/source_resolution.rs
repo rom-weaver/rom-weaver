@@ -691,16 +691,27 @@ fn exact_member_peels_stream_wrappers_but_requires_a_member() {
     for (input, name, should_resolve) in [
         (&archive, "roms.zip.gz", true),
         (&source, "game.bin.gz", false),
+        (&archive, "roms.zip.lz4", true),
+        (&source, "game.bin.lz4", false),
     ] {
         let compressed = dir.join(name);
-        let mut encoder = flate2::write::GzEncoder::new(
-            File::create(&compressed).expect("gzip file"),
-            flate2::Compression::default(),
-        );
-        encoder
-            .write_all(&fs::read(input).expect("gzip input"))
-            .expect("gzip encode");
-        encoder.finish().expect("gzip finish");
+        if name.ends_with(".lz4") {
+            let mut encoder =
+                lz4_flex::frame::FrameEncoder::new(File::create(&compressed).expect("lz4 file"));
+            encoder
+                .write_all(&fs::read(input).expect("lz4 input"))
+                .expect("lz4 encode");
+            encoder.finish().expect("lz4 finish");
+        } else {
+            let mut encoder = flate2::write::GzEncoder::new(
+                File::create(&compressed).expect("gzip file"),
+                flate2::Compression::default(),
+            );
+            encoder
+                .write_all(&fs::read(input).expect("gzip input"))
+                .expect("gzip encode");
+            encoder.finish().expect("gzip finish");
+        }
         let result =
             app.resolve_exact_member_source(&compressed, "game.bin", &context, labels(), flags);
         if should_resolve {

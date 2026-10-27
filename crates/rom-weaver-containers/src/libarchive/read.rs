@@ -34,6 +34,7 @@ const REGULAR_ARCHIVE_SUPPORT: &[(&str, SupportFunction)] = &[
     ("compress filter", archive_read_support_filter_compress),
     ("gzip filter", archive_read_support_filter_gzip),
     ("lzip filter", archive_read_support_filter_lzip),
+    ("lz4 filter", archive_read_support_filter_lz4),
     ("lzma filter", archive_read_support_filter_lzma),
     ("xz filter", archive_read_support_filter_xz),
     ("uu filter", archive_read_support_filter_uu),
@@ -47,6 +48,7 @@ pub enum ReadFilter {
     Bzip2,
     Xz,
     Zstd,
+    Lz4,
 }
 pub struct ReadArchive {
     ptr: Option<NonNull<archive>>,
@@ -90,6 +92,7 @@ impl ReadArchive {
                 ReadFilter::Bzip2 => archive_read_support_filter_bzip2(self.as_ptr()),
                 ReadFilter::Xz => archive_read_support_filter_xz(self.as_ptr()),
                 ReadFilter::Zstd => archive_read_support_filter_zstd(self.as_ptr()),
+                ReadFilter::Lz4 => archive_read_support_filter_lz4(self.as_ptr()),
             }
         };
         self.check_status(status, context)
@@ -103,6 +106,7 @@ impl ReadArchive {
             ReadFilter::Bzip2 => (ARCHIVE_FILTER_BZIP2, "bzip2"),
             ReadFilter::Xz => (ARCHIVE_FILTER_XZ, "xz"),
             ReadFilter::Zstd => (ARCHIVE_FILTER_ZSTD, "zstd"),
+            ReadFilter::Lz4 => (ARCHIVE_FILTER_LZ4, "lz4"),
         };
         let actual = unsafe { archive_filter_code(self.as_ptr(), 0) };
         trace!(source = %source.display(), expected, actual, "libarchive read filter check");

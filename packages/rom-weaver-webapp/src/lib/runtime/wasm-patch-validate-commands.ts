@@ -51,6 +51,7 @@ const parsePatchValidatePerPatchEntry = (raw: unknown): PatchValidatePerPatchVer
     ...(typeof record.format === "string" ? { format: record.format } : {}),
     ...(typeof record.message === "string" ? { message: record.message } : {}),
     ...(typeof record.patch === "string" ? { patch: record.patch } : {}),
+    ...(record.unreadable === true ? { unreadable: true } : {}),
     status: record.status === "failed" ? "failed" : "passed",
   };
 };

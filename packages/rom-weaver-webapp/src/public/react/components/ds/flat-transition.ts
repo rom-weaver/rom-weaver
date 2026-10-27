@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
-import { flushSync } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
 
 const logger = createLogger("flat-transition");
 
 /**
  * Flat view-transition helper - the loom crossfade for layout changes with no
- * element continuity (tab switches, the empty bench filling up). `vt-flat`
+ * element continuity (tab switches). `vt-flat`
  * suppresses per-element morph names; `vt-quiet` holds entry animations while
  * the crossfade plays, and every entry-animatable element is locked inline
  * before the classes come off so re-shown content never replays its
@@ -93,9 +91,8 @@ const holdTransitionClasses = (classes: readonly string[]): (() => void) => {
  * Run a synchronous DOM update inside a flat crossfade (no-op fallback).
  * `extraClass` tags the transition on `<html>` for the run's duration - mode
  * (tab) switches pass `vt-mode` so the CSS can flatten the per-form drop/head
- * names: those names give the empty→filled morph its continuity WITHIN a form,
- * but across tabs the two forms' names differ, so they'd fade independently and
- * out of sync with the root crossfade instead of riding it as one surface.
+ * names. The forms' names differ across tabs, so they would otherwise fade
+ * independently and out of sync with the root crossfade.
  */
 const runFlatViewTransition = (update: () => void, extraClass?: string) => {
   const classes = extraClass ? ["vt-flat", "vt-quiet", extraClass] : ["vt-flat", "vt-quiet"];
@@ -115,27 +112,4 @@ const runFlatViewTransition = (update: () => void, extraClass?: string) => {
   transition.finished.then(clear, clear);
 };
 
-/**
- * Defer a boolean layout flag by one flat crossfade: when `actual` flips, the
- * returned value follows inside a view transition, so the dependent layout
- * change (e.g. the 0x01 hero shrinking to the add-row) fades instead of
- * snapping.
- */
-const useFlatTransitionFlag = (actual: boolean): boolean => {
-  const [displayed, setDisplayed] = useState(actual);
-  useEffect(() => {
-    if (displayed === actual) return;
-    runFlatViewTransition(() => {
-      flushSync(() => setDisplayed(actual));
-    });
-  }, [actual, displayed]);
-  return displayed;
-};
-
-export {
-  holdTransitionClasses,
-  prefersReducedMotion,
-  runFlatViewTransition,
-  useFlatTransitionFlag,
-  viewTransitionsUnsupported,
-};
+export { holdTransitionClasses, prefersReducedMotion, runFlatViewTransition, viewTransitionsUnsupported };

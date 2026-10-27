@@ -305,6 +305,7 @@ type PatchValidatePerPatchVerdict = {
   message?: string;
   patch?: string;
   status: "passed" | "failed";
+  unreadable?: boolean;
 };
 
 type PatchValidateResult = {

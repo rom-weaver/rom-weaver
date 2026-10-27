@@ -13262,3 +13262,185 @@ fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
 fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
     assert!(!apply_auto_header_with_filename_crc32(false));
 }
+
+#[test]
+fn patch_validate_classifies_structurally_unreadable_patches() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let target = temp.child("target.bin");
+    let good = temp.child("good.bps");
+    let malformed = temp.child("malformed.ips");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(target.path(), b"hello new world").expect("fixture");
+    create_bps_patch(input.path(), target.path(), good.path());
+    for bytes in [b"PATCHbad".as_slice(), b"PATCH\0".as_slice()] {
+        fs::write(malformed.path(), bytes).expect("fixture");
+        for mode in ["--plan", "--independent"] {
+            let event = run_single_json_event(
+                &[
+                    "patch",
+                    "validate",
+                    "--input",
+                    input.path().to_str().expect("path"),
+                    "--patch",
+                    malformed.path().to_str().expect("path"),
+                    mode,
+                    "--jsonl",
+                ],
+                if mode == "--plan" { 0 } else { 1 },
+            );
+            let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+            assert_eq!(
+                verdict["unreadable"], true,
+                "malformed patch must be unreadable: {event}"
+            );
+            assert!(!verdict["message"].as_str().expect("message").is_empty());
+        }
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                "--patch",
+                malformed.path().to_str().expect("path"),
+                "--patch-basis",
+                "previous",
+                "--patch-input-check",
+                "size=15",
+                "--patch-input-check",
+                "size=999",
+                "--plan",
+                "--jsonl",
+            ],
+            0,
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][1];
+        assert_eq!(
+            verdict["unreadable"], true,
+            "malformed patch must be unreadable: {event}"
+        );
+        assert_eq!(verdict["input_verdict"], "failed", "{event}");
+    }
+    fs::write(input.path(), b"hello BAD world").expect("wrong ROM");
+    for mode in ["--plan", "--independent"] {
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                mode,
+                "--jsonl",
+            ],
+            if mode == "--plan" { 0 } else { 1 },
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+        assert_ne!(verdict["unreadable"], true, "{event}");
+        assert_eq!(
+            verdict[if mode == "--plan" {
+                "input_verdict"
+            } else {
+                "status"
+            }],
+            "failed",
+            "{event}"
+        );
+    }
+}
+
+#[test]
+fn patch_validate_keeps_ignorable_ips_trailing_bytes_readable() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("trailing.ips");
+    let output = temp.child("out.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    // PATCH, one record (offset 0, size 2, "HE"), EOF, one extra trailing byte.
+    fs::write(
+        patch.path(),
+        b"PATCH\x00\x00\x00\x00\x02HEEOF\x00".as_slice(),
+    )
+    .expect("fixture");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--plan",
+            "--jsonl",
+        ],
+        0,
+    );
+    let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+    assert_ne!(
+        verdict["unreadable"], true,
+        "ignorable trailing bytes must not hide Apply anyway: {event}"
+    );
+    run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"HEllo old world");
+}
+
+#[test]
+fn patch_validate_sequential_reports_truncated_ips_parser_error_not_wrong_rom() {
+    let temp = setup_temp_dir();
+    let original = temp.child("rom.bin");
+    let modified = temp.child("modified.bin");
+    let good = temp.child("good.bps");
+    let truncated = temp.child("truncated.ips");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    create_bps(original.path(), modified.path(), good.path());
+    // PATCH, one record (offset 0, size 4) whose data stops after 2 bytes.
+    fs::write(truncated.path(), b"PATCH\x00\x00\x00\x00\x04HE".as_slice()).expect("fixture");
+    for format_flag in ["--jsonl", "--json", ""] {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            good.path().to_str().expect("path"),
+            "--patch",
+            truncated.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "base",
+        ];
+        if !format_flag.is_empty() {
+            args.push(format_flag);
+        }
+        let output = command_output_with_env(&args, &[], 1);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            text.contains("IPS patch ended unexpectedly"),
+            "{format_flag}: {text}"
+        );
+        assert!(!text.contains("does not match"), "{format_flag}: {text}");
+    }
+}
