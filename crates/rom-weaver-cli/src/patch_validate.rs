@@ -961,6 +961,7 @@ impl CliApp {
                             patch: patch_label,
                             format: Some(format),
                             passed: false,
+                            unreadable: false,
                             message,
                         });
                     }
@@ -975,6 +976,7 @@ impl CliApp {
                         patch: patch_label,
                         format: report.format.clone(),
                         passed: false,
+                        unreadable: false,
                         message: report.label.clone(),
                     });
                 }
@@ -1070,6 +1072,7 @@ impl CliApp {
                 "format": verdict.format,
                 "status": if verdict.passed { "passed" } else { "failed" },
                 "message": verdict.message,
+                "unreadable": verdict.unreadable,
             }));
         }
 
@@ -1173,29 +1176,37 @@ impl CliApp {
                     input: job.input.clone(),
                     patches: vec![job.resolved.clone()],
                 };
-                let outcome = match &job.declared {
-                    Some((input_check, output_check)) if context.strict_patch_checksums() => {
-                        Self::validate_job_with_declared_checks(
-                            job,
-                            &request,
-                            input_check,
-                            output_check,
-                            context,
-                        )
+                let parse_failure =
+                    patch_structure_failure(job.handler.as_ref(), &job.resolved, context)?;
+                let unreadable = parse_failure.is_some();
+                let (passed, message) = if let Some(message) = parse_failure {
+                    (false, message)
+                } else {
+                    let outcome = match &job.declared {
+                        Some((input_check, output_check)) if context.strict_patch_checksums() => {
+                            Self::validate_job_with_declared_checks(
+                                job,
+                                &request,
+                                input_check,
+                                output_check,
+                                context,
+                            )
+                        }
+                        _ => job.handler.validate(&request, context),
+                    };
+                    match outcome {
+                        Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
+                        Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
+                        Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
+                        Err(error) => (false, error.to_string()),
                     }
-                    _ => job.handler.validate(&request, context),
-                };
-                let (passed, message) = match outcome {
-                    Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
-                    Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
-                    Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
-                    Err(error) => (false, error.to_string()),
                 };
                 let verdict = PerPatchVerdict {
                     index: job.index,
                     patch: job.patch.clone(),
                     format: Some(job.format.clone()),
                     passed,
+                    unreadable,
                     message,
                 };
                 trace!(
@@ -1386,6 +1397,17 @@ impl CliApp {
             failures: probe_failures,
         } = self.probe_plan_handlers(resolved_patches, patch_count, probe_threads);
 
+        let mut parse_failures = Vec::with_capacity(patch_count);
+        for (patch, handler) in resolved_patches.iter().zip(&handlers) {
+            let failure = match handler {
+                Some(handler) => {
+                    patch_structure_failure(handler.as_ref(), &patch.resolved, context)?
+                }
+                None => None,
+            };
+            parse_failures.push(failure);
+        }
+
         let plan_inputs = Self::build_plan_patch_inputs(
             resolved_patches,
             &handlers,
@@ -1408,6 +1430,13 @@ impl CliApp {
         {
             entry.input_verdict = PatchInputVerdict::Failed;
             entry.message = message;
+        }
+        for (entry, failure) in per_patch.iter_mut().zip(parse_failures) {
+            if let Some(message) = failure {
+                entry.input_verdict = PatchInputVerdict::Failed;
+                entry.unreadable = Some(true);
+                entry.message = message;
+            }
         }
         Ok(PlanResolution {
             handlers,
@@ -2187,6 +2216,32 @@ struct PlanReadyJobInputs<'a> {
     per_patch: &'a [PatchPlanVerdict],
 }
 
+fn patch_structure_failure(
+    handler: &dyn rom_weaver_core::PatchHandler,
+    patch: &Path,
+    context: &OperationContext,
+) -> Result<Option<String>> {
+    context.cancel().check()?;
+    match handler.parse(patch, context) {
+        Ok(_) | Err(RomWeaverError::Unsupported(_)) => Ok(None),
+        Err(error) => {
+            let structural = match &error {
+                RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_) => true,
+                RomWeaverError::Io(source) | RomWeaverError::IoPath { source, .. } => matches!(
+                    source.kind(),
+                    std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::InvalidData
+                ),
+                _ => false,
+            };
+            if structural {
+                Ok(Some(error.to_string()))
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
 /// Folds the preflight verdicts into the planner's per-patch verdicts.
 fn apply_plan_preflight_verdicts(
     per_patch: &mut [PatchPlanVerdict],
@@ -2214,11 +2269,12 @@ fn apply_plan_preflight_verdicts(
                     entry.basis = PatchInputBasis::Base;
                 }
             }
-        } else if !speculative {
+        } else if preflight.unreadable || !speculative {
             // A definite base consumer that fails is a real failure. A guessed-chain patch that
             // fails to apply to the base is NOT proven bad - it may genuinely target an
             // intermediate - so its honest `chain_deferred` verdict stands.
             entry.input_verdict = PatchInputVerdict::Failed;
+            entry.unreadable = preflight.unreadable.then_some(true);
             entry.message = preflight.message;
         }
     }
@@ -2374,6 +2430,7 @@ struct PerPatchVerdict {
     patch: String,
     format: Option<String>,
     passed: bool,
+    unreadable: bool,
     message: String,
 }
 

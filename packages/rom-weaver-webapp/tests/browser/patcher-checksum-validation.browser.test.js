@@ -847,6 +847,40 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
   expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
 });
 
+for (const { name, bytes, diagnostic } of [
+  { name: "truncated.ips", bytes: new TextEncoder().encode("PATCHbad"), diagnostic: "IPS patch ended unexpectedly" },
+  { name: "short.ips", bytes: new TextEncoder().encode("PATCH\u0000"), diagnostic: "IPS patch is too small" },
+  {
+    name: "truncated.bps",
+    bytes: new TextEncoder().encode("BPS1\u0000\u0000\u0000\u0000\u0000\u0000"),
+    diagnostic: "BPS patch is too small",
+  },
+]) {
+  test(`recognized malformed patch ${name} offers replacement without a ROM override`, async () => {
+    mount(createElement(ApplyPatchForm));
+    await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+    selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+    selectFileInput(
+      document.getElementById("rom-weaver-input-file-unified"),
+      new File([bytes], name, { type: "application/octet-stream" }),
+    );
+    await expect
+      .poll(() => document.querySelector("#rom-weaver-list-patch-stack .pfault")?.textContent, { timeout: 60000 })
+      .toContain(diagnostic);
+    const row = document.querySelector("#rom-weaver-list-patch-stack .file.bad");
+    expect(row?.textContent).toContain("Remove this patch and choose a valid patch file.");
+    expect(row?.textContent).toContain("Patch file is not valid");
+    expect(row?.textContent).not.toContain("different ROM");
+    expect(row?.textContent).not.toContain("Apply anyway");
+    expect(document.getElementById("rom-weaver-checkbox-checksum-override")).toBeNull();
+    const button = document.getElementById("rom-weaver-button-apply");
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+    button?.click();
+    expect(button?.textContent).not.toContain("Download");
+    expect(document.querySelector("#rom-weaver-list-patch-stack .pfault")).not.toBeNull();
+  });
+}
+
 test("an unreadable patch fails its own card in plain language and blocks apply", async () => {
   mount(createElement(ApplyPatchForm));
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();

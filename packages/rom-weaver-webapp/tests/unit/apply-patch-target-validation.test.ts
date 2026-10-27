@@ -51,6 +51,29 @@ const createAdapters = (
   }) as unknown as Parameters<typeof validateApplyPatchTarget>[3];
 
 describe("validateApplyPatchTarget transient-failure handling", () => {
+  it("preserves a plan's malformed-patch verdict separately from a ROM mismatch", async () => {
+    const stage = createStage();
+    const message = "IPS patch ended unexpectedly";
+    const validatePatch = vi.fn().mockResolvedValue({
+      plan: {
+        per_patch: [
+          {
+            basis: "base",
+            basis_source: "default",
+            index: 0,
+            input_verdict: "failed",
+            matched: { kind: "none" },
+            message,
+            unreadable: true,
+          },
+        ],
+      },
+      status: "mixed",
+    });
+    await validateApplyPatchTarget(stage, createTarget(), preflight, createAdapters(validatePatch));
+    expect(stage.state.patchValidation).toMatchObject({ message, status: "invalid", unreadable: true });
+  });
+
   it("forwards the shared patch input rule to plan validation", async () => {
     const validatePatch = vi.fn().mockResolvedValue({ message: "passed" });
     await validateApplyPatchTarget(
@@ -138,14 +161,18 @@ describe("validateApplyPatchTarget transient-failure handling", () => {
     const stage = createStage();
     const validatePatch = vi.fn().mockResolvedValue({
       message: "mixed",
-      perPatch: [{ index: 0, message: "BPS patch is truncated", status: "failed" }],
+      perPatch: [{ index: 0, message: "BPS patch is truncated", status: "failed", unreadable: true }],
       status: "mixed",
     });
     await validateApplyPatchTarget(stage, createTarget(), preflight, {
       ...createAdapters(validatePatch),
       weaveRom: { message: "Input checksum mismatch for crc32", status: "mismatch" },
     });
-    expect(stage.state.patchValidation).toMatchObject({ message: "BPS patch is truncated", status: "invalid" });
+    expect(stage.state.patchValidation).toMatchObject({
+      message: "BPS patch is truncated",
+      status: "invalid",
+      unreadable: true,
+    });
   });
 
   it("leaves the patch a retryable 'unknown', without a worker call, when the weave ROM could not be hashed", async () => {

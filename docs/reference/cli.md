@@ -443,6 +443,8 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--patch-input-check ALGO=HEX` and `--patch-output-check ALGO=HEX` supply the checksums the preceding `--patch` should see going in and produce, for formats that do not carry them.
 - A mid-chain patch with an original-ROM basis (declared, or inferred from its checksums) is checked against the original ROM and runs without its embedded source and target checks, as `patch apply` runs it.
 
+Under `--plan` and `--independent`, malformed patches fail with `unreadable: true` in `details.patch_validation.per_patch`. Messages retain the parser diagnostic. A ROM mismatch does not mark the patch unreadable.
+
 ## Patch creation metadata
 
 `patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.

@@ -13179,3 +13179,93 @@ fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headerless_bytes() {
 fn patch_apply_auto_header_follows_a_filename_crc32_of_the_headered_bytes() {
     assert!(!apply_auto_header_with_filename_crc32(false));
 }
+
+#[test]
+fn patch_validate_classifies_structurally_unreadable_patches() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let target = temp.child("target.bin");
+    let good = temp.child("good.bps");
+    let malformed = temp.child("malformed.ips");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    fs::write(target.path(), b"hello new world").expect("fixture");
+    create_bps_patch(input.path(), target.path(), good.path());
+    for bytes in [b"PATCHbad".as_slice(), b"PATCH\0".as_slice()] {
+        fs::write(malformed.path(), bytes).expect("fixture");
+        for mode in ["--plan", "--independent"] {
+            let event = run_single_json_event(
+                &[
+                    "patch",
+                    "validate",
+                    "--input",
+                    input.path().to_str().expect("path"),
+                    "--patch",
+                    malformed.path().to_str().expect("path"),
+                    mode,
+                    "--jsonl",
+                ],
+                if mode == "--plan" { 0 } else { 1 },
+            );
+            let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+            assert_eq!(
+                verdict["unreadable"], true,
+                "malformed patch must be unreadable: {event}"
+            );
+            assert!(!verdict["message"].as_str().expect("message").is_empty());
+        }
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                "--patch",
+                malformed.path().to_str().expect("path"),
+                "--patch-basis",
+                "previous",
+                "--patch-input-check",
+                "size=15",
+                "--patch-input-check",
+                "size=999",
+                "--plan",
+                "--jsonl",
+            ],
+            0,
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][1];
+        assert_eq!(
+            verdict["unreadable"], true,
+            "malformed patch must be unreadable: {event}"
+        );
+        assert_eq!(verdict["input_verdict"], "failed", "{event}");
+    }
+    fs::write(input.path(), b"hello BAD world").expect("wrong ROM");
+    for mode in ["--plan", "--independent"] {
+        let event = run_single_json_event(
+            &[
+                "patch",
+                "validate",
+                "--input",
+                input.path().to_str().expect("path"),
+                "--patch",
+                good.path().to_str().expect("path"),
+                mode,
+                "--jsonl",
+            ],
+            if mode == "--plan" { 0 } else { 1 },
+        );
+        let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+        assert_ne!(verdict["unreadable"], true, "{event}");
+        assert_eq!(
+            verdict[if mode == "--plan" {
+                "input_verdict"
+            } else {
+                "status"
+            }],
+            "failed",
+            "{event}"
+        );
+    }
+}

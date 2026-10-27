@@ -1267,3 +1267,26 @@ fn apply_base_planning_propagates_a_read_error_a_declared_base_step_needs() {
 
     assert!(matches!(error, RomWeaverError::Io(_)));
 }
+
+#[test]
+fn structural_patch_checks_preserve_io_errors_and_cancellation() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let app = app();
+    let handler = app
+        .patches
+        .handlers()
+        .iter()
+        .find(|handler| handler.descriptor().name == "IPS")
+        .expect("IPS handler");
+    let context = test_context(temp.path().join("temp"));
+    let missing = temp.path().join("missing.ips");
+    let error = patch_structure_failure(handler.as_ref(), &missing, &context)
+        .expect_err("missing files are not structural failures");
+    assert!(
+        matches!(error, RomWeaverError::Io(ref source) if source.kind() == std::io::ErrorKind::NotFound)
+    );
+    context.cancel().cancel();
+    let error = patch_structure_failure(handler.as_ref(), &missing, &context)
+        .expect_err("cancellation must propagate");
+    assert!(matches!(error, RomWeaverError::Cancelled));
+}
