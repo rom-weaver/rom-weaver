@@ -2,7 +2,11 @@ import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FileSystemDirectoryHandleLike } from "../../src/wasm/browser-opfs-runtime-types.ts";
-import { createOpfsProxyChannel, attachOpfsProxyChannel } from "../../src/wasm/browser-opfs-proxy-channel.ts";
+import {
+  OPFS_PROXY_GLOBAL_POISONED_INDEX,
+  createOpfsProxyChannel,
+  attachOpfsProxyChannel,
+} from "../../src/wasm/browser-opfs-proxy-channel.ts";
 import { OpfsProxyClient, OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
 import { BrowserProxyRandomAccessFile } from "../../src/wasm/browser-opfs-proxy-file.ts";
 import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
@@ -420,6 +424,72 @@ describe("createRomWeaverBrowserOpfs run", () => {
     const result = await runner.run(compressCommand());
     expect(result.exitCode).toBe(3);
     expect(result.ok).toBe(false);
+  });
+
+  describe("proxy poison", () => {
+    const poisonProxy = () => {
+      const channel = createOpfsProxyChannel(1);
+      harness.proxyClient = new OpfsProxyClient(channel);
+      vi.spyOn(harness.proxyClient, "handleStats").mockReturnValue({ live: 1, opened: 4, peak: 2 });
+      Atomics.store(channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+      expect(harness.proxyClient.isPoisoned()).toBe(true);
+    };
+
+    it("reports the bare poison error with the original failure as cause", async () => {
+      poisonProxy();
+      const original = new Error("wasm trap");
+      harness.startError = original;
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand());
+
+      expect(result.ok).toBe(false);
+      expect((result.error as Error).message).toBe("OPFS proxy is poisoned");
+      expect((result.error as Error).cause).toBe(original);
+    });
+
+    it("leaves the failure unchanged when the proxy is healthy", async () => {
+      const original = new Error("wasm trap");
+      harness.startError = original;
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand());
+
+      expect(result.error).toBe(original);
+    });
+
+    it("leaves a successful run untouched even when the proxy flag is set", async () => {
+      poisonProxy();
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand());
+
+      expect(result.ok).toBe(true);
+      expect(result).not.toHaveProperty("error");
+    });
+
+    it("reports the bare poison error for a non-zero exit with no recorded failure", async () => {
+      poisonProxy();
+      harness.startExitCode = 5;
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand());
+
+      expect(result.ok).toBe(false);
+      expect(result.exitCode).toBe(5);
+      expect((result.error as Error).message).toBe("OPFS proxy is poisoned");
+      expect((result.error as Error).cause).toBeUndefined();
+    });
+
+    it("keeps a non-zero exit without an error when the proxy is healthy", async () => {
+      harness.startExitCode = 5;
+      const runner = await createRunner();
+
+      const result = await runner.run(compressCommand());
+
+      expect(result.ok).toBe(false);
+      expect(result).not.toHaveProperty("error");
+    });
   });
 
   it("feeds the request to the guest on stdin as one JSON line", async () => {
