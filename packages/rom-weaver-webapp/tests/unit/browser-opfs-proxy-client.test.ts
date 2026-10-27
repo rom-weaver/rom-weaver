@@ -127,6 +127,25 @@ afterEach(() => {
 });
 
 describe("OpfsProxyClient shared-state readers", () => {
+  it.each([29, 51])("keeps poisoned close failures recyclable with sticky errno %s", (errno) => {
+    const other = new OpfsProxyClient(channel);
+    other.recordWriteError(new OpfsProxyError("OPFS proxy request timed out", errno));
+    Atomics.store(channel.global, OPFS_PROXY_GLOBAL_POISONED_INDEX, 1);
+    expect(() => client.throwIfWriteFailed()).toThrow(/^OPFS proxy (request timed out|is poisoned|died mid-request)$/);
+    expect(() => other.throwIfWriteFailed()).toThrow("OPFS proxy is poisoned");
+  });
+
+  it("keeps the first close error across clients until the next run", () => {
+    const other = new OpfsProxyClient(channel);
+    expect(() => client.throwIfWriteFailed()).not.toThrow();
+    other.recordWriteError(new OpfsProxyError("quota exceeded", 51));
+    client.recordWriteError(new OpfsProxyError("proxy poisoned during cleanup", 29));
+    expect(() => client.throwIfWriteFailed()).toThrow("No space left on device");
+    expect(() => other.throwIfWriteFailed()).toThrow("errno=51");
+    client.resetWriteError();
+    expect(() => other.throwIfWriteFailed()).not.toThrow();
+  });
+
   it("reads the poison flag, handle gauges and per-handle version stamps", () => {
     expect(client.isPoisoned()).toBe(false);
     expect(client.handleStats()).toEqual({ live: 0, opened: 0, peak: 0 });

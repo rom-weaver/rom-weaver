@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getPatchFileBlob } from "../../src/lib/input/binary-service.ts";
+import { getPatchFileBlob, getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
 import {
   getBinarySourceSize,
   prepareInput,
@@ -8,9 +8,16 @@ import {
   prepareInputFile,
   prepareMultipleDirectInputAssets,
 } from "../../src/lib/input/input-preparation-service.ts";
+import { shouldIdentifySource, skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
+import { createBrowserOpfsSourceRef } from "../../src/workers/protocol/browser-opfs-source-ref.ts";
+import { assertBrowserBinarySource } from "../../src/lib/runtime/source-normalization.ts";
+import { createPublicSourceValidator } from "../../src/platform/shared/public-source-validation.ts";
 import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
 import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 import type { SourceRef } from "../../src/types/source.ts";
+
+const { readPrefix } = vi.hoisted(() => ({ readPrefix: vi.fn(async () => new Uint8Array()) }));
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ readBrowserOpfsPrefix: readPrefix }));
 
 const makeFile = (contents: string, fileName: string, type = "application/octet-stream") =>
   new File([contents], fileName, { type });
@@ -184,6 +191,93 @@ describe("prepareInputAssets", () => {
     await expect(prepareInputAssets(source, undefined, 0, runtime)).rejects.toThrow(
       "orphan.bin must be OPFS/VFS path-backed in browser workflows",
     );
+  });
+
+  it("keeps the skipped identification policy on a retained-path ROM", async () => {
+    const source = makeFile("rom-bytes", "game.bin");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/game.bin" });
+    skipSourceIdentification(source);
+
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+
+    expect(file.filePath).toBe("/work/retained/game.bin");
+    expect(shouldIdentifySource(file)).toBe(false);
+  });
+
+  it.each(["rom", "patch"] as const)(
+    "uses the retained OPFS path for a %s with an unreadable File snapshot",
+    async (role) => {
+      const source = makeFile("rom-bytes", role === "rom" ? "game.bin" : "change.ips");
+      Object.defineProperty(source, "filePath", { value: "/work/weave-parse/retained/entry.bin" });
+      const readSnapshot = vi.spyOn(source, "slice").mockImplementation(() => {
+        throw new DOMException("The object can not be found here.", "NotFoundError");
+      });
+
+      const file = await prepareInput(source, role, NO_CONTAINER_OPTIONS as never, runtime);
+
+      expect(readSnapshot).not.toHaveBeenCalled();
+      expect(file.filePath).toBe("/work/weave-parse/retained/entry.bin");
+      expect(file.fileName).toBe(source.name);
+      expect(file.fileSize).toBe(source.size);
+      const exported = getPatchFileExternalSource(file);
+      expect(exported?.source).toBe(source);
+      const staged = await createBrowserOpfsSourceRef(exported as SourceRef, source.name, {
+        mountPoint: "/work",
+        pathPrefix: "cheat-target",
+      });
+      expect(staged).toMatchObject({ kind: "path", filePath: file.filePath, storageKind: "opfs" });
+      expect(readSnapshot).not.toHaveBeenCalled();
+      expect(() => assertBrowserBinarySource(exported as SourceRef, "Cheat classification")).not.toThrow();
+      expect(() => createPublicSourceValidator({ environmentLabel: "browser" })(exported)).not.toThrow();
+    },
+  );
+
+  it.each([
+    ["chd", "MComprHD"],
+    ["rvz", "RVZ\u0001"],
+  ])("detects retained misnamed %s magic with Blob parity", async (extension, magic) => {
+    const expected = await prepareInput(makeFile(magic, "disc.bin"), "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    const source = makeFile(magic, "disc.bin");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/disc.bin" });
+    const readSnapshot = vi.spyOn(source, "slice").mockImplementation(() => {
+      throw new DOMException("The object can not be found here.", "NotFoundError");
+    });
+    readPrefix.mockResolvedValueOnce(new TextEncoder().encode(magic));
+    const actual = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(actual.fileName).toBe(`disc.${extension}`);
+    expect(actual.fileName).toBe(expected.fileName);
+    expect(actual.filePath).toBe("/work/retained/disc.bin");
+    expect(getPatchFileExternalSource(actual)?.source).toBe(source);
+    expect(getPatchFileExternalSource(actual)?.fileName).toBe(expected.fileName);
+    expect(readPrefix).toHaveBeenLastCalledWith("/work/retained/disc.bin", expect.any(Number));
+    expect(readSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("reads retained VFS container magic through its own backend", async () => {
+    const bytes = new TextEncoder().encode("MComprHD");
+    const read = vi.fn(async (_path: string, buffer: Uint8Array) => {
+      buffer.set(bytes);
+      return bytes.length;
+    });
+    const source = { path: "/custom/disc.bin", fileName: "disc.bin", vfs: { read } } as unknown as SourceRef;
+    const calls = readPrefix.mock.calls.length;
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(file.fileName).toBe("disc.chd");
+    expect(file.filePath).toBe("/custom/disc.bin");
+    expect(read).toHaveBeenCalledWith("/custom/disc.bin", expect.any(Uint8Array), {
+      fileOffset: 0,
+      length: expect.any(Number),
+    });
+    expect(readPrefix.mock.calls.length).toBe(calls);
+  });
+
+  it("preserves a retained known codec extension without probing mismatched magic", async () => {
+    const source = makeFile("RVZ\u0001", "disc.chd");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/disc.chd" });
+    const calls = readPrefix.mock.calls.length;
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+    expect(file.fileName).toBe("disc.chd");
+    expect(readPrefix.mock.calls.length).toBe(calls);
   });
 
   it("resolves a bare (non-container) ROM file into a single rom asset", async () => {

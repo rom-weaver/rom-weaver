@@ -1,11 +1,16 @@
+import * as wasiShim from "@bjorn3/browser_wasi_shim";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   browserProxyAdapterBufferBytes,
   BrowserProxyRandomAccessFile,
 } from "../../src/wasm/browser-opfs-proxy-file.ts";
-import type { OpfsProxyClient } from "../../src/wasm/browser-opfs-proxy-client.ts";
-import { OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
+import { IdleFilePool } from "../../src/wasm/browser-opfs-idle-file-pool.ts";
+import { WasiRandomAccessFileInode } from "../../src/wasm/browser-opfs-wasi-file-inode.ts";
+import { OpfsProxyClient, OpfsProxyError } from "../../src/wasm/browser-opfs-proxy-client.ts";
+import { createOpfsProxyChannel } from "../../src/wasm/browser-opfs-proxy-channel.ts";
+import { installDirectWasiFileIoImports } from "../../src/wasm/browser-opfs-stdio-events.ts";
+import { closeSyncFiles } from "../../src/wasm/browser-opfs-sync-access.ts";
 
 const MIB = 1024 * 1024;
 /** Mirrors PROXY_READ_CACHE_BLOCK_BYTES / _MAX_REQUEST_BYTES / PROXY_WRITE_BUFFER_BYTES. */
@@ -106,7 +111,7 @@ function makeProxy(options: { openError?: Error } = {}): FakeProxy {
       return writeResult ? writeResult(data.byteLength) : data.byteLength;
     },
   };
-  return { ...state, client: client as unknown as OpfsProxyClient };
+  return { ...state, client: Object.assign(new OpfsProxyClient(createOpfsProxyChannel(1)), client) };
 }
 
 const patterned = (length: number, seed = 0) => {
@@ -119,6 +124,180 @@ let proxy: FakeProxy;
 
 beforeEach(() => {
   proxy = makeProxy();
+});
+
+describe("WASI close with proxy write buffering", () => {
+  it.each([false, true])("cleans up failed direct WASI close with descriptor buffering=%s", (buffered) => {
+    const before = browserProxyAdapterBufferBytes();
+    const file = Object.assign(
+      new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true }),
+      { supportsBufferedSequentialWrite: buffered },
+    );
+    const pool = new IdleFilePool();
+    const inode = new WasiRandomAccessFileInode(file, { closeOnLastFdClose: true, idlePool: pool });
+    const fd = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    const wasi = new wasiShim.WASI([], [], [fd]);
+    installDirectWasiFileIoImports(wasi);
+    fd.fd_write(new Uint8Array([1, 2, 3]));
+    proxy.setWriteResult(() => {
+      throw new OpfsProxyError("proxy timeout publishing /work/out.bin", wasiShim.wasi.ERRNO_IO);
+    });
+    try {
+      expect(wasi.wasiImport.fd_close(0)).toBe(wasiShim.wasi.ERRNO_IO);
+      expect.soft(wasi.fds[0]).toBeUndefined();
+      expect.soft(inode.openRefCount).toBe(0);
+      expect.soft(fd.fd_write(new Uint8Array([4])).ret).toBe(wasiShim.wasi.ERRNO_BADF);
+      expect.soft(fd.writeBuffer).toBeNull();
+      expect.soft(fd.writeBufferLength).toBe(0);
+      expect.soft(browserProxyAdapterBufferBytes()).toBe(before);
+      expect.soft(pool.size).toBe(0);
+      expect.soft(proxy.closed).toEqual([1]);
+    } finally {
+      proxy.setWriteResult(null);
+      file.close();
+    }
+  });
+
+  it("reports close failure at teardown while closing every remaining file", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { writable: true });
+    file.writeAt(0, new Uint8Array([1, 2, 3]));
+    proxy.setWriteResult(() => {
+      throw new OpfsProxyError("quota exceeded publishing /work/out.bin", wasiShim.wasi.ERRNO_NOSPC);
+    });
+    const other = { close: vi.fn() };
+    expect(() => closeSyncFiles([file, other])).toThrow("quota exceeded publishing /work/out.bin");
+    expect(other.close).toHaveBeenCalledOnce();
+    expect(proxy.closed).toEqual([1]);
+  });
+
+  it.each([
+    new OpfsProxyError("No space left on device", wasiShim.wasi.ERRNO_NOSPC),
+    new Error("unexpected write failure"),
+  ])("retains close error %s even if cleanup can retry the write", (error) => {
+    const before = browserProxyAdapterBufferBytes();
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { writable: true });
+    const inode = new WasiRandomAccessFileInode(file);
+    const fd = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    fd.fd_write(new Uint8Array([1, 2, 3]));
+    let writes = 0;
+    proxy.setWriteResult((length) => {
+      writes += 1;
+      if (writes === 1) throw error;
+      return length;
+    });
+    const wasi = new wasiShim.WASI([], [], [fd]);
+    installDirectWasiFileIoImports(wasi);
+    const errno = error instanceof OpfsProxyError ? error.errno : wasiShim.wasi.ERRNO_IO;
+    expect(wasi.wasiImport.fd_close(0)).toBe(errno);
+    expect(wasi.fds[0]).toBeUndefined();
+    expect(inode.openRefCount).toBe(0);
+    expect(browserProxyAdapterBufferBytes()).toBe(before);
+    expect(proxy.writes).toHaveLength(2);
+    expect(() => proxy.client.throwIfWriteFailed()).toThrow(`errno=${errno}`);
+    if (errno === wasiShim.wasi.ERRNO_NOSPC) {
+      expect(() => proxy.client.throwIfWriteFailed()).toThrow("No space left on device");
+    }
+  });
+
+  it.each([false, true])("publishes buffered writes without proxy fsync with idle pooling=%s", (pooled) => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const pool = new IdleFilePool();
+    const inode = new WasiRandomAccessFileInode(file, {
+      closeOnLastFdClose: pooled,
+      idlePool: pooled ? pool : undefined,
+    });
+    const writer = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    const reader = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_READ, 0).fd_obj;
+    if (!(writer && reader)) throw new Error("fixture descriptors must open");
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    try {
+      expect(writer.fd_write(bytes)).toEqual({ nwritten: bytes.length, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(proxy.writes).toEqual([]);
+      expect(writer.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(bytes);
+      expect(proxy.flushed).toEqual([]);
+      const callsAfterWrite = [...proxy.calls];
+      expect(reader.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.calls).toEqual(callsAfterWrite);
+      expect(proxy.flushed).toEqual([]);
+      expect(proxy.closed).toEqual([]);
+      if (pooled) expect(pool.size).toBe(1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it.each([false, true])("publishes writes before returning with idle pooling=%s", (pooled) => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const pool = new IdleFilePool();
+    const inode = new WasiRandomAccessFileInode(file, {
+      closeOnLastFdClose: pooled,
+      idlePool: pooled ? pool : undefined,
+    });
+    const first = inode.path_open(0, 0n, 0).fd_obj;
+    const second = inode.path_open(0, 0n, 0).fd_obj;
+    if (!(first && second)) throw new Error("fixture descriptors must open");
+    try {
+      expect(first.fd_write(new Uint8Array([1, 2]))).toEqual({ nwritten: 2, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(first.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2]));
+      expect(second.fd_pwrite(new Uint8Array([3, 4]), 2n)).toEqual({ nwritten: 2, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(second.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2, 3, 4]));
+      expect(proxy.closed).toEqual([]);
+      if (pooled) expect(pool.size).toBe(1);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("still requests durable storage on explicit fd_sync", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const inode = new WasiRandomAccessFileInode(file);
+    const fd = inode.path_open(0, wasiShim.wasi.RIGHTS_FD_WRITE, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    const bytes = new Uint8Array([1, 2, 3]);
+    try {
+      expect(fd.fd_write(bytes)).toEqual({ nwritten: bytes.length, ret: wasiShim.wasi.ERRNO_SUCCESS });
+      expect(proxy.writes).toEqual([]);
+      expect(fd.fd_sync()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(bytes);
+      expect(proxy.calls.slice(-2)).toEqual(["write", "flush"]);
+      expect(proxy.flushed).toEqual([1]);
+      expect(fd.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.flushed).toEqual([1]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("surfaces proxy errors at publish and retains pending bytes for retry", () => {
+    const file = new BrowserProxyRandomAccessFile(proxy.client, "/work/out.bin", { create: true, writable: true });
+    const inode = new WasiRandomAccessFileInode(file);
+    const fd = inode.path_open(0, 0n, 0).fd_obj;
+    if (!fd) throw new Error("fixture descriptor must open");
+    try {
+      fd.fd_write(new Uint8Array([1, 2, 3]));
+      proxy.setWriteResult(() => {
+        throw new OpfsProxyError("write failed", 29);
+      });
+      expect(() => file.publishWrites()).toThrow("write failed");
+      expect(proxy.writes).toHaveLength(1);
+      expect(inode.openRefCount).toBe(1);
+      proxy.setWriteResult(null);
+      file.publishWrites();
+      expect(proxy.writes).toHaveLength(2);
+      expect(proxy.writes[1]?.data).toEqual(new Uint8Array([1, 2, 3]));
+      expect(fd.fd_close()).toBe(wasiShim.wasi.ERRNO_SUCCESS);
+      expect(proxy.bytesFor("/work/out.bin")).toEqual(new Uint8Array([1, 2, 3]));
+      expect(inode.openRefCount).toBe(0);
+    } finally {
+      proxy.setWriteResult(null);
+      file.close();
+    }
+  });
 });
 
 describe("BrowserProxyRandomAccessFile handle lifecycle", () => {

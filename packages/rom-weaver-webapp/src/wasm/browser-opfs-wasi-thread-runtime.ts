@@ -133,6 +133,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
   signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
   let startAcked = false;
   const closeables: unknown[] = [];
+  let teardownFailure: { error: unknown } | undefined;
   const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
   const normalizedMountHandles = await resolveThreadRuntimeMountHandles({
     runtime,
@@ -230,14 +231,27 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThread
     throw error;
   } finally {
     trace(`[browser-opfs-thread] cleanup start tid=${tidLabel} succeeded=${runSucceeded}`);
-    closeSyncFiles(closeables);
-    // Preserve the existing microtask boundary before invalidating the thread mount.
-    // oxlint-disable-next-line typescript/await-thenable
-    await cleanupBrowserOpfsMounts(mounts);
-    if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)
-      await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    try {
+      closeSyncFiles(closeables);
+    } catch (error) {
+      teardownFailure = { error };
+    }
+    try {
+      await Promise.resolve(cleanupBrowserOpfsMounts(mounts));
+    } catch (error) {
+      teardownFailure ??= { error };
+    }
+    if (teardownFailure) runSucceeded = false;
+    try {
+      if (!runSucceeded || runtime?.invalidateMountCacheAfterRun)
+        await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    } catch (error) {
+      trace(`[browser-opfs-thread] invalidate mounts failed tid=${tidLabel} ${formatErrorForTrace(error)}`);
+      teardownFailure ??= { error };
+    }
     trace(`[browser-opfs-thread] cleanup done tid=${tidLabel}`);
   }
+  if (teardownFailure) throw teardownFailure.error;
 }
 
 /**

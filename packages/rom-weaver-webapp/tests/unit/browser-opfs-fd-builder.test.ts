@@ -151,6 +151,35 @@ async function build(overrides: Partial<Parameters<typeof buildBrowserOpfsWasiFd
 }
 
 describe("buildBrowserOpfsWasiFds", () => {
+  it.each(["close", "mount", "both"])("preserves fd-build errors when %s cleanup fails", async (failure) => {
+    const primary = new Error("mount acquisition failed");
+    const first = makeMount({ proxyClient: proxy.client });
+    const finishRun = vi.spyOn(first, "finishRun");
+    if (failure !== "close")
+      finishRun
+        .mockImplementationOnce(() => undefined)
+        .mockImplementation(() => {
+          throw new Error("mount cleanup failed");
+        });
+    const close = vi.fn(() => {
+      if (failure !== "mount") throw new Error("close cleanup failed");
+    });
+    const cache = makeMountCache({ "/work": first }, (path) => {
+      if (path === "/cache") throw primary;
+    });
+    await expect(
+      build({
+        mountCache: cache,
+        mountHandles: { "/work": directoryHandle, "/cache": directoryHandle },
+        runCloseables: [{ close }],
+        runtimeMounts: ["/work", "/cache"],
+      }),
+    ).rejects.toBe(primary);
+    expect(close).toHaveBeenCalledOnce();
+    expect(finishRun).toHaveBeenCalledTimes(2);
+    expect(trace.some((line) => line.includes("cleanup failed"))).toBe(true);
+  });
+
   it("returns stdio plus one preopen per mount and a cwd preopen", async () => {
     const { result } = await build();
 

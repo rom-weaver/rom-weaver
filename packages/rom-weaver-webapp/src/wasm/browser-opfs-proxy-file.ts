@@ -187,6 +187,14 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
     this.client.truncate(this.ensureOpen(), Number(size));
   }
 
+  publishWrites(): void {
+    this.flushWriteBuffer();
+  }
+
+  recordWriteError(error: unknown): void {
+    this.client.recordWriteError(error);
+  }
+
   flush(): void {
     if (this.handleId === null || this.closed) return;
     this.flushWriteBuffer();
@@ -199,17 +207,24 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
       this.releaseBuffers();
       return;
     }
+    let failure: { error: unknown } | undefined;
     try {
       this.flushWriteBuffer();
-    } finally {
-      try {
-        this.client.close(this.handleId);
-      } finally {
-        this.handleId = null;
-        this.closed = true;
-        this.releaseBuffers();
-      }
+    } catch (error) {
+      this.recordWriteError(error);
+      failure = { error };
     }
+    try {
+      this.client.close(this.handleId);
+    } catch (error) {
+      this.recordWriteError(error);
+      failure ??= { error };
+    } finally {
+      this.handleId = null;
+      this.closed = true;
+      this.releaseBuffers();
+    }
+    if (failure) throw failure.error;
   }
 
   /**

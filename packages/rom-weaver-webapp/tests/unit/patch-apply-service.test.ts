@@ -9,7 +9,10 @@ import {
 } from "../../src/lib/apply/patch-apply-service.ts";
 import { createBareMemberRule } from "../../src/lib/apply/bare-member-target.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
-import { createLazyExternalPatchFile } from "../../src/lib/input/binary-service.ts";
+import { attachPatchFileSourceRef, createLazyExternalPatchFile } from "../../src/lib/input/binary-service.ts";
+
+const { readPrefix } = vi.hoisted(() => ({ readPrefix: vi.fn(async () => new TextEncoder().encode("PATCHEOF")) }));
+vi.mock("../../src/workers/protocol/browser-opfs-worker-client.ts", () => ({ readBrowserOpfsPrefix: readPrefix }));
 
 const asset = (id: string, fileName: string, member?: string): InputAsset =>
   ({
@@ -253,6 +256,39 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
 });
 
 describe("weave patch requirements", () => {
+  it.each([true, false])("validates retained IPS magic with cached requirements (valid=%s)", async (valid) => {
+    const source = new File(["PATCHEOF"], "change.ips");
+    const readSnapshot = vi.spyOn(source, "slice").mockImplementation(() => {
+      throw new DOMException("The object can not be found here.", "NotFoundError");
+    });
+    const wrapped = createLazyExternalPatchFile("change.ips", { filePath: "/work/retained/change.ips", size: 8 });
+    attachPatchFileSourceRef(wrapped, { fileName: source.name, source });
+    attachIngestPatchRequirements(wrapped, { format: "IPS" });
+    const ingest = vi.fn();
+    readPrefix.mockResolvedValueOnce(new TextEncoder().encode(valid ? "PATCHEOF" : "INVALID!"));
+    const parsed = await parsePatchForApply(wrapped, { ingest: { run: ingest } } as never);
+    if (valid) expect(getPatchProbeRequirements(parsed)).toMatchObject({ format: "IPS" });
+    else expect(parsed).toBeNull();
+    expect(readPrefix).toHaveBeenLastCalledWith("/work/retained/change.ips", 8);
+    expect(readSnapshot).not.toHaveBeenCalled();
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it("validates cached VFS patch magic through its own backend", async () => {
+    const read = vi.fn(async (_path: string, buffer: Uint8Array) => {
+      buffer.set(new TextEncoder().encode("INVALID!"));
+      return 8;
+    });
+    const source = { path: "/custom/change.ips", vfs: { read } };
+    const wrapped = createLazyExternalPatchFile("change.ips", { filePath: source.path, size: 8 });
+    attachPatchFileSourceRef(wrapped, { fileName: "change.ips", source: source as never });
+    attachIngestPatchRequirements(wrapped, { format: "IPS" });
+    const calls = readPrefix.mock.calls.length;
+    expect(await parsePatchForApply(wrapped)).toBeNull();
+    expect(read).toHaveBeenCalledWith(source.path, expect.any(Uint8Array), { fileOffset: 0, length: 8 });
+    expect(readPrefix.mock.calls.length).toBe(calls);
+  });
+
   it("reuses requirements after a weave file is wrapped", async () => {
     const source = {};
     const wrapped = createLazyExternalPatchFile("patch.ips", { filePath: "/work/patch.ips", size: 18 });

@@ -7,6 +7,7 @@ import {
   getPatchFileCleanup,
   getPatchFileExternalSource,
   isBlobBackedPatchFile,
+  readPathSourcePrefix,
   type PatchFileInstance,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
@@ -86,6 +87,10 @@ const toOptionalCrc32Hex = (value: unknown): string | undefined => {
 };
 
 const readPatchHeader = async (patchFile: PatchFileInstance, length: number): Promise<string | null> => {
+  if (patchFile.filePath) {
+    const source = getPatchFileExternalSource(patchFile, patchFile.fileName || "patch.bin");
+    return new TextDecoder().decode(await readPathSourcePrefix(patchFile.filePath, length, source || undefined));
+  }
   try {
     patchFile.littleEndian = false;
     patchFile.seek(0);

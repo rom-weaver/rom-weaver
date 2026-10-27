@@ -69,37 +69,45 @@ export function createBrowserOpfsMountCache() {
       disposed = true;
       const mounts = [...mountsByPath.values()];
       mountsByPath.clear();
-      for (const mount of mounts) {
-        // Preserve the existing microtask boundary between synchronous mount disposals.
-        // oxlint-disable-next-line typescript/await-thenable
-        await mount.dispose();
-      }
+      await disposeMounts(mounts);
     },
 
     async invalidateMountPaths(mountPaths: Iterable<string> | null | undefined) {
       const lookup = new Set(mountPaths ?? []);
+      const mounts: BrowserOpfsMount[] = [];
       for (const [mountPath, mount] of mountsByPath) {
         if (!lookup.has(mountPath)) continue;
         mountsByPath.delete(mountPath);
-        // Preserve the existing microtask boundary between synchronous mount disposals.
-        // oxlint-disable-next-line typescript/await-thenable
-        await mount.dispose();
+        mounts.push(mount);
       }
+      await disposeMounts(mounts);
     },
 
     async invalidateMounts(mounts: Iterable<BrowserOpfsMount> | null | undefined) {
       const seen = new Set(mounts ?? []);
+      const invalidated: BrowserOpfsMount[] = [];
       for (const mount of seen) {
         if (!mount || typeof mount !== "object") continue;
         const current = mountsByPath.get(mount.mountPath);
         if (current !== mount) continue;
         mountsByPath.delete(mount.mountPath);
-        // Preserve the existing microtask boundary between synchronous mount disposals.
-        // oxlint-disable-next-line typescript/await-thenable
-        await mount.dispose();
+        invalidated.push(mount);
       }
+      await disposeMounts(invalidated);
     },
   };
+}
+
+async function disposeMounts(mounts: Iterable<BrowserOpfsMount>) {
+  let failure: { error: unknown } | undefined;
+  for (const mount of mounts) {
+    try {
+      await Promise.resolve(mount.dispose());
+    } catch (error) {
+      failure ??= { error };
+    }
+  }
+  if (failure) throw failure.error;
 }
 
 async function directoryHandlesMatch(left: DirectoryHandleWithSameEntry, right: DirectoryHandleWithSameEntry) {

@@ -31,6 +31,8 @@ export const OPFS_PROXY_GLOBAL_TOTAL_OPENS_INDEX = 5;
  * workload (rather than with concurrency) is the regression this gauge exists to catch.
  */
 export const OPFS_PROXY_GLOBAL_THREAD_WORKERS_CREATED_INDEX = 6;
+/** First unreported close-time write errno. Consumers MUST retain it until the next run starts. */
+export const OPFS_PROXY_GLOBAL_WRITE_ERROR_INDEX = 7;
 /** First index of the per-handle version-counter block (bumped on every write/truncate). */
 const OPFS_PROXY_GLOBAL_VERSION_BASE_INDEX = 8;
 /**

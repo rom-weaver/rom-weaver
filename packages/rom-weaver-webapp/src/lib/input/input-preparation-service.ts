@@ -17,6 +17,7 @@ import { emitTraceLog } from "../logging.ts";
 import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGdiFileReferences } from "./archive.ts";
 import {
+  attachPatchFileSourceRef,
   createBlobBackedPatchFile,
   createLazyExternalPatchFile,
   createLazyPatchFile,
@@ -24,7 +25,9 @@ import {
   createSourceAccessFromSource,
   decodeUtf8,
   getPatchFileBytes,
+  readPathSourcePrefix,
 } from "./binary-service.ts";
+import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
 import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
@@ -246,7 +249,32 @@ const createInputPreparationPatchFile = async (
     source: summarizePreparationSource(source, fallbackFileName),
   });
   const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
-  const sourceFileName = sourceAccess.fileName || fallbackFileName;
+  let sourceFileName = sourceAccess.fileName || fallbackFileName;
+  const sourcePath =
+    getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
+  if (sourcePath) {
+    if (!ROM_SPECIFIC_DECOMPRESSION_EXTENSIONS.has(getFileExtension(sourceFileName))) {
+      const header = await readPathSourcePrefix(sourcePath, MAX_ROM_SPECIFIC_MAGIC_PREFIX_LENGTH, source);
+      const magicExtension = getRomSpecificMagicExtension(header);
+      if (magicExtension) sourceFileName = replaceFileExtension(sourceFileName, magicExtension);
+    }
+    emitInputPreparationTrace(options, "create patch file lazy external source", {
+      fileName: sourceFileName,
+      role,
+      size: sourceAccess.size ?? undefined,
+      sourcePath,
+    });
+    const file = createLazyExternalPatchFile(sourceFileName, {
+      filePath: sourcePath,
+      size: sourceAccess.size ?? undefined,
+    });
+    const externalSource = sourceAccess.getExternalSource();
+    if (externalSource) attachPatchFileSourceRef(file, { ...externalSource, fileName: sourceFileName });
+    inheritIngestPatchRequirements(source, file);
+    inheritSourceIdentificationPolicy(source, file);
+    return file;
+  }
+
   const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options);
   if (lazyBrowserSource) {
     emitInputPreparationTrace(options, "create patch file lazy source", {
@@ -261,23 +289,6 @@ const createInputPreparationPatchFile = async (
       lazyBrowserSource.fileHandle,
       { materialize: false },
     );
-    inheritIngestPatchRequirements(source, file);
-    return file;
-  }
-
-  const sourcePath =
-    getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
-  if (sourcePath) {
-    emitInputPreparationTrace(options, "create patch file lazy external source", {
-      fileName: sourceFileName,
-      role,
-      size: sourceAccess.size ?? undefined,
-      sourcePath,
-    });
-    const file = createLazyExternalPatchFile(sourceFileName, {
-      filePath: sourcePath,
-      size: sourceAccess.size ?? undefined,
-    });
     inheritIngestPatchRequirements(source, file);
     return file;
   }

@@ -5,6 +5,7 @@ import {
 } from "./browser-opfs-constants.ts";
 import type { IdleFilePool, IdleFilePoolEntry } from "./browser-opfs-idle-file-pool.ts";
 import { requestsWriteRights } from "./browser-opfs-wasi-paths.ts";
+import { OpfsProxyError } from "./browser-opfs-proxy-client.ts";
 
 /**
  * Structural surface this module needs from the random-access file adapters
@@ -16,6 +17,9 @@ export interface RandomAccessFileLike {
   close?: () => void;
   flush: () => void;
   openNow?: () => void;
+  /** Buffered adapters MUST publish writes to other handles without requesting durable storage. */
+  publishWrites?: () => void;
+  recordWriteError?: (error: unknown) => void;
   readAt: (offset: number | bigint, dst: Uint8Array) => number;
   reopen?: () => void;
   scratchName?: string | null;
@@ -91,7 +95,7 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode implements IdleFil
 
   releaseOpenFile() {
     if (this.openRefCount > 0) this.openRefCount -= 1;
-    if (this.openRefCount !== 0 || !this.closeOnLastFdClose) return wasiShim.wasi.ERRNO_SUCCESS;
+    if (this.openRefCount !== 0 || !this.closeOnLastFdClose || this.fileClosed) return wasiShim.wasi.ERRNO_SUCCESS;
     if (typeof this.file?.close !== "function") return wasiShim.wasi.ERRNO_SUCCESS;
     // With a pool, park instead of closing: the file stays open only while it is among the few most
     // recently used, so handles stay bounded without paying an OPFS reopen on every re-access.
@@ -102,8 +106,9 @@ export class WasiRandomAccessFileInode extends wasiShim.Inode implements IdleFil
     try {
       this.closeIdleFile();
       return wasiShim.wasi.ERRNO_SUCCESS;
-    } catch {
-      return wasiShim.wasi.ERRNO_IO;
+    } catch (error) {
+      this.file.recordWriteError?.(error);
+      return error instanceof OpfsProxyError ? error.errno : wasiShim.wasi.ERRNO_IO;
     }
   }
 
@@ -352,13 +357,33 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
 
   override fd_close() {
     if (this.closed) return wasiShim.wasi.ERRNO_SUCCESS;
-    const flushRet = this.flushPendingWrite();
-    if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
-    this.closed = true;
-    this.writeBuffer = null;
-    this.writeBufferLength = 0;
-    this.writeBufferStart = 0n;
-    return this.inode.releaseOpenFile();
+    let ret = wasiShim.wasi.ERRNO_SUCCESS;
+    try {
+      ret = this.flushPendingWrite();
+      if (ret !== wasiShim.wasi.ERRNO_SUCCESS) {
+        throw new OpfsProxyError(`failed to flush buffered WASI writes: errno=${ret}`, ret);
+      }
+      // Close MUST publish adapter-buffered writes before Rust signals completion to other threads.
+      // The inode can retain its adapter after the descriptor closes, including in the idle pool.
+      if (!this.inode.readonly) this.inode.file.publishWrites?.();
+    } catch (error) {
+      ret = error instanceof OpfsProxyError ? error.errno : wasiShim.wasi.ERRNO_IO;
+      // Rust ignores close errors during Drop, so the runner MUST also observe this failure.
+      this.inode.file.recordWriteError?.(error);
+      this.inode.idlePool?.remove(this.inode);
+      try {
+        this.inode.closeIdleFile();
+      } catch {
+        // Cleanup MUST preserve the original publish error even if releasing its handle fails.
+      }
+    } finally {
+      this.closed = true;
+      this.writeBuffer = null;
+      this.writeBufferLength = 0;
+      this.writeBufferStart = 0n;
+    }
+    const releaseRet = this.inode.releaseOpenFile();
+    return ret === wasiShim.wasi.ERRNO_SUCCESS ? releaseRet : ret;
   }
 
   pendingWriteBufferLength() {
