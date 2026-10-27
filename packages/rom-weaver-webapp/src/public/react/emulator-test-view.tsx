@@ -22,13 +22,17 @@ import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-clien
 import { resolveAssetUrl } from "./asset-url.ts";
 import {
   addEntry,
+  dismissClosedGameNotice,
   disposeEntry,
   prepareEntry,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
+  useClosedGameName,
   useEmulatorSession,
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { createEmulatorGameUrl, revokeEmulatorGameUrl } from "./emulator-game-urls.ts";
 import { join } from "./components/ds/cx.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
@@ -130,6 +134,7 @@ type EmulatorTestViewProps = {
 
 const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
+  const closedGameName = useClosedGameName();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
@@ -308,11 +313,11 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
       setGameUrlState(null);
       return undefined;
     }
-    const url = URL.createObjectURL(currentBlob);
+    const url = createEmulatorGameUrl(currentBlob);
     setGameUrlState({ revision: savePreviewRevision, url });
     return () => {
       setGameUrlState(null);
-      URL.revokeObjectURL(url);
+      revokeEmulatorGameUrl(url);
     };
   }, [currentBlob, savePreviewRevision]);
   const gameUrl = gameUrlState?.revision === savePreviewRevision ? gameUrlState.url : null;
@@ -403,6 +408,7 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
         }),
       );
       try {
+        releaseLargeEntries();
         const loaded = await loadEmulatorRom(file, file.name, {
           onProgress: (progress) => {
             if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return;
@@ -842,8 +848,14 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           </>
         }
         beforeDropZone={
-          error || ignoredSaves || (currentGame && missingBios) ? (
+          error || ignoredSaves || (currentGame && missingBios) || (!currentGame && closedGameName) ? (
             <>
+              {!currentGame && closedGameName ? (
+                <Notice id="emulator-test-closed-game" level="info" onDismiss={dismissClosedGameNotice}>
+                  <b>{localizer.message("ui.test.closedGame.summary", { fileName: closedGameName })}</b>{" "}
+                  {localizer.message("ui.test.closedGame.detail")}
+                </Notice>
+              ) : null}
               {ignoredSaves ? (
                 <Notice id="emulator-test-ignored-saves" level="warn" onDismiss={() => setIgnoredSaves(undefined)}>
                   <b>Only one save loads at a time.</b> Used {ignoredSaves.used}; ignored{" "}

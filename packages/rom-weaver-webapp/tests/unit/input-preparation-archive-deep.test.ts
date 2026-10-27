@@ -430,6 +430,19 @@ describe("nested archive drop classification", () => {
     for (const cleanup of cleanups) expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it("lists a dropped container without reading the whole file into memory", async () => {
+    runtime.compression.probe.mockResolvedValue({ entries: [{ filename: "game.bin" }] });
+    const disc = new File([new Uint8Array(1024 * 1024)], "game.chd");
+    const arrayBuffer = vi.spyOn(disc, "arrayBuffer");
+    const slice = vi.spyOn(disc, "slice");
+
+    await expect(listDroppedArchiveEntryNames(disc)).resolves.toEqual(["game.bin"]);
+
+    // Drop routing runs on every pick; reading a disc whole there can exceed an iOS tab's memory limit.
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    for (const [start = 0, end = disc.size] of slice.mock.calls) expect(end - start).toBeLessThan(disc.size);
+  });
+
   it("preserves the cheap listing for direct ROMs, patches, and root manifests", async () => {
     for (const leaf of ["original.bin", "fix.ips", "rom-weaver-weave.json"]) {
       runtime.compression.probe.mockResolvedValue({ entries: [{ filename: leaf }, { filename: "inner.zip" }] });

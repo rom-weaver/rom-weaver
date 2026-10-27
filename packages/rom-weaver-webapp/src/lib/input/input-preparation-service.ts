@@ -19,6 +19,7 @@ import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGd
 import {
   createBlobBackedPatchFile,
   createLazyExternalPatchFile,
+  createLazyPatchFile,
   createPatchFile,
   createSourceAccessFromSource,
   decodeUtf8,
@@ -493,17 +494,19 @@ const prepareMultipleDirectInputAssets = async (
   sources: SourceRef[],
   options: ApplyWorkflowOptions | undefined,
 ): Promise<InputAsset[] | null> => {
-  const fallbackFileNames = sources.map((_, index) => `input-${index + 1}.bin`);
-  if (
-    !sources.some((source, index) =>
-      isCueEntryFileName(
-        getNamedSourceFileName(source, { fallback: fallbackFileNames[index] }) || fallbackFileNames[index],
-      ),
-    )
-  ) {
-    return null;
-  }
-  const files = await Promise.all(sources.map((source, index) => createPatchFile(source, `input-${index + 1}.bin`)));
+  const fallbackFileName = (index: number) => `input-${index + 1}.bin`;
+  const fileNames = sources.map(
+    (source, index) => getNamedSourceFileName(source, { fallback: fallbackFileName(index) }) || fallbackFileName(index),
+  );
+  if (!fileNames.some((fileName) => isCueEntryFileName(fileName))) return null;
+  // Only the sheets are read as text below; the tracks stay lazy.
+  const files = await Promise.all(
+    sources.map((source, index) =>
+      isCueEntryFileName(fileNames[index] || "") || isGdiEntryFileName(fileNames[index] || "")
+        ? createPatchFile(source, fallbackFileName(index))
+        : createLazyPatchFile(source, fallbackFileName(index)),
+    ),
+  );
   if (!files.some((file) => isCueEntryFileName(file.fileName))) return null;
 
   const assets: InputAsset[] = [];

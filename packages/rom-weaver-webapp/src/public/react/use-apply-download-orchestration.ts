@@ -37,7 +37,13 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
-import { addEntry, getApplyEntry, setCurrentGame, type EmulatorSessionEntry } from "./emulator-session-store.ts";
+import {
+  addEntry,
+  getApplyEntry,
+  releaseLargeEntries,
+  setCurrentGame,
+  type EmulatorSessionEntry,
+} from "./emulator-session-store.ts";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-rom.ts";
 import { useRomWeaverSettings } from "./settings-context.tsx";
@@ -335,6 +341,7 @@ type PostApplyActionsOptions = {
   onSelectTestView?: () => void;
   output: ApplyWorkflowResult;
   platform?: string;
+  releaseLargeGames?: () => void;
   retainedEntry?: EmulatorSessionEntry | null;
   setCurrentGame: (id: string) => void;
   testBehavior: PostApplyActionBehavior;
@@ -371,6 +378,7 @@ const runPostApplyActions = async ({
   onSelectTestView,
   output,
   platform,
+  releaseLargeGames = releaseLargeEntries,
   retainedEntry,
   setCurrentGame: selectCurrentGame,
   testBehavior,
@@ -398,6 +406,7 @@ const runPostApplyActions = async ({
   if (!entry) {
     try {
       const playableOutput = output.output as EmulatorPlayableOutput;
+      releaseLargeGames();
       const blob = await playableOutput.getBlob?.();
       if (!blob) {
         onAutomaticActionFailed?.("test");
@@ -595,6 +604,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           patchChangePendingRef,
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
+        // An Apply request may queue behind input preparation, which already works on the new disc.
+        const requestsApply =
+          !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) &&
+          (canQueueApply || canStartApply);
+        if (requestsApply) releaseLargeEntries({ announce: true });
         if (patchChangePendingRef.current && !busy) {
           traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);

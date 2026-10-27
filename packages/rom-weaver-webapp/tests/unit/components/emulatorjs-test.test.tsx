@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowProgress } from "../../../src/platform/browser/browser-api.ts";
@@ -8,6 +8,7 @@ import {
   addEntry,
   disposeEntry,
   getEmulatorSessionState,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
 } from "../../../src/public/react/emulator-session-store.ts";
 import type { EmulatorSessionEntry } from "../../../src/public/react/emulator-session-store.ts";
@@ -764,6 +765,40 @@ describe("EmulatorTestView", () => {
     await act(async () => finishLoad?.({ blob: new Blob(["game"]), checksum: "b".repeat(40), fileName: "game.nes" }));
     expect(await screen.findByTitle("EmulatorJS test for game.nes")).toBeTruthy();
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
+  });
+
+  it("unloads a disc-sized game before it reads the replacement", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    let gamesDuringLoad: number | undefined;
+    loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => {
+      gamesDuringLoad = getEmulatorSessionState().entries.length;
+      return { blob, checksum: "b".repeat(40), fileName };
+    });
+    addEntry(entry({ core: "psx", fileName: "disc.chd", sizeBytes: 464 * 1024 * 1024 }));
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Choose another ROM/), {
+      target: { files: [new File(["rom"], "next.nes")] },
+    });
+
+    // The paused disc and the next ROM's read can exceed an iOS tab's memory limit together.
+    expect(await screen.findByTitle("EmulatorJS test for next.nes")).toBeTruthy();
+    expect(gamesDuringLoad).toBe(0);
+  });
+
+  it("says why a disc-sized game closed for another action until it is dismissed", () => {
+    addEntry(entry({ core: "psx", fileName: "disc.chd", sizeBytes: 464 * 1024 * 1024 }));
+    releaseLargeEntries({ announce: true });
+
+    render(withSettings(<EmulatorTestView />));
+
+    const notice = document.getElementById("emulator-test-closed-game");
+    expect(notice?.textContent).toBe(
+      "disc.chd was closed to free memory. Another action started, or more than 1 GiB of files was added, while it was paused. Its in-game save is kept, so load it again to continue.",
+    );
+    fireEvent.click(within(notice as HTMLElement).getByRole("button", { name: "Dismiss" }));
+    expect(document.getElementById("emulator-test-closed-game")).toBeNull();
   });
 
   it("ignores a replacement that finishes after Stop is pressed", async () => {

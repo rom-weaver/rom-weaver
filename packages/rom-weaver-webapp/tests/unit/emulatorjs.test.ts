@@ -7,6 +7,7 @@ import {
   createEmulatorDocument,
   createEmulatorGameIdentity,
 } from "../../src/public/react/components/emulator-document.ts";
+import { createEmulatorGameUrl, revokeEmulatorGameUrl } from "../../src/public/react/emulator-game-urls.ts";
 import {
   coreReadsChd,
   getEmulatorJsAspectRatio,
@@ -319,6 +320,51 @@ describe("createEmulatorDocument", () => {
     expect(calls).toEqual(["write", "load", "restart", "sram-loaded"]);
   });
 
+  it("writes the in-game save once each time the Test view hides a started game", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.gba", "gba");
+    const source = document.indexOf('const source = "rom-weaver-emulator"');
+    const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
+    const calls: string[] = [];
+    let onMessage: ((event: { source: unknown; data: unknown }) => void) | undefined;
+    const parent = { postMessage: (message: { kind: string }) => calls.push(message.kind) };
+    const emulator = {
+      gameManager: { saveSaveFiles: () => calls.push("save") },
+      pause: () => {
+        calls.push("pause");
+        emulator.paused = true;
+      },
+      paused: false,
+      play: () => {
+        calls.push("play");
+        emulator.paused = false;
+      },
+      started: true,
+    };
+    const window = {
+      EJS_emulator: emulator,
+      addEventListener: (_kind: string, listener: typeof onMessage) => {
+        onMessage = listener;
+      },
+      parent,
+    };
+    const pause = { gameId: "game.gba", kind: "visibility-pause", source: "rom-weaver-emulator" };
+    const resume = { ...pause, kind: "visibility-resume" };
+
+    runInNewContext(script, { window });
+    onMessage?.({ source: parent, data: pause });
+    // Every browser-tab switch while the Test view stays hidden repeats the pause. Writing the in-memory save again
+    // would overwrite one the visitor changed in the Save editor meanwhile.
+    onMessage?.({ source: parent, data: pause });
+    onMessage?.({ source: parent, data: resume });
+    onMessage?.({ source: parent, data: pause });
+    emulator.started = false;
+    onMessage?.({ source: parent, data: resume });
+    onMessage?.({ source: parent, data: pause });
+
+    // A hidden disc-sized game can be unloaded, and EmulatorJS writes its save only every five minutes by default.
+    expect(calls).toEqual(["save", "pause", "play", "save", "pause", "play", "pause"]);
+  });
+
   it("neutralizes the EmulatorJS version check before the loader runs", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
     const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
@@ -342,6 +388,55 @@ describe("createEmulatorDocument", () => {
     expect(checked).toBe(false);
     expect(scope.EmulatorJS).toBe(FakeEmulatorJS);
     expect(start).toBeLessThan(document.indexOf("loader.js"));
+  });
+
+  const readGameBufferScript = (gameUrl: string) => {
+    const document = createEmulatorDocument("/emulatorjs/data/", gameUrl, "game.chd", "psx");
+    const start = document.indexOf("Object.defineProperty(window, 'EJS_emulator'");
+    expect(start).toBeGreaterThan(-1);
+    expect(start).toBeLessThan(document.indexOf("loader.js"));
+    return document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+  };
+
+  it("reads the game Blob once and lets the EmulatorJS file system keep that buffer", async () => {
+    const game = new Blob([new Uint8Array([1, 2, 3])]);
+    const gameUrl = createEmulatorGameUrl(game);
+    const nativeFetch = vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(0) }));
+    const listeners = new Map<string, (fs: unknown) => void>();
+    const window: Record<string, unknown> = { EJS_gameUrl: gameUrl, fetch: nativeFetch };
+    window.parent = globalThis;
+
+    try {
+      runInNewContext(readGameBufferScript(gameUrl), { window });
+      const buffer = await (await (window.fetch as typeof fetch)(gameUrl)).arrayBuffer();
+      await (window.fetch as typeof fetch)("/emulatorjs/data/cores/pcsx_rearmed-thread-wasm.data");
+      window.EJS_emulator = { on: (event: string, listener: (fs: unknown) => void) => listeners.set(event, listener) };
+      const writeFile = vi.fn();
+      const FS = { writeFile };
+      listeners.get("saveDatabaseLoaded")?.(FS);
+      FS.writeFile("game.chd", new Uint8Array(buffer));
+      FS.writeFile("bios.bin", new Uint8Array(4), { flags: "w" });
+
+      expect(new Uint8Array(buffer)).toEqual(new Uint8Array([1, 2, 3]));
+      expect(nativeFetch).toHaveBeenCalledOnce();
+      expect(writeFile.mock.calls[0]?.[2]).toEqual({ canOwn: true });
+      expect(writeFile.mock.calls[1]?.[2]).toEqual({ flags: "w" });
+    } finally {
+      revokeEmulatorGameUrl(gameUrl);
+    }
+  });
+
+  it("leaves EmulatorJS loading alone for a game URL the app no longer holds", () => {
+    const gameUrl = createEmulatorGameUrl(new Blob([new Uint8Array([1])]));
+    revokeEmulatorGameUrl(gameUrl);
+    const nativeFetch = vi.fn();
+    const window: Record<string, unknown> = { EJS_gameUrl: gameUrl, fetch: nativeFetch };
+    window.parent = globalThis;
+
+    runInNewContext(readGameBufferScript(gameUrl), { window });
+
+    expect(window.fetch).toBe(nativeFetch);
+    expect(Object.getOwnPropertyDescriptor(window, "EJS_emulator")).toBeUndefined();
   });
 });
 

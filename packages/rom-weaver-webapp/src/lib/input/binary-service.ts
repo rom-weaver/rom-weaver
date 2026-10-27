@@ -401,6 +401,19 @@ const createBlobBackedPatchFile = async (
   return file;
 };
 
+// createPatchFile reads a source with no path, such as a picked File, whole into the page heap. Keep that
+// source Blob-backed instead; reads then go through a worker, so a disc never lands on the main thread.
+const createLazyPatchFile = async (source: SourceRef, fallbackFileName: string): Promise<PatchFileInstance> => {
+  const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
+  const blob = sourceAccess.getFilePath() ? null : sourceAccess.getBlob();
+  if (!blob) return createPatchFile(source as Parameters<typeof createPatchFile>[0], fallbackFileName);
+  const file = await createBlobBackedPatchFile(blob, sourceAccess.fileName, undefined, sourceAccess.getFileHandle(), {
+    materialize: false,
+  });
+  inheritSourceIdentificationPolicy(source, file);
+  return file;
+};
+
 const getPatchFileBytes = (file: PatchFileInstance): Uint8Array => {
   if (isLazyExternalPatchFile(file)) throwLazyExternalRead();
   const bytes =
@@ -425,6 +438,7 @@ export {
   clonePatchFile,
   createBlobBackedPatchFile,
   createLazyExternalPatchFile,
+  createLazyPatchFile,
   createOutputFile,
   createPatchFile,
   createSourceAccessFromSource,

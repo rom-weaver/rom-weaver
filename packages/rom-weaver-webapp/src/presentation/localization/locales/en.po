@@ -170,8 +170,18 @@ msgstr "{file} does not match this save. You choose another ROM next."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.title"
+msgstr "{fileName} is paused in Test."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.test.fdsBios.summary"
 msgstr "{fileName} needs the Famicom Disk System BIOS."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.summary"
+msgstr "{fileName} was closed to free memory."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,6 +525,11 @@ msgstr "and nested archives"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.detail"
+msgstr "Another action started, or more than 1 GiB of files was added, while it was paused. Its in-game save is kept, so load it again to continue."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindApp"
 msgstr "App"
 
@@ -732,6 +747,11 @@ msgstr "Automatically download the app for offline use unless data saver is on."
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.back"
 msgstr "Back"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.open"
+msgstr "Back to Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4782,6 +4802,11 @@ msgstr "Start from the original ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.play.tryIt"
 msgstr "Start the game, then open the player menu."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.detail"
+msgstr "Starting another action, or adding more than 1 GiB of files, closes it to free memory. Progress since its last in-game save is lost."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

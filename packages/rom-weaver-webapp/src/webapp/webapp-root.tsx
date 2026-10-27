@@ -61,10 +61,13 @@ import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
+import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
 import type { EmulatorSaveImportRequest } from "./components/emulator-saves-panel.tsx";
+import { releaseLargeEntriesOnRunStart } from "../public/react/emulator-session-store.ts";
 import { LoadErrorBoundary } from "./components/load-error-boundary.tsx";
+import { PausedGameBanner } from "./components/paused-game-banner.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
@@ -904,6 +907,8 @@ function WebappRoot({
   useEffect(() => {
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
   }, [state.currentView]);
+  useEffect(() => releaseLargeEntriesOnRunStart(), []);
+  useEffect(() => releaseLargeEntriesOnLargeInput(() => currentViewRef.current === "test"), []);
   const isViewMounted = (view: WebappView) => state.currentView === view || visitedViews.includes(view);
   const openIdentifyLookup = useCallback(
     (selection: RomLookupSelection) => {
@@ -1115,6 +1120,7 @@ function WebappRoot({
               />
             ) : null}
             <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
+            <PausedGameBanner active={state.currentView !== "test"} onOpenTest={() => handleSelectTab("test")} />
             <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
             <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
               {notFound ? (

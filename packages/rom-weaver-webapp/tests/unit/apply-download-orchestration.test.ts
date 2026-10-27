@@ -138,6 +138,40 @@ describe("runPostApplyActions", () => {
     expect(calls).toEqual(["fallback:download", "focus"]);
     expect(outcome).toEqual({ downloaded: false, tested: false });
   });
+
+  it("releases a disc-sized Test game before it reads the output to test", async () => {
+    const calls: string[] = [];
+    const output = result();
+    Object.assign(output.output, {
+      getBlob: async () => {
+        calls.push("read");
+        return new Blob(["disc"]);
+      },
+    });
+    const outcome = await runPostApplyActions({
+      addSessionEntry: () => {
+        calls.push("add");
+      },
+      core: "psx",
+      download: () => undefined,
+      downloadBehavior: "show",
+      fileName: "disc.chd",
+      focusDownload: () => undefined,
+      loadRom: async (blob, fileName) => {
+        calls.push("load");
+        return { blob, checksum: "a".repeat(40), fileName };
+      },
+      onSelectTestView: () => calls.push("navigate"),
+      output,
+      platform: "psx",
+      releaseLargeGames: () => calls.push("release"),
+      setCurrentGame: () => calls.push("current"),
+      testBehavior: "auto-show",
+    });
+    // A paused disc and the patched one read in its place can exceed an iOS tab's memory limit together.
+    expect(calls).toEqual(["release", "read", "load", "add", "current", "navigate"]);
+    expect(outcome).toEqual({ downloaded: false, tested: true });
+  });
 });
 
 describe("claimPostApplyRun", () => {

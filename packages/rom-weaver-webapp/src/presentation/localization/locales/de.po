@@ -170,8 +170,18 @@ msgstr "{file} passt nicht zu diesem Spielstand. Du wählst als Nächstes eine a
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.title"
+msgstr "{fileName} ist in Test pausiert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.test.fdsBios.summary"
 msgstr "{fileName} benötigt das BIOS des Famicom Disk System."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.summary"
+msgstr "{fileName} wurde geschlossen, um Speicher freizugeben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,6 +525,11 @@ msgstr "und verschachtelte Archive"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.detail"
+msgstr "Während es pausiert war, wurde eine andere Aktion gestartet oder mehr als 1 GiB an Dateien hinzugefügt. Sein Spielstand bleibt erhalten; lade es erneut, um weiterzuspielen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindApp"
 msgstr "App"
 
@@ -732,6 +747,11 @@ msgstr "Lädt die App für die Offline-Nutzung automatisch herunter, außer wenn
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.back"
 msgstr "Zurück"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.open"
+msgstr "Zurück zu Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4782,6 +4802,11 @@ msgstr "Beginne mit dem Original-ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.play.tryIt"
 msgstr "Starte das Spiel und öffne dann das Player-Menü."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.detail"
+msgstr "Startest du eine andere Aktion oder fügst mehr als 1 GiB an Dateien hinzu, wird es geschlossen, um Speicher freizugeben. Fortschritt seit dem letzten Speichern im Spiel geht verloren."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

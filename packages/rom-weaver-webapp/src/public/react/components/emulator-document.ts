@@ -172,6 +172,47 @@ const DISABLE_UPDATE_CHECK = `
       })();`;
 
 /**
+ * Hand EmulatorJS the game from the app's Blob in one read and let its file
+ * system keep that buffer. Left alone, EmulatorJS reads the `blob:` game URL
+ * with `fetch().arrayBuffer()`, which WebKit holds twice while reading, and
+ * then copies the bytes into MEMFS. For a 464 MB disc that is about 1.4 GB at
+ * once, past what iOS lets one tab use, so the tab crashes. EmulatorJS only
+ * calls `arrayBuffer()` on the game response. The script MUST run after
+ * `EJS_gameUrl` is set and before `loader.js`.
+ */
+const OWN_GAME_BUFFER = `
+      (() => {
+        const games = window.parent !== window ? window.parent.__romWeaverEmulatorGames : null;
+        const game = games ? games.get(window.EJS_gameUrl) : null;
+        if (!game) return;
+        const owned = new WeakSet();
+        const nativeFetch = window.fetch;
+        window.fetch = function (input) {
+          if (input !== window.EJS_gameUrl) return nativeFetch.apply(this, arguments);
+          return Promise.resolve({
+            arrayBuffer: () => game.arrayBuffer().then((buffer) => {
+              owned.add(buffer);
+              return buffer;
+            }),
+          });
+        };
+        let emulator;
+        Object.defineProperty(window, 'EJS_emulator', {
+          configurable: true,
+          get: () => emulator,
+          set: (value) => {
+            emulator = value;
+            if (!value || typeof value.on !== 'function') return;
+            value.on('saveDatabaseLoaded', (FS) => {
+              const writeFile = FS.writeFile;
+              FS.writeFile = (path, data, options) =>
+                writeFile.call(FS, path, data, data && owned.has(data.buffer) ? { ...options, canOwn: true } : options);
+            });
+          },
+        });
+      })();`;
+
+/**
  * EmulatorJS builds its bar buttons from an icon plus a text span that its
  * stylesheet hides for some of them (mute/unmute), which leaves a button with
  * no accessible name. The bar is the core's own markup, so the wrapper names
@@ -245,11 +286,20 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
           request("request-load-sram");
         };
         window.__romWeaverVisibilityPaused = false;
+        window.__romWeaverHiddenSaveWritten = false;
         window.addEventListener("message", (event) => {
           if (event.source !== window.parent || !event.data || event.data.source !== source || event.data.gameId !== gameId) return;
           const emulator = window.EJS_emulator;
           if (!emulator) return;
           if (event.data.kind === "visibility-pause") {
+            // A hidden disc-sized game can be unloaded before it returns, and EmulatorJS writes the in-game
+            // save only every few minutes, so write it now. Only once per hide: every browser-tab switch while
+            // the view stays hidden repeats the pause, and a later write would overwrite a save changed meanwhile.
+            const manager = emulator.gameManager;
+            if (!window.__romWeaverHiddenSaveWritten && emulator.started && manager && typeof manager.saveSaveFiles === "function") {
+              manager.saveSaveFiles();
+              window.__romWeaverHiddenSaveWritten = true;
+            }
             if (!emulator.paused && typeof emulator.pause === "function") {
               emulator.pause();
               window.__romWeaverVisibilityPaused = true;
@@ -257,6 +307,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
             return;
           }
           if (event.data.kind === "visibility-resume") {
+            window.__romWeaverHiddenSaveWritten = false;
             if (window.__romWeaverVisibilityPaused && typeof emulator.play === "function") emulator.play();
             window.__romWeaverVisibilityPaused = false;
             return;
@@ -340,6 +391,7 @@ const createEmulatorDocument = (
     </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
+    <script>${OWN_GAME_BUFFER}</script>
     <script>${LABEL_MENU_BUTTONS}</script>
     <script>${TOLERATE_WAKE_LOCK_DENIAL}</script>
     <script>${createMigrateBareSettings(options.gameId ?? hashString(gameName), options.saveId || gameName, gameName)}</script>

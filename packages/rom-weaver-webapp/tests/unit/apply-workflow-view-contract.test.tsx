@@ -55,6 +55,7 @@ vi.mock("../../src/public/react/emulator-session-store.ts", () => ({
   addEntry,
   getApplyEntry,
   prepareEntry,
+  releaseLargeEntries: () => undefined,
   setCurrentGame,
 }));
 vi.mock("../../src/public/react/emulator-audio-context.ts", () => ({

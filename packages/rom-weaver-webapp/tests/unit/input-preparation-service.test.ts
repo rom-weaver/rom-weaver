@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { getPatchFileBlob } from "../../src/lib/input/binary-service.ts";
 import {
   getBinarySourceSize,
   prepareInput,
@@ -46,6 +47,21 @@ describe("prepareMultipleDirectInputAssets", () => {
     expect(trackAsset?.fileName).toBe("track01.bin");
     expect(trackAsset?.groupId).toBe(cueAsset?.groupId);
     expect(trackAsset?.patchable).toBe(true);
+  });
+
+  it("keeps the tracks Blob-backed instead of reading them into memory", async () => {
+    const track = makeFile("track-bytes", "track01.bin");
+    const arrayBuffer = vi.spyOn(track, "arrayBuffer");
+    const slice = vi.spyOn(track, "slice");
+
+    const assets = await prepareMultipleDirectInputAssets([makeFile(CUE_TEXT, "game.cue"), track], undefined);
+
+    // A disc track can be hundreds of MB, and every track is prepared at once.
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(slice).not.toHaveBeenCalled();
+    const trackFile = assets?.find((asset) => asset.kind === "track")?.file;
+    expect(trackFile && getPatchFileBlob(trackFile)).toBe(track);
+    expect(trackFile?.fileSize).toBe(track.size);
   });
 
   it("merges a sibling GDI referencing the same tracks into the disc group instead of a separate ROM", async () => {
