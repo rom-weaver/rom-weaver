@@ -1828,27 +1828,7 @@ fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
     assert!(!output.path().exists());
 }
 
-#[test]
-fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
-    let temp = setup_temp_dir();
-    let home = temp.child("home");
-    fs::create_dir_all(home.path()).unwrap();
-    let home = home.path().to_str().unwrap();
-    let run = |args: &[&str], code| {
-        let stdout = command_stdout_with_env(
-            args,
-            &[
-                ("HOME", home),
-                ("XDG_CACHE_HOME", home),
-                ("XDG_CONFIG_HOME", home),
-                ("XDG_DATA_HOME", home),
-                ("XDG_STATE_HOME", home),
-                ("TMPDIR", home),
-            ],
-            code,
-        );
-        parse_json_lines(&stdout).pop().expect("terminal event")
-    };
+fn write_dcp_source_gdi(temp: &assert_fs::TempDir) {
     let cooked = build_iso(
         &[IsoFile {
             path: "KEEP.DAT".to_string(),
@@ -1879,6 +1859,91 @@ fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
             "3\n1 0 4 2352 track01.bin 0\n2 8 0 2352 track02.bin 0\n3 45000 4 2352 track03.bin 0\n",
         )
         .expect("source GDI");
+}
+
+#[test]
+fn patch_apply_dcp_nested_in_zip_in_zip_matches_bare_dcp_output() {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir_all(home.path()).unwrap();
+    let home = home.path().to_str().unwrap();
+    let run = |args: &[&str]| {
+        command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_DATA_HOME", home),
+                ("XDG_STATE_HOME", home),
+                ("TMPDIR", home),
+            ],
+            0,
+        )
+    };
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    for (input, output) in [
+        ("NEW.DAT", "game.dcp"),
+        ("game.dcp", "inner.zip"),
+        ("inner.zip", "outer.zip"),
+    ] {
+        run(&[
+            "compress",
+            "--input",
+            temp.child(input).path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child(output).path().to_str().unwrap(),
+            "--json",
+        ]);
+    }
+    for (patch, out) in [("game.dcp", "bare"), ("outer.zip", "nested")] {
+        run(&[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child(patch).path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child(format!("{out}/x.gdi")).path().to_str().unwrap(),
+            "--json",
+        ]);
+    }
+    for name in ["x.gdi", "track01.bin", "track02.bin", "track03.bin"] {
+        assert_eq!(
+            fs::read(temp.child(format!("bare/{name}")).path()).unwrap(),
+            fs::read(temp.child(format!("nested/{name}")).path()).unwrap(),
+            "{name} from the nested archive must match the bare DCP"
+        );
+    }
+}
+
+#[test]
+fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir_all(home.path()).unwrap();
+    let home = home.path().to_str().unwrap();
+    let run = |args: &[&str], code| {
+        let stdout = command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_DATA_HOME", home),
+                ("XDG_STATE_HOME", home),
+                ("TMPDIR", home),
+            ],
+            code,
+        );
+        parse_json_lines(&stdout).pop().expect("terminal event")
+    };
+    write_dcp_source_gdi(&temp);
     fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
     for (inputs, format, output) in [
         ("NEW.DAT", "zip", "game.dcp"),

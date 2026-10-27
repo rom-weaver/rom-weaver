@@ -2153,8 +2153,10 @@ impl CliApp {
         temp_paths
     }
 
-    /// Cheap central-directory scan: only an archive naming a `.dcp` entry is worth the full
-    /// extraction probe, so other archives are extracted (and prompted for) once by the main path.
+    /// Listing-only scan, cheaper than the full extraction probe (a central-directory read for zip
+    /// and 7z; tar.* and solid archives decode while listing). Only an archive naming a `.dcp`
+    /// entry, or a nested archive / disc image that may hold one, is worth the probe, so other
+    /// archives are extracted (and prompted for) once by the main path.
     fn archive_lists_dcp_entry(&self, patch: &Path, context: &OperationContext) -> bool {
         let Some(handler) = self.containers.probe(patch) else {
             return false;
@@ -2168,9 +2170,13 @@ impl CliApp {
                 context,
             )
             .is_ok_and(|entries| {
-                entries
-                    .iter()
-                    .any(|entry| Self::is_dcp_patch(Path::new(entry)))
+                entries.iter().any(|entry| {
+                    Self::is_dcp_patch(Path::new(entry))
+                        || self
+                            .containers
+                            .find_by_output_extension(Path::new(entry))
+                            .is_some()
+                })
             })
     }
 
