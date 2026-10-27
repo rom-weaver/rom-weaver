@@ -759,12 +759,9 @@ impl CliApp {
                 );
             }
         };
-        // A ZIP/7z holding a `.dcp` applies like the bare `.dcp`: route on the resolved name.
-        let zipped_dcp_temp_paths = if weave_resolution.is_none() && args.emit_bundle.is_none() {
-            self.unwrap_zipped_dcp_patch(&mut args, &weave_context)
-        } else {
-            Vec::new()
-        };
+        // Emission and overwrite guards MUST retain the supplied archive after DCP extraction.
+        let original_patches = args.patches.clone();
+        let zipped_dcp_temp_paths = self.unwrap_zipped_dcp_patch(&mut args, &weave_context);
         if let Some(outcome) = self.validate_patch_apply_output_preflight(
             &args,
             weave_resolution.as_ref(),
@@ -795,7 +792,7 @@ impl CliApp {
         }
         let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitWeaveInputs {
             input: args.input.clone(),
-            patches: args.patches.clone(),
+            patches: original_patches.clone(),
             steps: emit_steps,
             default_basis: weave_resolution
                 .as_ref()
@@ -817,6 +814,7 @@ impl CliApp {
                 .and_then(|resolution| resolution.expected_rom_name.as_deref());
             let mut sources = vec![original_input];
             sources.extend(local_weave);
+            sources.extend(original_patches);
             self.run_dcp_apply(args, expected_rom_name, &sources)
         } else {
             self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
