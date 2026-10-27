@@ -12,6 +12,7 @@ pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub ignore_common_files: bool,
     pub overwrite: bool,
     pub no_nested_extract: bool,
+    pub discard_consumed_nfs_companions: bool,
     pub context: &'a OperationContext,
 }
 
@@ -341,6 +342,7 @@ impl CliApp {
             ignore_common_files: run.ignore_common_files,
             overwrite: run.overwrite,
             no_nested_extract: run.no_nested_extract,
+            discard_consumed_nfs_companions: false,
             context: run.context,
         }) {
             Ok((leaves, nested_count)) => {
@@ -407,6 +409,7 @@ impl CliApp {
             ignore_common_files,
             overwrite,
             no_nested_extract,
+            discard_consumed_nfs_companions,
             context,
         } = inputs;
         // Container handlers report their COMPLETE output set in `report.details["emitted_files"]`, so
@@ -462,6 +465,15 @@ impl CliApp {
             nested_count = outcome.count;
             all_emitted_details.extend(outcome.emitted_details);
         }
+        let consumed_nfs_members = if discard_consumed_nfs_companions {
+            let paths = all_emitted_details
+                .iter()
+                .filter_map(|value| value.get("path").and_then(Value::as_str).map(str::to_owned))
+                .collect::<Vec<_>>();
+            Self::consumed_nfs_members(&paths, &descended)
+        } else {
+            HashSet::new()
+        };
         // Report only the bottom/leaf outputs: any emitted file we did not further descend into. For a
         // non-nested extract `descended` is empty, so every primary output is a leaf.
         let leaves = all_emitted_details
@@ -472,7 +484,7 @@ impl CliApp {
                     .and_then(|map| map.get("path"))
                     .and_then(Value::as_str)
                 {
-                    Some(path) => !descended.contains(path),
+                    Some(path) => !descended.contains(path) && !consumed_nfs_members.contains(path),
                     None => true,
                 }
             })

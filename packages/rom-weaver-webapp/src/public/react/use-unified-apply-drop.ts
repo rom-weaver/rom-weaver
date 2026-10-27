@@ -8,6 +8,7 @@ import {
   parseGdiFileReferences,
 } from "../../lib/input/archive.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
+import { groupNfsFiles, isNfsPartName } from "../../lib/input/nfs-inputs.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import {
@@ -96,7 +97,9 @@ const routeUnifiedDrop = async (
   const { archives, inputs, patches } = classifyDroppedFiles(files);
   const directWeaves = files.filter((file) => isWeaveFileName(file.name));
   const archiveEntries = await Promise.all(
-    archives.map((archive) => listDroppedArchiveEntryNames(archive).catch(() => [] as string[])),
+    archives.map(async (archive) =>
+      isNfsPartName(archive.name) ? [] : listDroppedArchiveEntryNames(archive).catch(() => [] as string[]),
+    ),
   );
   if (signal?.aborted || isCancelled?.()) return;
   const weaveArchives = archives.filter((_archive, index) =>
@@ -241,6 +244,15 @@ const leafName = (name: string) => name.replaceAll("\\", "/").split("/").at(-1)?
 const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDropGroup[]> => {
   const unassigned = new Set(romInputs);
   const groups: RomDropGroup[] = [];
+  const nfsFiles = groupNfsFiles(romInputs);
+  if (nfsFiles) {
+    for (const file of nfsFiles) unassigned.delete(file);
+    groups.push({
+      files: nfsFiles,
+      label: nfsFiles[0].name,
+      size: nfsFiles.reduce((total, file) => total + file.size, 0),
+    });
+  }
   for (const cue of romInputs) {
     if (!(unassigned.has(cue) && isCueEntryFileName(cue.name))) continue;
     try {

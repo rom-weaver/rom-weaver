@@ -115,6 +115,11 @@ impl CliApp {
                 split_bin: false,
             };
             if let Err(error) = handler.probe_details(&probe_request, context) {
+                if handler.descriptor().name == "nfs"
+                    && handler.probe(&source) == rom_weaver_core::ProbeConfidence::Signature
+                {
+                    return Err(error);
+                }
                 trace!(
                     source = %source.display(),
                     format = handler.descriptor().name,
@@ -419,5 +424,79 @@ impl CliApp {
         } else {
             base
         }
+    }
+}
+
+#[cfg(test)]
+mod nfs_probe_tests {
+    use super::*;
+    use rom_weaver_core::{NoninteractivePrompter, NoopProgressSink};
+
+    #[test]
+    fn nested_nfs_reports_missing_and_incorrect_keys() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("hif_000000.nfs");
+        let mut bytes = vec![0u8; 0x20200];
+        bytes[..4].copy_from_slice(b"EGGS");
+        bytes[4..8].copy_from_slice(&1u32.to_be_bytes());
+        bytes[16..20].copy_from_slice(&1u32.to_be_bytes());
+        bytes[24..28].copy_from_slice(&4u32.to_be_bytes());
+        bytes[0x1fc..0x200].copy_from_slice(b"SGGE");
+        fs::write(&source, bytes).expect("NFS fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        for (key, expected) in [
+            (None, "Failed to locate"),
+            (Some([0u8; 16]), "Invalid disc header"),
+        ] {
+            if let Some(key) = key {
+                fs::write(directory.path().join("htk.bin"), key).expect("key fixture");
+            }
+            let result = app.extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                std::slice::from_ref(&source),
+                ArchiveEntryKindFilter::default(),
+                true,
+                false,
+                &context,
+            );
+            let error = match result {
+                Err(error) => error,
+                Ok(_) => panic!("recognized NFS probe failure must reach the caller"),
+            };
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn nested_nfs_extension_only_payload_stays_opaque() {
+        let directory = assert_fs::TempDir::new().expect("fixture directory");
+        let source = directory.path().join("unrelated.nfs");
+        fs::write(&source, b"plain extension-only payload").expect("fixture");
+        let app = CliApp::new(
+            Arc::new(NoopProgressSink),
+            Arc::new(NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let context = app.context(ThreadBudget::Fixed(1));
+        let outcome = app
+            .extract_nested_archives(
+                &directory.path().join("outer.zip"),
+                &[source],
+                ArchiveEntryKindFilter::default(),
+                true,
+                false,
+                &context,
+            )
+            .expect("extension-only candidates are skipped");
+        assert_eq!(outcome.count, 0);
     }
 }

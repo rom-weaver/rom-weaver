@@ -49,8 +49,10 @@ import {
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
+  resolveArchiveInputAssets,
 } from "./input-preparation-archive.ts";
 import { getBaseFileName, normalizeArchiveEntryName } from "./path-utils.ts";
+import { groupNfsFiles, isNfsPartName } from "./nfs-inputs.ts";
 
 type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
@@ -450,6 +452,9 @@ const prepareInputAssets = async (
     fileSize: file.fileSize,
   });
   const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || undefined;
+  if (isNfsPartName(file.fileName)) {
+    return resolveArchiveInputAssets(file, options, sourceIndex, runtime, selectedEntryName);
+  }
   if (isCueEntryFileName(file.fileName)) {
     emitInputPreparationTrace(options, "input.assets.cue.resolve.start", {
       fileName: file.fileName,
@@ -505,7 +510,16 @@ const withWeaveRomProvenance = (source: SourceRef, assets: InputAsset[]): InputA
 const prepareMultipleDirectInputAssets = async (
   sources: SourceRef[],
   options: ApplyWorkflowOptions | undefined,
+  runtime: InputPreparationRuntime = { name: "browser", sidecars: {} },
 ): Promise<InputAsset[] | null> => {
+  if (sources.every((source): source is File => source instanceof File)) {
+    const nfsFiles = groupNfsFiles(sources);
+    if (nfsFiles && nfsFiles.length === sources.length) {
+      const [source, ...companions] = nfsFiles;
+      const file = await createInputPreparationPatchFile(source, source.name, "rom", options);
+      return resolveArchiveInputAssets(file, options, 0, runtime, undefined, companions);
+    }
+  }
   const fallbackFileName = (index: number) => `input-${index + 1}.bin`;
   const fileNames = sources.map(
     (source, index) => getNamedSourceFileName(source, { fallback: fallbackFileName(index) }) || fallbackFileName(index),

@@ -165,6 +165,7 @@ const stageArchiveSources = async (
 ) => {
   const staged = await workerIo.stageSources(requests);
   return {
+    sources: staged,
     archive: staged[0],
     inputPaths: staged.map((entry) => entry.filePath),
     cleanup: async () => {
@@ -250,7 +251,12 @@ const stageArchiveInputs = async (workerIo: RuntimeWorkerIo, input: CompressionP
   }
   const staged = await stageArchiveSources(workerIo, requests);
   if (!staged.archive) throw new Error("Archive was not staged.");
-  return { archive: staged.archive, knownInputPaths: staged.inputPaths, cleanup: staged.cleanup };
+  return {
+    archive: staged.archive,
+    sources: staged.sources,
+    knownInputPaths: staged.inputPaths,
+    cleanup: staged.cleanup,
+  };
 };
 
 const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<WorkflowRuntime["compression"]> => ({
@@ -700,4 +706,4 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
   },
 });
 
-export { createBrowserArchiveRuntime };
+export { createBrowserArchiveRuntime, stageArchiveInputs };

@@ -2,6 +2,7 @@ import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { isNfsPartName } from "./nfs-inputs.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime-types.ts";
 import type { ExtractedFileEntry, ExtractStepDetails } from "../../wasm/index.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
@@ -130,6 +131,7 @@ const getArchiveFileBackedSource = (archiveFile: PatchFileInstance): ArchiveFile
 };
 
 const getCompressionFormat = (file: PatchFileInstance) => {
+  if (isNfsPartName(file.fileName)) return "nfs";
   const classification = classifyPatcherInput(file);
   if (classification.kind !== "compression") throw new Error(`${file.fileName || "Input"} is not a compression input`);
   return classification.compressionFormat;
@@ -452,6 +454,7 @@ const resolveArchiveInputAssetsByDescent = async (
   sourceIndex: number,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
   selectedInputEntryName?: string,
+  companionFiles?: File[],
 ): Promise<InputAsset[]> => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.ingest?.run) throw new Error("Ingest runtime is unavailable");
@@ -475,9 +478,10 @@ const resolveArchiveInputAssetsByDescent = async (
     outputs,
     patchOutputs,
   } = await resolvedRuntime.ingest.run({
+    companionFiles,
     fileName: archiveFile.fileName,
     identify: shouldIdentifySource(archiveFile),
-    source: getCompressionRuntimeSource(archiveFile),
+    source: companionFiles?.length ? getArchiveFileBackedSource(archiveFile) : getCompressionRuntimeSource(archiveFile),
     ...(select.length ? { select } : {}),
     logLevel: options?.logging?.level,
     onLog: options?.onLog,
@@ -646,6 +650,7 @@ const resolveArchiveInputAssets = async (
   sourceIndex: number,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
   selectedInputEntryName?: string,
+  companionFiles?: File[],
 ): Promise<InputAsset[]> => {
   if (options?.input?.containerInputsEnabled === false) {
     traceArchivePreparation(options, "input.archive.assets.skip", {
@@ -656,7 +661,7 @@ const resolveArchiveInputAssets = async (
     });
     return [];
   }
-  if (!isCompressionFile(archiveFile)) {
+  if (!(isCompressionFile(archiveFile) || isNfsPartName(archiveFile.fileName))) {
     traceArchivePreparation(options, "input.archive.assets.skip", {
       file: describeArchiveFileForTrace(archiveFile),
       reason: "not-compression",
@@ -665,7 +670,14 @@ const resolveArchiveInputAssets = async (
     });
     return [];
   }
-  return resolveArchiveInputAssetsByDescent(archiveFile, options, sourceIndex, runtime, selectedInputEntryName);
+  return resolveArchiveInputAssetsByDescent(
+    archiveFile,
+    options,
+    sourceIndex,
+    runtime,
+    selectedInputEntryName,
+    companionFiles,
+  );
 };
 
 /**

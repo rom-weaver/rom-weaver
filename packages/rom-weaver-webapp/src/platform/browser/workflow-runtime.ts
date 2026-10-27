@@ -54,7 +54,7 @@ import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/stor
 import { triggerBrowserDownload } from "./browser-download.ts";
 import type { BrowserIdentifyPack } from "./identify-packs.ts";
 import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
-import { createBrowserArchiveRuntime } from "./workflow-runtime-archive.ts";
+import { createBrowserArchiveRuntime, stageArchiveInputs } from "./workflow-runtime-archive.ts";
 import { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } from "./workflow-runtime-chd.ts";
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
@@ -161,6 +161,7 @@ const prepareIngestIdentify = async ({
   onProgress,
   signal,
   sourcePath,
+  knownInputPaths,
 }: {
   fileName: string;
   logLevel?: IngestRunInput["logLevel"];
@@ -168,6 +169,7 @@ const prepareIngestIdentify = async ({
   onProgress?: IngestRunInput["onProgress"];
   signal?: AbortSignal;
   sourcePath: string;
+  knownInputPaths?: string[];
 }): Promise<{
   entryNames: string[];
   packs: BrowserIdentifyPack[];
@@ -202,7 +204,11 @@ const prepareIngestIdentify = async ({
     // unknown extension must not silently fall back to the cartridge packs.
     onProgress?.({ message: "Inspecting the input…" });
     try {
-      const probe = await runRomWeaverProbeWorker({ logLevel, romFilter: true, signal, sourcePath }, undefined, onLog);
+      const probe = await runRomWeaverProbeWorker(
+        { knownInputPaths, logLevel, romFilter: true, signal, sourcePath },
+        undefined,
+        onLog,
+      );
       entryNames = probe.entries.map((entry) => entry.filename || entry.fileName || entry.name || "").filter(Boolean);
       hints = { entryNames, fileName, ...(probe.platform ? { platform: probe.platform } : {}) };
     } catch (error) {
@@ -253,6 +259,7 @@ const prepareIngestIdentify = async ({
 const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["ingest"] => ({
   run: async ({
     source,
+    companionFiles,
     fileName,
     checksumAlgorithms,
     identify,
@@ -265,43 +272,60 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     onProgress,
     signal,
   }) => {
-    const stagedSource = await workerIo.stageSource({
-      fallbackFileName: fileName || "input.bin",
-      pathPrefix: "ingest-input",
-      scope: "archive",
-      source,
-      trace: { logLevel, onLog },
-    });
-    const identifyPacks =
-      identify === false
-        ? { entryNames: [], packs: [], unavailable: undefined }
-        : await prepareIngestIdentify({
-            fileName: fileName || "input.bin",
-            logLevel,
-            onLog,
-            onProgress,
-            signal,
-            sourcePath: stagedSource.filePath,
-          });
-    /* Identifying an archive must answer for EVERY ROM member, so the selection
-       is made here instead of being left to the interactive host prompt - which
-       an identify run has no answer for and would cancel. */
-    const identifySelection = identifyAllRomEntries && !select?.length ? identifyPacks.entryNames : [];
-    const stagedPacks = identifyPacks.packs.length
-      ? await workerIo.stageSources(
-          identifyPacks.packs.map((pack, index) => ({
-            fallbackFileName: pack.fileName,
-            pathPrefix: `identify-pack-${index + 1}`,
-            pathPrefixInPath: true as const,
-            scope: "checksum" as const,
-            source: pack.blob,
+    if (companionFiles?.length && !(source instanceof File)) {
+      throw new Error("Companion ingest requires a File source");
+    }
+    const stagedInputs = companionFiles?.length
+      ? (
+          await stageArchiveInputs(workerIo, {
+            source: source as File,
+            companionFiles,
+            options: { logLevel, onLog },
+          })
+        ).sources
+      : [
+          await workerIo.stageSource({
+            fallbackFileName: fileName || "input.bin",
+            pathPrefix: "ingest-input",
+            scope: "archive",
+            source,
             trace: { logLevel, onLog },
-          })),
-        )
-      : [];
-    const staged = [stagedSource, ...stagedPacks];
+          }),
+        ];
+    const stagedSource = stagedInputs[0];
+    if (!stagedSource) throw new Error("Ingest source was not staged");
+    const staged = [...stagedInputs];
     const outputScope = createRomWeaverOutputScope();
     try {
+      const identifyPacks =
+        identify === false
+          ? { entryNames: [], packs: [], unavailable: undefined }
+          : await prepareIngestIdentify({
+              fileName: fileName || "input.bin",
+              logLevel,
+              onLog,
+              onProgress,
+              signal,
+              sourcePath: stagedSource.filePath,
+              knownInputPaths: stagedInputs.map((entry) => entry.filePath),
+            });
+      /* Identifying an archive must answer for EVERY ROM member, so the selection
+       is made here instead of being left to the interactive host prompt - which
+       an identify run has no answer for and would cancel. */
+      const identifySelection = identifyAllRomEntries && !select?.length ? identifyPacks.entryNames : [];
+      const stagedPacks = identifyPacks.packs.length
+        ? await workerIo.stageSources(
+            identifyPacks.packs.map((pack, index) => ({
+              fallbackFileName: pack.fileName,
+              pathPrefix: `identify-pack-${index + 1}`,
+              pathPrefixInPath: true as const,
+              scope: "checksum" as const,
+              source: pack.blob,
+              trace: { logLevel, onLog },
+            })),
+          )
+        : [];
+      staged.push(...stagedPacks);
       const result = await invokeRomWeaverIngestWorker(
         {
           ...(checksumAlgorithms?.length ? { checksumAlgorithms } : {}),

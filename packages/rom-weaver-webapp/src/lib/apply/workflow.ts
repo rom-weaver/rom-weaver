@@ -181,7 +181,7 @@ const prepareApplyInputAssets = async (input: PatchInput, runtime: WorkflowRunti
     "input",
     async () => {
       const directAssets =
-        inputSources.length > 1 ? await prepareMultipleDirectInputAssets(inputSources, options) : null;
+        inputSources.length > 1 ? await prepareMultipleDirectInputAssets(inputSources, options, runtime) : null;
       inputAssets.push(...(directAssets || []));
       if (directAssets) return;
       for (const [index, inputSource] of inputSources.entries()) {

@@ -514,6 +514,7 @@ type WorkflowRuntimeIngest = {
   // are checksummed in place and retain the caller's source reference.
   run?: (input: {
     source: unknown;
+    companionFiles?: File[];
     fileName?: string;
     checksumAlgorithms?: string[];
     /** Load local identify packs and attach best-effort title lookups. Defaults to true. */

@@ -167,7 +167,8 @@ vi.mock("../../src/platform/browser/browser-download.ts", () => ({ triggerBrowse
 vi.mock("../../src/platform/browser/browser-runtime-vfs.ts", () => ({
   createBrowserRuntimeVfsIo: state.createRuntimeIo,
 }));
-vi.mock("../../src/platform/browser/workflow-runtime-archive.ts", () => ({
+vi.mock("../../src/platform/browser/workflow-runtime-archive.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/platform/browser/workflow-runtime-archive.ts")>()),
   createBrowserArchiveRuntime: vi.fn(() => ({ create: vi.fn(), extract: vi.fn(), probe: vi.fn() })),
 }));
 vi.mock("../../src/platform/browser/workflow-runtime-chd.ts", () => ({
@@ -258,6 +259,30 @@ describe("browser workflow runtime construction and outputs", () => {
 });
 
 describe("browser ingest and weave runtime", () => {
+  it("stages NFS companions in one directory and releases them after ingest fails", async () => {
+    const source = new File(["NFS"], "HIF_000000.NFS");
+    const key = new File([new Uint8Array(16)], "HTK.BIN");
+    state.ingest.mockRejectedValueOnce(new Error("invalid NFS header"));
+    await expect(browserRuntime.ingest.run({ source, companionFiles: [key], identify: false })).rejects.toThrow(
+      "invalid NFS header",
+    );
+    const requests = state.workerIo.stageSources.mock.calls[0]?.[0];
+    expect(requests?.map((request) => request.fallbackFileName)).toEqual(["hif_000000.nfs", "htk.bin"]);
+    expect(new Set(requests?.map((request) => request.pathPrefix)).size).toBe(1);
+    expect(state.ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        knownInputPaths: expect.arrayContaining([
+          expect.stringMatching(/\/hif_000000\.nfs$/),
+          expect.stringMatching(/\/htk\.bin$/),
+        ]),
+      }),
+      undefined,
+      undefined,
+    );
+    const staged = await state.workerIo.stageSources.mock.results[0]?.value;
+    for (const entry of staged || []) expect(entry.cleanup).toHaveBeenCalledOnce();
+  });
+
   it("stages identify packs, annotates extracted members, and adopts outputs", async () => {
     const result = await browserRuntime.ingest.run({
       checksumAlgorithms: ["crc32"],

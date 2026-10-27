@@ -220,6 +220,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
         ...this.getExecutionOptions(),
         onCandidatesFound: (request: CandidateSelectionRequest) => requests.push(request),
       } as never,
+      this.runtime,
     );
     this.trace?.("source.session.stage.multi.direct-assets", {
       found: !!directAssets,
