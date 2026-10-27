@@ -738,6 +738,7 @@ export const ROM_WEAVER_FILE_FILTERS = {
     ".bz2",
     ".xz",
     ".zst",
+    ".lz4",
     ".cso",
     ".ciso",
     ".pbp",
