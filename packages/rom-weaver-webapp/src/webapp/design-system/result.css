@@ -111,6 +111,9 @@
   .rw-app .download-btn:has(> .dl-kind) :is(.dl-size, .dl-delta) {
     grid-area: 2 / 2 / auto / 4;
   }
+  .rw-app .download-btn:has(> .dl-kind) .dl-delta + .dl-size {
+    grid-row: 3;
+  }
   .rw-app .download-btn:has(> .dl-kind) :is(.dl-size, .dl-delta)::before {
     content: none;
   }
