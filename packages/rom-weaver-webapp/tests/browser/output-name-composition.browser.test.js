@@ -182,11 +182,13 @@ test("apply output options preserve configured compression order and labels", ()
 test("apply output options label uncompressed output by its extracted contents, not the input container", () => {
   const labels = (source, options = ["none", "zip", "chd"]) =>
     Object.fromEntries(createApplyOutputOptions(options, source).map(({ label, value }) => [value, label]));
-  expect(labels({ fileName: "game.chd", metadata: { mode: "cd" } })).toEqual({
+  expect(labels({ fileName: "game.chd", metadata: { format: "CD", mode: "cd" } })).toEqual({
     chd: ".chd",
     none: ".bin/.cue",
     zip: ".zip",
   });
+  // CD mode alone does not tell a CD from a GD-ROM.
+  expect(labels({ fileName: "game.chd", metadata: { mode: "cd" } }).none).toBe("None");
   expect(labels({ fileName: "game.chd", metadata: { format: "CD" } }).none).toBe(".bin/.cue");
   expect(labels({ fileName: "game.chd", metadata: { format: "GD-ROM" } }).none).toBe(".gdi");
   expect(labels({ fileName: "game.cue" }).none).toBe(".bin/.cue");
@@ -194,6 +196,8 @@ test("apply output options label uncompressed output by its extracted contents, 
   expect(labels({ fileName: "game.bin", metadata: { cueText: 'FILE "game.bin" BINARY' } }).none).toBe(".bin/.cue");
   expect(labels({ fileName: "game.iso", metadata: { cueText: 'FILE "game.iso" BINARY' } }).none).toBe(".iso/.cue");
   expect(labels({ fileName: "game.bin", metadata: { gdiText: "1" } }).none).toBe(".gdi");
+  expect(labels({ fileName: "track.img", metadata: { cuePath: "/disc.cue" } }).none).toBe(".img/.cue");
+  expect(labels({ fileName: "track01.bin", metadata: { cuePath: "/disc.gdi" } }).none).toBe(".gdi");
   expect(labels({ fileName: "game.chd" }).none).toBe("None");
   expect(labels({ fileName: "game.chd", metadata: { mode: "dvd" } }).none).toBe(".iso");
   expect(labels({ fileName: "game.rvz" }).none).toBe(".iso");

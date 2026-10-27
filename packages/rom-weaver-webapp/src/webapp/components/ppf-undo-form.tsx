@@ -187,6 +187,9 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         metadata: prepared?.metadata,
       }
     : null;
+  // A disc's prepared output is its sheet, so the format label reads the track type from the staged track.
+  const formatLabelSource =
+    rom && compressionSource?.metadata?.cuePath ? { ...compressionSource, fileName: rom.name } : compressionSource;
   const formats = [
     "none",
     "zip",
@@ -365,7 +368,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
                 inputFileName: rom?.name,
               })}
               formatId="ppf-undo-output-compression"
-              formatOptions={createOutputOptions(formats, compressionSource)}
+              formatOptions={createOutputOptions(formats, formatLabelSource)}
               onFormatChange={(value) => {
                 clearOutput();
                 setCompression(value);

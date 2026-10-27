@@ -20,7 +20,9 @@ describe("PPF Undo input replacement", () => {
       recommendedFormat: undefined,
       discFormat: undefined,
       group: false,
+      track: "track.bin",
       formats: ["none", "zip", "7z"],
+      noneLabel: ".bin",
     },
     {
       name: "grouped CUE",
@@ -28,7 +30,19 @@ describe("PPF Undo input replacement", () => {
       recommendedFormat: undefined,
       discFormat: "CD",
       group: true,
+      track: "track.bin",
       formats: ["none", "zip", "7z", "chd"],
+      noneLabel: ".bin/.cue",
+    },
+    {
+      name: "grouped CUE with an IMG track",
+      filename: "disc.zip",
+      recommendedFormat: undefined,
+      discFormat: "CD",
+      group: true,
+      track: "track.img",
+      formats: ["none", "zip", "7z", "chd"],
+      noneLabel: ".img/.cue",
     },
     {
       name: "content-detected GameCube",
@@ -36,11 +50,13 @@ describe("PPF Undo input replacement", () => {
       recommendedFormat: "rvz",
       discFormat: "DVD",
       group: false,
+      track: "track.bin",
       formats: ["none", "zip", "7z", "rvz"],
+      noneLabel: ".bin",
     },
   ])(
     "uses ingest metadata and the shared compression policy for $name",
-    async ({ filename, recommendedFormat, discFormat, group, formats }) => {
+    async ({ filename, recommendedFormat, discFormat, group, track: trackName, formats, noneLabel }) => {
       const source = new File(["sixteenbyteinput!"], filename);
       const stored = (path: string, content: string) => ({
         path,
@@ -48,8 +64,8 @@ describe("PPF Undo input replacement", () => {
         dispose: vi.fn(),
         vfs: { getFile: async () => new File([content], "stored") },
       });
-      const sheet = stored("/disc.cue", 'FILE "track.bin" BINARY');
-      const track = stored("/track.bin", "track");
+      const sheet = stored("/disc.cue", `FILE "${trackName}" BINARY`);
+      const track = stored(`/${trackName}`, "track");
       mocks.ingest.mockResolvedValue({
         result: {
           assets: group
@@ -70,6 +86,7 @@ describe("PPF Undo input replacement", () => {
       await waitFor(() => {
         const options = view.container.querySelectorAll("#ppf-undo-output-compression option");
         expect([...options].map((option) => (option as HTMLOptionElement).value)).toEqual(formats);
+        expect((options[0] as HTMLOptionElement | undefined)?.text).toBe(noneLabel);
       });
     },
   );

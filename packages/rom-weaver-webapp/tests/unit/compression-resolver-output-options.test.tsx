@@ -19,7 +19,8 @@ const labelsFor = (row: ReturnType<typeof createRomInputRow>) => {
 };
 
 describe("compression resolver output options", () => {
-  it("labels an uncompressed CHD disc by the files it saves, before and after extraction", () => {
+  it("labels an uncompressed CHD disc by the files it saves once extracted, not by a guess while extracting", () => {
+    // CD mode arrives before the tracks and covers GD-ROMs too, so it alone names no files.
     const extracting = createRomInputRow({ chdMode: "cd", id: "rom", info: { fileName: "game.chd" } });
     const extracted = createRomInputRow({
       chdMode: "cd",
@@ -28,9 +29,8 @@ describe("compression resolver output options", () => {
       info: { fileName: "game.bin" },
       kind: "track",
     });
-    for (const row of [extracting, extracted]) {
-      expect(labelsFor(row)).toEqual({ chd: ".chd", none: ".bin/.cue", zip: ".zip" });
-    }
+    expect(labelsFor(extracting)).toEqual({ chd: ".chd", none: "None", zip: ".zip" });
+    expect(labelsFor(extracted)).toEqual({ chd: ".chd", none: ".bin/.cue", zip: ".zip" });
   });
 
   it("labels an extracted GD-ROM by its gdi sheet", () => {
