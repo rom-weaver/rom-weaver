@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowProgress } from "../../../src/platform/browser/browser-api.ts";
@@ -8,6 +8,7 @@ import {
   addEntry,
   disposeEntry,
   getEmulatorSessionState,
+  releaseLargeEntries,
   restartCurrentGameWithSave,
 } from "../../../src/public/react/emulator-session-store.ts";
 import type { EmulatorSessionEntry } from "../../../src/public/react/emulator-session-store.ts";
@@ -784,6 +785,20 @@ describe("EmulatorTestView", () => {
     // The paused disc and the next ROM's read can exceed an iOS tab's memory limit together.
     expect(await screen.findByTitle("EmulatorJS test for next.nes")).toBeTruthy();
     expect(gamesDuringLoad).toBe(0);
+  });
+
+  it("says why a disc-sized game closed for another action until it is dismissed", () => {
+    addEntry(entry({ core: "psx", fileName: "disc.chd", sizeBytes: 464 * 1024 * 1024 }));
+    releaseLargeEntries({ announce: true });
+
+    render(withSettings(<EmulatorTestView />));
+
+    const notice = document.getElementById("emulator-test-closed-game");
+    expect(notice?.textContent).toBe(
+      "disc.chd was closed to free memory. Another action started while it was paused. Its in-game save is kept, so load it again to continue.",
+    );
+    fireEvent.click(within(notice as HTMLElement).getByRole("button", { name: "Dismiss" }));
+    expect(document.getElementById("emulator-test-closed-game")).toBeNull();
   });
 
   it("ignores a replacement that finishes after Stop is pressed", async () => {

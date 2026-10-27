@@ -2,7 +2,13 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addEntry, disposeEntry, getEmulatorSessionState } from "../../../src/public/react/emulator-session-store.ts";
+import {
+  addEntry,
+  dismissClosedGameNotice,
+  disposeEntry,
+  getClosedGameName,
+  getEmulatorSessionState,
+} from "../../../src/public/react/emulator-session-store.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { useApplyDownloadOrchestration } from "../../../src/public/react/use-apply-download-orchestration.ts";
 import type { ApplyWorkflowResult } from "../../../src/types/workflow-runtime-types.ts";
@@ -191,6 +197,8 @@ describe("useApplyDownloadOrchestration hook", () => {
     // The hidden Test view only pauses its game, which keeps the disc and the core's heap in the page.
     expect(workflow.applyPatches).toHaveBeenCalledOnce();
     expect(gamesDuringRun).toBe(0);
+    expect(getClosedGameName()).toBe("disc.chd");
+    dismissClosedGameNotice();
   });
 
   it("releases a paused disc-sized Test game when the click queues the Apply behind input preparation", async () => {

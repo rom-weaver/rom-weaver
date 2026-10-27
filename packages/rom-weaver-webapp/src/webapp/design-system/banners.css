@@ -70,6 +70,21 @@
 .rw-app .updates-text b {
   font-weight: 650;
 }
+/* The paused-game warning's button keeps its label on one line; phones move it under the text. */
+.rw-app .paused-game-banner .btn {
+  flex: none;
+}
+@media (max-width: 560px) {
+  .rw-app .paused-game-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .rw-app .paused-game-banner .btn {
+    grid-row: 2;
+    justify-self: start;
+  }
+}
 .rw-app .banner-x {
   position: relative;
   display: grid;

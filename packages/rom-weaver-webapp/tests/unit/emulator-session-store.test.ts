@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const loadEmulatorRom = vi.hoisted(() =>
   vi.fn(async (blob: Blob, fileName: string) => ({ blob, checksum: "a".repeat(40), fileName })),
@@ -6,13 +6,17 @@ const loadEmulatorRom = vi.hoisted(() =>
 
 vi.mock("../../src/public/react/components/emulator-load-rom.ts", () => ({ loadEmulatorRom }));
 
+import { setWorkbenchActivity } from "../../src/lib/activity-store.ts";
 import {
   addEntry,
   clearApplyEntries,
+  dismissClosedGameNotice,
   disposeEntry,
+  getClosedGameName,
   getEmulatorSessionState,
   prepareEntry,
   releaseLargeEntries,
+  releaseLargeEntriesOnRunStart,
   restartCurrentGameWithSave,
   setCurrentGame,
   type EmulatorSessionEntry,
@@ -96,6 +100,45 @@ describe("emulator session store", () => {
       currentGameId: "game",
       entries: [entry({ sizeBytes: 4 * 1024 * 1024 })],
     });
+  });
+
+  it("names the disc-sized game it closed only when asked to", () => {
+    addEntry(entry({ fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 }));
+    // A replacement game is about to load, so nothing needs explaining.
+    releaseLargeEntries();
+    expect(getClosedGameName()).toBeNull();
+
+    addEntry(entry({ fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 }));
+    releaseLargeEntries({ announce: true });
+    expect(getClosedGameName()).toBe("disc.chd");
+    dismissClosedGameNotice();
+    expect(getClosedGameName()).toBeNull();
+
+    addEntry(entry({ fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 }));
+    releaseLargeEntries({ announce: true });
+    addEntry(entry());
+    expect(getClosedGameName()).toBeNull();
+  });
+
+  it("closes a disc-sized game each time a workflow starts a run", () => {
+    const unsubscribe = releaseLargeEntriesOnRunStart();
+    onTestFinished(() => {
+      unsubscribe();
+      setWorkbenchActivity("session-store-test", { state: "idle" });
+    });
+    addEntry(entry({ fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 }));
+    setWorkbenchActivity("session-store-test", { state: "running" });
+    expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
+    expect(getClosedGameName()).toBe("disc.chd");
+
+    // A game loaded during the run stays until the next run starts.
+    addEntry(entry({ fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 }));
+    setWorkbenchActivity("session-store-test", { stage: "Halfway", state: "running" });
+    expect(getEmulatorSessionState().entries).toHaveLength(1);
+    setWorkbenchActivity("session-store-test", { state: "done" });
+    unsubscribe();
+    setWorkbenchActivity("session-store-test", { state: "running" });
+    expect(getEmulatorSessionState().entries).toHaveLength(1);
   });
 
   it("resolves and caches the retained artifact's blob", async () => {

@@ -170,8 +170,18 @@ msgstr "{file} no coincide con esta partida. Elegirás otra ROM a continuación.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.title"
+msgstr "{fileName} está en pausa en Probar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.test.fdsBios.summary"
 msgstr "{fileName} necesita la BIOS de Famicom Disk System."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.summary"
+msgstr "{fileName} se cerró para liberar memoria."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,6 +525,11 @@ msgstr "y archivos anidados"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.test.closedGame.detail"
+msgstr "Se inició otra acción mientras estaba en pausa. Su partida guardada se conserva; cárgalo de nuevo para continuar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindApp"
 msgstr "App"
 
@@ -732,6 +747,11 @@ msgstr "Descarga la aplicación automáticamente para usarla sin conexión, salv
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.back"
 msgstr "Atrás"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.open"
+msgstr "Volver a Probar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4782,6 +4802,11 @@ msgstr "Empieza por la ROM original"
 #: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.play.tryIt"
 msgstr "Inicia el juego y abre el menú del reproductor."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.pausedGame.detail"
+msgstr "Iniciar otra acción lo cierra para liberar memoria. Se pierde el progreso desde la última vez que guardaste en el juego."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

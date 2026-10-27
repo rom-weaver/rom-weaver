@@ -608,7 +608,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         const requestsApply =
           !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) &&
           (canQueueApply || canStartApply);
-        if (requestsApply) releaseLargeEntries();
+        if (requestsApply) releaseLargeEntries({ announce: true });
         if (patchChangePendingRef.current && !busy) {
           traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);

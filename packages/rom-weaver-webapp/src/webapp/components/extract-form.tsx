@@ -6,6 +6,7 @@ import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { InlineProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { Modal } from "../../public/react/components/ds/modal.tsx";
+import { releaseLargeEntries } from "../../public/react/emulator-session-store.ts";
 import { SelectionCheckList, type SelectionItem, SelectionTree } from "../../public/react/components/ds/selection.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { EXTRACT_FORMAT_GUIDES, WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
@@ -128,6 +129,8 @@ const ExtractForm = ({ onSelectTab, pageDrop }: ExtractFormProps) => {
       abortRef.current = abort;
       clearOutputs();
       setSplitPrompt(null);
+      // Extract publishes no workbench activity, so it closes a paused disc-sized Test game itself.
+      releaseLargeEntries({ announce: true });
       setBusy(true);
       setError("");
       const label = `Extracting ${file.name}…`;
@@ -180,6 +183,7 @@ const ExtractForm = ({ onSelectTab, pageDrop }: ExtractFormProps) => {
       const runId = ++runIdRef.current;
       const abort = new AbortController();
       abortRef.current = abort;
+      releaseLargeEntries({ announce: true });
       setBusy(true);
       setError("");
       setProgress({ label: `Reading the tracks in ${file.name}…`, percent: null });

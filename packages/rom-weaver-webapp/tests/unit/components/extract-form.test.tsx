@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  addEntry,
+  dismissClosedGameNotice,
+  getClosedGameName,
+  getEmulatorSessionState,
+} from "../../../src/public/react/emulator-session-store.ts";
 import { getAgentWorkflow } from "../../../src/webapp/agent/workflow-registry.ts";
 import { ExtractForm } from "../../../src/webapp/components/extract-form.tsx";
 
@@ -27,6 +33,29 @@ const addFile = (file: File) =>
 describe("ExtractForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("closes a paused disc-sized Test game when an extraction starts", async () => {
+    let gamesDuringExtract: number | undefined;
+    runtime.extract.mockImplementation(async () => {
+      gamesDuringExtract = getEmulatorSessionState().entries.length;
+      return { outputs: [output("Game.iso")] };
+    });
+    addEntry({
+      blob: new Blob(["disc"]),
+      fileName: "disc.chd",
+      id: "disc",
+      sizeBytes: 464 * 1024 * 1024,
+      source: "local",
+    });
+    render(<ExtractForm />);
+
+    addFile(new File(["7z"], "game.7z"));
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledOnce());
+    expect(gamesDuringExtract).toBe(0);
+    expect(getClosedGameName()).toBe("disc.chd");
+    dismissClosedGameNotice();
   });
 
   it("keeps NFS parts and their key together, including on retry", async () => {

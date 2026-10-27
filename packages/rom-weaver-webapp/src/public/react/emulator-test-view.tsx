@@ -22,10 +22,12 @@ import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-clien
 import { resolveAssetUrl } from "./asset-url.ts";
 import {
   addEntry,
+  dismissClosedGameNotice,
   disposeEntry,
   prepareEntry,
   releaseLargeEntries,
   restartCurrentGameWithSave,
+  useClosedGameName,
   useEmulatorSession,
   type EmulatorSessionEntry,
 } from "./emulator-session-store.ts";
@@ -132,6 +134,7 @@ type EmulatorTestViewProps = {
 
 const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
+  const closedGameName = useClosedGameName();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
@@ -845,8 +848,14 @@ const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) =>
           </>
         }
         beforeDropZone={
-          error || ignoredSaves || (currentGame && missingBios) ? (
+          error || ignoredSaves || (currentGame && missingBios) || (!currentGame && closedGameName) ? (
             <>
+              {!currentGame && closedGameName ? (
+                <Notice id="emulator-test-closed-game" level="info" onDismiss={dismissClosedGameNotice}>
+                  <b>{localizer.message("ui.test.closedGame.summary", { fileName: closedGameName })}</b>{" "}
+                  {localizer.message("ui.test.closedGame.detail")}
+                </Notice>
+              ) : null}
               {ignoredSaves ? (
                 <Notice id="emulator-test-ignored-saves" level="warn" onDismiss={() => setIgnoredSaves(undefined)}>
                   <b>Only one save loads at a time.</b> Used {ignoredSaves.used}; ignored{" "}

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { subscribeWorkbenchRunStart } from "../../lib/activity-store.ts";
 import type { RetainedRuntimeOutput } from "../../storage/vfs/types.ts";
 import { clearEmulatorSavePreview } from "../../storage/browser/emulator-saves.ts";
 import { createStore } from "../../webapp/vanilla-store.ts";
@@ -35,6 +36,13 @@ const store = createStore<EmulatorSessionState>(() => ({
   entries: [],
 }));
 
+// The disc-sized game another action closed, so the Test view can say why it is gone.
+const closedGameStore = createStore<{ fileName: string | null }>(() => ({ fileName: null }));
+
+const setClosedGameName = (fileName: string | null) => {
+  if (closedGameStore.getState().fileName !== fileName) closedGameStore.setState({ fileName });
+};
+
 const disposeEntryResources = (entry: EmulatorSessionEntry) => {
   if (entry.checksum) clearEmulatorSavePreview(entry.checksum);
   void Promise.resolve(entry.artifact?.dispose()).catch(() => undefined);
@@ -55,6 +63,7 @@ const addEntry = (entry: EmulatorSessionEntry) => {
     }
     return { currentGameId: entry.id, entries: [entry] };
   });
+  setClosedGameName(null);
 };
 
 const prepareEntry = async (id: string): Promise<Blob | null> => {
@@ -79,22 +88,37 @@ const prepareEntry = async (id: string): Promise<Blob | null> => {
 // A game this large is a disc; smaller ones cost little to keep.
 const LARGE_GAME_BYTES = 128 * 1024 * 1024;
 
+const isLargeEntry = (entry: EmulatorSessionEntry) => entry.sizeBytes > LARGE_GAME_BYTES;
+
 /**
- * Release a disc-sized game before the page reads another disc or runs a patch. A hidden Test view only pauses its
- * game, which keeps the disc's file-system copy and the core's heap in the page. Together with the next disc or the
- * patch run's memory, that can exceed an iOS tab's memory limit.
+ * Release a disc-sized game before the page reads another disc or another action runs. A hidden Test view only
+ * pauses its game, which keeps the disc's file-system copy and the core's heap in the page. Together with the next
+ * disc or the action's memory, that can exceed an iOS tab's memory limit. `announce` tells the Test view that the
+ * game was closed; callers that load a replacement leave it unset.
  */
-const releaseLargeEntries = () => {
+const releaseLargeEntries = ({ announce = false }: { announce?: boolean } = {}) => {
+  let closedName: string | undefined;
   store.setState((state) => {
-    const large = state.entries.filter((entry) => entry.sizeBytes > LARGE_GAME_BYTES);
+    const large = state.entries.filter(isLargeEntry);
     if (!large.length) return {};
     for (const entry of large) disposeEntryResources(entry);
+    closedName = large[0]?.fileName;
     return {
       currentGameId: large.some((entry) => entry.id === state.currentGameId) ? null : state.currentGameId,
       entries: state.entries.filter((entry) => !large.includes(entry)),
     };
   });
+  if (announce && closedName) setClosedGameName(closedName);
 };
+
+/** Release a disc-sized game each time a workflow starts a run. Returns the unsubscribe function. */
+const releaseLargeEntriesOnRunStart = () => subscribeWorkbenchRunStart(() => releaseLargeEntries({ announce: true }));
+
+const dismissClosedGameNotice = () => setClosedGameName(null);
+
+const getClosedGameName = () => closedGameStore.getState().fileName;
+
+const useClosedGameName = () => useSyncExternalStore(closedGameStore.subscribe, getClosedGameName, getClosedGameName);
 
 const getApplyEntry = (fileName?: string) =>
   store.getState().entries.find((entry) => entry.source === "apply" && (!fileName || entry.fileName === fileName));
@@ -142,12 +166,17 @@ export type { EmulatorSessionEntry };
 export {
   addEntry,
   clearApplyEntries,
+  dismissClosedGameNotice,
   disposeEntry,
   getApplyEntry,
+  getClosedGameName,
   getEmulatorSessionState,
+  isLargeEntry,
   prepareEntry,
   releaseLargeEntries,
+  releaseLargeEntriesOnRunStart,
   restartCurrentGameWithSave,
   setCurrentGame,
+  useClosedGameName,
   useEmulatorSession,
 };

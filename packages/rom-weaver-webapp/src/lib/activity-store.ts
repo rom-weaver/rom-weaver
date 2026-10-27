@@ -36,6 +36,7 @@ const IDLE: WorkbenchActivity = { stage: "", state: "idle" };
 const activities = new Map<string, WorkbenchActivity>();
 let published: WorkbenchActivity = IDLE;
 const listeners = new Set<() => void>();
+const runStartListeners = new Set<(workflowId: string) => void>();
 
 const getWorkbenchActivity = (): WorkbenchActivity => published;
 
@@ -61,6 +62,10 @@ const setWorkbenchActivity = (
   // pin the published state above another workflow's live run.
   if (merged.state === "idle") activities.delete(workflowId);
   else activities.set(workflowId, merged);
+  // Checked before the published state: a run that starts while another one runs leaves it unchanged.
+  if (merged.state === "running" && previous?.state !== "running") {
+    for (const listener of runStartListeners) listener(workflowId);
+  }
   const nextPublished = derivePublished();
   if (nextPublished.state === published.state && nextPublished.stage === published.stage) return;
   logger.trace("Workbench activity changed", {
@@ -80,4 +85,12 @@ const subscribeWorkbenchActivity = (listener: () => void) => {
   };
 };
 
-export { getWorkbenchActivity, setWorkbenchActivity, subscribeWorkbenchActivity };
+/** Calls `listener` with the workflow's id each time a workflow starts a run. */
+const subscribeWorkbenchRunStart = (listener: (workflowId: string) => void) => {
+  runStartListeners.add(listener);
+  return () => {
+    runStartListeners.delete(listener);
+  };
+};
+
+export { getWorkbenchActivity, setWorkbenchActivity, subscribeWorkbenchActivity, subscribeWorkbenchRunStart };

@@ -3,6 +3,7 @@ import {
   getWorkbenchActivity,
   setWorkbenchActivity,
   subscribeWorkbenchActivity,
+  subscribeWorkbenchRunStart,
 } from "../../src/lib/activity-store.ts";
 
 /**
@@ -11,6 +12,25 @@ import {
  */
 
 describe("activity store", () => {
+  it("tells run-start listeners each time a workflow starts a run", () => {
+    const started = vi.fn();
+    const unsubscribe = subscribeWorkbenchRunStart(started);
+    setWorkbenchActivity("compress", { state: "staging" });
+    setWorkbenchActivity("compress", { state: "running" });
+    setWorkbenchActivity("compress", { stage: "Compress - 50%", state: "running" });
+    // The published state is already running, but this is still a new run.
+    setWorkbenchActivity("checksum", { state: "running" });
+    setWorkbenchActivity("compress", { state: "done" });
+    setWorkbenchActivity("compress", { state: "running" });
+    unsubscribe();
+    setWorkbenchActivity("checksum", { state: "idle" });
+    setWorkbenchActivity("checksum", { state: "running" });
+    setWorkbenchActivity("compress", { state: "idle" });
+    setWorkbenchActivity("checksum", { state: "idle" });
+
+    expect(started.mock.calls).toEqual([["compress"], ["checksum"], ["compress"]]);
+  });
+
   it("publishes state changes to subscribers and resets the stage line", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeWorkbenchActivity(listener);
