@@ -8,6 +8,7 @@ import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../type
 import type { CompressionOptionValue } from "../../types/workflow-compression.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime-types.ts";
+import { replaceGdiFileReferences } from "../../workers/protocol/gdi-file-utils.ts";
 import { emitTraceLog } from "../logging.ts";
 import { COMPRESSION_DEFAULTS } from "../compression/compression-metadata.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
@@ -28,7 +29,7 @@ import {
   isLazyExternalPatchFile,
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import { appendFileNameExtension, getFileNameWithoutExtension } from "../input/path-utils.ts";
+import { appendFileNameExtension, getBaseFileName, getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { sanitizeTypedOutputName } from "../path-utils.ts";
 import {
   chdModeFromMetadata,
@@ -418,11 +419,12 @@ const createArchiveEntryFromPatchFile = (
   asset: InputAsset,
   file: PatchFileInstance,
   outputFileName = asset.fileName,
-  cueTextOverride?: string,
+  sheetTextOverride?: string,
 ): ArchiveOutputEntry => {
-  if (asset.kind === "cue") {
-    const cueText = cueTextOverride ?? asset.file.metadata?.cueText ?? decodeUtf8(getPatchFileBytes(file));
-    const data = new TextEncoder().encode(cueText);
+  if (asset.kind === "cue" || asset.kind === "gdi") {
+    const metadataText = asset.kind === "cue" ? asset.file.metadata?.cueText : asset.file.metadata?.gdiText;
+    const text = sheetTextOverride ?? metadataText ?? decodeUtf8(getPatchFileBytes(file));
+    const data = new TextEncoder().encode(text);
     return {
       entry: { data, filename: outputFileName },
       size: data.byteLength,
@@ -443,10 +445,26 @@ const createArchiveEntriesFromOutputAssets = (
   outputAssets: Array<{ asset: InputAsset; file: PatchFileInstance }>,
   baseName: string,
 ) => {
-  const createDefaultEntries = () =>
-    outputAssets.map(({ asset, file }) => createArchiveEntryFromPatchFile(asset, file));
   const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
   const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
+  const trackFileNames = new Map(
+    trackOutputs.map(({ asset }) => [getBaseFileName(asset.fileName).toLowerCase(), getBaseFileName(asset.fileName)]),
+  );
+  const createEntry = (
+    asset: InputAsset,
+    file: PatchFileInstance,
+    outputFileName = asset.fileName,
+    sheetText?: string,
+  ) => {
+    if (asset.kind === "gdi") {
+      sheetText = replaceGdiFileReferences(
+        asset.file.metadata?.gdiText ?? decodeUtf8(getPatchFileBytes(file)),
+        (name) => trackFileNames.get(getBaseFileName(name).toLowerCase()),
+      );
+    }
+    return createArchiveEntryFromPatchFile(asset, file, outputFileName, sheetText);
+  };
+  const createDefaultEntries = () => outputAssets.map(({ asset, file }) => createEntry(asset, file));
   const trackOutput = trackOutputs[0];
   if (cueOutput && trackOutput && trackOutputs.length === 1) {
     const trackExtension = getArchiveTrackExtension(trackOutput.file, trackOutput.asset.fileName);
@@ -464,12 +482,13 @@ const createArchiveEntriesFromOutputAssets = (
     } catch {
       return createDefaultEntries();
     }
+    trackFileNames.set(getBaseFileName(trackOutput.asset.fileName).toLowerCase(), trackFileName);
     return outputAssets.map(({ asset, file }) =>
       asset.kind === "cue"
-        ? createArchiveEntryFromPatchFile(asset, file, cueFileName, cueText)
+        ? createEntry(asset, file, cueFileName, cueText)
         : asset.kind === "track"
-          ? createArchiveEntryFromPatchFile(asset, file, trackFileName)
-          : createArchiveEntryFromPatchFile(asset, file),
+          ? createEntry(asset, file, trackFileName)
+          : createEntry(asset, file),
     );
   }
   return createDefaultEntries();

@@ -374,6 +374,30 @@ describe("buildSessionOutputFiles", () => {
     expect(new TextDecoder().decode(entries[0]?.data)).toContain('FILE "renamed.bin" BINARY');
   });
 
+  it("keeps a sibling GDI reference in sync when the CUE track is renamed", async () => {
+    const cue = await makeFile('FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\n', "disc.cue");
+    const gdi = await makeFile("1\n1 45000 4 2352 tracks/DISC.BIN 0\n", "disc.gdi");
+    const track = await makeFile("track-bytes", "disc.bin");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "renamed.zip"));
+
+    await buildSessionOutputFiles(
+      [
+        makeAsset("cue", "cue", cue, "group"),
+        makeAsset("gdi", "gdi", gdi, "group"),
+        makeAsset("track", "track", track, "group"),
+      ],
+      new Map(),
+      { output: { compression: "zip", outputName: "renamed" } } as never,
+    );
+
+    const entries = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0].entries as Array<{
+      data?: Uint8Array;
+      filename?: string;
+    }>;
+    expect(entries.map((entry) => entry.filename)).toEqual(["renamed.cue", "disc.gdi", "renamed.bin"]);
+    expect(new TextDecoder().decode(entries[1]?.data)).toBe('1\n1 45000 4 2352 "renamed.bin" 0\n');
+  });
+
   it.each([
     ["x.cue", "x"],
     ["Foo.gba", "Foo"],
