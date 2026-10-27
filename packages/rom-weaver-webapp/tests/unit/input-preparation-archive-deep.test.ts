@@ -20,6 +20,7 @@ vi.mock("../../src/lib/runtime/public-output-bin-file.ts", () => ({
   createPatchFileFromPublicOutput: mocks.createPatchFileFromPublicOutput,
 }));
 
+import { shouldIdentifySource, skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import {
   attachBareRomIngestMetadata,
   describeArchiveFileForTrace,
@@ -165,6 +166,22 @@ describe("resolveArchiveInput", () => {
     expect(result).toMatchObject({ fileName: "payload.sfc", _extractTimeMs: 3.2 });
   });
 
+  it("keeps the skipped identification policy on an extracted leaf", async () => {
+    const extracted = { fileName: "payload.sfc", fileSize: 8 };
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue(extracted);
+    runtime.compression.extract.mockResolvedValue({ output: output("payload.sfc"), outputs: [output("payload.sfc")] });
+    const source = archive("weave.zip");
+    skipSourceIdentification(source);
+    const result = await resolveArchiveInput(
+      source as never,
+      "rom",
+      { input: { containerInputsEnabled: true } } as never,
+      runtime as never,
+      "payload.sfc",
+    );
+    expect(shouldIdentifySource(result)).toBe(false);
+  });
+
   it("uses the first output when the extractor omits its singular output field", async () => {
     const extracted = { fileName: "payload.bin", fileSize: 8 };
     mocks.createPatchFileFromPublicOutput.mockResolvedValue(extracted);
@@ -249,6 +266,21 @@ describe("resolveArchiveInputAssets", () => {
       size: 16,
       preparation: { sourceSize: 40, wasDecompressed: true, parentCompressions: expect.any(Array) },
     });
+  });
+
+  it("keeps the skipped identification policy on descent leaves", async () => {
+    const sourceFile = archive("game.zip", 40);
+    const leaf = { fileName: "game.sfc", fileSize: 16 };
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue(leaf);
+    runtime.ingest.run.mockResolvedValue({
+      result: { assets: [{ platform: "snes", recommendedFormat: "sfc" }], patches: [] },
+      outputs: [output("game.sfc", 16)],
+      patchOutputs: [],
+    });
+    skipSourceIdentification(sourceFile);
+    await resolveArchiveInputAssets(sourceFile as never, {} as never, 1, runtime as never);
+    expect(runtime.ingest.run).toHaveBeenCalledWith(expect.objectContaining({ identify: false }));
+    expect(shouldIdentifySource(leaf)).toBe(false);
   });
 
   it("groups cue and track outputs and reports CHD mode", async () => {

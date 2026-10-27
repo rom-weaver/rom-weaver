@@ -37,7 +37,7 @@ import {
   makeRomAsset,
   makeTrackAsset,
 } from "./input-assets.ts";
-import { shouldIdentifySource } from "./input-identification-policy.ts";
+import { inheritSourceIdentificationPolicy, shouldIdentifySource } from "./input-identification-policy.ts";
 import { classifyPatcherInput } from "./input-classification.ts";
 import {
   DEFAULT_INPUT_PREPARATION_RUNTIME,
@@ -349,6 +349,7 @@ const resolveArchiveInputFileByDescent = async (
     throw error;
   }
   extracted.fileName = fileName;
+  inheritSourceIdentificationPolicy(file, extracted);
   const extractTimeMs = ownedOutput.timing?.elapsedMs;
   if (typeof extractTimeMs === "number" && Number.isFinite(extractTimeMs)) {
     (extracted as PatchFileInstance & { _extractTimeMs?: number })._extractTimeMs = Math.max(0, extractTimeMs);
@@ -527,6 +528,7 @@ const resolveArchiveInputAssetsByDescent = async (
         preferExternalFilePath: !shouldMaterializeForSyncRead,
       });
       file.fileName = fileName;
+      inheritSourceIdentificationPolicy(archiveFile, file);
       // The CHD recompress path keys off the disc format; ingest reports each leaf's optical medium.
       const discFormat = ingestResult.assets[index]?.discFormat;
       const ingestAsset = ingestResult.assets[index];

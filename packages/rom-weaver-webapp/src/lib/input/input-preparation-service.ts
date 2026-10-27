@@ -290,6 +290,7 @@ const createInputPreparationPatchFile = async (
       { materialize: false },
     );
     inheritIngestPatchRequirements(source, file);
+    inheritSourceIdentificationPolicy(source, file);
     return file;
   }
 
