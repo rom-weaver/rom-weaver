@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { MARKDOWN_ROUTES } from "../functions/markdown-routes.js";
-import { readDocLastmod } from "./docs-discovery.mjs";
 import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
 import {
   WORKFLOW_ENTRY_ROUTES,
@@ -65,21 +67,46 @@ test("sitemap lastmod values are ISO dates or absent, and never on a Markdown UR
   }
 });
 
-test("workflow pages get a lastmod whenever git can date their sources", () => {
-  const dated = (...files) => files.every((file) => readDocLastmod(path.resolve(file), path.resolve("../..")));
-  const shared = ["src/webapp/workflow-seo.mjs", "src/presentation/localization/messages.ts"];
-  const home = [
+test("workflow pages take their lastmod from the newest commit of their text sources", (context) => {
+  // A throwaway repository, so the assertion holds in the shallow clones CI uses.
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "seo-sitemap-"));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const git = (date, ...args) =>
+    execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+      cwd: directory,
+      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+      stdio: "ignore",
+    });
+  const files = [
+    "src/webapp/workflow-seo.mjs",
+    "src/presentation/localization/messages.ts",
     "src/webapp/components/home-page.tsx",
     "src/webapp/components/home-sections.tsx",
     "src/webapp/components/home-loom.tsx",
     "src/wasm/generated/rom-weaver-format-metadata.ts",
   ];
-  const sitemap = createSitemapSource();
-  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
-    // A shallow clone or an uncommitted source legitimately has no date; only assert when git can supply one.
-    if (!dated(...shared, ...(route.slug === "" ? home : []))) continue;
-    assert.match(sitemap, new RegExp(`<loc>https://rom-weaver.com/${route.slug}</loc><lastmod>`), route.slug || "home");
+  for (const file of files) {
+    fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+    fs.writeFileSync(path.join(directory, file), "// text\n");
   }
+  assert.doesNotMatch(
+    createSitemapSource({ root: directory, repo: directory }),
+    /<loc>https:\/\/rom-weaver.com\/compress<\/loc><lastmod>/,
+  );
+  git("2026-01-01T00:00:00Z", "init");
+  git("2026-01-01T00:00:00Z", "add", ".");
+  git("2026-01-01T00:00:00Z", "commit", "-m", "feat: add sources");
+  fs.appendFileSync(path.join(directory, "src/webapp/components/home-loom.tsx"), "// changed\n");
+  git("2026-02-01T00:00:00Z", "add", ".");
+  git("2026-02-01T00:00:00Z", "commit", "-m", "fix: change landing");
+  const sitemap = createSitemapSource({ root: directory, repo: directory });
+  const lastmodOf = (slug) =>
+    sitemap.match(new RegExp(`<loc>https://rom-weaver.com/${slug}</loc><lastmod>([^<]+)</lastmod>`))?.[1];
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+    assert.match(lastmodOf(route.slug) ?? "", /^\d{4}-\d{2}-\d{2}T/, route.slug || "home");
+  }
+  // The landing change is newer than the shared sources, so only the apex follows it.
+  assert.ok(lastmodOf("") > lastmodOf("compress"));
 });
 
 test("the sitemap includes the public compression workflow", () => {

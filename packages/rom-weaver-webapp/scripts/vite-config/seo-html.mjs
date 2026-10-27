@@ -119,11 +119,11 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
-// Every workflow page is the shared app shell prerendered for its view, so its text comes from
-// the route table, the message catalog and, for the apex, the landing components and format
-// lists. The newest commit of those files is an upper bound on the page's last change: it can be
-// later than the real edit, never earlier. A dirty or shallow checkout yields none, and the
-// entry then omits <lastmod> rather than guess.
+// A workflow page's <lastmod> is the newest commit of the files that carry its indexable text: the
+// route table, the message catalog and, for the apex, the landing components and format lists.
+// Hard-coded form text in a view's own component is not tracked, so a commit that edits only that
+// can leave the date behind. A dirty or shallow checkout yields none, and the entry then omits
+// <lastmod> rather than guess.
 const WORKFLOW_LASTMOD_SOURCES = ["src/webapp/workflow-seo.mjs", "src/presentation/localization/messages.ts"];
 const HOME_LASTMOD_SOURCES = [
   "src/webapp/components/home-page.tsx",
@@ -131,22 +131,22 @@ const HOME_LASTMOD_SOURCES = [
   "src/webapp/components/home-loom.tsx",
   "src/wasm/generated/rom-weaver-format-metadata.ts",
 ];
-const readWorkflowLastmod = (route) => {
+const readWorkflowLastmod = (route, root, repo) => {
   const files = route.slug === "" ? [...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES] : WORKFLOW_LASTMOD_SOURCES;
-  const dates = files.map((file) => readDocLastmod(path.join(rootDir, file), repoRoot));
+  const dates = files.map((file) => readDocLastmod(path.join(root, file), repo));
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
 
-export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
+export const createSitemapSource = ({ root = rootDir, repo = repoRoot } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]
   .map((route) => {
-    const lastmod = readWorkflowLastmod(route);
+    const lastmod = readWorkflowLastmod(route, root, repo);
     return `  <url><loc>https://rom-weaver.com/${route.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
   })
   .join("\n")}
 ${DOC_SOURCES.map((source) => {
-  const lastmod = readDocLastmod(docSourcePath(source), repoRoot);
+  const lastmod = readDocLastmod(docSourcePath(source), repo);
   return `  <url><loc>https://rom-weaver.com/${source.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
 }).join("\n")}
 </urlset>
