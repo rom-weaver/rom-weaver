@@ -87,11 +87,13 @@ import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 /** What the steps before any files need from the form: whether the bench is
-    ready to tour, and the practice files Continue loads when the reader has none. */
+    ready to tour, whether the Identify search is on the page, and the practice
+    files Continue loads when the reader has none. */
 type ApplyTutorialInputs = {
   loadPractice: () => void;
   loading: boolean;
   ready: boolean;
+  searchShown: boolean;
 };
 
 /**
@@ -112,6 +114,12 @@ const getApplySampleTutorialSteps = (
       ["download", localizer.message("ui.apply.tutorial.practiceFiles")],
     ],
     body: localizer.message("ui.apply.tutorial.addFiles.body"),
+    // Some files in but not all - a ROM without a patch - hide the search the
+    // next step frames, so Continue here waits for the rest or loads the
+    // practice files itself.
+    busy: !(inputs.ready || inputs.searchShown) && inputs.loading,
+    locked: !(inputs.ready || inputs.searchShown),
+    onContinue: inputs.loadPractice,
     placement: "below",
     target: "#rom-weaver-container .unified-drop-step",
     title: localizer.message("ui.apply.tutorial.addFiles.title"),
@@ -119,19 +127,24 @@ const getApplySampleTutorialSteps = (
       inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.addFiles.tryIt",
     ),
   },
-  // The other way in: the search under the empty drop zone, which hides once
-  // files are in - so with files in, the run passes over it. A chosen match
-  // moves the search into the ROM card, and the ring follows it there.
+  // The other way in: the search under the empty drop zone. The page hides it
+  // once a ROM is added or the patches supply the ROM checks, and the run then
+  // passes over this step. A chosen match moves the search into the ROM card,
+  // and the ring follows it there.
   {
     body: localizer.message("ui.apply.tutorial.identify.body"),
     busy: !inputs.ready && inputs.loading,
     locked: !inputs.ready,
     onContinue: inputs.loadPractice,
-    skip: inputs.ready,
+    skip: !inputs.searchShown,
     target: "#rom-weaver-container .identify-search, #rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.tutorial.identify.title"),
     tryIt: localizer.message(
-      inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.identify.tryIt",
+      inputs.ready
+        ? "ui.apply.tutorial.addFiles.readyTryIt"
+        : inputs.searchShown
+          ? "ui.apply.tutorial.identify.tryIt"
+          : "ui.apply.tutorial.addFiles.tryIt",
     ),
   },
   getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
@@ -379,8 +392,9 @@ const useGuidedSampleLoader = (input: {
       input.onPracticeCheatSampleChange?.(true);
     } catch {
       if (generation !== loadGenerationRef.current) return;
-      // Guided Apply stays on its add-files step, where the card shows why
-      // and the reader can still add files of their own; the others close.
+      // Guided Apply stays on the step that started the load, where the card
+      // shows why and the reader can still add files of their own; the others
+      // close.
       if (guide !== "apply") setSampleTutorial(null);
       input.onPracticeCheatSampleChange?.(false);
       setSampleError(localizer.message("ui.apply.tutorial.sampleLoadFailed"));
@@ -1270,6 +1284,7 @@ function ApplyWorkflowFormView({
                     loadPractice: loadApplyPractice,
                     loading: sampleLoading,
                     ready: sampleTutorialReady,
+                    searchShown: canSearchRom,
                   })
           }
         />

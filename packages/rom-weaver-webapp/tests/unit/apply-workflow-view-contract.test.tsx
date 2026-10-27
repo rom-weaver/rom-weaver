@@ -571,6 +571,44 @@ describe("apply workflow view - empty bench", () => {
     expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Add your files");
   });
 
+  it("passes over the Identify search once the reader's own files are in", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    renderView({
+      onUnifiedDrop: vi.fn(),
+      patches: [patchItem("hack.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+
+    act(() => requestGuidedSampleStart("apply"));
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const landed = () => waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    expect(document.querySelector(".identify-search")).toBeNull();
+    await landed();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(dialog.dataset.step).toBe("3"));
+    expect(dialog.dataset.stepCount).toBe("5");
+    await landed();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(dialog.dataset.step).toBe("1"));
+  });
+
+  it("keeps guided Apply's first step waiting while a ROM has no patch yet", async () => {
+    const onUnifiedDrop = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({ blob: () => Promise.resolve(new Blob(["sample"])), ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderView({ onUnifiedDrop, ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
+
+    act(() => requestGuidedSampleStart("apply"));
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    // The ROM hides the Identify search, so Continue loads the practice files
+    // here rather than moving to a step whose search is gone.
+    expect(document.querySelector(".identify-search")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+    expect(dialog.dataset.step).toBe("1");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip"));
+  });
+
   it("starts the sample tutorial from a guided Apply URL", () => {
     window.history.replaceState(null, "", "/apply-patch?guide=apply");
     const onUnifiedDrop = vi.fn();
