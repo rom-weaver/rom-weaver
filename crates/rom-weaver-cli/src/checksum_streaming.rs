@@ -338,7 +338,7 @@ impl CliApp {
 
         let handler = self.containers.probe(source)?;
         let stream_format = handler.descriptor().name;
-        if !matches!(stream_format, "gz" | "bz2" | "xz" | "zst") {
+        if !matches!(stream_format, "gz" | "bz2" | "xz" | "zst" | "lz4") {
             return None;
         }
         // A signature-only match may be a raw ROM; the general resolver decides whether to use it raw.
@@ -483,6 +483,7 @@ impl CliApp {
             "bz2" => Ok(LibarchiveReadFilter::Bzip2),
             "xz" => Ok(LibarchiveReadFilter::Xz),
             "zst" => Ok(LibarchiveReadFilter::Zstd),
+            "lz4" => Ok(LibarchiveReadFilter::Lz4),
             _ => Err(RomWeaverError::Validation(format!(
                 "streamed checksum auto-extract does not support `{stream_format}`"
             ))),
@@ -499,6 +500,7 @@ impl CliApp {
             "bz2" => ".bz2",
             "xz" => ".xz",
             "zst" => ".zst",
+            "lz4" => ".lz4",
             _ => return None,
         };
         let file_name_lower = file_name.to_ascii_lowercase();

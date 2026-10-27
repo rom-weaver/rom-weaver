@@ -6247,3 +6247,47 @@ fn weave_parse_corrupt_later_member_leaves_no_extracted_files() {
     );
     assert_eq!(fs::read(archive.path()).expect("source preserved"), bytes);
 }
+
+#[test]
+fn weave_create_resolves_rom_member_from_tar_stream_wrappers() {
+    // `weave create --rom-member` peels one stream-codec level (tar.zst and tar.lz4 alike)
+    // before listing the tar's members; raw single-payload streams are not member archives.
+    for codec in ["zst", "lz4"] {
+        let temp = setup_temp_dir();
+        let rom = write_weave_rom(&temp, "game.bin");
+        let mut builder = tar::Builder::new(Vec::new());
+        builder
+            .append_path_with_name(&rom, "game.bin")
+            .expect("append entry");
+        let tar_bytes = builder.into_inner().expect("finish tar");
+        let wrapped = temp.child(format!("game.tar.{codec}"));
+        let compressed = if codec == "zst" {
+            zstd::stream::encode_all(tar_bytes.as_slice(), 0).expect("zstd encode")
+        } else {
+            let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
+            std::io::Write::write_all(&mut encoder, &tar_bytes).expect("lz4 encode");
+            encoder.finish().expect("lz4 finish")
+        };
+        fs::write(wrapped.path(), compressed).expect("wrapped tar");
+        let patch = write_offset_ips(&temp, "change.ips", 0, 0xAA);
+        let output = temp.child("out.weave");
+        let create = run_single_json_event(
+            &[
+                "weave",
+                "create",
+                "--input",
+                wrapped.path().to_str().expect("path"),
+                "--rom-member",
+                "game.bin",
+                "--patch",
+                patch.to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(create["status"], "succeeded", "{codec}: {create}");
+        assert!(output.path().exists(), "{codec}");
+    }
+}
