@@ -142,26 +142,28 @@ const waitForEnabled = async (page, id) => {
   }
 };
 
-// Apply enables while staged cards still checksum and verify, and each result reflows the cards
-// above it. A click whose press and release straddle a reflow never reaches Apply, so wait until
-// every staged card shows its verdict without a stage bar. Callers stage BPS patches, whose source
-// checksums give the ROM and patch cards a verdict.
-const waitForSettledApplyInputs = async (page) => {
+// Action buttons enable while staged cards still checksum and verify, and each result reflows the
+// cards above the button. On WebKit a click whose press and release straddle a reflow lands on a
+// shared ancestor, so the button never activates. Wait until no card shows a stage bar and every
+// patch card has its verdict. Patch verification needs the ROM's checksums, so a verdict also means
+// the ROM finished staging. Without patch cards, every source card must report ready.
+const waitForSettledInputs = async (page) => {
   try {
     await page.waitForFunction(() => {
-      const cards = Array.from(document.querySelectorAll("#rom-weaver-container .card.file"));
+      const cards = Array.from(document.querySelectorAll("main .card.file")).filter(
+        (card) => card.getClientRects().length > 0,
+      );
+      const patches = cards.filter((card) => card.classList.contains("patch"));
+      const hasVerdict = (card) => ["ok", "bad", "warn"].some((verdict) => card.classList.contains(verdict));
       return (
         cards.length > 0 &&
-        cards.every(
-          (card) =>
-            !card.classList.contains("has-stage-bar") &&
-            ["ok", "bad", "warn"].some((verdict) => card.classList.contains(verdict)),
-        )
+        !cards.some((card) => card.classList.contains("has-stage-bar")) &&
+        (patches.length > 0 ? patches : cards).every(hasVerdict)
       );
     });
   } catch (cause) {
     const visibleState = (await page.locator("body").innerText()).slice(-8000);
-    throw new Error(`Apply inputs never settled. Visible state:\n${visibleState}`, { cause });
+    throw new Error(`Staged inputs never settled. Visible state:\n${visibleState}`, { cause });
   }
 };
 
@@ -228,7 +230,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     const picker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
     await picker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-apply");
-    await waitForSettledApplyInputs(page);
+    await waitForSettledInputs(page);
     const rebuilt = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rebuilt.bytes, expected, `${label} -> Apply exact combined result`);
   };
@@ -252,6 +254,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     "Create should select Patches & cheats for patch uploads",
   );
   await requireCollapsedOutputJobs(page, ["rom-weaver-apply-job", "rom-weaver-weave-job"], "Create combined outputs");
+  await waitForSettledInputs(page);
   const createOutput = page.locator("#rom-weaver-combined-patch-output");
   await createOutput.locator("#rom-weaver-combined-patch-format").selectOption("bps");
   const created = await downloadedBytes(page, () =>
@@ -266,6 +269,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     const picker = await openWorkflow(page, baseUrl, route, pickerId);
     await picker.setInputFiles(stackFiles());
     await requireCollapsedOutputJobs(page, ["rom-weaver-combined-patch-job", otherJob], route);
+    await waitForSettledInputs(page);
     const combinedJob = page.locator("#rom-weaver-combined-patch-job");
     await combinedJob.locator(":scope > .weave-job > button[aria-expanded]").click();
     await combinedJob.locator("#rom-weaver-combined-patch-format").selectOption("bps");
@@ -389,6 +393,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await configureUncompressedOutput(page);
     await picker.setInputFiles([inputFile("original.bin", original), inputFile("modified.bin", modified)]);
     await waitForEnabled(page, "patch-builder-button-create");
+    await waitForSettledInputs(page);
     await page.locator("#patch-builder-select-patch-type").selectOption("bps");
     const patch = await downloadedBytes(page, () => page.locator("#patch-builder-button-create").click());
     requireJourney(patch.name.endsWith(".bps"), `Create: expected BPS, received ${patch.name}`);
@@ -414,6 +419,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     const weavePicker = await openWorkflow(page, baseUrl, "weave-patches", "rom-weaver-input-file-unified-weave");
     await weavePicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-export-weave");
+    await waitForSettledInputs(page);
     await page.getByRole("button", { name: "Options", exact: true }).click();
     await page.locator("#rom-weaver-weave-export-weave-rom").check();
     await page.locator("#rom-weaver-button-export-weave").click();
@@ -425,7 +431,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await recipePicker.setInputFiles(inputFile(recipe.name, recipe.bytes));
     await page.locator("#rom-weaver-list-patch-stack .file").waitFor({ state: "visible" });
     await waitForEnabled(page, "rom-weaver-button-apply");
-    await waitForSettledApplyInputs(page);
+    await waitForSettledInputs(page);
     const rewoven = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rewoven.bytes, modified, "Weave export -> Apply exact roundtrip");
     await runCombinedPatchRoundtrips(page, baseUrl, configureUncompressedOutput);
