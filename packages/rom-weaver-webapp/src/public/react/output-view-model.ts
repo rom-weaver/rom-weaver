@@ -39,10 +39,14 @@ type CreatePatchFormatOptions = {
 };
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
-const DISC_SHEET_FILE_NAME_REGEX = /\.(?:cue|gdi)$/i;
+const CUE_FILE_NAME_REGEX = /\.cue$/i;
+const GDI_FILE_NAME_REGEX = /\.gdi$/i;
+const GD_ROM_FORMAT_REGEX = /gd/i;
 const FILE_NAME_SEPARATOR_REGEX = /[/\\]+/;
 const NONE_COMPRESSION_LABEL = "None";
-const UNCOMPRESSED_DISC_LABEL = ".zip (uncompressed)";
+const CUE_TRACK_LABEL = ".bin";
+const CUE_SHEET_LABEL = ".cue";
+const GDI_DISC_LABEL = ".gdi";
 
 const getFileNameWithoutExtension = (fileName: string) =>
   getBaseFileName(fileName).replace(EXTENSION_REGEX, "") || getBaseFileName(fileName);
@@ -142,8 +146,9 @@ const getExtensionLabel = (fileName: string) => {
   return extension ? `.${extension}` : "";
 };
 
-// An uncompressed disc (a cue/gdi sheet plus its tracks) is several files, so the run saves it in one stored
-// ZIP. A CD-mode CHD extracts to such a disc; a CHD whose mode is not known yet gets no extension, not a guess.
+// An uncompressed disc (a cue/gdi sheet plus its tracks) is several files, which the run saves in one stored
+// ZIP; the label names the files inside: ".bin/.cue" for a CD, ".gdi" for a GD-ROM. A CHD extracts to such a
+// disc in CD mode; a CHD whose mode is not known yet gets no extension, not a guess.
 const getUncompressedOutputLabel = (source?: GeneratedOutputSource) => {
   const rawFileName = getGeneratedOutputSourceFileName(source, "");
   if (!rawFileName) return "";
@@ -151,13 +156,17 @@ const getUncompressedOutputLabel = (source?: GeneratedOutputSource) => {
     source && typeof source === "object" && "metadata" in source
       ? (source.metadata as SourceMetadata | undefined)
       : undefined;
-  if (metadata?.cueText || metadata?.gdiText || DISC_SHEET_FILE_NAME_REGEX.test(rawFileName))
-    return UNCOMPRESSED_DISC_LABEL;
+  if (metadata?.gdiText || GDI_FILE_NAME_REGEX.test(rawFileName)) return GDI_DISC_LABEL;
+  if (metadata?.cueText || CUE_FILE_NAME_REGEX.test(rawFileName)) {
+    const trackLabel = CUE_FILE_NAME_REGEX.test(rawFileName) ? "" : getExtensionLabel(rawFileName);
+    return `${trackLabel || CUE_TRACK_LABEL}/${CUE_SHEET_LABEL}`;
+  }
   const classifiedInput = classifyPatcherInput(source);
   if (classifiedInput.kind !== "compression" || classifiedInput.compressionFormat !== "chd")
     return getExtensionLabel(rawFileName);
   const chdMode = chdModeFromMetadata(metadata);
-  if (chdMode === "cd") return UNCOMPRESSED_DISC_LABEL;
+  if (chdMode === "cd")
+    return GD_ROM_FORMAT_REGEX.test(metadata?.format || "") ? GDI_DISC_LABEL : `${CUE_TRACK_LABEL}/${CUE_SHEET_LABEL}`;
   return chdMode ? getExtensionLabel(rawFileName) : "";
 };
 

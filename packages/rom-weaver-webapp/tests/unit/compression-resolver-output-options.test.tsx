@@ -19,7 +19,7 @@ const labelsFor = (row: ReturnType<typeof createRomInputRow>) => {
 };
 
 describe("compression resolver output options", () => {
-  it("labels an uncompressed CHD disc by the bundle it saves, before and after extraction", () => {
+  it("labels an uncompressed CHD disc by the files it saves, before and after extraction", () => {
     const extracting = createRomInputRow({ chdMode: "cd", id: "rom", info: { fileName: "game.chd" } });
     const extracted = createRomInputRow({
       chdMode: "cd",
@@ -29,7 +29,18 @@ describe("compression resolver output options", () => {
       kind: "track",
     });
     for (const row of [extracting, extracted]) {
-      expect(labelsFor(row)).toEqual({ chd: ".chd", none: ".zip (uncompressed)", zip: ".zip" });
+      expect(labelsFor(row)).toEqual({ chd: ".chd", none: ".bin/.cue", zip: ".zip" });
     }
+  });
+
+  it("labels an extracted GD-ROM by its gdi sheet", () => {
+    const extracted = createRomInputRow({
+      chdMode: "cd",
+      gdiText: "1\n1 0 4 2352 track01.bin 0",
+      id: "rom",
+      info: { fileName: "track01.bin" },
+      kind: "track",
+    });
+    expect(labelsFor(extracted).none).toBe(".gdi");
   });
 });
