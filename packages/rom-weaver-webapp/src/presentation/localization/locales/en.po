@@ -526,7 +526,7 @@ msgstr "and nested archives"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.test.closedGame.detail"
-msgstr "Another action started while it was paused. Its in-game save is kept, so load it again to continue."
+msgstr "Another action started, or more than 1 GiB of files was added, while it was paused. Its in-game save is kept, so load it again to continue."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4806,7 +4806,7 @@ msgstr "Start the game, then open the player menu."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.pausedGame.detail"
-msgstr "Starting another action closes it to free memory. Progress since its last in-game save is lost."
+msgstr "Starting another action, or adding more than 1 GiB of files, closes it to free memory. Progress since its last in-game save is lost."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

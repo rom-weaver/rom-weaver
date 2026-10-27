@@ -11,7 +11,8 @@ import {
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { PausedGameBanner } from "../../../src/webapp/components/paused-game-banner.tsx";
 
-const WARNING = "Starting another action closes it to free memory. Progress since its last in-game save is lost.";
+const WARNING =
+  "Starting another action, or adding more than 1 GiB of files, closes it to free memory. Progress since its last in-game save is lost.";
 
 const entry = (overrides: Partial<EmulatorSessionEntry> = {}): EmulatorSessionEntry => ({
   blob: new Blob(["disc"]),

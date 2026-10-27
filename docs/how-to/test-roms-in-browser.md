@@ -81,7 +81,7 @@ Select **Choose another ROM** to replace the current game. Select **Stop** to un
 
 The emulator pauses when you leave the Test page or hide the browser tab. It resumes when you return.
 
-A paused game larger than 128 MiB, such as a disc image, closes when another action starts, for example Apply or Compress. This frees memory for that action. A banner on the other pages warns while such a game is paused. rom-weaver stores the game's in-game save when it pauses, but progress since the last in-game save is lost. Load the game again to continue.
+A paused game larger than 128 MiB, such as a disc image, closes when another action starts, for example Apply or Compress. It also closes when you add more than 1 GiB of files at once on another page. This frees memory for that work. A banner on the other pages warns while such a game is paused. rom-weaver stores the game's in-game save when it pauses, but progress since the last in-game save is lost. Load the game again to continue.
 
 ## Use saves and fullscreen
 

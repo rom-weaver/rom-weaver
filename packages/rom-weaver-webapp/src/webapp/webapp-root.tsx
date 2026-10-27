@@ -61,6 +61,7 @@ import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { observePanelHeadFit } from "./panel-head-fit.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
+import { releaseLargeEntriesOnLargeInput } from "./large-input-release.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
 import type { EmulatorSaveImportRequest } from "./components/emulator-saves-panel.tsx";
@@ -907,6 +908,7 @@ function WebappRoot({
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
   }, [state.currentView]);
   useEffect(() => releaseLargeEntriesOnRunStart(), []);
+  useEffect(() => releaseLargeEntriesOnLargeInput(() => currentViewRef.current === "test"), []);
   const isViewMounted = (view: WebappView) => state.currentView === view || visitedViews.includes(view);
   const openIdentifyLookup = useCallback(
     (selection: RomLookupSelection) => {

@@ -795,7 +795,7 @@ describe("EmulatorTestView", () => {
 
     const notice = document.getElementById("emulator-test-closed-game");
     expect(notice?.textContent).toBe(
-      "disc.chd was closed to free memory. Another action started while it was paused. Its in-game save is kept, so load it again to continue.",
+      "disc.chd was closed to free memory. Another action started, or more than 1 GiB of files was added, while it was paused. Its in-game save is kept, so load it again to continue.",
     );
     fireEvent.click(within(notice as HTMLElement).getByRole("button", { name: "Dismiss" }));
     expect(document.getElementById("emulator-test-closed-game")).toBeNull();

@@ -762,7 +762,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.test.closedGame.detail": msg({
     id: "ui.test.closedGame.detail",
-    message: "Another action started while it was paused. Its in-game save is kept, so load it again to continue.",
+    message:
+      "Another action started, or more than 1 GiB of files was added, while it was paused. Its in-game save is kept, so load it again to continue.",
   }),
   "ui.test.tutorial.load.title": msg({ id: "ui.test.tutorial.load.title", message: "A game is loaded" }),
   "ui.test.tutorial.load.body": msg({
@@ -1975,7 +1976,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.pausedGame.title": msg({ id: "ui.pausedGame.title", message: "{fileName} is paused in Test." }),
   "ui.pausedGame.detail": msg({
     id: "ui.pausedGame.detail",
-    message: "Starting another action closes it to free memory. Progress since its last in-game save is lost.",
+    message:
+      "Starting another action, or adding more than 1 GiB of files, closes it to free memory. Progress since its last in-game save is lost.",
   }),
   "ui.pausedGame.open": msg({ id: "ui.pausedGame.open", message: "Back to Test" }),
   "ui.settings.section.webapp": msg({ id: "ui.settings.section.webapp", message: "Webapp" }),
