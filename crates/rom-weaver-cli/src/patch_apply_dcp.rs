@@ -56,6 +56,16 @@ impl CliApp {
                 "a .dcp patch must be applied on its own (no patch chaining)".to_string(),
             );
         }
+        if !args.expect_in.is_empty()
+            || !args.expect_out.is_empty()
+            || !args.patch_input_check.is_empty()
+            || !args.patch_output_check.is_empty()
+        {
+            return fail(
+                "validate",
+                "a .dcp patch cannot be combined with --expect-in, --expect-out, --patch-input-check, or --patch-output-check; checksum guards are unsupported for rebuilt GD-ROM filesystems".to_string(),
+            );
+        }
         if args.patch_header.contains(&PatchApplyHeaderMode::Strip)
             || args.output_header.is_some()
             || args.repair_checksum

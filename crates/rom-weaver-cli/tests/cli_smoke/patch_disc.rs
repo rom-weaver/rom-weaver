@@ -1829,7 +1829,7 @@ fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
 }
 
 #[test]
-fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+fn patch_apply_dcp_checksum_guards_rejected_before_output() {
     let temp = setup_temp_dir();
     let cooked = build_iso(
         &[IsoFile {
@@ -1901,6 +1901,71 @@ fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
             fs::read(temp.child(format!("zipped/{name}")).path()).expect("zipped output"),
             "{name} from a zipped DCP must match the bare DCP"
         );
+    }
+
+    for patch in ["game.dcp", "translation.zip"] {
+        for mode in ["human", "--json", "--jsonl"] {
+            for (flag, track) in [
+                ("--expect-in", "track03.bin"),
+                ("--expect-out", "bare/track03.bin"),
+                ("--patch-input-check", "track03.bin"),
+                ("--patch-output-check", "bare/track03.bin"),
+            ] {
+                let bytes = fs::read(temp.child(track).path()).expect("checksum control bytes");
+                let matching = format!("crc32={:08x}", crc32fast::hash(&bytes));
+                assert_ne!(matching, "crc32=00000000");
+                for checksum in ["crc32=00000000", matching.as_str()] {
+                    let output_dir = temp.child(format!("{patch}-{mode}-{flag}-{checksum}"));
+                    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+                    command
+                        .env("HOME", temp.path())
+                        .env("XDG_CONFIG_HOME", temp.child("config").path())
+                        .env("XDG_CACHE_HOME", temp.child("cache").path())
+                        .env("XDG_DATA_HOME", temp.child("data").path())
+                        .env("XDG_STATE_HOME", temp.child("state").path())
+                        .env("NO_COLOR", "1")
+                        .args(["patch", "apply", "--input"])
+                        .arg(temp.child("disc.gdi").path())
+                        .arg("--patch")
+                        .arg(temp.child(patch).path())
+                        .args(["--no-compress", "--output"])
+                        .arg(output_dir.child("disc.gdi").path())
+                        .args([flag, checksum]);
+                    if mode != "human" {
+                        command.arg(mode);
+                    }
+                    let output = command.output().expect("guarded DCP apply");
+                    assert_eq!(
+                        output.status.code(),
+                        Some(1),
+                        "DCP checksum guards must fail before writing output: {patch} {mode} {flag} {checksum}"
+                    );
+                    let message = if mode == "human" {
+                        format!(
+                            "{}{}",
+                            String::from_utf8_lossy(&output.stdout),
+                            String::from_utf8_lossy(&output.stderr)
+                        )
+                    } else {
+                        let terminal = parse_json_lines(&output.stdout)
+                            .pop()
+                            .expect("terminal failure");
+                        assert_eq!(terminal["status"], "failed");
+                        assert_eq!(terminal["stage"], "validate");
+                        terminal["label"]
+                            .as_str()
+                            .expect("failure label")
+                            .to_string()
+                    };
+                    assert!(message.contains(flag), "{message}");
+                    assert!(
+                        message.contains("checksum guards are unsupported"),
+                        "{message}"
+                    );
+                    assert!(!output_dir.path().exists(), "rejected guard created output");
+                }
+            }
+        }
     }
 }
 

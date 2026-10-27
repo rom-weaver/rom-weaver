@@ -98,6 +98,8 @@ rom-weaver probe --input game.chd --json
 
 A few commands and flags answer to more than one name: `weave` is a compatibility alias for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore` for `trim --revert`. Format names have alternates too, so `--format 7zip` and `--format 7z` are the same. The [CLI guide](https://rom-weaver.com/docs/cli#alternate-names) lists them all.
 
+DCP patches rebuild a GD-ROM filesystem. DCP does not support `--expect-in`, `--expect-out`, `--patch-input-check`, or `--patch-output-check`. These guards fail before output is written, including for archive-wrapped patches. Matching a disc file's checksum still fails.
+
 The [CLI reference](https://rom-weaver.com/docs/cli) covers commands, shared flags, JSON output, and file permissions. [Supported formats](https://rom-weaver.com/docs/supported-formats) and [Install the CLI](https://rom-weaver.com/docs/install) cover capabilities and installation.
 
 ## Related crates
