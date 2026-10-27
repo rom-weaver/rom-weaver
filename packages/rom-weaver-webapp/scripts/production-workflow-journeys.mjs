@@ -167,6 +167,43 @@ const waitForSettledInputs = async (page) => {
   }
 };
 
+// The reflow above can still land between a user's press and release. Hold the button, push its
+// card down with a spacer right above it (scroll anchoring off, and visible content above the spacer
+// stays put, so the button really moves), require that the release point now lies over another
+// element, and release there. The button must still run.
+const pressAcrossLayoutShift = async (page, selector) => {
+  const button = page.locator(selector);
+  await button.scrollIntoViewIfNeeded();
+  const box = await button.boundingBox();
+  requireJourney(box, `${selector} has no pointer target`);
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  try {
+    const releaseTarget = await page.evaluate(
+      async ({ selector: target, x, y }) => {
+        for (const element of [document.documentElement, document.body]) element.style.overflowAnchor = "none";
+        const spacer = document.createElement("div");
+        spacer.id = "journey-layout-shift";
+        spacer.style.height = "64px";
+        const button = document.querySelector(target);
+        (button.closest(".card") || button).before(spacer);
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const hit = document.elementFromPoint(x, y);
+        return hit?.closest(target) ? "" : `${hit?.tagName.toLowerCase()}.${hit?.className}`;
+      },
+      { selector, ...point },
+    );
+    requireJourney(releaseTarget, `${selector} did not move off the release point`);
+  } finally {
+    await page.mouse.up();
+    await page.evaluate(() => {
+      document.getElementById("journey-layout-shift")?.remove();
+      for (const element of [document.documentElement, document.body]) element.style.overflowAnchor = "";
+    });
+  }
+};
+
 const openWorkflow = async (page, baseUrl, route, pickerId) => {
   await page.goto(new URL(route, baseUrl).href, { waitUntil: "domcontentloaded" });
   await page.waitForFunction((id) => document.getElementById(id) instanceof HTMLInputElement, pickerId);
@@ -295,9 +332,10 @@ const applyDuringPopulation = async (page, picker, files) => {
       if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
         presses++;
     };
+    // A release that a reflow moved off Apply reaches it as the button's own forwarded click, which
+    // is untrusted, so count every click that lands on Apply.
     const recordClick = (event) => {
-      if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
-        clicks++;
+      if (event.target instanceof Element && event.target.closest("#rom-weaver-button-apply")) clicks++;
     };
     document.addEventListener("click", recordClick, true);
     document.addEventListener("pointerdown", recordPress, true);
@@ -368,7 +406,7 @@ const applyDuringPopulation = async (page, picker, files) => {
       requireEqual(
         await page.evaluate(() => window.__romWeaverPopulationGesture.getClicks()),
         1,
-        "Population snapshot swallowed the trusted Apply click",
+        "Population snapshot swallowed the Apply click",
       );
     });
   } finally {
@@ -432,12 +470,12 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await page.locator("#rom-weaver-list-patch-stack .file").waitFor({ state: "visible" });
     await waitForEnabled(page, "rom-weaver-button-apply");
     await waitForSettledInputs(page);
-    const rewoven = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
+    const rewoven = await downloadedBytes(page, () => pressAcrossLayoutShift(page, "#rom-weaver-button-apply"));
     assertJourneyBytes(rewoven.bytes, modified, "Weave export -> Apply exact roundtrip");
     await runCombinedPatchRoundtrips(page, baseUrl, configureUncompressedOutput);
     requireJourney(failures.length === 0, `Create/Apply uncaught page errors: ${failures.join("; ")}`);
     process.stdout.write(`PASS Create -> Apply BPS roundtrip (${original.length} -> ${output.bytes.length} bytes)\n`);
-    process.stdout.write("PASS Weave export with ROM -> Apply exact roundtrip\n");
+    process.stdout.write("PASS Weave export with ROM -> Apply exact roundtrip (Apply pressed across a layout shift)\n");
   } finally {
     await context.close();
   }
