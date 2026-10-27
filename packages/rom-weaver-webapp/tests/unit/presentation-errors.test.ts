@@ -48,6 +48,14 @@ describe("presentation errors", () => {
     },
   );
 
+  it("offers browser recovery when the ignored archive name contains a backtick", () => {
+    const diagnostic =
+      "validation failed: all extract entries from `/work/notes `v2`.zip` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>";
+    expect(formatCodedErrorForDisplay(diagnostic)).toBe(
+      "No usable ROM found in notes `v2`.zip. Choose an archive containing a ROM, or extract it and add the ROM file.",
+    );
+  });
+
   it("keeps messages that carry required runtime detail", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(
       "INVALID_INPUT: Multi-file output needs an archive",

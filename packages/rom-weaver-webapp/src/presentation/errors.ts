@@ -76,8 +76,9 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
 };
 
 const NO_ROM_IN_ARCHIVE_REGEX = /no extract entries from `([^`]+)` matched --filter rom\b/i;
+// The native diagnostic wraps the archive path in backticks without escaping, so the path itself may contain backticks.
 const ALL_ARCHIVE_ENTRIES_IGNORED_REGEX =
-  /all (?:extract entries|extracted [^`]+ candidates) from `([^`]+)` were ignored by default filters;/i;
+  /all (?:extract entries|extracted [^`]+ candidates) from `(.+)` were ignored by default filters;/i;
 
 const getNoRomInArchiveMessage = (error: unknown): string => {
   for (const message of getDistinctErrorMessages(error)) {
