@@ -12,6 +12,7 @@ use rom_weaver_core::{
     SharedBlockCacheReader, SharedThreadPool,
 };
 use sha1::{Digest, Sha1};
+use tracing::debug;
 
 type VmResult<T> = std::result::Result<T, String>;
 const FILE_IO_CHUNK_BYTES: usize = 1024 * 1024;
@@ -1077,14 +1078,12 @@ impl<'pool> BspVm<'pool> {
                     return Ok(StepControl::Continue);
                 }
 
-                // Native BSP is non-interactive today, so menu instructions pick the first entry.
-                // We still decode all strings to preserve UTF-8 validation semantics.
                 for option_address in option_addresses {
                     let _ = self.utf8_decode(option_address)?;
                 }
 
-                self.set_variable(variable, 0);
-                Ok(StepControl::Continue)
+                debug!("rejecting interactive BSP menu without a choice provider");
+                Err("interactive BSP menus are not supported; use a BSP patcher that supports menu choices".to_string())
             }
             0x6C..=0x6F => {
                 let start = args[0];

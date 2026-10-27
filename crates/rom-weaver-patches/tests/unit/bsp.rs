@@ -380,7 +380,7 @@ fn apply_matches_reference_runtime_vectors() {
 }
 
 #[test]
-fn apply_matches_reference_runtime_menu_selection() {
+fn apply_rejects_menus_requiring_reference_interaction() {
     let temp = TestDir::new();
     let Some(runtime_path) = prepare_reference_runtime(&temp) else {
         return;
@@ -422,15 +422,21 @@ fn apply_matches_reference_runtime_menu_selection() {
 
     let input = vec![0x00];
     let reference = run_reference_patcher(&runtime_path, &patch, &input);
-    let ours = apply_bsp_patch_bytes(&patch, input, None).expect("native apply");
+    let error = apply_bsp_patch_bytes(&patch, input, None)
+        .expect_err("interactive BSP menus must not silently select a branch");
     let expected = match reference {
         ReferenceOutcome::Success(bytes) => bytes,
         ReferenceOutcome::Failure(code) => panic!("reference failed with status {code}"),
         ReferenceOutcome::Error(error) => panic!("reference errored: {error}"),
     };
 
-    assert_eq!(ours, expected, "menu selection parity mismatch");
-    assert_eq!(ours, vec![0x41]);
+    assert_eq!(expected, vec![0x41]);
+    assert!(
+        error
+            .to_string()
+            .contains("interactive BSP menus are not supported"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
