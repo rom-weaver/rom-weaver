@@ -9,7 +9,6 @@ import { useLocalApplyPatchFormSession } from "../../src/public/react/patcher-fo
 import {
   buildDcpFile,
   buildZippedDcpFile,
-  clickCandidateSelectionOption,
   clickApplyButton,
   getInputStackRows,
   getPatchStackRows,
@@ -957,8 +956,6 @@ test("a real ZIP DCP beside a GDI disc names DCP instead of asking for a target"
     new File([new Uint8Array(2352 * 16).fill(2)], "track02.bin"),
     await buildDcpFile(),
   ]);
-  // The dropped disc files are all ROMs, so the app asks which one to use before the DCP can be judged.
-  await clickCandidateSelectionOption("disc.gdi");
   await expectDcpCardAndBlockedApply();
 });
 
