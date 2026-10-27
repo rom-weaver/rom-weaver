@@ -957,6 +957,8 @@ test("guided Apply opens no drawers on desktop and keeps its last row and Apply 
     guide.querySelector(".sample-tutorial-next").click();
     await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
     await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
+    // Identify is the other way in, so it frames its search before any files.
+    expect(document.querySelector(".sample-tutorial-target").matches(".identify-search")).toBe(step === "2");
     // The ROM's Checks opens by itself when the practice weave supplies them.
     const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
       (head) =>
@@ -976,10 +978,11 @@ test("guided Apply opens no drawers on desktop and keeps its last row and Apply 
   );
 });
 
-test("guided Apply opens no drawers on a phone and gives Identify a card of its own", async () => {
-  // A phone card folds to its Try it, so the ROM and Identify steps on the same
-  // row must not fold to the same line; and an opened drawer - the optional
-  // weave job on the last step - would stretch its row past the screen.
+test("guided Apply opens no drawers on a phone and shows Identify on its search before any files", async () => {
+  // A phone card folds to its Try it, so no two steps may fold to the same
+  // line; Identify frames the search it explains, which only the empty bench
+  // shows; and an opened drawer - the optional weave job on the last step -
+  // would stretch its row past the screen.
   await page.viewport(390, 844);
   mountWebappRoot({ initialView: "patcher" });
   await expect
@@ -999,7 +1002,8 @@ test("guided Apply opens no drawers on a phone and gives Identify a card of its 
     await expect.poll(() => guide.dataset.moving).toBeUndefined();
     await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
     tryIts.push(guide.querySelector(".sample-tutorial-try")?.textContent);
-    expect(guide.querySelector(".sample-tutorial-compare") !== null).toBe(step === "2");
+    expect(document.querySelector(".sample-tutorial-target").matches(".identify-search")).toBe(step === "2");
+    expect(guide.querySelector(".sample-tutorial-compare") !== null).toBe(step === "3");
     // The ROM's Checks opens by itself when the practice weave supplies them.
     const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
       (head) =>

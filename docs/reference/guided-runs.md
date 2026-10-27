@@ -18,14 +18,14 @@ A guided run is a card that walks one browser workflow step by step on homebrew 
 | ---------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------- |
 | [Apply](https://rom-weaver.com/apply-patches?guide=apply)                    | 5     | Waits for you to add files; **Continue** loads `first-weave.zip` |
 | [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats)      | 4     | Loads `hello-world.nes`                                          |
-| [Weave](https://rom-weaver.com/weave-patches?guide=weave)                    | 5     | Loads `first-weave.zip`                                          |
+| [Weave](https://rom-weaver.com/weave-patches?guide=weave)                    | 4     | Loads `first-weave.zip`                                          |
 | [Create](https://rom-weaver.com/create-rom-patch?guide=create)               | 5     | Loads `hello-world.nes` and `modified-world.nes`                 |
 | [Create cheats](https://rom-weaver.com/create-rom-patch?guide=create-cheats) | 4     | Loads `hello-world.nes`                                          |
 | [Test](https://rom-weaver.com/test-rom?guide=test)                           | 2     | Loads `hello-world.nes`                                          |
 
-Guided Apply's steps are add your files, check your original ROM (with the Simple and Detailed views), identify the original ROM, patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
+Guided Apply's steps are add your files, or identify the original ROM by game name or checksum instead, then check your original ROM (with the Simple and Detailed views), patches and cheats, and apply. **Continue** on the first step moves to the Identify search under the empty drop zone; there, **Continue** with no files in loads `first-weave.zip`. With files in, **Continue** and **Back** pass over the search, which the page hides once files are added. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
 
-Apply, Create, and Weave include a Simple/Detailed comparison. Its buttons change the live view without advancing the guide. Apply and Weave explain the Identify search and the Detailed view’s Identify drawer.
+Apply, Create, and Weave include a Simple/Detailed comparison. Its buttons change the live view without advancing the guide. Apply frames the Identify search before any files are added; the comparison names the Detailed view’s Identify drawer.
 
 Guide cards fit their content without an internal scrollbar. The first step includes a click/drop demonstration; reduced-motion preferences disable its movement.
 
@@ -50,7 +50,7 @@ All of these feed **0x01 Inputs**, which puts each file on its card.
 | Drop a folder                 | Every file inside, including subfolders; hidden files are skipped                                             |
 | **Add files**                 | The file picker; touch screens show **Tap to choose files**                                                   |
 | Archives                      | ZIP, 7z, RAR, tar, and nested archives; see [container formats](formats.md#container-and-compression-formats) |
-| **Continue** with no files in | Guided Apply only: loads `first-weave.zip` onto the bench                                                     |
+| **Continue** with no files in | Guided Apply only: on the Identify step, loads `first-weave.zip` onto the bench                               |
 | **Download first-weave.zip**  | The guide card's first step: saves it to add by any route above                                               |
 
 ## Practice files

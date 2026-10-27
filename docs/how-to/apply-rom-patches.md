@@ -48,7 +48,7 @@ Files dropped on Home, Docs, or What's New offer matching workflows.
 
 The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Compress](convert-roms-browser.md).
 
-New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
+New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none, past the Identify search, loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
 
 ## Apply a BPS patch
 

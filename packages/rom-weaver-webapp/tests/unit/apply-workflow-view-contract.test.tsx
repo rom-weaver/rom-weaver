@@ -232,6 +232,15 @@ const renderView = ({
   );
 };
 
+// Guided Apply's first Continue moves to the other way in, the Identify search
+// under the empty drop zone; Continue there, with no files in, loads the
+// practice files.
+const continueToIdentify = async (dialog: HTMLElement) => {
+  fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(dialog.dataset.step).toBe("2"));
+  await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+};
+
 describe("checksum mismatch recovery", () => {
   it("offers recovery before the override while leaving it unchecked", () => {
     const ui = createEmptyPatcherUiState();
@@ -505,11 +514,19 @@ describe("apply workflow view - empty bench", () => {
     expect(within(dialog).getByRole("link", { name: "Download first-weave.zip" }).getAttribute("href")).toBe(
       "/first-weave.zip",
     );
-    // ...or Continue, with no files in, loads them onto the bench.
+    // ...or Continue moves to the other way in: the Identify search, framed
+    // while the bench is still empty.
+    await continueToIdentify(dialog);
+    expect(dialog.textContent).toContain("Or identify your original ROM");
+    await waitFor(() =>
+      expect(container.querySelector(".identify-search")?.classList.contains("sample-tutorial-target")).toBe(true),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Continue there, with no files in, loads them onto the bench.
     const next = within(dialog).getByRole("button", { name: "Continue" });
     expect(next.getAttribute("aria-disabled")).toBeNull();
     fireEvent.click(next);
-    expect(dialog.dataset.step).toBe("1");
+    expect(dialog.dataset.step).toBe("2");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
     expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip");
@@ -517,13 +534,14 @@ describe("apply workflow view - empty bench", () => {
     expect(shouldIdentifySource(files[0])).toBe(false);
   });
 
-  it("keeps guided Apply on its add-files step when the practice files fail to load", async () => {
+  it("keeps guided Apply on its Identify step when the practice files fail to load", async () => {
     const onUnifiedDrop = vi.fn();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
     act(() => requestGuidedSampleStart("apply"));
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    await continueToIdentify(dialog);
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
@@ -533,7 +551,7 @@ describe("apply workflow view - empty bench", () => {
       expect(within(dialog).getByRole("button", { name: "Continue" }).getAttribute("aria-busy")).toBeNull();
     });
     expect(document.querySelector(".sample-tutorial-dialog")).toBe(dialog);
-    expect(dialog.dataset.step).toBe("1");
+    expect(dialog.dataset.step).toBe("2");
     expect(onUnifiedDrop).not.toHaveBeenCalled();
   });
 
@@ -672,6 +690,7 @@ describe("apply workflow view - empty bench", () => {
 
     act(() => requestGuidedSampleStart("apply"));
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    await continueToIdentify(dialog);
     fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
 
     const card = container.querySelector("#rom-weaver-pending-drops .rw-pending .card.pending-card");

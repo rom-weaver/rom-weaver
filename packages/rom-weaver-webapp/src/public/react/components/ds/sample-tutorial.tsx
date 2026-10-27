@@ -113,6 +113,9 @@ type SampleTutorialStep = {
       matches nothing when the guide opens is left out, so hosts without that
       control never count a step they cannot show. */
   requires?: string;
+  /** Continue and Back pass over the step while this is set, and it keeps its
+      number: the search a step frames hides once files are in. */
+  skip?: boolean;
   target?: string;
   title: string;
   /** The one thing the reader should do on this step. */
@@ -179,6 +182,14 @@ const findLift = (target: HTMLElement, selector: string) => {
     if (match) return match;
   }
   return null;
+};
+
+/** The nearest step past `from` in `direction` that is not skipped, or `from` when there is none. */
+const stepToward = (steps: readonly SampleTutorialStep[], from: number, direction: 1 | -1) => {
+  for (let index = from + direction; index >= 0 && index < steps.length; index += direction) {
+    if (!steps[index]?.skip) return index;
+  }
+  return from;
 };
 
 /** Step numbers in the workbench's own 0x01 notation. */
@@ -743,6 +754,10 @@ const SampleTutorial = ({
   const motionRef = useRef<Animation | null>(null);
   const arrivingRef = useRef(false);
   const step = steps[stepIndex];
+  // A move commits after the card's exit, by when files landing meanwhile may
+  // have changed which steps are skipped.
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
   const stepCta = step?.cta;
   const stepLift = step?.lift;
   const stepOpenMenu = step?.openMenu;
@@ -829,8 +844,8 @@ const SampleTutorial = ({
     }
     if (!live || stepLocked) return;
     setAdvanceFrom(null);
-    beginMove(() => setStepIndex((current) => Math.min(current + 1, steps.length - 1)));
-  }, [advanceFrom, beginMove, error, live, stepIndex, stepLocked, steps.length]);
+    beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, 1)));
+  }, [advanceFrom, beginMove, error, live, stepIndex, stepLocked]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -892,18 +907,7 @@ const SampleTutorial = ({
       }
       return true;
     };
-    frame = window.requestAnimationFrame(() => {
-      if (!connect()) {
-        observer = new MutationObserver(() => {
-          if (connect()) observer?.disconnect();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      }
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-      setTargetEl(null);
+    const release = () => {
       if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
       removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
@@ -914,6 +918,27 @@ const SampleTutorial = ({
         if (previousDescription) target.setAttribute("aria-describedby", previousDescription);
         else target.removeAttribute("aria-describedby");
       }
+      target = stage = cta = lifted = openedMenu = null;
+      removeCtaEndListener = null;
+    };
+    frame = window.requestAnimationFrame(() => {
+      connect();
+      // Kept for the whole step: a row React swaps out mid-step - the drop
+      // zone's search giving way to the ROM card once a match is chosen - is
+      // found again rather than leaving the ring on a detached box.
+      observer = new MutationObserver(() => {
+        if (target?.isConnected) return;
+        const lost = !!target;
+        release();
+        if (!connect() && lost) setTargetEl(null);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      setTargetEl(null);
+      release();
     };
   }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenMenu, stepTarget, steps.length]);
 
@@ -1161,7 +1186,8 @@ const SampleTutorial = ({
   }, [live, stepIndex, stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
-  const finalStep = live && stepIndex === steps.length - 1;
+  const firstStep = stepToward(steps, stepIndex, -1) === stepIndex;
+  const finalStep = live && stepToward(steps, stepIndex, 1) === stepIndex;
   const copyKey = live ? stepIndex : "loading";
   const viewBody = localizer.message(
     detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody",
@@ -1325,11 +1351,11 @@ const SampleTutorial = ({
         <div className="sample-tutorial-actions">
           {live ? (
             <button
-              aria-disabled={moving || stepIndex === 0 ? "true" : undefined}
+              aria-disabled={moving || firstStep ? "true" : undefined}
               className="btn ghost slim"
               onClick={() => {
-                if (moving || stepIndex === 0) return;
-                beginMove(() => setStepIndex((current) => current - 1));
+                if (moving || firstStep) return;
+                beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, -1)));
               }}
               type="button"
             >
@@ -1370,7 +1396,7 @@ const SampleTutorial = ({
                   return;
                 }
                 if (finalStep) endGuide();
-                else beginMove(() => setStepIndex((current) => current + 1));
+                else beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, 1)));
               }}
               type="button"
             >
@@ -1388,11 +1414,4 @@ const SampleTutorial = ({
   return createPortal(layer, portalTarget);
 };
 
-export {
-  getViewTutorialStep,
-  SampleTutorial,
-  SampleTutorialStart,
-  type SampleTutorialStep,
-  useGuidedSampleStart,
-  VIEW_TOGGLE_HEAD_SELECTOR,
-};
+export { getViewTutorialStep, SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };

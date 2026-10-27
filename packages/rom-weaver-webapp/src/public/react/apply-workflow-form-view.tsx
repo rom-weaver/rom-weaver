@@ -30,7 +30,6 @@ import {
   SampleTutorial,
   type SampleTutorialStep,
   useGuidedSampleStart,
-  VIEW_TOGGLE_HEAD_SELECTOR,
 } from "./components/ds/sample-tutorial.tsx";
 import { skipSourceIdentification } from "../../lib/input/input-identification-policy.ts";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -87,8 +86,8 @@ import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStar
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
-/** What the add-files step needs from the form: whether the bench is ready to
-    tour, and the practice files Continue loads when the reader has none. */
+/** What the steps before any files need from the form: whether the bench is
+    ready to tour, and the practice files Continue loads when the reader has none. */
 type ApplyTutorialInputs = {
   loadPractice: () => void;
   loading: boolean;
@@ -96,23 +95,10 @@ type ApplyTutorialInputs = {
 };
 
 /**
- * Identify on the ROM card the view step before it frames. Its Try it starts at
- * the Simple/Detailed switch, so the switch is lifted again, but the comparison
- * stays on the view step: repeated here, it would fold both steps to the same
- * phone card.
- */
-const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep => ({
-  body: localizer.message("ui.apply.tutorial.identify.body"),
-  lift: VIEW_TOGGLE_HEAD_SELECTOR,
-  target: "#rom-weaver-row-file-rom",
-  title: localizer.message("ui.apply.tutorial.identify.title"),
-  tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
-});
-
-/**
  * The guided Apply run. It starts on the empty drop zone and waits there: the
- * reader adds files by any of the real routes, or presses Continue to use the
- * practice files - so nothing appears on the bench they did not ask for.
+ * reader adds files by any of the real routes, looks a ROM up instead, or
+ * presses Continue on the search to use the practice files - so nothing
+ * appears on the bench they did not ask for.
  */
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
@@ -126,14 +112,26 @@ const getApplySampleTutorialSteps = (
       ["download", localizer.message("ui.apply.tutorial.practiceFiles")],
     ],
     body: localizer.message("ui.apply.tutorial.addFiles.body"),
-    busy: !inputs.ready && inputs.loading,
-    locked: !inputs.ready,
-    onContinue: inputs.loadPractice,
     placement: "below",
     target: "#rom-weaver-container .unified-drop-step",
     title: localizer.message("ui.apply.tutorial.addFiles.title"),
     tryIt: localizer.message(
       inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.addFiles.tryIt",
+    ),
+  },
+  // The other way in: the search under the empty drop zone, which hides once
+  // files are in - so with files in, the run passes over it. A chosen match
+  // moves the search into the ROM card, and the ring follows it there.
+  {
+    body: localizer.message("ui.apply.tutorial.identify.body"),
+    busy: !inputs.ready && inputs.loading,
+    locked: !inputs.ready,
+    onContinue: inputs.loadPractice,
+    skip: inputs.ready,
+    target: "#rom-weaver-container .identify-search, #rom-weaver-row-file-rom",
+    title: localizer.message("ui.apply.tutorial.identify.title"),
+    tryIt: localizer.message(
+      inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.identify.tryIt",
     ),
   },
   getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
@@ -146,7 +144,6 @@ const getApplySampleTutorialSteps = (
     title: localizer.message("ui.apply.tutorial.rom.title"),
     tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
   }),
-  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["toggle", localizer.message("ui.apply.tutorial.toggle")],
@@ -228,7 +225,6 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.weaveTutorial.rom.title"),
   }),
-  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],

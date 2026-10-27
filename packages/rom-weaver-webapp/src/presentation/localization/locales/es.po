@@ -386,7 +386,7 @@ msgstr "Añadir una ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addFiles.tryIt"
-msgstr "Añade una ROM y al menos un parche, o pulsa Continuar para usar los archivos de práctica."
+msgstr "Añade una ROM y al menos un parche. ¿Aún no tienes archivos? Pulsa Continuar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1161,7 +1161,7 @@ msgstr "Elige unidades decimales o binarias para los tamaños de archivo."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.tryIt"
-msgstr "Elige Detallada y abre Identificar para consultar la información de la ROM."
+msgstr "Busca un nombre de juego o una suma de verificación, o pulsa Continuar para usar los archivos de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2476,7 +2476,7 @@ msgstr "Identificar ROMs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.title"
-msgstr "Identifica tu ROM inicial"
+msgstr "O identifica tu ROM inicial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

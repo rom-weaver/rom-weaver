@@ -293,6 +293,79 @@ describe("sample tutorial", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("passes over a skipped step both ways and keeps its number", async () => {
+    // Guided Apply's Identify search hides once files are in; its step stays
+    // counted so the steps after it are not renumbered under the reader.
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            STEPS[0] as SampleTutorialStep,
+            { body: "Search instead.", skip: true, target: "#tutorial-search", title: "Search" },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>,
+    );
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const landed = () => waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    await landed();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+    expect(dialog.dataset.step).toBe("3");
+    expect(dialog.dataset.stepCount).toBe("3");
+    await landed();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
+    expect(dialog.dataset.step).toBe("1");
+  });
+
+  it("follows its row when React replaces it mid-step", async () => {
+    // Choosing an Identify match swaps the drop zone's search for the ROM card.
+    const SwappingRow = () => {
+      const [matched, setMatched] = useState(false);
+      return matched ? (
+        <section id="tutorial-card">Matched ROM</section>
+      ) : (
+        <form id="tutorial-search">
+          <button onClick={() => setMatched(true)} type="button">
+            Choose match
+          </button>
+        </form>
+      );
+    };
+    render(
+      <div className="rw-app">
+        <SwappingRow />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[{ body: "Search.", target: "#tutorial-search, #tutorial-card", title: "Search" }]}
+        />
+      </div>,
+    );
+    const search = document.querySelector("#tutorial-search") as HTMLElement;
+    await waitFor(() => expect(search.classList.contains("sample-tutorial-target")).toBe(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose match" }));
+    const card = await waitFor(() => {
+      const match = document.querySelector("#tutorial-card") as HTMLElement;
+      expect(match.classList.contains("sample-tutorial-target")).toBe(true);
+      return match;
+    });
+    expect(document.querySelectorAll(".sample-tutorial-target")).toHaveLength(1);
+    expect(card.getAttribute("aria-describedby")).toBe(
+      document.querySelector(".sample-tutorial-dialog")?.getAttribute("aria-describedby"),
+    );
+  });
+
   it("keeps the same target mounted when its parent rerenders equivalent steps", async () => {
     const workbench = (steps: readonly SampleTutorialStep[]) => (
       <div className="rw-app">
