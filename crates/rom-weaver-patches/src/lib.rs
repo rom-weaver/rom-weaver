@@ -132,7 +132,8 @@ pub(crate) fn can_apply_sparse_in_memory(
 /// Existing outputs MUST retain their inode and permissions. New copies use native
 /// fast paths, gaining owner read/write on Unix or clearing Windows READONLY;
 /// wasm skips permission changes.
-pub(crate) fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
+pub fn copy_input_to_output(input: &Path, output: &Path) -> Result<File> {
+    trace!(input = %input.display(), output = %output.display(), "seeding writable output");
     if output.exists() {
         let mut input = File::open(input)?;
         let mut output = OpenOptions::new()

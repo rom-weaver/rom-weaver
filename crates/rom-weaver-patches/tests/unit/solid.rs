@@ -1497,3 +1497,69 @@ fn parallel_chunk_range_scan_is_empty_past_the_shared_length() {
         .expect("first chunk");
     assert_eq!(first, vec![(0u64, b"XY".to_vec())]);
 }
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0444() {
+    let temp = TestDir::new();
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj";
+    let original = temp.child("source.bin");
+    let modified = temp.child("target.bin");
+    let patch = temp.child("update.solid");
+    fs::write(&original, source).expect("source");
+    fs::write(&modified, target).expect("target");
+    let handler = SolidPatchHandler::new(&SOLID);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create patch");
+    crate::test_support::assert_read_only_input_apply(
+        &handler,
+        source,
+        &fs::read(patch).expect("patch"),
+        target,
+        0o444,
+    );
+}
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0464() {
+    let temp = TestDir::new();
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj";
+    let original = temp.child("source.bin");
+    let modified = temp.child("target.bin");
+    let patch = temp.child("update.solid");
+    fs::write(&original, source).expect("source");
+    fs::write(&modified, target).expect("target");
+    let handler = SolidPatchHandler::new(&SOLID);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create patch");
+    crate::test_support::assert_read_only_input_apply(
+        &handler,
+        source,
+        &fs::read(patch).expect("patch"),
+        target,
+        0o464,
+    );
+}

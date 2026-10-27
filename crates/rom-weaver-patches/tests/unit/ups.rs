@@ -1093,3 +1093,35 @@ fn prepared_ranges_at_source_eof_and_empty_ranges_need_no_source_bytes() {
     assert_eq!(empty.offset, 2);
     assert!(empty.data.is_empty());
 }
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0444() {
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj-tail";
+    let patch = create_ups_patch_bytes(source, target).expect("patch").bytes;
+    crate::test_support::assert_read_only_input_apply(
+        &UpsPatchHandler::new(&UPS),
+        source,
+        &patch,
+        target,
+        0o444,
+    );
+}
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0464() {
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj-tail";
+    let patch = create_ups_patch_bytes(source, target).expect("patch").bytes;
+    crate::test_support::assert_read_only_input_apply(
+        &UpsPatchHandler::new(&UPS),
+        source,
+        &patch,
+        target,
+        0o464,
+    );
+}

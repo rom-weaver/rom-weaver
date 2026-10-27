@@ -1,6 +1,6 @@
 use std::{
     cmp::max,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
     sync::Arc,
@@ -97,10 +97,9 @@ impl PatchHandler for UpsPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
         let thread_capability = parallel_per_record_capability(patch.changes.len());
         let execution = {
-            let mut output = OpenOptions::new().write(true).open(&request.output)?;
+            let mut output = crate::copy_input_to_output(&request.input, &request.output)?;
             output.set_len(working_size)?;
             let (execution, prepared) = run_with_optional_pool(
                 context,

@@ -1,7 +1,7 @@
 use std::{
     cmp::min,
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
@@ -216,15 +216,9 @@ impl PatchHandler for RupPatchHandler {
             ensure_parent_dir(&path)?;
             path
         };
-        rom_weaver_core::copy_file_retrying_interrupted(
-            &normalized_input.path,
-            &normalized_output_path,
-        )?;
+        let mut output =
+            crate::copy_input_to_output(&normalized_input.path, &normalized_output_path)?;
         let input_len = fs::metadata(&normalized_input.path)?.len();
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&normalized_output_path)?;
         output.set_len(output_size)?;
         let thread_capability = parallel_per_record_capability(file.records.len());
         let (execution, prepared) = run_with_optional_pool(
@@ -1109,12 +1103,8 @@ fn finalize_rup_output(
         }
         RupOutputReconstruction::Unif => {
             ensure_parent_dir(output_path)?;
-            rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
+            let mut output = crate::copy_input_to_output(input_path, output_path)?;
             let mut normalized = File::open(normalized_output_path)?;
-            let mut output = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(output_path)?;
             rebuild_unif_payload(&mut output, &mut normalized)
         }
     }
