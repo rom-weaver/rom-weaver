@@ -901,7 +901,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     install_cancel_handler(mode);
     let status = if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
         if !interactive {
-            let message = "--tui needs an interactive terminal; use `weave create` or `apply --emit-weave` for scripted runs";
+            let message = "--tui needs an interactive terminal; use `weave create` or `patch apply --emit-weave` for scripted runs";
             reporter.emit(native_output::error_event(
                 "patch-apply",
                 "validate",
