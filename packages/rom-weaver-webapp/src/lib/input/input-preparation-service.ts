@@ -27,6 +27,7 @@ import {
   getPatchFileBytes,
   readPathSourcePrefix,
 } from "./binary-service.ts";
+import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
 import { chdCodecModeFromCreateMode } from "./rom-specific-file-utils.ts";
 import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
@@ -270,6 +271,7 @@ const createInputPreparationPatchFile = async (
     const externalSource = sourceAccess.getExternalSource();
     if (externalSource) attachPatchFileSourceRef(file, { ...externalSource, fileName: sourceFileName });
     inheritIngestPatchRequirements(source, file);
+    inheritSourceIdentificationPolicy(source, file);
     return file;
   }
 

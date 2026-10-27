@@ -8,6 +8,7 @@ import {
   prepareInputFile,
   prepareMultipleDirectInputAssets,
 } from "../../src/lib/input/input-preparation-service.ts";
+import { shouldIdentifySource, skipSourceIdentification } from "../../src/lib/input/input-identification-policy.ts";
 import { createBrowserOpfsSourceRef } from "../../src/workers/protocol/browser-opfs-source-ref.ts";
 import { assertBrowserBinarySource } from "../../src/lib/runtime/source-normalization.ts";
 import { createPublicSourceValidator } from "../../src/platform/shared/public-source-validation.ts";
@@ -190,6 +191,17 @@ describe("prepareInputAssets", () => {
     await expect(prepareInputAssets(source, undefined, 0, runtime)).rejects.toThrow(
       "orphan.bin must be OPFS/VFS path-backed in browser workflows",
     );
+  });
+
+  it("keeps the skipped identification policy on a retained-path ROM", async () => {
+    const source = makeFile("rom-bytes", "game.bin");
+    Object.defineProperty(source, "filePath", { value: "/work/retained/game.bin" });
+    skipSourceIdentification(source);
+
+    const file = await prepareInput(source, "rom", NO_CONTAINER_OPTIONS as never, runtime);
+
+    expect(file.filePath).toBe("/work/retained/game.bin");
+    expect(shouldIdentifySource(file)).toBe(false);
   });
 
   it.each(["rom", "patch"] as const)(
