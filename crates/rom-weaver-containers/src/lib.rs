@@ -107,6 +107,7 @@ const BZIP2_SIGNATURE: [u8; 3] = *b"BZh";
 const XZ_SIGNATURE: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
 const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 const LZ4_SIGNATURE: [u8; 4] = [0x04, 0x22, 0x4D, 0x18];
+const LZ4_LEGACY_SIGNATURE: [u8; 4] = [0x02, 0x21, 0x4C, 0x18];
 const CSO_SIGNATURE: [u8; 4] = *b"CISO";
 const PBP_SIGNATURE: [u8; 4] = [0x00, b'P', b'B', b'P'];
 

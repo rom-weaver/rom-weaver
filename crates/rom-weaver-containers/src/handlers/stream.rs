@@ -152,7 +152,40 @@ impl StreamContainerHandler {
             StreamCompression::Bzip2 => file_starts_with(source, &BZIP2_SIGNATURE),
             StreamCompression::Xz => file_starts_with(source, &XZ_SIGNATURE),
             StreamCompression::Zstd => file_starts_with(source, &ZSTD_SIGNATURE),
-            StreamCompression::Lz4 => file_starts_with(source, &LZ4_SIGNATURE),
+            StreamCompression::Lz4 => lz4_signature_matches(source),
+        }
+    }
+}
+
+/// Mirror libarchive's lz4 bidder: skip leading skippable frames (also zstd's skippable magic,
+/// so a real lz4 frame must follow), then require a modern or legacy (`lz4 -l`) frame magic.
+fn lz4_signature_matches(source: &Path) -> bool {
+    const SKIPPABLE_MASK: u32 = 0xFFFF_FFF0;
+    const SKIPPABLE_START: u32 = 0x184D_2A50;
+    const MAX_LOOKAHEAD: u64 = 64 * 1024;
+    let Ok(mut file) = fs::File::open(source) else {
+        return false;
+    };
+    let read_u32 = |file: &mut fs::File| -> Option<u32> {
+        let mut bytes = [0u8; 4];
+        file.read_exact(&mut bytes).ok()?;
+        Some(u32::from_le_bytes(bytes))
+    };
+    let mut offset = 0u64;
+    loop {
+        let Some(magic) = read_u32(&mut file) else {
+            return false;
+        };
+        if magic & SKIPPABLE_MASK != SKIPPABLE_START {
+            return magic == u32::from_le_bytes(LZ4_SIGNATURE)
+                || magic == u32::from_le_bytes(LZ4_LEGACY_SIGNATURE);
+        }
+        let Some(size) = read_u32(&mut file) else {
+            return false;
+        };
+        offset += 8 + u64::from(size);
+        if offset + 8 > MAX_LOOKAHEAD || file.seek(SeekFrom::Start(offset)).is_err() {
+            return false;
         }
     }
 }

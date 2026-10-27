@@ -146,3 +146,56 @@ fn lz4_stream_rejects_invalid_and_corrupt_frames() {
         assert!(!request.out_dir.join("invalid.bin").exists());
     }
 }
+
+fn skippable(magic_high: u8, data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x50 | magic_high, 0x2A, 0x4D, 0x18];
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out.extend_from_slice(data);
+    out
+}
+
+fn legacy_frame(payload: &[u8]) -> Vec<u8> {
+    let block = lz4_flex::block::compress(payload);
+    let mut out = vec![0x02, 0x21, 0x4C, 0x18];
+    out.extend_from_slice(&(block.len() as u32).to_le_bytes());
+    out.extend_from_slice(&block);
+    out
+}
+
+#[test]
+fn lz4_legacy_and_skippable_frames_are_detected_without_extension() {
+    let scratch = Scratch::new();
+    let registry = ContainerRegistry::new();
+    let payload: Vec<u8> = (0..5000u32).map(|i| (i * 7 + (i >> 3)) as u8).collect();
+    let mut leading = skippable(0xF, b"metadata");
+    leading.extend(skippable(0x0, b""));
+    leading.extend(frame(&payload, BlockMode::Independent));
+    let cases = [("legacy", legacy_frame(&payload)), ("skippable", leading)];
+    for (name, bytes) in cases {
+        let request = scratch.request(name);
+        fs::write(&request.source, bytes).unwrap();
+        let handler = registry
+            .probe(&request.source)
+            .unwrap_or_else(|| panic!("{name}: extensionless lz4 must be detected"));
+        assert_eq!(handler.descriptor().name, "lz4", "{name}");
+        assert_eq!(handler.probe(&request.source), ProbeConfidence::Signature);
+        handler.extract(&request, &scratch.context()).unwrap();
+        let extracted: Vec<_> = fs::read_dir(&request.out_dir).unwrap().collect();
+        assert_eq!(extracted.len(), 1, "{name}");
+        assert_eq!(
+            fs::read(extracted[0].as_ref().unwrap().path()).unwrap(),
+            payload
+        );
+        fs::remove_dir_all(&request.out_dir).unwrap();
+    }
+}
+
+#[test]
+fn lz4_skippable_frame_without_lz4_frame_is_not_detected() {
+    let scratch = Scratch::new();
+    let path = scratch.0.join("zstd-like");
+    // A lone skippable frame (also zstd's skippable magic) is not lz4 data.
+    fs::write(&path, skippable(0x0, b"metadata-only")).unwrap();
+    let handler = ContainerRegistry::new().probe(&path);
+    assert!(handler.is_none_or(|h| h.descriptor().name != "lz4"));
+}
