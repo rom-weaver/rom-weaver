@@ -262,11 +262,17 @@ const applyDuringPopulation = async (page, picker, files) => {
     const releases = [];
     let released = false;
     let clicks = 0;
+    let presses = 0;
+    const recordPress = (event) => {
+      if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
+        presses++;
+    };
     const recordClick = (event) => {
       if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
         clicks++;
     };
     document.addEventListener("click", recordClick, true);
+    document.addEventListener("pointerdown", recordPress, true);
     if (typeof startViewTransition === "function") {
       document.startViewTransition = (options) => {
         const update = typeof options === "function" ? options : options.update;
@@ -287,6 +293,7 @@ const applyDuringPopulation = async (page, picker, files) => {
     }
     window.__romWeaverPopulationGesture = {
       getClicks: () => clicks,
+      getPresses: () => presses,
       settle: async () => {
         released = true;
         for (const resolve of releases) resolve();
@@ -301,14 +308,19 @@ const applyDuringPopulation = async (page, picker, files) => {
         for (const transition of transitions) transition.skipTransition();
         document.startViewTransition = startViewTransition;
         document.removeEventListener("click", recordClick, true);
+        document.removeEventListener("pointerdown", recordPress, true);
       },
     };
   });
   let pressed = false;
   try {
-    await picker.setInputFiles(files);
+    await Promise.all([
+      page.waitForEvent("console", { predicate: (message) => message.text().includes("patch validation settled") }),
+      picker.setInputFiles(files),
+    ]);
     await waitForEnabled(page, "rom-weaver-button-apply");
     const button = page.locator("#rom-weaver-button-apply");
+    await button.click({ trial: true });
     await button.scrollIntoViewIfNeeded();
     const box = await button.boundingBox();
     requireJourney(box, "Apply has no pointer target after input staging");
@@ -316,6 +328,11 @@ const applyDuringPopulation = async (page, picker, files) => {
     return await downloadedBytes(page, async () => {
       await page.mouse.down();
       pressed = true;
+      requireEqual(
+        await page.evaluate(() => window.__romWeaverPopulationGesture.getPresses()),
+        1,
+        "Input staging moved Apply before the trusted pointer press",
+      );
       // Pending snapshots MUST settle before pointer release to expose gesture retargeting.
       await page.evaluate(() => window.__romWeaverPopulationGesture.settle());
       await page.mouse.up();
