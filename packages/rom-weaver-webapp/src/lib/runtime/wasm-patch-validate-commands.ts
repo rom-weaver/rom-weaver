@@ -151,9 +151,14 @@ const resolvePatchValidateThreading = (input: RuntimePatchValidateWorkerInput, h
  * The caller's options arrive untyped and in both camelCase and snake_case, so
  * every field is normalized once here rather than at each use.
  */
-const readPatchValidateOptions = (options: RuntimePatchValidateWorkerInput["options"]) => {
+const readPatchValidateOptions = ({ options, patchFiles }: RuntimePatchValidateWorkerInput) => {
   const record = asRecord(options);
-  const requirements = getPatchValidationRequirements(options);
+  const embeddedRequirements = getPatchValidationRequirements(options);
+  const format = String(embeddedRequirements?.format ?? patchFiles[0]?.patchFormat ?? "")
+    .trim()
+    .toLowerCase();
+  // UPS MUST select either endpoint in the engine; its source metadata describes only forward input.
+  const requirements = format === "ups" ? null : embeddedRequirements;
   const readArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
   const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
   return {
@@ -200,7 +205,7 @@ const invokeRomWeaverPatchValidateWorker = async (
     validateWithChecksums,
     validateWithMinSize,
     validateWithSize,
-  } = readPatchValidateOptions(input.options);
+  } = readPatchValidateOptions(input);
   const {
     disableDefaultThreadArgInjection,
     effectiveThreadArg,

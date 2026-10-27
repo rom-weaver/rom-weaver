@@ -158,6 +158,7 @@ type ApplyWorkflowPatchState = {
   };
   /** This patch's slice of the chain verification plan (advisory; drives the chain chip). */
   chainVerdict?: {
+    direction?: "forward" | "reverse";
     /** What the patch's input checks were authored against. */
     basis: "base" | "previous";
     basisSource: "declared" | "inferred_base" | "inferred_chain" | "default";

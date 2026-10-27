@@ -248,6 +248,7 @@ const applyPlanValidationResult = <TSource>(
     status,
   });
   prepared.entry.stage.state.chainVerdict = {
+    ...(planVerdict.execution ? { direction: planVerdict.execution.direction } : {}),
     basis: planVerdict.basis,
     basisSource: planVerdict.basis_source,
     matched:

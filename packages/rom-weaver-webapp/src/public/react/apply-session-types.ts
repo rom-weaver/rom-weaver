@@ -61,6 +61,7 @@ type StagedInputInfo = {
   checksumCompared?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip). */
   chainVerdict?: {
+    direction?: "forward" | "reverse";
     basis: "base" | "previous";
     basisSource: "declared" | "inferred_base" | "inferred_chain" | "default";
     matched: { kind: "base"; variant: string } | { kind: "patch_output"; index: number } | { kind: "none" };

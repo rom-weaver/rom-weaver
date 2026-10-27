@@ -316,6 +316,40 @@ describe("apply workflow staging model", () => {
     ]);
   });
 
+  it("displays the planner-selected reverse UPS input and output checks", () => {
+    const info = toPatchStageInfo(
+      {
+        candidates: [],
+        id: "reverse-ups",
+        checksumPreflight: { status: "invalid" },
+        status: "ready",
+        warnings: [],
+        requirements: {
+          format: "UPS",
+          sourceTitles: ["Forward source"],
+          sourceSize: 4,
+          sourceCrc32: "8bb98613",
+          targetSize: 6,
+          targetCrc32: "e7ea484b",
+        },
+        chainVerdict: {
+          basis: "base",
+          basisSource: "inferred_base",
+          matched: { kind: "base", variant: "raw" },
+          direction: "reverse",
+        },
+        patchValidation: { status: "valid" },
+      } as never,
+      "change.ups",
+      0,
+      "game.bin",
+    );
+    expect(info?.validationValues).toEqual(["in size=6", "in crc32=e7ea484b", "out size=4", "out crc32=8bb98613"]);
+    expect(info?.validationState).toBe("valid");
+    expect(info?.sourceTitles).toBeUndefined();
+    expect(info?.sourceChecksumState).toBe("valid");
+  });
+
   it("reports readiness failures and normalizes a browser result", () => {
     const readyInput = { id: "rom", selectedCandidateId: "rom", status: "ready" } as never;
     const readyPatch = { fileName: "hack.ips", status: "ready" } as never;

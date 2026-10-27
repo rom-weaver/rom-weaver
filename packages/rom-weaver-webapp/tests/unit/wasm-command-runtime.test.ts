@@ -812,6 +812,28 @@ describe("invokeRomWeaverIdentifyTitlesWorker", () => {
 });
 
 describe("invokeRomWeaverPatchValidateWorker", () => {
+  it.each([undefined, ["crc32=e991ecc0"]])(
+    "leaves UPS endpoint selection to the engine with explicit checks %j",
+    async (validateWithChecksums) => {
+      mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ valid: true }));
+      await invokeRomWeaverPatchValidateWorker({
+        options: {
+          plan: true,
+          validateWithChecksums,
+          validationRequirements: [{ sourceCrc32: "b1314226", sourceSize: 4096 }],
+        },
+        patchFiles: [{ patchFileName: "reverse.ups", patchFilePath: "/reverse.ups", patchFormat: "ups" }],
+        romFileName: "modified.bin",
+        romFilePath: "/modified.bin",
+      });
+      const args = lastCall()[0].args.args as Record<string, unknown>;
+      expect(args.ignore_checksum_validation).toBe(false);
+      expect(args.plan).toBe(true);
+      if (validateWithChecksums) expect(args.expect_in).toEqual(validateWithChecksums);
+      else expect(args).not.toHaveProperty("expect_in");
+    },
+  );
+
   const validateInput = () => ({
     patchFiles: [
       { patchFileName: "a.ips", patchFilePath: "/a.ips", patchFormat: "ips" },

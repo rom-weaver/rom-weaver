@@ -188,15 +188,17 @@ const getPatchValidationMessage = (status: string, deep: ApplyWorkflowPatchState
 };
 
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
-  const sourceTitleValues = (patch.requirements?.sourceTitles || []).map((title) =>
+  const reverse = patch.requirements?.format === "UPS" && patch.chainVerdict?.direction === "reverse";
+  const requirements = patch.requirements;
+  const sourceTitleValues = (reverse ? [] : requirements?.sourceTitles || []).map((title) =>
     formatPatchValidationValue("in rom", formatIdentifyTitle(title)),
   );
   const enforceableRequirementValues = [
-    formatPatchValidationValue("in size", patch.requirements?.sourceSize),
-    formatPatchValidationValue("in min size", patch.requirements?.minimumSourceSize),
-    formatPatchValidationValue("in crc32", patch.requirements?.sourceCrc32),
-    formatPatchValidationValue("out size", patch.requirements?.targetSize),
-    formatPatchValidationValue("out crc32", patch.requirements?.targetCrc32),
+    formatPatchValidationValue("in size", reverse ? requirements?.targetSize : requirements?.sourceSize),
+    formatPatchValidationValue("in min size", reverse ? undefined : requirements?.minimumSourceSize),
+    formatPatchValidationValue("in crc32", reverse ? requirements?.targetCrc32 : requirements?.sourceCrc32),
+    formatPatchValidationValue("out size", reverse ? requirements?.sourceSize : requirements?.targetSize),
+    formatPatchValidationValue("out crc32", reverse ? requirements?.sourceCrc32 : requirements?.targetCrc32),
   ].filter(Boolean);
   const requirementValues = [...sourceTitleValues, ...enforceableRequirementValues];
   const actualValue = "";
@@ -218,6 +220,7 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
     // An unreadable patch is not a checksum mismatch: the override cannot help, so it must block Apply.
     checksumMismatch: status === "invalid" && !deep?.unreadable,
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),
+    sourceTitles: reverse ? undefined : requirements?.sourceTitles,
     validationActualValue: actualValue,
     validationLabel: requirementValues.length ? "Expected" : "Validation",
     validationMessage: message,
@@ -281,8 +284,11 @@ const toPatchStageInfo = (
     showHeaderOption: !!patch.headerResolution,
     showN64ByteOrderOption: !!patch.n64Resolution,
     size: patch.size,
-    sourceTitles: patch.requirements?.sourceTitles,
-    sourceChecksumState: patch.checksumPreflight?.status || "",
+    sourceTitles: validation.sourceTitles,
+    sourceChecksumState:
+      patch.checksumPreflight?.status === "invalid" && validation.validationState === "valid"
+        ? "valid"
+        : patch.checksumPreflight?.status || "",
     sourceSize: patch.sourceSize,
     targetInputFileName: patch.targetInputFileName,
     targetInputId: patch.targetInputId,
