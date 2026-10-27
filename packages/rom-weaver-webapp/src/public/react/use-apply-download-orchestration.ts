@@ -7,6 +7,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import {
   normalizePostApplyDownloadBehavior,
@@ -472,12 +473,14 @@ const handleApplyPrimaryGate = async ({
   setOutputErrorMessage: SessionState["setOutputErrorMessage"];
 }) => {
   if (busy) {
+    traceApplyPrimaryAction("cancelled active apply");
     lifecycle.setApplyQueued(false);
     cancelActiveOperation();
     clearActiveApplyProgress();
     return true;
   }
   if (pendingDownloadResult && hasPendingDownload) {
+    traceApplyPrimaryAction("downloading pending output");
     await downloadPendingOutput({
       activeSettings,
       downloadOutput,
@@ -490,15 +493,24 @@ const handleApplyPrimaryGate = async ({
     return true;
   }
   if (applyQueueBlocked) {
+    traceApplyPrimaryAction("ignored: apply queue blocked");
     lifecycle.setApplyQueued(false);
     return true;
   }
   if (canQueueApply && !canStartApply) {
+    traceApplyPrimaryAction("queued: apply not ready");
     lifecycle.setApplyQueued(true);
     return true;
   }
+  if (!canStartApply) traceApplyPrimaryAction("ignored: no inputs");
   return !canStartApply;
 };
+
+// Every primary-action branch that does not start a run leaves a trace, so a click that changes
+// nothing visible can be explained from the log (E2E dumps it when a download never starts).
+const applySessionLogger = createLogger("ui:apply-session");
+const traceApplyPrimaryAction = (outcome: string, details?: Record<string, unknown>) =>
+  applySessionLogger.trace(`apply primary action ${outcome}`, details);
 
 // Owns the apply-and-download workflow for the patcher session: queueing/cancellation gating, the
 // AbortController lifecycle, per-stage progress fan-out, completion timing/size summary, and the
@@ -584,6 +596,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         } = refs;
         const pendingDownloadResult = pendingDownloadResultRef.current;
         if (patchChangePendingRef.current && !busy) {
+          traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);
           return;
         }
@@ -610,7 +623,13 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           return;
         // React state does not turn the button busy synchronously. Use the run's existing controller
         // as the immediate lock so a queued effect or rapid second click cannot start another apply.
-        if (activeAbortControllerRef.current) return;
+        if (activeAbortControllerRef.current) {
+          traceApplyPrimaryAction("ignored: abort controller still active", {
+            aborted: activeAbortControllerRef.current.signal.aborted,
+          });
+          return;
+        }
+        traceApplyPrimaryAction("starting apply");
         setApplyQueued(false);
         const useChecksumOverride = hasStrictInputChecksumMismatch && checksumOverrideChecked;
         if (useChecksumOverride) setChecksumOverrideChecked(false);
