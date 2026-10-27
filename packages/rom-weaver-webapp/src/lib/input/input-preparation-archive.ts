@@ -13,7 +13,7 @@ import { transferRetainedOutputOwnership } from "../runtime/workflow-runtime-wor
 import { isCueEntryFileName, isGdiEntryFileName } from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
 import {
-  createPatchFile,
+  createLazyPatchFile,
   decodeUtf8,
   getPatchFileBlob,
   getPatchFileBytes,
@@ -189,7 +189,7 @@ const listCompressionEntries = async (
  * core's bounded recursive extraction and release its temporary outputs.
  */
 const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]> => {
-  const file = await createPatchFile(source as Parameters<typeof createPatchFile>[0], "archive.bin");
+  const file = await createLazyPatchFile(source, "archive.bin");
   const entries = await listCompressionEntries(file, undefined);
   const names = entries
     .map((entry) => (typeof entry === "string" ? entry : String((entry as { filename?: string }).filename || "")))
