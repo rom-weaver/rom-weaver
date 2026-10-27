@@ -1801,9 +1801,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Blobless full history for the sitemap's per-page <lastmod>; see deploy.
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: 60
           fetch-tags: true
 
       - name: Restore built wasm module
@@ -1920,13 +1918,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history without file contents: the sitemap's per-page
-          # <lastmod> comes from `git log -- <doc>` (readDocLastmod), which a
-          # shallow clone cannot answer for docs older than its depth, and a
-          # blobless clone avoids the ~97 MB full pack. Tags must still come
-          # along: the version string drops its `+hash` suffix only when
-          # `git tag --points-at HEAD` sees the release tag.
-          fetch-depth: 0
+          # Only prod writes sitemap.xml, whose per-doc <lastmod> comes from
+          # `git log -- <doc>` (readDocLastmod); a shallow clone cannot answer
+          # that for docs older than its depth. So prod takes full history
+          # without file contents (no ~97 MB pack); other channels keep the
+          # changelog's depth. '0' is quoted because a bare 0 is falsy in
+          # expressions. Tags must still come along: the version string drops
+          # its `+hash` suffix only when `git tag --points-at HEAD` sees the
+          # release tag.
+          fetch-depth: ${{ matrix.target.channel == 'prod' && '0' || '60' }}
           filter: blob:none
           fetch-tags: true
 
