@@ -8,6 +8,7 @@ import {
   POST_APPLY_TEST_BEHAVIOR_OPTIONS,
 } from "../../lib/apply/post-apply-behavior.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
+import { usePressThroughLayoutShift } from "../../presentation/react/use-press-through-layout-shift.ts";
 import type { ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
@@ -197,6 +198,7 @@ const WeaveExportAction = ({
   disabled: boolean;
 }) => {
   const localizer = useUiLocalizer();
+  const pressThroughLayoutShift = usePressThroughLayoutShift();
   if (weaveExport.busy) {
     return (
       <ProgressActionButton
@@ -217,6 +219,7 @@ const WeaveExportAction = ({
       disabled={disabled}
       id="rom-weaver-button-export-weave"
       onClick={() => void weaveExport.runExport()}
+      onPointerDown={pressThroughLayoutShift}
       type="button"
     >
       <Spool aria-hidden="true" />
