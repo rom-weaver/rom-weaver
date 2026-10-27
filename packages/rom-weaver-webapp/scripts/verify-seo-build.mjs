@@ -123,7 +123,9 @@ if (production) {
   assertExcludes(read("sitemap.xml"), ".md<", "sitemap Markdown URLs");
   assertExcludes(read("sitemap.xml"), ".json<", "sitemap JSON URLs");
 }
-assertIncludes(redirects, "\n/*/ /:splat 301\n", "trailing-slash redirect");
+// No catch-all slash redirect: the offline precache fetches `<slug>/` and needs that document
+// as is, and a splat rule can resolve a `//host/` path to another origin.
+assertExcludes(redirects, "/:splat", "_redirects splat rules");
 const authMarkdownHeaders = matchPagesHeaders(parsePagesHeaders(headers), "/auth.md");
 assertIncludes(authMarkdownHeaders["Content-Type"] ?? "", "text/markdown; charset=utf-8", "/auth.md content type");
 if (authMarkdownHeaders.Link) throw new Error("/auth.md must not carry a canonical Link");

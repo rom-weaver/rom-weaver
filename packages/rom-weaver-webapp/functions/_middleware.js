@@ -35,6 +35,9 @@ export const onRequest = async ({ request, env, next }) => {
     response = await next();
   }
   const headers = new Headers(response.headers);
+  // The `.md` rule's noindex belongs to the /<page>.md URL. This response is the page URL
+  // itself, so drop it; the non-production `noindex, nofollow` from the `/*` rule stays.
+  if (markdown && headers.get("X-Robots-Tag") === "noindex") headers.delete("X-Robots-Tag");
   // _headers stays under Pages' 100-rule cap by leaving these page Links to the middleware.
   if (!markdown && response.ok && route.alternateLink) {
     headers.append("Link", `<${route.markdownPath}>; rel="alternate"; type="text/markdown"`);
