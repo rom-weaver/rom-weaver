@@ -77,7 +77,10 @@ impl BspPatchHandler {
             in_place, "bsp apply output seeding decision"
         );
         if !in_place {
-            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
+            drop(crate::copy_input_to_output(
+                &request.input,
+                &request.output,
+            )?);
         }
         let apply_result = apply_bsp_patch_path(
             patch_path,

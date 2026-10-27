@@ -2592,3 +2592,67 @@ fn current_utc_date_is_an_eight_digit_yyyymmdd_string() {
     assert!((1..=12).contains(&date[4..6].parse::<u32>().unwrap()));
     assert!((1..=31).contains(&date[6..8].parse::<u32>().unwrap()));
 }
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0444() {
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj-tail";
+    let patch = create_rup_patch_bytes(source, target).expect("patch").bytes;
+    crate::test_support::assert_read_only_input_apply(
+        &RupPatchHandler::new(&RUP),
+        source,
+        &patch,
+        target,
+        0o444,
+    );
+}
+
+// quality-reason: Unix permissions MUST cover the separate UNIF reconstruction copy.
+#[cfg(unix)]
+#[test]
+fn apply_unif_read_only_input_0444() {
+    let source = unif_fixture(b"PRG1", b"CHR1");
+    let target = unif_fixture(b"PRG2", b"CHR2");
+    let patch = typed_rup_patch(b"PRG1CHR1", b"PRG2CHR2", 1);
+    crate::test_support::assert_read_only_input_apply(
+        &RupPatchHandler::new(&RUP),
+        &source,
+        &patch,
+        &target,
+        0o444,
+    );
+}
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0464() {
+    let source = b"abcdefghij";
+    let target = b"aXcdYfghZj-tail";
+    let patch = create_rup_patch_bytes(source, target).expect("patch").bytes;
+    crate::test_support::assert_read_only_input_apply(
+        &RupPatchHandler::new(&RUP),
+        source,
+        &patch,
+        target,
+        0o464,
+    );
+}
+
+// quality-reason: Unix permissions MUST cover the separate UNIF reconstruction copy.
+#[cfg(unix)]
+#[test]
+fn apply_unif_read_only_input_0464() {
+    let source = unif_fixture(b"PRG1", b"CHR1");
+    let target = unif_fixture(b"PRG2", b"CHR2");
+    let patch = typed_rup_patch(b"PRG1CHR1", b"PRG2CHR2", 1);
+    crate::test_support::assert_read_only_input_apply(
+        &RupPatchHandler::new(&RUP),
+        &source,
+        &patch,
+        &target,
+        0o464,
+    );
+}

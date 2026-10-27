@@ -798,3 +798,33 @@ fn validate_surfaces_a_script_that_exits_non_zero() {
         "unexpected error: {error}"
     );
 }
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0444() {
+    let source = [1, 2, 3];
+    let patch = decode_hex("600100000018ff0600000000");
+    crate::test_support::assert_read_only_input_apply(
+        &BspPatchHandler::new(&BSP),
+        &source,
+        &patch,
+        &[1, 0xff, 3],
+        0o444,
+    );
+}
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0464() {
+    let source = [1, 2, 3];
+    let patch = decode_hex("600100000018ff0600000000");
+    crate::test_support::assert_read_only_input_apply(
+        &BspPatchHandler::new(&BSP),
+        &source,
+        &patch,
+        &[1, 0xff, 3],
+        0o464,
+    );
+}

@@ -79,3 +79,45 @@ fn validate_checksum_file_accepts_a_read_only_rom() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+// quality-reason: Unix owner write bits MUST be checked even when the group can write.
+#[cfg(unix)]
+#[test]
+fn validate_checksum_file_accepts_owner_read_only_input() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    for existing in [false, true] {
+        let dir = scratch_dir(if existing {
+            "owner-read-only-existing"
+        } else {
+            "owner-read-only"
+        });
+        let rom_path = dir.join("rom.sfc");
+        let scratch = dir.join("scratch.bin");
+        let rom = snes_rom();
+        fs::write(&rom_path, &rom).expect("fixture");
+        fs::set_permissions(&rom_path, fs::Permissions::from_mode(0o464)).expect("input mode");
+        let before = existing.then(|| {
+            fs::write(&scratch, vec![0xff; rom.len() + 32]).expect("existing scratch");
+            fs::set_permissions(&scratch, fs::Permissions::from_mode(0o604)).expect("scratch mode");
+            fs::metadata(&scratch).expect("scratch metadata")
+        });
+        let outcome = CliApp::validate_checksum_file(&rom_path, Some(&rom_path), &scratch)
+            .expect("validate owner read-only ROM");
+        assert!(outcome.repaired_profiles.contains(&"snes"));
+        assert_eq!(fs::read(&rom_path).expect("ROM"), rom);
+        assert_eq!(
+            fs::metadata(&rom_path).expect("ROM metadata").mode() & 0o777,
+            0o464
+        );
+        let after = fs::metadata(&scratch).expect("scratch metadata");
+        if let Some(before) = before {
+            assert_eq!(after.mode(), before.mode());
+            assert_eq!(after.ino(), before.ino());
+        } else {
+            assert_eq!(after.mode() & 0o777, 0o664);
+        }
+        assert_eq!(after.len(), rom.len() as u64);
+        fs::remove_dir_all(dir).expect("cleanup");
+    }
+}

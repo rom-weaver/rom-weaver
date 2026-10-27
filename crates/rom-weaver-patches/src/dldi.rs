@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::{Seek, SeekFrom, Write},
     path::Path,
 };
@@ -356,11 +356,7 @@ fn apply_dldi_patch_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
-    let mut output = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(output_path)?;
+    let mut output = crate::copy_input_to_output(input_path, output_path)?;
     output.set_len(prepared.output_len)?;
     output.seek(SeekFrom::Start(prepared.patch_offset))?;
     output.write_all(&prepared.slot)?;

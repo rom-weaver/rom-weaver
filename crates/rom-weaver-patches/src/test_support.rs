@@ -226,3 +226,65 @@ pub(crate) fn assert_round_trip(
 
     create_report
 }
+
+// quality-reason: Unix mode and inode assertions MUST detect permission regressions under root.
+#[cfg(unix)]
+pub(crate) fn assert_read_only_input_apply(
+    handler: &dyn PatchHandler,
+    source: &[u8],
+    patch: &[u8],
+    target: &[u8],
+    mode: u32,
+) {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    for threads in [1, 8] {
+        for existing in [false, true] {
+            let temp = TestDir::new();
+            let input = temp.child("source.bin");
+            let output = temp.child("output.bin");
+            let patch_path = temp.child("update.patch");
+            fs::write(&input, source).expect("source");
+            fs::set_permissions(&input, fs::Permissions::from_mode(mode)).expect("input mode");
+            fs::write(&patch_path, patch).expect("patch");
+            let before = existing.then(|| {
+                fs::write(&output, vec![0xff; target.len() + 32]).expect("existing output");
+                fs::set_permissions(&output, fs::Permissions::from_mode(0o604))
+                    .expect("output mode");
+                fs::metadata(&output).expect("existing output metadata")
+            });
+
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: input.clone(),
+                        patches: vec![patch_path],
+                        output: output.clone(),
+                    },
+                    &test_context_with_threads(&temp, threads),
+                )
+                .expect("apply from read-only input");
+
+            assert_eq!(fs::read(&output).expect("patched bytes"), target);
+            assert_eq!(fs::read(&input).expect("source bytes"), source);
+            assert_eq!(
+                fs::metadata(&input).expect("input metadata").mode() & 0o777,
+                mode
+            );
+            let after = fs::metadata(&output).expect("output metadata");
+            if let Some(before) = before {
+                assert_eq!(after.mode(), before.mode(), "existing output mode");
+                assert_eq!(after.ino(), before.ino(), "existing output inode");
+                assert_eq!(after.uid(), before.uid(), "existing output owner");
+                assert_eq!(after.gid(), before.gid(), "existing output group");
+            } else {
+                assert_eq!(after.mode() & 0o777, mode | 0o600, "owner rw output");
+            }
+            fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&output)
+                .expect("output can be reopened for reading and writing");
+        }
+    }
+}

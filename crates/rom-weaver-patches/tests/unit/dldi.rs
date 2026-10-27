@@ -837,3 +837,39 @@ fn create_rejects_inputs_without_a_patchable_slot() {
         "unexpected error: {missing_modified}"
     );
 }
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0444() {
+    let source = build_test_app_with_slot(0x200, 12, 0x0200_0000, "Default driver");
+    let patch = build_test_dldi_driver(8, 0x0200_0000, "Test driver", 0);
+    let mut target = source.clone();
+    target[0x200..0x200 + patch.len()].copy_from_slice(&patch);
+    target[0x200 + DO_ALLOCATED_SPACE] = 12;
+    crate::test_support::assert_read_only_input_apply(
+        &DldiPatchHandler::new(&DLDI),
+        &source,
+        &patch,
+        &target,
+        0o444,
+    );
+}
+
+// quality-reason: Unix owner permissions MUST be checked independently of group write bits.
+#[cfg(unix)]
+#[test]
+fn apply_read_only_input_0464() {
+    let source = build_test_app_with_slot(0x200, 12, 0x0200_0000, "Default driver");
+    let patch = build_test_dldi_driver(8, 0x0200_0000, "Test driver", 0);
+    let mut target = source.clone();
+    target[0x200..0x200 + patch.len()].copy_from_slice(&patch);
+    target[0x200 + DO_ALLOCATED_SPACE] = 12;
+    crate::test_support::assert_read_only_input_apply(
+        &DldiPatchHandler::new(&DLDI),
+        &source,
+        &patch,
+        &target,
+        0o464,
+    );
+}

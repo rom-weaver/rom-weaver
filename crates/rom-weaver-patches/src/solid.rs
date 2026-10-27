@@ -804,11 +804,7 @@ fn apply_solid_writes_and_resize_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    rom_weaver_core::copy_file_retrying_interrupted(source_path, output_path)?;
-    let mut output = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(output_path)?;
+    let mut output = crate::copy_input_to_output(source_path, output_path)?;
     let required_output_len_u64 = u64::try_from(required_output_len)
         .map_err(|_| RomWeaverError::Validation("SOLID output length exceeded u64".into()))?;
     if output.metadata()?.len() < required_output_len_u64 {

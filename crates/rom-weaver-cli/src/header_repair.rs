@@ -23,30 +23,7 @@ impl CliApp {
         hint_path: Option<&Path>,
         scratch: &Path,
     ) -> Result<HeaderRepairOutcome> {
-        rom_weaver_core::copy_file_retrying_interrupted(path, scratch)?;
-        // On unix `fs::copy` carries the source mode across, and preserved dumps
-        // are routinely read-only; the repair routine opens for writing, so that
-        // mode would make every such ROM look unreadable. Only act when the copy
-        // really is read-only: under wasm32-wasip1 `fs::copy` creates a fresh
-        // writable file and `set_permissions` reaches a `chmod` WASI does not
-        // have, so an unconditional reset would fail there and silently disable
-        // every caller. A failure is logged, never fatal, for the same reason.
-        let permissions = fs::metadata(scratch)?.permissions();
-        if permissions.readonly() {
-            let mut writable = permissions;
-            #[expect(
-                clippy::permissions_set_readonly_false,
-                reason = "this is a private scratch copy the repair pass must write to; its mode is never observed"
-            )]
-            writable.set_readonly(false);
-            if let Err(error) = fs::set_permissions(scratch, writable) {
-                trace!(
-                    %error,
-                    scratch = %scratch.display(),
-                    "checksum validate: could not clear the scratch read-only bit"
-                );
-            }
-        }
+        drop(rom_weaver_patches::copy_input_to_output(path, scratch)?);
         let outcome = Self::repair_checksum_file_in_place(scratch, hint_path)?;
         trace!(
             rom = %path.display(),
