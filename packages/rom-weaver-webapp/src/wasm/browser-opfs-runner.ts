@@ -589,14 +589,19 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           stagingMs: runOptions.stagingMs,
         });
       }
-      // Thread teardown can report any worker failure first (or only a generic one); the shared
-      // proxy poison flag is the authority for recycling the runner.
+      // A poisoned proxy is the authority for recycling the runner. Thread teardown can wrap or
+      // replace a recorded failure, and a guest that handles EIO and exits non-zero records none;
+      // both surface the bare poison error. Successful runs are left untouched.
+      const ok = runSucceeded && exitCode === 0;
       if (failure) failure = { error: resolveProxyPoisonFailure(failure.error, opfsProxy.client) };
+      else if (!ok && opfsProxy.client.isPoisoned()) {
+        failure = { error: resolveProxyPoisonFailure(undefined, opfsProxy.client) };
+      }
       return {
         command,
         ...failure,
         exitCode: exitCode ?? 1,
-        ok: runSucceeded && exitCode === 0,
+        ok,
         request,
         ...flushStreams(),
       };

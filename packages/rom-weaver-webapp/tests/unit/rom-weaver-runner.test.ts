@@ -269,6 +269,7 @@ describe("runRomWeaverJson", () => {
     }
     expect(state.clients).toHaveLength(2);
     expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+    expect(state.clients[1]?.terminate).toHaveBeenCalledOnce();
   });
 
   it("reuses the runner after a thread failure when the proxy is healthy", async () => {
