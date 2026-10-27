@@ -10,6 +10,7 @@ use crate::dcp::rebuild_track_to_writer;
 use crate::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
 use super::patch_apply::warn_on_rom_name_mismatch;
+use super::weave_apply::WeaveApplyResolution;
 use super::*;
 
 struct CompressDcpDiscInputs<'a> {
@@ -30,7 +31,7 @@ impl CliApp {
     pub(super) fn run_dcp_apply(
         &self,
         args: PatchApplyCommand,
-        expected_rom_name: Option<&str>,
+        weave_resolution: Option<&WeaveApplyResolution>,
         additional_sources: &[PathBuf],
     ) -> OperationReport {
         let context = self.context(args.threads);
@@ -94,6 +95,49 @@ impl CliApp {
                     "validate",
                     "a .dcp patch cannot be combined with --code; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
                 );
+        }
+        if !args.cheat_records.is_empty() || !args.cheat_selection.cheats.is_empty() {
+            return fail(
+                "validate",
+                "a .dcp patch cannot be combined with --cheat or other database cheats; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
+            );
+        }
+        // Optional weave cheats are skipped like the other patch formats do;
+        // a required one cannot be baked into a rebuilt GD-ROM filesystem.
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut skipped_weave_cheats = Vec::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(resolution) = weave_resolution {
+            let required = resolution
+                .cheats
+                .iter()
+                .filter(|entry| !entry.optional)
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>();
+            if !required.is_empty() {
+                let weave = args.bundle.as_ref().map_or_else(
+                    || "the weave".to_string(),
+                    |path| format!("weave {}", path.display()),
+                );
+                return fail(
+                    "validate",
+                    format!(
+                        "a .dcp patch cannot be combined with the required cheat(s) in {weave}: {}; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem. Pass --without-cheats to apply the weave without its cheats, or mark them optional",
+                        required.join(", ")
+                    ),
+                );
+            }
+            skipped_weave_cheats = resolution
+                .cheats
+                .iter()
+                .enumerate()
+                .map(|(index, entry)| crate::weave_cheats::SkippedWeaveCheat {
+                    index,
+                    id: entry.id.clone(),
+                    reason: "a .dcp patch rebuilds a GD-ROM filesystem and cannot apply cheats"
+                        .to_string(),
+                })
+                .collect::<Vec<_>>();
         }
         if args.target.is_some() {
             return fail(
@@ -177,6 +221,8 @@ impl CliApp {
         {
             return fail_error("validate", error);
         }
+        let expected_rom_name =
+            weave_resolution.and_then(|resolution| resolution.expected_rom_name.as_deref());
         let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
         let mut report = self.rebuild_and_emit_dcp(
@@ -188,6 +234,23 @@ impl CliApp {
             single.clone(),
         );
         Self::append_report_warnings(&mut report, name_warning);
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && !skipped_weave_cheats.is_empty() {
+            let skipped = skipped_weave_cheats
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            report.label = format!(
+                "{}; skipped {} optional weave cheat(s): {skipped}",
+                report.label,
+                skipped_weave_cheats.len(),
+            );
+            Self::append_report_warnings(
+                &mut report,
+                [format!("skipped optional weave cheats: {skipped}")],
+            );
+        }
         report
     }
 

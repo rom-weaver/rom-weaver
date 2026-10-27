@@ -141,6 +141,43 @@ describe("useUnifiedApplyDrop", () => {
     );
   });
 
+  it("keeps a loose GDI and all referenced tracks together alongside a patch", async () => {
+    const controller = makeController();
+    const selectFile = vi.fn(async () => ({ id: "dropped-rom-0" }));
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const gdi = new File(['2\n1 0 0 2352 track01.bin 0\n2 45000 4 2352 "track 02.bin" 0\n'], "disc.gdi");
+    const tracks = [file("track01.bin"), file("track 02.bin")];
+    const patch = file("change.ips");
+
+    act(() => result.current.onDrop([tracks[0], gdi, tracks[1], patch]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+    expect(controller.provideRomInputFiles).toHaveBeenCalledWith([gdi, ...tracks]);
+    expect(controller.providePatchInputFiles).toHaveBeenCalledWith([patch]);
+    expect(selectFile).not.toHaveBeenCalled();
+  });
+
+  it("offers a GDI and its track as one choice beside an unrelated ROM", async () => {
+    const controller = makeController();
+    const selectFile = vi.fn(async () => ({ id: "dropped-rom-0" }));
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const gdi = new File(["1\n1 45000 4 2352 track01.bin 0\n"], "disc.gdi");
+    const track = file("track01.bin");
+
+    act(() => result.current.onDrop([gdi, track, file("other.nes")]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+    expect(controller.provideRomInputFiles).toHaveBeenCalledWith([gdi, track]);
+    expect(selectFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [
+          expect.objectContaining({ fileName: "disc.gdi", size: gdi.size + track.size }),
+          expect.objectContaining({ fileName: "other.nes" }),
+        ],
+      }),
+    );
+  });
+
   it("keeps a CUE selectable when a sibling GDI cannot be read", async () => {
     const controller = makeController();
     const selectFile = vi.fn(async () => ({ id: "dropped-rom-0" }));
@@ -388,26 +425,32 @@ describe("useUnifiedApplyDrop", () => {
     await waitFor(() => expect(delivered).toEqual(["patch:first-patches.zip", "rom:game.nes"]));
   });
 
-  it("stages a directly dropped CUE and its track as the companion ROM of a checks-only weave", async () => {
-    mockedLoadWeave.mockResolvedValue({
-      cleanup: vi.fn(async () => undefined),
-      patchFiles: [file("weave.ips")],
-      romFile: null,
-      session: { key: "weave-session" },
-    } as never);
-    const controller = makeController();
-    const onWeaveSession = vi.fn();
-    const selectFile = vi.fn();
-    const { result } = renderHook(() => useUnifiedApplyDrop(controller, onWeaveSession, undefined, selectFile));
-    const cue = new File(['FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352'], "disc.cue");
-    const track = file("disc.bin");
+  it.each([
+    ["cue", 'FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352'],
+    ["gdi", "1\n1 45000 4 2352 disc.bin 0\n"],
+  ])(
+    "stages a directly dropped %s and its track as the companion ROM of a checks-only weave",
+    async (extension, text) => {
+      mockedLoadWeave.mockResolvedValue({
+        cleanup: vi.fn(async () => undefined),
+        patchFiles: [file("weave.ips")],
+        romFile: null,
+        session: { key: "weave-session" },
+      } as never);
+      const controller = makeController();
+      const onWeaveSession = vi.fn();
+      const selectFile = vi.fn();
+      const { result } = renderHook(() => useUnifiedApplyDrop(controller, onWeaveSession, undefined, selectFile));
+      const cue = new File([text], `disc.${extension}`);
+      const track = file("disc.bin");
 
-    act(() => result.current.onDrop([file("rom-weaver-weave.json"), cue, track]));
+      act(() => result.current.onDrop([file("rom-weaver-weave.json"), cue, track]));
 
-    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([cue, track]));
-    expect(onWeaveSession).toHaveBeenCalledOnce();
-    expect(selectFile).not.toHaveBeenCalled();
-  });
+      await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledExactlyOnceWith([cue, track]));
+      expect(onWeaveSession).toHaveBeenCalledOnce();
+      expect(selectFile).not.toHaveBeenCalled();
+    },
+  );
 
   it("asks which companion ROM to use when a checks-only weave arrives with several", async () => {
     mockedList.mockResolvedValue(["game.nes"]);

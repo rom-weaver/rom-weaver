@@ -34,6 +34,28 @@ describe("presentation errors", () => {
     );
   });
 
+  it.each(["extract entries", "extracted patch create original candidates", "extracted ingest input candidates"])(
+    "offers browser recovery when all %s are ignored",
+    (entries) => {
+      const diagnostic = `validation failed: all ${entries} from \`/work/readme-only.zip\` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>`;
+      const expected =
+        "No usable ROM found in readme-only.zip. Choose an archive containing a ROM, or extract it and add the ROM file.";
+      expect(formatCodedErrorForDisplay(diagnostic)).toBe(expected);
+      expect(formatCodedErrorForDisplay(codedError(diagnostic, "COMPRESSION_FAILED"))).toBe(expected);
+      expect(formatCodedErrorForDisplay(codedError("failed", "WORKER_FAILED", { cause: new Error(diagnostic) }))).toBe(
+        expected,
+      );
+    },
+  );
+
+  it("offers browser recovery when the ignored archive name contains a backtick", () => {
+    const diagnostic =
+      "validation failed: all extract entries from `/work/notes `v2`.zip` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>";
+    expect(formatCodedErrorForDisplay(diagnostic)).toBe(
+      "No usable ROM found in notes `v2`.zip. Choose an archive containing a ROM, or extract it and add the ROM file.",
+    );
+  });
+
   it("keeps messages that carry required runtime detail", () => {
     expect(formatCodedErrorForDisplay(codedError("Multi-file output needs an archive", "INVALID_INPUT"))).toBe(
       "INVALID_INPUT: Multi-file output needs an archive",

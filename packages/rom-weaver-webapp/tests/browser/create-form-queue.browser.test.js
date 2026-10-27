@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, expect, test } from "vitest";
 import { CreatePatchForm } from "../../src/public/react/create-patch-form.tsx";
 import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { CREATE_IPS_SIZE_LIMIT_BYTES } from "../../src/lib/create/patch-format-limits.ts";
 
 const workflowMockState = {
   instances: [],
@@ -259,6 +260,41 @@ afterEach(() => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
   globalThis.fetch = originalFetch;
+});
+
+test.each([
+  CREATE_IPS_SIZE_LIMIT_BYTES - 1,
+  CREATE_IPS_SIZE_LIMIT_BYTES,
+  CREATE_IPS_SIZE_LIMIT_BYTES + 1,
+  64 * 1024 * 1024 + 1,
+])("Create filters archive candidates using the prepared ROM size %i", async (size) => {
+  workflowMockState.originalStateOverrides = { fileName: "original.bin", size };
+  workflowMockState.modifiedStateOverrides = { fileName: "modified.bin", size };
+  const formats = ["bps", "xdelta", "aps", "bdf", "ebp", "ips", "ppf", "rup", "ups"];
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultOriginal: new File(["compressed original"], "original.zip"),
+        defaultModified: new File(["compressed modified"], "modified.zip"),
+        getCreatePatchFormatCandidates: async () => ({ defaultFormat: "bps", formats }),
+        patchType: "ips",
+      }),
+    ),
+  );
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-original")?.textContent || "")
+    .toContain("original.bin");
+  await expect
+    .poll(() => document.querySelector("#patch-builder-row-modified")?.textContent || "")
+    .toContain("modified.bin");
+  const expected =
+    size < CREATE_IPS_SIZE_LIMIT_BYTES ? formats : formats.filter((format) => !["ips", "ebp"].includes(format));
+  const picker = () => document.getElementById("patch-builder-select-patch-type");
+  await expect.poll(() => Array.from(picker()?.options || [], (option) => option.value)).toEqual(expected);
+  expect(picker().value).toBe(size < CREATE_IPS_SIZE_LIMIT_BYTES ? "ips" : "bps");
 });
 
 test("guided Create URL starts and loads the sample tutorial", async () => {

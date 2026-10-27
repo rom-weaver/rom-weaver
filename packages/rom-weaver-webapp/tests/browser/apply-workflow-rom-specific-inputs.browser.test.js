@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { parseGdiFileReferences } from "../../src/lib/input/archive.ts";
 
 const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
@@ -108,6 +109,43 @@ const createTraceWorkflow = () => {
   });
   return { logs, workflow };
 };
+
+test.each(["track01.bin", "tracks/track01.bin", "TRACK01.BIN"])(
+  "apply workflow preserves a loose GDI and exact patched track bytes in raw output (%s reference)",
+  async (reference) => {
+    const workflow = new ApplyWorkflow({
+      settings: { output: { compression: "none" }, workers: { threads: 1 } },
+    });
+    const trackBytes = new Uint8Array(8 * 2352);
+    for (let index = 0; index < trackBytes.length; index++) trackBytes[index] = index % 251;
+    const gdiText = `1\n1 45000 4 2352 ${reference} 0\n`;
+    try {
+      await workflow.setInput([new File([gdiText], "disc.gdi"), new File([trackBytes], "track01.bin")]);
+      await workflow.addPatch(await loadFixtureFile(RAW_PATCH));
+      const result = await workflow.run();
+      try {
+        const blob = await result.output.getBlob();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const entries = readZipCentralDirectoryEntries(bytes);
+        expect(entries).toHaveLength(2);
+        const sheet = entries.find((entry) => entry.fileName.endsWith(".gdi"));
+        const track = entries.find((entry) => entry.fileName.endsWith(".bin"));
+        expect(sheet).toBeTruthy();
+        expect(track).toBeTruthy();
+        expect(sheet.method).toBe(0);
+        expect(track.method).toBe(0);
+        const sheetText = new TextDecoder().decode(readZipStoredEntryData(bytes, sheet));
+        expect(parseGdiFileReferences(sheetText)).toEqual([track.fileName]);
+        trackBytes[1] = 0x58;
+        expect(readZipStoredEntryData(bytes, track)).toEqual(trackBytes);
+      } finally {
+        await result.output.dispose();
+      }
+    } finally {
+      await workflow.dispose();
+    }
+  },
+);
 
 test("apply workflow resolves RVZ inputs to extracted names during staging", async () => {
   const workflow = new ApplyWorkflow();

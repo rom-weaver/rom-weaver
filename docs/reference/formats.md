@@ -87,6 +87,7 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 | Bzip2 | `bzip2` | `.bz2` | ✅ | ✅ | ❌ |
 | XZ | `lzma`, `lzma2` | `.xz` | ✅ | ✅ | ❌ |
 | Zstandard | `zstd`, `zstandard` | `.zst` | ✅ | ✅ | ❌ |
+| LZ4 frame | none | `.lz4` | ✅ | ✅ | ❌ |
 | CSO | `ciso` | `.cso`, `.ciso` | ✅ | ✅ ³ | ❌ |
 | PBP | none | `.pbp` | ✅ | ✅ | ❌ |
 | CHD | `chd-cd`, `chd-gd`, `chd-dvd`, `chd-raw`, `chd-hd`, `chd-av`, `chd-ld` | `.chd` | ✅ | ✅ ² | ✅ ² |

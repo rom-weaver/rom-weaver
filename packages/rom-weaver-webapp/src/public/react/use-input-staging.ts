@@ -545,6 +545,7 @@ const useInputStaging = (context: InputStagingContext) => {
       const { setInputStaging, setPatchInfoByKey, setRomInputs } = session;
       const { stageInput } = stage;
       const { generation, progressGeneration } = inputStageMachine.nextRunGeneration();
+      const stagedPatchKeys = snapshot.patches.map((patch) => getPatchKey(patch, snapshot.patches));
       // An archive Rust identifies as patch-only (`is_rom === false`) is moved to the patch bucket once;
       // the move supersedes this run, so a per-run guard is enough to fire a single reclassify.
       const reclassifiedInputKeys = new Set<string>();
@@ -638,7 +639,10 @@ const useInputStaging = (context: InputStagingContext) => {
             progress: null,
           });
         },
-        onImplicitPatches: (patches, infos = []) => {
+        onImplicitPatches: (discoveredPatches, discoveredInfos = []) => {
+          let patches = discoveredPatches;
+          let infos: Array<StagedInputInfo | null | undefined> = discoveredInfos;
+          let keepStagedInfo = false;
           if (inputStageGenerationRef.current !== generation) {
             emitSessionTrace("stageInput implicit patches ignored", {
               currentGeneration: inputStageGenerationRef.current,
@@ -648,18 +652,46 @@ const useInputStaging = (context: InputStagingContext) => {
             return;
           }
           if (!patches.length) return;
+          const currentSnapshot = contextRef.current.stage.getCurrentSnapshot?.() ?? snapshot;
+          const getCurrentKey = contextRef.current.rows.getPatchKey;
+          const currentKeys = currentSnapshot.patches.map((patch) => getCurrentKey(patch, currentSnapshot.patches));
+          if (
+            currentKeys.length !== stagedPatchKeys.length ||
+            currentKeys.some((key, index) => key !== stagedPatchKeys[index])
+          ) {
+            // Sidecars are only discovered by the first pass, so after a mid-staging reorder or removal
+            // the user's list MUST win and newly discovered sidecars MUST be appended after it.
+            const sidecars = patches.filter((patch) => !snapshot.patches.includes(patch));
+            if (!sidecars.length) return;
+            patches = [...currentSnapshot.patches, ...sidecars];
+            infos = [
+              ...currentSnapshot.patches.map(() => undefined),
+              ...sidecars.map((sidecar) => discoveredInfos[discoveredPatches.indexOf(sidecar)]),
+            ];
+            keepStagedInfo = true;
+            emitSessionTrace("stageInput implicit patches appended to changed patch list", {
+              generation,
+              sidecarCount: sidecars.length,
+            });
+          }
           emitSessionTrace("stageInput implicit patches", {
             generation,
             patchCount: patches.length,
             patches: patches.map((patch, index) => getBinarySourceFileName(patch, `Patch ${index + 1}`)),
           });
           updatePatches(patches);
-          setPatchInfoByKey(
+          setPatchInfoByKey((current) =>
             Object.fromEntries(
-              patches.map((patch, index) => [
-                getPatchKey(patch, patches),
-                infos[index] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) },
-              ]),
+              patches.map((patch, index) => {
+                const key = getPatchKey(patch, patches);
+                return [
+                  key,
+                  infos[index] ||
+                    (keepStagedInfo ? current[key] : undefined) || {
+                      fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`),
+                    },
+                ];
+              }),
             ),
           );
         },

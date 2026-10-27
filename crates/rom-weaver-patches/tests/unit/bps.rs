@@ -2336,3 +2336,39 @@ fn streaming_apply_uses_four_mebibyte_reads_for_source_reads_and_copies() {
     assert_eq!(source.reads, [EXPECTED_BUFFER_BYTES, 1, 8]);
     assert_eq!(fs::read(output_path).expect("output"), expected);
 }
+
+#[test]
+fn parse_honors_patch_integrity_policy_without_skipping_structure() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("policy.bps");
+    let handler = BpsPatchHandler::new(&BPS);
+    let strict = test_context_with_threads(&temp, 1);
+    let ignore = test_context_with_threads(&temp, 1)
+        .with_patch_checksum_validation(PatchChecksumValidation::Ignore);
+    let mut patch = build_bps_patch(
+        b"source",
+        b"target",
+        vec![TestAction::TargetRead(b"target".to_vec())],
+    );
+    fs::write(&patch_path, &patch).expect("valid fixture");
+    handler
+        .parse(&patch_path, &strict)
+        .expect("strict valid parse");
+    *patch.last_mut().expect("patch CRC byte") ^= 1;
+    fs::write(&patch_path, &patch).expect("corrupt CRC fixture");
+    let error = handler
+        .parse(&patch_path, &strict)
+        .expect_err("strict CRC check");
+    assert!(
+        error.to_string().contains("Patch checksum invalid"),
+        "{error}"
+    );
+    handler
+        .parse(&patch_path, &ignore)
+        .expect("explicit Ignore must accept only a corrupted patch CRC");
+    fs::write(&patch_path, b"BPS1").expect("truncated fixture");
+    let error = handler
+        .parse(&patch_path, &ignore)
+        .expect_err("Ignore must still reject malformed structure");
+    assert!(error.to_string().contains("too small"), "{error}");
+}

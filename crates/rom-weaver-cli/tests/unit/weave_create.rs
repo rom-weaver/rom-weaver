@@ -401,7 +401,7 @@ fn write_weave_bytes_zstd_encodes_a_zst_name() {
 #[test]
 fn write_weave_bytes_refuses_read_only_codecs() {
     let dir = scratch_dir("write-readonly");
-    for extension in ["bz2", "xz"] {
+    for extension in ["bz2", "xz", "lz4"] {
         let output = dir.join(format!("rom-weaver-weave.json.{extension}"));
         let error = write_weave_bytes(&output, b"{}\n").expect_err("read-only codec");
         assert!(

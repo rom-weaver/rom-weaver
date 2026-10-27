@@ -1340,7 +1340,9 @@ fn write_weave_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
             Ok(())
         }
         Some(extension)
-            if extension.eq_ignore_ascii_case("bz2") || extension.eq_ignore_ascii_case("xz") =>
+            if extension.eq_ignore_ascii_case("bz2")
+                || extension.eq_ignore_ascii_case("xz")
+                || extension.eq_ignore_ascii_case("lz4") =>
         {
             Err(RomWeaverError::Validation(format!(
                 "weave create emits .gz or .zst compressed weaves; `.{extension}` is read-only"

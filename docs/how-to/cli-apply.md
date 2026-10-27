@@ -55,7 +55,7 @@ rom-weaver patch apply --input game.gdi --patch hack.dcp --output patched.chd
 
 For a CUE-based disc, replace `game.gdi` with the `.cue` path. DCP rebuilds the high-density data track's filesystem and selects that track automatically.
 
-DCP cannot run in a patch chain or with cheats, an explicit target, or byte-level header, checksum-repair, and N64 byte-order transforms. It also rejects the checksum guards `--expect-in`, `--expect-out`, `--patch-input-check`, and `--patch-output-check`, and fails before writing output. Browser Apply does not support this disc-sheet workflow.
+DCP cannot run in a patch chain or with cheats, an explicit target, or byte-level header, checksum-repair, and N64 byte-order transforms. It also rejects the checksum guards `--expect-in`, `--expect-out`, `--patch-input-check`, and `--patch-output-check`, and fails before writing output. A weave's optional cheats are skipped with a warning; its required cheats fail the apply unless you pass `--without-cheats`. Browser Apply does not support this disc-sheet workflow.
 
 Test the resulting CHD in a compatible Dreamcast emulator. Keep the original disc and tracks until you check the result.
 
