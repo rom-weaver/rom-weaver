@@ -907,8 +907,9 @@ impl CliApp {
     /// sequential chaining). A single failing patch never aborts the others - the
     /// command collects a per-patch verdict for every patch and exits 0 so the
     /// webapp can read individual results (a hard failure would lose them). A
-    /// genuine cancellation is the sole exception: it returns a `Cancelled`
-    /// failure so the whole call maps to a retryable "unknown".
+    /// handler error that is not a per-patch verdict (cancellation or an I/O
+    /// failure) is the exception: it fails the whole call, which the webapp maps
+    /// to a retryable "unknown".
     fn run_patch_validate_independent(
         &self,
         resolved_patches: &[ResolvedPatch],
@@ -1159,8 +1160,8 @@ impl CliApp {
 
     /// Fan patch preflight validations across the op's thread budget (capped at the
     /// number of runnable patches; serial on the non-threaded wasm build). A
-    /// per-patch `Cancelled` is the only error that aborts the whole batch -
-    /// every other handler error is captured as that patch's "failed"
+    /// per-patch cancellation or non-verdict (e.g. I/O) error aborts the whole
+    /// batch - validation errors are captured as that patch's "failed"
     /// verdict. `Err` carries the whole-batch abort report.
     fn validate_ready_jobs(
         &self,
@@ -1278,10 +1279,10 @@ impl CliApp {
 
         match computed {
             Ok(verdicts) => Ok((verdicts, planned)),
-            // A genuine cancellation aborts the whole batch as a hard failure so the webapp maps the
-            // call to a retryable "unknown" rather than reading partial per-patch verdicts.
+            // A cancellation or non-verdict error aborts the whole batch as a hard failure so the
+            // webapp maps the call to a retryable "unknown" rather than reading partial verdicts.
             Err(error) => {
-                debug!("patch preflight cancelled");
+                debug!("patch preflight aborted: {error}");
                 Err(Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     None,
@@ -1300,7 +1301,7 @@ impl CliApp {
     /// `chain_deferred`, never falsely "failed" against the wrong bytes),
     /// and emit the typed `PatchValidationPlan` under
     /// `details.patch_validation`. Mixed plan results still exit 0 (unlike
-    /// native `--independent`, which exits 1); only cancellation is a hard failure.
+    /// native `--independent`, which exits 1); only cancellation or a non-verdict error is a hard failure.
     fn run_patch_validate_plan(&self, inputs: PatchValidatePlanInputs<'_>) -> OperationReport {
         let PatchValidatePlanInputs {
             resolved_patches,
@@ -2225,20 +2226,36 @@ fn patch_structure_failure(
     match handler.parse(patch, context) {
         Ok(_) | Err(RomWeaverError::Unsupported(_)) => Ok(None),
         Err(error) => {
-            let structural = match &error {
-                RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_) => true,
-                RomWeaverError::Io(source) | RomWeaverError::IoPath { source, .. } => matches!(
-                    source.kind(),
-                    std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::InvalidData
-                ),
-                _ => false,
-            };
-            if structural {
-                Ok(Some(error.to_string()))
-            } else {
-                Err(error)
+            if !is_structural_parse_error(&error) {
+                return Err(error);
+            }
+            // Some parse checks (trailing bytes, patch CRC, ...) are policy checks the Ignore
+            // policy accepts on purpose, so the patch is still applicable with
+            // `--ignore-checksum-validation`. Only a patch that fails to parse even then is
+            // genuinely unreadable.
+            let lenient = context
+                .clone()
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
+                .with_patch_check_scopes(PatchCheckScopes::all(false));
+            match handler.parse(patch, &lenient) {
+                Ok(_) | Err(RomWeaverError::Unsupported(_)) => Ok(None),
+                Err(lenient_error) if is_structural_parse_error(&lenient_error) => {
+                    Ok(Some(lenient_error.to_string()))
+                }
+                Err(lenient_error) => Err(lenient_error),
             }
         }
+    }
+}
+
+fn is_structural_parse_error(error: &RomWeaverError) -> bool {
+    match error {
+        RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_) => true,
+        RomWeaverError::Io(source) | RomWeaverError::IoPath { source, .. } => matches!(
+            source.kind(),
+            std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::InvalidData
+        ),
+        _ => false,
     }
 }
 

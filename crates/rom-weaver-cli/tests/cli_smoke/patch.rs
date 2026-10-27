@@ -13269,3 +13269,53 @@ fn patch_validate_classifies_structurally_unreadable_patches() {
         );
     }
 }
+
+#[test]
+fn patch_validate_keeps_ignorable_ips_trailing_bytes_readable() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("trailing.ips");
+    let output = temp.child("out.bin");
+    fs::write(input.path(), b"hello old world").expect("fixture");
+    // PATCH, one record (offset 0, size 2, "HE"), EOF, one extra trailing byte.
+    fs::write(
+        patch.path(),
+        b"PATCH\x00\x00\x00\x00\x02HEEOF\x00".as_slice(),
+    )
+    .expect("fixture");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--plan",
+            "--jsonl",
+        ],
+        0,
+    );
+    let verdict = &event["details"]["patch_validation"]["per_patch"][0];
+    assert_ne!(
+        verdict["unreadable"], true,
+        "ignorable trailing bytes must not hide Apply anyway: {event}"
+    );
+    run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"HEllo old world");
+}
