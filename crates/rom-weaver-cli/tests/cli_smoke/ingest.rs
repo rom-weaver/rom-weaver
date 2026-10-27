@@ -2145,3 +2145,146 @@ fn ingest_rom_bundle_with_a_dcp_reports_the_rom_and_the_dcp_patch() {
         [("game.dcp".to_string(), "dcp".to_string())]
     );
 }
+
+/// Build a tiny GameCube-shaped NFS head (`hif_000000.nfs`) encrypted with `key`, as the real
+/// format lays it out: a 0x200-byte `EGGS` header then AES-128-CBC sectors keyed by sector number.
+fn synthetic_nfs_head(key: [u8; 16]) -> Vec<u8> {
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit, block_padding::NoPadding};
+    const SECTOR: usize = 0x8000;
+    const SECTORS: usize = 4;
+    let mut plain = (0..SECTOR * SECTORS)
+        .map(|index| ((index * 7 + 19) & 0xff) as u8)
+        .collect::<Vec<_>>();
+    plain[..0x440].fill(0);
+    plain[..6].copy_from_slice(b"GAUE01");
+    plain[0x1c..0x20].copy_from_slice(&[0xc2, 0x33, 0x9f, 0x3d]);
+    let mut nfs = vec![0u8; 0x200];
+    nfs[..4].copy_from_slice(b"EGGS");
+    nfs[4..8].copy_from_slice(&1u32.to_be_bytes());
+    nfs[16..20].copy_from_slice(&1u32.to_be_bytes());
+    nfs[24..28].copy_from_slice(&(SECTORS as u32).to_be_bytes());
+    nfs[0x1fc..0x200].copy_from_slice(b"SGGE");
+    for (sector, chunk) in plain.chunks_mut(SECTOR).enumerate() {
+        let mut iv = [0u8; 16];
+        iv[12..].copy_from_slice(&(sector as u32).to_be_bytes());
+        let length = chunk.len();
+        <cbc::Encryptor<aes::Aes128>>::new(&key.into(), &iv.into())
+            .encrypt_padded::<NoPadding>(chunk, length)
+            .expect("encrypt NFS sector");
+    }
+    nfs.extend_from_slice(&plain);
+    nfs
+}
+
+/// Ingest `entries` as one archive and return the asset file names plus the raw terminal event.
+fn ingest_nfs_archive(
+    temp: &TempDir,
+    entries: &[(&Path, &str)],
+    expected_code: i32,
+) -> (Vec<String>, Value) {
+    let archive = temp.child("dump.tar.gz");
+    write_tar_gz_fixture(entries, archive.path());
+    let output = temp.child("ingest-out");
+    let terminal = run_single_json_event(
+        &[
+            "ingest",
+            "--input",
+            archive.path().to_str().expect("archive path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        expected_code,
+    );
+    let names = terminal["details"]["ingest"]["assets"]
+        .as_array()
+        .map(|assets| {
+            assets
+                .iter()
+                .filter_map(|asset| asset["path"].as_str())
+                .map(|path| path.rsplit('/').next().unwrap_or(path).to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    (names, terminal)
+}
+
+/// The supplied `code/htk.bin` decodes the NFS dump and is consumed with it, never emitted as a
+/// second ROM output.
+#[test]
+fn ingest_consumes_the_htk_key_of_an_nfs_archive() {
+    let temp = setup_temp_dir();
+    let key = [0x11u8; 16];
+    let head = temp.child("hif_000000.nfs");
+    fs::write(head.path(), synthetic_nfs_head(key)).expect("NFS fixture");
+    let key_file = temp.child("htk.bin");
+    fs::write(key_file.path(), key).expect("key fixture");
+
+    let (names, terminal) = ingest_nfs_archive(
+        &temp,
+        &[
+            (head.path(), "content/hif_000000.nfs"),
+            (key_file.path(), "code/htk.bin"),
+        ],
+        0,
+    );
+
+    assert_eq!(terminal["status"], "succeeded", "{terminal}");
+    assert_eq!(names.len(), 1, "exactly the decoded disc: {names:?}");
+    assert!(!names.iter().any(|name| name == "htk.bin"), "{names:?}");
+    assert!(
+        !names.iter().any(|name| name.ends_with(".nfs")),
+        "{names:?}"
+    );
+}
+
+/// A keyless NFS is the only payload Apply needs, so ingest fails with the key error; the same dump
+/// next to another ROM keeps ingesting that ROM.
+#[test]
+fn ingest_reports_a_keyless_nfs_but_keeps_other_archive_roms() {
+    let temp = setup_temp_dir();
+    let head = temp.child("hif_000000.nfs");
+    fs::write(head.path(), synthetic_nfs_head([0x11u8; 16])).expect("NFS fixture");
+
+    let (_, failed) = ingest_nfs_archive(&temp, &[(head.path(), "content/hif_000000.nfs")], 1);
+    let message = failed.to_string();
+    assert!(message.contains("Failed to locate"), "{message}");
+
+    let other = temp.child("other.nes");
+    fs::write(other.path(), with_nes_header(b"other rom")).expect("ROM fixture");
+    let (names, terminal) = ingest_nfs_archive(
+        &temp,
+        &[
+            (head.path(), "content/hif_000000.nfs"),
+            (other.path(), "other.nes"),
+        ],
+        0,
+    );
+    assert_eq!(terminal["status"], "succeeded", "{terminal}");
+    assert!(names.iter().any(|name| name == "other.nes"), "{names:?}");
+}
+
+/// `extract` only unpacks: a keyless NFS archive still succeeds and emits the raw parts.
+#[test]
+fn extract_keeps_raw_files_of_a_keyless_nfs_archive() {
+    let temp = setup_temp_dir();
+    let head = temp.child("hif_000000.nfs");
+    fs::write(head.path(), synthetic_nfs_head([0x11u8; 16])).expect("NFS fixture");
+    let archive = temp.child("dump.tar.gz");
+    write_tar_gz_fixture(&[(head.path(), "content/hif_000000.nfs")], archive.path());
+    let output = temp.child("extract-out");
+
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            archive.path().to_str().expect("archive path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        0,
+    );
+
+    assert!(output.path().join("content/hif_000000.nfs").is_file());
+}

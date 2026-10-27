@@ -184,11 +184,30 @@ impl CliApp {
         entries: &[String],
         descended: &HashSet<String>,
     ) -> HashSet<String> {
-        Self::nfs_selection_groups(entries)
+        let consumed = Self::nfs_selection_groups(entries)
             .into_iter()
             .filter(|group| descended.contains(&group.label))
             .flat_map(|group| group.members)
-            .collect()
+            .collect::<HashSet<_>>();
+        trace!(
+            entries = entries.len(),
+            descended = descended.len(),
+            consumed = consumed.len(),
+            "resolved NFS members consumed by a successful descent"
+        );
+        consumed
+    }
+
+    /// Whether `path` is an NFS part (`hif_NNNNNN.nfs`) or its `htk.bin` key.
+    pub(super) fn is_nfs_dump_member(path: &str) -> bool {
+        let base = path_basename(path);
+        base == "htk.bin"
+            || base
+                .strip_prefix("hif_")
+                .and_then(|part| part.strip_suffix(".nfs"))
+                .is_some_and(|digits| {
+                    digits.len() == 6 && digits.bytes().all(|digit| digit.is_ascii_digit())
+                })
     }
 
     fn expand_nfs_selections(entries: &[String], selections: &[String]) -> Vec<String> {
@@ -200,6 +219,11 @@ impl CliApp {
             }
             for member in group.members {
                 if !expanded.contains(&member) {
+                    trace!(
+                        head = %group.label,
+                        member = %member,
+                        "expanding NFS selection to include disc member"
+                    );
                     expanded.push(member);
                 }
             }
@@ -225,6 +249,11 @@ impl CliApp {
             allow_multi_select,
         } = extract;
         let expanded_selections = if selections.iter().any(|name| name.ends_with(".nfs")) {
+            trace!(
+                source = %source.display(),
+                selections = selections.len(),
+                "listing archive entries to expand NFS selections"
+            );
             let entries = handler.list_entries(
                 &ContainerProbeRequest {
                     source: source.to_path_buf(),

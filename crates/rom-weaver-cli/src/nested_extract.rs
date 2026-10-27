@@ -8,6 +8,10 @@ pub(super) struct NestedExtractOutcome {
     /// `emitted_files` detail objects (with checksums when requested) for every file produced by the
     /// nested levels, in extraction order.
     pub(super) emitted_details: Vec<Value>,
+    /// Failure message of the first recognized NFS head that could not be decoded (for example a
+    /// missing or wrong `htk.bin`). The raw files stay as plain outputs; only a caller that needs the
+    /// decoded disc (Apply/ingest) turns this into an error.
+    pub(super) unreadable_nfs: Option<RomWeaverError>,
 }
 
 impl CliApp {
@@ -49,6 +53,7 @@ impl CliApp {
         let mut nested_count = 0usize;
         let mut descended: HashSet<String> = HashSet::new();
         let mut emitted_details: Vec<Value> = Vec::new();
+        let mut unreadable_nfs: Option<RomWeaverError> = None;
         let mut processed = HashSet::new();
         processed.insert(root_source.clone());
 
@@ -119,7 +124,13 @@ impl CliApp {
                     && handler.descriptor().name == "nfs"
                     && handler.probe(&source) == rom_weaver_core::ProbeConfidence::Signature
                 {
-                    return Err(error);
+                    debug!(
+                        source = %source.display(),
+                        error = %error,
+                        "recognized NFS head failed to decode; keeping raw files and deferring the error"
+                    );
+                    unreadable_nfs.get_or_insert(error);
+                    continue;
                 }
                 trace!(
                     source = %source.display(),
@@ -245,6 +256,7 @@ impl CliApp {
             count: nested_count,
             descended,
             emitted_details,
+            unreadable_nfs,
         })
     }
 
@@ -467,11 +479,12 @@ mod nfs_probe_tests {
                 false,
                 &context,
             );
-            let error = match result {
-                Err(error) => error,
-                Ok(_) => panic!("recognized NFS probe failure must reach the caller"),
-            };
-            assert!(error.to_string().contains(expected), "{error}");
+            let outcome = result.expect("a keyless NFS must not fail the nested scan");
+            assert_eq!(outcome.count, 0);
+            let message = outcome
+                .unreadable_nfs
+                .expect("recognized NFS probe failure must be reported to the caller");
+            assert!(message.to_string().contains(expected), "{message}");
         }
     }
 

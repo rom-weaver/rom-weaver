@@ -1765,9 +1765,11 @@ dependencies = [
 name = "rom-weaver-cli"
 version = "0.22.2"
 dependencies = [
+ "aes",
  "assert_cmd",
  "assert_fs",
  "brotli",
+ "cbc",
  "clap",
  "clap_complete",
  "clap_mangen",

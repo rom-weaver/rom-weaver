@@ -82,8 +82,10 @@ libc.workspace = true
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+aes.workspace = true
 assert_cmd.workspace = true
 assert_fs.workspace = true
+cbc.workspace = true
 flate2.workspace = true
 
 [[bin]]
