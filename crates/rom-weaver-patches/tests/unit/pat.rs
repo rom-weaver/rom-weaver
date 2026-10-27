@@ -383,7 +383,7 @@ fn validate_reports_forward_reverse_and_skipped_records() {
         report.label,
         format!(
             "validated PAT patch source with 3 record(s): 1 forward / 1 reverse; warning=PAT would skip 1 record(s) from {} due to unexpected input byte",
-            patch.display()
+            patch.file_name().expect("patch name").to_string_lossy()
         )
     );
 }

@@ -329,7 +329,11 @@ fn patch_apply_pat_chain_names_each_patch_that_skipped_records() {
     for patch in [&first, &second] {
         let expected = format!(
             "PAT skipped 1 record(s) from {} due to unexpected input byte",
-            patch.path().display()
+            patch
+                .path()
+                .file_name()
+                .expect("patch name")
+                .to_string_lossy()
         );
         assert!(
             warnings.iter().any(|warning| warning == &expected),
@@ -361,7 +365,11 @@ fn patch_apply_pat_skipped_records_warn_in_every_output_mode() {
         fs::write(source.path(), input).expect("source fixture");
         let warning = format!(
             "PAT skipped {skipped} record(s) from {} due to unexpected input byte",
-            patch.path().display()
+            patch
+                .path()
+                .file_name()
+                .expect("patch name")
+                .to_string_lossy()
         );
         for (mode, flags) in [
             ("human", vec![]),

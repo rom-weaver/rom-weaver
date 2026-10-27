@@ -152,7 +152,7 @@ impl PatPatchHandler {
             format!(
                 "; warning={} skipped {skipped} record(s) from {} due to unexpected input byte",
                 self.descriptor.name,
-                patch_path.display()
+                patch_label(patch_path)
             )
         } else {
             String::new()
@@ -211,7 +211,7 @@ impl PatchHandler for PatPatchHandler {
             format!(
                 "; warning={} would skip {skipped} record(s) from {} due to unexpected input byte",
                 self.descriptor.name,
-                patch_path.display()
+                patch_label(patch_path)
             )
         } else {
             String::new()
@@ -322,6 +322,14 @@ pub(crate) fn has_pat_record_signature(path: &Path) -> bool {
     parse_pat_file(path)
         .map(|parsed| !parsed.records.is_empty())
         .unwrap_or(false)
+}
+
+/// Names the patch in warnings by file name, so output stays identical across platforms' path separators.
+fn patch_label(patch_path: &Path) -> String {
+    patch_path.file_name().map_or_else(
+        || patch_path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 fn group_pat_records_by_offset(records: &[PatRecord]) -> Vec<PatOffsetGroup> {
