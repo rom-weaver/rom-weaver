@@ -1828,8 +1828,7 @@ fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
     assert!(!output.path().exists());
 }
 
-#[test]
-fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+fn dcp_disc_fixture() -> TempDir {
     let temp = setup_temp_dir();
     let cooked = build_iso(
         &[IsoFile {
@@ -1873,6 +1872,12 @@ fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
             0,
         );
     }
+    temp
+}
+
+#[test]
+fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+    let temp = dcp_disc_fixture();
     for (patch, out) in [("game.dcp", "bare"), ("translation.zip", "zipped")] {
         let stdout = command_stdout(
             &[
@@ -1967,4 +1972,184 @@ fn patch_apply_zipped_multi_entry_dcp_resolves_to_dcp_not_inner_entries() {
         !stdout.contains("payload resolution is ambiguous"),
         "the DCP's inner entries must not be treated as candidates: {stdout}"
     );
+}
+
+#[test]
+fn patch_apply_dcp_rejects_database_cheats_before_output() {
+    let temp = dcp_disc_fixture();
+    let database = temp.child("empty-cheats");
+    fs::create_dir(database.path()).expect("empty cheat database");
+    let weave = temp.child("rom-weaver-weave.json");
+    weave
+        .write_str(
+            r#"{"version":1,"patches":[{"path":"game.dcp"}],"cheats":[{"id":"no-such-cheat"}]}"#,
+        )
+        .expect("weave with database cheat");
+    for patch in ["game.dcp", "translation.zip"] {
+        let baseline = temp.child(format!("{patch}-baseline/disc.gdi"));
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                temp.child("disc.gdi").path().to_str().unwrap(),
+                "--patch",
+                temp.child(patch).path().to_str().unwrap(),
+                "--no-compress",
+                "--output",
+                baseline.path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        assert!(baseline.path().is_file(), "baseline DCP apply must succeed");
+        let selections: &[&str] = if patch == "game.dcp" {
+            &["database", "weave", "code"]
+        } else {
+            &["database", "code"]
+        };
+        for mode in ["human", "json", "jsonl"] {
+            for &selection in selections {
+                let output_dir = temp.child(format!("{patch}-{mode}-{selection}"));
+                let output = output_dir.child("disc.gdi");
+                let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+                command.args([
+                    "patch",
+                    "apply",
+                    "--input",
+                    temp.child("disc.gdi").path().to_str().unwrap(),
+                    "--patch",
+                    temp.child(patch).path().to_str().unwrap(),
+                    "--no-compress",
+                    "--output",
+                    output.path().to_str().unwrap(),
+                    "--cheat-database",
+                    database.path().to_str().unwrap(),
+                ]);
+                match selection {
+                    "database" => {
+                        command.args(["--cheat", "no-such-cheat"]);
+                    }
+                    "weave" => {
+                        command.args(["--weave", weave.path().to_str().unwrap()]);
+                    }
+                    "code" => {
+                        command.args(["--code", "SXIOPO", "--code-system", "nes"]);
+                    }
+                    _ => unreachable!(),
+                }
+                if mode != "human" {
+                    command.arg(format!("--{mode}"));
+                }
+                for key in [
+                    "HOME",
+                    "XDG_CONFIG_HOME",
+                    "XDG_CACHE_HOME",
+                    "XDG_DATA_HOME",
+                    "XDG_STATE_HOME",
+                ] {
+                    command.env(key, temp.child(key).path());
+                }
+                let result = command.env("NO_COLOR", "1").output().expect("DCP apply");
+                assert_eq!(
+                    result.status.code(),
+                    Some(1),
+                    "DCP must reject cheats before output ({patch}, {mode}, {selection}): {}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+                let diagnostic = if mode == "human" {
+                    String::from_utf8(result.stderr).expect("human diagnostic")
+                } else {
+                    let events = parse_json_lines(&result.stdout);
+                    let terminal = events.last().expect("terminal failure");
+                    assert_eq!(terminal["status"], "failed");
+                    assert_eq!(terminal["stage"], "validate");
+                    terminal["label"].as_str().expect("diagnostic").to_string()
+                };
+                let flag = if selection == "code" {
+                    "--code"
+                } else {
+                    "--cheat"
+                };
+                assert!(
+                    diagnostic.contains("a .dcp patch cannot be combined with")
+                        && diagnostic.contains(flag),
+                    "{diagnostic}"
+                );
+                assert!(
+                    !output_dir.path().exists(),
+                    "rejection must not create output files"
+                );
+            }
+        }
+    }
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--weave",
+            weave.path().to_str().unwrap(),
+            "--without-cheats",
+            "--cheat-database",
+            database.path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child("without-cheats/disc.gdi")
+                .path()
+                .to_str()
+                .unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert!(temp.child("without-cheats/track03.bin").path().is_file());
+}
+
+#[test]
+fn patch_apply_dcp_rejects_structured_cheat_records() {
+    use std::sync::Arc;
+
+    use rom_weaver_app::{AppRunOptions, Commands, PatchApplyCommand, PatchCommands, RomWeaverApp};
+    use rom_weaver_core::{NoninteractivePrompter, OperationStatus, RecordingProgressSink};
+
+    let temp = dcp_disc_fixture();
+    let output = temp.child("structured/disc.gdi");
+    let args: PatchApplyCommand = serde_json::from_value(serde_json::json!({
+        "input": temp.child("disc.gdi").path(),
+        "patches": [temp.child("game.dcp").path()],
+        "output": output.path(),
+        "no_compress": true,
+        "cheat_records": [{
+            "id": "fixture-cheat", "system": "nes", "gameId": "synthetic",
+            "description": "Fixture cheat", "rawCode": "C00012FF",
+            "codeKind": "pro-action-replay", "rawFields": {"code": "C00012FF"},
+            "sourceFile": "fixture.cht", "sourceIndex": 0, "sourceRevision": "test"
+        }]
+    }))
+    .expect("structured apply command");
+    let sink = Arc::new(RecordingProgressSink::default());
+    let outcome = RomWeaverApp::run(
+        Commands::Patch(PatchCommands::Apply(Box::new(args))),
+        AppRunOptions {
+            emit_progress_events: false,
+            interactive_selection_enabled: false,
+            assume_yes: false,
+            dry_run: false,
+        },
+        sink.clone(),
+        Arc::new(NoninteractivePrompter),
+    );
+    assert_eq!(
+        outcome.status,
+        OperationStatus::Failed,
+        "DCP must reject structured cheats before output"
+    );
+    let events = sink.snapshot();
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal.stage, "validate");
+    assert!(terminal.label.contains("--cheat"), "{}", terminal.label);
+    assert!(!temp.child("structured").path().exists());
 }

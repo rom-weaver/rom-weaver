@@ -10,6 +10,7 @@ use crate::dcp::rebuild_track_to_writer;
 use crate::gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
 use super::patch_apply::warn_on_rom_name_mismatch;
+use super::weave_apply::WeaveApplyResolution;
 use super::*;
 
 struct CompressDcpDiscInputs<'a> {
@@ -30,7 +31,7 @@ impl CliApp {
     pub(super) fn run_dcp_apply(
         &self,
         args: PatchApplyCommand,
-        expected_rom_name: Option<&str>,
+        weave_resolution: Option<&WeaveApplyResolution>,
         additional_sources: &[PathBuf],
     ) -> OperationReport {
         let context = self.context(args.threads);
@@ -78,6 +79,17 @@ impl CliApp {
                     "validate",
                     "a .dcp patch cannot be combined with --code; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
                 );
+        }
+        let has_database_cheats =
+            !args.cheat_records.is_empty() || !args.cheat_selection.cheats.is_empty();
+        #[cfg(not(target_arch = "wasm32"))]
+        let has_database_cheats = has_database_cheats
+            || weave_resolution.is_some_and(|resolution| !resolution.cheats.is_empty());
+        if has_database_cheats {
+            return fail(
+                "validate",
+                "a .dcp patch cannot be combined with --cheat or other database cheats; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
+            );
         }
         if args.target.is_some() {
             return fail(
@@ -161,6 +173,8 @@ impl CliApp {
         {
             return fail_error("validate", error);
         }
+        let expected_rom_name =
+            weave_resolution.and_then(|resolution| resolution.expected_rom_name.as_deref());
         let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
         let mut report = self.rebuild_and_emit_dcp(

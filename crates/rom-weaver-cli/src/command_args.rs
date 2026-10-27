@@ -72,7 +72,8 @@ Not supported: PDS; NINJA1 (recognized, but cannot be applied); HDiffPatch
 directory patches, HDIFF19 (single-file .hdiff and .hpatchz are fine).
 
 DCP needs a Dreamcast .cue or .gdi input. It rebuilds the whole disc, so it
-cannot be combined with other patches or with the header and checksum options.";
+cannot be combined with other patches, cheats (--code or --cheat), or with
+the header and checksum options.";
 
 pub const PATCH_APPLY_AFTER_HELP: &str = "\
 Example:
