@@ -12,6 +12,7 @@ import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { Notice } from "./components/ds/feedback.tsx";
 import type { OutputCardProps } from "./components/ds/output-card.tsx";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
+import { releaseLargeEntries } from "./emulator-session-store.ts";
 import { createCreatePatchFormatOptions } from "./output-view-model.ts";
 import { resolveCreateExecutionOutputName } from "./create-patch-output-model.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -148,6 +149,8 @@ const useCombinedPatch = ({
       let result = output.current;
       const cached = !!result;
       if (!result) {
+        // This run publishes no workbench activity, so it closes a paused disc-sized Test game itself.
+        releaseLargeEntries({ announce: true });
         result = await run({
           settings: executionSettings,
           signal: abortController.signal,

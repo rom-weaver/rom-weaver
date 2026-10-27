@@ -3,6 +3,13 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrowserCreateResult } from "../../src/platform/browser/browser-api.ts";
 import { getEnabledPatchTargetSizes } from "../../src/public/react/apply-workflow-snapshot-store.ts";
+import {
+  addEntry,
+  dismissClosedGameNotice,
+  disposeEntry,
+  getClosedGameName,
+  getEmulatorSessionState,
+} from "../../src/public/react/emulator-session-store.ts";
 import { useCombinedPatch } from "../../src/public/react/use-combined-patch.tsx";
 
 vi.mock("../../src/public/react/settings-context.tsx", () => ({
@@ -69,6 +76,30 @@ describe("useCombinedPatch", () => {
       void result.current.run();
     });
     expect(run.mock.calls.at(-1)?.[0].settings).toMatchObject({ output: { outputName: "combined-combined.bps" } });
+  });
+
+  it("closes a paused disc-sized Test game before it builds the patch, but not to download a built one", async () => {
+    const disc = { blob: new Blob(["disc"]), fileName: "disc.chd", id: "disc", sizeBytes: 464 * 1024 * 1024 };
+    const patch = createdPatch();
+    let gamesDuringRun: number | undefined;
+    const run = vi.fn<Options["run"]>(async () => {
+      gamesDuringRun = getEmulatorSessionState().entries.length;
+      return patch.result;
+    });
+    addEntry({ ...disc, source: "local" });
+    const { result } = renderHook(() => useCombinedPatch(options(run)));
+
+    await act(async () => result.current.run());
+    expect(gamesDuringRun).toBe(0);
+    expect(getClosedGameName()).toBe("disc.chd");
+    dismissClosedGameNotice();
+
+    // A second click only downloads the patch it already built.
+    addEntry({ ...disc, source: "local" });
+    await act(async () => result.current.run());
+    expect(run).toHaveBeenCalledOnce();
+    expect(getEmulatorSessionState().entries).toHaveLength(1);
+    disposeEntry("disc");
   });
 
   it.each([
