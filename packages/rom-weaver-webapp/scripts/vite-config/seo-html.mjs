@@ -143,7 +143,7 @@ const readWorkflowLastmod = (route, root, repo) => {
 export const createSitemapSource = ({
   root = rootDir,
   repo = repoRoot,
-  generatedLastmod = readNoticesLastmod(repoRoot),
+  generatedLastmod = readNoticesLastmod(repo),
 } = {}) => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${[...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]

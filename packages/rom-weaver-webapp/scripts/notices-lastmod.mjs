@@ -8,7 +8,7 @@ const GENERATOR = "scripts/gen-third-party-licenses.mjs";
 // exactly when that literal did. The closing backtick sits alone on its line.
 const NOTICES_PAGE_REGEX = /^const WEBAPP_NOTICES_PAGE = `([\s\S]*?)^`;$/m;
 
-const readNoticesPage = (source) => NOTICES_PAGE_REGEX.exec(source)?.[1] ?? null;
+export const readNoticesPage = (source) => NOTICES_PAGE_REGEX.exec(source)?.[1] ?? null;
 
 /**
  * The release that last changed the Notices page, as `YYYY-MM-DD`: walk the release tags from
@@ -28,12 +28,11 @@ export const readNoticesLastmod = (cwd, changelog) => {
     const tags = git(["tag", "--list", "v*", "--sort=-v:refname"]).split("\n").filter(Boolean);
     let oldest = null;
     for (const tag of tags) {
-      let page = null;
-      try {
-        page = readNoticesPage(git(["show", `${tag}:${GENERATOR}`]));
-      } catch {
-        // The generator did not exist at this tag, so the page was different (or absent).
-      }
+      // Tree objects are always present, even in a blobless clone, so an empty listing means the
+      // generator did not exist at this tag. Any other failure (a blob that cannot be fetched) is
+      // unknown history and throws to the outer catch, which omits the date.
+      if (!git(["ls-tree", "--name-only", tag, "--", GENERATOR]).trim()) break;
+      const page = readNoticesPage(git(["show", `${tag}:${GENERATOR}`]));
       if (page !== current) break;
       oldest = tag;
     }

@@ -4,7 +4,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { readNoticesLastmod } from "./notices-lastmod.mjs";
+import { readNoticesLastmod, readNoticesPage } from "./notices-lastmod.mjs";
+
+test("the real license generator still exposes the Notices template", () => {
+  const generator = path.resolve(import.meta.dirname, "../../../scripts/gen-third-party-licenses.mjs");
+  const text = readNoticesPage(fs.readFileSync(generator, "utf8"));
+  assert.ok(
+    text?.startsWith("# Notices"),
+    "WEBAPP_NOTICES_PAGE not found; update NOTICES_PAGE_REGEX in notices-lastmod.mjs",
+  );
+});
 
 const page = (text) => `const WEBAPP_NOTICES_PAGE = \`# Notices\n\n${text}\n\`;\nconst OTHER = 1;\n`;
 
