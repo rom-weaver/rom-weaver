@@ -255,6 +255,86 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
   );
 };
 
+const applyDuringPopulation = async (page, picker, files) => {
+  await page.evaluate(() => {
+    const startViewTransition = document.startViewTransition?.bind(document);
+    const transitions = [];
+    const releases = [];
+    let released = false;
+    let clicks = 0;
+    const recordClick = (event) => {
+      if (event.isTrusted && event.target instanceof Element && event.target.closest("#rom-weaver-button-apply"))
+        clicks++;
+    };
+    document.addEventListener("click", recordClick, true);
+    if (typeof startViewTransition === "function") {
+      document.startViewTransition = (options) => {
+        const update = typeof options === "function" ? options : options.update;
+        const held = new Promise((resolve) => {
+          if (released) resolve();
+          else releases.push(resolve);
+        });
+        const deferredUpdate = async () => {
+          await update?.();
+          await held;
+        };
+        const transition = startViewTransition(
+          typeof options === "function" ? deferredUpdate : { ...options, update: deferredUpdate },
+        );
+        transitions.push(transition);
+        return transition;
+      };
+    }
+    window.__romWeaverPopulationGesture = {
+      getClicks: () => clicks,
+      settle: async () => {
+        released = true;
+        for (const resolve of releases) resolve();
+        await Promise.allSettled(transitions.map((transition) => transition.ready));
+        for (const animation of document.getAnimations()) {
+          if (animation.effect?.pseudoElement?.startsWith("::view-transition")) animation.pause();
+        }
+      },
+      restore: () => {
+        released = true;
+        for (const resolve of releases) resolve();
+        for (const transition of transitions) transition.skipTransition();
+        document.startViewTransition = startViewTransition;
+        document.removeEventListener("click", recordClick, true);
+      },
+    };
+  });
+  let pressed = false;
+  try {
+    await picker.setInputFiles(files);
+    await waitForEnabled(page, "rom-weaver-button-apply");
+    const button = page.locator("#rom-weaver-button-apply");
+    await button.scrollIntoViewIfNeeded();
+    const box = await button.boundingBox();
+    requireJourney(box, "Apply has no pointer target after input staging");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    return await downloadedBytes(page, async () => {
+      await page.mouse.down();
+      pressed = true;
+      // Pending snapshots MUST settle before pointer release to expose gesture retargeting.
+      await page.evaluate(() => window.__romWeaverPopulationGesture.settle());
+      await page.mouse.up();
+      pressed = false;
+      requireEqual(
+        await page.evaluate(() => window.__romWeaverPopulationGesture.getClicks()),
+        1,
+        "Population snapshot swallowed the trusted Apply click",
+      );
+    });
+  } finally {
+    if (pressed) await page.mouse.up();
+    await page.evaluate(() => {
+      window.__romWeaverPopulationGesture.restore();
+      delete window.__romWeaverPopulationGesture;
+    });
+  }
+};
+
 export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureUncompressedOutput) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   const page = await context.newPage();
@@ -284,10 +364,12 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     );
     await enableTraceLogging(page);
     const applyPicker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
-    await applyPicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
-    await waitForEnabled(page, "rom-weaver-button-apply");
-    const output = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
+    const output = await applyDuringPopulation(page, applyPicker, [
+      inputFile("original.bin", original),
+      inputFile(patch.name, patch.bytes),
+    ]);
     assertJourneyBytes(output.bytes, modified, "Create -> Apply BPS roundtrip");
+    process.stdout.write("PASS trusted Apply click during input population -> exact patched bytes\n");
     const weavePicker = await openWorkflow(page, baseUrl, "weave-patches", "rom-weaver-input-file-unified-weave");
     await weavePicker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-export-weave");

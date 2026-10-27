@@ -13,7 +13,6 @@ import {
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
-import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-transition.ts";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { OutputCard } from "../../public/react/components/ds/output-card.tsx";
@@ -85,7 +84,7 @@ const PlaylistForm = ({ pageDrop }: PlaylistFormProps) => {
   const filesRef = useRef<PlaylistDisc[]>([]);
   const handledDropRef = useRef(0);
   const mountedRef = useRef(true);
-  const workflowEmpty = useFlatTransitionFlag(files.length === 0);
+  const workflowEmpty = files.length === 0;
 
   useEffect(() => {
     outputRef.current = output;

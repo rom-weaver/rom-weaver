@@ -21,7 +21,6 @@ import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
-import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import {
@@ -1179,8 +1178,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
     buildCreateSourceStep({ ...options, runtimeNotice: sourceStepRuntimeNotice });
 
   const createFileInputAccept = getFileInputAcceptAttributes();
-  const createSourcesActuallyEmpty = !(original || modified || createPreparationPending);
-  const createSourcesEmpty = useFlatTransitionFlag(createSourcesActuallyEmpty);
+  const createSourcesEmpty = !(original || modified || createPreparationPending);
   const sampleTutorialReady = createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
@@ -1254,7 +1252,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       id: "patch-builder-row-unified-drop",
       inputId: "patch-builder-input-file-unified",
       onFiles: props.onUnifiedDrop || handleUnifiedDrop,
-      onboarding: createSourcesActuallyEmpty ? (
+      onboarding: createSourcesEmpty ? (
         <SampleTutorialStart
           chipLabel={localizer.message("ui.tutorial.tryCreate")}
           documentation={{
@@ -1411,7 +1409,7 @@ function ModifiedRomCreateForm(props: InternalCreatePatchFormProps) {
       onFormatChange: updatePatchType,
       title: "Patch",
     },
-    sourcesEmpty: createSourcesActuallyEmpty,
+    sourcesEmpty: createSourcesEmpty,
     swap: createInputsSelected
       ? { disabled: uploadDisabled || createPreparationPending || createQueued, onSwap: swapCreateSources }
       : null,
