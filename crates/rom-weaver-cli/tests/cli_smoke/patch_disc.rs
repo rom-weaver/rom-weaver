@@ -1828,9 +1828,7 @@ fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
     assert!(!output.path().exists());
 }
 
-#[test]
-fn patch_apply_dcp_checksum_guards_rejected_before_output() {
-    let temp = setup_temp_dir();
+fn write_dcp_source_gdi(temp: &assert_fs::TempDir) {
     let cooked = build_iso(
         &[IsoFile {
             path: "KEEP.DAT".to_string(),
@@ -1851,9 +1849,83 @@ fn patch_apply_dcp_checksum_guards_rejected_before_output() {
         })
         .collect::<Vec<_>>();
     fs::write(temp.child("track03.bin").path(), raw).expect("source track");
+    let low_density = (0..8)
+        .flat_map(|index| encode_mode1_sector(index, &[0; USER_DATA_SIZE]))
+        .collect::<Vec<_>>();
+    fs::write(temp.child("track01.bin").path(), low_density).expect("low-density track");
+    fs::write(temp.child("track02.bin").path(), vec![0; 8 * 2352]).expect("audio track");
     temp.child("disc.gdi")
-        .write_str("1\n3 45000 4 2352 track03.bin 0\n")
+        .write_str(
+            "3\n1 0 4 2352 track01.bin 0\n2 8 0 2352 track02.bin 0\n3 45000 4 2352 track03.bin 0\n",
+        )
         .expect("source GDI");
+}
+
+#[test]
+fn patch_apply_dcp_nested_in_zip_in_zip_matches_bare_dcp_output() {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir_all(home.path()).unwrap();
+    let home = home.path().to_str().unwrap();
+    let run = |args: &[&str]| {
+        command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_DATA_HOME", home),
+                ("XDG_STATE_HOME", home),
+                ("TMPDIR", home),
+            ],
+            0,
+        )
+    };
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    for (input, output) in [
+        ("NEW.DAT", "game.dcp"),
+        ("game.dcp", "inner.zip"),
+        ("inner.zip", "outer.zip"),
+    ] {
+        run(&[
+            "compress",
+            "--input",
+            temp.child(input).path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child(output).path().to_str().unwrap(),
+            "--json",
+        ]);
+    }
+    for (patch, out) in [("game.dcp", "bare"), ("outer.zip", "nested")] {
+        run(&[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child(patch).path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child(format!("{out}/x.gdi")).path().to_str().unwrap(),
+            "--json",
+        ]);
+    }
+    for name in ["x.gdi", "track01.bin", "track02.bin", "track03.bin"] {
+        assert_eq!(
+            fs::read(temp.child(format!("bare/{name}")).path()).unwrap(),
+            fs::read(temp.child(format!("nested/{name}")).path()).unwrap(),
+            "{name} from the nested archive must match the bare DCP"
+        );
+    }
+}
+
+#[test]
+fn patch_apply_dcp_checksum_guards_rejected_before_output() {
+    let temp = setup_temp_dir();
+    write_dcp_source_gdi(&temp);
     fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
     for (inputs, format, output) in [
         ("NEW.DAT", "zip", "game.dcp"),
@@ -1873,35 +1945,21 @@ fn patch_apply_dcp_checksum_guards_rejected_before_output() {
             0,
         );
     }
-    for (patch, out) in [("game.dcp", "bare"), ("translation.zip", "zipped")] {
-        let stdout = command_stdout(
-            &[
-                "patch",
-                "apply",
-                "--input",
-                temp.child("disc.gdi").path().to_str().unwrap(),
-                "--patch",
-                temp.child(patch).path().to_str().unwrap(),
-                "--no-compress",
-                "--output",
-                temp.child(format!("{out}/disc.gdi"))
-                    .path()
-                    .to_str()
-                    .unwrap(),
-                "--json",
-            ],
-            0,
-        );
-        let terminal = parse_json_lines(&stdout).pop().expect("terminal event");
-        assert_patch_envelope(&terminal, "patch-apply", "dcp", "succeeded");
-    }
-    for name in ["disc.gdi", "track03.bin"] {
-        assert_eq!(
-            fs::read(temp.child(format!("bare/{name}")).path()).expect("bare output"),
-            fs::read(temp.child(format!("zipped/{name}")).path()).expect("zipped output"),
-            "{name} from a zipped DCP must match the bare DCP"
-        );
-    }
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            temp.child("game.dcp").path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            temp.child("bare/disc.gdi").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
 
     // An empty per-patch check means "none", so it must not count as a guard.
     command_stdout(
@@ -1996,6 +2054,174 @@ fn patch_apply_dcp_checksum_guards_rejected_before_output() {
 }
 
 #[test]
+fn patch_apply_zipped_dcp_matches_bare_dcp_output() {
+    let temp = setup_temp_dir();
+    let home = temp.child("home");
+    fs::create_dir_all(home.path()).unwrap();
+    let home = home.path().to_str().unwrap();
+    let run = |args: &[&str], code| {
+        let stdout = command_stdout_with_env(
+            args,
+            &[
+                ("HOME", home),
+                ("XDG_CACHE_HOME", home),
+                ("XDG_CONFIG_HOME", home),
+                ("XDG_DATA_HOME", home),
+                ("XDG_STATE_HOME", home),
+                ("TMPDIR", home),
+            ],
+            code,
+        );
+        parse_json_lines(&stdout).pop().expect("terminal event")
+    };
+    write_dcp_source_gdi(&temp);
+    fs::write(temp.child("NEW.DAT").path(), b"added by the DCP").expect("DCP payload");
+    for (inputs, format, output) in [
+        ("NEW.DAT", "zip", "game.dcp"),
+        ("game.dcp", "zip", "translation.zip"),
+    ] {
+        run(
+            &[
+                "compress",
+                "--input",
+                temp.child(inputs).path().to_str().unwrap(),
+                "--format",
+                format,
+                "--output",
+                temp.child(output).path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+    }
+    for (mode, compression, files) in [
+        (
+            "raw",
+            &["--no-compress"][..],
+            &["disc.gdi", "track01.bin", "track02.bin", "track03.bin"][..],
+        ),
+        (
+            "chd",
+            &[
+                "--compress-format",
+                "chd",
+                "--compress-codec",
+                "zstd",
+                "--threads",
+                "1",
+            ][..],
+            &["disc.chd"][..],
+        ),
+    ] {
+        let format = if mode == "raw" { "dcp" } else { "chd" };
+        for (patch, label, emit) in [
+            ("game.dcp", "bare", false),
+            ("translation.zip", "zipped", false),
+            ("game.dcp", "bare-emit", true),
+            ("translation.zip", "zipped-emit", true),
+        ] {
+            let out = format!("{mode}-{label}");
+            let weave = temp.child(format!("{out}.json"));
+            let emit_args = if emit {
+                vec!["--emit-weave", weave.path().to_str().unwrap()]
+            } else {
+                Vec::new()
+            };
+            let terminal = run(
+                &[
+                    "patch",
+                    "apply",
+                    "--input",
+                    temp.child("disc.gdi").path().to_str().unwrap(),
+                    "--patch",
+                    temp.child(patch).path().to_str().unwrap(),
+                    "--output",
+                    temp.child(format!("{out}/{}", files[0]))
+                        .path()
+                        .to_str()
+                        .unwrap(),
+                    "--json",
+                ]
+                .into_iter()
+                .chain(compression.iter().copied())
+                .chain(emit_args)
+                .collect::<Vec<_>>(),
+                0,
+            );
+            assert_patch_envelope(&terminal, "patch-apply", format, "succeeded");
+            for name in files {
+                assert_eq!(
+                    fs::read(temp.child(format!("{mode}-bare/{name}")).path()).unwrap(),
+                    fs::read(temp.child(format!("{out}/{name}")).path()).unwrap(),
+                    "{name} from {out} must match the bare DCP"
+                );
+            }
+            if emit {
+                assert_eq!(terminal["warnings"], serde_json::json!([]));
+                let recipe: Value =
+                    serde_json::from_slice(&fs::read(weave.path()).expect("emitted weave"))
+                        .expect("weave JSON");
+                assert_eq!(recipe["patches"][0]["path"], patch);
+                let replay = format!("{out}-replay");
+                let terminal = run(
+                    &[
+                        "patch",
+                        "apply",
+                        "--input",
+                        temp.child("disc.gdi").path().to_str().unwrap(),
+                        "--weave",
+                        weave.path().to_str().unwrap(),
+                        "--output",
+                        temp.child(format!("{replay}/{}", files[0]))
+                            .path()
+                            .to_str()
+                            .unwrap(),
+                        "--json",
+                    ]
+                    .into_iter()
+                    .chain(compression.iter().copied())
+                    .collect::<Vec<_>>(),
+                    0,
+                );
+                assert_patch_envelope(&terminal, "patch-apply", format, "succeeded");
+                for name in files {
+                    assert_eq!(
+                        fs::read(temp.child(format!("{mode}-bare/{name}")).path()).unwrap(),
+                        fs::read(temp.child(format!("{replay}/{name}")).path()).unwrap(),
+                        "{name} from an emitted weave must match the bare DCP"
+                    );
+                }
+            }
+        }
+    }
+    let archive = fs::read(temp.child("translation.zip").path()).unwrap();
+    let protected = temp.child("patches/translation.zip");
+    fs::create_dir_all(protected.path().parent().unwrap()).unwrap();
+    fs::write(protected.path(), &archive).unwrap();
+    let terminal = run(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.gdi").path().to_str().unwrap(),
+            "--patch",
+            protected.path().to_str().unwrap(),
+            "--output",
+            protected.path().to_str().unwrap(),
+            "--no-compress",
+            "--force",
+            "--emit-weave",
+            temp.child("protected.json").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert!(terminal["label"].as_str().unwrap().contains("same file"));
+    assert_eq!(fs::read(protected.path()).unwrap(), archive);
+    assert!(!temp.child("protected.json").path().exists());
+}
+
+#[test]
 fn patch_apply_zipped_multi_entry_dcp_resolves_to_dcp_not_inner_entries() {
     let temp = setup_temp_dir();
     fs::write(temp.child("track03.bin").path(), b"not read").expect("source track");
@@ -2057,5 +2283,58 @@ fn patch_apply_zipped_multi_entry_dcp_resolves_to_dcp_not_inner_entries() {
     assert!(
         !stdout.contains("payload resolution is ambiguous"),
         "the DCP's inner entries must not be treated as candidates: {stdout}"
+    );
+}
+
+#[test]
+fn patch_apply_zipped_non_dcp_patch_is_extracted_once_with_emit_weave() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("in.bin").path(), b"AAAAAAAAAAAAAAAA").expect("input");
+    fs::write(temp.child("p.ips").path(), b"PATCH\x00\x00\x02\x00\x01ZEOF").expect("ips");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("p.ips").path().to_str().unwrap(),
+            "--format",
+            "zip",
+            "--output",
+            temp.child("t.zip").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("in.bin").path().to_str().unwrap(),
+            "--patch",
+            temp.child("t.zip").path().to_str().unwrap(),
+            "--output",
+            temp.child("out.bin").path().to_str().unwrap(),
+            "--no-compress",
+            "--emit-weave",
+            temp.child("r.json").path().to_str().unwrap(),
+            "--jsonl",
+        ],
+        0,
+    );
+    let extractions = parse_json_lines(&stdout)
+        .iter()
+        .filter(|event| {
+            event["label"]
+                .as_str()
+                .is_some_and(|label| label.starts_with("extracting patch apply patch source"))
+        })
+        .count();
+    assert_eq!(
+        extractions, 1,
+        "a zipped non-DCP patch must be extracted once, not probed then re-extracted"
+    );
+    assert_eq!(
+        fs::read(temp.child("out.bin").path()).unwrap(),
+        b"AAZAAAAAAAAAAAAA"
     );
 }
