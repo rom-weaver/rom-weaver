@@ -91,9 +91,41 @@ const enableTraceLogging = (page) =>
     localStorage.setItem(key, JSON.stringify({ ...stored, common: { ...stored.common, logLevel: "trace" } }));
   });
 
+// The app saves outputs through an <a download> click, and browsers rewrite characters they will not
+// save: Chromium turns ":" into "_", and Linux WebKit also turns spaces into "_" where Chromium and
+// macOS WebKit keep them. `requestedName` is the name the app asked for; `name` stays the saved name,
+// which journeys re-upload as a user would.
+const savedNameForm = (name) => name.replace(/[\s\\/:*?"<>|]/g, "_");
+
+const recordRequestedDownloadNames = (page) =>
+  page.evaluate(() => {
+    if (window.__romWeaverRequestedDownloads) return;
+    window.__romWeaverRequestedDownloads = [];
+    document.addEventListener(
+      "click",
+      (event) => {
+        const anchor = event.target;
+        if (anchor instanceof HTMLAnchorElement && anchor.hasAttribute("download"))
+          window.__romWeaverRequestedDownloads.push(anchor.download);
+      },
+      true,
+    );
+  });
+
+const requestedDownloadName = async (page, saved) => {
+  const requested = await page.evaluate(() => window.__romWeaverRequestedDownloads?.splice(0) || []);
+  const name = requested.find((candidate) => savedNameForm(candidate) === savedNameForm(saved));
+  requireJourney(
+    name || requested.length === 0,
+    `Download ${saved} matches no name the app requested (${requested.join(", ")})`,
+  );
+  return name ?? saved;
+};
+
 export const downloadedBytes = async (page, action) => {
   let download;
   let actionState = "pending";
+  await recordRequestedDownloadNames(page);
   const triggerAction = async () => {
     try {
       await action();
@@ -127,7 +159,11 @@ export const downloadedBytes = async (page, action) => {
     throw new Error(`Download ${download.suggestedFilename()} failed: ${String(await download.failure())}`, { cause });
   }
   requireJourney(downloadPath, `Download ${download.suggestedFilename()} has no saved path`);
-  return { bytes: fs.readFileSync(downloadPath), name: download.suggestedFilename() };
+  return {
+    bytes: fs.readFileSync(downloadPath),
+    name: download.suggestedFilename(),
+    requestedName: await requestedDownloadName(page, download.suggestedFilename()),
+  };
 };
 
 const waitForEnabled = async (page, id) => {
@@ -579,7 +615,7 @@ export const runTrimJourney = async (createContext, baseUrl, configureUncompress
         .getByRole("button", { name: "Trim ROM", exact: true })
         .click();
     });
-    requireEqual(output.name, "game (trimmed).nds");
+    requireEqual(output.requestedName, "game (trimmed).nds");
     assertJourneyBytes(output.bytes, input.subarray(0, 0x3000), "Trim NDS declared extent");
     process.stdout.write(`PASS Trim NDS (${input.length} -> ${output.bytes.length} exact bytes)\n`);
   } finally {
