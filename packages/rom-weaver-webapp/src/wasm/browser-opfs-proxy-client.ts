@@ -59,11 +59,20 @@ export const WRITABLE_FLAG = 1 << 29;
 /** Error carrying the WASI errno the proxy reported, so the WASI layer can map it back faithfully. */
 export class OpfsProxyError extends Error {
   readonly errno: number;
-  constructor(message: string, errno: number) {
-    super(message);
+  constructor(message: string, errno: number, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = "OpfsProxyError";
     this.errno = errno;
   }
+}
+
+/**
+ * Decide from shared proxy state, not message text: thread teardown wraps or replaces worker
+ * failures, so a poisoned proxy surfaces as the bare, classifiable error with the run's failure as cause.
+ */
+export function resolveProxyPoisonFailure(error: unknown, client: Pick<OpfsProxyClient, "isPoisoned">): unknown {
+  if (!client.isPoisoned()) return error;
+  return new OpfsProxyError("OPFS proxy is poisoned", OPFS_PROXY_STATUS_EIO, { cause: error });
 }
 
 export interface OpfsProxyOpenOptions {

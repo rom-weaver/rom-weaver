@@ -45,6 +45,7 @@ import {
   traceFlushOpenWasiFileDescriptors,
   traceRandomAccessFileIoStats,
 } from "./browser-opfs-stdio-events.ts";
+import { resolveProxyPoisonFailure } from "./browser-opfs-proxy-client.ts";
 import { closeSyncFiles } from "./browser-opfs-sync-access.ts";
 import { cleanupBrowserOpfsRunScratch } from "./browser-opfs-run-cleanup.ts";
 import type { NormalizedVirtualFile } from "./browser-opfs-virtual-files.ts";
@@ -588,6 +589,9 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           stagingMs: runOptions.stagingMs,
         });
       }
+      // Thread teardown can report any worker failure first (or only a generic one); the shared
+      // proxy poison flag is the authority for recycling the runner.
+      if (failure) failure = { error: resolveProxyPoisonFailure(failure.error, opfsProxy.client) };
       return {
         command,
         ...failure,
