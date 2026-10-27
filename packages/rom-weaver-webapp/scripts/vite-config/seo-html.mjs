@@ -119,20 +119,21 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
   return notFoundHtml;
 };
 
-// A workflow page's indexable text is its title and description in workflow-seo.mjs, plus the
-// landing copy for the apex. The newest commit of those files is the honest date; a dirty or
-// shallow checkout yields none, and the entry then omits <lastmod> rather than guess.
-const WORKFLOW_LASTMOD_SOURCES = {
-  "": [
-    "src/webapp/components/home-page.tsx",
-    "src/webapp/components/home-sections.tsx",
-    "src/presentation/localization/messages.ts",
-  ],
-};
+// Every workflow page is the shared app shell prerendered for its view, so its text comes from
+// the route table, the message catalog and, for the apex, the landing components and format
+// lists. The newest commit of those files is an upper bound on the page's last change: it can be
+// later than the real edit, never earlier. A dirty or shallow checkout yields none, and the
+// entry then omits <lastmod> rather than guess.
+const WORKFLOW_LASTMOD_SOURCES = ["src/webapp/workflow-seo.mjs", "src/presentation/localization/messages.ts"];
+const HOME_LASTMOD_SOURCES = [
+  "src/webapp/components/home-page.tsx",
+  "src/webapp/components/home-sections.tsx",
+  "src/webapp/components/home-loom.tsx",
+  "src/wasm/generated/rom-weaver-format-metadata.ts",
+];
 const readWorkflowLastmod = (route) => {
-  const dates = ["src/webapp/workflow-seo.mjs", ...(WORKFLOW_LASTMOD_SOURCES[route.slug] ?? [])].map((file) =>
-    readDocLastmod(path.join(rootDir, file), repoRoot),
-  );
+  const files = route.slug === "" ? [...WORKFLOW_LASTMOD_SOURCES, ...HOME_LASTMOD_SOURCES] : WORKFLOW_LASTMOD_SOURCES;
+  const dates = files.map((file) => readDocLastmod(path.join(rootDir, file), repoRoot));
   return dates.includes(null) ? null : dates.sort((a, b) => a.localeCompare(b)).at(-1);
 };
 

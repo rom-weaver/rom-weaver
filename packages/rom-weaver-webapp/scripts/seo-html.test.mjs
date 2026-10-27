@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import { test } from "node:test";
 import { MARKDOWN_ROUTES } from "../functions/markdown-routes.js";
+import { readDocLastmod } from "./docs-discovery.mjs";
 import { DOC_SOURCES } from "../src/webapp/docs-routing.mjs";
 import {
   WORKFLOW_ENTRY_ROUTES,
@@ -60,6 +62,23 @@ test("sitemap lastmod values are ISO dates or absent, and never on a Markdown UR
   for (const [, location, lastmod] of sitemap.matchAll(/<loc>(.*?)<\/loc>(?:<lastmod>(.*?)<\/lastmod>)?/g)) {
     assert.ok(!location.endsWith(".md"), location);
     if (lastmod) assert.match(lastmod, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, location);
+  }
+});
+
+test("workflow pages get a lastmod whenever git can date their sources", () => {
+  const dated = (...files) => files.every((file) => readDocLastmod(path.resolve(file), path.resolve("../..")));
+  const shared = ["src/webapp/workflow-seo.mjs", "src/presentation/localization/messages.ts"];
+  const home = [
+    "src/webapp/components/home-page.tsx",
+    "src/webapp/components/home-sections.tsx",
+    "src/webapp/components/home-loom.tsx",
+    "src/wasm/generated/rom-weaver-format-metadata.ts",
+  ];
+  const sitemap = createSitemapSource();
+  for (const route of [...Object.values(WORKFLOW_SEO_ROUTES), ...Object.values(WORKFLOW_ENTRY_ROUTES)]) {
+    // A shallow clone or an uncommitted source legitimately has no date; only assert when git can supply one.
+    if (!dated(...shared, ...(route.slug === "" ? home : []))) continue;
+    assert.match(sitemap, new RegExp(`<loc>https://rom-weaver.com/${route.slug}</loc><lastmod>`), route.slug || "home");
   }
 });
 
