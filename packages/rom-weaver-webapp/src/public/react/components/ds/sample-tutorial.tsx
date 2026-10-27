@@ -1,6 +1,7 @@
 import {
   Archive,
   BookOpen,
+  ChevronDown,
   ChevronUp,
   Download,
   EllipsisVertical,
@@ -101,7 +102,8 @@ type SampleTutorialStep = {
   /** What Continue does on a locked step instead of waiting - loading the
       practice files, say. The guide moves on by itself once the step unlocks. */
   onContinue?: () => void;
-  openDrawers?: boolean;
+  /** Opens the row's first menu on desktop. Phones leave it shut: the open
+      menu would cover the row the step describes. */
   openMenu?: boolean;
   /** `below` keeps the card under the row however tall the row is, for a row
       whose own controls - a drop zone's Add files button - the card must not
@@ -111,6 +113,9 @@ type SampleTutorialStep = {
       matches nothing when the guide opens is left out, so hosts without that
       control never count a step they cannot show. */
   requires?: string;
+  /** Continue and Back pass over the step while this is set, and it keeps its
+      number: the search a step frames hides once files are in. */
+  skip?: boolean;
   target?: string;
   title: string;
   /** The one thing the reader should do on this step. */
@@ -141,11 +146,10 @@ const getViewTutorialStep = (
   base?: SampleTutorialStep,
 ): SampleTutorialStep =>
   base
-    ? { ...base, lift: VIEW_TOGGLE_HEAD_SELECTOR, openDrawers: true, target, view: true }
+    ? { ...base, lift: VIEW_TOGGLE_HEAD_SELECTOR, target, view: true }
     : {
         body: "",
         lift: VIEW_TOGGLE_HEAD_SELECTOR,
-        openDrawers: true,
         requires: VIEW_TOGGLE_SELECTOR,
         target,
         title: localizer.message("ui.tutorial.view.title"),
@@ -178,6 +182,14 @@ const findLift = (target: HTMLElement, selector: string) => {
     if (match) return match;
   }
   return null;
+};
+
+/** The nearest step past `from` in `direction` that is not skipped, or `from` when there is none. */
+const stepToward = (steps: readonly SampleTutorialStep[], from: number, direction: 1 | -1) => {
+  for (let index = from + direction; index >= 0 && index < steps.length; index += direction) {
+    if (!steps[index]?.skip) return index;
+  }
+  return from;
 };
 
 /** Step numbers in the workbench's own 0x01 notation. */
@@ -214,6 +226,8 @@ const GUIDE_ENTER_EASE = "cubic-bezier(.2, .85, .3, 1)";
 const GUIDE_ENTER_RISE = 10;
 /** Drawers expand over .3s, so the row keeps growing after a step opens. */
 const GUIDE_SETTLE_MS = 360;
+/** How long a step waits for its row to connect before showing its card without one. */
+const GUIDE_TARGET_WAIT_MS = 600;
 /** Caps the re-reveal so later layout shifts never yank the page around. */
 const GUIDE_REVEALS = 3;
 /** Above this share of the viewport a row is anchored from its top edge. */
@@ -733,12 +747,19 @@ const SampleTutorial = ({
   // While moving, the card is parked invisible: it has left its old anchor and
   // the new one is not placed yet, so anything drawn there would be a flash.
   const [moving, setMoving] = useState(false);
+  // A phone card keeps a step's Try it and folds the explanation behind More,
+  // so the row it describes keeps most of the screen. The reader's choice
+  // carries over to the steps after it.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const motionRef = useRef<Animation | null>(null);
   const arrivingRef = useRef(false);
   const step = steps[stepIndex];
+  // A move commits after the card's exit, by when files landing meanwhile may
+  // have changed which steps are skipped.
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
   const stepCta = step?.cta;
   const stepLift = step?.lift;
-  const stepOpenDrawers = step?.openDrawers;
   const stepOpenMenu = step?.openMenu;
   const stepPlacement = step?.placement;
   const stepTarget = step?.target;
@@ -823,8 +844,8 @@ const SampleTutorial = ({
     }
     if (!live || stepLocked) return;
     setAdvanceFrom(null);
-    beginMove(() => setStepIndex((current) => Math.min(current + 1, steps.length - 1)));
-  }, [advanceFrom, beginMove, error, live, stepIndex, stepLocked, steps.length]);
+    beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, 1)));
+  }, [advanceFrom, beginMove, error, live, stepIndex, stepLocked]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -852,7 +873,6 @@ const SampleTutorial = ({
     let cta: HTMLElement | null = null;
     let removeCtaEndListener: (() => void) | null = null;
     let lifted: HTMLElement | null = null;
-    const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
     const connect = () => {
       if (target) return true;
@@ -864,13 +884,10 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
-      if (stepOpenDrawers) {
-        for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
-          openedDrawers.push(drawer);
-          drawer.click();
-        }
-      }
-      if (stepOpenMenu) {
+      // Drawers stay as the reader left them: opened, the optional download
+      // jobs and every Checks list stretch the row the step describes, so a
+      // step's Try it names the one worth opening instead.
+      if (stepOpenMenu && window.matchMedia(GUIDE_ANCHOR_QUERY).matches) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
@@ -890,22 +907,8 @@ const SampleTutorial = ({
       }
       return true;
     };
-    frame = window.requestAnimationFrame(() => {
-      if (!connect()) {
-        observer = new MutationObserver(() => {
-          if (connect()) observer?.disconnect();
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      }
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-      setTargetEl(null);
+    const release = () => {
       if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
-      for (const drawer of openedDrawers) {
-        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
-      }
       removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
@@ -915,8 +918,29 @@ const SampleTutorial = ({
         if (previousDescription) target.setAttribute("aria-describedby", previousDescription);
         else target.removeAttribute("aria-describedby");
       }
+      target = stage = cta = lifted = openedMenu = null;
+      removeCtaEndListener = null;
     };
-  }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenDrawers, stepOpenMenu, stepTarget, steps.length]);
+    frame = window.requestAnimationFrame(() => {
+      connect();
+      // Kept for the whole step: a row React swaps out mid-step - the drop
+      // zone's search giving way to the ROM card once a match is chosen - is
+      // found again rather than leaving the ring on a detached box.
+      observer = new MutationObserver(() => {
+        if (target?.isConnected) return;
+        const lost = !!target;
+        release();
+        if (!connect() && lost) setTargetEl(null);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      setTargetEl(null);
+      release();
+    };
+  }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenMenu, stepTarget, steps.length]);
 
   // Use document coordinates so the ring and anchored card scroll with the row.
   // Placement MUST NOT run on scroll: main-thread updates can lag composited scrolling.
@@ -924,6 +948,11 @@ const SampleTutorial = ({
     const dialog = dialogRef.current;
     const ring = ringRef.current;
     if (dialog && dialog.dataset.step !== (live ? String(stepIndex + 1) : undefined)) return;
+    // Until the new step's row connects, `targetEl` is still the last step's: a
+    // reveal measured from it scrolls toward the row being left, and the
+    // placement that follows, finding the new row already on screen, never
+    // scrolls back.
+    if (targetEl && stepTarget && !targetEl.matches(stepTarget)) return;
     const unanchor = () => {
       if (!dialog) return;
       delete dialog.dataset.anchored;
@@ -950,8 +979,15 @@ const SampleTutorial = ({
     };
     if (!(targetEl && dialog && ring)) {
       unanchor();
-      if (!stepTarget) arrive();
-      return;
+      if (!stepTarget) {
+        arrive();
+        return;
+      }
+      // A row that never connects - the reader emptied the bench mid-run, and
+      // ghost rows stand in for it - MUST NOT leave the card parked invisible
+      // with every button ignoring presses: it shows on its own bar instead.
+      const wait = window.setTimeout(arrive, GUIDE_TARGET_WAIT_MS);
+      return () => window.clearTimeout(wait);
     }
     // A control lifted above the row keeps the card below it, never over it.
     const liftedAbove = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
@@ -1084,6 +1120,14 @@ const SampleTutorial = ({
       revealTo = null;
       window.clearTimeout(settle);
     };
+    // More asks for a taller card, so it re-arms a reveal even after earlier
+    // scrolling, or the key that pressed it, retired the rest: the grown card
+    // must not hang off the bottom of the screen.
+    const onDetailsToggle = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest(".sample-tutorial-more")) {
+        revealsLeft = Math.max(revealsLeft, 1);
+      }
+    };
     // The reveal has landed: settle the pair against the viewport it reached.
     const onScrollEnd = () => {
       if (revealTo === null) return;
@@ -1092,15 +1136,16 @@ const SampleTutorial = ({
     };
     // The row grows as its drawers expand, so re-reveal once each size change
     // has stopped - otherwise the card ends up sitting over the row it explains.
-    // On a phone the pinned card's own height sets the room the row gets, so a
-    // card that grows with its new copy re-reveals too. Gated on those heights:
-    // mobile browser chrome collapsing as the user scrolls must not scroll the
-    // page out from under them.
+    // On a phone the card's own height matters too: a pinned card sets the room
+    // the row gets, and an anchored one grows down past the screen edge, so a
+    // card that grows with its new copy or its More details re-reveals. Gated on
+    // those heights: mobile browser chrome collapsing as the user scrolls must
+    // not scroll the page out from under them.
     const onResize = () => {
       place(false, pendingShift());
       const height = targetEl.getBoundingClientRect().height;
       const card = dialog.getBoundingClientRect().height;
-      const cardMoved = !anchorCard() && card !== cardHeight;
+      const cardMoved = !desktop.matches && card !== cardHeight;
       cardHeight = card;
       if (height === rowHeight && !cardMoved) return;
       rowHeight = height;
@@ -1121,6 +1166,7 @@ const SampleTutorial = ({
     window.addEventListener("touchmove", yieldToUser, { passive: true });
     window.addEventListener("keydown", yieldToUser);
     window.addEventListener("scrollend", onScrollEnd);
+    dialog.addEventListener("click", onDetailsToggle);
     desktop.addEventListener("change", track);
     return () => {
       window.clearTimeout(settle);
@@ -1131,6 +1177,7 @@ const SampleTutorial = ({
       window.removeEventListener("touchmove", yieldToUser);
       window.removeEventListener("keydown", yieldToUser);
       window.removeEventListener("scrollend", onScrollEnd);
+      dialog.removeEventListener("click", onDetailsToggle);
       desktop.removeEventListener("change", track);
       // The card is deliberately left where it is: clearing it here would make
       // the next step's placement measure from the CSS-pinned bar and glide
@@ -1139,7 +1186,8 @@ const SampleTutorial = ({
   }, [live, stepIndex, stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
-  const finalStep = live && stepIndex === steps.length - 1;
+  const firstStep = stepToward(steps, stepIndex, -1) === stepIndex;
+  const finalStep = live && stepToward(steps, stepIndex, 1) === stepIndex;
   const copyKey = live ? stepIndex : "loading";
   const viewBody = localizer.message(
     detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody",
@@ -1150,6 +1198,8 @@ const SampleTutorial = ({
   const stepTryIt = step.view
     ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
     : step.tryIt;
+  // Without a Try it the body is the step's only instruction, so it never folds.
+  const foldable = live && !!stepTryIt;
   const currentLabel = localizer.message("ui.tutorial.view.current");
   const layer = (
     <div className="sample-tutorial-layer">
@@ -1163,6 +1213,7 @@ const SampleTutorial = ({
         aria-labelledby={titleId}
         aria-modal="false"
         className="sample-tutorial-dialog"
+        data-folded={foldable && !detailsOpen ? "true" : undefined}
         data-loading={live ? undefined : "true"}
         data-moving={moving ? "true" : undefined}
         data-placement={live ? (step.placement ?? "bottom") : "bottom"}
@@ -1207,7 +1258,9 @@ const SampleTutorial = ({
                 ) : null}
               </div>
               <h2 id={titleId}>{live ? step.title : localizer.message("ui.tutorial.loadingTitle")}</h2>
-              <p id={bodyId}>{live ? stepBody : loadingBody}</p>
+              <p className="sample-tutorial-body" id={bodyId}>
+                {live ? stepBody : loadingBody}
+              </p>
               {live && step.view ? (
                 <div className="sample-tutorial-compare">
                   {/* Named by their content: the summary is visible text, so a
@@ -1298,11 +1351,11 @@ const SampleTutorial = ({
         <div className="sample-tutorial-actions">
           {live ? (
             <button
-              aria-disabled={moving || stepIndex === 0 ? "true" : undefined}
+              aria-disabled={moving || firstStep ? "true" : undefined}
               className="btn ghost slim"
               onClick={() => {
-                if (moving || stepIndex === 0) return;
-                beginMove(() => setStepIndex((current) => current - 1));
+                if (moving || firstStep) return;
+                beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, -1)));
               }}
               type="button"
             >
@@ -1312,6 +1365,21 @@ const SampleTutorial = ({
           {/* Sits between the buttons rather than on a line of its own, so it
               costs the card no height; phones drop it for the ✕ alone. */}
           {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
+          {/* Phones only, in the slot the end hint leaves free. It steps aside
+              while Continue shows its loading label, which needs the whole row
+              on a narrow phone. */}
+          {foldable && !busy ? (
+            <button
+              aria-controls={bodyId}
+              aria-expanded={detailsOpen}
+              className="sample-tutorial-more"
+              onClick={() => setDetailsOpen((open) => !open)}
+              type="button"
+            >
+              {localizer.message(detailsOpen ? "ui.tutorial.less" : "ui.tutorial.more")}
+              <ChevronDown aria-hidden="true" />
+            </button>
+          ) : null}
           {live ? (
             <button
               aria-busy={busy || undefined}
@@ -1328,7 +1396,7 @@ const SampleTutorial = ({
                   return;
                 }
                 if (finalStep) endGuide();
-                else beginMove(() => setStepIndex((current) => current + 1));
+                else beginMove(() => setStepIndex((current) => stepToward(stepsRef.current, current, 1)));
               }}
               type="button"
             >

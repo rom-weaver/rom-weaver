@@ -906,6 +906,121 @@ test("guided Apply scrolls its first card clear of the dock on a phone", async (
   await page.viewport(1280, 900);
 });
 
+test("guided Apply scrolls its first card back on screen when More opens the rest on a phone", async () => {
+  // The hanging card grows down from its row, so without a fresh reveal Less
+  // and Continue would end up below the dock.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+
+  await expect
+    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')?.dataset.anchored)
+    .toBe("true");
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  const dock = document.querySelector(".rw-app .dock-pad").getBoundingClientRect();
+  await expect.poll(() => guide.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight - dock.height);
+  const folded = guide.getBoundingClientRect().height;
+
+  // Scrolling first retires the row's re-reveals; More still earns one.
+  window.dispatchEvent(new WheelEvent("wheel"));
+  guide.querySelector(".sample-tutorial-more").click();
+  await expect.poll(() => guide.getBoundingClientRect().height).toBeGreaterThan(folded);
+  await expect
+    .poll(() => guide.getBoundingClientRect().bottom, { timeout: 3000 })
+    .toBeLessThanOrEqual(window.innerHeight - dock.height);
+  expect(guide.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  await page.viewport(1280, 900);
+});
+
+test("guided Apply opens no drawers on desktop and keeps its last row and Apply button on screen", async () => {
+  // The step before ends at the page bottom. A reveal measured from that row,
+  // still in state while the new one connects, scrolled the page back up and
+  // left the Apply button below the screen. Opened drawers - the optional
+  // download jobs on the last step - used to hide that by stretching the row.
+  await page.viewport(1280, 900);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+  await expect.poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')).toBeTruthy();
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  for (const step of ["2", "3", "4", "5"]) {
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
+    guide.querySelector(".sample-tutorial-next").click();
+    await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
+    // The step number renders before the step's row connects, so the last
+    // step's row can still be the target here; wait for the card to land on
+    // the new one.
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
+    await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
+    // Identify is the other way in, so it frames its search before any files.
+    expect(document.querySelector(".sample-tutorial-target").matches(".identify-search")).toBe(step === "2");
+    // The ROM's Checks opens by itself when the practice weave supplies them.
+    const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
+      (head) =>
+        head.getAttribute("aria-expanded") === "true" &&
+        !(head.closest("#rom-weaver-row-file-rom") && head.textContent.startsWith("Checks")),
+    );
+    expect(opened.map((head) => head.textContent)).toEqual([]);
+  }
+  await expect.poll(() => document.querySelector("[data-guide-cta]")).toBeTruthy();
+  // Long enough for a smooth reveal to land either way.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  expect(document.querySelector("[data-guide-cta]").getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    window.innerHeight,
+  );
+  expect(document.querySelector(".sample-tutorial-ring").getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    window.innerHeight,
+  );
+});
+
+test("guided Apply opens no drawers on a phone and shows Identify on its search before any files", async () => {
+  // A phone card folds to its Try it, so no two steps may fold to the same
+  // line; Identify frames the search it explains, which only the empty bench
+  // shows; and an opened drawer - the optional weave job on the last step -
+  // would stretch its row past the screen.
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+  await expect.poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')).toBeTruthy();
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  await expect.poll(() => guide.dataset.moving).toBeUndefined();
+  const tryIts = [];
+  for (const step of ["2", "3", "4", "5"]) {
+    guide.querySelector(".sample-tutorial-next").click();
+    await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
+    // Continue ignores presses until the card has landed.
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
+    await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
+    tryIts.push(guide.querySelector(".sample-tutorial-try")?.textContent);
+    expect(document.querySelector(".sample-tutorial-target").matches(".identify-search")).toBe(step === "2");
+    expect(guide.querySelector(".sample-tutorial-compare") !== null).toBe(step === "3");
+    // The ROM's Checks opens by itself when the practice weave supplies them.
+    const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
+      (head) =>
+        head.getAttribute("aria-expanded") === "true" &&
+        !(head.closest("#rom-weaver-row-file-rom") && head.textContent.startsWith("Checks")),
+    );
+    expect(opened.map((head) => head.textContent)).toEqual([]);
+  }
+  expect(new Set(tryIts).size).toBe(4);
+  expect(document.querySelector("#rom-weaver-weave-job .cks-head")?.getAttribute("aria-expanded")).toBe("false");
+  await page.viewport(1280, 900);
+});
+
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
   const hardwareConcurrency = Object.getOwnPropertyDescriptor(Navigator.prototype, "hardwareConcurrency");
   Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 2 });

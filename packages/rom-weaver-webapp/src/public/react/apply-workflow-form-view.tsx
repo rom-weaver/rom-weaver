@@ -86,26 +86,22 @@ import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStar
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
-/** What the add-files step needs from the form: whether the bench is ready to
-    tour, and the practice files Continue loads when the reader has none. */
+/** What the steps before any files need from the form: whether the bench is
+    ready to tour, whether the Identify search is on the page, and the practice
+    files Continue loads when the reader has none. */
 type ApplyTutorialInputs = {
   loadPractice: () => void;
   loading: boolean;
   ready: boolean;
+  searchShown: boolean;
 };
 
 /**
  * The guided Apply run. It starts on the empty drop zone and waits there: the
- * reader adds files by any of the real routes, or presses Continue to use the
- * practice files - so nothing appears on the bench they did not ask for.
+ * reader adds files by any of the real routes, looks a ROM up instead, or
+ * presses Continue on the search to use the practice files - so nothing
+ * appears on the bench they did not ask for.
  */
-const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep =>
-  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
-    body: localizer.message("ui.apply.tutorial.identify.body"),
-    title: localizer.message("ui.apply.tutorial.identify.title"),
-    tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
-  });
-
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
   inputs: ApplyTutorialInputs,
@@ -118,8 +114,11 @@ const getApplySampleTutorialSteps = (
       ["download", localizer.message("ui.apply.tutorial.practiceFiles")],
     ],
     body: localizer.message("ui.apply.tutorial.addFiles.body"),
-    busy: !inputs.ready && inputs.loading,
-    locked: !inputs.ready,
+    // Some files in but not all - a ROM without a patch - hide the search the
+    // next step frames, so Continue here waits for the rest or loads the
+    // practice files itself.
+    busy: !(inputs.ready || inputs.searchShown) && inputs.loading,
+    locked: !(inputs.ready || inputs.searchShown),
     onContinue: inputs.loadPractice,
     placement: "below",
     target: "#rom-weaver-container .unified-drop-step",
@@ -128,18 +127,36 @@ const getApplySampleTutorialSteps = (
       inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.addFiles.tryIt",
     ),
   },
+  // The other way in: the search under the empty drop zone. The page hides it
+  // once a ROM is added or the patches supply the ROM checks, and the run then
+  // passes over this step. A chosen match moves the search into the ROM card,
+  // and the ring follows it there.
+  {
+    body: localizer.message("ui.apply.tutorial.identify.body"),
+    busy: !inputs.ready && inputs.loading,
+    locked: !inputs.ready,
+    onContinue: inputs.loadPractice,
+    skip: !inputs.searchShown,
+    target: "#rom-weaver-container .identify-search, #rom-weaver-row-file-rom",
+    title: localizer.message("ui.apply.tutorial.identify.title"),
+    tryIt: localizer.message(
+      inputs.ready
+        ? "ui.apply.tutorial.addFiles.readyTryIt"
+        : inputs.searchShown
+          ? "ui.apply.tutorial.identify.tryIt"
+          : "ui.apply.tutorial.addFiles.tryIt",
+    ),
+  },
   getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
     actions: [
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
     body: localizer.message("ui.apply.tutorial.rom.body"),
-    openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.tutorial.rom.title"),
     tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
   }),
-  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["toggle", localizer.message("ui.apply.tutorial.toggle")],
@@ -152,7 +169,6 @@ const getApplySampleTutorialSteps = (
       ["menu", localizer.message("ui.apply.tutorial.addCheats")],
     ],
     body: localizer.message("ui.apply.tutorial.patches.body"),
-    openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: localizer.message("ui.apply.tutorial.patches.title"),
@@ -166,7 +182,6 @@ const getApplySampleTutorialSteps = (
     ],
     body: localizer.message("ui.apply.tutorial.output.body"),
     cta: ".btn.run",
-    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
     title: localizer.message("ui.apply.tutorial.output.title"),
@@ -181,14 +196,12 @@ const getCheatsTutorialSteps = (
   {
     actions: [["checks", "Checks"]],
     body: "This checksum-matched homebrew ROM unlocks a small practice catalog for this guide.",
-    openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: "Start with the practice ROM",
   },
   {
     actions: [["menu", "Add cheats to the patch order"]],
     body: "Open the cheat picker, add practice cheats, and inspect the address, value, and optional compare byte.",
-    openDrawers: true,
     target: "#rom-weaver-row-patch-stack",
     title: "Choose cheats",
   },
@@ -199,7 +212,6 @@ const getCheatsTutorialSteps = (
       ["menu", "Details"],
     ],
     body: "Cheats share the patch stack. Switch them on, inspect their writes, and place them in execution order.",
-    openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: "Review the stack",
@@ -210,7 +222,6 @@ const getCheatsTutorialSteps = (
       ? localizer.message("ui.combinedPatch.description")
       : "Apply the stack to bake the selected cheats into a new ROM.",
     cta: ".btn.run",
-    openDrawers: true,
     placement: "top",
     target: createPage ? "#rom-weaver-combined-patch-output" : "#rom-weaver-row-output-file-name",
     title: createPage ? localizer.message("ui.combinedPatch.title") : "Apply the cheats",
@@ -224,11 +235,9 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
       ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
     body: localizer.message("ui.apply.weaveTutorial.rom.body"),
-    openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.weaveTutorial.rom.title"),
   }),
-  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
@@ -244,7 +253,6 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
   {
     actions: [["weave", localizer.message("ui.apply.weaveTutorial.weavePatches")]],
     body: localizer.message("ui.apply.weaveTutorial.safeWeave.body"),
-    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-weave-job",
     title: localizer.message("ui.apply.weaveTutorial.safeWeave.title"),
@@ -253,7 +261,6 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     actions: [["weave", localizer.message("ui.weaveExport.share")]],
     body: localizer.message("ui.apply.weaveTutorial.download.body"),
     cta: "#rom-weaver-button-export-weave",
-    openDrawers: true,
     placement: "top",
     target: "#rom-weaver-weave-job",
     title: localizer.message("ui.apply.weaveTutorial.download.title"),
@@ -385,8 +392,9 @@ const useGuidedSampleLoader = (input: {
       input.onPracticeCheatSampleChange?.(true);
     } catch {
       if (generation !== loadGenerationRef.current) return;
-      // Guided Apply stays on its add-files step, where the card shows why
-      // and the reader can still add files of their own; the others close.
+      // Guided Apply stays on the step that started the load, where the card
+      // shows why and the reader can still add files of their own; the others
+      // close.
       if (guide !== "apply") setSampleTutorial(null);
       input.onPracticeCheatSampleChange?.(false);
       setSampleError(localizer.message("ui.apply.tutorial.sampleLoadFailed"));
@@ -1276,6 +1284,7 @@ function ApplyWorkflowFormView({
                     loadPractice: loadApplyPractice,
                     loading: sampleLoading,
                     ready: sampleTutorialReady,
+                    searchShown: canSearchRom,
                   })
           }
         />

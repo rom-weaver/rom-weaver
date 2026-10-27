@@ -30,18 +30,17 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a practice ROM** › **Start a practice run** under the empty drop zone.
 
-The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
+The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in (on a phone, choose **More** on the guide card to see them): drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
-For this tutorial, choose **Continue** without adding anything. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead, then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
+For this tutorial, choose **Continue** without adding anything. The guide moves to **Or identify your original ROM**, the search under the drop area for a game you know but have no file for. The homebrew sample has no public database entry, so choose **Continue** again. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead (under **More** on a phone), then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
 
 ## Step 2: look at what you added
 
-The guide points at four more parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
+The guide points at three more parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
 
 1. **Check your original ROM** frames the **ROM** card, which lists the file's checksums, and lifts the **Simple/Detailed** switch beside it. Its label shows the active view. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
-2. **Identify your original ROM** explains the search under the empty drop zone. The homebrew sample has no public database entry, so there is nothing to search; choose **Continue**.
-3. **Patches and cheats** shows two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`. Cheats join the same list from **Add cheats to the patch order**; leave every cheat off to preserve this tutorial's expected output.
-4. **Apply & download** names the output controls you use in the next step.
+2. **Patches and cheats** shows two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`. Cheats join the same list from **Add cheats to the patch order**; leave every cheat off to preserve this tutorial's expected output.
+3. **Apply & download** names the output controls you use in the next step.
 
 ## Step 3: apply the patches
 
@@ -106,7 +105,7 @@ These guides label the sample as practice. The checksum above is still the resul
 
 This tutorial is written against the guided sample, so the usual surprises have simple causes:
 
-- **The page was empty when it opened.** That is expected: the guide waits for you to add files. Choose **Continue** on the guide card to use the practice files. If no guide card appeared, the guide runs from the `?guide=apply` part of the link. Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply) again rather than the plain Apply Patches page.
+- **The page was empty when it opened.** That is expected: the guide waits for you to add files. Choose **Continue** twice on the guide card to use the practice files. If no guide card appeared, the guide runs from the `?guide=apply` part of the link. Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply) again rather than the plain Apply Patches page.
 - **The button was greyed out.** Every file has to finish reading and checksumming first. The notice nearest the disabled button always says what it is still waiting for.
 - **The patches were in the other order.** That is valid for this sample. Both patches target the original ROM, so either order produces the same result.
 - **Your checksum did not match.** Confirm you applied both patches and that you are hashing the downloaded file rather than the sample you started from.

@@ -932,8 +932,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     const tutorial = page.locator(".sample-tutorial-dialog");
     // Guided Apply opens on the drop zone and loads nothing until asked, so its
-    // first step is scanned waiting for files; Continue then loads the practice
-    // files and moves on by itself once they are in.
+    // first step and the Identify search after it are scanned waiting for
+    // files; Continue on the search loads the practice files and moves on by
+    // itself once they are in.
     await guidedApply.click();
     await page
       .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="5"]:not([data-moving])')
@@ -964,12 +965,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.locator("#rom-weaver-input-file-unified-weave").waitFor({ state: "attached" });
       await installAuditTools();
     });
-    for (let step = 1; step <= 5; step += 1) {
+    for (let step = 1; step <= 4; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Weave ${step}/5`);
-      if (step === 5) {
+      await scanVariants(`guided Weave ${step}/4`);
+      if (step === 4) {
         const createWeaveButton = page.locator("#rom-weaver-button-export-weave:not([data-downloadable])");
         await createWeaveButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(

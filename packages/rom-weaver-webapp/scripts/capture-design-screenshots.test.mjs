@@ -21,7 +21,13 @@ test("guided captures wait for loaded sample data independently of tutorial copy
     assert.deepEqual(calls, [
       ["body", "visible"],
       ...(captureCase.dismissGuide ? [['.sample-tutorial-dialog[aria-busy="false"]', "visible"]] : []),
-      ...(captureCase.practiceFiles ? [[".sample-tutorial-actions .btn.primary", "click"]] : []),
+      ...(captureCase.practiceFiles
+        ? [
+            [".sample-tutorial-actions .btn.primary", "click"],
+            ['.sample-tutorial-dialog[data-step="2"]:not([data-moving])', "visible"],
+            [".sample-tutorial-actions .btn.primary", "click"],
+          ]
+        : []),
       [captureCase.target, "visible"],
     ]);
     assert.equal("waitFor" in captureCase, false);

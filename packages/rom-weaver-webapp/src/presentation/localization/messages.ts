@@ -632,7 +632,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
   "ui.apply.tutorial.identify.title": msg({
     id: "ui.apply.tutorial.identify.title",
-    message: "Identify your original ROM",
+    message: "Or identify your original ROM",
   }),
   "ui.apply.tutorial.identify.body": msg({
     id: "ui.apply.tutorial.identify.body",
@@ -641,7 +641,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.identify.tryIt": msg({
     id: "ui.apply.tutorial.identify.tryIt",
-    message: "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums.",
+    message: "Search a game name or checksum, or press Continue to use the practice files.",
   }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
@@ -665,7 +665,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.addFiles.tryIt": msg({
     id: "ui.apply.tutorial.addFiles.tryIt",
-    message: "Add a ROM and at least one patch, or press Continue to use the practice files.",
+    message: "Add a ROM and at least one patch. No files yet? Press Continue.",
   }),
   "ui.apply.tutorial.addFiles.readyTryIt": msg({
     id: "ui.apply.tutorial.addFiles.readyTryIt",
@@ -1112,6 +1112,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.endHint": msg({ id: "ui.tutorial.endHint", message: "Esc or ✕ leaves the guide." }),
   "ui.tutorial.exit": msg({ id: "ui.tutorial.exit", message: "Leave the guide" }),
   "ui.tutorial.instructions": msg({ id: "ui.tutorial.instructions", message: "Practice run steps" }),
+  "ui.tutorial.less": msg({ id: "ui.tutorial.less", message: "Less" }),
+  "ui.tutorial.more": msg({ id: "ui.tutorial.more", message: "More" }),
   "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading practice files…" }),
   "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading practice files" }),
   "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading practice files" }),

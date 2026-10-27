@@ -401,7 +401,7 @@ msgstr "Add a ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addFiles.tryIt"
-msgstr "Add a ROM and at least one patch, or press Continue to use the practice files."
+msgstr "Add a ROM and at least one patch. No files yet? Press Continue."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1196,7 +1196,7 @@ msgstr "Choose decimal or binary units for file sizes."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.tryIt"
-msgstr "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums."
+msgstr "Search a game name or checksum, or press Continue to use the practice files."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2511,7 +2511,7 @@ msgstr "Identify ROMs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.title"
-msgstr "Identify your original ROM"
+msgstr "Or identify your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2740,6 +2740,11 @@ msgstr "Legacy variant"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.less"
+msgstr "Less"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.cheats.sourceLibretro"
 msgstr "Libretro database"
 
@@ -2947,6 +2952,11 @@ msgstr "Modified is the result you want the patch to produce. If the two files l
 #: src/presentation/localization/messages.ts
 msgid "ui.create.sourceMode.rom"
 msgstr "Modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.more"
+msgstr "More"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

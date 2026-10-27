@@ -14,12 +14,11 @@ const STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [["checks", "Checks"]],
     body: "Review the first section.",
-    openDrawers: true,
     openMenu: true,
     target: "#tutorial-first",
     title: "First section",
   },
-  { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
+  { body: "Review the second section.", target: "#tutorial-second", title: "Second section" },
 ];
 
 const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: string; label: string }) => {
@@ -47,7 +46,7 @@ const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: st
 
 // The app commits .rw-app long before the guide mounts, and ending the guide
 // unmounts only the guide. Both matter here: the portal container is resolved
-// on the guide's first render, and the drawer restore runs on its teardown.
+// on the guide's first render, and the menu restore runs on its teardown.
 const renderGuidedWorkbench = ({ onClose = vi.fn() }: { onClose?: () => void } = {}) => {
   const workbench = (guided: boolean) => (
     <div className="rw-app">
@@ -212,7 +211,7 @@ describe("sample tutorial", () => {
     );
   });
 
-  it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {
+  it("highlights live sections, leaves their drawers shut, and keeps progression in the guide", async () => {
     const onClose = vi.fn();
     render(
       <div className="rw-app">
@@ -224,7 +223,8 @@ describe("sample tutorial", () => {
 
     const first = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    // An opened drawer stretches the row; the step's Try it names one instead.
+    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("false");
     expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("true");
     const actions = screen.getByRole("list", { name: "On this card" });
     expect(actions.textContent).toContain("Checks");
@@ -240,10 +240,14 @@ describe("sample tutorial", () => {
 
     const second = document.querySelector("#tutorial-second") as HTMLElement;
     await waitFor(() => expect(second.classList.contains("sample-tutorial-target")).toBe(true));
-    expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("false");
     expect(first.classList.contains("sample-tutorial-target")).toBe(false);
     expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
+    // The buttons ignore presses until the card has landed on its new row.
+    const landed = () =>
+      waitFor(() => expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-moving")).toBe(false));
 
+    await landed();
     back.focus();
     fireEvent.click(back);
     await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
@@ -251,10 +255,115 @@ describe("sample tutorial", () => {
     expect(back.disabled).toBe(false);
     expect(back.getAttribute("aria-disabled")).toBe("true");
 
+    await landed();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+    await landed();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("shows the card without its row when the next step's row never connects", async () => {
+    // The reader emptied the bench mid-run: ghost rows replace the row the
+    // next step names, so the card must not wait for it forever.
+    const onClose = vi.fn();
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={onClose}
+          ready
+          steps={[
+            STEPS[0] as SampleTutorialStep,
+            { body: "Review the removed section.", target: "#tutorial-removed", title: "Removed section" },
+          ]}
+        />
+      </div>,
+    );
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const first = document.querySelector("#tutorial-first") as HTMLElement;
+    await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
+    await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Removed section" })).toBeTruthy());
+    await waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("passes over a skipped step both ways and keeps its number", async () => {
+    // Guided Apply's Identify search hides once files are in; its step stays
+    // counted so the steps after it are not renumbered under the reader.
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            STEPS[0] as SampleTutorialStep,
+            { body: "Search instead.", skip: true, target: "#tutorial-search", title: "Search" },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>,
+    );
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const landed = () => waitFor(() => expect(dialog.hasAttribute("data-moving")).toBe(false));
+    await landed();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+    expect(dialog.dataset.step).toBe("3");
+    expect(dialog.dataset.stepCount).toBe("3");
+    await landed();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
+    expect(dialog.dataset.step).toBe("1");
+  });
+
+  it("follows its row when React replaces it mid-step", async () => {
+    // Choosing an Identify match swaps the drop zone's search for the ROM card.
+    const SwappingRow = () => {
+      const [matched, setMatched] = useState(false);
+      return matched ? (
+        <section id="tutorial-card">Matched ROM</section>
+      ) : (
+        <form id="tutorial-search">
+          <button onClick={() => setMatched(true)} type="button">
+            Choose match
+          </button>
+        </form>
+      );
+    };
+    render(
+      <div className="rw-app">
+        <SwappingRow />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[{ body: "Search.", target: "#tutorial-search, #tutorial-card", title: "Search" }]}
+        />
+      </div>,
+    );
+    const search = document.querySelector("#tutorial-search") as HTMLElement;
+    await waitFor(() => expect(search.classList.contains("sample-tutorial-target")).toBe(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose match" }));
+    const card = await waitFor(() => {
+      const match = document.querySelector("#tutorial-card") as HTMLElement;
+      expect(match.classList.contains("sample-tutorial-target")).toBe(true);
+      return match;
+    });
+    expect(document.querySelectorAll(".sample-tutorial-target")).toHaveLength(1);
+    expect(card.getAttribute("aria-describedby")).toBe(
+      document.querySelector(".sample-tutorial-dialog")?.getAttribute("aria-describedby"),
+    );
   });
 
   it("keeps the same target mounted when its parent rerenders equivalent steps", async () => {
@@ -269,13 +378,36 @@ describe("sample tutorial", () => {
     const target = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(target.classList.contains("sample-tutorial-target")).toBe(true));
     const ring = document.querySelector(".sample-tutorial-ring");
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    const menu = target.querySelector(".patch-menu-btn") as HTMLButtonElement;
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
 
     rerender(workbench(STEPS.map((step) => ({ ...step }))));
 
     expect(document.querySelector(".sample-tutorial-ring")).toBe(ring);
     expect(target.classList.contains("sample-tutorial-target")).toBe(true);
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("leaves the row's menu shut on a phone, where it would cover the row", async () => {
+    // No query the guide asks about matches below the desktop anchor width.
+    const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          addEventListener: vi.fn(),
+          matches: false,
+          media: query,
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    try {
+      renderGuidedWorkbench();
+
+      const first = document.querySelector("#tutorial-first") as HTMLElement;
+      await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
+      expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      matchMedia.mockRestore();
+    }
   });
 
   it("keeps one live region across steps so the change is announced", async () => {
@@ -458,12 +590,12 @@ describe("sample tutorial", () => {
     expect(button.dataset.guideCta).toBeUndefined();
   });
 
-  it("re-closes an opened drawer when the final action ends the guide", async () => {
+  it("re-closes an opened menu when the final action ends the guide", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       {
         body: "Press it.",
         cta: ".btn.run",
-        openDrawers: true,
+        openMenu: true,
         target: "#tutorial-cta",
         title: "Finish",
       },
@@ -482,21 +614,21 @@ describe("sample tutorial", () => {
     const { rerender } = render(workbench(false));
     rerender(workbench(true));
 
-    const drawer = screen.getByRole("button", { name: "Output options" });
-    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    const menu = document.querySelector("#tutorial-cta .patch-menu-btn") as HTMLButtonElement;
+    await waitFor(() => expect(menu.getAttribute("aria-expanded")).toBe("true"));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onClose).toHaveBeenCalledOnce();
     rerender(workbench(false));
-    expect(drawer.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("re-closes the drawers it opened when the guide ends", async () => {
+  it("re-closes the menu it opened when the guide ends", async () => {
     const { endGuide } = renderGuidedWorkbench();
 
-    const drawer = screen.getByRole("button", { name: "First drawer" });
-    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    const menu = document.querySelector("#tutorial-first .patch-menu-btn") as HTMLButtonElement;
+    await waitFor(() => expect(menu.getAttribute("aria-expanded")).toBe("true"));
     endGuide();
-    expect(drawer.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
   });
 });
 
@@ -603,6 +735,46 @@ describe("sample tutorial step card", () => {
     );
     const tryIt = document.querySelector(".sample-tutorial-try");
     expect(tryIt?.textContent).toBe("Try itOpen the first drawer.");
+  });
+
+  it("folds the explanation behind More and keeps the reader's choice on later steps", async () => {
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            { ...(STEPS[0] as SampleTutorialStep), tryIt: "Open the first drawer." },
+            { ...(STEPS[1] as SampleTutorialStep), tryIt: "Open the second drawer." },
+          ]}
+        />
+      </div>,
+    );
+
+    const guide = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    const more = screen.getByRole("button", { name: "More" });
+    expect(guide.dataset.folded).toBe("true");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(more.getAttribute("aria-controls")).toBe(document.querySelector(".sample-tutorial-body")?.id);
+
+    fireEvent.click(more);
+    expect(guide.dataset.folded).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(guide.dataset.step).toBe("2"));
+    expect(guide.dataset.folded).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Less" })).toBeTruthy();
+  });
+
+  it("never folds a step whose body is its only instruction", () => {
+    renderGuidedWorkbench();
+
+    expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-folded")).toBe(false);
+    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
   });
 
   it("describes the current view and follows the Detailed setting while the step is open", async () => {
@@ -794,6 +966,39 @@ describe("sample tutorial step card", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
     // The download belongs to the first step only.
     expect(screen.queryByRole("link", { name: "Download first-weave.zip" })).toBeNull();
+  });
+
+  it("hides More while Continue shows its loading label", () => {
+    const workbench = (busy: boolean) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            {
+              ...(STEPS[0] as SampleTutorialStep),
+              busy,
+              locked: true,
+              onContinue: vi.fn(),
+              tryIt: "Open the first drawer.",
+            },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>
+    );
+    const { rerender } = render(workbench(false));
+    expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
+
+    rerender(workbench(true));
+    expect(screen.getByRole("button", { name: "Loading practice files…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
+
+    rerender(workbench(false));
+    expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
   });
 
   it("stays on a locked step whose Continue work failed", async () => {

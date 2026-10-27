@@ -243,13 +243,20 @@ test("url-session files fetched from same-origin urls flow through the drop pipe
 });
 
 // Guided Apply opens on the empty drop zone and loads nothing until the reader
-// asks: Continue with no files in loads the practice files.
+// asks: Continue moves to the Identify search, and Continue there, with no
+// files in, loads the practice files.
 const startPracticeFiles = async () => {
-  await expect
-    .poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"] .sample-tutorial-actions .btn.primary'))
-    .toBeInstanceOf(HTMLButtonElement);
-  expect(getInputStackRows()).toHaveLength(0);
-  document.querySelector(".sample-tutorial-actions .btn.primary").click();
+  for (const step of ["1", "2"]) {
+    await expect
+      .poll(() =>
+        document.querySelector(
+          `.sample-tutorial-dialog[data-step="${step}"]:not([data-moving]) .sample-tutorial-actions .btn.primary`,
+        ),
+      )
+      .toBeInstanceOf(HTMLButtonElement);
+    expect(getInputStackRows()).toHaveLength(0);
+    document.querySelector(".sample-tutorial-actions .btn.primary").click();
+  }
 };
 
 test("sample action applies with one patch disabled", async () => {

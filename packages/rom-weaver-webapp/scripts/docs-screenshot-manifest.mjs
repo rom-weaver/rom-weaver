@@ -74,14 +74,18 @@ const DOCS_SCREENSHOT_CASES = [
   },
 ];
 const PRACTICE_FILES_BUTTON = ".sample-tutorial-actions .btn.primary";
+const IDENTIFY_STEP = '.sample-tutorial-dialog[data-step="2"]:not([data-moving])';
 const waitForDocsScreenshotReady = async (page, captureCase) => {
   await page.locator("body").waitFor({ state: "visible" });
   if (captureCase.dismissGuide) {
     await page.locator('.sample-tutorial-dialog[aria-busy="false"]').waitFor({ state: "visible" });
   }
-  // Guided Apply waits on its drop zone until files are added; its Continue
-  // stages the practice files every Apply capture shows.
+  // Guided Apply waits on its drop zone until files are added; Continue moves
+  // to the Identify search, whose Continue stages the practice files every
+  // Apply capture shows.
   if (captureCase.practiceFiles) {
+    await page.locator(PRACTICE_FILES_BUTTON).click();
+    await page.locator(IDENTIFY_STEP).waitFor({ state: "visible" });
     await page.locator(PRACTICE_FILES_BUTTON).click();
   }
   await page.locator(captureCase.target).first().waitFor({ state: "visible" });
