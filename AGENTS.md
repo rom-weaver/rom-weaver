@@ -63,6 +63,16 @@ Commands and details:
 - Bug fixes: `quality-regression-proof` where practical; report the exact
   base/candidate behavioral evidence. Compile, setup, or zero-test failures
   prove nothing.
+- Bug-fix tests go through the real entry point with the real input shape
+  (for errors, the message the production code builds, not a hand-written
+  string), and fail without the fix. A test that calls a helper directly does
+  not cover the code that wires it in; delete the wiring and confirm a test
+  fails.
+- Propagation fixes (a flag, policy, or state that derived objects must carry,
+  such as the identify skip): find every site that creates a derived object
+  with `rg` before fixing one, fix them together or list the ones left, and
+  prefer enforcing the rule where the object is created over adding calls at
+  each site.
 - Worker lifecycle changes: `browser-runtime-lifecycle.test.mjs` and
   `browser-opfs-many-entries.test.mjs` (`ROM_WEAVER_WASM_EXHAUSTIVE=1` for
   deeper seeded sequences).
