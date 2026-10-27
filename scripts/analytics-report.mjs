@@ -18,7 +18,7 @@
 // bing options: --page URL (GetPageQueryStats), --query TEXT (GetQueryPageStats).
 // cloudflare options: --host HOSTNAME (top referrers and HTML responses for that host,
 //   one query per UTC day because adaptive datasets cap the queryable range).
-// --summary prints a compact table to stderr; JSON stays on stdout.
+// gsc --summary prints a compact table to stderr; JSON stays on stdout.
 //
 // Examples:
 //   # Queries that reached one page over the last 28 days
@@ -136,7 +136,7 @@ export function parseArgs(argv) {
       throw new Error(`Unknown argument: ${flag}`);
     }
     if (!spec.sources.includes(source)) {
-      const reason = ["--days", "--start", "--end"].includes(flag)
+      const reason = ["--days", "--start", "--end"].includes(flag) && ["bing", "github"].includes(source)
         ? " (it reports a fixed history window)"
         : "";
       throw new Error(`${flag} does not apply to ${source}${reason}`);
@@ -156,6 +156,10 @@ export function parseArgs(argv) {
   if (given.start !== undefined) checkDate(given.start, "--start");
   if (given.end !== undefined) checkDate(given.end, "--end");
   if (given.start && given.end && given.start > given.end) throw new Error("--start must not be after --end");
+  // Deltas come from the single `page` and `query` sets, so any other --dims would compare nothing.
+  if (given.compare !== undefined && given.dims !== undefined && !["page", "query"].includes(given.dims.trim())) {
+    throw new Error("--compare needs the default dimension sets, --dims page, or --dims query");
+  }
   const options = {
     source,
     days,
@@ -196,7 +200,9 @@ export function dateRange(days, now = new Date()) {
 export function resolveRange({ days = DEFAULT_DAYS, start, end }, now = new Date()) {
   const base = end ? new Date(`${end}T00:00:00Z`) : now;
   const fallback = dateRange(days, base);
-  return { start: start ?? fallback.start, end: end ?? fallback.end };
+  const range = { start: start ?? fallback.start, end: end ?? fallback.end };
+  if (range.start > range.end) throw new Error(`--start ${range.start} is after the range end ${range.end}`);
+  return range;
 }
 
 export function eachDay({ start, end }) {

@@ -174,14 +174,15 @@ test("parses the new flags into args and options", () => {
     "--query-contains",
     "rom",
     "--dims",
-    "query,page",
+    "query",
     "--fresh",
     "--compare",
     "2026-02-03:2026-02-09",
     "--summary",
   ]);
   assert.equal(parsed.start, "2026-02-10");
-  assert.deepEqual(parsed.dims, ["query", "page"]);
+  assert.deepEqual(parsed.dims, ["query"]);
+  assert.deepEqual(parseArgs(["gsc", "--dims", "query,page"]).dims, ["query", "page"]);
   assert.deepEqual(parsed.compare, { start: "2026-02-03", end: "2026-02-09" });
   assert.equal(parsed.fresh, true);
   assert.equal(parsed.summary, true);
@@ -491,4 +492,13 @@ test("run wraps every result in the source, args and date envelope", async () =>
     { source: result.source, args: result.args, start: result.start, end: result.end, fetchedAt: result.fetchedAt },
     { source: "github", args: {}, start: null, end: null, fetchedAt: "2026-01-10T00:00:00.000Z" },
   );
+});
+
+test("argument checks cover review edge cases", () => {
+  assert.throws(() => resolveRange({ start: "2099-01-01" }, new Date("2026-01-10T00:00:00Z")), /after the range end/);
+  assert.throws(() => parseArgs(["gsc", "--dims", "date", "--compare", "2026-01-01:2026-01-07"]), /--compare needs/);
+  assert.doesNotThrow(() => parseArgs(["gsc", "--dims", "query", "--compare", "2026-01-01:2026-01-07"]));
+  assert.throws(() => parseArgs(["gsc-inspect", "--days", "7", "https://example.invalid/"]), (error) => !/history window/.test(error.message));
+  assert.throws(() => parseArgs(["bing", "--days", "7"]), /history window/);
+  assert.throws(() => parseArgs(["cloudflare", "--summary"]), /does not apply/);
 });
