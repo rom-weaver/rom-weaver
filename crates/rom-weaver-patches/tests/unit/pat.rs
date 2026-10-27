@@ -381,7 +381,7 @@ fn validate_reports_forward_reverse_and_skipped_records() {
 
     assert_eq!(
         report.label,
-        "validated PAT patch source with 3 record(s): 1 forward / 1 reverse; 1 record(s) would be skipped due to unexpected input byte"
+        "validated PAT patch source with 3 record(s): 1 forward / 1 reverse; warning=PAT would skip 1 record(s) due to unexpected input byte"
     );
 }
 

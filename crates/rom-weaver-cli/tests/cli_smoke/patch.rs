@@ -284,6 +284,92 @@ fn patch_create_format_warning_is_emitted_once() {
 }
 
 #[test]
+fn patch_apply_pat_skipped_records_warn_in_every_output_mode() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.bin");
+    let patch = temp.child("change.pat");
+    patch
+        .write_str(
+            "00000000 61 41\n00000001 62 42\n00000002 63 43\n00000003 64 44\n00000004 65 45\n",
+        )
+        .expect("patch fixture");
+    for (case, (input, expected, skipped)) in [
+        (b"xxxxx", b"xxxxx", 5),
+        (b"xbcde", b"xBCDE", 1),
+        (b"abcde", b"ABCDE", 0),
+        (b"ABCDE", b"abcde", 0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        fs::write(source.path(), input).expect("source fixture");
+        let warning = format!("PAT skipped {skipped} record(s) due to unexpected input byte");
+        for (mode, flags) in [
+            ("human", vec![]),
+            ("verbose", vec!["--verbose"]),
+            ("quiet", vec!["--quiet"]),
+            ("json", vec!["--json"]),
+            ("jsonl", vec!["--jsonl"]),
+        ] {
+            let destination = temp.child(format!("{case}-{mode}.bin"));
+            let output = Command::cargo_bin("rom-weaver")
+                .expect("binary")
+                .env("HOME", temp.path())
+                .env("XDG_CONFIG_HOME", temp.child("config").path())
+                .env("XDG_CACHE_HOME", temp.child("cache").path())
+                .env("XDG_STATE_HOME", temp.child("state").path())
+                .env("XDG_DATA_HOME", temp.child("data").path())
+                .args([
+                    "patch",
+                    "apply",
+                    "--input",
+                    source.path().to_str().expect("source path"),
+                    "--patch",
+                    patch.path().to_str().expect("patch path"),
+                    "--output",
+                    destination.path().to_str().expect("output path"),
+                    "--no-compress",
+                    "--no-color",
+                ])
+                .args(&flags)
+                .assert()
+                .success()
+                .get_output()
+                .clone();
+            assert_eq!(fs::read(destination.path()).expect("output"), expected);
+            let stderr = String::from_utf8(output.stderr).expect("diagnostic");
+            let structured = mode == "json" || mode == "jsonl";
+            let warning_marker = if structured { "\"WARN\"" } else { "warning:" };
+            assert_eq!(
+                stderr.matches(warning_marker).count(),
+                usize::from(skipped > 0),
+                "PAT skipped-record warnings must reach stderr: {mode}, {skipped}: {stderr}"
+            );
+            if skipped > 0 {
+                assert!(stderr.contains(&warning), "{mode}: {stderr}");
+            }
+            if structured {
+                let report = parse_json_lines(&output.stdout).pop().expect("report");
+                assert_eq!(report["status"], "succeeded");
+                let warnings = report["details"]["warnings"].as_array();
+                assert_eq!(warnings.map_or(0, Vec::len), usize::from(skipped > 0));
+                if mode == "json" {
+                    assert_eq!(
+                        report["warnings"].as_array().expect("warnings").len(),
+                        usize::from(skipped > 0)
+                    );
+                }
+                if skipped > 0 {
+                    assert_eq!(warnings.expect("skip warning")[0], warning);
+                }
+            } else {
+                assert!(output.stdout.is_empty(), "{mode}");
+            }
+        }
+    }
+}
+
+#[test]
 fn patch_apply_format_warning_is_emitted_once_and_retained_in_dry_run() {
     let temp = setup_temp_dir();
     let (source, patch) = make_bps_patch_fixture(&temp);

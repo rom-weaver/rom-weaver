@@ -149,7 +149,10 @@ impl PatPatchHandler {
             String::new()
         };
         let skipped_suffix = if skipped > 0 {
-            format!("; skipped {skipped} record(s) due to unexpected input byte")
+            format!(
+                "; warning={} skipped {skipped} record(s) due to unexpected input byte",
+                self.descriptor.name
+            )
         } else {
             String::new()
         };
@@ -204,7 +207,10 @@ impl PatchHandler for PatPatchHandler {
             .collect::<Result<Vec<_>>>()?;
         let (forward, reverse, skipped) = summarize_pat_writes(&writes)?;
         let skipped_suffix = if skipped > 0 {
-            format!("; {skipped} record(s) would be skipped due to unexpected input byte")
+            format!(
+                "; warning={} would skip {skipped} record(s) due to unexpected input byte",
+                self.descriptor.name
+            )
         } else {
             String::new()
         };
