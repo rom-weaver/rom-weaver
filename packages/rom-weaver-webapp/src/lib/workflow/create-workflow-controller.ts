@@ -259,6 +259,15 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     });
   }
 
+  /**
+   * A cancel that arrives while no operation is active or queued has nothing to stop; storing it
+   * would reject the next unrelated operation. Disposal still aborts unconditionally.
+   */
+  override abort(reason?: unknown): void {
+    if (!(this.disposed || this.isBusy())) return;
+    super.abort(reason);
+  }
+
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
