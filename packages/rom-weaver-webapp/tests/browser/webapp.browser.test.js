@@ -956,6 +956,10 @@ test("guided Apply opens no drawers on desktop and keeps its last row and Apply 
     await expect.poll(() => guide.dataset.moving).toBeUndefined();
     guide.querySelector(".sample-tutorial-next").click();
     await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
+    // The step number renders before the step's row connects, so the last
+    // step's row can still be the target here; wait for the card to land on
+    // the new one.
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
     await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
     // Identify is the other way in, so it frames its search before any files.
     expect(document.querySelector(".sample-tutorial-target").matches(".identify-search")).toBe(step === "2");
