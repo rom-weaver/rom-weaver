@@ -457,10 +457,12 @@ const createArchiveEntriesFromOutputAssets = (
     sheetText?: string,
   ) => {
     if (asset.kind === "gdi") {
-      sheetText = replaceGdiFileReferences(
-        asset.file.metadata?.gdiText ?? decodeUtf8(getPatchFileBytes(file)),
-        (name) => trackFileNames.get(getBaseFileName(name).toLowerCase()),
+      const originalText = asset.file.metadata?.gdiText ?? decodeUtf8(getPatchFileBytes(file));
+      sheetText = replaceGdiFileReferences(originalText, (name) =>
+        trackFileNames.get(getBaseFileName(name).toLowerCase()),
       );
+      // A text round trip turns non-UTF-8 track names into U+FFFD, so unchanged sheets keep their original bytes.
+      if (sheetText === originalText) return createArchiveEntryInputFromPatchFile(file, outputFileName);
     }
     return createArchiveEntryFromPatchFile(asset, file, outputFileName, sheetText);
   };

@@ -398,6 +398,26 @@ describe("buildSessionOutputFiles", () => {
     expect(new TextDecoder().decode(entries[1]?.data)).toBe('1\n1 45000 4 2352 "renamed.bin" 0\n');
   });
 
+  it("passes an unchanged GDI sheet through the byte-copy entry builder", async () => {
+    const sheetBytes = Uint8Array.from([
+      ...new TextEncoder().encode("1\n1 0 4 2352 Pok"),
+      0xe9,
+      ...new TextEncoder().encode("mon.bin 0\n"),
+    ]);
+    const gdi = await createPatchFile(new File([sheetBytes], "disc.gdi"), "disc.gdi");
+    const track = await makeFile("track-bytes", "track01.bin");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(await makeFile("zip-bytes", "disc.zip"));
+
+    await buildSessionOutputFiles(
+      [makeAsset("gdi", "gdi", gdi, "group"), makeAsset("track", "track", track, "group")],
+      new Map(),
+      { output: { compression: "zip", outputName: "disc" } } as never,
+    );
+
+    // The mocked entry builder stands in for the real byte-copy path; a text re-encode would never reach it for the sheet.
+    expect(vi.mocked(createArchiveEntryInputFromPatchFile)).toHaveBeenCalledWith(gdi, "disc.gdi");
+  });
+
   it.each([
     ["x.cue", "x"],
     ["Foo.gba", "Foo"],
