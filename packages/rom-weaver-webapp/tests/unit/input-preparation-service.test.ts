@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getPatchFileBlob } from "../../src/lib/input/binary-service.ts";
+import { getPatchFileBlob, getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
 import {
   getBinarySourceSize,
   prepareInput,
@@ -8,6 +8,9 @@ import {
   prepareInputFile,
   prepareMultipleDirectInputAssets,
 } from "../../src/lib/input/input-preparation-service.ts";
+import { createBrowserOpfsSourceRef } from "../../src/workers/protocol/browser-opfs-source-ref.ts";
+import { assertBrowserBinarySource } from "../../src/lib/runtime/source-normalization.ts";
+import { createPublicSourceValidator } from "../../src/platform/shared/public-source-validation.ts";
 import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
 import { buildCompressPanel } from "../../src/public/react/compress-options.ts";
 import type { SourceRef } from "../../src/types/source.ts";
@@ -185,6 +188,34 @@ describe("prepareInputAssets", () => {
       "orphan.bin must be OPFS/VFS path-backed in browser workflows",
     );
   });
+
+  it.each(["rom", "patch"] as const)(
+    "uses the retained OPFS path for a %s with an unreadable File snapshot",
+    async (role) => {
+      const source = makeFile("rom-bytes", role === "rom" ? "game.bin" : "change.ips");
+      Object.defineProperty(source, "filePath", { value: "/work/weave-parse/retained/entry.bin" });
+      const readSnapshot = vi.spyOn(source, "slice").mockImplementation(() => {
+        throw new DOMException("The object can not be found here.", "NotFoundError");
+      });
+
+      const file = await prepareInput(source, role, NO_CONTAINER_OPTIONS as never, runtime);
+
+      expect(readSnapshot).not.toHaveBeenCalled();
+      expect(file.filePath).toBe("/work/weave-parse/retained/entry.bin");
+      expect(file.fileName).toBe(source.name);
+      expect(file.fileSize).toBe(source.size);
+      const exported = getPatchFileExternalSource(file);
+      expect(exported?.source).toBe(source);
+      const staged = await createBrowserOpfsSourceRef(exported as SourceRef, source.name, {
+        mountPoint: "/work",
+        pathPrefix: "cheat-target",
+      });
+      expect(staged).toMatchObject({ kind: "path", filePath: file.filePath, storageKind: "opfs" });
+      expect(readSnapshot).not.toHaveBeenCalled();
+      expect(() => assertBrowserBinarySource(exported as SourceRef, "Cheat classification")).not.toThrow();
+      expect(() => createPublicSourceValidator({ environmentLabel: "browser" })(exported)).not.toThrow();
+    },
+  );
 
   it("resolves a bare (non-container) ROM file into a single rom asset", async () => {
     const source = makeFile("rom-bytes", "game.bin");
