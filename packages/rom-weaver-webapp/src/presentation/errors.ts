@@ -76,10 +76,16 @@ const getUserFacingErrorMessage = (error: unknown, localizer: Localizer = create
 };
 
 const NO_ROM_IN_ARCHIVE_REGEX = /no extract entries from `([^`]+)` matched --filter rom\b/i;
+const ALL_ARCHIVE_ENTRIES_IGNORED_REGEX =
+  /all (?:extract entries|extracted [^`]+ candidates) from `([^`]+)` were ignored by default filters;/i;
 
-/** The native "nothing matched --filter rom" validation, shown without its internal path and flag. */
 const getNoRomInArchiveMessage = (error: unknown): string => {
   for (const message of getDistinctErrorMessages(error)) {
+    const ignoredArchivePath = ALL_ARCHIVE_ENTRIES_IGNORED_REGEX.exec(message)?.[1];
+    if (ignoredArchivePath) {
+      const fileName = ignoredArchivePath.split(/[\\/]/).pop() || ignoredArchivePath;
+      return `No usable ROM found in ${fileName}. Choose an archive containing a ROM, or extract it and add the ROM file.`;
+    }
     const archivePath = NO_ROM_IN_ARCHIVE_REGEX.exec(message)?.[1];
     if (archivePath) return `No ROM found in ${archivePath.split(/[\\/]/).pop() || archivePath}.`;
   }
