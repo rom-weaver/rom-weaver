@@ -80,16 +80,48 @@ impl CliApp {
                     "a .dcp patch cannot be combined with --code; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
                 );
         }
-        let has_database_cheats =
-            !args.cheat_records.is_empty() || !args.cheat_selection.cheats.is_empty();
-        #[cfg(not(target_arch = "wasm32"))]
-        let has_database_cheats = has_database_cheats
-            || weave_resolution.is_some_and(|resolution| !resolution.cheats.is_empty());
-        if has_database_cheats {
+        if !args.cheat_records.is_empty() || !args.cheat_selection.cheats.is_empty() {
             return fail(
                 "validate",
                 "a .dcp patch cannot be combined with --cheat or other database cheats; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
             );
+        }
+        // Optional weave cheats are skipped like the other patch formats do;
+        // a required one cannot be baked into a rebuilt GD-ROM filesystem.
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut skipped_weave_cheats = Vec::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(resolution) = weave_resolution {
+            let required = resolution
+                .cheats
+                .iter()
+                .filter(|entry| !entry.optional)
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>();
+            if !required.is_empty() {
+                let weave = args.bundle.as_ref().map_or_else(
+                    || "the weave".to_string(),
+                    |path| format!("weave {}", path.display()),
+                );
+                return fail(
+                    "validate",
+                    format!(
+                        "a .dcp patch cannot be combined with the required cheat(s) in {weave}: {}; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem. Pass --without-cheats to apply the weave without its cheats, or mark them optional",
+                        required.join(", ")
+                    ),
+                );
+            }
+            skipped_weave_cheats = resolution
+                .cheats
+                .iter()
+                .enumerate()
+                .map(|(index, entry)| crate::weave_cheats::SkippedWeaveCheat {
+                    index,
+                    id: entry.id.clone(),
+                    reason: "a .dcp patch rebuilds a GD-ROM filesystem and cannot apply cheats"
+                        .to_string(),
+                })
+                .collect::<Vec<_>>();
         }
         if args.target.is_some() {
             return fail(
@@ -186,6 +218,23 @@ impl CliApp {
             single.clone(),
         );
         Self::append_report_warnings(&mut report, name_warning);
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && !skipped_weave_cheats.is_empty() {
+            let skipped = skipped_weave_cheats
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            report.label = format!(
+                "{}; skipped {} optional weave cheat(s): {skipped}",
+                report.label,
+                skipped_weave_cheats.len(),
+            );
+            Self::append_report_warnings(
+                &mut report,
+                [format!("skipped optional weave cheats: {skipped}")],
+            );
+        }
         report
     }
 
