@@ -14,12 +14,11 @@ const STEPS: readonly SampleTutorialStep[] = [
   {
     actions: [["checks", "Checks"]],
     body: "Review the first section.",
-    openDrawers: true,
     openMenu: true,
     target: "#tutorial-first",
     title: "First section",
   },
-  { body: "Review the second section.", openDrawers: true, target: "#tutorial-second", title: "Second section" },
+  { body: "Review the second section.", target: "#tutorial-second", title: "Second section" },
 ];
 
 const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: string; label: string }) => {
@@ -47,7 +46,7 @@ const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: st
 
 // The app commits .rw-app long before the guide mounts, and ending the guide
 // unmounts only the guide. Both matter here: the portal container is resolved
-// on the guide's first render, and the drawer restore runs on its teardown.
+// on the guide's first render, and the menu restore runs on its teardown.
 const renderGuidedWorkbench = ({ onClose = vi.fn() }: { onClose?: () => void } = {}) => {
   const workbench = (guided: boolean) => (
     <div className="rw-app">
@@ -212,7 +211,7 @@ describe("sample tutorial", () => {
     );
   });
 
-  it("highlights live sections, opens their drawers, and keeps progression in the guide", async () => {
+  it("highlights live sections, leaves their drawers shut, and keeps progression in the guide", async () => {
     const onClose = vi.fn();
     render(
       <div className="rw-app">
@@ -224,7 +223,8 @@ describe("sample tutorial", () => {
 
     const first = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    // An opened drawer stretches the row; the step's Try it names one instead.
+    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("false");
     expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("true");
     const actions = screen.getByRole("list", { name: "On this card" });
     expect(actions.textContent).toContain("Checks");
@@ -240,10 +240,14 @@ describe("sample tutorial", () => {
 
     const second = document.querySelector("#tutorial-second") as HTMLElement;
     await waitFor(() => expect(second.classList.contains("sample-tutorial-target")).toBe(true));
-    expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Second drawer" }).getAttribute("aria-expanded")).toBe("false");
     expect(first.classList.contains("sample-tutorial-target")).toBe(false);
     expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
+    // The buttons ignore presses until the card has landed on its new row.
+    const landed = () =>
+      waitFor(() => expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-moving")).toBe(false));
 
+    await landed();
     back.focus();
     fireEvent.click(back);
     await waitFor(() => expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy());
@@ -251,8 +255,10 @@ describe("sample tutorial", () => {
     expect(back.disabled).toBe(false);
     expect(back.getAttribute("aria-disabled")).toBe("true");
 
+    await landed();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+    await landed();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -269,16 +275,17 @@ describe("sample tutorial", () => {
     const target = document.querySelector("#tutorial-first") as HTMLElement;
     await waitFor(() => expect(target.classList.contains("sample-tutorial-target")).toBe(true));
     const ring = document.querySelector(".sample-tutorial-ring");
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    const menu = target.querySelector(".patch-menu-btn") as HTMLButtonElement;
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
 
     rerender(workbench(STEPS.map((step) => ({ ...step }))));
 
     expect(document.querySelector(".sample-tutorial-ring")).toBe(ring);
     expect(target.classList.contains("sample-tutorial-target")).toBe(true);
-    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("leaves the row's drawers and menu shut on a phone, where they would stretch or cover the row", async () => {
+  it("leaves the row's menu shut on a phone, where it would cover the row", async () => {
     // No query the guide asks about matches below the desktop anchor width.
     const matchMedia = vi.spyOn(window, "matchMedia").mockImplementation(
       (query) =>
@@ -294,7 +301,6 @@ describe("sample tutorial", () => {
 
       const first = document.querySelector("#tutorial-first") as HTMLElement;
       await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
-      expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("false");
       expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("false");
     } finally {
       matchMedia.mockRestore();
@@ -481,12 +487,12 @@ describe("sample tutorial", () => {
     expect(button.dataset.guideCta).toBeUndefined();
   });
 
-  it("re-closes an opened drawer when the final action ends the guide", async () => {
+  it("re-closes an opened menu when the final action ends the guide", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       {
         body: "Press it.",
         cta: ".btn.run",
-        openDrawers: true,
+        openMenu: true,
         target: "#tutorial-cta",
         title: "Finish",
       },
@@ -505,21 +511,21 @@ describe("sample tutorial", () => {
     const { rerender } = render(workbench(false));
     rerender(workbench(true));
 
-    const drawer = screen.getByRole("button", { name: "Output options" });
-    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    const menu = document.querySelector("#tutorial-cta .patch-menu-btn") as HTMLButtonElement;
+    await waitFor(() => expect(menu.getAttribute("aria-expanded")).toBe("true"));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onClose).toHaveBeenCalledOnce();
     rerender(workbench(false));
-    expect(drawer.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("re-closes the drawers it opened when the guide ends", async () => {
+  it("re-closes the menu it opened when the guide ends", async () => {
     const { endGuide } = renderGuidedWorkbench();
 
-    const drawer = screen.getByRole("button", { name: "First drawer" });
-    await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
+    const menu = document.querySelector("#tutorial-first .patch-menu-btn") as HTMLButtonElement;
+    await waitFor(() => expect(menu.getAttribute("aria-expanded")).toBe("true"));
     endGuide();
-    expect(drawer.getAttribute("aria-expanded")).toBe("false");
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
   });
 });
 

@@ -102,10 +102,6 @@ type SampleTutorialStep = {
   /** What Continue does on a locked step instead of waiting - loading the
       practice files, say. The guide moves on by itself once the step unlocks. */
   onContinue?: () => void;
-  /** Opens the row's closed drawers on desktop. Phones leave them shut: an
-      opened drawer - the optional weave job, say - stretches the row past the
-      screen, so the step's Try it names the one to open instead. */
-  openDrawers?: boolean;
   /** Opens the row's first menu on desktop. Phones leave it shut: the open
       menu would cover the row the step describes. */
   openMenu?: boolean;
@@ -147,11 +143,10 @@ const getViewTutorialStep = (
   base?: SampleTutorialStep,
 ): SampleTutorialStep =>
   base
-    ? { ...base, lift: VIEW_TOGGLE_HEAD_SELECTOR, openDrawers: true, target, view: true }
+    ? { ...base, lift: VIEW_TOGGLE_HEAD_SELECTOR, target, view: true }
     : {
         body: "",
         lift: VIEW_TOGGLE_HEAD_SELECTOR,
-        openDrawers: true,
         requires: VIEW_TOGGLE_SELECTOR,
         target,
         title: localizer.message("ui.tutorial.view.title"),
@@ -748,7 +743,6 @@ const SampleTutorial = ({
   const step = steps[stepIndex];
   const stepCta = step?.cta;
   const stepLift = step?.lift;
-  const stepOpenDrawers = step?.openDrawers;
   const stepOpenMenu = step?.openMenu;
   const stepPlacement = step?.placement;
   const stepTarget = step?.target;
@@ -862,7 +856,6 @@ const SampleTutorial = ({
     let cta: HTMLElement | null = null;
     let removeCtaEndListener: (() => void) | null = null;
     let lifted: HTMLElement | null = null;
-    const openedDrawers: HTMLButtonElement[] = [];
     let frame = 0;
     const connect = () => {
       if (target) return true;
@@ -874,14 +867,10 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
-      const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY).matches;
-      if (stepOpenDrawers && desktop) {
-        for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
-          openedDrawers.push(drawer);
-          drawer.click();
-        }
-      }
-      if (stepOpenMenu && desktop) {
+      // Drawers stay as the reader left them: opened, the optional download
+      // jobs and every Checks list stretch the row the step describes, so a
+      // step's Try it names the one worth opening instead.
+      if (stepOpenMenu && window.matchMedia(GUIDE_ANCHOR_QUERY).matches) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
@@ -914,9 +903,6 @@ const SampleTutorial = ({
       observer?.disconnect();
       setTargetEl(null);
       if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
-      for (const drawer of openedDrawers) {
-        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
-      }
       removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
@@ -927,7 +913,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenDrawers, stepOpenMenu, stepTarget, steps.length]);
+  }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenMenu, stepTarget, steps.length]);
 
   // Use document coordinates so the ring and anchored card scroll with the row.
   // Placement MUST NOT run on scroll: main-thread updates can lag composited scrolling.
@@ -935,6 +921,11 @@ const SampleTutorial = ({
     const dialog = dialogRef.current;
     const ring = ringRef.current;
     if (dialog && dialog.dataset.step !== (live ? String(stepIndex + 1) : undefined)) return;
+    // Until the new step's row connects, `targetEl` is still the last step's: a
+    // reveal measured from it scrolls toward the row being left, and the
+    // placement that follows, finding the new row already on screen, never
+    // scrolls back.
+    if (targetEl && stepTarget && !targetEl.matches(stepTarget)) return;
     const unanchor = () => {
       if (!dialog) return;
       delete dialog.dataset.anchored;

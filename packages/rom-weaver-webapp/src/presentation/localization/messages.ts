@@ -641,7 +641,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.identify.tryIt": msg({
     id: "ui.apply.tutorial.identify.tryIt",
-    message: "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums.",
+    message: "Choose Detailed, then open Identify to inspect the ROM information.",
   }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",

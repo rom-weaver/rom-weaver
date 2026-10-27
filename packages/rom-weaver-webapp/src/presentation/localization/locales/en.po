@@ -1161,7 +1161,7 @@ msgstr "Choose decimal or binary units for file sizes."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.tryIt"
-msgstr "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums."
+msgstr "Choose Detailed, then open Identify to inspect the ROM information."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -29,9 +29,9 @@ Apply, Create, and Weave include a Simple/Detailed comparison. Its buttons chang
 
 Guide cards fit their content without an internal scrollbar. The first step includes a click/drop demonstration; reduced-motion preferences disable its movement.
 
-On screens 640 px wide or narrower, a step with a **Try it** line shows its title, **Try it**, and buttons. **More** shows the step's explanation, including the first step's demonstration and practice-file download, and stays open on later steps. The guide does not open drawers, including the optional weave job, or a patch's menu for you on these screens.
+On screens 640 px wide or narrower, a step with a **Try it** line shows its title, **Try it**, and buttons. **More** shows the step's explanation, including the first step's demonstration and practice-file download, and stays open on later steps. The guide does not open a patch's menu for you on these screens.
 
-A step that needs a control the page does not show, such as the **Simple/Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay. Drawers opened by the guide close again when it ends, including after its final action.
+A step that needs a control the page does not show, such as the **Simple/Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay. The guide never opens drawers, including the optional download jobs. A patch menu opened by the guide closes again when it ends, including after its final action.
 
 ## Where a run starts
 

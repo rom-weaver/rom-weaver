@@ -937,6 +937,45 @@ test("guided Apply scrolls its first card back on screen when More opens the res
   await page.viewport(1280, 900);
 });
 
+test("guided Apply opens no drawers on desktop and keeps its last row and Apply button on screen", async () => {
+  // The step before ends at the page bottom. A reveal measured from that row,
+  // still in state while the new one connects, scrolled the page back up and
+  // left the Apply button below the screen. Opened drawers - the optional
+  // download jobs on the last step - used to hide that by stretching the row.
+  await page.viewport(1280, 900);
+  mountWebappRoot({ initialView: "patcher" });
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
+  document.querySelector(".sample-tutorial-start-primary").click();
+  await expect.poll(() => document.querySelector('.sample-tutorial-dialog[data-step="1"]')).toBeTruthy();
+  const guide = document.querySelector(".sample-tutorial-dialog");
+  for (const step of ["2", "3", "4", "5"]) {
+    await expect.poll(() => guide.dataset.moving).toBeUndefined();
+    guide.querySelector(".sample-tutorial-next").click();
+    await expect.poll(() => guide.dataset.step, { timeout: 15000 }).toBe(step);
+    await expect.poll(() => document.querySelector(".sample-tutorial-target")).toBeTruthy();
+    // The ROM's Checks opens by itself when the practice weave supplies them.
+    const opened = [...document.querySelectorAll(".sample-tutorial-target .cks > .cks-head")].filter(
+      (head) =>
+        head.getAttribute("aria-expanded") === "true" &&
+        !(head.closest("#rom-weaver-row-file-rom") && head.textContent.startsWith("Checks")),
+    );
+    expect(opened.map((head) => head.textContent)).toEqual([]);
+  }
+  await expect.poll(() => document.querySelector("[data-guide-cta]")).toBeTruthy();
+  // Long enough for a smooth reveal to land either way.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  expect(document.querySelector("[data-guide-cta]").getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    window.innerHeight,
+  );
+  expect(document.querySelector(".sample-tutorial-ring").getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    window.innerHeight,
+  );
+});
+
 test("guided Apply opens no drawers on a phone and gives Identify a card of its own", async () => {
   // A phone card folds to its Try it, so the ROM and Identify steps on the same
   // row must not fold to the same line; and an opened drawer - the optional
