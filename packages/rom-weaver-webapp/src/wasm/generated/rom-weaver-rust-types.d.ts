@@ -339,7 +339,7 @@ export type PatchApplyDirection = "forward" | "reverse";
 
 export type PatchEndpointSelection = { variant: number, direction: PatchApplyDirection, };
 
-export type PatchPlanVerdict = { index: number, patch: string, format?: string, basis: PatchInputBasis, basis_source: PatchBasisSource, matched: PatchInputMatch, input_verdict: PatchInputVerdict,
+export type PatchPlanVerdict = { index: number, patch: string, format?: string, basis: PatchInputBasis, basis_source: PatchBasisSource, matched: PatchInputMatch, input_verdict: PatchInputVerdict, unreadable?: boolean,
 /**
  * Exact reversible endpoint selected from embedded patch metadata. Apply
  * uses it when a base-authored mid-chain patch cannot infer direction

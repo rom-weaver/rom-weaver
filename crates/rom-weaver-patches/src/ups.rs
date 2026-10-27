@@ -54,8 +54,11 @@ impl PatchHandler for UpsPatchHandler {
         ProbeConfidence::Extension
     }
 
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = parse_ups_file(patch_path)?;
+    fn parse(&self, patch_path: &Path, context: &OperationContext) -> Result<OperationReport> {
+        let patch = parse_ups_file_with_checksum_validation(
+            patch_path,
+            context.validate_patch_integrity(),
+        )?;
         Ok(byuu_parse_report(
             self.descriptor,
             patch.changes.len(),
@@ -244,10 +247,6 @@ struct UpsChange {
 struct CreatedUpsPatch {
     bytes: Vec<u8>,
     record_count: usize,
-}
-
-fn parse_ups_file(path: &Path) -> Result<ParsedUpsPatch> {
-    parse_ups_file_with_checksum_validation(path, true)
 }
 
 fn parse_ups_file_with_checksum_validation(

@@ -110,9 +110,9 @@ const applyPatchVerdict = <TSource>(
   stage.state.patchValidation = {
     message: verdict.message,
     status: verdict.status,
-    ...(verdict.unreadable ? { unreadable: true } : {}),
     targetInputId: target.id,
     validationKey,
+    ...(verdict.unreadable ? { unreadable: true } : {}),
   };
   stage.state.checksumTimeMs = Date.now() - startedAt;
 };
@@ -248,7 +248,7 @@ const applyPlanValidationResult = <TSource>(
           : "Input state is only provable while applying"),
     status,
     // An unsupported patch (e.g. an interactive BSP menu) fails on every ROM: block Apply, no override.
-    unreadable: status === "invalid" && planVerdict.unsupported === true,
+    unreadable: planVerdict.unreadable === true || (status === "invalid" && planVerdict.unsupported === true),
   });
   prepared.entry.stage.state.chainVerdict = {
     basis: planVerdict.basis,
@@ -276,6 +276,7 @@ const applyPerPatchValidationResult = <TSource>(
       verdict.message ||
       (verdict.status === "passed" ? "Patch validation passed" : "Patch cannot be applied to this ROM"),
     status: verdict.status === "passed" ? "valid" : "invalid",
+    unreadable: verdict.unreadable,
   });
 };
 

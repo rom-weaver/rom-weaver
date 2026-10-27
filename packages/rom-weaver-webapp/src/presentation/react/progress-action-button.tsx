@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { createProgressViewModel } from "../workflow-presentation.ts";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../workflow-presentation.ts";
+import { usePressThroughLayoutShift } from "./use-press-through-layout-shift.ts";
 
 const THREAD_LABEL_SEGMENTS_REGEX = /^(.*?)(?:\s+(?:with|-)\s+(\d+\s+threads?))(\.\.\.)?$/i;
 const TRAILING_ELLIPSIS_REGEX = /\s*\.\.\.$/;
@@ -172,6 +173,7 @@ function ProgressActionButton({
 }: ProgressActionButtonProps) {
   const { cancelButtonRef, runButtonRef } = useRunFocusHandoff(Boolean(progress));
   const isDownload = !progress && DOWNLOAD_LABEL_REGEX.test(label);
+  const pressThroughLayoutShift = usePressThroughLayoutShift();
 
   if (progress) {
     return (
@@ -193,6 +195,7 @@ function ProgressActionButton({
       disabled={disabled}
       id={id}
       onClick={ariaDisabled ? undefined : onClick}
+      onPointerDown={pressThroughLayoutShift}
       ref={runButtonRef}
       title={title}
       type="button"

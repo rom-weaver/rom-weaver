@@ -61,11 +61,11 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 >
 > ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild. This workflow is available through the native CLI, not browser Apply.
 >
-> ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** do not list MOD. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
+> ³ MOD patches target Paper Mario (USA) v1.0: 41,943,040 bytes, CRC32 `A7F5CD7E`. Browser Create in **Modified ROM** mode and the CLI format recommendation offer MOD only for that Original and only when the Modified ROM is not smaller. The combined patch in Create's **Patches & cheats** mode and Apply's **Download a combined patch** do not list MOD. CLI `patch create --format mod` accepts another Original with a warning. A MOD patch made from another Original applies in the CLI only with `--ignore-checksum-validation`.
 >
 > ⁴ The native CLI creates this format. Browser Create does not offer it. Browser Apply supports it.
 
-PPF and EBP cannot encode a target smaller than the Original. Browser Create hides them for such a target, and CLI `patch create` and `patch create --plan` reject or omit them.
+PPF, EBP, and MOD cannot encode a target smaller than the Original. Browser Create hides them for such a target, and CLI `patch create` and `patch create --plan` reject or omit them.
 
 BSP scripts with nonempty menus fail during apply or validation in the browser and CLI. Interactive choices are unsupported; no branch is selected automatically. Scripts without menus and empty menus remain supported.
 

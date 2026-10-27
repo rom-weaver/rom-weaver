@@ -828,6 +828,7 @@ describe("invokeRomWeaverPatchValidateWorker", () => {
           per_patch: [
             { format: "ips", index: 0, patch: "/a.ips", status: "passed" },
             { index: 1, message: "checksum mismatch", status: "failed" },
+            { index: 2, message: "IPS patch ended unexpectedly", status: "failed", unreadable: true },
             { index: -1, status: "passed" },
             { index: "not-a-number", status: "passed" },
             null,
@@ -843,6 +844,7 @@ describe("invokeRomWeaverPatchValidateWorker", () => {
     expect(result.perPatch).toEqual([
       { format: "ips", index: 0, patch: "/a.ips", status: "passed" },
       { index: 1, message: "checksum mismatch", status: "failed" },
+      { index: 2, message: "IPS patch ended unexpectedly", status: "failed", unreadable: true },
     ]);
   });
 

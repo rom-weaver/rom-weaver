@@ -138,7 +138,7 @@ const routeUnifiedDrop = async (
     weaveFile: File,
   ) => {
     // Companion ROMs route like a second drop: bare files plus ROM-bucket archives, with a
-    // directly dropped CUE kept together with its tracks.
+    // directly dropped disc sheet kept together with its tracks.
     const companionRoms = loaded.romFile
       ? []
       : [...inputs, ...archives.filter((_archive, index) => archiveBuckets[index] === "rom")].filter(
@@ -237,30 +237,39 @@ type RomDropGroup = { files: File[]; label: string; size: number };
 
 const leafName = (name: string) => name.replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() || "";
 
-/** Keep a directly dropped CUE and its tracks together as one logical ROM. */
+/** Disc sheets and their supplied tracks MUST stay together as one logical ROM. */
 const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDropGroup[]> => {
   const unassigned = new Set(romInputs);
   const groups: RomDropGroup[] = [];
-  for (const cue of romInputs) {
-    if (!(unassigned.has(cue) && isCueEntryFileName(cue.name))) continue;
+  const sheets = [
+    ...romInputs.filter((file) => isCueEntryFileName(file.name)),
+    ...romInputs.filter((file) => isGdiEntryFileName(file.name)),
+  ];
+  for (const sheet of sheets) {
+    if (!unassigned.has(sheet)) continue;
     try {
+      const isCue = isCueEntryFileName(sheet.name);
+      const text = await sheet.text();
       const references = new Set(
-        parseCueFileReferences(await cue.text()).map((reference) => leafName(reference.fileName)),
+        (isCue
+          ? parseCueFileReferences(text).map((reference) => reference.fileName)
+          : parseGdiFileReferences(text)
+        ).map(leafName),
       );
-      const files = [cue];
+      const files = [sheet];
       for (const file of unassigned) {
-        if (file === cue) continue;
+        if (file === sheet) continue;
         const isReferencedTrack = references.has(leafName(file.name));
-        const gdiReferences = isGdiEntryFileName(file.name) ? parseGdiFileReferences(await file.text()) : [];
+        const gdiReferences = isCue && isGdiEntryFileName(file.name) ? parseGdiFileReferences(await file.text()) : [];
         const isMatchingGdi =
           gdiReferences.length > 0 && gdiReferences.every((reference) => references.has(leafName(reference)));
         if (isReferencedTrack || isMatchingGdi) files.push(file);
       }
       // Claim the files only after every read succeeded, so a failed read leaves them selectable.
       for (const file of files) unassigned.delete(file);
-      groups.push({ files, label: cue.name, size: files.reduce((total, file) => total + file.size, 0) });
+      groups.push({ files, label: sheet.name, size: files.reduce((total, file) => total + file.size, 0) });
     } catch (error) {
-      logger.debug("direct CUE grouping failed", { error: String(error), fileName: cue.name });
+      logger.debug("direct disc grouping failed", { error: String(error), fileName: sheet.name });
     }
   }
   for (const file of unassigned) groups.push({ files: [file], label: file.name, size: file.size });
@@ -269,7 +278,7 @@ const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDro
 
 /**
  * A run patches exactly one logical ROM. A directly dropped disc can contain a
- * CUE plus several track files, which MUST stay together as one candidate.
+ * CUE or GDI plus several track files, which MUST stay together as one candidate.
  */
 const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFile): Promise<File[] | undefined> => {
   const groups = await groupDirectDiscInputs(romInputs);
