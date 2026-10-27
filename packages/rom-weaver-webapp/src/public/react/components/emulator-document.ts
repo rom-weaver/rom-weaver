@@ -291,6 +291,10 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId:
           const emulator = window.EJS_emulator;
           if (!emulator) return;
           if (event.data.kind === "visibility-pause") {
+            // A hidden disc-sized game can be unloaded before it returns, and EmulatorJS writes the in-game
+            // save only every few minutes, so write it now.
+            const manager = emulator.gameManager;
+            if (emulator.started && manager && typeof manager.saveSaveFiles === "function") manager.saveSaveFiles();
             if (!emulator.paused && typeof emulator.pause === "function") {
               emulator.pause();
               window.__romWeaverVisibilityPaused = true;

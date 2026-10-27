@@ -320,6 +320,40 @@ describe("createEmulatorDocument", () => {
     expect(calls).toEqual(["write", "load", "restart", "sram-loaded"]);
   });
 
+  it("writes the in-game save when the hidden Test view pauses a started game", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.gba", "gba");
+    const source = document.indexOf('const source = "rom-weaver-emulator"');
+    const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
+    const calls: string[] = [];
+    let onMessage: ((event: { source: unknown; data: unknown }) => void) | undefined;
+    const parent = { postMessage: (message: { kind: string }) => calls.push(message.kind) };
+    const emulator = {
+      gameManager: { saveSaveFiles: () => calls.push("save") },
+      pause: () => {
+        calls.push("pause");
+        emulator.paused = true;
+      },
+      paused: false,
+      started: true,
+    };
+    const window = {
+      EJS_emulator: emulator,
+      addEventListener: (_kind: string, listener: typeof onMessage) => {
+        onMessage = listener;
+      },
+      parent,
+    };
+    const pause = { gameId: "game.gba", kind: "visibility-pause", source: "rom-weaver-emulator" };
+
+    runInNewContext(script, { window });
+    onMessage?.({ source: parent, data: pause });
+    emulator.started = false;
+    onMessage?.({ source: parent, data: pause });
+
+    // A hidden disc-sized game can be unloaded, and EmulatorJS writes its save only every five minutes by default.
+    expect(calls).toEqual(["save", "pause"]);
+  });
+
   it("neutralizes the EmulatorJS version check before the loader runs", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
     const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
