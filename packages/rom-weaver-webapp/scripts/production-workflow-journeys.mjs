@@ -142,6 +142,29 @@ const waitForEnabled = async (page, id) => {
   }
 };
 
+// Apply enables while staged cards still checksum and verify, and each result reflows the cards
+// above it. A click whose press and release straddle a reflow never reaches Apply, so wait until
+// every staged card shows its verdict without a stage bar. Callers stage BPS patches, whose source
+// checksums give the ROM and patch cards a verdict.
+const waitForSettledApplyInputs = async (page) => {
+  try {
+    await page.waitForFunction(() => {
+      const cards = Array.from(document.querySelectorAll("#rom-weaver-container .card.file"));
+      return (
+        cards.length > 0 &&
+        cards.every(
+          (card) =>
+            !card.classList.contains("has-stage-bar") &&
+            ["ok", "bad", "warn"].some((verdict) => card.classList.contains(verdict)),
+        )
+      );
+    });
+  } catch (cause) {
+    const visibleState = (await page.locator("body").innerText()).slice(-8000);
+    throw new Error(`Apply inputs never settled. Visible state:\n${visibleState}`, { cause });
+  }
+};
+
 const openWorkflow = async (page, baseUrl, route, pickerId) => {
   await page.goto(new URL(route, baseUrl).href, { waitUntil: "domcontentloaded" });
   await page.waitForFunction((id) => document.getElementById(id) instanceof HTMLInputElement, pickerId);
@@ -205,6 +228,7 @@ const runCombinedPatchRoundtrips = async (page, baseUrl, configureUncompressedOu
     const picker = await openWorkflow(page, baseUrl, "apply-patches", "rom-weaver-input-file-unified");
     await picker.setInputFiles([inputFile("original.bin", original), inputFile(patch.name, patch.bytes)]);
     await waitForEnabled(page, "rom-weaver-button-apply");
+    await waitForSettledApplyInputs(page);
     const rebuilt = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rebuilt.bytes, expected, `${label} -> Apply exact combined result`);
   };
@@ -401,6 +425,7 @@ export const runCreateApplyRoundtrip = async (createContext, baseUrl, configureU
     await recipePicker.setInputFiles(inputFile(recipe.name, recipe.bytes));
     await page.locator("#rom-weaver-list-patch-stack .file").waitFor({ state: "visible" });
     await waitForEnabled(page, "rom-weaver-button-apply");
+    await waitForSettledApplyInputs(page);
     const rewoven = await downloadedBytes(page, () => page.locator("#rom-weaver-button-apply").click());
     assertJourneyBytes(rewoven.bytes, modified, "Weave export -> Apply exact roundtrip");
     await runCombinedPatchRoundtrips(page, baseUrl, configureUncompressedOutput);
